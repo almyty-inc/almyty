@@ -101,7 +101,7 @@ export function DistributionPanel({
         : agentAppsApi.publishDistribution(app.slug, distribution.target),
     onSuccess: () => {
       success(
-        live ? 'Taken down' : 'Published',
+        live ? 'Unpublished' : 'Published',
         live
           ? 'It has stopped answering. Its settings and address are kept.'
           : 'It is answering now.',
@@ -110,8 +110,7 @@ export function DistributionPanel({
     },
     onError: (err: any) =>
       errorNotif(
-        live ? 'Could not take it down' : 'Could not publish',
-        err?.response?.data?.message || 'Something went wrong.',
+        live ? 'Could not unpublish' : 'Could not publish',
       ),
   })
 
@@ -161,7 +160,7 @@ export function DistributionPanel({
       {check?.ok && (
         <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
           <Check className="h-4 w-4" />
-          Ready to ship
+          Ready to publish
         </p>
       )}
 
@@ -178,7 +177,8 @@ export function DistributionPanel({
             Every signing toolchain needs one, and it must be yours rather than a placeholder.
           </p>
           <Button
-            className="mt-2 w-full"
+            className="mt-2"
+            variant="outline"
             disabled={save.isPending}
             onClick={() => save.mutate({})}
           >
@@ -270,15 +270,15 @@ export function DistributionPanel({
           >
             {publish.isPending
               ? live
-                ? 'Taking it down...'
+                ? 'Unpublishing...'
                 : 'Publishing...'
               : live
-                ? 'Take it down'
+                ? 'Unpublish'
                 : 'Publish'}
           </Button>
           <p className="text-xs text-muted-foreground">
             {live
-              ? 'Taking it down stops it answering and keeps its address, so publishing again needs no re-registration.'
+              ? 'Unpublish stops it answering and keeps its address, so publishing again needs no re-registration.'
               : 'Publishing stands up the surface and points it at this product.'}
           </p>
         </div>

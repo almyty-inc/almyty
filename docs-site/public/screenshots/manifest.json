@@ -144,8 +144,28 @@
     },
     {
       "id": "apps-canvas",
-      "title": "App canvas with Web, Terminal, and Slack distributions",
+      "title": "App detail page with Slack, Terminal, and Web distribution cards",
       "path": "screenshots/apps-canvas.png"
+    },
+    {
+      "id": "apps-detail",
+      "title": "App detail page (alias of apps-canvas after the canvas was removed)",
+      "path": "screenshots/apps-detail.png"
+    },
+    {
+      "id": "apps-empty",
+      "title": "Empty app: not shipping anywhere yet",
+      "path": "screenshots/apps-empty.png"
+    },
+    {
+      "id": "apps-agents",
+      "title": "App Agents tab with the product default",
+      "path": "screenshots/apps-agents.png"
+    },
+    {
+      "id": "apps-settings",
+      "title": "App Settings tab with cost ceiling and rate limits",
+      "path": "screenshots/apps-settings.png"
     },
     {
       "id": "apps-web-published",
@@ -159,8 +179,13 @@
     },
     {
       "id": "apps-slack-credentials",
-      "title": "Slack distribution credential handoff",
+      "title": "Slack distribution with Bot token and Signing secret fields",
       "path": "screenshots/apps-slack-credentials.png"
+    },
+    {
+      "id": "apps-slack-live",
+      "title": "Slack distribution published and live",
+      "path": "screenshots/apps-slack-live.png"
     },
     {
       "id": "apps-build-capabilities",
