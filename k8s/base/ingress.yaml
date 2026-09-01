@@ -59,3 +59,70 @@ spec:
             name: almyty-frontend
             port:
               number: 8080
+---
+# Hosted chat: {slug}.almyty.app
+#
+# The SPA dispatches on the Host label (see frontend App.tsx). The
+# client calls SAME-ORIGIN /api so the anonymous session cookie is
+# scoped to the tenant host, not api.almyty.com. /api is rewritten
+# onto the API; everything else is the frontend.
+#
+# TLS: HTTP-01 cannot issue a wildcard. The secret must be a DNS-01
+# (or otherwise provisioned) certificate covering *.almyty.app.
+# Per-environment staging/dev wildcards live in the private infra
+# overlays, not here.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: almyty-hosted-chat-api
+  namespace: almyty
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - "*.almyty.app"
+    secretName: wildcard-almyty-app-tls
+  rules:
+  - host: "*.almyty.app"
+    http:
+      paths:
+      - path: /api(/|$)(.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: almyty-api
+            port:
+              number: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: almyty-hosted-chat
+  namespace: almyty
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - "*.almyty.app"
+    secretName: wildcard-almyty-app-tls
+  rules:
+  - host: "*.almyty.app"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: almyty-frontend
+            port:
+              number: 8080

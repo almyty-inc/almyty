@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { render, screen, waitFor } from '@testing-library/react'
 
@@ -48,6 +48,14 @@ vi.mock('@/hooks/use-pageviews', () => ({
   usePageviews: () => undefined,
 }))
 
+vi.mock('@/lib/tenant-host', () => ({
+  currentTenantSlug: () => (globalThis as any).__hostedChatSlug ?? null,
+}))
+
+vi.mock('@/pages/hosted-chat', () => ({
+  HostedChatPage: ({ slug }: { slug: string }) => <div>Hosted chat {slug}</div>,
+}))
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -57,6 +65,10 @@ function renderAt(path: string) {
 }
 
 describe('App authed routing', () => {
+  beforeEach(() => {
+    ;(globalThis as any).__hostedChatSlug = null
+  })
+
   it('renders the Dashboard at /', async () => {
     renderAt('/')
     expect(await screen.findByText('Dashboard Marker')).toBeInTheDocument()
@@ -81,3 +93,16 @@ describe('App authed routing', () => {
     expect(screen.getByText('Page not found')).toBeInTheDocument()
   })
 })
+
+describe('App hosted-chat dispatch', () => {
+  beforeEach(() => {
+    ;(globalThis as any).__hostedChatSlug = 'acme'
+  })
+
+  it('renders the hosted chat app on a tenant host, not the dashboard', async () => {
+    renderAt('/')
+    expect(await screen.findByText('Hosted chat acme')).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard Marker')).not.toBeInTheDocument()
+  })
+})
+

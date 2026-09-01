@@ -24,6 +24,10 @@ ARG VITE_SENTRY_DSN=
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 ARG VITE_TURNSTILE_SITE_KEY=
 ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
+# Tenant hosts: {slug}.<this domain>. staging must be staging.almyty.app
+# or published chat URLs hit production.
+# HOSTED_CHAT_BASE_DOMAIN is NOT baked here: it is per-environment k8s
+# config emitted at container start by docker-entrypoint.sh.
 
 RUN npx vite build
 
@@ -56,6 +60,10 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built assets from base stage
 COPY --from=base /app/dist /usr/share/nginx/html
+
+# Runtime-config entrypoint (emits /tmp/runtime-config.js from env)
+COPY docker-entrypoint.sh /docker-entrypoint.d/40-almyty-runtime-config.sh
+RUN chmod +x /docker-entrypoint.d/40-almyty-runtime-config.sh
 
 # Create non-root nginx user
 RUN chown -R nginx:nginx /usr/share/nginx/html && \

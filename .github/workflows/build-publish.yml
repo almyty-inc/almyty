@@ -57,7 +57,7 @@ jobs:
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
           echo "env_prefix=$PFX" >> "$GITHUB_OUTPUT"
           echo "sha_tag=${PFX}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "latest_tag=${PFX}" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=$PFX" >> "$GITHUB_OUTPUT"
           if [ "${{ github.ref_type }}" = "branch" ]; then
             echo "is_branch=true" >> "$GITHUB_OUTPUT"
           else

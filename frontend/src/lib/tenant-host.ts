@@ -9,6 +9,8 @@
  * almyty.com happens to run, not a requirement of the feature.
  */
 
+// Last-resort default when neither the runtime config nor the dev
+// VITE_ var is set. Real deployments always set HOSTED_CHAT_BASE_DOMAIN.
 export const DEFAULT_HOSTED_CHAT_BASE_DOMAIN = 'almyty.app'
 
 /** Hosts we route ourselves, which can never be a tenant. */
@@ -29,6 +31,19 @@ export const RESERVED_SLUGS = [
 ]
 
 export function hostedChatBaseDomain(): string {
+  // Production reads the domain from k8s at runtime: docker-entrypoint.sh
+  // writes it into /runtime-config.js from HOSTED_CHAT_BASE_DOMAIN, so the
+  // image itself is environment-agnostic. VITE_ is only a dev fallback.
+  const runtime =
+    typeof window !== 'undefined'
+      ? String((window as unknown as {
+          __ALMYTY_RUNTIME__?: { hostedChatBaseDomain?: string }
+        }).__ALMYTY_RUNTIME__?.hostedChatBaseDomain ?? '')
+          .trim()
+          .toLowerCase()
+      : ''
+  if (runtime) return runtime
+
   const configured = String(import.meta.env?.VITE_HOSTED_CHAT_BASE_DOMAIN ?? '')
     .trim()
     .toLowerCase()
@@ -67,4 +82,9 @@ export function devSlugOverride(search: string): string | null {
 /** The tenant this page is serving, if any. */
 export function currentTenantSlug(location: Location = window.location): string | null {
   return devSlugOverride(location.search) ?? slugFromHost(location.hostname)
+}
+
+/** True on {slug}.almyty.app (or a configured base), where the dashboard must not run. */
+export function isHostedChatHost(location: Location = window.location): boolean {
+  return currentTenantSlug(location) !== null
 }
