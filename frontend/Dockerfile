@@ -24,7 +24,7 @@ ARG VITE_SENTRY_DSN=
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 ARG VITE_TURNSTILE_SITE_KEY=
 ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
-# Tenant hosts: {slug}.<this domain>. Staging must be staging.almyty.com
+# Tenant hosts: {slug}.<this domain>. staging must be staging.almyty.app
 # or published chat URLs hit production.
 ARG VITE_HOSTED_CHAT_BASE_DOMAIN=almyty.app
 ENV VITE_HOSTED_CHAT_BASE_DOMAIN=$VITE_HOSTED_CHAT_BASE_DOMAIN

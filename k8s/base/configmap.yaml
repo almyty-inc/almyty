@@ -49,6 +49,6 @@ data:
   BASE_URL: "https://api.almyty.com"
 
   # Hosted chat tenant hosts hang off this domain: {slug}.<base>.
-  # Staging overlays must set staging.almyty.com so published URLs
+  # Staging overlays must set staging.almyty.app so published URLs
   # do not hit production.
   HOSTED_CHAT_BASE_DOMAIN: "almyty.app"

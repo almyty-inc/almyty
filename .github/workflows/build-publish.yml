@@ -49,9 +49,9 @@ jobs:
           # Missing it = the SPA calls http://localhost:3000 and prod login breaks.
           case "${{ github.ref_name }}" in
             master)      ENV=production;  PFX=prod;    API_URL="https://api.almyty.com";         CHAT_DOMAIN="almyty.app" ;;
-            staging)     ENV=staging;     PFX=staging; API_URL="https://api.staging.almyty.com"; CHAT_DOMAIN="staging.almyty.com" ;;
-            development) ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com";     CHAT_DOMAIN="dev.almyty.com" ;;
-            *)           ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com";     CHAT_DOMAIN="dev.almyty.com" ;;
+            staging)     ENV=staging;     PFX=staging; API_URL="https://api.staging.almyty.com"; CHAT_DOMAIN="staging.almyty.app" ;;
+            development) ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com";     CHAT_DOMAIN="dev.almyty.app" ;;
+            *)           ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com";     CHAT_DOMAIN="dev.almyty.app" ;;
           esac
           SHORT_SHA="${GITHUB_SHA::12}"
           echo "environment=$ENV" >> "$GITHUB_OUTPUT"
