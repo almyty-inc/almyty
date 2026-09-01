@@ -187,7 +187,7 @@ The API image should remain lean. The recommended production layout is a dedicat
 
 Two settings point at what the build packages, both falling back to the monorepo layout:
 
-- `APP_BUILD_CLIENT_ENTRY` — the built terminal client.
+- `APP_BUILD_CLIENT_ENTRY`: the built terminal client. The API image installs `@almyty/chat` at `/opt/almyty` and points this at it.
 - `APP_BUILD_DESKTOP_SHELL` — the Electron shell directory.
 
 ### A build is not interactive
