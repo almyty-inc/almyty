@@ -33,6 +33,7 @@ jobs:
       latest_tag: ${{ steps.m.outputs.latest_tag }}
       is_branch: ${{ steps.m.outputs.is_branch }}
       api_url: ${{ steps.m.outputs.api_url }}
+      hosted_chat_domain: ${{ steps.m.outputs.hosted_chat_domain }}
     steps:
       - uses: actions/checkout@v6
 
@@ -47,17 +48,18 @@ jobs:
           # API_URL is baked into the frontend at build time (VITE_API_BASE_URL).
           # Missing it = the SPA calls http://localhost:3000 and prod login breaks.
           case "${{ github.ref_name }}" in
-            master)      ENV=production;  PFX=prod;    API_URL="https://api.almyty.com" ;;
-            staging)     ENV=staging;     PFX=staging; API_URL="https://api.staging.almyty.com" ;;
-            development) ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com" ;;
-            *)           ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com" ;;
+            master)      ENV=production;  PFX=prod;    API_URL="https://api.almyty.com";         CHAT_DOMAIN="almyty.app" ;;
+            staging)     ENV=staging;     PFX=staging; API_URL="https://api.staging.almyty.com"; CHAT_DOMAIN="staging.almyty.com" ;;
+            development) ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com";     CHAT_DOMAIN="dev.almyty.com" ;;
+            *)           ENV=development;  PFX=dev;     API_URL="https://api.dev.almyty.com";     CHAT_DOMAIN="dev.almyty.com" ;;
           esac
           SHORT_SHA="${GITHUB_SHA::12}"
           echo "environment=$ENV" >> "$GITHUB_OUTPUT"
           echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+          echo "hosted_chat_domain=$CHAT_DOMAIN" >> "$GITHUB_OUTPUT"
           echo "env_prefix=$PFX" >> "$GITHUB_OUTPUT"
           echo "sha_tag=${PFX}-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "latest_tag=${PFX}" >> "$GITHUB_OUTPUT"
+          echo "latest_tag=$PFX" >> "$GITHUB_OUTPUT"
           if [ "${{ github.ref_type }}" = "branch" ]; then
             echo "is_branch=true" >> "$GITHUB_OUTPUT"
           else
@@ -145,6 +147,7 @@ jobs:
             VITE_POSTHOG_HOST=/ingest
             VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
             VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY }}
+            VITE_HOSTED_CHAT_BASE_DOMAIN=${{ needs.meta.outputs.hosted_chat_domain }}
           tags: almyty/frontend:${{ needs.meta.outputs.latest_tag }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
@@ -272,6 +275,7 @@ jobs:
             VITE_POSTHOG_HOST=/ingest
             VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
             VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY }}
+            VITE_HOSTED_CHAT_BASE_DOMAIN=${{ needs.meta.outputs.hosted_chat_domain }}
           outputs: type=image,name=almyty/almyty,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=almyty-${{ matrix.platform }}
           cache-to: type=gha,scope=almyty-${{ matrix.platform }},mode=max
