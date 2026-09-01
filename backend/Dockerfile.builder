@@ -57,15 +57,7 @@ COPY --from=builder /app/dist-ee ./dist-ee
 # This process is the build worker: consume build jobs, and only those.
 ENV NODE_ENV=production
 ENV APP_BUILD_MODE=worker
-# Same client the API image ships: bun compiles this, it is not a
-# backend Node dependency.
-RUN mkdir -p /opt/almyty \
- && cd /opt/almyty \
- && npm install --omit=dev --legacy-peer-deps @almyty/chat@1.2.0 \
- && test -f /opt/almyty/node_modules/@almyty/chat/dist/index.js
-ENV APP_BUILD_CLIENT_ENTRY=/opt/almyty/node_modules/@almyty/chat/dist/index.js
 # electron-builder needs the terminal client + shell to package; those are
 # resolved the same way the processor already resolves them.
-
 
 CMD ["node", "dist-ee/src/main"]
