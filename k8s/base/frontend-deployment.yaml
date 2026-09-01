@@ -49,6 +49,14 @@ spec:
           capabilities:
             drop:
             - ALL
+        # Per-environment hosted-chat base domain; the entrypoint bakes
+        # it into /runtime-config.js at container start (not build time).
+        env:
+        - name: HOSTED_CHAT_BASE_DOMAIN
+          valueFrom:
+            configMapKeyRef:
+              name: almyty-config
+              key: HOSTED_CHAT_BASE_DOMAIN
         ports:
         - containerPort: 8080
           name: http
