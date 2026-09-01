@@ -60,14 +60,17 @@ spec:
             port:
               number: 8080
 ---
-# Hosted chat: {slug}.almyty.app in production, {slug}.staging.almyty.com
-# on staging. DNS for both wildcards already exists. The SPA dispatches
-# on the Host label. The client calls SAME-ORIGIN /api so the anonymous
-# session cookie is scoped to the tenant host. /api is rewritten onto
-# the API; everything else is the frontend.
+# Hosted chat: {slug}.almyty.app
 #
-# TLS: HTTP-01 cannot issue a wildcard. Attach a DNS-01 (or already
-# issued) certificate to these secrets.
+# The SPA dispatches on the Host label (see frontend App.tsx). The
+# client calls SAME-ORIGIN /api so the anonymous session cookie is
+# scoped to the tenant host, not api.almyty.com. /api is rewritten
+# onto the API; everything else is the frontend.
+#
+# TLS: HTTP-01 cannot issue a wildcard. The secret must be a DNS-01
+# (or otherwise provisioned) certificate covering *.almyty.app.
+# Per-environment staging/dev wildcards live in the private infra
+# overlays, not here.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -85,21 +88,8 @@ spec:
   - hosts:
     - "*.almyty.app"
     secretName: wildcard-almyty-app-tls
-  - hosts:
-    - "*.staging.almyty.com"
-    secretName: wildcard-staging-almyty-com-tls
   rules:
   - host: "*.almyty.app"
-    http:
-      paths:
-      - path: /api(/|$)(.*)
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: almyty-api
-            port:
-              number: 3000
-  - host: "*.staging.almyty.com"
     http:
       paths:
       - path: /api(/|$)(.*)
@@ -125,21 +115,8 @@ spec:
   - hosts:
     - "*.almyty.app"
     secretName: wildcard-almyty-app-tls
-  - hosts:
-    - "*.staging.almyty.com"
-    secretName: wildcard-staging-almyty-com-tls
   rules:
   - host: "*.almyty.app"
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: almyty-frontend
-            port:
-              number: 8080
-  - host: "*.staging.almyty.com"
     http:
       paths:
       - path: /
