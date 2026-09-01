@@ -261,3 +261,30 @@ describe('AppBuildsService capabilities', () => {
     expect(result.canBuild).toBe(false);
   });
 });
+
+describe('AppBuildsService capabilities in worker mode', () => {
+  const orig = process.env.APP_BUILD_MODE;
+  afterEach(() => { if (orig === undefined) delete process.env.APP_BUILD_MODE; else process.env.APP_BUILD_MODE = orig; });
+
+  it('reports the worker toolchain, not this pod which has none', async () => {
+    // An API pod delegating to a worker must not report "cannot build" —
+    // it has no tools of its own to probe. The worker image carries the
+    // full set.
+    process.env.APP_BUILD_MODE = 'off';
+    const { service } = makeService({ canPresign: false });
+    (service as any).toolchain = { available: jest.fn(async () => false), run: jest.fn() };
+
+    const desktop = await service.capabilities('desktop' as any);
+    expect(desktop.canBuild).toBe(true);
+    expect(desktop.signing.every((s) => s.ready)).toBe(true);
+  });
+
+  it('still says a web distribution builds nothing, even on a worker', async () => {
+    process.env.APP_BUILD_MODE = 'worker';
+    const { service } = makeService({ canPresign: false });
+    (service as any).toolchain = { available: jest.fn(async () => true), run: jest.fn() };
+
+    const web = await service.capabilities('web' as any);
+    expect(web.canBuild).toBe(false);
+  });
+});

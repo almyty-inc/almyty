@@ -68,3 +68,19 @@ Roll out in four steps:
 4. Introduce an optional Kubernetes Job launcher using the same image and build contract for high-isolation tenants or signing workloads.
 
 The staging warning that Bun is absent is useful evidence: the UI is correctly refusing a build, but installing Bun into the API pod is not the production fix. Deploying a compatible builder worker is.
+
+## Both modes are supported
+
+The code supports running builds in the API pod or on a dedicated worker, chosen by `APP_BUILD_MODE`:
+
+| `APP_BUILD_MODE` | Who builds | Toolchain it needs | Use |
+|---|---|---|---|
+| `in-api` (default) | the API pod | bun and rcodesign, already in the API image | single deployments, dev, staging |
+| `worker` | the dedicated worker | the full set in `backend/Dockerfile.builder` | the worker deployment in production |
+| `off` | nobody in this process | none | the API pods once a worker exists, so they do not grab jobs they cannot fully run |
+
+In the default `in-api` mode a terminal app, a standalone binary, and macOS signing build in the API pod; a Windows-signing or desktop build reports a clear "not available on this deployment". That is enough for small self-hosters and for staging.
+
+For the full toolchain, deploy `backend/Dockerfile.builder` (glibc base with bun, rcodesign, osslsigncode, and electron-builder) with `APP_BUILD_MODE=worker`, and set `APP_BUILD_MODE=off` on the API pods. The worker consumes the same build queue; the API keeps validation, authorization, queueing, status, and downloads. When builds run on the worker, the capabilities endpoint reports the worker toolchain rather than probing the API pod, so the UI does not wrongly claim a target cannot be built.
+
+Building and deploying the worker image (the CI job that pushes `almyty/builder` and the worker Deployment manifest) lives in the infra repo alongside the rest of the deploy pipeline.
