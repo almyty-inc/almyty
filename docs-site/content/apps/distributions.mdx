@@ -1,0 +1,52 @@
+# Distributions
+
+A distribution is one place your product reaches people. You add a distribution to record *where* a product will ship; you **publish** it as the separate decision to let people actually reach it. There is exactly one distribution per target.
+
+## Which agent answers
+
+An app can carry several agents, and each distribution chooses which one answers. A distribution uses the app's default agent unless you point it at a specific one, so a support product with a triage agent and a billing agent can put the billing agent on the billing channel.
+
+If a distribution names an agent that has since been removed from the app, publishing is refused rather than going live with something you believe is no longer involved.
+
+![The Agents tab, where the app's default agent is set](/screenshots/apps-agents.png)
+
+## Publishing a messaging channel
+
+Channel distributions (Slack, Telegram, WhatsApp, and the rest) take their platform credentials on the distribution itself, so you stay on the app instead of being sent elsewhere to wire up a gateway. Fill in what the platform needs and publish.
+
+![The Slack distribution with its Bot token and Signing secret fields](/screenshots/apps-slack-credentials.png)
+
+Once published, the distribution is live and shows an **Unpublish** action.
+
+![The Slack distribution published and live](/screenshots/apps-slack-live.png)
+
+Publishing is idempotent: publishing again re-syncs the existing channel rather than failing, because the second attempt is usually you reapplying a settings change. **Unpublishing deactivates** the channel rather than deleting it, so taking a product down for an afternoon does not mean re-registering a Slack app afterwards; republishing keeps the same endpoint and credentials.
+
+## Publishing a hosted chat
+
+The **Web** distribution is a hosted chat app on its own address, carrying the product's name, greeting, colour, and AI disclosure rather than the dashboard chrome.
+
+![The published Web distribution](/screenshots/apps-web-published.png)
+
+![The branded hosted chat surface](/screenshots/apps-hosted-chat.png)
+
+See **[Hosted Chat App](/hosted-chat)** for addressing, custom domains, and self-hosting.
+
+## What publishing refuses
+
+Publishing turns away two things that would otherwise produce a surface that is live and useless:
+
+- **Missing credentials**: a channel whose required credentials are absent. Each adapter declares exactly what it uses, so you are told which credential is missing rather than getting a channel that silently receives nothing.
+- **A workflow agent behind a chat surface**: the runtime turns these away at the first message, so publishing stops it up front.
+
+## What gates an app from shipping
+
+While you are still editing, the app tells you the unmet requirements continuously, rather than letting you discover them when a publish is rejected. The ones that matter for anything open to the public:
+
+- **A cost ceiling.** Anyone with the link or the binary can spend against your model keys, so an open product needs a per-run ceiling.
+- **Rate limits.** One user must not be able to exhaust the product for everyone else. Per-user and per-IP ceilings are separate, because a hosted-chat visitor has no account.
+- **No local access on a public artifact.** A downloadable app that touches the machine it lands on cannot also be open to anyone.
+
+An unset auth mode reads as open, not as unset; the permissive reading of missing configuration is the one that gets someone billed. These limits live on the **Settings** tab, next to branding and who may use the product. A limit left empty is stored as unset, not as zero.
+
+![The Settings tab with a cost ceiling and per-user / per-IP rate limits](/screenshots/apps-settings.png)

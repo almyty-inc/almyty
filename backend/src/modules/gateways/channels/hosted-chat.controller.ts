@@ -221,26 +221,33 @@ export class HostedChatController {
     const owned = await this.hostedChat.runBelongsToEndUser(runId, endUser);
     if (!owned) throw new HttpException('Not found', HttpStatus.NOT_FOUND);
 
+    // Ownership is necessary but not sufficient: scope the run to this
+    // gateway's organization and agent before exposing any of its events.
+    const run = await this.agentRuntimeService.getRun(
+      runId,
+      gateway.organizationId,
+      gateway.agentId,
+    );
+    const verify = run.agent?.agentConfig?.verify;
+    const withholdCandidateChunks = !!(
+      verify?.enabled &&
+      Array.isArray(verify.checkers) &&
+      verify.checkers.length > 0 &&
+      (verify.triggers ?? ['on_final_output']).includes('on_final_output')
+    );
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // nginx would otherwise buffer the stream
     res.flushHeaders?.();
 
-    const emitter = this.agentRuntimeService.getRunEmitter(runId);
-    if (!emitter) {
-      // The run already finished, or this process is not the one running
-      // it. Either way the client should fall back to fetching the
-      // finished reply rather than hanging on an open socket.
-      res.write(`event: done\ndata: ${JSON.stringify({ reason: 'not_streaming' })}\n\n`);
-      return res.end();
-    }
-
     let closed = false;
+    const abortController = new AbortController();
     const close = () => {
       if (closed) return;
       closed = true;
-      emitter.off('event', onEvent);
+      abortController.abort();
       clearInterval(heartbeat);
       try {
         res.end();
@@ -251,7 +258,10 @@ export class HostedChatController {
 
     const onEvent = (event: any) => {
       if (closed) return;
-      if (event?.type === 'token' || event?.type === 'step.completed') {
+      if (
+        !withholdCandidateChunks &&
+        (event?.type === 'llm.chunk' || event?.type === 'token')
+      ) {
         res.write(`event: token\ndata: ${JSON.stringify(event.data ?? {})}\n\n`);
         return;
       }
@@ -268,8 +278,26 @@ export class HostedChatController {
     }, 25_000);
     heartbeat.unref?.();
 
-    emitter.on('event', onEvent);
     req.on('close', close);
+
+    try {
+      // Redis Streams are the cross-pod source of truth. A hosted request and
+      // its worker frequently land on different API pods, so a process-local
+      // EventEmitter cannot reliably deliver completion.
+      await this.agentRuntimeService.subscribeRunEvents(
+        runId,
+        onEvent,
+        abortController.signal,
+      );
+    } catch {
+      // The done event below tells the browser to reconcile from the persisted
+      // transcript even if Redis disconnected after the run had completed.
+    }
+
+    if (!closed) {
+      res.write(`event: done\ndata: ${JSON.stringify({ reason: 'stream_ended' })}\n\n`);
+      close();
+    }
     return undefined;
   }
 

@@ -239,7 +239,11 @@ export class HostedChatService {
     });
 
     return messages
-      .filter((m) => m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT)
+      .filter(
+        (m) =>
+          (m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT) &&
+          m.metadata?.internal !== true,
+      )
       .map((m) => ({
         id: m.id,
         role: m.role,

@@ -247,6 +247,9 @@ describe('HostedChatService', () => {
         // Tool and system turns are scaffolding, not transcript.
         { id: 'm3', role: 'tool', content: '{"rows":[]}', createdAt: new Date() },
         { id: 'm4', role: 'system', content: 'You are...', createdAt: new Date() },
+        // Verifier drafts and synthetic feedback are runtime scaffolding too.
+        { id: 'm5', role: 'assistant', content: 'rejected draft', metadata: { internal: true }, createdAt: new Date() },
+        { id: 'm6', role: 'user', content: 'verification feedback', metadata: { internal: true }, createdAt: new Date() },
       ]);
       const messages = await service.listMessages({ id: 'conv-1' } as any);
       expect(messages.map((m) => m.id)).toEqual(['m1', 'm2']);

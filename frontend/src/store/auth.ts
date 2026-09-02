@@ -7,7 +7,7 @@ import { identifyUser, resetAnalytics } from '@/lib/analytics'
 
 // Identify the logged-in user in PostHog. Called only after auth succeeds
 // (contract basis). Carries the minimum: user id + current org id + plan.
-// No-op when analytics is disabled (no VITE_POSTHOG_KEY).
+// No-op when analytics is disabled (no ALMYTY_POSTHOG_KEY).
 function identifyForAnalytics(user: User) {
   if (!user?.id) return
   const org = useOrganizationStore.getState().currentOrganization

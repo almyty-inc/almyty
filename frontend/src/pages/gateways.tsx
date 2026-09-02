@@ -359,7 +359,7 @@ export function GatewaysPage() {
         {
           label: 'Copy Full URL',
           onClick: async (gateway) => {
-            const backendUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin
+            const backendUrl = import.meta.env.ALMYTY_API_BASE_URL || window.location.origin
             const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
             const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
             const fullEndpoint = `${backendUrl}/${simpleSlug}/${gwSlug}`

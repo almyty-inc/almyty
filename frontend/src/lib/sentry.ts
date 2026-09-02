@@ -4,7 +4,7 @@
  * Mirrors the turnkey / no-op contract of the PostHog wrapper in
  * ./analytics.ts:
  *
- *   - Reads VITE_SENTRY_DSN at init. If it is unset, Sentry is NEVER
+ *   - Reads ALMYTY_SENTRY_DSN at init. If it is unset, Sentry is NEVER
  *     loaded — no @sentry/react import, no network, no errors. Every
  *     exported function becomes a safe no-op. The app runs identically
  *     with or without the DSN, so this ships dark and is lit up by
@@ -35,13 +35,13 @@ let client: SentryModule | null = null
 let initStarted = false
 
 function readDsn(): string | undefined {
-  const dsn = import.meta.env.VITE_SENTRY_DSN
+  const dsn = import.meta.env.ALMYTY_SENTRY_DSN
   return typeof dsn === 'string' && dsn.trim() !== '' ? dsn.trim() : undefined
 }
 
 /**
  * Initialize Sentry once at app bootstrap. No-op (and never touches the
- * network) when VITE_SENTRY_DSN is unset. Development is never tracked —
+ * network) when ALMYTY_SENTRY_DSN is unset. Development is never tracked —
  * only staging and production initialize, matching the analytics gate.
  * Safe to call more than once — subsequent calls are ignored.
  */

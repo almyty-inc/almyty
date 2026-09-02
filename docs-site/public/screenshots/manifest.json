@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-08-31T11:00:00.000Z",
-  "baseUrl": "https://app.staging.almyty.com",
+  "capturedAt": "2026-09-02T09:36:33.000Z",
+  "baseUrl": "https://app.almyty.com",
   "theme": "mixed",
   "viewport": {
     "width": 1440,
@@ -143,13 +143,8 @@
       "path": "screenshots/apps-list.png"
     },
     {
-      "id": "apps-canvas",
-      "title": "App detail page with Slack, Terminal, and Web distribution cards",
-      "path": "screenshots/apps-canvas.png"
-    },
-    {
       "id": "apps-detail",
-      "title": "App detail page (alias of apps-canvas after the canvas was removed)",
+      "title": "App detail page with Slack, Terminal, and Web distribution cards",
       "path": "screenshots/apps-detail.png"
     },
     {

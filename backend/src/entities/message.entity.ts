@@ -155,6 +155,9 @@ export class Message {
     requestId?: string;
     cached?: boolean;
     streamed?: boolean;
+    /** Runtime scaffolding that must not appear in a customer transcript. */
+    internal?: boolean;
+    internalPurpose?: 'verification_candidate' | 'verification_revision' | 'verification_advisory';
     retryCount?: number;
     processingTime?: number;
     queueTime?: number;

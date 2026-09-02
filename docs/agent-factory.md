@@ -29,7 +29,7 @@ The separation is load-bearing. One agent appears in an internal app and a custo
 
 An app is a normal detail page: a header, three tabs (Distributions, Agents, Settings), and a card per place the product ships. Each card carries a ProtocolBadge for the medium and a status badge (Live, Building, Draft). Clicking a card opens a centered dialog, not a canvas, not a drawer.
 
-![An app detail page with Slack, Terminal, and Web distributions as cards](../docs-site/public/screenshots/apps-canvas.png)
+![An app detail page with Slack, Terminal, and Web distributions as cards](../docs-site/public/screenshots/apps-detail.png)
 
 A product with no distributions yet shows an EmptyState on the Distributions tab, with the same Add distribution action as the header.
 
