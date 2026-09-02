@@ -17,7 +17,7 @@ Messages then round-trip: platform, to adapter (verify, normalize), to agent run
 
 Every channel refuses inbound messages it cannot authenticate. A gateway whose verification secret is unset accepts nothing, rather than accepting everything.
 
-A channel is therefore not usable until its verification secret is set, and the surface node in the publish canvas names the exact key it is waiting for. If a channel is not receiving messages, that key is the first thing to check.
+A channel is therefore not usable until its verification secret is set, and its configuration names the exact key it is waiting for. If a channel is not receiving messages, that key is the first thing to check.
 
 | Channel | What proves the request is genuine | Configure |
 |---|---|---|

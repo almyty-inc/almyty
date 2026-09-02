@@ -1,0 +1,54 @@
+# Downloadable Apps
+
+A build runs on our machines and produces a file: a terminal command, a desktop app, or a standalone binary. It does not run on your users' laptops, which is the difference between "download your app" and "install Node and run this command".
+
+Everything knowable up front (an unknown platform, a target that produces no file, a missing toolchain) is checked before the build is queued, so you find out at once rather than twenty minutes into a job.
+
+## Targets and platforms
+
+| Target | Produces | Linux | Windows | macOS |
+|---|---|---|---|---|
+| **Terminal** | a command-line app | bare executable | `.exe` | bare executable |
+| **Binary** | one standalone executable | bare executable | `.exe` | bare executable |
+| **Desktop** | an installable app | `.AppImage` | NSIS installer `.exe` | `.app` in a `.zip` |
+
+Everything cross-compiles: a Linux executable and a macOS app both build on either host. The one exception is a macOS `.dmg`, which needs Apple tooling, so the desktop target ships a zipped `.app` instead, which any Mac opens.
+
+Terminal and Binary compile to the same output, so when you add a distribution only **Terminal** is offered. Existing Binary distributions still build.
+
+## The icon
+
+Your app wears your icon. Set `iconUrl` in the app's branding and the build fetches it and derives the platform formats from it; without one, every app would wear the default framework logo, which undoes most of what a branded build is for. The icon never fails a build: if it cannot be fetched, the build falls back to a default and tells you which happened.
+
+## Desktop apps
+
+The desktop app is an Electron window that renders your hosted chat under your name. It is locked down to match: no Node in the page, navigation confined to your app's own origin, and permission requests refused. The window is painted in your brand colour before the page loads, so a launch shows your brand rather than flashing white.
+
+## Downloads
+
+A build produces a download link that is **minted per request and short-lived**, so a URL that ends up in a chat log or a ticket stops working. The artifact itself expires on its own schedule and is swept afterwards. The downloaded file is named for the product, version, and platform, so it is recognisable in a Downloads folder.
+
+```
+POST /apps/:slug/builds              queue a build
+GET  /apps/:slug/builds              build history
+GET  /apps/:slug/builds/:id/download a fresh download link
+```
+
+## What a build host needs
+
+Before you press **Build**, the app checks whether the host can compile your target and, separately, whether it can sign it. These are two different problems with different fixes, so they are reported separately. The button is disabled when the host cannot compile, and warns when it can compile but not sign.
+
+![A Terminal distribution reporting a build-capability problem](/screenshots/apps-build-capabilities.png)
+
+A production deployment that compiles apps needs these tools on the build host:
+
+| Tool | For |
+|---|---|
+| `bun` | Terminal and Binary targets |
+| `electron-builder` (via `npx`) | Desktop target |
+| `rcodesign` | signing and notarising macOS artifacts |
+| `osslsigncode` | signing Windows executables |
+
+Because desktop builds download a pinned framework release, the host needs outbound network at build time. The recommended layout keeps the API image lean and runs builds on a dedicated worker image; see the self-hosting notes for the trade-offs.
+
+Ready to sign what you build? See **[Signing](/apps/signing)**.
