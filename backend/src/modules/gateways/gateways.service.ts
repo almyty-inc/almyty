@@ -1,4 +1,4 @@
-import { Inject, Optional, forwardRef } from '@nestjs/common';
+import { ConflictException, Inject, Optional, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, Like, MoreThanOrEqual } from 'typeorm';
@@ -238,6 +238,35 @@ export class GatewaysService {
   }
 
   /**
+   * Reserve a hosted-chat subdomain globally.
+   *
+   * App slugs are tenant-scoped, but a hosted chat's DNS name is not:
+   * `{slug}.almyty.app` is one public address for the whole deployment.
+   * Letting two organizations publish the same slug makes the public
+   * lookup ambiguous and can route one tenant to another tenant's agent.
+   */
+  private async assertHostedChatSlugAvailable(
+    configuration: Record<string, any> | undefined,
+    allowedGatewayId?: string,
+  ): Promise<void> {
+    const raw = configuration?.hostedChat?.slug;
+    const slug = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (!slug) return;
+
+    const claims = await this.gatewayRepository
+      .createQueryBuilder('gateway')
+      .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
+      .andWhere("gateway.configuration -> 'hostedChat' ->> 'slug' = :slug", { slug })
+      .getMany();
+
+    if (claims.some((gateway) => gateway.id !== allowedGatewayId)) {
+      throw new ConflictException(
+        `The web address '${slug}' is already in use. Choose a different app name.`,
+      );
+    }
+  }
+
+  /**
    * Channel configs carry channel secrets: the app's OAuth client
    * secret (multi-workspace installs, e.g. a Slack app's
    * client_secret) plus per-channel credentials such as bot_token,
@@ -327,6 +356,10 @@ export class GatewaysService {
 
       // Validate configuration based on gateway type
       this.init.validateGatewayConfiguration(createGatewayDto.type, createGatewayDto.configuration);
+
+      if (createGatewayDto.type === GatewayType.HOSTED_CHAT) {
+        await this.assertHostedChatSlugAvailable(createGatewayDto.configuration);
+      }
 
       // Validate team scoping before persisting.
       await this.accessPolicy.assertCanScopeToTeam(
@@ -427,6 +460,9 @@ export class GatewaysService {
       // Validate configuration if updated
       if (updateGatewayDto.configuration) {
         this.init.validateGatewayConfiguration(gateway.type, gateway.configuration);
+        if (gateway.type === GatewayType.HOSTED_CHAT) {
+          await this.assertHostedChatSlugAvailable(gateway.configuration, gateway.id);
+        }
         await this.encryptConfigSecrets(gateway.configuration, organizationId);
       }
 
