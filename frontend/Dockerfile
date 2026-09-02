@@ -1,5 +1,11 @@
 # Stage 1: Base - install deps and build
-FROM node:26-alpine AS base
+#
+# Runs on the BUILD host's own architecture: the output is static
+# JS/CSS/HTML, identical for every target platform, so compiling it
+# under QEMU emulation for arm64 turns a one-minute build into an
+# hour. Only the nginx stage below is per-architecture.
+FROM --platform= node:26-alpine AS base
+
 WORKDIR /app
 
 COPY package*.json ./
