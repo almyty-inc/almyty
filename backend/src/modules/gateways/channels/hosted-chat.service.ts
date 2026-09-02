@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
@@ -35,6 +35,8 @@ export class HostedChatService {
   /** Cookie holding the per-surface session key. */
   static readonly SESSION_COOKIE = 'almyty_chat_session';
 
+  private readonly logger = new Logger(HostedChatService.name);
+
   constructor(
     @InjectRepository(Gateway)
     private readonly gatewayRepository: Repository<Gateway>,
@@ -62,14 +64,28 @@ export class HostedChatService {
     if (!normalized) throw new NotFoundException('Chat app not found');
 
     // configuration is jsonb; match the slug inside the hostedChat block.
-    const gateway = await this.gatewayRepository
+    const gateways = await this.gatewayRepository
       .createQueryBuilder('gateway')
       .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
       .andWhere("gateway.configuration -> 'hostedChat' ->> 'slug' = :slug", { slug: normalized })
-      .getOne();
+      .getMany();
 
-    if (!gateway || !gateway.isActive()) throw new NotFoundException('Chat app not found');
-    return gateway;
+    const active = gateways.filter((gateway) => gateway.isActive());
+
+    // A tenant slug is a global public address. If bad historic data or
+    // a concurrent publish ever leaves more than one live claimant,
+    // fail closed instead of choosing an arbitrary tenant and exposing
+    // its branding, agent, and conversations under somebody else's URL.
+    if (active.length > 1) {
+      this.logger.error(
+        `Refusing ambiguous hosted-chat slug '${normalized}' claimed by gateways ${active
+          .map((gateway) => gateway.id)
+          .join(', ')}`,
+      );
+    }
+
+    if (active.length !== 1) throw new NotFoundException('Chat app not found');
+    return active[0];
   }
 
   /**

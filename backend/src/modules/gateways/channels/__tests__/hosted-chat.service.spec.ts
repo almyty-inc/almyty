@@ -36,6 +36,7 @@ describe('HostedChatService', () => {
       where: jest.fn().mockReturnThis(),
       andWhere: jest.fn().mockReturnThis(),
       getOne: jest.fn(async () => gateway()),
+      getMany: jest.fn(async () => [gateway()]),
     };
     gatewayRepository = { createQueryBuilder: jest.fn(() => qb) };
     endUserRepository = {
@@ -69,15 +70,34 @@ describe('HostedChatService', () => {
     });
 
     it('404s for an unknown slug', async () => {
-      qb.getOne.mockResolvedValueOnce(null);
+      qb.getMany.mockResolvedValueOnce([]);
       await expect(service.findBySlug('nope')).rejects.toThrow(NotFoundException);
     });
 
     it('404s rather than 403s for a real but inactive surface', async () => {
       // Whether acme.almyty.app exists is itself information; a public
       // endpoint should not confirm it while refusing to serve it.
-      qb.getOne.mockResolvedValueOnce(gateway({ status: GatewayStatus.INACTIVE }));
+      qb.getMany.mockResolvedValueOnce([gateway({ status: GatewayStatus.INACTIVE })]);
       await expect(service.findBySlug('acme')).rejects.toThrow(NotFoundException);
+    });
+
+    it('fails closed when two organizations claim the same live slug', async () => {
+      qb.getMany.mockResolvedValueOnce([
+        gateway({ id: 'gw-org-1', organizationId: 'org-1' }),
+        gateway({ id: 'gw-org-2', organizationId: 'org-2' }),
+      ]);
+
+      await expect(service.findBySlug('acme')).rejects.toThrow(NotFoundException);
+    });
+
+    it('ignores an inactive historic claimant when one live surface remains', async () => {
+      const live = gateway({ id: 'gw-live', organizationId: 'org-1' });
+      qb.getMany.mockResolvedValueOnce([
+        gateway({ id: 'gw-old', organizationId: 'org-2', status: GatewayStatus.INACTIVE }),
+        live,
+      ]);
+
+      await expect(service.findBySlug('acme')).resolves.toBe(live);
     });
 
     it('404s on an empty slug without touching the database', async () => {

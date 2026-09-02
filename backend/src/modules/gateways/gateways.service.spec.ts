@@ -1,9 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConflictException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GatewaysService } from './gateways.service';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
-import { Gateway } from '../../entities/gateway.entity';
+import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { GatewayAuth } from '../../entities/gateway-auth.entity';
 import { User } from '../../entities/user.entity';
@@ -109,6 +110,69 @@ describe('GatewaysService', () => {
     organizationRepository = module.get(getRepositoryToken(Organization));
     usageMetricRepository = module.get(getRepositoryToken(UsageMetric));
     accessPolicy = module.get(AccessPolicyService);
+  });
+
+  describe('hosted-chat slug isolation', () => {
+    const queryBuilder = (claims: Array<{ id: string }>) => ({
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue(claims),
+    });
+
+    it('refuses a public subdomain already claimed by another gateway', async () => {
+      const qb = queryBuilder([{ id: 'gw-other-tenant' }]);
+      gatewayRepository.createQueryBuilder.mockReturnValue(qb);
+
+      await expect(
+        (service as any).assertHostedChatSlugAvailable(
+          { hostedChat: { slug: '  Customer-Care  ' } },
+          'gw-this-tenant',
+        ),
+      ).rejects.toThrow(ConflictException);
+
+      expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), {
+        slug: 'customer-care',
+      });
+    });
+
+    it('allows an existing gateway to keep its own subdomain on republish', async () => {
+      gatewayRepository.createQueryBuilder.mockReturnValue(queryBuilder([{ id: 'gw-self' }]));
+
+      await expect(
+        (service as any).assertHostedChatSlugAvailable(
+          { hostedChat: { slug: 'customer-care' } },
+          'gw-self',
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('checks a hosted-chat create before persisting it', async () => {
+      organizationRepository.findOne.mockResolvedValue({ canAddMoreGateways: () => true });
+      userRepository.findOne.mockResolvedValue({
+        hasPermissionInOrganization: () => true,
+      });
+      gatewayRepository.findOne.mockResolvedValue(null);
+      const claim = jest
+        .spyOn(service as any, 'assertHostedChatSlugAvailable')
+        .mockRejectedValue(new ConflictException('already claimed'));
+
+      await expect(
+        service.createGateway(
+          {
+            name: 'Customer Care',
+            type: GatewayType.HOSTED_CHAT,
+            agentId: 'agent-1',
+            endpoint: '/apps/customer-care/web',
+            configuration: { hostedChat: { slug: 'customer-care' } },
+          },
+          'org-1',
+          'user-1',
+        ),
+      ).rejects.toThrow(ConflictException);
+
+      expect(claim).toHaveBeenCalledWith({ hostedChat: { slug: 'customer-care' } });
+      expect(gatewayRepository.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('createGateway', () => {
