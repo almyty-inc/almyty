@@ -10,12 +10,12 @@ import { initAnalytics } from '@/lib/analytics'
 import { initSentry } from '@/lib/sentry'
 import './index.css'
 
-// Sentry error tracking — no-op unless VITE_SENTRY_DSN is set. Same
+// Sentry error tracking — no-op unless ALMYTY_SENTRY_DSN is set. Same
 // host-based environment gate as analytics (dev untracked). See
 // src/lib/sentry.ts.
 initSentry()
 
-// PostHog product analytics — no-op unless VITE_POSTHOG_KEY is set.
+// PostHog product analytics — no-op unless ALMYTY_POSTHOG_KEY is set.
 // Cookieless, EU host; see src/lib/analytics.ts.
 initAnalytics()
 

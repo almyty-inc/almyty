@@ -54,7 +54,7 @@ export function LoginPage() {
     // Allow absolute URLs to the API domain (OAuth authorize callbacks)
     try {
       const url = new URL(raw)
-      const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+      const apiBase = import.meta.env.ALMYTY_API_BASE_URL || ''
       if (apiBase && url.origin === new URL(apiBase).origin) return raw
     } catch {}
     return null

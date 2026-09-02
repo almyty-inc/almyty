@@ -30,7 +30,7 @@
  * the matching $pageleave automatically.
  *
  * Turnkey / no-op contract:
- *   - Reads VITE_POSTHOG_KEY at init. If it is unset, PostHog is NEVER
+ *   - Reads ALMYTY_POSTHOG_KEY at init. If it is unset, PostHog is NEVER
  *     loaded — no network, no cookies, no errors. Every exported function
  *     becomes a safe no-op. The app runs identically with or without the
  *     key, so this can ship dark and be lit up by setting an env var.
@@ -39,7 +39,7 @@ import type { PostHog } from 'posthog-js'
 
 // Same-origin reverse-proxy path. nginx (frontend/nginx.conf) forwards
 // /ingest/* to PostHog EU. Overridable per-environment via
-// VITE_POSTHOG_HOST — e.g. an absolute 'https://app.almyty.com/ingest'
+// ALMYTY_POSTHOG_HOST — e.g. an absolute 'https://app.almyty.com/ingest'
 // once the marketing + app origins are aligned. THIS is the one default
 // to change if the external proxy path ever moves.
 const DEFAULT_HOST = '/ingest'
@@ -62,12 +62,12 @@ export interface IdentifyTraits {
 }
 
 function readKey(): string | undefined {
-  const key = import.meta.env.VITE_POSTHOG_KEY
+  const key = import.meta.env.ALMYTY_POSTHOG_KEY
   return typeof key === 'string' && key.trim() !== '' ? key.trim() : undefined
 }
 
 function readHost(): string {
-  const host = import.meta.env.VITE_POSTHOG_HOST
+  const host = import.meta.env.ALMYTY_POSTHOG_HOST
   return typeof host === 'string' && host.trim() !== '' ? host.trim() : DEFAULT_HOST
 }
 
@@ -78,14 +78,14 @@ export type AppEnvironment = 'production' | 'staging' | 'development'
  * completely untracked and (b) tag staging vs production events so they are
  * cleanly separable in one shared PostHog project.
  *
- * Resolution: an explicit VITE_APP_ENV build override wins; otherwise infer
+ * Resolution: an explicit ALMYTY_APP_ENV build override wins; otherwise infer
  * from the host. Anything that isn't the known prod/staging host — localhost,
  * *.dev.*, preview builds, unknown — is treated as development (untracked),
  * which is the safe default: we never want to pollute analytics with local or
  * unrecognized traffic.
  */
 export function readEnvironment(): AppEnvironment {
-  const explicit = import.meta.env.VITE_APP_ENV
+  const explicit = import.meta.env.ALMYTY_APP_ENV
   if (explicit === 'production' || explicit === 'staging' || explicit === 'development') {
     return explicit
   }
@@ -97,7 +97,7 @@ export function readEnvironment(): AppEnvironment {
 
 /**
  * Initialize PostHog once at app bootstrap. No-op (and never touches the
- * network) when VITE_POSTHOG_KEY is unset. Safe to call more than once —
+ * network) when ALMYTY_POSTHOG_KEY is unset. Safe to call more than once —
  * subsequent calls are ignored.
  */
 export async function initAnalytics(): Promise<void> {

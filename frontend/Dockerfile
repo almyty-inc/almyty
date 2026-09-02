@@ -7,23 +7,23 @@ RUN npm ci --legacy-peer-deps
 
 COPY . .
 
-ARG VITE_API_BASE_URL=http://localhost:3000
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ARG ALMYTY_API_BASE_URL=http://localhost:3000
+ENV ALMYTY_API_BASE_URL=$ALMYTY_API_BASE_URL
 # PostHog product analytics (publishable client key; baked at build time).
 # Cross-domain funnels stitch to the marketing site's same PostHog EU project.
-ARG VITE_POSTHOG_KEY=phc_wLKPNJ2JTUp7vbdjPKXcieuA6vJrjjDSib4HrSNzfV4e
-ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
+ARG ALMYTY_POSTHOG_KEY=phc_wLKPNJ2JTUp7vbdjPKXcieuA6vJrjjDSib4HrSNzfV4e
+ENV ALMYTY_POSTHOG_KEY=$ALMYTY_POSTHOG_KEY
 # Same-origin reverse-proxy path (nginx forwards /ingest → PostHog EU),
 # so ad blockers can't drop the third-party host. Override with an
 # absolute URL (e.g. https://app.almyty.com/ingest) to align origins.
-ARG VITE_POSTHOG_HOST=/ingest
-ENV VITE_POSTHOG_HOST=$VITE_POSTHOG_HOST
+ARG ALMYTY_POSTHOG_HOST=/ingest
+ENV ALMYTY_POSTHOG_HOST=$ALMYTY_POSTHOG_HOST
 # Sentry error tracking (baked at build time). Empty by default →
 # Sentry never initializes (no-op). Set the DSN to light it up.
-ARG VITE_SENTRY_DSN=
-ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
-ARG VITE_TURNSTILE_SITE_KEY=
-ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
+ARG ALMYTY_SENTRY_DSN=
+ENV ALMYTY_SENTRY_DSN=$ALMYTY_SENTRY_DSN
+ARG ALMYTY_TURNSTILE_SITE_KEY=
+ENV ALMYTY_TURNSTILE_SITE_KEY=$ALMYTY_TURNSTILE_SITE_KEY
 # Tenant hosts: {slug}.<this domain>. staging must be staging.almyty.app
 # or published chat URLs hit production.
 # HOSTED_CHAT_BASE_DOMAIN is NOT baked here: it is per-environment k8s

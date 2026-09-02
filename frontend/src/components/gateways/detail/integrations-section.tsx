@@ -48,7 +48,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
     }
   }
 
-  const backendUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin
+  const backendUrl = import.meta.env.ALMYTY_API_BASE_URL || window.location.origin
   const gatewayType = (gateway.type || 'mcp').toLowerCase()
   const skillsContent = skillsData || ''
 

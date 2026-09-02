@@ -10,7 +10,7 @@
  */
 
 // Last-resort default when neither the runtime config nor the dev
-// VITE_ var is set. Real deployments always set HOSTED_CHAT_BASE_DOMAIN.
+// ALMYTY_ var is set. Real deployments always set HOSTED_CHAT_BASE_DOMAIN.
 export const DEFAULT_HOSTED_CHAT_BASE_DOMAIN = 'almyty.app'
 
 /** Hosts we route ourselves, which can never be a tenant. */
@@ -33,7 +33,7 @@ export const RESERVED_SLUGS = [
 export function hostedChatBaseDomain(): string {
   // Production reads the domain from k8s at runtime: docker-entrypoint.sh
   // writes it into /runtime-config.js from HOSTED_CHAT_BASE_DOMAIN, so the
-  // image itself is environment-agnostic. VITE_ is only a dev fallback.
+  // image itself is environment-agnostic. ALMYTY_ is only a dev fallback.
   const runtime =
     typeof window !== 'undefined'
       ? String((window as unknown as {
@@ -44,7 +44,7 @@ export function hostedChatBaseDomain(): string {
       : ''
   if (runtime) return runtime
 
-  const configured = String(import.meta.env?.VITE_HOSTED_CHAT_BASE_DOMAIN ?? '')
+  const configured = String(import.meta.env?.ALMYTY_HOSTED_CHAT_BASE_DOMAIN ?? '')
     .trim()
     .toLowerCase()
   return configured || DEFAULT_HOSTED_CHAT_BASE_DOMAIN
