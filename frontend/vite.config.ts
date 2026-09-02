@@ -15,14 +15,18 @@ const bypassHtmlGetRequests = (req) => {
  * Where the dev proxy sends API traffic.
  *
  * One constant rather than a port repeated per rule, so a developer
- * whose 4000 is already taken sets VITE_API_TARGET once and every path
+ * whose 4000 is already taken sets ALMYTY_API_TARGET once and every path
  * follows. Previously only /api honoured it and the rest were pinned,
  * which sent auth to whatever else was listening on 4000.
  */
-const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:4000'
+const apiTarget = process.env.ALMYTY_API_TARGET || 'http://localhost:4000'
 
 export default defineConfig({
+  // Client-exposed env vars carry the product's name, not the build
+  // tool's. Only ALMYTY_-prefixed vars reach the bundle.
+  envPrefix: 'ALMYTY_',
   plugins: [react()],
+
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -36,7 +40,7 @@ export default defineConfig({
       // rule that routes /api on a tenant host to the API service. The
       // hosted chat client must be same-origin or the anonymous session
       // cookie lands on the wrong host and every visitor looks new on
-      // every request. VITE_API_TARGET overrides the port for anyone
+      // every request. ALMYTY_API_TARGET overrides the port for anyone
       // whose 3000 is already taken.
       '/api': {
         target: apiTarget,

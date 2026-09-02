@@ -4,8 +4,8 @@ import React from 'react'
  * Optional CAPTCHA widget for the signup form.
  *
  * Renders ONLY when a public site key is configured via build-time env:
- *   VITE_TURNSTILE_SITE_KEY  -> Cloudflare Turnstile
- *   VITE_HCAPTCHA_SITE_KEY   -> hCaptcha
+ *   ALMYTY_TURNSTILE_SITE_KEY  -> Cloudflare Turnstile
+ *   ALMYTY_HCAPTCHA_SITE_KEY   -> hCaptcha
  *
  * When neither is set the component renders nothing and reports no token, so
  * the whole feature ships dark and matches the backend (which no-ops when
@@ -13,8 +13,8 @@ import React from 'react'
  * lazily and only when a key exists.
  */
 
-const TURNSTILE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined
-const HCAPTCHA_KEY = import.meta.env.VITE_HCAPTCHA_SITE_KEY as string | undefined
+const TURNSTILE_KEY = import.meta.env.ALMYTY_TURNSTILE_SITE_KEY as string | undefined
+const HCAPTCHA_KEY = import.meta.env.ALMYTY_HCAPTCHA_SITE_KEY as string | undefined
 
 type Provider = 'turnstile' | 'hcaptcha'
 
