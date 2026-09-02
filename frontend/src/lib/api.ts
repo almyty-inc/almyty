@@ -1,7 +1,7 @@
 import axios, { AxiosResponse, AxiosError } from 'axios'
 import { isHostedChatHost } from '@/lib/tenant-host'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
 // Retry configuration
 const MAX_RETRIES = 3

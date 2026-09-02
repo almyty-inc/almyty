@@ -44,7 +44,7 @@ jobs:
           #   immutable build tag  = <pfx>-<shortsha> (12-char sha)
           # `latest` is NOT published here — it means "newest stable release"
           # and is minted only by release.yml on v* tags.
-          # API_URL is baked into the frontend at build time (VITE_API_BASE_URL).
+          # API_URL is baked into the frontend at build time (ALMYTY_API_BASE_URL).
           # Missing it = the SPA calls http://localhost:3000 and prod login breaks.
           case "${{ github.ref_name }}" in
             master)      ENV=production;  PFX=prod;    API_URL="https://api.almyty.com" ;;
@@ -140,11 +140,11 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            VITE_API_BASE_URL=${{ needs.meta.outputs.api_url }}
-            VITE_POSTHOG_KEY=${{ vars.VITE_POSTHOG_KEY }}
-            VITE_POSTHOG_HOST=/ingest
-            VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
-            VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY }}
+            ALMYTY_API_BASE_URL=${{ needs.meta.outputs.api_url }}
+            ALMYTY_POSTHOG_KEY=${{ vars.ALMYTY_POSTHOG_KEY }}
+            ALMYTY_POSTHOG_HOST=/ingest
+            ALMYTY_SENTRY_DSN=${{ vars.ALMYTY_SENTRY_DSN }}
+            ALMYTY_TURNSTILE_SITE_KEY=${{ vars.ALMYTY_TURNSTILE_SITE_KEY }}
           tags: almyty/frontend:${{ needs.meta.outputs.latest_tag }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
@@ -234,7 +234,7 @@ jobs:
 
   # All-in-one self-host image. Same native-arch split as docs: qemu-cross
   # arm64 hangs on npm ci / native addons. Off the deploy critical path.
-  # Self-host SPA is same-origin, so VITE_API_BASE_URL stays empty.
+  # Self-host SPA is same-origin, so ALMYTY_API_BASE_URL stays empty.
   # Built only on tag pushes and manual dispatch (not every branch push).
   build-almyty:
     name: Build almyty (${{ matrix.platform }})
@@ -267,11 +267,11 @@ jobs:
           target: production
           platforms: linux/${{ matrix.platform }}
           build-args: |
-            VITE_API_BASE_URL=
-            VITE_POSTHOG_KEY=${{ vars.VITE_POSTHOG_KEY }}
-            VITE_POSTHOG_HOST=/ingest
-            VITE_SENTRY_DSN=${{ vars.VITE_SENTRY_DSN }}
-            VITE_TURNSTILE_SITE_KEY=${{ vars.VITE_TURNSTILE_SITE_KEY }}
+            ALMYTY_API_BASE_URL=
+            ALMYTY_POSTHOG_KEY=${{ vars.ALMYTY_POSTHOG_KEY }}
+            ALMYTY_POSTHOG_HOST=/ingest
+            ALMYTY_SENTRY_DSN=${{ vars.ALMYTY_SENTRY_DSN }}
+            ALMYTY_TURNSTILE_SITE_KEY=${{ vars.ALMYTY_TURNSTILE_SITE_KEY }}
           outputs: type=image,name=almyty/almyty,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=almyty-${{ matrix.platform }}
           cache-to: type=gha,scope=almyty-${{ matrix.platform }},mode=max

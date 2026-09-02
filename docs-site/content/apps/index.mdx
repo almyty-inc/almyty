@@ -1,0 +1,48 @@
+# Agent Factory
+
+The **Apps** screen takes an agent you have already built and turns it into a product you ship under your own name: a hosted chat on its own address, a Slack or WhatsApp presence, a terminal command, a desktop app, or a standalone binary.
+
+![The Apps list with a customer-facing product](/screenshots/apps-list.png)
+
+## Why it exists
+
+Most ways to ship an agent keep your users tethered to the vendor: a hosted widget, a messaging channel, an API. A signed binary you hand to your own users does not. It carries your name, your identifier, and your signature, and when the operating system asks who published it, the answer is you. That is what the Agent Factory is built around.
+
+## Agents, apps, and distributions
+
+```
+   Agent(s)              App                    Distributions
+   capability     ->     product          ->    where it reaches people
+   ---------             ---------              ---------
+   what it knows         what it is called      web       (hosted chat)
+   which models          who may use it         slack, telegram, ...
+   which tools           branding               tui       (terminal)
+   how its loop runs     cost + rate limits     desktop   (installable)
+                                                binary    (one executable)
+```
+
+- An **agent** is a capability: what it knows, which models and tools it uses, how its loop runs.
+- An **app** is a product decision: a name, a set of agents, branding, an auth mode, and spending limits.
+- A **distribution** is one place that product reaches people. There is exactly one per target.
+
+The separation is deliberate. The same agent can appear in an internal app and a customer-facing one at once, under different names, different auth, and different limits, without being duplicated.
+
+## The app detail page
+
+An app is a normal detail page: a header, three tabs (**Distributions**, **Agents**, **Settings**), and a card for each place the product ships. Every card shows a badge for the medium and a status (Live, Building, Draft). Clicking a card opens a dialog to configure that distribution.
+
+![An app detail page with its distributions as cards](/screenshots/apps-detail.png)
+
+A product with no distributions yet shows an empty state on the Distributions tab, with the same **Add distribution** action as the header.
+
+![An app that is not shipping anywhere yet](/screenshots/apps-empty.png)
+
+## Addressing
+
+Everything is addressed by name: `/apps/acme-support`, `/apps/acme-support/distributions/slack`. The slug is unique within your organization and is what the product ships under, so it is what you recognise and can type.
+
+## Where to go next
+
+- **[Distributions](/apps/distributions)**: publish your product to a hosted chat or a messaging channel.
+- **[Downloadable Apps](/apps/builds)**: compile a terminal, desktop, or binary app on our machines.
+- **[Signing](/apps/signing)**: ship builds signed with your own certificate.

@@ -69,7 +69,14 @@ describe('HostedChatController', () => {
     gatewayRateLimit = { check: jest.fn(async () => ({ limited: false })) };
     agentRuntimeService = {
       startRun: jest.fn(async () => ({ id: 'run-1' })),
-      getRunEmitter: jest.fn(() => null),
+      getRun: jest.fn(async () => ({
+        id: 'run-1',
+        status: 'running',
+        agent: { agentConfig: {} },
+      })),
+      subscribeRunEvents: jest.fn(async (_runId, handler) => {
+        handler({ type: 'run.completed', data: { output: 'done' } });
+      }),
     };
     controller = new HostedChatController(hostedChat, gatewayRateLimit, agentRuntimeService);
   });
@@ -238,19 +245,51 @@ describe('HostedChatController', () => {
     });
 
     it('sets the SSE headers and disables proxy buffering', async () => {
-      const emitter = { on: jest.fn(), off: jest.fn() };
-      agentRuntimeService.getRunEmitter.mockReturnValueOnce(emitter);
       await controller.stream('acme', 'run-1', req(), res);
       expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
       // nginx would otherwise buffer the whole stream and deliver it at once.
       expect(res.setHeader).toHaveBeenCalledWith('X-Accel-Buffering', 'no');
+      expect(agentRuntimeService.getRun).toHaveBeenCalledWith('run-1', 'org-1', 'agent-1');
     });
 
-    it('closes immediately when the run is not streaming here', async () => {
-      agentRuntimeService.getRunEmitter.mockReturnValueOnce(null);
+    it('streams chunks and completion from the cross-pod event channel', async () => {
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.chunk', data: { content: 'hello' } });
+        handler({ type: 'run.completed', data: { output: 'hello' } });
+      });
+
       await controller.stream('acme', 'run-1', req(), res);
-      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('not_streaming'));
+
+      expect(agentRuntimeService.subscribeRunEvents).toHaveBeenCalledWith(
+        'run-1',
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('event: token'));
+      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('"content":"hello"'));
+      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('run.completed'));
       expect(res.end).toHaveBeenCalled();
+    });
+
+    it('does not stream an unverified candidate answer to a public visitor', async () => {
+      agentRuntimeService.getRun.mockResolvedValueOnce({
+        id: 'run-1',
+        status: 'running',
+        agent: {
+          agentConfig: {
+            verify: { enabled: true, checkers: [{ name: 'accuracy' }] },
+          },
+        },
+      });
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.chunk', data: { content: 'rejected draft' } });
+        handler({ type: 'run.completed', data: { output: 'verified answer' } });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+
+      expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('rejected draft'));
+      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('run.completed'));
     });
   });
 

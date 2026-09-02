@@ -769,6 +769,9 @@ describe('AgentRuntimeService (integration)', () => {
       expect(
         messageStore.some(m => m.role === 'user' && String(m.content).includes('verification panel')),
       ).toBe(false);
+      expect(
+        messageStore.find(m => m.role === 'assistant' && m.runId === run.id)?.metadata?.internal,
+      ).not.toBe(true);
     });
 
     it('sends the answer back for revision when the panel fails (within budget)', async () => {
@@ -789,6 +792,17 @@ describe('AgentRuntimeService (integration)', () => {
       );
       expect(critique).toBeDefined();
       expect(String(critique!.content)).toContain('missing total');
+      expect(critique!.metadata).toMatchObject({
+        internal: true,
+        internalPurpose: 'verification_revision',
+      });
+      const rejectedDraft = messageStore.find(
+        m => m.role === 'assistant' && m.runId === run.id,
+      );
+      expect(rejectedDraft?.metadata).toMatchObject({
+        internal: true,
+        internalPurpose: 'verification_candidate',
+      });
     });
 
     it('completes anyway once the revision budget is exhausted', async () => {
@@ -807,6 +821,9 @@ describe('AgentRuntimeService (integration)', () => {
       const stored = runStore.find(r => r.id === run.id)!;
       expect(stored.status).toBe(AgentRunStatus.COMPLETED);
       expect(stored.metadata?.verify?.exhausted).toBe(true);
+      expect(
+        messageStore.find(m => m.role === 'assistant' && m.runId === run.id)?.metadata?.internal,
+      ).not.toBe(true);
     });
 
     it('does not run the panel when verify is disabled', async () => {
@@ -867,6 +884,10 @@ describe('AgentRuntimeService (integration)', () => {
       );
       expect(advisory).toBeDefined();
       expect(String(advisory!.content)).toContain('off track');
+      expect(advisory!.metadata).toMatchObject({
+        internal: true,
+        internalPurpose: 'verification_advisory',
+      });
     });
 
     it('skips the final-output gate when on_final_output is not a configured trigger', async () => {

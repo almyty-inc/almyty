@@ -658,7 +658,7 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
   const skillsGateway = gateways.find(g => g.gateway?.type === 'skills')?.gateway
   const firstGateway = gateways[0]?.gateway
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL || window.location.origin
+  const apiBase = import.meta.env.ALMYTY_API_BASE_URL || window.location.origin
 
   const { data: skillData, isLoading: skillLoading } = useQuery({
     queryKey: ['tool-skill', toolId],

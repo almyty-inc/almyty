@@ -29,7 +29,7 @@ describe('analytics wrapper — no key (disabled)', () => {
     posthogMock.identify.mockClear()
     posthogMock.reset.mockClear()
     posthogMock.capture.mockClear()
-    vi.stubEnv('VITE_POSTHOG_KEY', '')
+    vi.stubEnv('ALMYTY_POSTHOG_KEY', '')
   })
 
   afterEach(() => {
@@ -63,10 +63,10 @@ describe('analytics wrapper — keyed (enabled)', () => {
     posthogMock.capture.mockClear()
     posthogMock.register.mockClear()
     posthogMock.startSessionRecording.mockClear()
-    vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test_key')
+    vi.stubEnv('ALMYTY_POSTHOG_KEY', 'phc_test_key')
     // Pin a tracked environment — jsdom's host is localhost, which the
     // wrapper (correctly) treats as development and would not track.
-    vi.stubEnv('VITE_APP_ENV', 'production')
+    vi.stubEnv('ALMYTY_APP_ENV', 'production')
   })
 
   afterEach(() => {
@@ -124,8 +124,8 @@ describe('analytics wrapper — keyed (enabled)', () => {
     expect(posthogMock.startSessionRecording).toHaveBeenCalledTimes(1)
   })
 
-  it('honors VITE_POSTHOG_HOST override (aligned proxy origin)', async () => {
-    vi.stubEnv('VITE_POSTHOG_HOST', 'https://app.almyty.com/ingest')
+  it('honors ALMYTY_POSTHOG_HOST override (aligned proxy origin)', async () => {
+    vi.stubEnv('ALMYTY_POSTHOG_HOST', 'https://app.almyty.com/ingest')
     const a = await loadAnalytics()
     await a.initAnalytics()
     expect(posthogMock.init.mock.calls[0][1].api_host).toBe('https://app.almyty.com/ingest')
@@ -142,7 +142,7 @@ describe('analytics wrapper — keyed (enabled)', () => {
   })
 
   it('capturePageview is a no-op when analytics is disabled', async () => {
-    vi.stubEnv('VITE_POSTHOG_KEY', '')
+    vi.stubEnv('ALMYTY_POSTHOG_KEY', '')
     const a = await loadAnalytics()
     await a.initAnalytics()
     a.capturePageview('/anything')
@@ -188,7 +188,7 @@ describe('analytics wrapper — keyed (enabled)', () => {
   })
 
   it('tags every event with the environment super-property', async () => {
-    vi.stubEnv('VITE_APP_ENV', 'production')
+    vi.stubEnv('ALMYTY_APP_ENV', 'production')
     const a = await loadAnalytics()
     await a.initAnalytics()
     expect(posthogMock.register).toHaveBeenCalledWith({ environment: 'production' })
@@ -201,7 +201,7 @@ describe('analytics wrapper — environment gating', () => {
     posthogMock.init.mockClear()
     posthogMock.register.mockClear()
     posthogMock.startSessionRecording.mockClear()
-    vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test_key')
+    vi.stubEnv('ALMYTY_POSTHOG_KEY', 'phc_test_key')
   })
 
   afterEach(() => {
@@ -209,28 +209,28 @@ describe('analytics wrapper — environment gating', () => {
   })
 
   it('does NOT track development (key set, but env is development)', async () => {
-    vi.stubEnv('VITE_APP_ENV', 'development')
+    vi.stubEnv('ALMYTY_APP_ENV', 'development')
     const a = await loadAnalytics()
     await a.initAnalytics()
     expect(posthogMock.init).not.toHaveBeenCalled()
   })
 
   it('defaults to development (untracked) for an unrecognized host', async () => {
-    // No VITE_APP_ENV override; jsdom host is localhost -> development.
+    // No ALMYTY_APP_ENV override; jsdom host is localhost -> development.
     const a = await loadAnalytics()
     await a.initAnalytics()
     expect(posthogMock.init).not.toHaveBeenCalled()
   })
 
   it('tracks production only, not staging or development', async () => {
-    vi.stubEnv('VITE_APP_ENV', 'production')
+    vi.stubEnv('ALMYTY_APP_ENV', 'production')
     let a = await loadAnalytics()
     await a.initAnalytics()
     expect(posthogMock.init).toHaveBeenCalledTimes(1)
     for (const env of ['staging', 'development'] as const) {
       vi.resetModules()
       posthogMock.init.mockClear()
-      vi.stubEnv('VITE_APP_ENV', env)
+      vi.stubEnv('ALMYTY_APP_ENV', env)
       a = await loadAnalytics()
       await a.initAnalytics()
       expect(posthogMock.init).not.toHaveBeenCalled()

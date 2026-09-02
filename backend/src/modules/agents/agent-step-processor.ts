@@ -523,11 +523,11 @@ export class AgentStepProcessor {
         // No tool calls — the agent has a final response
         const finalContent = responseMessage.content || '';
 
-        // Persist final assistant message
+        // Prepare the candidate, but do not expose it until verification ends.
+        let finalMsg: Message | null = null;
         if (run.conversationId) {
-          const finalMsg = Message.createAssistantMessage(run.conversationId, finalContent);
+          finalMsg = Message.createAssistantMessage(run.conversationId, finalContent);
           finalMsg.runId = run.id;
-          await this.s.messageRepository.save(finalMsg);
         }
 
         // Autonomous verify gate: a refute-only checker panel reviews the
@@ -549,9 +549,20 @@ export class AgentStepProcessor {
               revisions + 1,
               maxLoops,
             );
+            if (finalMsg) {
+              finalMsg.metadata = {
+                internal: true,
+                internalPurpose: 'verification_candidate',
+              };
+              await this.s.messageRepository.save(finalMsg);
+            }
             if (run.conversationId) {
               const critiqueMsg = Message.createUserMessage(run.conversationId, critique);
               critiqueMsg.runId = run.id;
+              critiqueMsg.metadata = {
+                internal: true,
+                internalPurpose: 'verification_revision',
+              };
               await this.s.messageRepository.save(critiqueMsg);
             }
             run.steps.push({
@@ -606,6 +617,10 @@ export class AgentStepProcessor {
             },
           };
         }
+
+        // Verification candidates are only committed to customer-visible
+        // history after they pass (or exhaust the configured revision budget).
+        if (finalMsg) await this.s.messageRepository.save(finalMsg);
 
         run.status = AgentRunStatus.COMPLETED;
         run.output = finalContent;
@@ -706,26 +721,27 @@ export class AgentStepProcessor {
     agent: Agent,
     finalContent: string,
   ): Promise<VerifyPanelResult | null> {
-    const cfg = agent.agentConfig?.verify;
-    if (!cfg?.enabled || !Array.isArray(cfg.checkers) || cfg.checkers.length === 0) {
-      return null;
-    }
-    // on_final_output is the default trigger; skip the gate if it's not configured.
-    if (!(cfg.triggers ?? ['on_final_output']).includes('on_final_output')) {
-      return null;
-    }
-    if (!finalContent.trim()) {
-      // Nothing to check (e.g. the agent ended with an empty message).
-      return null;
-    }
+    if (!this.hasFinalOutputVerification(agent, finalContent)) return null;
+    const cfg = agent.agentConfig!.verify!;
     const panel = await this.verifier.runPanel(
-      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers, policy: cfg.policy },
+      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy },
       run.organizationId,
       run.userId,
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;
     return panel;
+  }
+
+  private hasFinalOutputVerification(agent: Agent, finalContent: string): boolean {
+    const cfg = agent.agentConfig?.verify;
+    return !!(
+      cfg?.enabled &&
+      Array.isArray(cfg.checkers) &&
+      cfg.checkers.length > 0 &&
+      (cfg.triggers ?? ['on_final_output']).includes('on_final_output') &&
+      finalContent.trim()
+    );
   }
 
   /**
@@ -787,6 +803,10 @@ export class AgentStepProcessor {
       if (run.conversationId) {
         const msg = Message.createUserMessage(run.conversationId, note);
         msg.runId = run.id;
+        msg.metadata = {
+          internal: true,
+          internalPurpose: 'verification_advisory',
+        };
         await this.s.messageRepository.save(msg);
       }
       this.s.emitEvent(runId, 'verify.advisory', { step: run.currentStep, failures: panel.failures });
