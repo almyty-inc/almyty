@@ -5,12 +5,12 @@
 // Auth: staging sign-in is CAPTCHA-gated, so this reuses a Playwright
 // storageState you produce ONCE by logging in by hand:
 //
-//   npx playwright open --save-storage=.auth/staging.json https://app.staging.almyty.com
+//   npx playwright open --save-storage=.auth/docs.json https://app.almyty.com
 //   # sign in, solve the CAPTCHA, then close the window
 //
 // Then run:
 //
-//   SCREENSHOT_STORAGE_STATE=.auth/staging.json \
+//   SCREENSHOT_STORAGE_STATE=.auth/docs.json \
 //   SCREENSHOT_APP_SLUG=acme-support \
 //   node frontend/scripts/capture-app-screenshots.mjs
 //
@@ -26,7 +26,7 @@ const repo = resolve(here, '..', '..')
 const shotsDir = resolve(repo, 'docs-site', 'public', 'screenshots')
 const manifestPath = resolve(shotsDir, 'manifest.json')
 
-const BASE_URL = process.env.SCREENSHOT_BASE_URL ?? 'https://app.staging.almyty.com'
+const BASE_URL = process.env.SCREENSHOT_BASE_URL ?? 'https://app.almyty.com'
 const STORAGE_STATE = process.env.SCREENSHOT_STORAGE_STATE
 const APP_SLUG = process.env.SCREENSHOT_APP_SLUG ?? 'acme-support'
 const EMPTY_SLUG = process.env.SCREENSHOT_EMPTY_APP_SLUG ?? APP_SLUG
