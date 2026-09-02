@@ -9,6 +9,7 @@ export default {
   agents: 'Agents',
   'agentic-loops': 'Agentic Loops',
   'llm-providers': 'AI Models',
+  apps: 'Agent Factory',
   interfaces: 'Chat Interfaces',
   'hosted-chat': 'Hosted Chat App',
   'operate-separator': { type: 'separator', title: 'Operate' },

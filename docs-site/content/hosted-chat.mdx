@@ -1,78 +1,90 @@
 # Hosted chat app
 
-Put an agent in front of people as a chat app of its own: your name, your colour, your logo, on your own subdomain. No embedding, no page to build, no front end to deploy.
+Publish an agent as a branded, full-page chat at `https://<app-slug>.almyty.app`. There is no widget to embed and no separate frontend to deploy.
 
-It is part of the Apache core. Self-hosting gets you the whole feature on a domain you control.
+![A branded hosted chat app on its own address](/screenshots/apps-hosted-chat.png)
+
+The page carries your app's name, colour, greeting, and AI disclosure. Visitors get streaming replies and conversation history without seeing the almyty dashboard.
+
+## Publish from Apps
+
+1. Open **Apps** and create an app, or select one you already have.
+2. On **Agents**, attach at least one autonomous agent and choose the default agent that answers.
+3. On **Settings**, set the name and colour visitors see, the greeting, the access mode, and the spending limits.
+4. On **Distributions**, select **Add distribution**, then choose **Web app**.
+5. Open the Web app card. Resolve any listed blockers, then select **Publish**.
+
+The distribution changes to **Live** when the hosted chat is answering. Open `https://<app-slug>.almyty.app` to test it as a visitor.
+
+![The Web app distribution after publication](/screenshots/apps-web-published.png)
+
+The address comes from the app slug. It must be 3 to 63 characters, using lowercase letters, numbers, and hyphens without a hyphen at either end. Reserved service names cannot be used.
 
 ## What a visitor gets
 
-A full-page chat with streaming replies, conversation history, and starter prompts. They do not sign up, and they do not see almyty unless you leave the mark on.
+A visitor can start a chat, receive a streaming reply, and reopen earlier conversations. Public-link visitors do not need an almyty account. An anonymous visitor still has a separate record, keyed by a cookie scoped to that app's host, so one visitor cannot read another visitor's conversations.
 
-Returning visitors keep their history. That works without a login because an anonymous visitor is still a real record, keyed by a cookie scoped to your surface. If you later turn on email verification or SSO, the same record gains an identity rather than being replaced, so nobody loses their history to a change of settings.
+Unpublishing turns the chat off without deleting its address or settings. Publishing it again restores the same distribution.
 
-## Setting one up
+## Protect model spend
 
-1. Create a **Hosted chat** surface on the agent you want to publish. On the surfaces canvas it sits under **People**.
-2. Pick a subdomain. Lowercase letters, numbers and hyphens, three characters or more. Some names are reserved.
-3. Set the name, brand colour, greeting, and up to four starter prompts.
-4. Choose who can use it.
-5. Save. The panel tells you if anything is blocking publication.
+An app that uses **Anyone with the link** cannot be published until all three limits are set on **Settings**:
 
-## Who can use it
+- a cost ceiling per run;
+- a request limit per visitor, per hour; and
+- a request limit per IP address, per hour.
 
-| Mode | Who gets in |
-|---|---|
-| `public_link` | Anyone with the URL |
-| `email_otp` | Anyone who can receive a one-time code |
-| `oauth` | Anyone who can sign in with your provider |
-| `sso` | Your enterprise directory (commercial) |
+These are enforced publication rules. The distribution dialog names each missing setting before the app can go live, so a public URL cannot spend against your model keys without a ceiling.
 
-### Public links have two requirements, and they are enforced
-
-A public link cannot be published without:
-
-- a **cost cap** on the surface, and
-- both a **per-visitor** and a **per-IP** rate limit.
-
-This is a refusal in code, not advice in a doc. On bring-your-own-key, a public chat URL with no ceiling is a way for a stranger to spend against your model provider account. If either is missing you get a reason code and a sentence saying which one, before you publish rather than after.
-
-Gated modes do not carry the requirement, because the gate is what stands between a stranger and the spend.
+The app-level access selector also includes email verification, OAuth, and SSO. Gated modes do not require public-link limits because the identity gate stands between an unknown visitor and your model spend. SSO requires a commercial entitlement.
 
 ## AI disclosure
 
-Every hosted chat app shows an AI disclosure under the composer by default, which is what the EU AI Act asks of a deployer under Art. 50. You can reword it. Removing it entirely requires the white-label entitlement, and the removal is recorded.
+Every hosted chat shows an AI disclosure under the composer by default. You can change the wording on **Settings**. Removing it requires the white-label entitlement, and the removal is recorded.
 
-See [Compliance](/compliance) for the full mapping.
+See [Compliance](/compliance) for the full EU AI Act mapping.
+
+## Addresses in each environment
+
+Hosted apps and the dashboard use separate domains:
+
+| Environment | Dashboard | Hosted app |
+|---|---|---|
+| Production | `app.almyty.com` | `<app-slug>.almyty.app` |
+| Staging | `app.staging.almyty.com` | `<app-slug>.staging.almyty.app` |
+| Development | your development dashboard | `<app-slug>.dev.almyty.app` |
+
+Keeping the app on its own host lets the visitor cookie stay scoped to that app instead of the dashboard or API.
 
 ## Self-hosting
 
-The feature is Apache-licensed in full. What almyty.com operates is a domain and a wildcard certificate, which is hosting, not licensing.
-
-To run it on your own domain:
+Hosted chat is part of the Apache-licensed core. To serve apps on a domain you control:
 
 1. Point a wildcard DNS record at your deployment, for example `*.chat.acme.com`.
-2. Set `HOSTED_CHAT_BASE_DOMAIN=chat.acme.com` on the API, and `ALMYTY_HOSTED_CHAT_BASE_DOMAIN` on the frontend build.
-3. Issue a wildcard certificate for that domain.
+2. Set `HOSTED_CHAT_BASE_DOMAIN=chat.acme.com` on both the API and frontend containers. The frontend reads it at runtime, so the same image can be used in every environment.
+3. Route `/api` on every tenant host to the API and strip the `/api` prefix. Route every other path to the frontend. Keeping these calls same-origin is what keeps the anonymous visitor cookie on the tenant host.
+4. Issue a wildcard certificate for the domain and attach it to the tenant-host ingress.
 
-A surface with the slug `support` is then reachable at `https://support.chat.acme.com`.
+An app with the slug `support` is then available at `https://support.chat.acme.com`.
 
-### A note on wildcard certificates
+### Wildcard certificates need DNS-01
 
-Let's Encrypt will not issue a wildcard over an HTTP-01 challenge. You need **DNS-01**, which means your certificate tooling has to be able to write TXT records into the zone. If your DNS is hosted somewhere your issuer has no solver for, move the zone or delegate `_acme-challenge` to one that does.
+Let's Encrypt does not issue wildcard certificates through an HTTP-01 challenge. Use DNS-01, which means your certificate controller needs permission to create TXT records in the zone. If your issuer has no solver for that DNS provider, move the zone or delegate `_acme-challenge` to one it can update.
 
-The alternative is a certificate per tenant, which works until you meet the Let's Encrypt limit of 50 certificates per registered domain per week.
+A certificate per tenant also works, but Let's Encrypt limits issuance to 50 certificates per registered domain each week.
 
 ## What is commercial
 
-Two things:
+Two options require a commercial entitlement:
 
-- **White-label**: removing the almyty mark.
-- **`sso` auth mode**.
+- removing the almyty mark with white-label mode; and
+- using SSO as the app access mode.
 
-Everything else, including `public_link`, `email_otp` and `oauth`, is core. Both appear in the builder as disabled controls with a line saying what unlocks them, rather than being hidden, so you can always tell the difference between a feature that is missing and one that is locked.
+Public links, email verification, and OAuth remain in the core edition.
 
 ## Related
 
-- [Chat interfaces](/interfaces): the embeddable widget and the messaging platforms
-- [Run limits](/run-limits): the ceilings a run cannot exceed
-- [Compliance](/compliance): Art. 50 and the rest of the mapping
+- [Agent Factory](/apps): turn agents into products and distributions
+- [Distributions](/apps/distributions): publish to Web, Slack, and other channels
+- [Chat interfaces](/interfaces): embed a widget or connect a messaging platform
+- [Run limits](/run-limits): stop runs at explicit ceilings
