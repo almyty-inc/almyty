@@ -21,6 +21,9 @@ import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto'
 import { callLlmProviderHttp } from './providers/safe-request';
 import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
+import { DefaultModelResolver } from './default-model.resolver';
+import { ModelNotFoundError, isModelNotFoundResponse, vendorMessage } from './model-errors';
+
 import {
   validateUrl,
   validateUrlAllowingPrivate,
@@ -45,7 +48,9 @@ export class LlmChatRunnerHelper {
     private readonly toolExecutorService: ToolExecutorService,
     private readonly modelsHelper: LlmModelsHelper,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    private readonly defaultModels: DefaultModelResolver,
   ) {}
+
 
   async callLlmProvider(
     provider: LlmProvider,
@@ -58,6 +63,14 @@ export class LlmChatRunnerHelper {
     // point for outbound provider calls, so it covers chat, streaming, and the
     // health check path.
     await this.envelopeCrypto.warmOrg(provider.organizationId);
+
+    // Settle the model once, up front. Provider implementations never
+    // guess: when neither the request nor the provider names one, the
+    // vendor's current list decides (see DefaultModelResolver).
+    if (!request.model) {
+      request = { ...request, model: await this.defaultModels.resolve(provider) };
+    }
+
     const maxRetries = 2;
     const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
     let lastError: any;
@@ -100,7 +113,21 @@ export class LlmChatRunnerHelper {
         // via bumpProviderStats, which is the right place for the
         // persistent record. Keep the per-attempt log above.
 
+        // A retired or mistyped model id is not transient: surface it as
+        // a typed error the scheduler and UI can act on, and forget any
+        // cached default so the next call re-asks the vendor.
+        if (isModelNotFoundResponse(statusCode, error.response?.data || error.response?.body)) {
+          this.defaultModels.invalidate(provider.id);
+          throw new ModelNotFoundError(
+            request.model ?? provider.configuration?.model ?? 'unknown',
+            provider.id,
+            provider.type,
+            vendorMessage(error.response?.data || error.response?.body),
+          );
+        }
+
         // Retry only on retryable status codes (429, 500, 502, 503)
+
         const isRetryable = [429, 500, 502, 503].includes(statusCode) ||
           error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
 

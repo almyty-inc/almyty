@@ -5,6 +5,8 @@ import { MessageRole } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse } from '../llm-providers.service';
 import { callLlmProviderHttp } from './safe-request';
+import { requireModel } from '../model-errors';
+
 
 /**
  * Handles Google Gemini API calls.
@@ -38,7 +40,7 @@ export async function callGoogle(
   // interpolated raw, so a model id like `../../v1beta/chat` or a key
   // containing `&` / `#` would break URL parsing or inject extra
   // query params.
-  const safeModel = encodeURIComponent(request.model || provider.configuration.model || 'gemini-2.5-flash');
+  const safeModel = encodeURIComponent(requireModel(request, provider));
   const safeKey = encodeURIComponent(apiKey || '');
   const config: AxiosRequestConfig = {
     method: 'POST',
@@ -72,7 +74,7 @@ export async function callGoogle(
       totalTokens: usage.totalTokenCount || 0,
     },
     cost,
-    model: request.model || provider.configuration.model || 'gemini-2.5-flash',
+    model: requireModel(request, provider),
     conversationId: conversation.id,
     messageId: '',
     responseTime,
@@ -101,7 +103,7 @@ export async function callCohere(
   }));
 
   const cohereRequest: Record<string, unknown> = {
-    model: request.model || provider.configuration.model || 'command',
+    model: requireModel(request, provider),
     message: lastMessage.content,
     chat_history: chatHistory,
     max_tokens: request.maxTokens || conversation.context?.maxTokens,
@@ -212,7 +214,7 @@ export async function callHuggingFace(
       totalTokens: Math.round(inputTokens + outputTokens),
     },
     cost,
-    model: request.model || provider.configuration.model || 'unknown',
+    model: requireModel(request, provider),
     conversationId: conversation.id,
     messageId: '',
     responseTime,
@@ -322,7 +324,7 @@ export async function callCustomProvider(
       totalTokens: usage.inputTokens + usage.outputTokens,
     },
     cost: 0, // Custom providers would need their own cost calculation
-    model: request.model || provider.configuration.model || 'custom',
+    model: requireModel(request, provider),
     conversationId: conversation.id,
     messageId: '',
     responseTime,
