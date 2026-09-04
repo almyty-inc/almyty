@@ -253,6 +253,19 @@ describe('AgentNodeExecutor', () => {
         ),
       ).rejects.toThrow(/rate limited/);
     });
+    it('keeps the typed cause and code when the model no longer exists', async () => {
+      const { ModelNotFoundError, isModelNotFoundError } = require('../../llm-providers/model-errors');
+      llmProvidersService.chat.mockRejectedValue(new ModelNotFoundError('claude-sonnet-4-20250514', 'p1', 'anthropic', 'model: claude-sonnet-4-20250514'));
+
+      const failure = await executor
+        .execute(node('llm_call', { providerId: 'p1', userPrompt: 'x' }), buildContext(), 'org-1')
+        .catch((e: any) => e);
+
+      expect(failure.message).toMatch(/LLM call failed/);
+      expect(failure.code).toBe('MODEL_NOT_FOUND');
+      expect(isModelNotFoundError(failure)).toBe(true);
+    });
+
 
     it('does not crash on missing usage/cost in response', async () => {
       // Regression: LLM Call node previously crashed reading these fields.

@@ -228,7 +228,13 @@ export class AgentNodeExecutor {
     } catch (err: any) {
       const detail = err.response?.data?.error?.message || err.response?.data?.message || err.response?.data || err.message;
       this.logger.error(`[NODE_EXEC] LLM call failed for node '${node.id}': ${JSON.stringify(detail)}`);
-      throw new Error(`LLM call failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+      // Keep the typed cause (e.g. ModelNotFoundError) reachable: the
+      // scheduler and the UI act on its code, not on the message text.
+      throw Object.assign(
+        new Error(`LLM call failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`),
+        { cause: err, code: err?.code },
+      );
+
     }
 
     const executionTime = Date.now() - startTime;
