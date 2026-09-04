@@ -33,6 +33,23 @@ export interface AgentModelIssue {
 
 const QUEUE_NAME = 'agent-scheduler';
 
+type BrokenModel = { code: 'MODEL_NOT_FOUND'; model: string; providerId?: string; message: string };
+
+/** A MODEL_NOT_FOUND note recorded on any node of a finished execution. */
+export function brokenModelFrom(nodeResults: Record<string, any> | undefined | null): BrokenModel | undefined {
+  for (const r of Object.values(nodeResults ?? {})) {
+    if (r && r.errorCode === 'MODEL_NOT_FOUND') {
+      return { code: 'MODEL_NOT_FOUND', model: r.errorModel ?? 'unknown', providerId: r.errorProviderId, message: r.error ?? 'Model not available' };
+    }
+  }
+  return undefined;
+}
+
+function asIssue(err: unknown): BrokenModel | undefined {
+  const e = err as any;
+  return e && e.code === 'MODEL_NOT_FOUND' && typeof e.model === 'string' ? e : undefined;
+}
+
 /** Bounds on intervalMinutes. Below the floor we'd flood Redis; above the
  *  ceiling BullMQ can mishandle the timestamp arithmetic. */
 const MIN_INTERVAL_MINUTES = 1;
@@ -114,7 +131,7 @@ export class AgentSchedulerService implements OnModuleInit {
   async pauseForBrokenModel(agentId: string, organizationId: string, err: unknown): Promise<void> {
     const agent = await this.agentRepo.findOne({ where: { id: agentId, organizationId } });
     if (!agent) return;
-    const cause = findModelNotFound(err);
+    const cause = findModelNotFound(err) ?? asIssue(err);
     const issue: AgentModelIssue = {
       code: 'MODEL_NOT_FOUND',
       model: cause?.model ?? 'unknown',
@@ -287,7 +304,7 @@ export class AgentSchedulerService implements OnModuleInit {
       }
 
       this.logger.log(`[SCHEDULED_RUN] Executing agent ${agentId}`);
-      await this.executionEngine.execute(
+      const execution = await this.executionEngine.execute(
         agent,
         organizationId,
         userId,
@@ -296,6 +313,12 @@ export class AgentSchedulerService implements OnModuleInit {
           metadata: { triggerType: 'scheduled' },
         },
       );
+      // The engine reports node failures in the returned execution rather
+      // than throwing, so look there for a model the vendor retired.
+      const broken = brokenModelFrom(execution?.nodeResults);
+      if (broken) {
+        await this.pauseForBrokenModel(agentId, organizationId, broken);
+      }
     } catch (err: any) {
       this.logger.error(`[SCHEDULED_RUN] Failed for agent ${agentId}: ${err.message}`);
       // A model the vendor no longer serves will fail identically on every

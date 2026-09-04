@@ -1,4 +1,5 @@
 import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
+import { findModelNotFound } from '../llm-providers/model-errors';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -314,6 +315,10 @@ export class AgentExecutionEngine {
               result,
               error: null as string | null,
               errorType: null as ExecutionErrorType | null,
+              errorCode: undefined as string | undefined,
+              errorModel: undefined as string | undefined,
+              errorProviderId: undefined as string | undefined,
+
               startedAt: nodeStartedAt,
               completedAt: nodeCompletedAt,
             };
@@ -332,6 +337,12 @@ export class AgentExecutionEngine {
               result: null as NodeExecutionResult | null,
               error: err.message || 'Unknown node error',
               errorType,
+              // Typed cause, so callers that only see the persisted node
+              // results (the scheduler) can still act on MODEL_NOT_FOUND.
+              errorCode: err?.code as string | undefined,
+              errorModel: findModelNotFound(err)?.model,
+              errorProviderId: findModelNotFound(err)?.providerId,
+
               startedAt: nodeStartedAt,
               completedAt: nodeCompletedAt,
             };
@@ -378,7 +389,7 @@ export class AgentExecutionEngine {
         // Process layer results
         for (const item of layerResults) {
           if (!item) continue;
-          const { nodeId, node, result, error, errorType, startedAt, completedAt } = item;
+          const { nodeId, node, result, error, errorType, errorCode, errorModel, errorProviderId, startedAt, completedAt } = item;
 
           if (error || !result) {
             // Node failed — record error but continue with other branches
@@ -386,7 +397,9 @@ export class AgentExecutionEngine {
             nodeResults[nodeId] = {
               error,
               errorType,
+              ...(errorCode ? { errorCode, errorModel, errorProviderId } : {}),
               startedAt,
+
               completedAt,
               executionTime: completedAt - startedAt,
             };

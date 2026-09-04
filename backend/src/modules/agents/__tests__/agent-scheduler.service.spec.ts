@@ -168,6 +168,37 @@ describe('AgentSchedulerService', () => {
       expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('k-a1');
     });
 
+    it('pauses when the engine returns a failed execution whose node hit MODEL_NOT_FOUND', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduled());
+      queue.getRepeatableJobs.mockResolvedValue([{ id: 'schedule-a1', key: 'k-a1' }]);
+      executionEngine.execute.mockResolvedValue({
+        status: 'failed',
+        nodeResults: {
+          input_1: { output: {} },
+          llm_1: { error: 'LLM call failed: Model "claude-sonnet-4-20250514" is not available', errorType: 'LLM_ERROR', errorCode: 'MODEL_NOT_FOUND', errorModel: 'claude-sonnet-4-20250514', errorProviderId: 'p1' },
+        },
+      });
+
+      await service.handleScheduledExecution(job);
+
+      const saved = agentRepo.save.mock.calls[0][0];
+      expect(saved.settings.schedule.enabled).toBe(false);
+      expect(saved.settings.modelIssue).toMatchObject({ code: 'MODEL_NOT_FOUND', model: 'claude-sonnet-4-20250514', providerId: 'p1' });
+      expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('k-a1');
+    });
+
+    it('does not pause when the execution failed for another reason', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduled());
+      executionEngine.execute.mockResolvedValue({
+        status: 'failed',
+        nodeResults: { llm_1: { error: 'Request failed with status code 429', errorType: 'LLM_ERROR' } },
+      });
+
+      await service.handleScheduledExecution(job);
+
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+
     it('leaves the schedule alone for any other failure', async () => {
       agentRepo.findOne.mockResolvedValue(scheduled());
       executionEngine.execute.mockRejectedValue(new Error('Request failed with status code 429'));
