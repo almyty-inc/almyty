@@ -213,7 +213,7 @@ describe('callAnthropicStream', () => {
 
   it('should stream content deltas from Anthropic SSE format', async () => {
     const sseData = [
-      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg-1","model":"claude-sonnet-4-20250514","usage":{"input_tokens":15}}}\n\n',
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg-1","model":"claude-sonnet-5","usage":{"input_tokens":15}}}\n\n',
       'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n',
       'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n',
       'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" from Claude"}}\n\n',
@@ -229,7 +229,7 @@ describe('callAnthropicStream', () => {
       type: 'anthropic' as any,
       configuration: {
         apiKey: 'sk-ant-test',
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
         apiVersion: '2023-06-01',
         timeout: 30000,
       },
@@ -269,12 +269,12 @@ describe('callAnthropicStream', () => {
 
     expect(costFn).toHaveBeenCalledWith(expect.anything(), 15, 5);
     expect(result.cost).toBe(0.002);
-    expect(result.model).toBe('claude-sonnet-4-20250514');
+    expect(result.model).toBe('claude-sonnet-5');
   });
 
   it('should accumulate Anthropic tool_use blocks from stream', async () => {
     const sseData = [
-      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg-1","model":"claude-sonnet-4-20250514","usage":{"input_tokens":20}}}\n\n',
+      'event: message_start\ndata: {"type":"message_start","message":{"id":"msg-1","model":"claude-sonnet-5","usage":{"input_tokens":20}}}\n\n',
       'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"calculator"}}\n\n',
       'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"expression\\""}}\n\n',
       'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":": \\"2+2\\"}"}}\n\n',
