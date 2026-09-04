@@ -121,7 +121,7 @@ describe('AgentAppsService', () => {
 
     it('lets an entitled org publish an SSO app', async () => {
       const orgLicense = { hasForOrg: jest.fn(async () => true) };
-      const entitled = new AgentAppsService(appRepository, distributionRepository, agentRepository, gateways, orgLicense as any);
+      const entitled = new AgentAppsService(appRepository, distributionRepository, agentRepository, executionRepository, runRepository, gateways, orgLicense as any);
       appRepository.findOne.mockResolvedValue(ssoApp());
       const result = await entitled.check(ORG, 's');
 
