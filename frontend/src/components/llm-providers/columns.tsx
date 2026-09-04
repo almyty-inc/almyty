@@ -20,6 +20,8 @@ import { VisibilityBadge, type Team } from '@/components/ui/team-filter'
 
 import type { LlmProvider } from './schema'
 import { providerLogos, statusColors } from './provider-type-config'
+import { currentProviderFailure } from '@/lib/provider-health'
+
 
 interface ProviderColumnDeps {
   navigate: (path: string) => void
@@ -111,11 +113,21 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
             <Badge className={colors[status as keyof typeof colors]}>
               {status}
             </Badge>
-            {status === 'error' && provider.lastError && (
-              <span className="text-xs text-red-500 truncate max-w-[150px]" title={provider.lastError}>
-                {provider.lastError}
-              </span>
-            )}
+            {(() => {
+              const failing = currentProviderFailure(provider)
+              if (!failing && !(status === 'error' && provider.lastError)) return null
+              const message = failing?.message ?? provider.lastError ?? ''
+              return (
+                <span
+                  className="flex items-center gap-1 text-xs text-red-500"
+                  title={failing ? `Last call failed ${new Date(failing.at).toLocaleString()}: ` : message}
+                >
+                  {failing && <Badge className="bg-red-500/15 text-red-700 dark:text-red-400">Failing</Badge>}
+                  <span className="truncate max-w-[150px]">{message}</span>
+                </span>
+              )
+            })()}
+
           </div>
         )
       },

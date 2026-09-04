@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  Optional,
+
   ConflictException,
   Injectable,
   NotFoundException,
@@ -14,6 +16,14 @@ import {
   AppDistribution,
 } from '../../entities/agent-app-distribution.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
+
+/** What the apps page shows next to a product: is its agent working right now? */
+export type AppHealth =
+  | { state: 'ok' }
+  | { state: 'failing'; agentId: string; agentName: string; at: Date; message: string };
+
 import {
   AppCheck,
   checkDistribution,
@@ -30,6 +40,8 @@ import {
   rateLimitFor,
 } from './distribution-publish';
 import { GatewaysService } from '../gateways/gateways.service';
+import { OrgLicenseResolver } from '../licensing/org-license.resolver';
+
 
 export interface CreateAppDto {
   name: string;
@@ -61,15 +73,58 @@ export class AgentAppsService {
     private readonly distributionRepository: Repository<AppDistribution>,
     @InjectRepository(Agent)
     private readonly agentRepository: Repository<Agent>,
+    @InjectRepository(AgentExecution)
+    private readonly executionRepository: Repository<AgentExecution>,
+    @InjectRepository(AgentRun)
+    private readonly runRepository: Repository<AgentRun>,
+
     private readonly gateways: GatewaysService,
+    @Optional()
+    private readonly orgLicense?: OrgLicenseResolver,
+
   ) {}
 
-  async list(organizationId: string): Promise<AgentApp[]> {
-    return this.appRepository.find({
+  async list(organizationId: string): Promise<Array<AgentApp & { health: AppHealth }>> {
+    const apps = await this.appRepository.find({
       where: { organizationId },
       order: { createdAt: 'DESC' },
     });
+    return Promise.all(apps.map(async (app) => ({ ...app, health: await this.health(organizationId, app.agentIds ?? []) })));
   }
+
+  /**
+   * Did the last thing any of this app's agents did fail?
+   *
+   * A product whose agent is failing looked identical on the apps page
+   * to one that is idle; the only trace was a visitor's empty screen.
+   * Look at the most recent execution (workflow agents) or run
+   * (autonomous agents) per agent and report the failure, if that is
+   * what happened last.
+   */
+  async health(organizationId: string, agentIds: string[]): Promise<AppHealth> {
+    for (const agentId of agentIds) {
+      const [execution, run] = await Promise.all([
+        this.executionRepository.findOne({ where: { agentId, organizationId }, order: { createdAt: 'DESC' } }),
+        this.runRepository.findOne({ where: { agentId, organizationId }, order: { createdAt: 'DESC' } }),
+      ]);
+      const latest = [execution, run]
+        .filter((x): x is AgentExecution | AgentRun => !!x)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      if (!latest) continue;
+      if (latest.status === 'failed' || latest.status === 'timeout') {
+        const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId }, select: { id: true, name: true } });
+        return {
+          state: 'failing',
+          agentId,
+          agentName: agent?.name ?? agentId,
+          at: latest.createdAt,
+          message: latest.error ?? `Last run ${latest.status}`,
+        };
+      }
+    }
+    return { state: 'ok' };
+  }
+
 
   /**
    * Apps are addressed by their slug, not their id.
@@ -185,7 +240,7 @@ export class AgentAppsService {
     context: Parameters<typeof checkApp>[1] = {},
   ): Promise<AppCheck> {
     const app = await this.findOne(organizationId, slug);
-    return checkApp(app, this.limitsContext(app, context));
+    return checkApp(app, await this.limitsContext(app, context));
   }
 
   /**
@@ -195,14 +250,17 @@ export class AgentAppsService {
    * an empty context on every call, so a public product showed both
    * refusals for ever and no setting could clear them.
    */
-  private limitsContext(
+  private async limitsContext(
     app: AgentApp,
     context: Parameters<typeof checkApp>[1] = {},
-  ): Parameters<typeof checkApp>[1] {
+  ): Promise<Parameters<typeof checkApp>[1]> {
     return {
       costCapCents: app.limits?.costCapCents ?? null,
       perUserRateLimit: app.limits?.perUserRateLimit ?? null,
       perIpRateLimit: app.limits?.perIpRateLimit ?? null,
+      // SSO is an enterprise entitlement; until this was passed in, every
+      // SSO app was refused at publish whether the org had it or not.
+      hasEnterpriseAuth: this.orgLicense ? await this.orgLicense.hasForOrg(app.organizationId, 'sso') : false,
       ...context,
     };
   }
@@ -276,7 +334,7 @@ export class AgentAppsService {
     // Both gates, as one list. The product-wide rules are the reason a
     // public product needs a cost cap; the publish rules are the ones
     // that only apply at this moment.
-    const product = checkApp(app, this.limitsContext(app));
+    const product = checkApp(app, await this.limitsContext(app));
     // The agent that will actually answer: the one this surface names,
     // or the product's default. Resolved before the checks so a surface
     // is never published in front of an agent that cannot hold a
@@ -379,7 +437,7 @@ export class AgentAppsService {
       distribution.target,
       app,
       distribution.configuration,
-      this.limitsContext(app, context),
+      await this.limitsContext(app, context),
     );
   }
 

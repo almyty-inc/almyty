@@ -15,6 +15,9 @@ vi.mock('@/lib/hosted-chat', async () => {
       messages: vi.fn(),
       send: vi.fn(),
       streamUrl: vi.fn(() => 'http://localhost/stream'),
+      me: vi.fn(),
+      ssoLoginUrl: vi.fn((slug: string) => '/api/public/chat/' + slug + '/auth/sso/login'),
+
     },
   }
 })
@@ -144,7 +147,6 @@ describe('HostedChatPage', () => {
     expect(await screen.findByText('hi there')).toBeInTheDocument()
   })
 
-
   it('tells the visitor when the run failed instead of going quiet', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
@@ -208,6 +210,69 @@ describe('HostedChatPage', () => {
     expect(await screen.findByText('hi there')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
   })
+
+  it('renders safe Markdown in assistant replies while leaving visitor text literal', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'New chat',
+      messages: [
+        { id: 'm1', role: 'user', content: '**literal**', createdAt: '2026-01-01' },
+        {
+          id: 'm2',
+          role: 'assistant',
+          content: '**Documentation**\n\n1. Read the [guide](https://example.com).',
+          createdAt: '2026-01-01',
+        },
+      ],
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), {
+      target: { value: '**literal**' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+
+    expect(await screen.findByText('Documentation')).toHaveProperty('tagName', 'STRONG')
+    expect(screen.getByText('**literal**')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'guide' })).toHaveAttribute(
+      'rel',
+      'noopener noreferrer',
+    )
+  })
+
+  it('does not render raw HTML from assistant replies', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'New chat',
+      messages: [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content:
+            '<img src=x onerror="alert(1)"><script>alert(1)</script>Safe [link](javascript:alert(1))',
+          createdAt: '2026-01-01',
+        },
+      ],
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+
+    expect(await screen.findByText(/Safe/)).toBeInTheDocument()
+    expect(document.querySelector('img')).toBeNull()
+    expect(document.querySelector('script')).toBeNull()
+    expect(screen.getByText('link').closest('a')).toHaveAttribute('href', '')
+  })
+
   it('surfaces a rate limit in words a visitor understands', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockRejectedValue({ response: { status: 429 } })
@@ -279,5 +344,55 @@ describe('HostedChatPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent("couldn't reply")
     // The visitor's turn survives; only the empty streaming placeholder goes.
     expect(screen.getByText('hello')).toBeInTheDocument()
+  })
+
+  describe('surfaces that require sign-in', () => {
+    it('never asks who the visitor is on a public-link surface', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+      render(<HostedChatPage slug="acme" />)
+      await screen.findByLabelText('Message')
+      expect(hostedChatApi.me).not.toHaveBeenCalled()
+    })
+
+    it('shows a tenant-branded SSO sign-in instead of the composer until the visitor is signed in', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'sso' }))
+      ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'sso', available: true, authenticated: false, email: null, displayName: null })
+
+      render(<HostedChatPage slug="acme" />)
+
+      expect(await screen.findByRole('heading', { name: 'Sign in to Acme Assistant' })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Continue with single sign-on' })).toHaveAttribute('href', '/api/public/chat/acme/auth/sso/login')
+      expect(screen.queryByLabelText('Message')).toBeNull()
+      expect(hostedChatApi.conversations).not.toHaveBeenCalled()
+    })
+
+    it('opens the chat once the backend says the visitor is signed in', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'sso' }))
+      ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'sso', available: true, authenticated: true, email: 'ava@northwind.example', displayName: 'Ava' })
+
+      render(<HostedChatPage slug="acme" />)
+
+      expect(await screen.findByLabelText('Message')).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: /Sign in to/ })).toBeNull()
+    })
+
+    it('says the surface is closed when its organization cannot offer the sign-in method', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'sso' }))
+      ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'sso', available: false, authenticated: false, email: null, displayName: null })
+
+      render(<HostedChatPage slug="acme" />)
+
+      expect(await screen.findByText(/not accepting sign-ins right now/)).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /single sign-on/ })).toBeNull()
+    })
+
+    it('is honest about a sign-in method that is not built yet', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'email_otp' }))
+      ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'email_otp', available: true, authenticated: false, email: null, displayName: null })
+
+      render(<HostedChatPage slug="acme" />)
+
+      expect(await screen.findByText(/not set up yet/)).toBeInTheDocument()
+    })
   })
 })
