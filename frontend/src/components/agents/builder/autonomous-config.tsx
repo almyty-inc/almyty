@@ -110,7 +110,7 @@ export function AutonomousConfig({
             <div className="space-y-2">
               <Label className="text-sm">Model</Label>
               <Input value={modelConfig.model || ''} onChange={(e) => onModelConfigChange({ ...modelConfig, model: e.target.value })}
-                placeholder="e.g. gpt-4o, claude-sonnet-4-20250514" />
+                placeholder="e.g. gpt-4o, claude-sonnet-5" />
             </div>
             <div className="space-y-2">
               <Label className="text-sm">Temperature</Label>

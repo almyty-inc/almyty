@@ -1894,6 +1894,41 @@ describe('LlmProvidersService', () => {
       expect(result.usage.outputTokens).toBe(20);
     });
 
+    it('should fall back to DEFAULT_ANTHROPIC_MODEL when neither request nor provider names a model', async () => {
+      const { DEFAULT_ANTHROPIC_MODEL } = require('./providers/anthropic.provider');
+      const mockProvider = {
+        id: 'provider-1',
+        type: LlmProviderType.ANTHROPIC,
+        configuration: { apiKey: 'test-key', timeout: 30000 },
+        getApiUrl: jest.fn().mockReturnValue('https://api.anthropic.com/v1'),
+        getAuthHeaders: jest.fn().mockReturnValue({ 'x-api-key': 'test-key' }),
+      };
+
+      const mockAxios = require('axios');
+      mockAxios.default = jest.fn().mockResolvedValue({
+        data: {
+          content: [{ type: 'text', text: 'ok' }],
+          usage: { input_tokens: 1, output_tokens: 1 },
+          model: DEFAULT_ANTHROPIC_MODEL,
+          stop_reason: 'end_turn',
+        },
+      });
+
+      const chatRequest: ChatRequest = {
+        messages: [{ role: MessageRole.USER, content: 'Hello' }],
+      };
+      const mockSession = { id: 'session-1', context: { maxTokens: 1024 } };
+
+      await callAnthropic(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
+
+      const sent = mockAxios.default.mock.calls[0][0];
+      expect(sent.data.model).toBe(DEFAULT_ANTHROPIC_MODEL);
+      // Dated snapshots get retired by the vendor and then 404 for every
+      // caller that left the model blank; the default must be an alias.
+      expect(DEFAULT_ANTHROPIC_MODEL).not.toMatch(/\d{8}$/);
+      expect(DEFAULT_ANTHROPIC_MODEL).toMatch(/^claude-(sonnet|opus|haiku|fable)-\d/);
+    });
+
     it('should handle Anthropic tool use', async () => {
       const mockProvider = {
         id: 'provider-1',
@@ -2498,14 +2533,14 @@ describe('LlmProvidersService', () => {
     it('should fall back to default pricing for known Anthropic models', () => {
       const provider = {
         metadata: {},
-        configuration: { model: 'claude-sonnet-4-20250514' },
+        configuration: { model: 'claude-sonnet-5' },
         type: LlmProviderType.ANTHROPIC,
       } as any;
 
       const cost = service['calculateProviderCost'](provider, 1000, 500);
-      // claude-sonnet-4: input=0.003/1K, output=0.015/1K
-      // (1000/1000)*0.003 + (500/1000)*0.015 = 0.003 + 0.0075 = 0.0105
-      expect(cost).toBeCloseTo(0.0105, 4);
+      // claude-sonnet-5: input=0.002/1K, output=0.010/1K
+      // (1000/1000)*0.002 + (500/1000)*0.010 = 0.002 + 0.005 = 0.007
+      expect(cost).toBeCloseTo(0.007, 4);
     });
 
     it('should return 0 for unknown models with no configured pricing', () => {
