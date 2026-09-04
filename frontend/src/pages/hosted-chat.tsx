@@ -53,6 +53,66 @@ function readableOn(hex: string): string {
   return luma > 0.6 ? '#18181b' : '#ffffff'
 }
 
+/**
+ * What a visitor sees on a surface that requires sign-in, before they
+ * have. Carries the tenant's name and colour so it reads as their door,
+ * not ours. Only SSO has a flow behind it today; the other modes say so
+ * rather than pretending.
+ */
+function SignInScreen({
+  slug,
+  branding,
+  available,
+  style,
+}: {
+  slug: string
+  branding: HostedChatBranding
+  available: boolean
+  style: React.CSSProperties
+}) {
+  const sso = branding.authMode === 'sso'
+  return (
+    <div style={style} className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+      <div className="w-full max-w-sm rounded-2xl border bg-card p-8 text-center shadow-sm">
+        {branding.logoUrl ? (
+          <img src={branding.logoUrl} alt="" className="mx-auto mb-4 h-12 w-12 rounded-lg object-cover" />
+        ) : (
+          <div
+            className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg text-lg font-semibold"
+            style={{ backgroundColor: 'var(--tenant)', color: 'var(--on-tenant)' }}
+          >
+            {branding.appName.slice(0, 1).toUpperCase()}
+          </div>
+        )}
+        <h1 className="font-heading text-xl font-semibold">Sign in to {branding.appName}</h1>
+        {!available ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            This chat is not accepting sign-ins right now. Please contact {branding.appName}.
+          </p>
+        ) : sso ? (
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">Use your organization account to continue.</p>
+            <a
+              href={hostedChatApi.ssoLoginUrl(slug)}
+              className="mt-6 inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-medium"
+              style={{ backgroundColor: 'var(--tenant)', color: 'var(--on-tenant)' }}
+            >
+              Continue with single sign-on
+            </a>
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">
+            This chat requires a sign-in method that is not set up yet. Please contact {branding.appName}.
+          </p>
+        )}
+        {!branding.whiteLabel && (
+          <p className="mt-6 text-xs text-muted-foreground">Powered by almyty</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function HostedChatPage({ slug }: HostedChatPageProps) {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<PendingMessage[]>([])
@@ -73,10 +133,26 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
     retry: false,
   })
 
+  // A surface that requires sign-in admits nobody until the backend says
+  // this visitor is signed in the required way. Public surfaces skip the
+  // round trip entirely.
+  const requiresAuth = !!branding && branding.authMode !== 'public_link'
+  const {
+    data: me,
+    isLoading: meLoading,
+    refetch: refetchMe,
+  } = useQuery({
+    queryKey: ['hosted-chat-me', slug],
+    queryFn: () => hostedChatApi.me(slug),
+    enabled: requiresAuth,
+    retry: false,
+  })
+  const admitted = !!branding && (!requiresAuth || me?.authenticated === true)
+
   const { data: conversations, refetch: refetchConversations } = useQuery({
     queryKey: ['hosted-chat-conversations', slug],
     queryFn: () => hostedChatApi.conversations(slug),
-    enabled: !!branding,
+    enabled: admitted,
   })
 
   const accent = branding?.primaryColor ?? '#8b5cf6'
@@ -223,6 +299,9 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
     } catch (err: any) {
       setSending(false)
       const status = err?.response?.status
+      // Signed out (or never signed in) on a surface that requires it:
+      // re-ask the backend and the page flips to the sign-in screen.
+      if (status === 401) void refetchMe()
       setError(
         status === 429
           ? 'This assistant is busy right now. Please try again in a moment.'
@@ -252,6 +331,17 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         </div>
       </div>
     )
+  }
+
+  if (requiresAuth && !admitted) {
+    if (meLoading) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <LoadingSpinner />
+        </div>
+      )
+    }
+    return <SignInScreen slug={slug} branding={branding} available={me?.available !== false} style={style} />
   }
 
   const disclosure = disclosureLine(branding)

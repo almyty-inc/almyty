@@ -129,7 +129,25 @@ export const hostedChatApi = {
       .post(`/public/chat/${slug}/messages`, { message, conversationId })
       .then((r) => unwrap<{ runId: string; conversationId: string }>(r.data)),
 
+  /** Who the visitor is and whether the surface admits them (issues the cookie). */
+  me: (slug: string) =>
+    client()
+      .get(`/public/chat/${slug}/me`)
+      .then((r) =>
+        unwrap<{
+          authMode: HostedChatBranding['authMode']
+          available: boolean
+          authenticated: boolean
+          email: string | null
+          displayName: string | null
+        }>(r.data),
+      ),
+
+  /** Full-page redirect target that starts the tenant's SSO sign-in. */
+  ssoLoginUrl: (slug: string) => `${HOSTED_CHAT_API_PREFIX}/public/chat/${slug}/auth/sso/login`,
+
   /** SSE endpoint for an in-flight reply. Same origin, see above. */
+
   streamUrl: (slug: string, runId: string) =>
     `${HOSTED_CHAT_API_PREFIX}/public/chat/${slug}/stream?runId=${encodeURIComponent(runId)}`,
 }

@@ -65,6 +65,11 @@ describe('HostedChatController', () => {
       startConversation: jest.fn(async () => ({ id: 'conv-1', title: 'hello' })),
       listMessages: jest.fn(async () => []),
       runBelongsToEndUser: jest.fn(async () => true),
+      authMode: jest.fn(() => 'public_link'),
+      requiresAuth: jest.fn(() => false),
+      isAuthorized: jest.fn(() => true),
+      authModeAvailable: jest.fn(async () => true),
+
     };
     gatewayRateLimit = { check: jest.fn(async () => ({ limited: false })) };
     agentRuntimeService = {
@@ -79,6 +84,58 @@ describe('HostedChatController', () => {
       }),
     };
     controller = new HostedChatController(hostedChat, gatewayRateLimit, agentRuntimeService);
+  });
+
+  describe('visitor auth gate', () => {
+    const requireSso = () => {
+      hostedChat.authMode.mockReturnValue('sso');
+      hostedChat.requiresAuth.mockReturnValue(true);
+    };
+
+    it('admits anyone on a public-link surface without asking who they are', async () => {
+      await controller.listConversations('acme', req(), res);
+      expect(hostedChat.isAuthorized).not.toHaveBeenCalled();
+    });
+
+    it('refuses an anonymous visitor on an SSO surface with a stable code', async () => {
+      requireSso();
+      hostedChat.isAuthorized.mockReturnValue(false);
+      const failure = await controller.listConversations('acme', req(), res).catch((e) => e);
+      expect(failure).toBeInstanceOf(HttpException);
+      expect(failure.getStatus()).toBe(401);
+      expect(failure.getResponse()).toMatchObject({ code: 'AUTH_REQUIRED', authMode: 'sso' });
+    });
+
+    it('gates sending, streaming and transcripts the same way', async () => {
+      requireSso();
+      hostedChat.isAuthorized.mockReturnValue(false);
+      await expect(controller.postMessage('acme', { message: 'hi' }, req(), res)).rejects.toMatchObject({ status: 401 });
+      await expect(controller.messages('acme', 'conv-1', req(), res)).rejects.toMatchObject({ status: 401 });
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    it('admits a visitor signed in the required way', async () => {
+      requireSso();
+      hostedChat.isAuthorized.mockReturnValue(true);
+      const out = await controller.listConversations('acme', req(), res);
+      expect(out.success).toBe(true);
+    });
+
+    it('closes an SSO surface whose organization is not entitled, instead of opening it', async () => {
+      requireSso();
+      hostedChat.authModeAvailable.mockResolvedValue(false);
+      hostedChat.isAuthorized.mockReturnValue(true);
+      const failure = await controller.listConversations('acme', req(), res).catch((e) => e);
+      expect(failure.getStatus()).toBe(503);
+      expect(failure.getResponse()).toMatchObject({ code: 'AUTH_MODE_UNAVAILABLE' });
+    });
+
+    it('reports who the visitor is without gating, so the page can show a sign-in', async () => {
+      requireSso();
+      hostedChat.isAuthorized.mockReturnValue(false);
+      const out = await controller.me('acme', req(), res);
+      expect(out.data).toMatchObject({ authMode: 'sso', authenticated: false, available: true });
+    });
   });
 
   describe('session cookie', () => {
