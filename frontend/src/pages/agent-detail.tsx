@@ -26,6 +26,8 @@ import type {
 
 import { AgentHeader } from '@/components/agents/detail/agent-header'
 import { AgentStats } from '@/components/agents/detail/agent-stats'
+import { ModelIssueBanner } from '@/components/agents/detail/model-issue-banner'
+
 import { PipelineCanvas } from '@/components/agents/detail/pipeline-canvas'
 import { OverviewTab } from '@/components/agents/detail/overview-tab'
 import { RunsTab } from '@/components/agents/detail/runs-tab'
@@ -330,7 +332,10 @@ export function AgentDetailPage() {
         onDeactivate={() => deactivateMutation.mutate()}
       />
 
+      <ModelIssueBanner agent={agent} />
+
       <AgentStats agent={agent} />
+
 
       {/* Pipeline Canvas (read-only) -- hidden for autonomous agents */}
       {agent.mode !== 'autonomous' && (
