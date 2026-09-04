@@ -250,7 +250,16 @@ export interface PipelineEdge {
   label?: string
 }
 
+export interface AgentModelIssue {
+  code: 'MODEL_NOT_FOUND'
+  model: string
+  providerId?: string
+  message: string
+  detectedAt: string
+}
+
 export interface Agent {
+
   id: string
   name: string
   description?: string
@@ -323,7 +332,11 @@ export interface Agent {
       enabled: boolean
       intervalMinutes: number
       input: Record<string, any>
+      /** Set by the backend when it paused the schedule on its own. */
+      pausedReason?: AgentModelIssue
     }
+    /** Set by the backend when the vendor reported the agent's model no longer exists. */
+    modelIssue?: AgentModelIssue
   }
   metadata?: Record<string, any>
   webhookUrl?: string

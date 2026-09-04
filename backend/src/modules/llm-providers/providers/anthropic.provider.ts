@@ -5,6 +5,8 @@ import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
 import { callLlmProviderHttp, callLlmProviderHttpStream } from './safe-request';
+import { requireModel } from '../model-errors';
+
 
 /**
  * Anthropic deprecates sampling params per model generation (e.g.
@@ -15,13 +17,6 @@ import { callLlmProviderHttp, callLlmProviderHttpStream } from './safe-request';
  * tells us exactly which one it no longer accepts.
  */
 const DEPRECATED_PARAM_RE = /`(\w+)` is deprecated/;
-
-/**
- * Model used when neither the request nor the provider configuration
- * names one. Anthropic retires dated snapshot IDs, so keep this on a
- * current-generation alias and never on a dated snapshot.
- */
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5';
 
 export async function callWithDeprecatedParamRetry<T>(
   call: () => Promise<T>,
@@ -61,7 +56,7 @@ export async function callAnthropic(
 
   // Prepare Anthropic request
   const anthropicRequest: Record<string, unknown> = {
-    model: request.model || provider.configuration.model || DEFAULT_ANTHROPIC_MODEL,
+    model: requireModel(request, provider),
     max_tokens: request.maxTokens || conversation.context?.maxTokens || 1024,
     temperature: request.temperature ?? conversation.context?.temperature,
     top_p: request.topP ?? conversation.context?.topP,
@@ -158,7 +153,7 @@ function buildAnthropicRequestBody(
   const nonSystemMessages = request.messages.filter(msg => msg.role !== MessageRole.SYSTEM && msg.role !== 'system' as MessageRole);
 
   const body: Record<string, unknown> = {
-    model: request.model || provider.configuration.model || DEFAULT_ANTHROPIC_MODEL,
+    model: requireModel(request, provider),
     max_tokens: request.maxTokens || conversation.context?.maxTokens || 1024,
     temperature: request.temperature ?? conversation.context?.temperature,
     top_p: request.topP ?? conversation.context?.topP,
@@ -339,7 +334,7 @@ export async function callAnthropicStream(
           totalTokens: inputTokens + outputTokens,
         },
         cost,
-        model: modelName || (request.model || provider.configuration.model || DEFAULT_ANTHROPIC_MODEL),
+        model: modelName || requireModel(request, provider),
         conversationId: conversation.id,
         messageId: '',
         responseTime,

@@ -20,6 +20,8 @@ import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
+import { DefaultModelResolver } from './default-model.resolver';
+
 
 // jest.mock with __esModule: true short-circuits __importDefault so the
 // application code's `axios_1.default` and the spec's
@@ -149,8 +151,10 @@ describe('LlmProvidersService', () => {
         LlmChatHelper,
         LlmStatsHelper,
         LlmChatRunnerHelper,
+        DefaultModelResolver,
         {
           provide: AccessPolicyService,
+
           useValue: {
             canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }),
             applyListFilter: jest.fn().mockResolvedValue({ bypass: true, teamIds: [] }),
@@ -163,6 +167,10 @@ describe('LlmProvidersService', () => {
     service = module.get<LlmProvidersService>(LlmProvidersService);
     chatHelperInstance = module.get(LlmChatHelper);
     modelsHelperInstance = module.get(LlmModelsHelper);
+    // Save-time model validation asks the vendor for its list; never let a
+    // unit test reach the network. Tests that care override this spy.
+    jest.spyOn(modelsHelperInstance, 'fetchModelsFromProvider').mockResolvedValue([]);
+
     accessPolicy = module.get(AccessPolicyService);
     runnerInstance = module.get(LlmChatRunnerHelper);
     llmProviderRepository = module.get(getRepositoryToken(LlmProvider));
@@ -336,6 +344,45 @@ describe('LlmProvidersService', () => {
       expect(isEncrypted(mockProvider.configuration.usageApiKey)).toBe(true);
       expect(mockProvider.getDecryptedUsageApiKey()).toBe('sk-ant-admin-plain');
       expect(llmProviderRepository.save).toHaveBeenCalledWith(mockProvider);
+    });
+  });
+
+  describe('assertModelIsServed (save-time model validation)', () => {
+    const cfg = (model?: string) => ({ apiKey: 'k', model }) as any;
+
+    it('accepts a model the vendor lists', async () => {
+      (modelsHelperInstance.fetchModelsFromProvider as jest.Mock).mockResolvedValue([{ id: 'claude-sonnet-5' }, { id: 'claude-opus-5' }]);
+      await expect(service.assertModelIsServed(LlmProviderType.ANTHROPIC, cfg('claude-sonnet-5'), 'org-1')).resolves.toBeUndefined();
+    });
+
+    it('rejects a model the vendor no longer serves, naming what it does serve', async () => {
+      (modelsHelperInstance.fetchModelsFromProvider as jest.Mock).mockResolvedValue([{ id: 'claude-sonnet-5' }, { id: 'claude-opus-5' }]);
+      const failure = await service.assertModelIsServed(LlmProviderType.ANTHROPIC, cfg('claude-sonnet-4-20250514'), 'org-1').catch((e) => e);
+      expect(failure).toBeInstanceOf(BadRequestException);
+      expect(failure.getResponse()).toMatchObject({ code: 'MODEL_NOT_SERVED' });
+      expect(failure.getResponse().message).toMatch(/claude-sonnet-4-20250514/);
+      expect(failure.getResponse().message).toMatch(/claude-sonnet-5/);
+    });
+
+    it('lets the save through when the vendor cannot list models', async () => {
+      (modelsHelperInstance.fetchModelsFromProvider as jest.Mock).mockResolvedValue([]);
+      await expect(service.assertModelIsServed(LlmProviderType.CUSTOM, cfg('anything'), 'org-1')).resolves.toBeUndefined();
+    });
+
+    it('does not ask the vendor when no model is configured', async () => {
+      await service.assertModelIsServed(LlmProviderType.OPENAI, cfg(undefined), 'org-1');
+      expect(modelsHelperInstance.fetchModelsFromProvider).not.toHaveBeenCalled();
+    });
+
+    it('runs on create and on a model change during update', async () => {
+      const spy = jest.spyOn(service, 'assertModelIsServed').mockResolvedValue(undefined);
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1' });
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', hasPermissionInOrganization: () => true });
+      llmProviderRepository.create.mockImplementation((v: any) => Object.assign(new LlmProvider(), v));
+      llmProviderRepository.save.mockImplementation(async (v: any) => ({ id: 'p-new', ...v }));
+      await service.createProvider({ name: 'n', type: LlmProviderType.OPENAI, configuration: cfg('gpt-5') } as any, 'org-1', 'user-1');
+      expect(spy).toHaveBeenCalledWith(LlmProviderType.OPENAI, expect.objectContaining({ model: 'gpt-5' }), 'org-1');
     });
   });
 
@@ -1933,8 +1980,8 @@ describe('LlmProvidersService', () => {
       expect(result.usage.outputTokens).toBe(20);
     });
 
-    it('should fall back to DEFAULT_ANTHROPIC_MODEL when neither request nor provider names a model', async () => {
-      const { DEFAULT_ANTHROPIC_MODEL } = require('./providers/anthropic.provider');
+    it('refuses to guess a model when neither request nor provider names one', async () => {
+      const { NoModelConfiguredError } = require('./model-errors');
       const mockProvider = {
         id: 'provider-1',
         type: LlmProviderType.ANTHROPIC,
@@ -1942,30 +1989,56 @@ describe('LlmProvidersService', () => {
         getApiUrl: jest.fn().mockReturnValue('https://api.anthropic.com/v1'),
         getAuthHeaders: jest.fn().mockReturnValue({ 'x-api-key': 'test-key' }),
       };
-
       const mockAxios = require('axios');
-      mockAxios.default = jest.fn().mockResolvedValue({
-        data: {
-          content: [{ type: 'text', text: 'ok' }],
-          usage: { input_tokens: 1, output_tokens: 1 },
-          model: DEFAULT_ANTHROPIC_MODEL,
-          stop_reason: 'end_turn',
-        },
-      });
+      mockAxios.default = jest.fn();
 
-      const chatRequest: ChatRequest = {
-        messages: [{ role: MessageRole.USER, content: 'Hello' }],
-      };
+      const chatRequest: ChatRequest = { messages: [{ role: MessageRole.USER, content: 'Hello' }] };
       const mockSession = { id: 'session-1', context: { maxTokens: 1024 } };
 
-      await callAnthropic(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
+      // There is deliberately no literal default anywhere in the provider
+      // implementations: a blank model is a wiring error, not a guess.
+      await expect(
+        callAnthropic(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001),
+      ).rejects.toBeInstanceOf(NoModelConfiguredError);
+      expect(mockAxios.default).not.toHaveBeenCalled();
+    });
 
-      const sent = mockAxios.default.mock.calls[0][0];
-      expect(sent.data.model).toBe(DEFAULT_ANTHROPIC_MODEL);
-      // Dated snapshots get retired by the vendor and then 404 for every
-      // caller that left the model blank; the default must be an alias.
-      expect(DEFAULT_ANTHROPIC_MODEL).not.toMatch(/\d{8}$/);
-      expect(DEFAULT_ANTHROPIC_MODEL).toMatch(/^claude-(sonnet|opus|haiku|fable)-\d/);
+    it('resolves a blank model from the vendor list before dispatching', async () => {
+      const provider = {
+        id: 'provider-1',
+        type: LlmProviderType.ANTHROPIC,
+        configuration: { apiKey: 'test-key' },
+        getApiUrl: jest.fn().mockReturnValue('https://api.anthropic.com/v1'),
+      } as any;
+      jest.spyOn(modelsHelperInstance, 'fetchModelsFromProvider').mockResolvedValue([
+        { id: 'claude-opus-5', name: 'Opus' },
+        { id: 'claude-sonnet-5', name: 'Sonnet' },
+        { id: 'claude-sonnet-4-20250514', name: 'old' },
+      ]);
+      const dispatched: any[] = [];
+      jest.spyOn(runnerInstance as any, 'dispatchProviderCall').mockImplementation(async (_p: any, req: any) => {
+        dispatched.push(req);
+        return { message: { role: 'assistant', content: 'ok' }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, cost: 0, model: req.model, responseTime: 1 } as any;
+      });
+
+      await runnerInstance.callLlmProvider(provider, { messages: [{ role: MessageRole.USER, content: 'hi' }] }, { id: 's', context: {} } as any, []);
+
+      expect(dispatched[0].model).toBe('claude-sonnet-5');
+    });
+
+    it('turns a vendor model-not-found answer into ModelNotFoundError without retrying', async () => {
+      const { ModelNotFoundError } = require('./model-errors');
+      const provider = { id: 'provider-1', type: LlmProviderType.ANTHROPIC, configuration: { apiKey: 'k', model: 'claude-sonnet-4-20250514' } } as any;
+      const dispatch = jest.spyOn(runnerInstance as any, 'dispatchProviderCall').mockRejectedValue(
+        Object.assign(new Error('Request failed with status code 404'), {
+          response: { status: 404, data: { type: 'error', error: { type: 'not_found_error', message: 'model: claude-sonnet-4-20250514' } } },
+        }),
+      );
+
+      const call = runnerInstance.callLlmProvider(provider, { messages: [{ role: MessageRole.USER, content: 'hi' }] }, { id: 's', context: {} } as any, []);
+      await expect(call).rejects.toBeInstanceOf(ModelNotFoundError);
+      await expect(call).rejects.toMatchObject({ code: 'MODEL_NOT_FOUND', model: 'claude-sonnet-4-20250514', providerId: 'provider-1' });
+      expect(dispatch).toHaveBeenCalledTimes(1);
     });
 
     it('should handle Anthropic tool use', async () => {
@@ -2053,7 +2126,7 @@ describe('LlmProvidersService', () => {
       const mockProvider = {
         id: 'provider-1',
         type: LlmProviderType.GOOGLE,
-        configuration: { apiKey: 'test-key' },
+        configuration: { apiKey: 'test-key', model: 'gemini-2.5-flash' },
         getApiUrl: jest.fn().mockReturnValue('https://generativelanguage.googleapis.com/v1'),
       };
 
@@ -2678,7 +2751,7 @@ describe('LlmProvidersService', () => {
       jest.spyOn(runnerInstance as any, 'dispatchProviderCall').mockImplementation(async () => {
         callCount++;
         const err: any = new Error('Bad request');
-        err.response = { status: 400, data: { error: { message: 'Invalid model' } } };
+        err.response = { status: 400, data: { error: { message: 'Invalid request: messages must not be empty' } } };
         throw err;
       });
 
