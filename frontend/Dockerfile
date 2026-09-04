@@ -53,6 +53,7 @@ RUN rm /etc/nginx/conf.d/default.conf
 
 # Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx-security-headers.inc /etc/nginx/conf.d/security-headers.inc
 
 # Copy built assets from base stage
 COPY --from=base /app/dist /usr/share/nginx/html
