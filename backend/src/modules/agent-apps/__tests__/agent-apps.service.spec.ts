@@ -65,6 +65,27 @@ describe('AgentAppsService', () => {
     );
   });
 
+  describe('publish-time SSO entitlement', () => {
+    const ssoApp = () => ({ id: 'app-1', organizationId: ORG, name: 'n', slug: 's', agentIds: ['agent-1'], authMode: 'sso', limits: { costCapCents: 100, perUserRateLimit: 10, perIpRateLimit: 10 }, isActive: true }) as any;
+
+    it('refuses an SSO app when the org has no entitlement resolver (community build)', async () => {
+      appRepository.findOne.mockResolvedValue(ssoApp());
+      const result = await service.check(ORG, 's');
+
+      expect(result.refusals.map((r: any) => r.code)).toContain('SSO_NOT_ENTITLED');
+    });
+
+    it('lets an entitled org publish an SSO app', async () => {
+      const orgLicense = { hasForOrg: jest.fn(async () => true) };
+      const entitled = new AgentAppsService(appRepository, distributionRepository, agentRepository, gateways, orgLicense as any);
+      appRepository.findOne.mockResolvedValue(ssoApp());
+      const result = await entitled.check(ORG, 's');
+
+      expect(orgLicense.hasForOrg).toHaveBeenCalledWith(ORG, 'sso');
+      expect(result.refusals.map((r: any) => r.code)).not.toContain('SSO_NOT_ENTITLED');
+    });
+  });
+
   describe('tenant scoping', () => {
     it('looks an app up by name, scoped to the organization in the query', async () => {
       await service.findOne(ORG, '  ACME-Support ');
