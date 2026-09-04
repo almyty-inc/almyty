@@ -109,6 +109,16 @@ export function AppsPage() {
                         </Badge>
                       )}
                       {!app.isActive && <Badge variant="outline">Paused</Badge>}
+                      {app.health?.state === 'failing' && (
+                        <Badge
+                          variant="outline"
+                          className="border-red-400 text-red-600"
+                          title={`${app.health.agentName}: ${app.health.message} (${new Date(app.health.at).toLocaleString()})`}
+                        >
+                          Last run failed
+                        </Badge>
+                      )}
+
                     </div>
 
                     <p className="text-xs text-muted-foreground">
