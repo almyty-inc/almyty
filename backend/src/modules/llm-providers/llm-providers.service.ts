@@ -20,6 +20,8 @@ import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
+import { DefaultModelResolver } from './default-model.resolver';
+
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
@@ -131,6 +133,8 @@ export class LlmProvidersService {
     private readonly chatHelper: LlmChatHelper,
     private readonly statsHelper: LlmStatsHelper,
     private readonly runner: LlmChatRunnerHelper,
+    private readonly defaultModels: DefaultModelResolver,
+
     private readonly accessPolicy: AccessPolicyService,
     private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
@@ -161,6 +165,8 @@ export class LlmProvidersService {
 
       // Validate configuration
       this.runner.validateProviderConfiguration(createDto.type, createDto.configuration);
+      await this.assertModelIsServed(createDto.type, createDto.configuration, organizationId);
+
 
       // Validate team scoping before persisting.
       await this.accessPolicy.assertCanScopeToTeam(
@@ -241,6 +247,10 @@ export class LlmProvidersService {
       if (updateDto.configuration) {
         provider.configuration = { ...provider.configuration, ...updateDto.configuration };
         this.runner.validateProviderConfiguration(provider.type, provider.configuration);
+        if (updateDto.configuration.model !== undefined) {
+          await this.assertModelIsServed(provider.type, provider.configuration, organizationId);
+        }
+
       }
 
       // Update other fields
@@ -424,20 +434,11 @@ export class LlmProvidersService {
 
       const startTime = Date.now();
 
-      // Provider creation validates credentials by listing models, but the
-      // create form does not require a provider-wide default model. Passing
-      // no model here lets the OpenAI-compatible runner fall back to gpt-4o,
-      // which marks Mistral, Groq, DeepSeek, and similar providers unhealthy
-      // even when their key is valid. Prefer an explicit default; otherwise
-      // probe the first chat-capable model returned by that provider.
-      let healthCheckModel = provider.configuration?.model;
-      if (!healthCheckModel) {
-        const availableModels = await this.modelsHelper.fetchModelsFromProvider(provider);
-        healthCheckModel = availableModels[0]?.id;
-      }
-      if (!healthCheckModel) {
-        throw new BadRequestException('Provider returned no chat-capable models');
-      }
+      // Probe with the provider's configured model, else whatever the
+      // vendor currently serves (DefaultModelResolver). Never a literal:
+      // a fixed id here marked Mistral, Groq and DeepSeek unhealthy with
+      // valid keys, and rotted for Anthropic when the id was retired.
+      const healthCheckModel = await this.defaultModels.resolve(provider);
 
       // Perform a simple health check request
       const testRequest: ChatRequest = {
@@ -619,7 +620,35 @@ export class LlmProvidersService {
     return this.modelsHelper.calculateProviderCost(provider, inputTokens, outputTokens);
   }
 
+  /**
+   * A configured default model must be one the vendor actually serves.
+   * Checked against the live list at save time, because a retired or
+   * mistyped id otherwise only shows up as a 404 on the first real call.
+   * When the vendor cannot list models (unsupported type, listing failed)
+   * there is nothing to check against and the save goes through.
+   */
+  async assertModelIsServed(
+    type: LlmProviderType,
+    configuration: LlmProviderConfig | undefined,
+    organizationId: string,
+  ): Promise<void> {
+    const model = configuration?.model?.trim();
+    if (!model) return;
+    const probe = Object.assign(new LlmProvider(), { type, configuration, organizationId });
+    const listed = await this.modelsHelper.fetchModelsFromProvider(probe);
+    if (listed.length === 0) return;
+    if (listed.some((m) => m.id === model)) return;
+    const sample = listed.slice(0, 5).map((m) => m.id).join(', ');
+    throw new BadRequestException({
+      code: 'MODEL_NOT_SERVED',
+      message:
+        `Model "${model}" is not served by this ${type} provider. ` +
+        `It may have been retired. Currently available include: ${sample}.`,
+    });
+  }
+
   // ── Delegations to LlmChatHelper ──
+
   chat(...args: Parameters<LlmChatHelper['chat']>) { return this.chatHelper.chat(...args); }
   validateProviderConfiguration(...args: Parameters<LlmChatRunnerHelper['validateProviderConfiguration']>) { return this.runner.validateProviderConfiguration(...args); }
   callLlmProvider(...args: Parameters<LlmChatRunnerHelper['callLlmProvider']>) { return this.runner.callLlmProvider(...args); }
