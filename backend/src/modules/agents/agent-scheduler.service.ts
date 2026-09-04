@@ -7,11 +7,28 @@ import { Job, Queue } from 'bull';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
+import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
+
 
 export interface AgentScheduleConfig {
   enabled: boolean;
   intervalMinutes: number;
   input: Record<string, any>;
+  /** Set when the scheduler paused this schedule on its own (see pauseForBrokenModel). */
+  pausedReason?: AgentModelIssue;
+}
+
+/**
+ * Recorded on agent.settings.modelIssue when a vendor reports that the
+ * model an agent is configured with no longer exists. Cleared when the
+ * schedule is re-enabled (i.e. someone has looked at it).
+ */
+export interface AgentModelIssue {
+  code: 'MODEL_NOT_FOUND';
+  model: string;
+  providerId?: string;
+  message: string;
+  detectedAt: string;
 }
 
 const QUEUE_NAME = 'agent-scheduler';
@@ -75,8 +92,11 @@ export class AgentSchedulerService implements OnModuleInit {
       intervalMinutes: validated,
       input,
     } as AgentScheduleConfig;
+    // Re-enabling is the acknowledgement: whoever did it has seen the note.
+    delete settings.modelIssue;
 
     agent.settings = settings;
+
     const saved = await this.agentRepo.save(agent);
 
     // Add repeatable job to BullMQ
@@ -86,7 +106,37 @@ export class AgentSchedulerService implements OnModuleInit {
     return saved;
   }
 
+  /**
+   * Stop a schedule whose model the vendor has retired, and leave a note
+   * on the agent (settings.modelIssue + schedule.pausedReason) that the
+   * UI surfaces. Re-enabling the schedule after fixing the model clears it.
+   */
+  async pauseForBrokenModel(agentId: string, organizationId: string, err: unknown): Promise<void> {
+    const agent = await this.agentRepo.findOne({ where: { id: agentId, organizationId } });
+    if (!agent) return;
+    const cause = findModelNotFound(err);
+    const issue: AgentModelIssue = {
+      code: 'MODEL_NOT_FOUND',
+      model: cause?.model ?? 'unknown',
+      providerId: cause?.providerId,
+      message: cause?.message ?? (err as Error)?.message ?? 'Model not available',
+      detectedAt: new Date().toISOString(),
+    };
+    const settings = { ...(agent.settings || {}) };
+    if (settings.schedule) {
+      settings.schedule = { ...settings.schedule, enabled: false, pausedReason: issue };
+    }
+    settings.modelIssue = issue;
+    agent.settings = settings;
+    await this.agentRepo.save(agent);
+    await this.removeRepeatableJob(agentId);
+    this.logger.warn(
+      `[SCHEDULED_RUN] Paused schedule for agent ${agentId}: model "${issue.model}" is no longer served by its provider`,
+    );
+  }
+
   async unscheduleAgent(agentId: string, organizationId: string): Promise<Agent> {
+
     const agent = await this.agentsService.getAgent(agentId, organizationId);
 
     // Remove repeatable job from BullMQ
@@ -248,6 +298,14 @@ export class AgentSchedulerService implements OnModuleInit {
       );
     } catch (err: any) {
       this.logger.error(`[SCHEDULED_RUN] Failed for agent ${agentId}: ${err.message}`);
+      // A model the vendor no longer serves will fail identically on every
+      // tick until someone changes it. Pause the schedule and record why,
+      // so the dashboard can show "pick a new model" instead of an alert
+      // firing every interval.
+      if (isModelNotFoundError(err)) {
+        await this.pauseForBrokenModel(agentId, organizationId, err);
+      }
+
     }
   }
 

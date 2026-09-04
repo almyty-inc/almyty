@@ -13,6 +13,9 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { LlmModelsHelper } from './llm-models.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
+import { DefaultModelResolver } from './default-model.resolver';
+import { ModelNotFoundError, isModelNotFoundResponse, vendorMessage } from './model-errors';
+
 import { LlmProvidersService } from './llm-providers.service';
 import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto';
 import { callLlmProviderHttp } from './providers/safe-request';
@@ -42,6 +45,8 @@ export class LlmChatHelper {
     private readonly providers: LlmProvidersService,
     private readonly stats: LlmStatsHelper,
     private readonly runner: LlmChatRunnerHelper,
+    private readonly defaultModels: DefaultModelResolver,
+
     private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
@@ -359,7 +364,13 @@ export class LlmChatHelper {
       }
 
       const costFn = this.modelsHelper.calculateProviderCost.bind(this.modelsHelper);
+      // Streaming bypasses the runner, so settle the model here the same
+      // way: configured, else the vendor's current list. Never a literal.
+      if (!request.model) {
+        request = { ...request, model: await this.defaultModels.resolve(provider) };
+      }
       let response: ChatResponse;
+
 
       // Streaming dispatches straight to callOpenAIStream/callAnthropicStream
       // (bypassing runner.callLlmProvider), so warm the org's DEK here too
@@ -455,6 +466,18 @@ export class LlmChatHelper {
         this.logger.warn(`Failed to update provider error stats: ${updateError.message}`);
       }
 
+      // A retired model id is not transient; hand callers the typed error
+      // so schedules stop and the UI can say which model to replace.
+      const status = error.response?.status || error.status;
+      if (isModelNotFoundResponse(status, error.response?.data)) {
+        this.defaultModels.invalidate(providerId);
+        throw new ModelNotFoundError(
+          request.model ?? 'unknown',
+          providerId,
+          undefined,
+          vendorMessage(error.response?.data),
+        );
+      }
       throw error;
     }
   }
