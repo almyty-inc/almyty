@@ -408,7 +408,19 @@ const OPENAI_PRICING: DefaultModelPricing[] = [
 ];
 
 // Anthropic list prices as of 2026-01 (docs.anthropic.com pricing).
+// Anthropic list prices as of 2026-09 (claude.com/pricing). Rules are
+// substring matches evaluated in order, so the more specific Opus 4.5+
+// and Haiku 4.5 rules must precede the bare 'claude-opus-4' /
+// 'claude-haiku-4' rules they would otherwise be shadowed by.
 const ANTHROPIC_PRICING: DefaultModelPricing[] = [
+  { match: 'claude-fable-5', input: 0.01, output: 0.05 },
+  { match: 'claude-opus-5', input: 0.005, output: 0.025 },
+  { match: 'claude-sonnet-5', input: 0.002, output: 0.01 },
+  { match: 'claude-haiku-4-5', input: 0.001, output: 0.005 },
+  { match: 'claude-opus-4-5', input: 0.005, output: 0.025 },
+  { match: 'claude-opus-4-6', input: 0.005, output: 0.025 },
+  { match: 'claude-opus-4-7', input: 0.005, output: 0.025 },
+  { match: 'claude-opus-4-8', input: 0.005, output: 0.025 },
   { match: 'claude-3-5-sonnet', input: 0.003, output: 0.015 },
   { match: 'claude-3-7-sonnet', input: 0.003, output: 0.015 },
   { match: 'claude-sonnet-4', input: 0.003, output: 0.015 },
