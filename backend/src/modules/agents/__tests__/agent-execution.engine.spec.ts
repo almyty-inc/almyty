@@ -930,6 +930,33 @@ describe('AgentExecutionEngine', () => {
       expect(llmNodeResult.error).toContain('rate limit');
       expect(llmNodeResult.errorType).toBe('LLM_ERROR');
     });
+
+    it('keeps the MODEL_NOT_FOUND code, model and provider on the node result', async () => {
+      const { ModelNotFoundError } = require('../../llm-providers/model-errors');
+      const agent = makeAgent();
+      const execution = makeExecution();
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      nodeExecutor.execute.mockImplementation(async (node: any) => {
+        if (node.type === 'llm_call') {
+          const inner = new ModelNotFoundError('claude-sonnet-4-20250514', 'p1', 'anthropic', 'model: claude-sonnet-4-20250514');
+          throw Object.assign(new Error('LLM call failed: ' + inner.message), { cause: inner, code: inner.code });
+        }
+        return { output: {} };
+      });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      expect(result.nodeResults['llm_1']).toMatchObject({
+        errorType: 'LLM_ERROR',
+        errorCode: 'MODEL_NOT_FOUND',
+        errorModel: 'claude-sonnet-4-20250514',
+        errorProviderId: 'p1',
+      });
+    });
   });
 
   // ── Execution record always updated ──────────────────────────────────
