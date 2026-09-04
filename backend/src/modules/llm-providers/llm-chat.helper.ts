@@ -243,7 +243,7 @@ export class LlmChatHelper {
         if (upstreamMsg !== LLM_HEALTH_GATE_MESSAGE) {
           await this.llmProviderRepository.update(
             { id: providerId, organizationId },
-            { lastError: upstreamMsg },
+            { lastError: upstreamMsg, lastErrorAt: new Date() },
           );
         }
       } catch (updateError: any) {
@@ -459,7 +459,7 @@ export class LlmChatHelper {
         if (upstreamMsg !== LLM_HEALTH_GATE_MESSAGE) {
           await this.llmProviderRepository.update(
             { id: providerId, organizationId },
-            { lastError: upstreamMsg },
+            { lastError: upstreamMsg, lastErrorAt: new Date() },
           );
         }
       } catch (updateError: any) {
