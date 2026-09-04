@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowUp, MessageSquarePlus, Menu, X } from 'lucide-react'
+import type { Components } from 'react-markdown'
 
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,6 +13,8 @@ import {
   type HostedChatBranding,
   type HostedChatMessage,
 } from '@/lib/hosted-chat'
+
+const ReactMarkdown = lazy(() => import('react-markdown'))
 
 /**
  * A tenant's own chat app, served at {slug}.<base domain>.
@@ -420,15 +423,53 @@ function MessageBubble({ message }: { message: PendingMessage }) {
     <div className={cn('flex', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
-          isUser ? '' : 'bg-muted',
+          'max-w-[85%] break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
+          isUser ? 'whitespace-pre-wrap' : 'bg-muted',
         )}
         style={isUser ? { background: 'var(--tenant)', color: 'var(--on-tenant)' } : undefined}
       >
-        {message.content || (message.streaming ? <StreamingDots /> : null)}
+        {message.content ? (
+          isUser ? (
+            message.content
+          ) : (
+            <Suspense fallback={<span className="whitespace-pre-wrap">{message.content}</span>}>
+              <ReactMarkdown skipHtml components={assistantMarkdownComponents}>
+                {message.content}
+              </ReactMarkdown>
+            </Suspense>
+          )
+        ) : message.streaming ? (
+          <StreamingDots />
+        ) : null}
       </div>
     </div>
   )
+}
+
+const assistantMarkdownComponents: Components = {
+  p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+  ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
+  li: ({ children }) => <li>{children}</li>,
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="underline underline-offset-2"
+    >
+      {children}
+    </a>
+  ),
+  code: ({ children }) => (
+    <code className="rounded bg-background/70 px-1 py-0.5 font-mono text-[0.9em]">{children}</code>
+  ),
+  pre: ({ children }) => (
+    <pre className="mb-3 overflow-x-auto rounded-lg bg-background/70 p-3 last:mb-0">{children}</pre>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="mb-3 border-l-2 border-current/30 pl-3 last:mb-0">{children}</blockquote>
+  ),
 }
 
 function StreamingDots() {
