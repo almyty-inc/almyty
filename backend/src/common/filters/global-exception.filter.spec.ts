@@ -127,4 +127,64 @@ describe('GlobalExceptionFilter — Sentry 5xx reporting', () => {
       expect(body.error.statusCode).toBe(500);
     });
   });
+
+  describe('body-parser errors raised before the handler runs', () => {
+    // Shape body-parser actually throws (see raw-body / body-parser docs):
+    // a plain Error with `status`, `type`, and `expose`.
+    const bodyParserError = (type: string, status: number, message: string) =>
+      Object.assign(new Error(message), { type, status, statusCode: status, expose: true });
+
+    it('maps entity.too.large to 413 instead of a 500', () => {
+      mockRequest.method = 'POST';
+      mockRequest.path = '/public/chat/acme/messages';
+      mockRequest.headers = { 'content-type': 'application/json' };
+      filter.catch(bodyParserError('entity.too.large', 413, 'request entity too large'), mockHost);
+      expect(mockResponse.status).toHaveBeenCalledWith(413);
+      const body = mockResponse.json.mock.calls[0][0];
+      expect(body.error.code).toBe('PAYLOAD_TOO_LARGE');
+      expect(body.error.message).toBe('Request body too large');
+      expect(sentryMock.captureException).not.toHaveBeenCalled();
+    });
+
+    it('maps encoding.unsupported to 415', () => {
+      filter.catch(bodyParserError('encoding.unsupported', 415, 'unsupported content encoding "br"'), mockHost);
+      expect(mockResponse.status).toHaveBeenCalledWith(415);
+      expect(mockResponse.json.mock.calls[0][0].error.code).toBe('UNSUPPORTED_MEDIA_TYPE');
+    });
+
+    it('does not hijack an ordinary Error that happens to carry a non-4xx status', () => {
+      filter.catch(Object.assign(new Error('upstream'), { status: 502, type: 'x' }), mockHost);
+      expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+    });
+  });
+
+  describe('malformed JSON on public HTTP endpoints', () => {
+    it('returns a plain 400 for /public/* rather than a JSON-RPC parse-error envelope', () => {
+      mockRequest.method = 'POST';
+      mockRequest.path = '/public/chat/acme/messages';
+      mockRequest.headers = { 'content-type': 'application/json' };
+      filter.catch(bodyParserError400(), mockHost);
+      expect(mockResponse.status).toHaveBeenCalledWith(400);
+      const body = mockResponse.json.mock.calls[0][0];
+      expect(body.jsonrpc).toBeUndefined();
+      expect(body.error.code).toBe('BAD_REQUEST');
+      expect(body.error.message).toBe('Malformed request body');
+    });
+
+    it('keeps the JSON-RPC parse-error envelope for gateway paths', () => {
+      mockRequest.method = 'POST';
+      mockRequest.path = '/gw/acme/mcp';
+      mockRequest.headers = { 'content-type': 'application/json' };
+      filter.catch(bodyParserError400(), mockHost);
+      expect(mockResponse.status).toHaveBeenCalledWith(200);
+      expect(mockResponse.json.mock.calls[0][0].error.code).toBe(-32700);
+    });
+
+    function bodyParserError400() {
+      return Object.assign(
+        new SyntaxError('Unexpected token o in JSON at position 12'),
+        { type: 'entity.parse.failed', status: 400, statusCode: 400, expose: true },
+      );
+    }
+  });
 });

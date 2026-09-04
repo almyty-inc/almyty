@@ -9,6 +9,35 @@ import {
 import { Request, Response } from 'express';
 import { QueryFailedError, EntityNotFoundError } from 'typeorm';
 
+/**
+ * Errors body-parser raises before the route handler runs. They are plain
+ * Errors with a 4xx `status` and a machine-readable `type` (see
+ * github.com/expressjs/body-parser#errors).
+ */
+interface BodyParserError extends Error {
+  status: number;
+  type: string;
+}
+
+const BODY_PARSER_MESSAGES: Record<string, string> = {
+  'entity.too.large': 'Request body too large',
+  'encoding.unsupported': 'Unsupported content encoding',
+  'charset.unsupported': 'Unsupported charset',
+  'entity.verify.failed': 'Request body failed verification',
+  'entity.parse.failed': 'Malformed request body',
+  'request.aborted': 'Request aborted',
+  'request.size.invalid': 'Request size did not match Content-Length',
+  'stream.encoding.set': 'Invalid request stream',
+  'stream.not.readable': 'Invalid request stream',
+  'parameters.too.many': 'Too many parameters',
+};
+
+function isBodyParserError(exception: unknown): exception is BodyParserError {
+  if (!(exception instanceof Error)) return false;
+  const { status, type } = exception as Partial<BodyParserError>;
+  return typeof status === 'number' && status >= 400 && status < 500 && typeof type === 'string';
+}
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
@@ -27,7 +56,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         || path.startsWith('/gateways') || path.startsWith('/apis')
         || path.startsWith('/tools') || path.startsWith('/health')
         || path.startsWith('/users') || path.startsWith('/organizations')
-        || path.startsWith('/credentials') || path.startsWith('/mcp');
+        || path.startsWith('/credentials') || path.startsWith('/mcp') || path.startsWith('/public');
       const ct = request.headers?.['content-type'] || '';
       const errMsg = (exception as any)?.message || '';
       const isParseError = !isInternalApi && ct.includes('application/json') && (
@@ -85,6 +114,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       status = HttpStatus.NOT_FOUND;
       message = 'Resource not found';
       code = 'NOT_FOUND';
+    } else if (isBodyParserError(exception)) {
+      // body-parser rejects a request before any handler runs (payload over
+      // the size limit, unsupported encoding, ...). It throws a plain Error
+      // carrying the right HTTP status, so honour that instead of turning a
+      // client mistake into a 500 that pages someone.
+      status = exception.status;
+      message = BODY_PARSER_MESSAGES[exception.type] ?? 'Invalid request body';
+      code = this.getCodeFromStatus(status);
     } else if (exception instanceof Error) {
       status = HttpStatus.INTERNAL_SERVER_ERROR;
       message = 'Internal server error';
@@ -142,8 +179,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       case 404: return 'NOT_FOUND';
       case 409: return 'CONFLICT';
       case 422: return 'UNPROCESSABLE_ENTITY';
+      case 413: return 'PAYLOAD_TOO_LARGE';
+      case 415: return 'UNSUPPORTED_MEDIA_TYPE';
+      case 422: return 'UNPROCESSABLE_ENTITY';
       case 429: return 'RATE_LIMITED';
-      default: return status >= 500 ? 'INTERNAL_ERROR' : 'CLIENT_ERROR';
     }
   }
 }
