@@ -43,6 +43,8 @@ describe('HostedChatService', () => {
       findOne: jest.fn(async () => null),
       create: jest.fn((row: any) => row),
       save: jest.fn(async (row: any) => ({ id: 'eu-1', ...row })),
+      delete: jest.fn(async () => undefined),
+
     };
     conversationRepository = {
       find: jest.fn(async () => []),
@@ -124,6 +126,62 @@ describe('HostedChatService', () => {
       const bare = gateway();
       bare.configuration = { bot_token: 'xoxb' };
       expect(service.publicBranding(bare).appName).toBe('Assistant');
+    });
+  });
+
+  describe('visitor authentication', () => {
+    const ssoGateway = () => {
+      const gw = gateway();
+      gw.configuration = { hostedChat: { slug: 'acme', appName: 'Acme', authMode: 'sso' } };
+      return gw;
+    };
+
+    it('does not require auth on a public-link surface', () => {
+      expect(service.requiresAuth(gateway())).toBe(false);
+      expect(service.isAuthorized(gateway(), { authProvider: null } as any)).toBe(true);
+    });
+
+    it('requires the provider the surface currently uses, not just any sign-in', () => {
+      const gw = ssoGateway();
+      expect(service.requiresAuth(gw)).toBe(true);
+      expect(service.isAuthorized(gw, { authProvider: null } as any)).toBe(false);
+      expect(service.isAuthorized(gw, { authProvider: 'email_otp' } as any)).toBe(false);
+      expect(service.isAuthorized(gw, { authProvider: 'sso' } as any)).toBe(true);
+    });
+
+    it('treats SSO as unavailable when no entitlement resolver is wired', async () => {
+      await expect(service.authModeAvailable(ssoGateway())).resolves.toBe(false);
+      await expect(service.authModeAvailable(gateway())).resolves.toBe(true);
+    });
+
+    it('upgrades the current anonymous visitor in place and rotates the session key', async () => {
+      const current: any = { id: 'eu-1', gatewayId: 'gw-1', sessionKey: 'old', authProvider: null, externalId: null };
+      endUserRepository.findOne.mockResolvedValue(null);
+
+      const { endUser, issuedSessionKey } = await service.bindAuthenticatedVisitor(ssoGateway(), current, {
+        provider: 'sso',
+        externalId: 'okta|123',
+        email: 'ava@northwind.example',
+        displayName: 'Ava Chen',
+      });
+
+      expect(endUser).toMatchObject({ id: 'eu-1', authProvider: 'sso', externalId: 'okta|123', email: 'ava@northwind.example', displayName: 'Ava Chen' });
+      expect(issuedSessionKey).not.toBe('old');
+      expect(issuedSessionKey).toHaveLength(64);
+      expect(endUserRepository.delete).not.toHaveBeenCalled();
+    });
+
+    it('reuses the row of a person who signed in before, and drops the anonymous one', async () => {
+      const current: any = { id: 'eu-anon', gatewayId: 'gw-1', sessionKey: 'old', authProvider: null };
+      const previous: any = { id: 'eu-ava', gatewayId: 'gw-1', sessionKey: 'older', authProvider: 'sso', externalId: 'okta|123' };
+      endUserRepository.findOne.mockResolvedValue(previous);
+
+      const { endUser } = await service.bindAuthenticatedVisitor(ssoGateway(), current, { provider: 'sso', externalId: 'okta|123' });
+
+      expect(endUserRepository.findOne).toHaveBeenCalledWith({ where: { gatewayId: 'gw-1', externalId: 'okta|123', authProvider: 'sso' } });
+      expect(endUser.id).toBe('eu-ava');
+      expect(endUser.sessionKey).not.toBe('older');
+      expect(endUserRepository.delete).toHaveBeenCalledWith({ id: 'eu-anon' });
     });
   });
 

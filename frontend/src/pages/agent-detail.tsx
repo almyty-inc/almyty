@@ -27,6 +27,8 @@ import type {
 import { AgentHeader } from '@/components/agents/detail/agent-header'
 import { AgentStats } from '@/components/agents/detail/agent-stats'
 import { ModelIssueBanner } from '@/components/agents/detail/model-issue-banner'
+import { RunFailureBanner } from '@/components/agents/detail/run-failure-banner'
+
 
 import { PipelineCanvas } from '@/components/agents/detail/pipeline-canvas'
 import { OverviewTab } from '@/components/agents/detail/overview-tab'
@@ -333,6 +335,8 @@ export function AgentDetailPage() {
       />
 
       <ModelIssueBanner agent={agent} />
+      <RunFailureBanner agent={agent} executions={executions} />
+
 
       <AgentStats agent={agent} />
 

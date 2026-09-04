@@ -16,6 +16,9 @@ import type { Request, Response } from 'express';
 
 import { Public } from '../../../common/decorators/public.decorator';
 import { HostedChatService } from './hosted-chat.service';
+import type { Gateway } from '../../../entities/gateway.entity';
+import type { EndUser } from '../../../entities/end-user.entity';
+
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
@@ -61,7 +64,29 @@ export class HostedChatController {
     });
   }
 
+  /**
+   * Refuse a visitor the surface requires to be signed in. 401 with a
+   * stable code; the page knows the auth mode from branding and shows the
+   * matching sign-in. An SSO surface on an org without the entitlement
+   * closes rather than opening up.
+   */
+  private async requireVisitor(gateway: Gateway, endUser: EndUser): Promise<void> {
+    if (!this.hostedChat.requiresAuth(gateway)) return;
+    if (!(await this.hostedChat.authModeAvailable(gateway))) {
+      throw new HttpException(
+        { code: 'AUTH_MODE_UNAVAILABLE', message: 'This chat requires a sign-in method its organization is not entitled to.' },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    if (this.hostedChat.isAuthorized(gateway, endUser)) return;
+    throw new HttpException(
+      { code: 'AUTH_REQUIRED', message: 'Sign in to use this chat.', authMode: this.hostedChat.authMode(gateway) },
+      HttpStatus.UNAUTHORIZED,
+    );
+  }
+
   private sessionFrom(req: Request): string | undefined {
+
     return (req as any).cookies?.[HostedChatService.SESSION_COOKIE];
   }
 
@@ -118,6 +143,33 @@ export class HostedChatController {
     return { success: true, data: this.hostedChat.publicBranding(gateway) };
   }
 
+  @Get(':slug/me')
+  @ApiOperation({ summary: 'Who this visitor is, and whether the surface admits them' })
+  async me(
+    @Param('slug') slug: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const gateway = await this.hostedChat.findBySlug(slug);
+    const { endUser, issuedSessionKey } = await this.hostedChat.resolveEndUser(
+      gateway,
+      this.sessionFrom(req),
+      this.clientIp(req),
+    );
+    this.setSessionCookie(res, issuedSessionKey);
+    const authMode = this.hostedChat.authMode(gateway);
+    return {
+      success: true,
+      data: {
+        authMode,
+        available: await this.hostedChat.authModeAvailable(gateway),
+        authenticated: this.hostedChat.isAuthorized(gateway, endUser),
+        email: endUser.email ?? null,
+        displayName: endUser.displayName ?? null,
+      },
+    };
+  }
+
   @Get(':slug/conversations')
   @ApiOperation({ summary: 'This visitor conversations' })
   async listConversations(
@@ -133,7 +185,9 @@ export class HostedChatController {
     );
     this.setSessionCookie(res, issuedSessionKey);
 
+    await this.requireVisitor(gateway, endUser);
     const conversations = await this.hostedChat.listConversations(endUser);
+
     return {
       success: true,
       data: conversations.map((c) => ({ id: c.id, title: c.title, createdAt: c.createdAt })),
@@ -173,6 +227,7 @@ export class HostedChatController {
       this.clientIp(req),
     );
     this.setSessionCookie(res, issuedSessionKey);
+    await this.requireVisitor(gateway, endUser);
 
     const conversation = body?.conversationId
       ? await this.hostedChat.findConversation(endUser, body.conversationId)
@@ -214,6 +269,7 @@ export class HostedChatController {
       this.sessionFrom(req),
       this.clientIp(req),
     );
+    await this.requireVisitor(gateway, endUser);
 
     // A run id is a UUID, but it is still a caller-supplied identifier
     // on a public endpoint, so confirm it belongs to this visitor rather
@@ -316,6 +372,7 @@ export class HostedChatController {
       this.clientIp(req),
     );
     this.setSessionCookie(res, issuedSessionKey);
+    await this.requireVisitor(gateway, endUser);
 
     const conversation = await this.hostedChat.findConversation(endUser, conversationId);
     const messages = await this.hostedChat.listMessages(conversation);

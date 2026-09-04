@@ -11,6 +11,8 @@ describe('AgentAppsService', () => {
   let appRepository: any;
   let distributionRepository: any;
   let agentRepository: any;
+  let executionRepository: any;
+  let runRepository: any;
   let gateways: any;
   let service: AgentAppsService;
 
@@ -57,12 +59,75 @@ describe('AgentAppsService', () => {
       upsertForDistribution: jest.fn(async () => ({ id: 'gw-1' })),
       deactivateGateway: jest.fn(async () => ({ id: 'gw-1' })),
     };
+    executionRepository = { findOne: jest.fn(async () => null) };
+    runRepository = { findOne: jest.fn(async () => null) };
     service = new AgentAppsService(
       appRepository,
       distributionRepository,
       agentRepository,
+      executionRepository,
+      runRepository,
       gateways,
     );
+
+  });
+
+  describe("health (is the app's agent working right now?)", () => {
+    it('reports ok when the latest execution completed', async () => {
+      executionRepository.findOne.mockResolvedValue({ status: 'completed', createdAt: new Date('2026-09-04T10:00:00Z') });
+      await expect(service.health(ORG, ['agent-1'])).resolves.toEqual({ state: 'ok' });
+    });
+
+    it('reports the failure when the newest thing the agent did failed, with the vendor message', async () => {
+      executionRepository.findOne.mockResolvedValue({ status: 'completed', createdAt: new Date('2026-09-04T09:00:00Z') });
+      runRepository.findOne.mockResolvedValue({ status: 'failed', error: 'Request failed with status code 429', createdAt: new Date('2026-09-04T10:40:41Z') });
+      agentRepository.findOne.mockResolvedValue({ id: 'agent-1', name: 'Customer Support Copilot' });
+
+      await expect(service.health(ORG, ['agent-1'])).resolves.toEqual({
+        state: 'failing',
+        agentId: 'agent-1',
+        agentName: 'Customer Support Copilot',
+        at: new Date('2026-09-04T10:40:41Z'),
+        message: 'Request failed with status code 429',
+      });
+    });
+
+    it('does not report an old failure that a later run recovered from', async () => {
+      runRepository.findOne.mockResolvedValue({ status: 'failed', error: '429', createdAt: new Date('2026-09-04T09:00:00Z') });
+      executionRepository.findOne.mockResolvedValue({ status: 'completed', createdAt: new Date('2026-09-04T10:00:00Z') });
+      await expect(service.health(ORG, ['agent-1'])).resolves.toEqual({ state: 'ok' });
+    });
+
+    it('is ok for an app whose agents have never run', async () => {
+      await expect(service.health(ORG, ['agent-1'])).resolves.toEqual({ state: 'ok' });
+    });
+
+    it('scopes the lookups to the organization', async () => {
+      await service.health(ORG, ['agent-1']);
+      expect(executionRepository.findOne).toHaveBeenCalledWith(expect.objectContaining({ where: { agentId: 'agent-1', organizationId: ORG } }));
+      expect(runRepository.findOne).toHaveBeenCalledWith(expect.objectContaining({ where: { agentId: 'agent-1', organizationId: ORG } }));
+    });
+  });
+
+  describe('publish-time SSO entitlement', () => {
+    const ssoApp = () => ({ id: 'app-1', organizationId: ORG, name: 'n', slug: 's', agentIds: ['agent-1'], authMode: 'sso', limits: { costCapCents: 100, perUserRateLimit: 10, perIpRateLimit: 10 }, isActive: true }) as any;
+
+    it('refuses an SSO app when the org has no entitlement resolver (community build)', async () => {
+      appRepository.findOne.mockResolvedValue(ssoApp());
+      const result = await service.check(ORG, 's');
+
+      expect(result.refusals.map((r: any) => r.code)).toContain('SSO_NOT_ENTITLED');
+    });
+
+    it('lets an entitled org publish an SSO app', async () => {
+      const orgLicense = { hasForOrg: jest.fn(async () => true) };
+      const entitled = new AgentAppsService(appRepository, distributionRepository, agentRepository, executionRepository, runRepository, gateways, orgLicense as any);
+      appRepository.findOne.mockResolvedValue(ssoApp());
+      const result = await entitled.check(ORG, 's');
+
+      expect(orgLicense.hasForOrg).toHaveBeenCalledWith(ORG, 'sso');
+      expect(result.refusals.map((r: any) => r.code)).not.toContain('SSO_NOT_ENTITLED');
+    });
   });
 
   describe('tenant scoping', () => {

@@ -109,7 +109,14 @@ export interface AgentApp {
   limits: AppLimits | null
   isActive: boolean
   distributions?: AppDistribution[]
+  /** From the list endpoint: whether the app's agent last failed. */
+  health?: AppHealth
 }
+
+export type AppHealth =
+  | { state: 'ok' }
+  | { state: 'failing'; agentId: string; agentName: string; at: string; message: string }
+
 
 export interface AppCheck {
   ok: boolean

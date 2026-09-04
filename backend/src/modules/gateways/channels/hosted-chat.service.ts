@@ -15,6 +15,8 @@ import {
 } from './hosted-chat.config';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
+import { OrgLicenseResolver } from '../../licensing/org-license.resolver';
+
 import {
   CustomDomainConfig,
   VERIFICATION_RECORD_PREFIX,
@@ -34,6 +36,19 @@ import {
 export class HostedChatService {
   /** Cookie holding the per-surface session key. */
   static readonly SESSION_COOKIE = 'almyty_chat_session';
+  static readonly SESSION_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
+
+  /** One definition of the visitor cookie, shared by every controller that issues it. */
+  static sessionCookieOptions() {
+    return {
+      httpOnly: true,
+      sameSite: 'lax' as const,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: HostedChatService.SESSION_MAX_AGE_MS,
+      path: '/',
+    };
+  }
+
 
   private readonly logger = new Logger(HostedChatService.name);
 
@@ -50,6 +65,9 @@ export class HostedChatService {
     private readonly runRepository: Repository<AgentRun>,
     @Optional()
     private readonly auditLogService?: AuditLogService,
+    @Optional()
+    private readonly orgLicense?: OrgLicenseResolver,
+
   ) {}
 
   /**
@@ -171,6 +189,75 @@ export class HostedChatService {
       }),
     );
     return { endUser, issuedSessionKey: issued };
+  }
+
+  // ── Visitor authentication ──────────────────────────────────────────
+  //
+  // The auth mode on a surface was stored and shown but never enforced:
+  // every visitor was admitted anonymously whatever the tenant chose.
+  // Core only ever asks "is this visitor signed in the way the surface
+  // requires?"; the sign-in flows themselves (SSO in ee/) attach the
+  // identity through bindAuthenticatedVisitor below.
+
+  /** The auth mode this surface is configured with. */
+  authMode(gateway: Gateway): HostedChatConfig['authMode'] {
+    return hostedChatConfigFrom(gateway.configuration).authMode;
+  }
+
+  requiresAuth(gateway: Gateway): boolean {
+    return this.authMode(gateway) !== 'public_link';
+  }
+
+  /**
+   * Signed in with the provider the surface currently requires. Matching
+   * the provider (not just "not anonymous") means switching a surface
+   * from email codes to SSO invalidates the old sessions instead of
+   * grandfathering them.
+   */
+  isAuthorized(gateway: Gateway, endUser: EndUser): boolean {
+    if (!this.requiresAuth(gateway)) return true;
+    return !!endUser.authProvider && endUser.authProvider === this.authMode(gateway);
+  }
+
+  /**
+   * SSO is an enterprise entitlement. A surface set to SSO on an org that
+   * lost the entitlement must close, not silently fall back to open.
+   */
+  async authModeAvailable(gateway: Gateway): Promise<boolean> {
+    if (this.authMode(gateway) !== 'sso') return true;
+    if (!this.orgLicense) return false;
+    return this.orgLicense.hasForOrg(gateway.organizationId, 'sso');
+  }
+
+  /**
+   * Attach a verified identity to a visitor. If this person has signed in
+   * to this surface before, their earlier row (and its conversations) is
+   * reused; otherwise the current anonymous row is upgraded in place. The
+   * session key is rotated either way so the pre-sign-in cookie never
+   * becomes the signed-in one (session fixation).
+   */
+  async bindAuthenticatedVisitor(
+    gateway: Gateway,
+    current: EndUser,
+    identity: { provider: 'email_otp' | 'oauth' | 'sso'; externalId: string; email?: string | null; displayName?: string | null },
+  ): Promise<{ endUser: EndUser; issuedSessionKey: string }> {
+    const existing = await this.endUserRepository.findOne({
+      where: { gatewayId: gateway.id, externalId: identity.externalId, authProvider: identity.provider },
+    });
+    const target = existing ?? current;
+    target.authProvider = identity.provider;
+    target.externalId = identity.externalId;
+    if (identity.email !== undefined) target.email = identity.email ?? null;
+    if (identity.displayName !== undefined) target.displayName = identity.displayName ?? null;
+    target.sessionKey = HostedChatService.newSessionKey();
+    target.lastSeenAt = new Date();
+    const saved = await this.endUserRepository.save(target);
+    if (existing && existing.id !== current.id) {
+      // The anonymous row the visitor was using is now orphaned; drop it
+      // so it cannot be resumed with the old cookie.
+      await this.endUserRepository.delete({ id: current.id }).catch(() => undefined);
+    }
+    return { endUser: saved, issuedSessionKey: saved.sessionKey };
   }
 
   /** This visitor's conversations, newest first. */
