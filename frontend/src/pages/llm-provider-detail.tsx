@@ -29,6 +29,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { llmProvidersApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { CredentialPicker } from '@/components/credential-picker'
+import { currentProviderFailure } from '@/lib/provider-health'
 
 const providerLogos: Record<string, string> = {
   openai: '🤖', anthropic: '🧠', google: '✦', mistral: '🔷', xai: '𝕏',
@@ -284,9 +285,22 @@ export function LlmProviderDetailPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Health:</span>
-                  <span className={`text-sm font-medium ${provider.isHealthy ? 'text-green-600' : provider.status === 'error' ? 'text-red-600' : 'text-muted-foreground'}`}>
-                    {provider.isHealthy ? 'Healthy' : provider.status === 'error' ? 'Down' : 'Unknown'}
-                  </span>
+                  {(() => {
+                    const failing = currentProviderFailure(provider)
+                    if (failing) {
+                      return (
+                        <span className="text-right text-sm font-medium text-red-600" title={failing.message}>
+                          Failing since {new Date(failing.at).toLocaleString()}
+                          <span className="block max-w-[260px] truncate font-normal text-xs text-red-500">{failing.message}</span>
+                        </span>
+                      )
+                    }
+                    return (
+                      <span className={`text-sm font-medium ${provider.isHealthy ? 'text-green-600' : provider.status === 'error' ? 'text-red-600' : 'text-muted-foreground'}`}>
+                        {provider.isHealthy ? 'Healthy' : provider.status === 'error' ? 'Down' : 'Unknown'}
+                      </span>
+                    )
+                  })()}
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Models:</span>

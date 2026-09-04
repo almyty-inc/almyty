@@ -73,6 +73,10 @@ export class LlmStatsHelper {
         totalTokensUsed: () => `"totalTokensUsed" + ${tokens}`,
         totalCost: () => `"totalCost" + ${cost}`,
         lastRequestAt: new Date(),
+        // A success is the only thing that can retire a lastError in the
+        // UI; isHealthy stays a hard gate the health check owns.
+        ...(delta.success ? { lastSuccessAt: new Date() } : {}),
+
       })
       .where('id = :id', { id: providerId })
       .execute();

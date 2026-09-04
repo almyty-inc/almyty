@@ -16,6 +16,14 @@ import {
   AppDistribution,
 } from '../../entities/agent-app-distribution.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
+
+/** What the apps page shows next to a product: is its agent working right now? */
+export type AppHealth =
+  | { state: 'ok' }
+  | { state: 'failing'; agentId: string; agentName: string; at: Date; message: string };
+
 import {
   AppCheck,
   checkDistribution,
@@ -65,18 +73,58 @@ export class AgentAppsService {
     private readonly distributionRepository: Repository<AppDistribution>,
     @InjectRepository(Agent)
     private readonly agentRepository: Repository<Agent>,
+    @InjectRepository(AgentExecution)
+    private readonly executionRepository: Repository<AgentExecution>,
+    @InjectRepository(AgentRun)
+    private readonly runRepository: Repository<AgentRun>,
+
     private readonly gateways: GatewaysService,
     @Optional()
     private readonly orgLicense?: OrgLicenseResolver,
 
   ) {}
 
-  async list(organizationId: string): Promise<AgentApp[]> {
-    return this.appRepository.find({
+  async list(organizationId: string): Promise<Array<AgentApp & { health: AppHealth }>> {
+    const apps = await this.appRepository.find({
       where: { organizationId },
       order: { createdAt: 'DESC' },
     });
+    return Promise.all(apps.map(async (app) => ({ ...app, health: await this.health(organizationId, app.agentIds ?? []) })));
   }
+
+  /**
+   * Did the last thing any of this app's agents did fail?
+   *
+   * A product whose agent is failing looked identical on the apps page
+   * to one that is idle; the only trace was a visitor's empty screen.
+   * Look at the most recent execution (workflow agents) or run
+   * (autonomous agents) per agent and report the failure, if that is
+   * what happened last.
+   */
+  async health(organizationId: string, agentIds: string[]): Promise<AppHealth> {
+    for (const agentId of agentIds) {
+      const [execution, run] = await Promise.all([
+        this.executionRepository.findOne({ where: { agentId, organizationId }, order: { createdAt: 'DESC' } }),
+        this.runRepository.findOne({ where: { agentId, organizationId }, order: { createdAt: 'DESC' } }),
+      ]);
+      const latest = [execution, run]
+        .filter((x): x is AgentExecution | AgentRun => !!x)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      if (!latest) continue;
+      if (latest.status === 'failed' || latest.status === 'timeout') {
+        const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId }, select: { id: true, name: true } });
+        return {
+          state: 'failing',
+          agentId,
+          agentName: agent?.name ?? agentId,
+          at: latest.createdAt,
+          message: latest.error ?? `Last run ${latest.status}`,
+        };
+      }
+    }
+    return { state: 'ok' };
+  }
+
 
   /**
    * Apps are addressed by their slug, not their id.

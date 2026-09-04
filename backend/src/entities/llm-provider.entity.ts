@@ -195,6 +195,14 @@ export class LlmProvider {
   @Column({ nullable: true })
   lastError: string;
 
+  /** When lastError was recorded; compare with lastSuccessAt to know if it is current. */
+  @Column({ nullable: true })
+  lastErrorAt: Date;
+
+  @Column({ nullable: true })
+  lastSuccessAt: Date;
+
+
   @CreateDateColumn()
   createdAt: Date;
 

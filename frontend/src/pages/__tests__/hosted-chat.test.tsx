@@ -147,7 +147,6 @@ describe('HostedChatPage', () => {
     expect(await screen.findByText('hi there')).toBeInTheDocument()
   })
 
-
   it('tells the visitor when the run failed instead of going quiet', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
@@ -211,6 +210,69 @@ describe('HostedChatPage', () => {
     expect(await screen.findByText('hi there')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
   })
+
+  it('renders safe Markdown in assistant replies while leaving visitor text literal', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'New chat',
+      messages: [
+        { id: 'm1', role: 'user', content: '**literal**', createdAt: '2026-01-01' },
+        {
+          id: 'm2',
+          role: 'assistant',
+          content: '**Documentation**\n\n1. Read the [guide](https://example.com).',
+          createdAt: '2026-01-01',
+        },
+      ],
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), {
+      target: { value: '**literal**' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+
+    expect(await screen.findByText('Documentation')).toHaveProperty('tagName', 'STRONG')
+    expect(screen.getByText('**literal**')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'guide' })).toHaveAttribute(
+      'rel',
+      'noopener noreferrer',
+    )
+  })
+
+  it('does not render raw HTML from assistant replies', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'New chat',
+      messages: [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content:
+            '<img src=x onerror="alert(1)"><script>alert(1)</script>Safe [link](javascript:alert(1))',
+          createdAt: '2026-01-01',
+        },
+      ],
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+
+    expect(await screen.findByText(/Safe/)).toBeInTheDocument()
+    expect(document.querySelector('img')).toBeNull()
+    expect(document.querySelector('script')).toBeNull()
+    expect(screen.getByText('link').closest('a')).toHaveAttribute('href', '')
+  })
+
   it('surfaces a rate limit in words a visitor understands', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockRejectedValue({ response: { status: 429 } })

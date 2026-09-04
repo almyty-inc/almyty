@@ -133,6 +133,10 @@ export interface Gateway {
   successfulRequests: number
   lastRequestAt?: string
   lastHealthCheckAt?: string
+  /** Set with lastError; the error is current when it is newer than lastSuccessAt. */
+  lastErrorAt?: string
+  lastSuccessAt?: string
+
   isHealthy: boolean
   isSystem?: boolean
   createdAt: string
