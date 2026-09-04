@@ -15,6 +15,9 @@ import { ScimAuthGuard } from './guards/scim-auth.guard';
 import { SsoController } from './sso.controller';
 import { SsoConfigController } from './sso-config.controller';
 import { ScimController } from './scim.controller';
+import { HostedChatSsoController } from './hosted-chat-sso.controller';
+import { GatewaysModule } from '../../../src/modules/gateways/gateways.module';
+
 
 /**
  * Enterprise SSO (SAML/OIDC) + SCIM provisioning (P4). Every route is gated by
@@ -26,9 +29,11 @@ import { ScimController } from './scim.controller';
   imports: [
     TypeOrmModule.forFeature([OrgSsoConfig, User, UserOrganization, Team, UserTeam]),
     AuthModule,
+    GatewaysModule,
   ],
+
   providers: [SsoConfigService, SsoService, ScimService, ScimAuthGuard],
-  controllers: [SsoConfigController, SsoController, ScimController],
+  controllers: [SsoConfigController, SsoController, ScimController, HostedChatSsoController],
   exports: [SsoConfigService],
 })
 export class SsoModule {}

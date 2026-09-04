@@ -86,6 +86,9 @@ Unpublishing **deactivates** the gateway rather than deleting it. Republishing k
 
 An unset auth mode reads as open, not as unset. The permissive reading of missing configuration is the one that gets someone billed.
 
+The auth mode is enforced by the hosted-chat backend, not just displayed. A surface set to anything other than `public_link` answers `401 AUTH_REQUIRED` on every visitor endpoint (conversations, messages, stream, transcript) until the visitor has signed in the required way, and `GET /public/chat/:slug/me` tells the page which sign-in to show. `sso` is backed today: the visitor is sent through the organization's OIDC provider (`/public/chat/:slug/auth/sso/login` on the tenant host, callback under the same prefix, so the admin registers `https://{slug}.{base}/api/public/chat/{slug}/auth/sso/callback` at the IdP), the verified `sub` becomes the visitor's `externalId`, and the session cookie is rotated. An SSO surface on an organization without the `sso` entitlement closes rather than opening. `email_otp` and `oauth` are stored and gated the same way but have no sign-in flow yet, and the page says so.
+
+
 The first two are satisfied from the app's own `limits` column: a cost ceiling per run in cents, and per-user and per-IP request ceilings. Cents rather than currency because a ceiling in floating point is a rounding argument later; per-IP separately from per-user because a hosted chat visitor has no account.
 
 Those inputs live on the Settings tab, next to branding and who may use the product.

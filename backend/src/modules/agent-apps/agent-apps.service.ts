@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  Optional,
+
   ConflictException,
   Injectable,
   NotFoundException,
@@ -30,6 +32,8 @@ import {
   rateLimitFor,
 } from './distribution-publish';
 import { GatewaysService } from '../gateways/gateways.service';
+import { OrgLicenseResolver } from '../licensing/org-license.resolver';
+
 
 export interface CreateAppDto {
   name: string;
@@ -62,6 +66,9 @@ export class AgentAppsService {
     @InjectRepository(Agent)
     private readonly agentRepository: Repository<Agent>,
     private readonly gateways: GatewaysService,
+    @Optional()
+    private readonly orgLicense?: OrgLicenseResolver,
+
   ) {}
 
   async list(organizationId: string): Promise<AgentApp[]> {
@@ -185,7 +192,7 @@ export class AgentAppsService {
     context: Parameters<typeof checkApp>[1] = {},
   ): Promise<AppCheck> {
     const app = await this.findOne(organizationId, slug);
-    return checkApp(app, this.limitsContext(app, context));
+    return checkApp(app, await this.limitsContext(app, context));
   }
 
   /**
@@ -195,14 +202,17 @@ export class AgentAppsService {
    * an empty context on every call, so a public product showed both
    * refusals for ever and no setting could clear them.
    */
-  private limitsContext(
+  private async limitsContext(
     app: AgentApp,
     context: Parameters<typeof checkApp>[1] = {},
-  ): Parameters<typeof checkApp>[1] {
+  ): Promise<Parameters<typeof checkApp>[1]> {
     return {
       costCapCents: app.limits?.costCapCents ?? null,
       perUserRateLimit: app.limits?.perUserRateLimit ?? null,
       perIpRateLimit: app.limits?.perIpRateLimit ?? null,
+      // SSO is an enterprise entitlement; until this was passed in, every
+      // SSO app was refused at publish whether the org had it or not.
+      hasEnterpriseAuth: this.orgLicense ? await this.orgLicense.hasForOrg(app.organizationId, 'sso') : false,
       ...context,
     };
   }
@@ -276,7 +286,7 @@ export class AgentAppsService {
     // Both gates, as one list. The product-wide rules are the reason a
     // public product needs a cost cap; the publish rules are the ones
     // that only apply at this moment.
-    const product = checkApp(app, this.limitsContext(app));
+    const product = checkApp(app, await this.limitsContext(app));
     // The agent that will actually answer: the one this surface names,
     // or the product's default. Resolved before the checks so a surface
     // is never published in front of an agent that cannot hold a
@@ -379,7 +389,7 @@ export class AgentAppsService {
       distribution.target,
       app,
       distribution.configuration,
-      this.limitsContext(app, context),
+      await this.limitsContext(app, context),
     );
   }
 
