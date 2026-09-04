@@ -255,7 +255,8 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - name: npm audit backend
         working-directory: backend
-        run: npm audit --audit-level=high --omit=dev
+        # Retries only registry-outage failures; real findings fail at once.
+        run: ../scripts/npm-audit-retry.sh --audit-level=high --omit=dev
 
   npm-audit-frontend:
     name: npm audit (frontend — hard-block)
@@ -314,7 +315,7 @@ jobs:
           cache-dependency-path: docs-site/package-lock.json
       - name: npm audit docs-site
         working-directory: docs-site
-        run: npm audit --audit-level=high --omit=dev
+        run: ../scripts/npm-audit-retry.sh --audit-level=high --omit=dev
 
   # ─── Secret scanning (gitleaks) ──────────────────────────────
   # Scans the working tree for accidentally committed secrets: AWS
