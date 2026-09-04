@@ -5,6 +5,9 @@ import { BullModule } from '@nestjs/bull';
 import { AgentApp } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
+
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 import { AppBuild } from '../../entities/app-build.entity';
 import { Credential } from '../../entities/credential.entity';
@@ -27,7 +30,7 @@ import { BuildSignerService } from './build-signer.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AgentApp, AppDistribution, Agent, AppBuild, Credential]),
+    TypeOrmModule.forFeature([AgentApp, AppDistribution, Agent, AgentExecution, AgentRun, AppBuild, Credential]),
     BullModule.registerQueue({ name: APP_BUILD_QUEUE }),
     // Artifacts go through the same storage the rest of the product
     // uses, so a deployment on S3 gets signed download URLs for free.
