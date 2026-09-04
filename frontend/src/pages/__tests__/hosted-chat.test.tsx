@@ -144,6 +144,70 @@ describe('HostedChatPage', () => {
     expect(await screen.findByText('hi there')).toBeInTheDocument()
   })
 
+
+  it('tells the visitor when the run failed instead of going quiet', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    // A failed run persists only the visitor's turn.
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'New chat',
+      messages: [{ id: 'm1', role: 'user', content: 'hello', createdAt: '2026-01-01' }],
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+
+    FakeEventSource.instances[0].emit('done', { reason: 'run.failed' })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("The assistant couldn't reply just now")
+    // The visitor's own turn stays: it was delivered, the reply is what failed.
+    expect(screen.getByText('hello')).toBeInTheDocument()
+  })
+
+  it('flags an unanswered turn even when the stream ends without a reason', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'New chat',
+      messages: [{ id: 'm1', role: 'user', content: 'hello', createdAt: '2026-01-01' }],
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+
+    FakeEventSource.instances[0].emit('done', { reason: 'stream_ended' })
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+
+  it('shows no error when the run completed with a reply', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'New chat',
+      messages: [
+        { id: 'm1', role: 'user', content: 'hello', createdAt: '2026-01-01' },
+        { id: 'm2', role: 'assistant', content: 'hi there', createdAt: '2026-01-01' },
+      ],
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+
+    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+
+    expect(await screen.findByText('hi there')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
   it('surfaces a rate limit in words a visitor understands', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockRejectedValue({ response: { status: 429 } })
@@ -172,5 +236,48 @@ describe('HostedChatPage', () => {
     ;(hostedChatApi.branding as any).mockRejectedValue(new Error('404'))
     render(<HostedChatPage slug="nope" />)
     expect(await screen.findByText('This chat is not available')).toBeInTheDocument()
+  })
+
+  it('reconciles once even when done and onerror both fire', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'New chat',
+      messages: [{ id: 'm1', role: 'user', content: 'hello', createdAt: '2026-01-01' }],
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+
+    const source = FakeEventSource.instances[0] as any
+    source.emit('done', { reason: 'run.failed' })
+    source.onerror?.()
+    source.emit('done', { reason: 'run.failed' })
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    // One transcript reconcile for the send; the branding/conversation
+    // loads do not go through messages().
+    expect(hostedChatApi.messages).toHaveBeenCalledTimes(1)
+  })
+
+  it('still tells the visitor something went wrong when the transcript fetch itself fails', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+    ;(hostedChatApi.messages as any).mockRejectedValue(new Error('network down'))
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+
+    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("couldn't reply")
+    // The visitor's turn survives; only the empty streaming placeholder goes.
+    expect(screen.getByText('hello')).toBeInTheDocument()
   })
 })

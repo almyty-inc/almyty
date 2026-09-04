@@ -14,6 +14,8 @@ import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper'
 import { AgentContextCompactor } from './agent-context-compactor.helper';
 import { checkRunLimits, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
+import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
+
 /**
  * `processStep` was the bulk of AgentRuntimeService — a single 500-line
  * method orchestrating the autonomous-agent inner loop. Splitting it
@@ -657,6 +659,14 @@ export class AgentStepProcessor {
     } catch (error) {
       this.s.logger.error(`Step failed for run ${runId}: ${error.message}`, error.stack);
 
+      // Leave a note on the agent when its model has been retired, so the
+      // dashboard can say "pick a new model" instead of showing one more
+      // failed run. Best effort: never let bookkeeping mask the real error.
+      if (isModelNotFoundError(error)) {
+        await this.flagModelIssue(agent, error);
+      }
+
+
       const stepDuration = Date.now() - stepStart;
       run.steps.push({
         type: 'error',
@@ -691,6 +701,30 @@ export class AgentStepProcessor {
    * and we return false so the caller aborts without re-counting cost or
    * steps. Returns true when this worker won the step.
    */
+  /**
+   * Record on the agent that its model is no longer served by the vendor.
+   * Best effort: a failure here must not hide the run failure itself.
+   */
+  private async flagModelIssue(agent: Agent, error: unknown): Promise<void> {
+    try {
+      const cause = findModelNotFound(error);
+      const settings = {
+        ...(agent.settings || {}),
+        modelIssue: {
+          code: 'MODEL_NOT_FOUND',
+          model: cause?.model ?? agent.modelConfig?.model ?? 'unknown',
+          providerId: cause?.providerId ?? agent.modelConfig?.providerId,
+          message: cause?.message ?? (error as Error)?.message ?? 'Model not available',
+          detectedAt: new Date().toISOString(),
+        },
+      };
+      await this.s.agentRepository.update({ id: agent.id }, { settings: settings as Record<string, any> });
+      agent.settings = settings;
+    } catch (flagError: any) {
+      this.s.logger.warn(`Could not record model issue on agent ${agent.id}: ${flagError.message}`);
+    }
+  }
+
   private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {
     const res = await this.s.runRepository.update(
       { id: run.id, currentStep: expectedStep },

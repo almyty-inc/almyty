@@ -169,19 +169,51 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         )
       })
 
-      const finish = async () => {
+      // Both the done event and onerror route here, and a closed
+      // EventSource can still fire onerror after done; reconcile once.
+      let finished = false
+      const finish = async (reason?: string) => {
+        if (finished) return
+        finished = true
         source.close()
         setSending(false)
         // The stream carries progress; the transcript is the source of
         // truth, so reconcile once rather than trusting accumulated
         // chunks (a reconnect or a non-streaming run would otherwise
         // leave the reply empty).
-        const thread = await hostedChatApi.messages(slug, threadId)
+        let thread: Awaited<ReturnType<typeof hostedChatApi.messages>>
+        try {
+          thread = await hostedChatApi.messages(slug, threadId)
+        } catch {
+          // Transcript fetch failed too: keep the visitor's turn, drop the
+          // empty placeholder, and say so rather than hanging silently.
+          setMessages((current) => current.filter((m) => !m.streaming))
+          setError("The assistant couldn't reply just now. Please try again in a moment.")
+          return
+        }
         setMessages(thread.messages)
         refetchConversations()
+        // A run that failed (provider outage, quota, tool error) leaves the
+        // transcript ending on the visitor's turn. Without saying so the
+        // page just goes quiet, which reads as "ignored".
+        const last = thread.messages[thread.messages.length - 1]
+        const unanswered = !last || last.role === 'user'
+        if (reason === 'run.cancelled') {
+          setError('That reply was cancelled. Please try again.')
+        } else if (reason === 'run.failed' || unanswered) {
+          setError("The assistant couldn't reply just now. Please try again in a moment.")
+        }
       }
 
-      source.addEventListener('done', finish)
+      source.addEventListener('done', (event) => {
+        let reason: string | undefined
+        try {
+          reason = JSON.parse((event as MessageEvent).data || '{}').reason
+        } catch {
+          /* malformed payload: fall through to the transcript check */
+        }
+        void finish(reason)
+      })
       source.onerror = () => {
         void finish()
       }
