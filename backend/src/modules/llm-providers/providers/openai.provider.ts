@@ -5,6 +5,8 @@ import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
 import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
+import { requireModel } from '../model-errors';
+
 
 /**
  * Handles OpenAI-compatible provider calls (OpenAI, Azure OpenAI, Mistral, xAI,
@@ -23,7 +25,7 @@ export async function callOpenAI(
 
   // Prepare OpenAI request
   const openaiRequest: Record<string, unknown> = {
-    model: request.model || provider.configuration.model || 'gpt-4o',
+    model: requireModel(request, provider),
     messages: request.messages.map(msg => {
       const openaiMsg: Record<string, unknown> = {
         role: msg.role,
@@ -147,7 +149,7 @@ function buildOpenAIRequestBody(
   stream: boolean,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
-    model: request.model || provider.configuration.model || 'gpt-4o',
+    model: requireModel(request, provider),
     messages: request.messages.map(msg => {
       const openaiMsg: Record<string, unknown> = {
         role: msg.role,
@@ -338,7 +340,7 @@ export async function callOpenAIStream(
           totalTokens,
         },
         cost,
-        model: modelName || (request.model || provider.configuration.model || 'gpt-4o'),
+        model: modelName || requireModel(request, provider),
         conversationId: conversation.id,
         messageId: '',
         responseTime,

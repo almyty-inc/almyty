@@ -18,6 +18,8 @@ import {
 } from '../providers/safe-request';
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { LlmChatRunnerHelper } from '../llm-chat-runner.helper';
+import { DefaultModelResolver } from '../default-model.resolver';
+
 import { LlmModelsHelper } from '../llm-models.helper';
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 
@@ -160,7 +162,7 @@ describe('ollama SSRF gate', () => {
   });
 
   describe('create/update-time validation (validateProviderConfiguration)', () => {
-    const runner = new LlmChatRunnerHelper({} as any, {} as any, new LlmModelsHelper(makeEnvelopeCryptoMock()), makeEnvelopeCryptoMock());
+    const runner = new LlmChatRunnerHelper({} as any, {} as any, new LlmModelsHelper(makeEnvelopeCryptoMock()), makeEnvelopeCryptoMock(), new DefaultModelResolver(new LlmModelsHelper(makeEnvelopeCryptoMock())));
 
     it('allows a keyless ollama provider with a public URL', () => {
       delete process.env[ENV_KEY];

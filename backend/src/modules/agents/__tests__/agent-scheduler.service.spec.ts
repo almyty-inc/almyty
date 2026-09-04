@@ -6,6 +6,8 @@ import { BadRequestException } from '@nestjs/common';
 import { AgentSchedulerService } from '../agent-scheduler.service';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { ModelNotFoundError } from '../../llm-providers/model-errors';
+
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 
 describe('AgentSchedulerService', () => {
@@ -136,6 +138,62 @@ describe('AgentSchedulerService', () => {
   });
 
   // ── restoreSchedules: corrupted schedule handling ──────────────────
+
+  // ── handleScheduledExecution: retired model ─────────────────────────
+
+  describe('handleScheduledExecution: model the vendor no longer serves', () => {
+    const scheduled = () => ({
+      id: 'a1',
+      organizationId: 'org-1',
+      status: AgentStatus.ACTIVE,
+      settings: { schedule: { enabled: true, intervalMinutes: 10, input: {} } },
+    });
+    const job = { data: { agentId: 'a1', organizationId: 'org-1', userId: 'u1', input: {} } } as any;
+
+    it('pauses the schedule, records why on the agent, and removes the repeatable job', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduled());
+      queue.getRepeatableJobs.mockResolvedValue([{ id: 'schedule-a1', key: 'k-a1' }]);
+      const notFound = new ModelNotFoundError('claude-sonnet-4-20250514', 'p1', 'anthropic', 'model: claude-sonnet-4-20250514');
+      executionEngine.execute.mockRejectedValue(
+        Object.assign(new Error('LLM call failed: ' + notFound.message), { cause: notFound, code: 'MODEL_NOT_FOUND' }),
+      );
+
+      await service.handleScheduledExecution(job);
+
+      const saved = agentRepo.save.mock.calls[0][0];
+      expect(saved.settings.schedule.enabled).toBe(false);
+      expect(saved.settings.schedule.pausedReason).toMatchObject({ code: 'MODEL_NOT_FOUND', model: 'claude-sonnet-4-20250514', providerId: 'p1' });
+      expect(saved.settings.modelIssue).toMatchObject({ code: 'MODEL_NOT_FOUND', model: 'claude-sonnet-4-20250514' });
+      expect(saved.settings.modelIssue.detectedAt).toEqual(expect.any(String));
+      expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('k-a1');
+    });
+
+    it('leaves the schedule alone for any other failure', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduled());
+      executionEngine.execute.mockRejectedValue(new Error('Request failed with status code 429'));
+
+      await service.handleScheduledExecution(job);
+
+      expect(agentRepo.save).not.toHaveBeenCalled();
+      expect(queue.removeRepeatableByKey).not.toHaveBeenCalled();
+    });
+
+    it('clears the note when the schedule is enabled again', async () => {
+      agentsService.getAgent.mockResolvedValue({
+        id: 'a1',
+        organizationId: 'org-1',
+        settings: {
+          modelIssue: { code: 'MODEL_NOT_FOUND', model: 'old', message: 'gone', detectedAt: 'x' },
+          schedule: { enabled: false, intervalMinutes: 10, input: {}, pausedReason: { code: 'MODEL_NOT_FOUND' } },
+        },
+      });
+
+      const saved = await service.scheduleAgent('a1', 'org-1', 15);
+
+      expect(saved.settings.modelIssue).toBeUndefined();
+      expect(saved.settings.schedule).toEqual({ enabled: true, intervalMinutes: 15, input: {} });
+    });
+  });
 
   describe('restoreSchedules', () => {
     it('skips agents with corrupted intervalMinutes instead of crashing', async () => {

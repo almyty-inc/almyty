@@ -16,6 +16,8 @@ import { LlmModelsHelper } from './llm-models.helper';
 import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
+import { DefaultModelResolver } from './default-model.resolver';
+
 
 import { ToolsModule } from '../tools/tools.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
@@ -34,7 +36,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     forwardRef(() => ToolsModule),
     AuthorizationModule,
   ],
-  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper],
+  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper, DefaultModelResolver],
   controllers: [LlmProvidersController, LlmSessionsController],
   exports: [LlmProvidersService],
 })

@@ -1,6 +1,8 @@
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { LlmModelsHelper } from '../llm-models.helper';
 import { LlmChatRunnerHelper } from '../llm-chat-runner.helper';
+import { DefaultModelResolver } from '../default-model.resolver';
+
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { MessageRole } from '../../../entities/message.entity';
 
@@ -77,7 +79,7 @@ describe('ollama keyless auth', () => {
 });
 
 describe('ollama chat dispatch (OpenAI-compat path)', () => {
-  const runner = new LlmChatRunnerHelper({} as any, {} as any, new LlmModelsHelper(makeEnvelopeCryptoMock()), makeEnvelopeCryptoMock());
+  const runner = new LlmChatRunnerHelper({} as any, {} as any, new LlmModelsHelper(makeEnvelopeCryptoMock()), makeEnvelopeCryptoMock(), new DefaultModelResolver(new LlmModelsHelper(makeEnvelopeCryptoMock())));
   const session = { context: {} } as any;
   const request = {
     messages: [{ role: MessageRole.USER, content: 'hi' }],
