@@ -194,28 +194,39 @@ export function endpointFor(appSlug: string, target: DistributionTarget | string
 export function gatewayNameFor(app: Pick<AgentApp, 'name'>, target: DistributionTarget | string): string {
   return `${app.name} (${target})`;
 }
-
 /**
  * The rate limit a gateway is created with.
  *
- * Taken from the app's own limits rather than left at the gateway
- * default, because those limits are the reason the product was allowed
- * to be published at all. Creating the surface without them would make
- * the check theatre.
+ * The app's per-user and per-IP numbers mean what they say: each visitor
+ * and each address gets that many messages an hour. They used to be
+ * folded into ONE ceiling for the whole surface, so "10 per user" became
+ * "10 for the entire product" and the first visitor locked everyone else
+ * out. A surface-wide ceiling is still possible, but only when an
+ * operator sets one on the gateway on purpose.
  */
-export function rateLimitFor(app: Pick<AgentApp, 'limits'>) {
+export function rateLimitFor(app: Pick<AgentApp, 'limits'>, target: DistributionTarget = DistributionTarget.WEB) {
   const perUser = app.limits?.perUserRateLimit ?? 0;
   const perIp = app.limits?.perIpRateLimit ?? 0;
-  const perHour = Math.max(perUser, perIp);
+  if (perUser <= 0 && perIp <= 0) return { enabled: false };
 
-  if (perHour <= 0) return { enabled: false };
+  // Hosted chat and the widget enforce the per-visitor share themselves
+  // (checkVisitor). Messaging channels do not know a visitor yet: their
+  // ingress only runs the surface check, so for them the numbers still
+  // fold into a surface ceiling. Removing that would leave a public
+  // Slack or Telegram surface with no ceiling at all.
+  if (target !== DistributionTarget.WEB) {
+    const perHour = Math.max(perUser, perIp);
+    return {
+      enabled: true,
+      requestsPerHour: perHour,
+      requestsPerMinute: Math.max(1, Math.ceil(perHour / 60)),
+    };
+  }
 
   return {
-    enabled: true,
-    requestsPerHour: perHour,
-    // A per-minute ceiling as well, so an hour's budget cannot be spent
-    // in the first ten seconds.
-    requestsPerMinute: Math.max(1, Math.ceil(perHour / 60)),
+    enabled: false,
+    ...(perUser > 0 ? { perVisitorPerHour: perUser } : {}),
+    ...(perIp > 0 ? { perIpPerHour: perIp } : {}),
   };
 }
 

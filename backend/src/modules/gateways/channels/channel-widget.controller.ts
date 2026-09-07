@@ -10,9 +10,12 @@ import {
   Post,
   Query,
   Res,
+  Req,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { HostedChatService } from './hosted-chat.service';
+
 
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { ChannelGatewayService } from './channel-gateway.service';
@@ -82,9 +85,11 @@ export class ChannelWidgetController {
   async postMessage(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: { message?: string; sessionId?: string; threadId?: string },
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const message = typeof body?.message === 'string' ? body.message.trim() : '';
+
     if (!message) throw new BadRequestException('message is required');
     if (message.length > 4000) throw new BadRequestException('message too long (max 4000 chars)');
 
@@ -101,7 +106,30 @@ export class ChannelWidgetController {
       );
     }
 
+    // Each widget session (and each address) gets its own share, so one
+    // browser cannot use up the whole site's allowance.
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = typeof forwarded === 'string' && forwarded ? forwarded.split(',')[0].trim() : req.ip;
+    const own = await this.gatewayRateLimit.checkVisitor(gateway, {
+      // The widget script identifies a browser by threadId (sessionId is
+      // the older name some embeds still send); either is the visitor.
+      endUserId:
+        (typeof body?.sessionId === 'string' && body.sessionId) ||
+        (typeof body?.threadId === 'string' && body.threadId) ||
+        null,
+
+      clientHash: HostedChatService.hashClient(ip),
+    });
+    if (own.limited) {
+      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
+      throw new HttpException(
+        { code: own.code ?? 'VISITOR_RATE_LIMITED', message: own.message ?? 'Too many messages. Please wait a moment.' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     const result = await this.channelGatewayService.handleWidgetMessage(gateway, {
+
       message,
       sessionId: body?.sessionId,
       threadId: body?.threadId,
