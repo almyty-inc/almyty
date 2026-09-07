@@ -69,6 +69,10 @@ describe('HostedChatController', () => {
       requiresAuth: jest.fn(() => false),
       isAuthorized: jest.fn(() => true),
       authModeAvailable: jest.fn(async () => true),
+      deleteConversation: jest.fn(async () => undefined),
+      deleteVisitor: jest.fn(async () => undefined),
+      exportVisitor: jest.fn(async () => ({ exportedAt: 'now', conversations: [] })),
+
 
     };
     gatewayRateLimit = { check: jest.fn(async () => ({ limited: false })), checkVisitor: jest.fn(async () => ({ limited: false })) };
@@ -110,6 +114,60 @@ describe('HostedChatController', () => {
       const failure = await controller.postMessage('acme', { message: 'hi' }, req(), res).catch((e) => e);
       expect(failure.getResponse()).toMatchObject({ code: 'SURFACE_RATE_LIMITED' });
       expect(gatewayRateLimit.checkVisitor).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('visitor self-service', () => {
+    it('deletes one conversation, scoped to the cookie visitor', async () => {
+      const out = await controller.deleteConversation('acme', 'conv-1', req(), res);
+      expect(hostedChat.deleteConversation).toHaveBeenCalledWith(endUser, 'conv-1');
+      expect(out).toEqual({ success: true });
+    });
+
+    it('erases the visitor and clears the cookie', async () => {
+      res.clearCookie = jest.fn();
+      await controller.deleteMe('acme', req(), res);
+      expect(hostedChat.deleteVisitor).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), endUser);
+      expect(res.clearCookie).toHaveBeenCalledWith(HostedChatService.SESSION_COOKIE, { path: '/' });
+    });
+
+    it('exports as a download, and counts it against the visitor share', async () => {
+      const out = await controller.exportMe('acme', req(), res);
+      expect(gatewayRateLimit.checkVisitor).toHaveBeenCalled();
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="acme-my-data.json"');
+      expect(out).toMatchObject({ conversations: [] });
+    });
+
+    it('refuses with a stable code when the product switched the right off', async () => {
+      const gw = gateway();
+      (gw.configuration as any).hostedChat.visitorCanDelete = false;
+      (gw.configuration as any).hostedChat.visitorCanExport = false;
+      hostedChat.findBySlug.mockResolvedValue(gw);
+      for (const call of [
+        () => controller.deleteConversation('acme', 'conv-1', req(), res),
+        () => controller.deleteMe('acme', req(), res),
+        () => controller.exportMe('acme', req(), res),
+      ]) {
+        const failure = await call().catch((e) => e);
+        expect(failure.getStatus()).toBe(403);
+        expect(failure.getResponse()).toMatchObject({ code: 'VISITOR_RIGHT_DISABLED' });
+      }
+      expect(hostedChat.deleteConversation).not.toHaveBeenCalled();
+      expect(hostedChat.deleteVisitor).not.toHaveBeenCalled();
+    });
+
+    it('applies the auth gate before any self-service action', async () => {
+      hostedChat.authMode.mockReturnValue('sso');
+      hostedChat.requiresAuth.mockReturnValue(true);
+      hostedChat.isAuthorized.mockReturnValue(false);
+      await expect(controller.deleteMe('acme', req(), res)).rejects.toMatchObject({ status: 401 });
+      expect(hostedChat.deleteVisitor).not.toHaveBeenCalled();
+    });
+
+    it('tells the runtime whether visitor turns may feed shared memory', async () => {
+      await controller.postMessage('acme', { message: 'hi' }, req(), res);
+      const options = agentRuntimeService.startRun.mock.calls[0][4];
+      expect(options.metadata).toEqual({ visitorMemory: false });
     });
   });
 

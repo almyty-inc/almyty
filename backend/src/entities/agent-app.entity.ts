@@ -31,6 +31,46 @@ import { AppDistribution } from './agent-app-distribution.entity';
  */
 
 /** How an end user of a distributed app proves who they are. */
+/** Stored per app; see appPrivacyFrom for the defaults a missing field takes. */
+export interface AppPrivacySettings {
+  /**
+   * Days to keep this app's visitor conversations and runs. Null means the
+   * organization's retention policy applies. A value only ever shortens
+   * that policy; it cannot extend it.
+   */
+  retentionDays?: number | null;
+  /** Visitors may delete their own conversations, or everything about them. */
+  visitorCanDelete?: boolean;
+  /** Visitors may download everything the app holds about them. */
+  visitorCanExport?: boolean;
+  /**
+   * Visitor conversations may be summarised into the agent's shared
+   * memory. Off by default: that memory is read back into answers for
+   * everyone, so one visitor's words would surface in another's reply.
+   */
+  visitorMemory?: boolean;
+}
+
+export const APP_PRIVACY_DEFAULTS: Required<AppPrivacySettings> = {
+  retentionDays: null,
+  visitorCanDelete: true,
+  visitorCanExport: true,
+  visitorMemory: false,
+};
+
+/** The effective settings for an app: stored values over the defaults. */
+export function appPrivacyFrom(privacy: AppPrivacySettings | null | undefined): Required<AppPrivacySettings> {
+  return {
+    retentionDays:
+      typeof privacy?.retentionDays === 'number' && Number.isFinite(privacy.retentionDays) && privacy.retentionDays > 0
+        ? Math.floor(privacy.retentionDays)
+        : null,
+    visitorCanDelete: privacy?.visitorCanDelete ?? APP_PRIVACY_DEFAULTS.visitorCanDelete,
+    visitorCanExport: privacy?.visitorCanExport ?? APP_PRIVACY_DEFAULTS.visitorCanExport,
+    visitorMemory: privacy?.visitorMemory ?? APP_PRIVACY_DEFAULTS.visitorMemory,
+  };
+}
+
 export enum AppAuthMode {
   /** Anyone with the link or the binary. Requires hard cost caps. */
   PUBLIC_LINK = 'public_link',
@@ -126,7 +166,17 @@ export class AgentApp {
   } | null;
 
   /**
+   * What a product lets its visitors do with their own data, and how
+   * long it keeps it. Every field is optional; a missing value means the
+   * default in `appPrivacyFrom`, so an app created before this column
+   * existed behaves like a new one.
+   */
+  @Column({ type: 'json', nullable: true })
+  privacy: AppPrivacySettings | null;
+
+  /**
    * What a distributed artifact may do on the machine it runs on.
+
    *
    * Off by default and deliberately awkward to widen. A branded binary
    * with shell access, handed to end users, is a supply-chain vector:

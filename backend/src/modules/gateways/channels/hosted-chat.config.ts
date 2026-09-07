@@ -141,6 +141,13 @@ export const hostedChatConfigSchema = z.object({
 
   /** Removes almyty branding. Commercial edition. */
   whiteLabel: z.boolean().default(false),
+  /** Visitors may delete their own conversations or everything about them. */
+  visitorCanDelete: z.boolean().default(true),
+  /** Visitors may download everything the surface holds about them. */
+  visitorCanExport: z.boolean().default(true),
+  /** Visitor conversations may feed the agent's shared memory. Off unless the tenant opts in. */
+  visitorMemory: z.boolean().default(false),
+
 });
 
 export type HostedChatConfig = z.infer<typeof hostedChatConfigSchema>;
@@ -156,7 +163,11 @@ export const HOSTED_CHAT_DEFAULTS: HostedChatConfig = Object.freeze({
   authMode: 'public_link',
   aiDisclosure: null,
   whiteLabel: false,
-});
+  visitorCanDelete: true,
+  visitorCanExport: true,
+  visitorMemory: false,
+}
+);
 
 /** Read the hosted chat block off a gateway, falling back to defaults. */
 export function hostedChatConfigFrom(

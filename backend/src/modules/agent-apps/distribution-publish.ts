@@ -1,6 +1,8 @@
 import { GatewayType } from '../../entities/gateway.entity';
 import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
 import type { AgentApp } from '../../entities/agent-app.entity';
+import { appPrivacyFrom } from '../../entities/agent-app.entity';
+
 
 /**
  * Turning a distribution into something that answers.
@@ -209,25 +211,28 @@ export function rateLimitFor(app: Pick<AgentApp, 'limits'>, target: Distribution
   const perIp = app.limits?.perIpRateLimit ?? 0;
   if (perUser <= 0 && perIp <= 0) return { enabled: false };
 
-  // Hosted chat and the widget enforce the per-visitor share themselves
-  // (checkVisitor). Messaging channels do not know a visitor yet: their
-  // ingress only runs the surface check, so for them the numbers still
-  // fold into a surface ceiling. Removing that would leave a public
-  // Slack or Telegram surface with no ceiling at all.
+  const perVisitor = {
+    ...(perUser > 0 ? { perVisitorPerHour: perUser } : {}),
+    ...(perIp > 0 ? { perIpPerHour: perIp } : {}),
+  };
+
+  // Hosted chat and the widget know their visitor and enforce the share
+  // per visitor only. Messaging channels enforce it per platform sender
+  // as well, but their webhook ingress also keeps a surface ceiling: a
+  // public Slack or Telegram surface is the customer's model keys on the
+  // open internet, and the ceiling is the spend bound while the sender
+  // is still unverified.
   if (target !== DistributionTarget.WEB) {
     const perHour = Math.max(perUser, perIp);
     return {
       enabled: true,
       requestsPerHour: perHour,
       requestsPerMinute: Math.max(1, Math.ceil(perHour / 60)),
+      ...perVisitor,
     };
   }
 
-  return {
-    enabled: false,
-    ...(perUser > 0 ? { perVisitorPerHour: perUser } : {}),
-    ...(perIp > 0 ? { perIpPerHour: perIp } : {}),
-  };
+  return { enabled: false, ...perVisitor };
 }
 
 /**
@@ -245,10 +250,12 @@ export function rateLimitFor(app: Pick<AgentApp, 'limits'>, target: Distribution
  */
 export function gatewayConfigurationFor(
   target: DistributionTarget,
-  app: Pick<AgentApp, 'id' | 'slug' | 'name' | 'branding' | 'authMode'>,
+  app: Pick<AgentApp, 'id' | 'slug' | 'name' | 'branding' | 'authMode'> & { privacy?: AgentApp['privacy'] },
   configuration: Record<string, any> | null | undefined,
 ): Record<string, any> {
   const branding = app.branding ?? {};
+  const privacy = appPrivacyFrom(app.privacy);
+
 
   const base = {
     ...(configuration ?? {}),
@@ -274,6 +281,12 @@ export function gatewayConfigurationFor(
       authMode: app.authMode,
       aiDisclosure: branding.aiDisclosure ?? null,
       whiteLabel: branding.whiteLabel ?? false,
+      // What visitors may do with their own data, so the public surface
+      // can answer without a join back to the app.
+      visitorCanDelete: privacy.visitorCanDelete,
+      visitorCanExport: privacy.visitorCanExport,
+      visitorMemory: privacy.visitorMemory,
+
     },
   };
 }
