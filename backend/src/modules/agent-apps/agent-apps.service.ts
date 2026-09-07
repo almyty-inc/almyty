@@ -362,7 +362,7 @@ export class AgentAppsService {
         // by. Without that last one a published web app was a gateway
         // nothing could find.
         configuration: gatewayConfigurationFor(target, app, distribution.configuration),
-        rateLimitConfig: rateLimitFor(app),
+        rateLimitConfig: rateLimitFor(app, target),
       },
       organizationId,
       userId,

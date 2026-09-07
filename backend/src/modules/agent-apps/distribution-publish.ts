@@ -204,10 +204,24 @@ export function gatewayNameFor(app: Pick<AgentApp, 'name'>, target: Distribution
  * out. A surface-wide ceiling is still possible, but only when an
  * operator sets one on the gateway on purpose.
  */
-export function rateLimitFor(app: Pick<AgentApp, 'limits'>) {
+export function rateLimitFor(app: Pick<AgentApp, 'limits'>, target: DistributionTarget = DistributionTarget.WEB) {
   const perUser = app.limits?.perUserRateLimit ?? 0;
   const perIp = app.limits?.perIpRateLimit ?? 0;
   if (perUser <= 0 && perIp <= 0) return { enabled: false };
+
+  // Hosted chat and the widget enforce the per-visitor share themselves
+  // (checkVisitor). Messaging channels do not know a visitor yet: their
+  // ingress only runs the surface check, so for them the numbers still
+  // fold into a surface ceiling. Removing that would leave a public
+  // Slack or Telegram surface with no ceiling at all.
+  if (target !== DistributionTarget.WEB) {
+    const perHour = Math.max(perUser, perIp);
+    return {
+      enabled: true,
+      requestsPerHour: perHour,
+      requestsPerMinute: Math.max(1, Math.ceil(perHour / 60)),
+    };
+  }
 
   return {
     enabled: false,
