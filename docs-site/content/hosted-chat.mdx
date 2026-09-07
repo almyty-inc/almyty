@@ -55,10 +55,17 @@ A visitor on `{slug}.almyty.app` (or your own domain) is your user, not almyty's
 - Until you delete it, or until your organization's retention policy sweeps it. Settings, Organization, Data Retention sets independent periods for conversations and runs; the hourly sweep deletes records past the period and records what it removed in the audit log. With no policy set, records are kept indefinitely.
 - Individual conversations and runs can be deleted per record from the dashboard.
 
-**What is not there yet**
+**What you control, per app**
 
-- No self-service for visitors: nothing on the chat page lets a visitor export or erase their own conversations. Erasure requests go through you, and you act on them in the dashboard.
-- No per-app retention shorter than the organization's policy.
+Every product carries these settings on its **Settings** tab, with defaults that need no attention:
+
+- **Visitors may delete their conversations** (on by default): the chat page offers *delete this conversation* and *delete everything about me*. Deleting everything removes the visitor record, every conversation and the runs behind them, and ends the session.
+- **Visitors may download their data** (on by default): a JSON file with the visitor record and every conversation.
+- **Visitor conversations may feed agent memory** (off by default): only switch it on for an agent whose memory is meant to learn from the public.
+- **Keep visitor conversations for** a number of days (empty by default, meaning the organization policy applies). A value only ever shortens the organization policy; the hourly sweep removes older conversations, their messages and runs.
+
+Switching a right off returns a plain refusal to the visitor with a stable code; nothing is deleted or exported behind their back.
+
 
 ## Protect model spend
 

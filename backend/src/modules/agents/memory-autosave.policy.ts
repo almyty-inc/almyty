@@ -11,8 +11,14 @@ import type { AgentRun } from '../../entities/agent-run.entity';
  * visitor's answer, and the tenant would be storing personal data it
  * never asked for. Operators' own runs keep the existing opt-in.
  */
-export function shouldAutoSaveMemory(agent: Pick<Agent, 'memoryConfig'>, run: Pick<AgentRun, 'endUserId'>): boolean {
+export function shouldAutoSaveMemory(
+  agent: Pick<Agent, 'memoryConfig'>,
+  run: Pick<AgentRun, 'endUserId'> & { metadata?: Record<string, any> | null },
+): boolean {
   if (!agent.memoryConfig?.autoSave) return false;
-  if (run.endUserId) return false;
+  // A product may opt its visitors in (app privacy setting, carried on the
+  // run when the surface starts it). The default stays out.
+  if (run.endUserId) return run.metadata?.visitorMemory === true;
   return true;
 }
+
