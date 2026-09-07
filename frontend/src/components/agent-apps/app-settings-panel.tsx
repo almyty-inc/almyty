@@ -202,7 +202,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="app-per-user">Requests per user, per hour</Label>
+            <Label htmlFor="app-per-user">Messages per visitor, per hour</Label>
             <Input
               id="app-per-user"
               inputMode="numeric"
@@ -212,7 +212,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="app-per-ip">Requests per IP, per hour</Label>
+            <Label htmlFor="app-per-ip">Messages per IP address, per hour</Label>
             <Input
               id="app-per-ip"
               inputMode="numeric"
@@ -223,8 +223,10 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          The per-IP ceiling covers surfaces where a visitor has no account, so one
-          person cannot exhaust the product for everyone else.
+          A visitor is identified by their sign-in or private chat cookie. Visitors
+          sharing an IP address also share the IP allowance. Each allowance has a
+          per-minute burst limit of one fifth of its hourly value, with a minimum of 3.
+          These limits are not one shared bucket for the whole app.
         </p>
       </section>
 
