@@ -78,12 +78,20 @@ describe('AppSettingsPanel limits', () => {
     // The per-IP one covers surfaces where a visitor has no account.
     render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
-    fireEvent.change(screen.getByLabelText(/per user/i), { target: { value: '120' } })
-    fireEvent.change(screen.getByLabelText(/per IP/i), { target: { value: '30' } })
+    fireEvent.change(screen.getByLabelText(/per visitor/i), { target: { value: '120' } })
+    fireEvent.change(screen.getByLabelText(/per IP address/i), { target: { value: '30' } })
     save()
 
     await waitFor(() => expect(agentAppsApi.update).toHaveBeenCalled())
     expect(sent().limits).toMatchObject({ perUserRateLimit: 120, perIpRateLimit: 30 })
+  })
+
+  it('explains that visitor limits are not one app-wide bucket', () => {
+    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+
+    expect(screen.getByText(/identified by their sign-in or private chat cookie/i)).toBeInTheDocument()
+    expect(screen.getByText(/not one shared bucket for the whole app/i)).toBeInTheDocument()
+    expect(screen.getByText(/one fifth of its hourly value, with a minimum of 3/i)).toBeInTheDocument()
   })
 
   it('explains why an open product needs them', async () => {
