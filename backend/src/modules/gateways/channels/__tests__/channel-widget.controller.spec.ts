@@ -147,6 +147,22 @@ describe('ChannelWidgetController', () => {
       expect(out).toEqual({ success: true, data: { runId: 'run-1', threadId: 'thread-1' } });
     });
 
+    it('rate-limits per widget thread, which is how the embed script identifies a browser', async () => {
+      await controller.postMessage('gw-1', { message: 'hi', threadId: 'thread-9' }, { headers: { 'x-forwarded-for': '198.51.100.7' }, ip: '10.0.0.1' } as any, res as any);
+      expect(gatewayRateLimit.checkVisitor).toHaveBeenCalledWith(expect.anything(), {
+        endUserId: 'thread-9',
+        clientHash: expect.stringMatching(/^[0-9a-f]{32}$/),
+      });
+    });
+
+    it('answers 429 with the visitor code when a thread has used its share', async () => {
+      gatewayRateLimit.checkVisitor.mockResolvedValue({ limited: true, code: 'VISITOR_RATE_LIMITED', message: 'Too many messages from you (30 per hour). Please wait 12 seconds.', retryAfterSeconds: 12 });
+      const failure = await controller.postMessage('gw-1', { message: 'hi', threadId: 'thread-9' }, req as any, res as any).catch((e) => e);
+      expect(failure.getStatus()).toBe(429);
+      expect(failure.getResponse()).toMatchObject({ code: 'VISITOR_RATE_LIMITED' });
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '12');
+    });
+
     it('rejects an empty or missing message', async () => {
       await expect(controller.postMessage('gw-1', {}, req as any, res as any)).rejects.toThrow(BadRequestException);
       await expect(controller.postMessage('gw-1', { message: '   ' }, req as any, res as any)).rejects.toThrow(

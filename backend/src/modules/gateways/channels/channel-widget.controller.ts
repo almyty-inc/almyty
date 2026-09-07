@@ -111,7 +111,13 @@ export class ChannelWidgetController {
     const forwarded = req.headers['x-forwarded-for'];
     const ip = typeof forwarded === 'string' && forwarded ? forwarded.split(',')[0].trim() : req.ip;
     const own = await this.gatewayRateLimit.checkVisitor(gateway, {
-      endUserId: typeof body?.sessionId === 'string' ? body.sessionId : null,
+      // The widget script identifies a browser by threadId (sessionId is
+      // the older name some embeds still send); either is the visitor.
+      endUserId:
+        (typeof body?.sessionId === 'string' && body.sessionId) ||
+        (typeof body?.threadId === 'string' && body.threadId) ||
+        null,
+
       clientHash: HostedChatService.hashClient(ip),
     });
     if (own.limited) {
