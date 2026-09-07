@@ -194,39 +194,30 @@ describe('gatewayNameFor', () => {
 });
 
 describe('rateLimitFor', () => {
-  it('carries the product limits onto the surface', () => {
-    // The limits are the reason publishing was allowed. Creating the
-    // surface without them would make the check theatre.
-    const limit = rateLimitFor(app({ limits: { perUserRateLimit: 120, perIpRateLimit: 60 } }));
-    expect(limit.enabled).toBe(true);
-    expect(limit.requestsPerHour).toBe(120);
-  });
-
-  it('takes the higher of the two ceilings', () => {
-    expect(rateLimitFor(app({ limits: { perUserRateLimit: 10, perIpRateLimit: 90 } })))
-      .toMatchObject({ requestsPerHour: 90 });
-  });
-
-  it('adds a per-minute ceiling, so an hour cannot be spent in ten seconds', () => {
-    expect(rateLimitFor(app({ limits: { perUserRateLimit: 600 } }))).toMatchObject({
-      requestsPerMinute: 10,
-    });
-  });
-
-  it('never sets a per-minute ceiling of zero', () => {
-    // Rounding a small hourly budget down would block every request.
-    expect(rateLimitFor(app({ limits: { perUserRateLimit: 5 } }))).toMatchObject({
-      requestsPerMinute: 1,
-    });
-  });
-
-  it('is disabled when the product sets no limits', () => {
-    // Only reachable for a product that is not open to anyone; the
-    // public rules refuse to publish one without them.
-    expect(rateLimitFor(app({ limits: null }))).toEqual({ enabled: false });
-    expect(rateLimitFor(app({ limits: { perUserRateLimit: 0, perIpRateLimit: 0 } }))).toEqual({
+  it('carries the product limits onto the surface as per-visitor and per-address ceilings', () => {
+    expect(rateLimitFor(app({ limits: { perUserRateLimit: 120, perIpRateLimit: 60 } }))).toEqual({
       enabled: false,
+      perVisitorPerHour: 120,
+      perIpPerHour: 60,
     });
+  });
+
+  it('never folds them into one ceiling for the whole product', () => {
+    // "10 per user" used to become "10 for everyone": the first visitor
+    // locked the product for the rest of the hour.
+    const limit = rateLimitFor(app({ limits: { perUserRateLimit: 10, perIpRateLimit: 90 } }));
+    expect(limit).not.toHaveProperty('requestsPerHour');
+    expect(limit).not.toHaveProperty('requestsPerMinute');
+    expect(limit.enabled).toBe(false);
+  });
+
+  it('sets only the ceilings the app has', () => {
+    expect(rateLimitFor(app({ limits: { perUserRateLimit: 600 } }))).toEqual({ enabled: false, perVisitorPerHour: 600 });
+    expect(rateLimitFor(app({ limits: { perIpRateLimit: 30 } }))).toEqual({ enabled: false, perIpPerHour: 30 });
+  });
+
+  it('is disabled outright for an app without limits', () => {
+    expect(rateLimitFor(app({ limits: null }))).toEqual({ enabled: false });
   });
 });
 

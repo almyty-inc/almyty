@@ -20,9 +20,11 @@ describe('ChannelWidgetController', () => {
     handleWidgetMessage: jest.Mock;
     listWidgetMessages: jest.Mock;
   };
-  let gatewayRateLimit: { check: jest.Mock };
+  let gatewayRateLimit: { check: jest.Mock; checkVisitor: jest.Mock };
   let controller: ChannelWidgetController;
   let res: { setHeader: jest.Mock };
+  let req: { headers: Record<string, string>; ip: string };
+
 
   const gateway = { id: 'gw-1', type: 'chat_widget' };
 
@@ -34,12 +36,14 @@ describe('ChannelWidgetController', () => {
         { id: 'e1', runId: 'run-1', message: 'hello', attachments: null, createdAt: new Date() },
       ]),
     };
-    gatewayRateLimit = { check: jest.fn(async () => ({ limited: false })) };
+    gatewayRateLimit = { check: jest.fn(async () => ({ limited: false })), checkVisitor: jest.fn(async () => ({ limited: false })) };
     controller = new ChannelWidgetController(
       channelGatewayService as any,
       gatewayRateLimit as any,
     );
     res = { setHeader: jest.fn() };
+    req = { headers: {}, ip: '203.0.113.9' };
+
   });
 
   describe('GET :id/widget.js', () => {
@@ -131,6 +135,7 @@ describe('ChannelWidgetController', () => {
       const out = await controller.postMessage(
         'gw-1',
         { message: '  hi there  ', threadId: 'thread-1' },
+        req as any,
         res as any,
       );
       expect(channelGatewayService.findWidgetGateway).toHaveBeenCalledWith('gw-1');
@@ -143,8 +148,8 @@ describe('ChannelWidgetController', () => {
     });
 
     it('rejects an empty or missing message', async () => {
-      await expect(controller.postMessage('gw-1', {}, res as any)).rejects.toThrow(BadRequestException);
-      await expect(controller.postMessage('gw-1', { message: '   ' }, res as any)).rejects.toThrow(
+      await expect(controller.postMessage('gw-1', {}, req as any, res as any)).rejects.toThrow(BadRequestException);
+      await expect(controller.postMessage('gw-1', { message: '   ' }, req as any, res as any)).rejects.toThrow(
         BadRequestException,
       );
       expect(channelGatewayService.handleWidgetMessage).not.toHaveBeenCalled();
@@ -152,7 +157,7 @@ describe('ChannelWidgetController', () => {
 
     it('rejects an oversized message', async () => {
       await expect(
-        controller.postMessage('gw-1', { message: 'x'.repeat(4001) }, res as any),
+        controller.postMessage('gw-1', { message: 'x'.repeat(4001) }, req as any, res as any),
       ).rejects.toThrow(/too long/);
     });
 
@@ -162,7 +167,7 @@ describe('ChannelWidgetController', () => {
         retryAfterSeconds: 30,
         message: 'Gateway rate limit exceeded',
       });
-      await expect(controller.postMessage('gw-1', { message: 'hi' }, res as any)).rejects.toThrow(
+      await expect(controller.postMessage('gw-1', { message: 'hi' }, req as any, res as any)).rejects.toThrow(
         HttpException,
       );
       expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '30');

@@ -302,10 +302,13 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       // Signed out (or never signed in) on a surface that requires it:
       // re-ask the backend and the page flips to the sign-in screen.
       if (status === 401) void refetchMe()
+      const code = err?.response?.data?.error?.code
       setError(
-        status === 429
-          ? 'This assistant is busy right now. Please try again in a moment.'
-          : err?.response?.data?.message || 'Something went wrong. Please try again.',
+        status === 429 && code === 'VISITOR_RATE_LIMITED'
+          ? err?.response?.data?.error?.message || "You've sent a lot of messages in a short time. Please wait a moment."
+          : status === 429
+            ? 'This assistant is busy right now. Please try again in a moment.'
+            : err?.response?.data?.message || 'Something went wrong. Please try again.',
       )
       // Drop the optimistic user turn: leaving it implies it was sent.
       setMessages((current) => current.filter((m) => !m.id.startsWith('local-')))

@@ -284,6 +284,19 @@ describe('HostedChatPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/busy right now/)
   })
 
+  it('tells a visitor when it is their own share that ran out, not the assistant', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockRejectedValue({
+      response: { status: 429, data: { error: { code: 'VISITOR_RATE_LIMITED', message: 'Too many messages from you (60 per hour). Please wait 40 seconds.' } } },
+    })
+
+    render(<HostedChatPage slug="acme" />)
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Too many messages from you (60 per hour). Please wait 40 seconds.')
+  })
+
   it('removes the optimistic turn when sending failed', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockRejectedValue({ response: { status: 500 } })

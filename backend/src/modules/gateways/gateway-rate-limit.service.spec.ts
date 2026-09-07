@@ -1,4 +1,4 @@
-import { GatewayRateLimitService } from './gateway-rate-limit.service';
+import { GatewayRateLimitService, burstPerMinute } from './gateway-rate-limit.service';
 
 describe('GatewayRateLimitService', () => {
   let redis: { incr: jest.Mock; expire: jest.Mock };
@@ -55,5 +55,60 @@ describe('GatewayRateLimitService', () => {
     redis.incr.mockRejectedValue(new Error('redis down'));
     const result = await service.check(gateway({ enabled: true, requestsPerMinute: 1 }));
     expect(result.limited).toBe(false);
+  });
+
+  describe('checkVisitor (per visitor / per address)', () => {
+    const gw = (rateLimitConfig: any) => ({ id: 'gw-1', rateLimitConfig }) as any;
+
+    it('does nothing when the surface has no per-visitor limits', async () => {
+      await expect(service.checkVisitor(gw({ enabled: false }), { endUserId: 'eu-1', clientHash: 'h' })).resolves.toEqual({ limited: false });
+      expect(redis.incr).not.toHaveBeenCalled();
+    });
+
+    it('keys the counters on the visitor, not the surface', async () => {
+      redis.incr.mockResolvedValue(1);
+      await service.checkVisitor(gw({ enabled: false, perVisitorPerHour: 60 }), { endUserId: 'eu-1', clientHash: null });
+      const keys = redis.incr.mock.calls.map((c) => c[0] as string);
+      expect(keys.some((k) => k.startsWith('gw_rate:gw-1:user:eu-1:hour:'))).toBe(true);
+      expect(keys.some((k) => k.startsWith('gw_rate:gw-1:user:eu-1:minute:'))).toBe(true);
+    });
+
+    it('limits one visitor without touching the others', async () => {
+      // 61st message this hour for eu-1.
+      redis.incr.mockResolvedValue(61);
+      const out = await service.checkVisitor(gw({ enabled: false, perVisitorPerHour: 60 }), { endUserId: 'eu-1', clientHash: null });
+      expect(out.limited).toBe(true);
+      expect(out.code).toBe('VISITOR_RATE_LIMITED');
+      expect(out.message).toMatch(/Too many messages from you \(60 per hour\)/);
+      expect(out.retryAfterSeconds).toBeGreaterThan(0);
+    });
+
+    it('applies a burst ceiling per minute so an hour cannot go in ten seconds', async () => {
+      // hour bucket fine (1), minute bucket over burstPerMinute(60)=12.
+      redis.incr.mockResolvedValueOnce(1).mockResolvedValueOnce(13);
+      const out = await service.checkVisitor(gw({ enabled: false, perVisitorPerHour: 60 }), { endUserId: 'eu-1', clientHash: null });
+      expect(out.limited).toBe(true);
+      expect(out.message).toMatch(/12 per minute/);
+    });
+
+    it('limits an address that has no visitor identity', async () => {
+      redis.incr.mockResolvedValue(31);
+      const out = await service.checkVisitor(gw({ enabled: false, perIpPerHour: 30 }), { endUserId: null, clientHash: 'abc' });
+      expect(out.limited).toBe(true);
+      expect(out.message).toMatch(/your network/);
+    });
+
+    it('fails open when Redis is down', async () => {
+      redis.incr.mockRejectedValue(new Error('ECONNREFUSED'));
+      await expect(service.checkVisitor(gw({ enabled: false, perVisitorPerHour: 5 }), { endUserId: 'eu-1' })).resolves.toEqual({ limited: false });
+    });
+  });
+
+  describe('burstPerMinute', () => {
+    it('is a fifth of the hour, never below three', () => {
+      expect(burstPerMinute(60)).toBe(12);
+      expect(burstPerMinute(600)).toBe(120);
+      expect(burstPerMinute(5)).toBe(3);
+    });
   });
 });

@@ -72,7 +72,12 @@ export interface RateLimitConfig {
   requestsPerDay?: number;
   burstLimit?: number;
   windowSize?: number;
+  /** Messages each signed-in or cookie-identified visitor may send per hour (hosted chat, widget). */
+  perVisitorPerHour?: number;
+  /** Messages each client address may send per hour, hashed, for visitors without an identity. */
+  perIpPerHour?: number;
 }
+
 
 @Entity('gateways')
 @VersionedEntity()
