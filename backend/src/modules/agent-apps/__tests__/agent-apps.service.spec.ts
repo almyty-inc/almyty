@@ -488,7 +488,11 @@ describe('AgentAppsService', () => {
       await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
 
       const dto = gateways.upsertForDistribution.mock.calls[0][0];
+      // A Slack surface cannot tell visitors apart yet, so it keeps the
+      // surface ceiling; web distributions get per-visitor limits instead
+      // (covered in distribution-publish.spec).
       expect(dto.rateLimitConfig).toMatchObject({ enabled: true, requestsPerHour: 60 });
+
     });
 
     it('404s publishing a target this app does not ship to', async () => {

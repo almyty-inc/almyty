@@ -216,9 +216,10 @@ export class HostedChatController {
     if (rate.limited) {
       if (rate.retryAfterSeconds) res.setHeader('Retry-After', String(rate.retryAfterSeconds));
       throw new HttpException(
-        rate.message ?? 'This chat is busy right now, please try again shortly.',
+        { code: rate.code ?? 'SURFACE_RATE_LIMITED', message: rate.message ?? 'This chat is busy right now, please try again shortly.' },
         HttpStatus.TOO_MANY_REQUESTS,
       );
+
     }
 
     const { endUser, issuedSessionKey } = await this.hostedChat.resolveEndUser(
@@ -228,6 +229,21 @@ export class HostedChatController {
     );
     this.setSessionCookie(res, issuedSessionKey);
     await this.requireVisitor(gateway, endUser);
+
+    // This visitor's own share. The surface ceiling above is for the
+    // product as a whole; this is what keeps one person (or one address)
+    // from spending everyone else's.
+    const own = await this.gatewayRateLimit.checkVisitor(gateway, {
+      endUserId: endUser.id,
+      clientHash: HostedChatService.hashClient(this.clientIp(req)),
+    });
+    if (own.limited) {
+      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
+      throw new HttpException(
+        { code: own.code ?? 'VISITOR_RATE_LIMITED', message: own.message ?? 'Too many messages. Please wait a moment.' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
     const conversation = body?.conversationId
       ? await this.hostedChat.findConversation(endUser, body.conversationId)

@@ -4,6 +4,8 @@ import {
   slugFromHost,
   currentTenantSlug,
   isHostedChatHost,
+  telemetryAllowedOn,
+
   hostedChatBaseDomain,
 } from '../tenant-host'
 
@@ -122,4 +124,19 @@ describe('hostedChatBaseDomain (runtime k8s config)', () => {
     expect(slugFromHost('acme.staging.almyty.app')).toBe('acme')
     expect(slugFromHost('acme.almyty.app')).toBeNull()
   })
+
+describe('telemetryAllowedOn', () => {
+  const loc = (hostname: string) => ({ hostname, search: '' }) as unknown as Location
+
+  it('allows our own dashboard hosts', () => {
+    ;(window as any).__ALMYTY_RUNTIME__ = { hostedChatBaseDomain: 'staging.almyty.app' }
+    expect(telemetryAllowedOn(loc('app.staging.almyty.com'))).toBe(true)
+    expect(telemetryAllowedOn(loc('localhost'))).toBe(true)
+  })
+
+  it("never allows it on a tenant's chat host", () => {
+    ;(window as any).__ALMYTY_RUNTIME__ = { hostedChatBaseDomain: 'staging.almyty.app' }
+    expect(telemetryAllowedOn(loc('northwind-customer-care.staging.almyty.app'))).toBe(false)
+  })
+})
 })
