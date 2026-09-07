@@ -8,16 +8,23 @@ import App from './App.tsx'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { initAnalytics } from '@/lib/analytics'
 import { initSentry } from '@/lib/sentry'
+import { telemetryAllowedOn } from '@/lib/tenant-host'
+
 import './index.css'
 
 // Sentry error tracking — no-op unless ALMYTY_SENTRY_DSN is set. Same
 // host-based environment gate as analytics (dev untracked). See
 // src/lib/sentry.ts.
-initSentry()
+// Neither runs on a tenant's chat host: those visitors are the tenant's
+// users, not ours. See telemetryAllowedOn in src/lib/tenant-host.ts.
+if (telemetryAllowedOn()) {
+  initSentry()
 
-// PostHog product analytics — no-op unless ALMYTY_POSTHOG_KEY is set.
-// Cookieless, EU host; see src/lib/analytics.ts.
-initAnalytics()
+  // PostHog product analytics — no-op unless ALMYTY_POSTHOG_KEY is set.
+  // Cookieless, EU host; see src/lib/analytics.ts.
+  initAnalytics()
+}
+
 
 // Create a client
 const queryClient = new QueryClient({
