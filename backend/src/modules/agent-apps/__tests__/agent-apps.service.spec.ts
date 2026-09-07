@@ -488,7 +488,11 @@ describe('AgentAppsService', () => {
       await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
 
       const dto = gateways.upsertForDistribution.mock.calls[0][0];
-      expect(dto.rateLimitConfig).toMatchObject({ enabled: true, requestsPerHour: 60 });
+      // Per visitor / per address, never one bucket for the whole product.
+      expect(dto.rateLimitConfig.enabled).toBe(false);
+      expect(dto.rateLimitConfig.perVisitorPerHour ?? dto.rateLimitConfig.perIpPerHour).toBe(60);
+      expect(dto.rateLimitConfig).not.toHaveProperty('requestsPerHour');
+
     });
 
     it('404s publishing a target this app does not ship to', async () => {

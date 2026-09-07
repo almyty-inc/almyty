@@ -39,7 +39,10 @@ export interface CreateGatewayDto {
     requestsPerDay?: number;
     burstLimit?: number;
     windowSize?: number;
+    perVisitorPerHour?: number;
+    perIpPerHour?: number;
   };
+
   corsConfig?: {
     origins: string[];
     methods: string[];
@@ -85,7 +88,10 @@ export interface UpdateGatewayDto {
     requestsPerDay?: number;
     burstLimit?: number;
     windowSize?: number;
+    perVisitorPerHour?: number;
+    perIpPerHour?: number;
   };
+
   corsConfig?: {
     origins: string[];
     methods: string[];
