@@ -71,7 +71,7 @@ describe('HostedChatController', () => {
       authModeAvailable: jest.fn(async () => true),
 
     };
-    gatewayRateLimit = { check: jest.fn(async () => ({ limited: false })) };
+    gatewayRateLimit = { check: jest.fn(async () => ({ limited: false })), checkVisitor: jest.fn(async () => ({ limited: false })) };
     agentRuntimeService = {
       startRun: jest.fn(async () => ({ id: 'run-1' })),
       getRun: jest.fn(async () => ({
@@ -84,6 +84,33 @@ describe('HostedChatController', () => {
       }),
     };
     controller = new HostedChatController(hostedChat, gatewayRateLimit, agentRuntimeService);
+  });
+
+  describe('per-visitor rate limit', () => {
+    it('checks the visitor share with the visitor id and hashed address, after the surface ceiling', async () => {
+      await controller.postMessage('acme', { message: 'hi' }, req({ headers: { 'x-forwarded-for': '198.51.100.7' } }), res);
+      expect(gatewayRateLimit.checkVisitor).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), {
+        endUserId: 'eu-1',
+        clientHash: expect.stringMatching(/^[0-9a-f]{32}$/),
+      });
+    });
+
+    it('answers 429 with a visitor-specific code and Retry-After, and starts no run', async () => {
+      gatewayRateLimit.checkVisitor.mockResolvedValue({ limited: true, code: 'VISITOR_RATE_LIMITED', message: 'Too many messages from you (60 per hour). Please wait 40 seconds.', retryAfterSeconds: 40 });
+      const failure = await controller.postMessage('acme', { message: 'hi' }, req(), res).catch((e) => e);
+      expect(failure).toBeInstanceOf(HttpException);
+      expect(failure.getStatus()).toBe(429);
+      expect(failure.getResponse()).toMatchObject({ code: 'VISITOR_RATE_LIMITED' });
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '40');
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    it('keeps the surface ceiling distinguishable from the visitor share', async () => {
+      gatewayRateLimit.check.mockResolvedValue({ limited: true, code: 'SURFACE_RATE_LIMITED', message: 'Gateway rate limit exceeded', retryAfterSeconds: 5 });
+      const failure = await controller.postMessage('acme', { message: 'hi' }, req(), res).catch((e) => e);
+      expect(failure.getResponse()).toMatchObject({ code: 'SURFACE_RATE_LIMITED' });
+      expect(gatewayRateLimit.checkVisitor).not.toHaveBeenCalled();
+    });
   });
 
   describe('visitor auth gate', () => {

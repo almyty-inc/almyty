@@ -26,7 +26,42 @@ A visitor can start a chat, receive a streaming reply, and reopen earlier conver
 
 Unpublishing turns the chat off without deleting its address or settings. Publishing it again restores the same distribution.
 
+## What almyty stores about a visitor
+
+A visitor on `{slug}.almyty.app` (or your own domain) is your user, not almyty's. This is exactly what the platform keeps, where it goes, who can read it, and for how long. It applies to the hosted chat app and to the chat widget alike.
+
+**What is stored**
+
+- **A visitor record**: a random session key in a cookie scoped to that host, a truncated hash of the client IP (used only for rate limits; the address itself is not stored), and the time last seen. If the app requires sign-in, the record also holds the identity the sign-in returned: the provider, its subject id, the email and display name.
+- **Conversations and messages**: every visitor turn and every assistant reply in full, with the model used, token counts and cost, and any tool calls the agent made with their arguments and results.
+- **Runs**: the agent run behind each reply, with its input, steps, output and error, attributed to the visitor record rather than to a dashboard user.
+- **Nothing in the agent's memory.** Runs started by a visitor are never summarised into the agent's shared memory, even when the agent has memory auto-save switched on, because that memory is read back into answers for everyone.
+- **Transient**: rate-limit counters (one hour at most) and the live event stream of a reply (minutes) in Redis.
+
+**Where it goes**
+
+- To the model provider you configured, under your API key, as the prompt. What that provider retains is governed by your agreement with them.
+- To any tool the agent calls, as arguments.
+- Nowhere else. Tenant chat hosts load none of almyty's product analytics or error reporting; those run only on the dashboard.
+
+**Who can read it**
+
+- Members of your organization whose role can open the agent: the runs tab shows each run with its input and output.
+- Whoever operates the almyty deployment has database access to everything above. On almyty's hosted service that is almyty; on a self-hosted installation it is you.
+- No one else. Another visitor cannot see it, and an unpublished app keeps its data but stops serving it.
+
+**How long**
+
+- Until you delete it, or until your organization's retention policy sweeps it. Settings, Organization, Data Retention sets independent periods for conversations and runs; the hourly sweep deletes records past the period and records what it removed in the audit log. With no policy set, records are kept indefinitely.
+- Individual conversations and runs can be deleted per record from the dashboard.
+
+**What is not there yet**
+
+- No self-service for visitors: nothing on the chat page lets a visitor export or erase their own conversations. Erasure requests go through you, and you act on them in the dashboard.
+- No per-app retention shorter than the organization's policy.
+
 ## Protect model spend
+
 
 An app that uses **Anyone with the link** cannot be published until all three limits are set on **Settings**:
 

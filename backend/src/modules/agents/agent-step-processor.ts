@@ -15,6 +15,8 @@ import { AgentContextCompactor } from './agent-context-compactor.helper';
 import { checkRunLimits, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
+import { shouldAutoSaveMemory } from './memory-autosave.policy';
+
 
 /**
  * `processStep` was the bulk of AgentRuntimeService — a single 500-line
@@ -514,7 +516,7 @@ export class AgentStepProcessor {
         if (!(await this.commitStep(run, expectedStep))) return 'done';
 
         // Auto-save memory if enabled
-        if (agent.memoryConfig?.autoSave) {
+        if (shouldAutoSaveMemory(agent, run)) {
           await this.s.misc.autoSaveMemory(run, agent);
         }
 
@@ -649,7 +651,7 @@ export class AgentStepProcessor {
         await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
 
         // Auto-save memory if enabled
-        if (agent.memoryConfig?.autoSave) {
+        if (shouldAutoSaveMemory(agent, run)) {
           await this.s.misc.autoSaveMemory(run, agent);
         }
 
