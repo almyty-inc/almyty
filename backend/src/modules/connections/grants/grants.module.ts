@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Agent } from '../../../entities/agent.entity';
@@ -10,12 +10,16 @@ import { UserOrganization } from '../../../entities/user-organization.entity';
 import { UserTeam } from '../../../entities/user-team.entity';
 import { Workspace } from '../../../entities/workspace.entity';
 import { AuditLogModule } from '../../audit-log/audit-log.module';
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { GrantsController } from './grants.controller';
 import { GrantsService } from './grants.service';
+import { GrantsUsePolicy } from './grants-use.policy';
 
 /**
  * Connections, gate 2: grants. Imported by ConnectionsModule, which
- * wires `GrantsService.assertCanUse` into the resolver seam.
+ * wires `GrantsService.assertCanUse` into the resolver seam; on boot
+ * the module also installs itself as the consumer-side use policy of
+ * the credential reference resolver (gate 3's seam).
  */
 @Module({
   imports: [
@@ -23,7 +27,16 @@ import { GrantsService } from './grants.service';
     AuditLogModule,
   ],
   controllers: [GrantsController],
-  providers: [GrantsService],
-  exports: [GrantsService],
+  providers: [GrantsService, GrantsUsePolicy],
+  exports: [GrantsService, GrantsUsePolicy],
 })
-export class GrantsModule {}
+export class GrantsModule implements OnModuleInit {
+  constructor(
+    private readonly policy: GrantsUsePolicy,
+    private readonly refs: CredentialRefResolver,
+  ) {}
+
+  onModuleInit(): void {
+    this.refs.usePolicy(this.policy);
+  }
+}
