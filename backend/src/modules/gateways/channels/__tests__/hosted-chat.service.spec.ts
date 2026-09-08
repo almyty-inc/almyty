@@ -129,6 +129,57 @@ describe('HostedChatService', () => {
     });
   });
 
+  describe('visitor self-service', () => {
+    const visitor = { id: 'eu-1', gatewayId: 'gw-1', email: 'a@b.c', displayName: 'A', authProvider: null, createdAt: new Date('2026-01-01'), lastSeenAt: new Date('2026-01-02') } as any;
+
+    it('deletes a conversation only through the visitor who owns it, runs first', async () => {
+      conversationRepository.findOne.mockResolvedValue({ id: 'conv-1', endUserId: 'eu-1' });
+      runRepository.delete = jest.fn(async () => ({ affected: 1 }));
+      messageRepository.delete = jest.fn(async () => ({ affected: 3 }));
+      conversationRepository.delete = jest.fn(async () => ({ affected: 1 }));
+
+      await service.deleteConversation(visitor, 'conv-1');
+
+      expect(conversationRepository.findOne).toHaveBeenCalledWith({ where: { id: 'conv-1', endUserId: 'eu-1' } });
+      const order = [runRepository.delete, messageRepository.delete, conversationRepository.delete].map((m) => m.mock.invocationCallOrder[0]);
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+      expect(runRepository.delete).toHaveBeenCalledWith({ conversationId: 'conv-1', endUserId: 'eu-1' });
+      expect(conversationRepository.delete).toHaveBeenCalledWith({ id: 'conv-1', endUserId: 'eu-1' });
+    });
+
+    it('refuses to delete a conversation the visitor does not own', async () => {
+      conversationRepository.findOne.mockResolvedValue(null);
+      runRepository.delete = jest.fn();
+      await expect(service.deleteConversation(visitor, 'conv-x')).rejects.toBeInstanceOf(NotFoundException);
+      expect(runRepository.delete).not.toHaveBeenCalled();
+    });
+
+    it('erases the visitor: runs explicitly, the row (and its conversations) by cascade', async () => {
+      runRepository.delete = jest.fn(async () => ({ affected: 2 }));
+      endUserRepository.delete = jest.fn(async () => ({ affected: 1 }));
+
+      await service.deleteVisitor(gateway(), visitor);
+
+      expect(runRepository.delete).toHaveBeenCalledWith({ endUserId: 'eu-1' });
+      expect(endUserRepository.delete).toHaveBeenCalledWith({ id: 'eu-1', gatewayId: 'gw-1' });
+    });
+
+    it('exports the visitor record and every conversation with its messages', async () => {
+      conversationRepository.find.mockResolvedValue([{ id: 'c1', title: 'Order', status: 'active', createdAt: new Date('2026-02-01') }]);
+      messageRepository.find.mockResolvedValue([
+        { role: 'user', content: 'hi', createdAt: new Date('2026-02-01'), metadata: {} },
+        { role: 'assistant', content: 'hello', createdAt: new Date('2026-02-01'), metadata: {} },
+      ]);
+
+      const out: any = await service.exportVisitor(gateway(), visitor);
+
+      expect(out.visitor).toMatchObject({ id: 'eu-1', email: 'a@b.c', displayName: 'A' });
+      expect(out.conversations).toHaveLength(1);
+      expect(out.conversations[0].messages.map((m: any) => m.content)).toEqual(['hi', 'hello']);
+      expect(conversationRepository.find).toHaveBeenCalledWith(expect.objectContaining({ where: { endUserId: 'eu-1' } }));
+    });
+  });
+
   describe('visitor authentication', () => {
     const ssoGateway = () => {
       const gw = gateway();

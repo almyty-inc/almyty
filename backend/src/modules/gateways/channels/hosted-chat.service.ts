@@ -125,6 +125,9 @@ export class HostedChatService {
       suggestedPrompts: config.suggestedPrompts,
       authMode: config.authMode,
       whiteLabel: config.whiteLabel,
+      visitorCanDelete: config.visitorCanDelete,
+      visitorCanExport: config.visitorCanExport,
+
       // Null means "use the default line". An empty string is a
       // deliberate removal, which publishing already gated on the
       // white-label entitlement.
@@ -258,6 +261,68 @@ export class HostedChatService {
       await this.endUserRepository.delete({ id: current.id }).catch(() => undefined);
     }
     return { endUser: saved, issuedSessionKey: saved.sessionKey };
+  }
+
+  // ── Visitor self-service ─────────────────────────────────────────────
+  //
+  // A visitor owns what they said. These take the visitor resolved from
+  // the cookie, never an id from the request, and scope every write
+  // through that row so nothing of anyone else's can be touched.
+
+  /** Remove one conversation, its messages, and the runs behind it. */
+  async deleteConversation(endUser: EndUser, conversationId: string): Promise<void> {
+    const conversation = await this.findConversation(endUser, conversationId);
+    // Runs reference the conversation with SET NULL, so delete them first
+    // or they outlive the transcript they belong to.
+    await this.runRepository.delete({ conversationId: conversation.id, endUserId: endUser.id });
+    await this.messageRepository.delete({ conversationId: conversation.id });
+    await this.conversationRepository.delete({ id: conversation.id, endUserId: endUser.id });
+  }
+
+  /** Erase everything this surface holds about the visitor. The cookie dies with the row. */
+  async deleteVisitor(gateway: Gateway, endUser: EndUser): Promise<void> {
+    // agent_runs.endUserId has no foreign key; take them out explicitly.
+    await this.runRepository.delete({ endUserId: endUser.id });
+    // conversations (and their messages) cascade from the visitor row.
+    await this.endUserRepository.delete({ id: endUser.id, gatewayId: gateway.id });
+    this.audit(gateway, 'visitor.erased', { endUserId: endUser.id });
+  }
+
+  /** Everything this surface holds about the visitor, for them to keep. */
+  async exportVisitor(gateway: Gateway, endUser: EndUser): Promise<Record<string, unknown>> {
+    const conversations = await this.conversationRepository.find({
+      where: { endUserId: endUser.id },
+      order: { createdAt: 'ASC' },
+      take: 500,
+    });
+    const threads = [];
+    for (const c of conversations) {
+      const messages = await this.listMessages(c);
+      threads.push({
+        id: c.id,
+        title: c.title,
+        status: c.status,
+        createdAt: c.createdAt,
+        messages: messages.map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt })),
+      });
+    }
+    return {
+      exportedAt: new Date().toISOString(),
+      app: hostedChatConfigFrom(gateway.configuration).appName,
+      visitor: {
+        id: endUser.id,
+        email: endUser.email ?? null,
+        displayName: endUser.displayName ?? null,
+        signedInWith: endUser.authProvider ?? null,
+        firstSeen: endUser.createdAt,
+        lastSeen: endUser.lastSeenAt,
+      },
+      conversations: threads,
+    };
+  }
+
+  private audit(gateway: Gateway, action: string, details: Record<string, unknown>): void {
+    this.logger.log(`[hosted-chat] ${action} gateway=${gateway.id} ${JSON.stringify(details)}`);
   }
 
   /** This visitor's conversations, newest first. */

@@ -29,7 +29,9 @@ import {
   checkDistribution,
   checkApp,
   appSlugError,
+  defaultLimitsFor,
 } from './agent-app.rules';
+
 import {
   GATEWAY_TYPE_FOR_TARGET,
   agentForDistribution,
@@ -52,6 +54,8 @@ export interface CreateAppDto {
   authMode?: AppAuthMode;
   capabilities?: AgentApp['capabilities'];
   limits?: AgentApp['limits'];
+  privacy?: AgentApp['privacy'];
+
 }
 
 export type UpdateAppDto = Partial<CreateAppDto> & { isActive?: boolean };
@@ -187,10 +191,16 @@ export class AgentAppsService {
         branding: dto.branding ?? {},
         authMode: dto.authMode ?? AppAuthMode.PUBLIC_LINK,
         capabilities: dto.capabilities ?? {},
+        // A product open to anyone starts with a ceiling on every axis
+        // rather than with empty fields and a publish rule that refuses
+        // it. The numbers are meant to be edited, not discovered.
+        limits: dto.limits ?? defaultLimitsFor(dto.authMode ?? AppAuthMode.PUBLIC_LINK),
+        privacy: dto.privacy ?? null,
         isActive: true,
       }),
     );
   }
+
 
   async update(organizationId: string, slug: string, dto: UpdateAppDto): Promise<AgentApp> {
     const app = await this.findOne(organizationId, slug);
@@ -217,6 +227,8 @@ export class AgentAppsService {
     if (dto.authMode !== undefined) app.authMode = dto.authMode;
     if (dto.capabilities !== undefined) app.capabilities = dto.capabilities;
     if (dto.limits !== undefined) app.limits = dto.limits;
+    if (dto.privacy !== undefined) app.privacy = dto.privacy;
+
     if (dto.isActive !== undefined) app.isActive = dto.isActive;
 
     return this.appRepository.save(app);

@@ -146,6 +146,31 @@ describe('AgentAppsService', () => {
   });
 
   describe('create', () => {
+    it('starts an open-to-anyone product with a ceiling on every axis', async () => {
+      appRepository.findOne.mockResolvedValueOnce(null);
+      const created = await service.create(ORG, { name: 'Acme', slug: 'acme' });
+      expect(created.limits).toEqual({ costCapCents: 50, perUserRateLimit: 60, perIpRateLimit: 120 });
+      expect(created.privacy).toBeNull();
+    });
+
+    it('starts a gated product with only the cost cap, the identity gate does the rest', async () => {
+      appRepository.findOne.mockResolvedValueOnce(null);
+      const created = await service.create(ORG, { name: 'Acme', slug: 'acme', authMode: 'sso' as any });
+      expect(created.limits).toEqual({ costCapCents: 50, perUserRateLimit: null, perIpRateLimit: null });
+    });
+
+    it('keeps limits and privacy the caller chose', async () => {
+      appRepository.findOne.mockResolvedValueOnce(null);
+      const created = await service.create(ORG, {
+        name: 'Acme',
+        slug: 'acme',
+        limits: { costCapCents: 10, perUserRateLimit: 5, perIpRateLimit: 5 },
+        privacy: { retentionDays: 14, visitorCanExport: false },
+      });
+      expect(created.limits).toEqual({ costCapCents: 10, perUserRateLimit: 5, perIpRateLimit: 5 });
+      expect(created.privacy).toEqual({ retentionDays: 14, visitorCanExport: false });
+    });
+
     it('normalises the slug and defaults to the open auth mode', async () => {
       appRepository.findOne.mockResolvedValueOnce(null); // no clash
       const created = await service.create(ORG, { name: 'Acme', slug: '  ACME-Support ' });

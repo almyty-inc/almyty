@@ -15,4 +15,11 @@ describe('shouldAutoSaveMemory', () => {
     // visitor's words must not become part of someone else's answer.
     expect(shouldAutoSaveMemory({ memoryConfig: { autoSave: true } } as any, { endUserId: 'eu-1' } as any)).toBe(false);
   });
+
+  it('saves a visitor run only when the product opted its visitors in', () => {
+    const agent = { memoryConfig: { autoSave: true } } as any;
+    expect(shouldAutoSaveMemory(agent, { endUserId: 'eu-1', metadata: { visitorMemory: true } } as any)).toBe(true);
+    expect(shouldAutoSaveMemory(agent, { endUserId: 'eu-1', metadata: { visitorMemory: false } } as any)).toBe(false);
+    expect(shouldAutoSaveMemory(agent, { endUserId: 'eu-1', metadata: {} } as any)).toBe(false);
+  });
 });
