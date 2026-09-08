@@ -21,6 +21,9 @@ export const createProviderSchema = z.object({
   // Optional admin-scoped key for the provider's usage/cost API (issue
   // #241) — only rendered for types in providerUsageApiSupport.
   usageApiKey: z.string().optional(),
+  // Set when the user connected an account through the connect sheet
+  // instead of pasting a key; the backend resolves the secret from it.
+  connectionId: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.type === 'ollama') {
     // Key optional; when provided it still has to look like a token.
@@ -29,6 +32,8 @@ export const createProviderSchema = z.object({
     }
     return
   }
+  // A connected account (Connections layer) stands in for the key.
+  if (data.connectionId) return
   if (!data.apiKey) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'API key is required', path: ['apiKey'] })
   } else if (data.apiKey.length < 8) {

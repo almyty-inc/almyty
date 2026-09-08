@@ -105,6 +105,7 @@ export interface CreateModelDeploymentBody {
   desired?: ModelDeploymentDesired
   providerConfig?: Record<string, unknown>
   credentialId?: string
+  connectionId?: string
   budgetId?: string
   modelId?: string
 }

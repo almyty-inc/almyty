@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CredentialPicker } from '@/components/credential-picker'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectedChip } from '@/components/connections/connected-chip'
+import type { Connection } from '@/types/connections'
 import {
   Dialog,
   DialogContent,
@@ -43,6 +46,7 @@ export function CreateProviderDialog({
   const [visibility, setVisibility] = React.useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [testing, setTesting] = React.useState(false)
   const [testResult, setTestResult] = React.useState<any>(null)
+  const [connectedAccount, setConnectedAccount] = React.useState<Connection | null>(null)
   const handleTestConnection = async () => {
     const type = createForm.watch('type')
     const apiKey = createForm.watch('apiKey')
@@ -131,11 +135,28 @@ export function CreateProviderDialog({
           <CredentialPicker
             label={createForm.watch('type') === 'ollama' ? 'API Key (optional)' : 'API Key'}
             value={createForm.watch('credentialId') || ''}
-            onSelect={(id) => { createForm.setValue('credentialId', id); createForm.setValue('apiKey', '') }}
-            onNewKey={(key) => { createForm.setValue('apiKey', key); createForm.setValue('credentialId', '') }}
+            onSelect={(id) => { createForm.setValue('credentialId', id); createForm.setValue('apiKey', ''); createForm.setValue('connectionId', '') }}
+            onNewKey={(key) => { createForm.setValue('apiKey', key); createForm.setValue('credentialId', ''); createForm.setValue('connectionId', '') }}
             newKeyValue={createForm.watch('apiKey') || ''}
             filterType="api_key"
           />
+          {/* Or connect an account through the Connections layer */}
+          {createForm.watch('connectionId') && connectedAccount ? (
+            <ConnectedChip connection={connectedAccount} onClear={() => { createForm.setValue('connectionId', ''); setConnectedAccount(null) }} />
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">or</span>
+              <ConnectAccountButton
+                kind="inference"
+                onConnected={(connection) => {
+                  setConnectedAccount(connection)
+                  createForm.setValue('connectionId', connection.id)
+                  createForm.setValue('apiKey', '')
+                  createForm.setValue('credentialId', '')
+                }}
+              />
+            </div>
+          )}
           {providerKeyUrls[createForm.watch('type')] && (
             <a
               href={providerKeyUrls[createForm.watch('type')]}

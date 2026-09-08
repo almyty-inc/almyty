@@ -22,6 +22,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectedChip } from '@/components/connections/connected-chip'
+import type { Connection } from '@/types/connections'
 
 export type ChannelType =
   | 'slack'
@@ -169,6 +172,8 @@ export function ChannelConfigForm({
   const [editing, setEditing] = useState<Record<string, boolean>>(initialEditing)
   const [values, setValues] = useState<Record<string, string>>({})
   const [reveal, setReveal] = useState<Record<string, boolean>>({})
+  // A connected account (Connections layer) stands in for the pasted tokens.
+  const [connection, setConnection] = useState<Connection | null>(null)
   const [testStatus, setTestStatus] = useState<
     | { state: 'idle' }
     | { state: 'pending' }
@@ -181,6 +186,7 @@ export function ChannelConfigForm({
     setValues({})
     setReveal({})
     setTestStatus({ state: 'idle' })
+    setConnection(null)
   }, [type, gateway.id, initialEditing])
 
   if (type === 'chat_widget') {
@@ -207,10 +213,10 @@ export function ChannelConfigForm({
     return existing[f.key] != null && String(existing[f.key]).length > 0
   }
 
-  const allRequiredFilled = fields.every(isFieldComplete)
+  const allRequiredFilled = fields.every(isFieldComplete) || !!connection
 
   // Anything actually entered counts as a change.
-  const hasUnsavedEdits = Object.entries(values).some(([, v]) => v !== '')
+  const hasUnsavedEdits = Object.entries(values).some(([, v]) => v !== '') || !!connection
 
   const buildPatchPayload = () => {
     // Only patch keys the user actually typed into. Untouched fields
@@ -227,6 +233,7 @@ export function ChannelConfigForm({
         }
       }
     }
+    if (connection) next.connectionId = connection.id
     return next
   }
 
@@ -239,6 +246,7 @@ export function ChannelConfigForm({
     setEditing(m)
     setValues({})
     setReveal({})
+    setConnection(null)
   }
 
   const handleTest = async () => {
@@ -262,6 +270,16 @@ export function ChannelConfigForm({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        <div className="space-y-1.5">
+          {connection ? (
+            <ConnectedChip connection={connection} onClear={() => setConnection(null)} />
+          ) : (
+            <ConnectAccountButton kind="channel" onConnected={setConnection} />
+          )}
+          <p className="text-xs text-muted-foreground">
+            Connect the {type.replace('_', ' ')} account once and skip pasting tokens below.
+          </p>
+        </div>
         {fields.map((f) => {
           const isEditing = !!editing[f.key]
           const hasExisting = existing[f.key] != null && existing[f.key] !== ''

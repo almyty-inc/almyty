@@ -55,6 +55,8 @@ export interface Organization {
   plan: OrganizationPlan
   settings: OrganizationSettings
   agentDefaults?: OrganizationAgentDefaults
+  /** Members may connect accounts only they can use. Default on for personal orgs, off for production orgs. */
+  allowUserScopedConnections?: boolean
   billingInfo?: BillingInfo
   isActive: boolean
   createdAt: string

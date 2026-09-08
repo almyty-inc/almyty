@@ -86,6 +86,13 @@ function LlmProvidersRedirect() {
   return <Navigate to={`/models?${params.toString()}`} replace />
 }
 
+// The OAuth callback for the Connections layer lands the browser on
+// /connections?connection=<id>&status=...; the gallery lives under Settings.
+function ConnectionsRedirect() {
+  const location = useLocation()
+  return <Navigate to={`/settings/connections${location.search}`} replace />
+}
+
 import { HostedChatPage } from '@/pages/hosted-chat'
 import { AppsPage } from '@/pages/apps'
 import { AppDetailPage } from '@/pages/app-detail'
@@ -153,6 +160,7 @@ function App() {
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/credentials/*" element={<CredentialsPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
+          <Route path="/connections" element={<ConnectionsRedirect />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />

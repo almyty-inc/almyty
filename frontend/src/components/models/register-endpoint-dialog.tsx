@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
@@ -15,6 +15,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { RegisterEndpointBody } from '@/types/models'
+import type { Connection } from '@/types/connections'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectedChip } from '@/components/connections/connected-chip'
 import { registerEndpointSchema, compactCapabilities, type RegisterEndpointFormData, type RegisterEndpointFormOutput } from './schema'
 import { CapabilitiesField, PrivacyTierField } from './model-form-fields'
 
@@ -29,6 +32,7 @@ const DEFAULTS: RegisterEndpointFormData = {
   name: '',
   url: '',
   apiKey: '',
+  connectionId: '',
   vendorModelId: '',
   privacyTier: 'private_cloud',
   region: '',
@@ -46,8 +50,13 @@ export function RegisterEndpointDialog({ open, onOpenChange, onSubmit, submittin
     defaultValues: DEFAULTS,
   })
 
+  const [connectedAccount, setConnectedAccount] = useState<Connection | null>(null)
+
   useEffect(() => {
-    if (!open) form.reset(DEFAULTS)
+    if (!open) {
+      form.reset(DEFAULTS)
+      setConnectedAccount(null)
+    }
   }, [open, form])
 
   const submit = form.handleSubmit(async (data) => {
@@ -57,6 +66,7 @@ export function RegisterEndpointDialog({ open, onOpenChange, onSubmit, submittin
       vendorModelId: data.vendorModelId,
       privacyTier: data.privacyTier as RegisterEndpointBody['privacyTier'],
       ...(data.apiKey ? { apiKey: data.apiKey } : {}),
+      ...(data.connectionId ? { connectionId: data.connectionId } : {}),
       ...(data.region ? { region: data.region } : {}),
       ...(data.contextLength !== undefined ? { contextLength: data.contextLength } : {}),
     }
@@ -89,7 +99,21 @@ export function RegisterEndpointDialog({ open, onOpenChange, onSubmit, submittin
           </div>
           <div>
             <Label htmlFor="endpoint-api-key">API key <span className="text-muted-foreground font-normal">(optional)</span></Label>
-            <Input id="endpoint-api-key" type="password" autoComplete="off" className="mt-1" placeholder="Leave empty for keyless servers" {...form.register('apiKey')} />
+            <Input id="endpoint-api-key" type="password" autoComplete="off" className="mt-1" placeholder="Leave empty for keyless servers" {...form.register('apiKey')} disabled={!!connectedAccount} />
+            <div className="mt-2">
+              {connectedAccount ? (
+                <ConnectedChip connection={connectedAccount} onClear={() => { setConnectedAccount(null); form.setValue('connectionId', '') }} />
+              ) : (
+                <ConnectAccountButton
+                  kind="inference"
+                  onConnected={(connection) => {
+                    setConnectedAccount(connection)
+                    form.setValue('connectionId', connection.id)
+                    form.setValue('apiKey', '')
+                  }}
+                />
+              )}
+            </div>
           </div>
           <div>
             <Label htmlFor="endpoint-model-id">Model id</Label>

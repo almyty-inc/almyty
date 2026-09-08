@@ -112,6 +112,8 @@ export interface RegisterEndpointBody {
   name: string
   url: string
   apiKey?: string
+  /** A connected account from the Connections layer instead of a raw key. */
+  connectionId?: string
   vendorModelId: string
   capabilities?: ModelCapabilities
   contextLength?: number
