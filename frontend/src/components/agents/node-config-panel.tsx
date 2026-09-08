@@ -22,7 +22,9 @@ import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 import { llmProvidersApi, toolsApi, agentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
+import { RoutingPolicyField } from '@/components/models/routing-policy-editor'
 import type { LlmProvider, Tool, Agent } from '@/types'
+import type { RoutingPolicy } from '@/types/models'
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -208,6 +210,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   })
 
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
+  const routed = !!node.data.routing && typeof node.data.routing === 'object'
 
   // Get the selected provider to determine type for model suggestions
   const providerList = (Array.isArray(providers) ? providers : (providers as any)?.providers || []) as Array<Pick<LlmProvider, 'id' | 'name' | 'type'>>
@@ -248,6 +251,54 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
 
   return (
     <div className="space-y-3">
+      {/* Model selection: a pinned provider + model, or a routing policy the
+          catalog resolves at run time. The two are exclusive on the node:
+          routing replaces providerId, switching back removes routing. */}
+      <div>
+        <Label>Model selection</Label>
+        <div className="mt-1 grid grid-cols-2 gap-1 rounded-md bg-muted p-1" role="radiogroup" aria-label="Model selection">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!routed}
+            className={`rounded px-2 py-1 text-xs transition-colors ${!routed ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+            onClick={() => {
+              if (!routed) return
+              const { routing: _routing, ...rest } = node.data
+              onUpdateNode(node.id, rest)
+            }}
+          >
+            Pinned provider
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={routed}
+            className={`rounded px-2 py-1 text-xs transition-colors ${routed ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+            onClick={() => {
+              if (routed) return
+              const { providerId: _providerId, providerName: _providerName, providerType: _providerType, model: _model, ...rest } = node.data
+              onUpdateNode(node.id, { ...rest, routing: { objective: 'cheapest' } })
+              setUseCustomModel(false)
+            }}
+          >
+            Routed by policy
+          </button>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-1">
+          {routed
+            ? 'The router picks a validated card from the catalog on every call and records which one answered.'
+            : 'Always this provider and model.'}
+        </p>
+      </div>
+
+      {routed ? (
+        <RoutingPolicyField
+          value={(node.data.routing as RoutingPolicy) || {}}
+          onChange={(policy) => updateData('routing', policy)}
+        />
+      ) : (
+        <>
       <div>
         <Label>LLM Provider</Label>
         <Select
@@ -320,6 +371,8 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
           </>
         )}
       </div>
+        </>
+      )}
 
       <div>
         <Label htmlFor="system-prompt">System Prompt</Label>

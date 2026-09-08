@@ -53,6 +53,7 @@ import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
+import { ExecutionRouting } from './routing-attribution'
 import type { Agent, AgentExecution, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
 
 interface OverviewTabProps {
@@ -353,6 +354,7 @@ export function OverviewTab({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Status</TableHead>
+                    <TableHead>Model</TableHead>
                     <TableHead>Duration</TableHead>
                     <TableHead>Cost</TableHead>
                     <TableHead>Tokens</TableHead>
@@ -368,6 +370,9 @@ export function OverviewTab({
                           {exec.status === 'failed' && <XCircle className="h-3 w-3 mr-1" />}
                           {exec.status}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[320px]">
+                        <ExecutionRouting nodeResults={exec.nodeResults} />
                       </TableCell>
                       <TableCell className="text-sm">
                         {exec.executionTime ? `${(exec.executionTime / 1000).toFixed(2)}s` : '--'}

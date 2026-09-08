@@ -45,11 +45,17 @@ import {
 } from '@/components/llm-providers/schema'
 import { buildProviderColumns } from '@/components/llm-providers/columns'
 
-export function LlmProvidersPage() {
+interface LlmProvidersPageProps {
+  /** Rendered inside the Models page: no page title, the tab already names it. */
+  embedded?: boolean
+}
+
+export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {}) {
   useEffect(() => {
+    if (embedded) return
     document.title = 'AI Models | almyty'
     return () => { document.title = 'almyty' }
-  }, [])
+  }, [embedded])
 
   const navigate = useNavigate()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -284,9 +290,13 @@ export function LlmProvidersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">AI Models</h1>
+          {embedded ? (
+            <h2 className="text-lg font-semibold">Providers</h2>
+          ) : (
+            <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">AI Models</h1>
+          )}
           <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) \u00B7 $${totalCost.toFixed(2)} total cost \u00B7 ${pluralized(totalRequests, 'request')}`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) · $${totalCost.toFixed(2)} total cost · ${pluralized(totalRequests, 'request')}`}
           </p>
         </div>
         {/* Only show Add Provider button when not in empty state */}
@@ -360,6 +370,15 @@ export function LlmProvidersPage() {
                   <SelectItem value="openai">OpenAI</SelectItem>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
                   <SelectItem value="google">Google Gemini</SelectItem>
+                  <SelectItem value="fireworks">Fireworks AI</SelectItem>
+                  <SelectItem value="cerebras">Cerebras</SelectItem>
+                  <SelectItem value="deepinfra">DeepInfra</SelectItem>
+                  <SelectItem value="novita">Novita</SelectItem>
+                  <SelectItem value="perplexity">Perplexity</SelectItem>
+                  <SelectItem value="zai">Z.ai</SelectItem>
+                  <SelectItem value="baseten">Baseten</SelectItem>
+                  <SelectItem value="nebius">Nebius Token Factory</SelectItem>
+                  <SelectItem value="sambanova">SambaNova</SelectItem>
                   <SelectItem value="mistral">Mistral AI</SelectItem>
                   <SelectItem value="xai">xAI</SelectItem>
                   <SelectItem value="deepseek">DeepSeek</SelectItem>
