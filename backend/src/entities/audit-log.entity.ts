@@ -79,6 +79,16 @@ export enum AuditAction {
   MODEL_DEPLOYMENT_TRANSITION = 'model_deployment_transition',
   MODEL_DEPLOYMENT_BUDGET_STOP = 'model_deployment_budget_stop',
   MODEL_DEPLOYMENT_ORPHAN_TEARDOWN = 'model_deployment_orphan_teardown',
+
+  // Connections layer
+  CONNECTION_CONNECT = 'connection_connect',
+  CONNECTION_VALIDATE = 'connection_validate',
+  CONNECTION_DISCONNECT = 'connection_disconnect',
+  CONNECTION_ROTATE = 'connection_rotate',
+  CONNECTION_RESOLVE = 'connection_resolve',
+  CONNECTION_GRANT = 'connection_grant',
+  CONNECTION_REVOKE_GRANT = 'connection_revoke_grant',
+  CONNECTOR_CREATE = 'connector_create',
 }
 
 
@@ -100,6 +110,8 @@ export enum AuditResource {
   MODEL = 'model',
   MODEL_VERSION = 'model_version',
   MODEL_DEPLOYMENT = 'model_deployment',
+  CONNECTION = 'connection',
+  CONNECTOR = 'connector',
 
   REFERRAL = 'referral',
 }
