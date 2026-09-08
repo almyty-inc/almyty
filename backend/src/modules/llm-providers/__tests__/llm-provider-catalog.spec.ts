@@ -52,6 +52,25 @@ describe('llm-provider-catalog key/docs URLs', () => {
     expect(getProviderDisplayName(LlmProviderType.OLLAMA)).toBe('Ollama');
   });
 
+  it('maps the OpenAI-compatible inference hosts to their consoles and docs (verified 2026-09-08)', () => {
+    const expected: Array<[LlmProviderType, string, string, string]> = [
+      [LlmProviderType.FIREWORKS, 'Fireworks AI', 'https://app.fireworks.ai/settings/users/api-keys', 'https://docs.fireworks.ai'],
+      [LlmProviderType.CEREBRAS, 'Cerebras', 'https://cloud.cerebras.ai', 'https://inference-docs.cerebras.ai'],
+      [LlmProviderType.DEEPINFRA, 'DeepInfra', 'https://deepinfra.com/dash/api_keys', 'https://docs.deepinfra.com'],
+      [LlmProviderType.NOVITA, 'Novita', 'https://novita.ai/settings/key-management', 'https://docs.novita.ai'],
+      [LlmProviderType.PERPLEXITY, 'Perplexity', 'https://console.perplexity.ai', 'https://docs.perplexity.ai'],
+      [LlmProviderType.ZAI, 'Z.ai', 'https://z.ai/manage-apikey/apikey-list', 'https://docs.z.ai'],
+      [LlmProviderType.BASETEN, 'Baseten', 'https://app.baseten.co/settings/api_keys', 'https://docs.baseten.co'],
+      [LlmProviderType.NEBIUS, 'Nebius Token Factory', 'https://tokenfactory.nebius.com/settings/api-keys', 'https://docs.tokenfactory.nebius.com'],
+      [LlmProviderType.SAMBANOVA, 'SambaNova', 'https://cloud.sambanova.ai/apis', 'https://docs.sambanova.ai'],
+    ];
+    for (const [type, name, keyUrl, docsUrl] of expected) {
+      expect(getProviderDisplayName(type)).toBe(name);
+      expect(getProviderKeyUrl(type)).toBe(keyUrl);
+      expect(getProviderDocsUrl(type)).toBe(docsUrl);
+    }
+  });
+
   it('still resolves a display name for every type (sanity)', () => {
     for (const type of ALL_TYPES) {
       expect(getProviderDisplayName(type)).toBeTruthy();

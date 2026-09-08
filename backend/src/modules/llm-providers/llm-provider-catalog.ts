@@ -23,6 +23,15 @@ export function getProviderDisplayName(type: LlmProviderType): string {
     [LlmProviderType.COHERE]: 'Cohere',
     [LlmProviderType.HUGGINGFACE]: 'Hugging Face',
     [LlmProviderType.OLLAMA]: 'Ollama',
+    [LlmProviderType.FIREWORKS]: 'Fireworks AI',
+    [LlmProviderType.CEREBRAS]: 'Cerebras',
+    [LlmProviderType.DEEPINFRA]: 'DeepInfra',
+    [LlmProviderType.NOVITA]: 'Novita',
+    [LlmProviderType.PERPLEXITY]: 'Perplexity',
+    [LlmProviderType.ZAI]: 'Z.ai',
+    [LlmProviderType.BASETEN]: 'Baseten',
+    [LlmProviderType.NEBIUS]: 'Nebius Token Factory',
+    [LlmProviderType.SAMBANOVA]: 'SambaNova',
     [LlmProviderType.CUSTOM]: 'Custom',
   };
   return names[type] || type;
@@ -44,6 +53,15 @@ export function getProviderDescription(type: LlmProviderType): string {
     [LlmProviderType.COHERE]: 'Enterprise language models',
     [LlmProviderType.HUGGINGFACE]: 'Open-source model inference',
     [LlmProviderType.OLLAMA]: 'Run open models locally — llama, qwen, mistral, and more',
+    [LlmProviderType.FIREWORKS]: 'Fast serverless inference for open models',
+    [LlmProviderType.CEREBRAS]: 'Wafer-scale inference for open models',
+    [LlmProviderType.DEEPINFRA]: 'Low-cost hosting for open models',
+    [LlmProviderType.NOVITA]: 'Open models with function calling and reasoning',
+    [LlmProviderType.PERPLEXITY]: 'Sonar models with built-in web search',
+    [LlmProviderType.ZAI]: 'GLM models from Zhipu',
+    [LlmProviderType.BASETEN]: 'Model APIs for open frontier models',
+    [LlmProviderType.NEBIUS]: 'Open models on Nebius Token Factory',
+    [LlmProviderType.SAMBANOVA]: 'Fast inference for open models on SambaNova Cloud',
     [LlmProviderType.CUSTOM]: 'Any OpenAI-compatible API endpoint',
   };
   return descriptions[type] || 'Custom AI model provider';
@@ -65,6 +83,15 @@ export function getProviderFeatures(type: LlmProviderType): string[] {
     [LlmProviderType.COHERE]: ['Tool Use', 'Streaming', 'Enterprise'],
     [LlmProviderType.HUGGINGFACE]: ['Open Source', 'Multiple Models'],
     [LlmProviderType.OLLAMA]: ['Tool Use', 'Streaming', 'Local Inference', 'Zero Cost'],
+    [LlmProviderType.FIREWORKS]: ['Tool Use', 'Streaming', 'Open Source Models', 'Fast Inference'],
+    [LlmProviderType.CEREBRAS]: ['Tool Use', 'Streaming', 'Ultra-fast Inference'],
+    [LlmProviderType.DEEPINFRA]: ['Tool Use', 'Streaming', 'Open Source Models'],
+    [LlmProviderType.NOVITA]: ['Tool Use', 'Streaming', 'Open Source Models'],
+    [LlmProviderType.PERPLEXITY]: ['Streaming', 'Web Search', 'Citations'],
+    [LlmProviderType.ZAI]: ['Tool Use', 'Streaming', 'Reasoning'],
+    [LlmProviderType.BASETEN]: ['Tool Use', 'Streaming', 'Open Source Models'],
+    [LlmProviderType.NEBIUS]: ['Tool Use', 'Streaming', 'Open Source Models'],
+    [LlmProviderType.SAMBANOVA]: ['Tool Use', 'Streaming', 'Ultra-fast Inference'],
     [LlmProviderType.CUSTOM]: ['Flexible', 'Any OpenAI-Compatible API'],
   };
   return features[type] || [];
@@ -107,6 +134,17 @@ export function getProviderKeyUrl(type: LlmProviderType): string | null | undefi
     // is no canonical key page.
     // Local Ollama needs no key; this is the CLOUD key page (ollama.com).
     [LlmProviderType.OLLAMA]: 'https://ollama.com/settings/keys',
+    // OpenAI-compatible inference hosts (verified 2026-09-08, see
+    // docs/design/call-only-vendors.md).
+    [LlmProviderType.FIREWORKS]: 'https://app.fireworks.ai/settings/users/api-keys',
+    [LlmProviderType.CEREBRAS]: 'https://cloud.cerebras.ai',
+    [LlmProviderType.DEEPINFRA]: 'https://deepinfra.com/dash/api_keys',
+    [LlmProviderType.NOVITA]: 'https://novita.ai/settings/key-management',
+    [LlmProviderType.PERPLEXITY]: 'https://console.perplexity.ai',
+    [LlmProviderType.ZAI]: 'https://z.ai/manage-apikey/apikey-list',
+    [LlmProviderType.BASETEN]: 'https://app.baseten.co/settings/api_keys',
+    [LlmProviderType.NEBIUS]: 'https://tokenfactory.nebius.com/settings/api-keys',
+    [LlmProviderType.SAMBANOVA]: 'https://cloud.sambanova.ai/apis',
     [LlmProviderType.CUSTOM]: null,
   };
   return urls[type];
@@ -132,6 +170,15 @@ export function getProviderDocsUrl(type: LlmProviderType): string | null | undef
     [LlmProviderType.COHERE]: 'https://docs.cohere.com',
     [LlmProviderType.HUGGINGFACE]: 'https://huggingface.co/docs',
     [LlmProviderType.OLLAMA]: 'https://ollama.com',
+    [LlmProviderType.FIREWORKS]: 'https://docs.fireworks.ai',
+    [LlmProviderType.CEREBRAS]: 'https://inference-docs.cerebras.ai',
+    [LlmProviderType.DEEPINFRA]: 'https://docs.deepinfra.com',
+    [LlmProviderType.NOVITA]: 'https://docs.novita.ai',
+    [LlmProviderType.PERPLEXITY]: 'https://docs.perplexity.ai',
+    [LlmProviderType.ZAI]: 'https://docs.z.ai',
+    [LlmProviderType.BASETEN]: 'https://docs.baseten.co',
+    [LlmProviderType.NEBIUS]: 'https://docs.tokenfactory.nebius.com',
+    [LlmProviderType.SAMBANOVA]: 'https://docs.sambanova.ai',
     [LlmProviderType.CUSTOM]: null,
   };
   return urls[type];

@@ -32,6 +32,18 @@ export enum LlmProviderType {
   COHERE = 'cohere',
   HUGGINGFACE = 'huggingface',
   OLLAMA = 'ollama',
+  // OpenAI-compatible inference hosts (chat, streaming and tool calling
+  // ride the OpenAI dispatch path). Details per vendor in
+  // docs/design/call-only-vendors.md.
+  FIREWORKS = 'fireworks',
+  CEREBRAS = 'cerebras',
+  DEEPINFRA = 'deepinfra',
+  NOVITA = 'novita',
+  PERPLEXITY = 'perplexity',
+  ZAI = 'zai',
+  BASETEN = 'baseten',
+  NEBIUS = 'nebius',
+  SAMBANOVA = 'sambanova',
   CUSTOM = 'custom',
 }
 
@@ -312,6 +324,34 @@ export class LlmProvider {
         return this.configuration.apiUrl || 'https://api.together.xyz/v1';
       case LlmProviderType.OPENROUTER:
         return this.configuration.apiUrl || 'https://openrouter.ai/api/v1';
+      // OpenAI-compatible inference hosts. Each default is the vendor's
+      // documented OpenAI base (chat at <base>/chat/completions, model
+      // list at <base>/models); verified 2026-09-08, see
+      // docs/design/call-only-vendors.md. A configured apiUrl always wins.
+      case LlmProviderType.FIREWORKS:
+        return this.configuration.apiUrl || 'https://api.fireworks.ai/inference/v1';
+      case LlmProviderType.CEREBRAS:
+        return this.configuration.apiUrl || 'https://api.cerebras.ai/v1';
+      case LlmProviderType.DEEPINFRA:
+        return this.configuration.apiUrl || 'https://api.deepinfra.com/v1/openai';
+      case LlmProviderType.NOVITA:
+        return this.configuration.apiUrl || 'https://api.novita.ai/openai';
+      case LlmProviderType.PERPLEXITY:
+        // Router API (OpenAI-compatible, lists models). The legacy Sonar
+        // endpoint is https://api.perplexity.ai (no /models; retired
+        // 2026-09-27 in favour of the non-OpenAI-shaped Agent API) and
+        // can still be set as apiUrl with an explicit model.
+        return this.configuration.apiUrl || 'https://api.perplexity.ai/router/v1';
+      case LlmProviderType.ZAI:
+        return this.configuration.apiUrl || 'https://api.z.ai/api/paas/v4';
+      case LlmProviderType.BASETEN:
+        return this.configuration.apiUrl || 'https://inference.baseten.co/v1';
+      case LlmProviderType.NEBIUS:
+        // Nebius AI Studio is now Nebius Token Factory; the old
+        // api.studio.nebius.com host still answers but is undocumented.
+        return this.configuration.apiUrl || 'https://api.tokenfactory.nebius.com/v1';
+      case LlmProviderType.SAMBANOVA:
+        return this.configuration.apiUrl || 'https://api.sambanova.ai/v1';
       case LlmProviderType.COHERE:
         return this.configuration.apiUrl || 'https://api.cohere.ai/v2';
       case LlmProviderType.AZURE_OPENAI:
@@ -435,6 +475,16 @@ export class LlmProvider {
       case LlmProviderType.TOGETHER:
       case LlmProviderType.COHERE:
       case LlmProviderType.HUGGINGFACE:
+      // OpenAI-compatible inference hosts: plain Bearer key, same as OpenAI.
+      case LlmProviderType.FIREWORKS:
+      case LlmProviderType.CEREBRAS:
+      case LlmProviderType.DEEPINFRA:
+      case LlmProviderType.NOVITA:
+      case LlmProviderType.PERPLEXITY:
+      case LlmProviderType.ZAI:
+      case LlmProviderType.BASETEN:
+      case LlmProviderType.NEBIUS:
+      case LlmProviderType.SAMBANOVA:
         if (apiKey) {
           headers['Authorization'] = `Bearer ${apiKey}`;
         }
