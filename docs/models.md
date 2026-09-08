@@ -32,8 +32,11 @@ There is no code list of supported models. A model is usable when its **card** e
 
 Ways a card comes to exist:
 
+- **Automatically, from the provider.** Creating an LLM provider, changing its configuration, and every passing health check (`POST /llm-providers/:id/test`, and the check that runs a second after create and update) import what the provider currently lists, in the background. Cards already present are left alone. A card whose vendor id has vanished from the list goes `inactive` with `metadata.retiredAt` and `metadata.retiredReason: "not listed by provider"`; it is never deleted, because runs and audit rows reference card ids, and it comes back on its own when the provider lists it again. An empty list (the vendor could not be asked) retires nothing. Deleting a provider retires its cards the same way (`retiredReason: "provider deleted"`); the card's `providerId` is nulled by the database, so it is no longer callable.
+- **Health check as validation.** The health check makes a real call with the provider's resolved model. Passing records a validation run on that provider's card for that vendor id (`validationStatus: passed`, `lastValidatedAt`, `measuredLatencyMs`), creating the card when the catalog has none, so a fresh organization with one healthy provider can route right away. A `MODEL_NOT_FOUND` failure marks the card `failed` with the error; any other failure leaves the catalog alone. The audit row carries `source: health_check`.
+- **Backfill on boot.** Every active provider that has no cards yet is synced once at startup (a queued job with a stable id, so replicas do it once; off under `NODE_ENV=test` and `MODEL_CATALOG_BACKFILL=off`).
+- `POST /models/sync { providerId }` runs the same import for one provider by hand; `POST /models/sync` with no body runs it for every active provider of the org and returns a per-provider summary (`created`, `skipped`, `retired`, `reinstated`, `error`).
 - `POST /models` against a stored provider (admin picks the vendor id)
-- `POST /models/sync { providerId }` imports everything the provider currently lists, unvalidated
 - `POST /models/register-endpoint { name, url, apiKey?, vendorModelId, privacyTier?, region? }` for any OpenAI-compatible server you run yourself. The URL and key become a `custom` LLM provider row (key encrypted like every other), the card points at it.
 - A deployment reaching `ready` fills the card it was created for (`endpointRef.url`, `deploymentId`).
 
@@ -62,6 +65,10 @@ An `llm_call` node (or any chat request) may carry a `routing` policy instead of
 ```
 
 Selection is pure (`routing/model-router.ts`): filter by selectability, tier ceiling, region, capabilities and budget headroom, then order by objective (`cheapest` by blended feed price, `fastest` by measured p50, `pinned`, or an explicit `fallbackChain`). The chat runner walks the chain: a candidate that fails for a reason that is not the request's fault (retired model, quota, outage, auth on that provider) is skipped; a request-shaped failure (400, 413, 422) or a caller abort stops the walk.
+
+**Organization default.** An `llm_call` node that names neither a `providerId` nor a `routing` policy uses the organization's default policy, `settings.defaultRouting`, when one is set. It has the same shape as the node policy and is read and written through the organization endpoints (`GET /organizations/:id`, `PATCH /organizations/:id { settings: { defaultRouting } }`; `null` clears it, other `settings` keys are left as they are). The PATCH validates the policy: `objective` is one of `cheapest | fastest | pinned`, `privacyTier` one of `local | private_cloud | public`, `regions` and `fallbackChain` are string arrays, `capabilities` an object of booleans, `pinnedModel` a string, `budgetHeadroomCents` a non-negative integer or `null`. A policy on the node always wins over the default. The executor caches the default for 30 seconds per organization, so a change applies to the next run, not the one in flight. A node with neither, in an organization without a default, fails with a message that says so.
+
+**Latency learning.** `fastest` ranks by `measuredLatencyMs.p50`, which real traffic keeps current: after every routed answer the router folds the response time into the answering card (p50 as an exponential moving average with weight 0.2 for the new sample; p95 jumps to a slower sample at once and decays toward faster ones by a tenth per sample). The estimate lives in memory and is written to the card at most once a minute; after a restart it is seeded from the stored value. A validation run or a passing health check resets both to that single measurement.
 
 The answer records what happened. `ChatResponse.routing` and the node result carry `{ modelId, modelVersionId, vendorModelId, providerId, rationale, attempt, tried, rejected }`, and the same lands in the audit log as `model_routed`. `nodeResults[nodeId].routing` on a run shows which card served which step and why.
 
@@ -98,8 +105,9 @@ npx @almyty/models teardown <deploymentId>
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
+| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time backfill of providers that have no cards yet |
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
 | `MODEL_RECONCILE_CRON` | `*/2 * * * *` | Deployment reconcile sweep; `off` disables |
 | `MODEL_STUB_ADAPTER` | unset | `true` registers the stub adapter in production too |
-| `MODEL_REGISTRY_S3_*` | falls back to `STORAGE_S3_*` | Bucket for weights and manifests |
+| `MODEL_REGISTRY_S3_*` | falls back to `STORAGE_S3_*` | Single-tenant seed only: creates the one organization's registry connection on first boot; ignored with more than one organization |
 | `CONFORMANCE_LIVE` | unset | Adapter key whose conformance spec runs against the real provider |

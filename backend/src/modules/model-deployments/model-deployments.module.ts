@@ -9,6 +9,7 @@ import { SpendBudget } from '../../entities/spend-budget.entity';
 import { Credential } from '../../entities/credential.entity';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { KmsModule } from '../kms/kms.module';
+import { ModelRegistryModule } from '../model-registry/model-registry.module';
 import { AdapterRegistry } from './adapters/adapter.registry';
 import { StubAdapter } from './adapters/stub.adapter';
 import { HuggingFaceEndpointsAdapter } from './adapters/huggingface-endpoints.adapter';
@@ -33,6 +34,7 @@ import { ModelDeploymentsProcessor } from './model-deployments.processor';
     BullModule.registerQueue({ name: MODEL_RECONCILE_QUEUE }),
     AuditLogModule,
     KmsModule,
+    ModelRegistryModule,
   ],
   providers: [AdapterRegistry, ModelDeploymentsService, ModelDeploymentsProcessor],
   controllers: [ModelDeploymentsController],
