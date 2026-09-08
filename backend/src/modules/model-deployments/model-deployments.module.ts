@@ -13,6 +13,8 @@ import { AdapterRegistry } from './adapters/adapter.registry';
 import { StubAdapter } from './adapters/stub.adapter';
 import { HuggingFaceEndpointsAdapter } from './adapters/huggingface-endpoints.adapter';
 import { ModalAdapter } from './adapters/modal.adapter';
+import { OllamaAdapter } from './adapters/ollama.adapter';
+import { CustomEndpointAdapter } from './adapters/custom-endpoint.adapter';
 
 
 import { ModelDeploymentsController } from './model-deployments.controller';
@@ -42,6 +44,8 @@ export class ModelDeploymentsModule implements OnModuleInit {
   onModuleInit(): void {
     this.adapters.register(new HuggingFaceEndpointsAdapter());
     this.adapters.register(new ModalAdapter());
+    this.adapters.register(new OllamaAdapter());
+    this.adapters.register(new CustomEndpointAdapter());
 
 
     if (process.env.NODE_ENV !== 'production' || process.env.MODEL_STUB_ADAPTER === 'true') {
