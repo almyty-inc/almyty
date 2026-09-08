@@ -18,6 +18,7 @@ const app = (over: Partial<AgentApp> = {}): AgentApp =>
     authMode: 'public_link',
     capabilities: {},
     limits: null,
+    privacy: null,
     isActive: true,
     ...over,
   }) as AgentApp
@@ -106,5 +107,46 @@ describe('AppSettingsPanel limits', () => {
     expect(screen.queryByText(/spends against your model keys/i)).toBeNull()
     // The fields stay: a closed product may still want a ceiling.
     expect(screen.getByLabelText(/Cost ceiling/)).toBeInTheDocument()
+  })
+
+  it('shows the safe privacy defaults for an existing app with no stored overrides', () => {
+    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+
+    expect(screen.getByRole('switch', { name: /download their data/i })).toBeChecked()
+    expect(screen.getByRole('switch', { name: /delete their data/i })).toBeChecked()
+    expect(screen.getByRole('switch', { name: /include visitor conversations/i })).not.toBeChecked()
+    expect(screen.getByLabelText(/Delete visitor data after/i)).toHaveValue(null)
+    expect(screen.getByText(/inherit the organization policy/i)).toBeInTheDocument()
+  })
+
+  it('saves per-app retention, visitor rights, and the shared-memory choice together', async () => {
+    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+
+    fireEvent.change(screen.getByLabelText(/Delete visitor data after/i), {
+      target: { value: '14' },
+    })
+    fireEvent.click(screen.getByRole('switch', { name: /download their data/i }))
+    fireEvent.click(screen.getByRole('switch', { name: /include visitor conversations/i }))
+    save()
+
+    await waitFor(() => expect(agentAppsApi.update).toHaveBeenCalled())
+    expect(sent().privacy).toEqual({
+      retentionDays: 14,
+      visitorCanDelete: true,
+      visitorCanExport: false,
+      visitorMemory: true,
+    })
+  })
+
+  it('refuses an invalid retention override before it reaches the API', () => {
+    render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
+
+    fireEvent.change(screen.getByLabelText(/Delete visitor data after/i), {
+      target: { value: '1.5' },
+    })
+
+    expect(screen.getByText(/whole number of at least 1 day/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(agentAppsApi.update).not.toHaveBeenCalled()
   })
 })
