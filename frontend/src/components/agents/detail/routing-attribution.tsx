@@ -8,13 +8,16 @@ interface RoutingAttributionProps {
   routing: RouteAttribution
   /** Shown as a prefix when a run has more than one routed node. */
   nodeId?: string
+  /** Card id to display name, so the tried and rejected lists read as names instead of ids. */
+  cardNames?: Record<string, string>
 }
 
 /**
  * One line per routed node: which card answered, why the router picked it,
  * and on which attempt. The tried and rejected lists open on demand.
  */
-export function RoutingAttribution({ routing, nodeId }: RoutingAttributionProps) {
+export function RoutingAttribution({ routing, nodeId, cardNames }: RoutingAttributionProps) {
+  const label = (id: string) => cardNames?.[id] ?? id
   const [open, setOpen] = useState(false)
   const tried = Array.isArray(routing.tried) ? routing.tried : []
   const rejected = Array.isArray(routing.rejected) ? routing.rejected : []
@@ -50,7 +53,7 @@ export function RoutingAttribution({ routing, nodeId }: RoutingAttributionProps)
               <ul className="space-y-0.5">
                 {tried.map((t, i) => (
                   <li key={`t-${i}`} className="flex gap-2">
-                    <span className="font-mono truncate max-w-[110px]" title={t.modelId}>{t.modelId}</span>
+                    <span className="font-mono truncate max-w-[110px]" title={t.modelId}>{label(t.modelId)}</span>
                     <span className="text-muted-foreground">{t.reason}</span>
                   </li>
                 ))}
@@ -63,7 +66,7 @@ export function RoutingAttribution({ routing, nodeId }: RoutingAttributionProps)
               <ul className="space-y-0.5">
                 {rejected.map((r, i) => (
                   <li key={`r-${i}`} className="flex gap-2">
-                    <span className="font-mono truncate max-w-[110px]" title={r.modelId}>{r.modelId}</span>
+                    <span className="font-mono truncate max-w-[110px]" title={r.modelId}>{label(r.modelId)}</span>
                     <span className="text-muted-foreground">{r.reason}</span>
                   </li>
                 ))}
@@ -77,13 +80,13 @@ export function RoutingAttribution({ routing, nodeId }: RoutingAttributionProps)
 }
 
 /** Every routed node of an execution, or a dash when none carried a policy. */
-export function ExecutionRouting({ nodeResults }: { nodeResults: AgentExecution['nodeResults'] }) {
+export function ExecutionRouting({ nodeResults, cardNames }: { nodeResults: AgentExecution['nodeResults']; cardNames?: Record<string, string> }) {
   const routed = Object.entries(nodeResults || {}).filter(([, r]) => r && r.routing && r.routing.vendorModelId)
   if (routed.length === 0) return <span className="text-sm text-muted-foreground">--</span>
   return (
     <div className="space-y-1">
       {routed.map(([nodeId, r]) => (
-        <RoutingAttribution key={nodeId} routing={r.routing as RouteAttribution} nodeId={routed.length > 1 ? nodeId : undefined} />
+        <RoutingAttribution key={nodeId} routing={r.routing as RouteAttribution} nodeId={routed.length > 1 ? nodeId : undefined} cardNames={cardNames} />
       ))}
     </div>
   )
