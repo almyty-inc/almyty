@@ -68,7 +68,7 @@ describe('ChannelGatewayService installation resolution', () => {
     };
   };
 
-  const buildService = (withInstallations: boolean) =>
+  const buildService = (withInstallations: boolean, rateLimit?: any) =>
     new ChannelGatewayService(
       gatewayRepository,
       runRepository,
@@ -89,7 +89,10 @@ describe('ChannelGatewayService installation resolution', () => {
       new MatrixAdapter(),
       new IrcAdapter(),
       withInstallations ? installationService : undefined,
+      undefined,
+      rateLimit,
     );
+
 
   beforeEach(() => {
     fetchMock = installFetchMock();
@@ -186,6 +189,32 @@ describe('ChannelGatewayService installation resolution', () => {
 
     // Lookup failure degrades to the gateway's own credentials.
     expect(fetchMock.calls[0].init.headers.Authorization).toBe('Bearer xoxb-gateway-default');
+  });
+
+  describe('per-sender share', () => {
+    it('checks the platform sender, not the webhook address, and drops a sender over their share', async () => {
+      const rateLimit = {
+        checkVisitor: jest.fn(async () => ({ limited: true, code: 'VISITOR_RATE_LIMITED', message: 'Too many messages from you (60 per hour). Please wait 30 seconds.' })),
+      };
+      const service = buildService(false, rateLimit);
+
+      await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
+
+      expect(rateLimit.checkVisitor).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), { endUserId: 'U1', clientHash: null });
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+      const failed = eventRepository.create.mock.calls.map((c: any) => c[0]).find((e: any) => e.status === 'failed');
+      expect(failed?.errorMessage).toMatch(/Too many messages from you/);
+    });
+
+    it('lets a sender under their share through', async () => {
+      const rateLimit = { checkVisitor: jest.fn(async () => ({ limited: false })) };
+      const service = buildService(false, rateLimit);
+
+      await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
+      await completeRunAndFlush();
+
+      expect(agentRuntimeService.startRun).toHaveBeenCalled();
+    });
   });
 
   describe('tenant id extraction', () => {

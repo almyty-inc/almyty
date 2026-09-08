@@ -10,6 +10,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
+import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRun } from '../../../entities/agent-run.entity';
 import { ChannelEvent } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
@@ -67,7 +68,11 @@ export class ChannelGatewayService {
     // present, warms a BYO-KMS org's DEK before the sync getChannelConfig
     // reads so `encrypted:kms:` secrets can be unwrapped.
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
+    // Per-sender share of a public channel surface. Optional for the same
+    // positional-construction reason as the two above.
+    @Optional() private readonly gatewayRateLimit?: GatewayRateLimitService,
   ) {
+
     this.adapters = new Map<string, BaseAdapter>([
       [GatewayType.CHAT_WIDGET, this.chatWidgetAdapter],
       // A hosted chat app persists replies exactly like the widget does;
@@ -166,6 +171,20 @@ export class ChannelGatewayService {
     // Normalize inbound message
     const normalized: NormalizedMessage = adapter.normalizeInbound(body);
     await this.logEvent(gateway, 'inbound', 'received', this.truncatePayload(body));
+
+    // Each platform sender gets their own share of the surface, so one
+    // person in a Slack workspace cannot use up the whole product's
+    // allowance. The webhook's source address is the platform's, not the
+    // sender's, so no per-IP scope here.
+    const senderId = normalized.userId && normalized.userId !== 'unknown' ? normalized.userId : null;
+    if (senderId && this.gatewayRateLimit) {
+      const own = await this.gatewayRateLimit.checkVisitor(gateway, { endUserId: senderId, clientHash: null });
+      if (own.limited) {
+        await this.logEvent(gateway, 'inbound', 'failed', this.truncatePayload(body), own.message ?? 'sender rate limited');
+        return;
+      }
+    }
+
     // Find existing run for this thread, or start a new one
     let run: AgentRun | null = null;
 
