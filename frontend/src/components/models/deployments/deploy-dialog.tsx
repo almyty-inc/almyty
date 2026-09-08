@@ -7,6 +7,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { JsonSchemaForm, schemaDefaults, validateSchemaValues, type SchemaFormValues } from '@/components/ui/json-schema-form'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectedChip } from '@/components/connections/connected-chip'
+import type { Connection } from '@/types/connections'
 import { budgetsApi, credentialsApi } from '@/lib/api'
 import { formatCents } from '@/lib/deployments-api'
 import { cn } from '@/lib/utils'
@@ -47,6 +50,8 @@ export interface DeployFormState {
   config: SchemaFormValues
   credentialId: string
   budgetId: string
+  /** A connected account from the Connections layer, instead of a vault credential. */
+  connectionId?: string
 }
 
 export type DeployBuildResult = { ok: true; body: CreateModelDeploymentBody } | { ok: false; errors: Record<string, string> }
@@ -95,6 +100,7 @@ export function buildDeployBody(state: DeployFormState): DeployBuildResult {
   if (Object.keys(desired).length > 0) body.desired = desired
   if (Object.keys(config.value).length > 0) body.providerConfig = config.value
   if (state.credentialId) body.credentialId = state.credentialId
+  if (state.connectionId) body.connectionId = state.connectionId
   if (state.budgetId) body.budgetId = state.budgetId
   return { ok: true, body }
 }
@@ -111,6 +117,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
   const [desired, setDesired] = useState<DesiredFormValues>(EMPTY_DESIRED)
   const [config, setConfig] = useState<SchemaFormValues>({})
   const [credentialId, setCredentialId] = useState('')
+  const [connection, setConnection] = useState<Connection | null>(null)
   const [budgetId, setBudgetId] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -141,6 +148,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
     setDesired(EMPTY_DESIRED)
     setConfig({})
     setCredentialId('')
+    setConnection(null)
     setBudgetId('')
     setErrors({})
   }, [open, initialVersionId])
@@ -155,7 +163,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    const result = buildDeployBody({ adapter, versionId, desired, config, credentialId, budgetId })
+    const result = buildDeployBody({ adapter, versionId, desired, config, credentialId, budgetId, connectionId: connection?.id })
     if (!result.ok) {
       setErrors(result.errors)
       return
@@ -285,6 +293,17 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
                 ))}
               </select>
               <p className="text-xs text-muted-foreground">Handed to the adapter per call, never stored on the deployment.</p>
+              {connection ? (
+                <ConnectedChip connection={connection} onClear={() => setConnection(null)} />
+              ) : (
+                <ConnectAccountButton
+                  kind="deployment"
+                  onConnected={(next) => {
+                    setConnection(next)
+                    setCredentialId('')
+                  }}
+                />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="deploy-budget">Spend budget</Label>

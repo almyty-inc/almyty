@@ -15,6 +15,9 @@ import {
 } from '@/components/ui/dialog'
 import { mcpSourcesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectedChip } from '@/components/connections/connected-chip'
+import type { Connection } from '@/types/connections'
 
 interface AddMcpServerDialogProps {
   open: boolean
@@ -34,11 +37,13 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [bearerToken, setBearerToken] = useState('')
+  const [connection, setConnection] = useState<Connection | null>(null)
 
   const resetForm = () => {
     setName('')
     setUrl('')
     setBearerToken('')
+    setConnection(null)
   }
 
   const createMutation = useMutation({
@@ -46,11 +51,13 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
       if (!organizationId) {
         return Promise.reject(new Error('No organization context'))
       }
-      return mcpSourcesApi.create(organizationId, {
+      const payload: Parameters<typeof mcpSourcesApi.create>[1] & { connectionId?: string } = {
         name: name.trim(),
         url: url.trim(),
         ...(bearerToken.trim() ? { bearerToken: bearerToken.trim() } : {}),
-      })
+        ...(connection ? { connectionId: connection.id } : {}),
+      }
+      return mcpSourcesApi.create(organizationId, payload)
     },
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['mcp-sources'] })
@@ -149,6 +156,17 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
             <p className="text-xs text-muted-foreground">
               Sent as an Authorization header. Stored encrypted.
             </p>
+            {connection ? (
+              <ConnectedChip connection={connection} onClear={() => setConnection(null)} />
+            ) : (
+              <ConnectAccountButton
+                kind="mcp"
+                onConnected={(next) => {
+                  setConnection(next)
+                  setBearerToken('')
+                }}
+              />
+            )}
           </div>
 
           <DialogFooter>
