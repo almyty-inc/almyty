@@ -42,6 +42,7 @@ import { ConnectSheet, CONNECTORS_QUERY_KEY } from './connect-sheet'
 import { ConnectionDetailSheet, CONNECTIONS_QUERY_KEY } from './connection-detail-sheet'
 import { CustomConnectorDialog } from './custom-connector-dialog'
 import { ConnectionHealthBadge } from './health-badge'
+import { ConnectionsGovernanceSection } from '@/components/connections-governance/governance-section'
 
 interface SheetState {
   open: boolean
@@ -214,6 +215,8 @@ export function ConnectionsTab() {
           </div>
         </section>
       ))}
+
+      <ConnectionsGovernanceSection />
 
       <ConnectSheet
         open={sheet.open}
