@@ -26,6 +26,8 @@ import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { Credential } from '../../entities/credential.entity';
+import { LlmProviderSecretsHelper, MASKED_PROVIDER_KEY } from './llm-provider-secrets.helper';
 
 import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters } from './dto/llm-providers.dto';
 export type { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters };
@@ -139,6 +141,7 @@ export class LlmProvidersService {
 
     private readonly accessPolicy: AccessPolicyService,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    private readonly secrets: LlmProviderSecretsHelper,
     // The catalog listens to provider lifecycle (sync on create, on a
     // configuration change and after a passing health check). Optional:
     // it arrives through a forwardRef and some specs build this service
@@ -171,9 +174,17 @@ export class LlmProvidersService {
         throw new ForbiddenException('User does not have permission to manage LLM providers');
       }
 
-      // Validate configuration
-      this.runner.validateProviderConfiguration(createDto.type, createDto.configuration);
-      await this.assertModelIsServed(createDto.type, createDto.configuration, organizationId);
+      // Keys never land on the provider row: a pasted key becomes a
+      // Credential row the provider manages, a credentialId points at a
+      // shared connection. Validation sees the key either way.
+      const createAny = createDto as CreateLlmProviderDto & { credentialId?: string | null; usageCredentialId?: string | null };
+      const { configuration, apiKey, usageApiKey } = LlmProviderSecretsHelper.splitKeys(createDto.configuration);
+      this.runner.validateProviderConfiguration(createDto.type, {
+        ...configuration,
+        apiKey: apiKey ?? (createAny.credentialId ? MASKED_PROVIDER_KEY : undefined),
+        usageApiKey,
+      });
+      await this.assertModelIsServed(createDto.type, configuration, organizationId, { apiKey, credentialId: createAny.credentialId });
 
 
       // Validate team scoping before persisting.
@@ -188,34 +199,42 @@ export class LlmProvidersService {
       const capabilities = createDto.capabilities || this.modelsHelper.getDefaultCapabilities(createDto.type);
 
       // Create provider
+      const { credentialId: _credentialId, usageCredentialId: _usageCredentialId, ...providerFields } = createAny;
       const provider = this.llmProviderRepository.create({
-        ...createDto,
+        ...providerFields,
+        configuration,
         organizationId,
         capabilities,
         status: LlmProviderStatus.ACTIVE,
       });
 
-      // Encrypt the API key at rest before it touches the DB. Routes through
-      // the org's envelope path: a BYO-KMS org gets encrypted:kms:, every other
-      // org gets the same platform encrypted:gcm: value as before.
-      await provider.encryptSensitiveDataForOrg(this.envelopeCrypto);
+      // Save first so the key rows can name the provider they belong to;
+      // a failure to store the key removes the half-made provider again.
       const savedProvider = await this.llmProviderRepository.save(provider);
+      try {
+        await this.secrets.applyKey(savedProvider, 'inference', { plaintext: apiKey, credentialId: createAny.credentialId ?? undefined });
+        await this.secrets.applyKey(savedProvider, 'usage', { plaintext: usageApiKey, credentialId: createAny.usageCredentialId ?? undefined });
+      } catch (error) {
+        try { await this.llmProviderRepository.remove(savedProvider); } catch { /* best effort */ }
+        throw error;
+      }
+      const withKeys = await this.llmProviderRepository.save(savedProvider);
 
       // Perform initial health check. Pass the org we just created
       // under so the scoped lookup inside performHealthCheck finds
       // the row.
       setTimeout(
-        () => this.performHealthCheck(savedProvider.id, organizationId),
+        () => this.performHealthCheck(withKeys.id, organizationId),
         1000,
       );
-      this.scheduleCatalogSync(savedProvider.id, organizationId, 'provider_created');
+      this.scheduleCatalogSync(withKeys.id, organizationId, 'provider_created');
 
-      this.logger.log(`LLM provider '${savedProvider.name}' created for organization ${organizationId}`);
+      this.logger.log(`LLM provider '${withKeys.name}' created for organization ${organizationId}`);
 
       // Audit log (fire-and-forget)
-      this.auditLogService.logCreate(organizationId, userId, AuditResource.LLM_PROVIDER, savedProvider.id, savedProvider.name, { type: savedProvider.type });
+      this.auditLogService.logCreate(organizationId, userId, AuditResource.LLM_PROVIDER, withKeys.id, withKeys.name, { type: withKeys.type });
 
-      return savedProvider;
+      return withKeys;
 
     } catch (error) {
       this.logger.error(`Failed to create LLM provider: ${error.message}`);
@@ -252,14 +271,31 @@ export class LlmProvidersService {
         await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, nextVis, nextTeamId);
       }
 
-      // Update configuration
+      // Update configuration. Keys are split off first: the plaintext
+      // never lands on the provider row, it becomes (or rotates) a
+      // Credential row. A credentialId in the body points the provider at
+      // a shared connection; null clears it.
+      const updateAny = updateDto as UpdateLlmProviderDto & { credentialId?: string | null; usageCredentialId?: string | null };
+      let pastedKey: string | undefined;
+      let pastedUsageKey: string | undefined;
       if (updateDto.configuration) {
-        provider.configuration = { ...provider.configuration, ...updateDto.configuration };
-        this.runner.validateProviderConfiguration(provider.type, provider.configuration);
-        if (updateDto.configuration.model !== undefined) {
-          await this.assertModelIsServed(provider.type, provider.configuration, organizationId);
-        }
-
+        const split = LlmProviderSecretsHelper.splitKeys(updateDto.configuration);
+        pastedKey = split.apiKey;
+        pastedUsageKey = split.usageApiKey;
+        provider.configuration = { ...provider.configuration, ...split.configuration };
+      }
+      if (updateDto.configuration || updateAny.credentialId !== undefined) {
+        this.runner.validateProviderConfiguration(
+          provider.type,
+          this.validationView(provider, { apiKey: pastedKey, usageApiKey: pastedUsageKey, credentialId: updateAny.credentialId }),
+        );
+      }
+      if (updateDto.configuration?.model !== undefined) {
+        await this.assertModelIsServed(provider.type, provider.configuration, organizationId, {
+          apiKey: pastedKey,
+          credentialId: updateAny.credentialId === undefined ? provider.credentialId : updateAny.credentialId,
+          credential: provider.credential,
+        });
       }
 
       // Update other fields
@@ -282,9 +318,13 @@ export class LlmProvidersService {
         provider.teamId = updateDto.teamId;
       }
 
-      // Re-encrypt before persisting (idempotent for an already-encrypted
-      // key that wasn't changed in this update). Org-aware envelope path.
-      await provider.encryptSensitiveDataForOrg(this.envelopeCrypto);
+      // Move the keys: paste -> managed row, credentialId -> shared row,
+      // an inline key still on the row (shim) -> managed row. The org's
+      // envelope is warmed first so a customer-managed inline value can
+      // be read for the move.
+      await this.envelopeCrypto.warmOrg(organizationId);
+      await this.secrets.applyKey(provider, 'inference', { plaintext: pastedKey, credentialId: updateAny.credentialId });
+      await this.secrets.applyKey(provider, 'usage', { plaintext: pastedUsageKey, credentialId: updateAny.usageCredentialId });
       const updatedProvider = await this.llmProviderRepository.save(provider);
 
       // Perform health check after update, scoped to the same org
@@ -337,7 +377,11 @@ export class LlmProvidersService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.llmProviderRepository.createQueryBuilder('provider');
+    // The list is a query builder, where eager relations do not apply;
+    // join the credential rows so the masked view can name the connection.
+    const queryBuilder = this.llmProviderRepository.createQueryBuilder('provider')
+      .leftJoinAndSelect('provider.credential', 'credential')
+      .leftJoinAndSelect('provider.usageCredential', 'usageCredential');
     if (filters.bypassTeamFilter) {
       queryBuilder.where('provider.organizationId = :_orgId', { _orgId: filters.organizationId });
     } else if (filters.caller) {
@@ -413,6 +457,9 @@ export class LlmProvidersService {
       }
     }
 
+    // The key rows this provider created go with it; a shared
+    // connection it pointed at stays.
+    await this.secrets.release(provider);
     await this.llmProviderRepository.remove(provider);
 
     this.logger.log(`LLM provider '${provider.name}' deleted`);
@@ -445,8 +492,9 @@ export class LlmProvidersService {
     error?: string;
     details?: Record<string, any>;
   }> {
+    let provider: LlmProvider | null = null;
     try {
-      const provider = await this.llmProviderRepository.findOne({
+      provider = await this.llmProviderRepository.findOne({
         where: { id: providerId, organizationId },
       });
 
@@ -454,6 +502,9 @@ export class LlmProvidersService {
         return { isHealthy: false, error: 'Provider not found' };
       }
 
+      // The policy seam and a fresh read of the credential row, before
+      // the sync key reads inside the runner.
+      await this.secrets.withResolvedSecrets(provider, { context: { purpose: 'health_check', resourceType: 'llm_provider', resourceId: provider.id } });
       const startTime = Date.now();
 
       // Probe with the provider's configured model, else whatever the
@@ -491,6 +542,7 @@ export class LlmProvidersService {
       // run for the matching card, and a good moment to refresh the list.
       this.recordCatalogValidation(provider, healthCheckModel, { passed: true, latencyMs: responseTime });
       this.scheduleCatalogSync(provider.id, provider.organizationId, 'health_check');
+      void this.secrets.recordHealth(provider, true);
 
       return {
         isHealthy: true,
@@ -518,6 +570,7 @@ export class LlmProvidersService {
       // org-scoped so we don't touch a foreign provider on errors
       // either). Partial UPDATE for the same race reason.
       if (upstreamMessage !== LLM_HEALTH_GATE_MESSAGE) {
+        void this.secrets.recordHealth({ organizationId, credentialId: provider?.credentialId ?? null }, false, upstreamMessage);
         try {
           await this.llmProviderRepository.update(
             { id: providerId, organizationId },
@@ -664,10 +717,22 @@ export class LlmProvidersService {
     type: LlmProviderType,
     configuration: LlmProviderConfig | undefined,
     organizationId: string,
+    /** The key the probe should use: a pasted plaintext, or the credential the provider points at. */
+    key: { apiKey?: string; credentialId?: string | null; credential?: Credential | null } = {},
   ): Promise<void> {
     const model = configuration?.model?.trim();
     if (!model) return;
-    const probe = Object.assign(new LlmProvider(), { type, configuration, organizationId });
+    const probe = Object.assign(new LlmProvider(), { type, configuration: { ...(configuration ?? {}) }, organizationId });
+    if (key.apiKey && key.apiKey !== MASKED_PROVIDER_KEY) {
+      probe.configuration.apiKey = key.apiKey;
+    } else if (key.credentialId) {
+      probe.credentialId = key.credentialId;
+      if (key.credential && key.credential.id === key.credentialId) {
+        probe.credential = key.credential;
+      } else {
+        await this.secrets.withResolvedSecrets(probe, { context: { purpose: 'model_list', resourceType: 'llm_provider' } });
+      }
+    }
     let listed: Array<{ id: string }>;
     try {
       listed = await this.modelsHelper.fetchModelsFromProvider(probe);
@@ -686,6 +751,20 @@ export class LlmProvidersService {
         `Model "${model}" is not served by this ${type} provider. ` +
         `It may have been retired. Currently available include: ${sample}.`,
     });
+  }
+
+  /**
+   * What validateProviderConfiguration should see: the configuration
+   * with the key present when the provider has one, on the row (shim),
+   * pasted in this request, or referenced.
+   */
+  private validationView(
+    provider: LlmProvider,
+    incoming: { apiKey?: string; usageApiKey?: string; credentialId?: string | null },
+  ): LlmProviderConfig {
+    const hasRef = incoming.credentialId === undefined ? !!provider.credentialId : !!incoming.credentialId;
+    const apiKey = incoming.apiKey ?? (hasRef || provider.configuration?.apiKey ? MASKED_PROVIDER_KEY : undefined);
+    return { ...provider.configuration, apiKey, usageApiKey: incoming.usageApiKey };
   }
 
   // Catalog hooks. The catalog is optional at construction time (forwardRef,

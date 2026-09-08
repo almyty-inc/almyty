@@ -55,12 +55,19 @@ export enum LlmProviderStatus {
 }
 
 export interface LlmProviderConfig {
+  /**
+   * Read-through shim only. The inference key lives in the Credential
+   * row `credentialId` points at; this field is read when no reference
+   * is set (rows the startup backfill has not moved) and is never
+   * written by the service any more. TODO(2026-12-01): drop the shim.
+   */
   apiKey?: string;
   /**
-   * Optional admin/org-scoped key for the provider's USAGE/COST API (P7).
-   * This is a DIFFERENT credential scope than `apiKey` (the inference
-   * key): OpenAI needs an Admin key, Anthropic an org Admin key. Stored
-   * encrypted alongside apiKey; read via getDecryptedUsageApiKey().
+   * Read-through shim for the admin/usage key (P7), same contract as
+   * `apiKey`: the value lives in the row `usageCredentialId` points at.
+   * This is a DIFFERENT credential scope than the inference key: OpenAI
+   * needs an Admin key, Anthropic an org Admin key. Read via
+   * getDecryptedUsageApiKey(). TODO(2026-12-01): drop the shim.
    */
   usageApiKey?: string;
   apiUrl?: string;
@@ -110,6 +117,19 @@ export interface LlmProviderConfig {
   };
 }
 
+/** What the API shows about the credential backing a provider. Never the config. */
+export interface LlmProviderCredentialRef {
+  id: string;
+  name: string | null;
+  connectorKey: string | null;
+  healthStatus: string | null;
+}
+
+export interface LlmProviderCredentialRefs {
+  credentialRef?: LlmProviderCredentialRef | null;
+  usageCredentialRef?: LlmProviderCredentialRef | null;
+}
+
 @Entity('llm_providers')
 @VersionedEntity()
 @Index(['organizationId', 'name'])
@@ -150,8 +170,13 @@ export class LlmProvider {
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;
 
-  @Column({ nullable: true })
-  credentialId: string;
+  /** The inference key: a Credential row in the org's store. */
+  @Column({ type: 'uuid', nullable: true })
+  credentialId: string | null;
+
+  /** The usage/admin key (a different scope at the vendor), also a Credential row. */
+  @Column({ type: 'uuid', nullable: true })
+  usageCredentialId: string | null;
 
   @Column({ type: 'json' })
   configuration: LlmProviderConfig;
@@ -227,9 +252,16 @@ export class LlmProvider {
   @JoinColumn({ name: 'organizationId' })
   organization: Organization;
 
-  @ManyToOne(() => Credential, { nullable: true, onDelete: 'SET NULL' })
+  // Eager: every repository read of a provider carries its credential so
+  // the sync key getters work at every existing call site (chat runner,
+  // embeddings, usage, A2A, health) without each of them resolving first.
+  @ManyToOne(() => Credential, { nullable: true, eager: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'credentialId' })
-  credential: Credential;
+  credential: Credential | null;
+
+  @ManyToOne(() => Credential, { nullable: true, eager: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'usageCredentialId' })
+  usageCredential: Credential | null;
 
   @OneToMany(() => Conversation, conversation => conversation.provider)
   sessions: Conversation[];
@@ -439,23 +471,33 @@ export class LlmProvider {
 
   /**
    * The plaintext admin/usage API key (P7), or undefined if none is set.
-   * Same transparent-decrypt contract as getDecryptedApiKey().
+   * Read through `usageCredential` when the provider references one; the
+   * inline `configuration.usageApiKey` is the read-through shim for rows
+   * the startup backfill has not moved yet.
    */
   getDecryptedUsageApiKey(): string | undefined {
+    const fromRef = LlmProvider.secretFromCredential(this.usageCredential, ['apiKey', 'usageApiKey', 'token', 'key']);
+    if (fromRef !== undefined) return fromRef;
+    if (this.usageCredentialId) return undefined;
     const key = this.configuration?.usageApiKey;
     if (typeof key !== 'string' || key.length === 0) return undefined;
     return decryptField(key, this.organizationId);
   }
 
   /**
-   * The plaintext API key for use in an outbound request. Transparently
-   * decrypts the stored value; a legacy plaintext value passes through
-   * unchanged. A customer-managed (`encrypted:kms:`) value is unwrapped via the
-   * registered envelope hook — the org's DEK must be warmed first (the service
-   * layer does this before invoking read paths). Every read site must go
-   * through this, never configuration.apiKey directly.
+   * The plaintext API key for use in an outbound request. Read through
+   * the referenced credential when `credentialId` is set (the relation
+   * is eager, so it is loaded with the provider); otherwise the inline
+   * `configuration.apiKey` shim, transparently decrypted. A
+   * customer-managed (`encrypted:kms:`) value is unwrapped via the
+   * registered envelope hook, so the org's DEK must be warmed first (the
+   * service layer does this before invoking read paths). Every read site
+   * must go through this, never configuration.apiKey directly.
    */
   getDecryptedApiKey(): string | undefined {
+    const fromRef = LlmProvider.secretFromCredential(this.credential, ['apiKey', 'token', 'key', 'bearer']);
+    if (fromRef !== undefined) return fromRef;
+    if (this.credentialId) return undefined;
     const key = this.configuration?.apiKey;
     if (typeof key !== 'string' || key.length === 0) return undefined;
     return decryptField(key, this.organizationId);
@@ -543,15 +585,22 @@ export class LlmProvider {
     return headers;
   }
 
-  maskSensitiveData(): Partial<LlmProvider> {
-    const masked = { ...this };
-    
+  /**
+   * The API view: secret values replaced by a marker, the backing
+   * credential rows reduced to a reference (id, name, connector, health)
+   * so the dashboard can show which connection a provider uses without
+   * ever seeing its config.
+   */
+  maskSensitiveData(): Partial<LlmProvider> & LlmProviderCredentialRefs {
+    const { credential, usageCredential, ...rest } = this;
+    const masked: Partial<LlmProvider> & LlmProviderCredentialRefs = { ...rest };
+
     // Mask sensitive configuration data
     if (masked.configuration) {
       masked.configuration = {
         ...masked.configuration,
-        apiKey: masked.configuration.apiKey ? '***masked***' : undefined,
-        usageApiKey: masked.configuration.usageApiKey ? '***masked***' : undefined,
+        apiKey: this.hasInferenceKey() ? '***masked***' : undefined,
+        usageApiKey: this.hasUsageKey() ? '***masked***' : undefined,
         azure: masked.configuration.azure ? {
           ...masked.configuration.azure,
         } : undefined,
@@ -564,7 +613,47 @@ export class LlmProvider {
       };
     }
 
+    masked.credentialRef = LlmProvider.refOf(this.credentialId, credential);
+    masked.usageCredentialRef = LlmProvider.refOf(this.usageCredentialId, usageCredential);
+
     return masked;
+  }
+
+  /** True when an inference key exists, on the credential or (shim) inline. */
+  hasInferenceKey(): boolean {
+    return !!this.credentialId || !!this.configuration?.apiKey;
+  }
+
+  /** True when a usage/admin key exists, on the credential or (shim) inline. */
+  hasUsageKey(): boolean {
+    return !!this.usageCredentialId || !!this.configuration?.usageApiKey;
+  }
+
+  private static refOf(id: string | null | undefined, row: Credential | null | undefined): LlmProviderCredentialRef | null {
+    if (!id) return null;
+    return {
+      id,
+      name: row?.name ?? null,
+      connectorKey: row?.connectorKey ?? null,
+      healthStatus: row?.healthStatus ?? null,
+    };
+  }
+
+  /**
+   * Read one secret field off a loaded credential relation. Sync by
+   * design: the relation is eager, so every repository read carries the
+   * row, and the org's KMS envelope is warmed by the same service-layer
+   * step that already precedes every sync key read.
+   */
+  private static secretFromCredential(row: Credential | null | undefined, fields: string[]): string | undefined {
+    if (!row || typeof (row as any).getDecryptedConfig !== 'function') return undefined;
+    if (row.isActive === false) return undefined;
+    const config = row.getDecryptedConfig();
+    for (const field of fields) {
+      const value = config?.[field];
+      if (typeof value === 'string' && value.length > 0) return value;
+    }
+    return undefined;
   }
 
   calculateEstimatedCost(inputTokens: number, outputTokens: number): number {
@@ -579,7 +668,7 @@ export class LlmProvider {
     return inputCost + outputCost;
   }
 
-  toPublicView(): Partial<LlmProvider> {
+  toPublicView(): Partial<LlmProvider> & LlmProviderCredentialRefs {
     const {
       configuration,
       ...publicData

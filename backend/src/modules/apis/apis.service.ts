@@ -21,6 +21,9 @@ import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { Credential } from '../../entities/credential.entity';
+import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
+import { hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
 
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
@@ -48,7 +51,57 @@ export class ApisService {
     private readonly importHelper: ApisImportHelper,
     private readonly toolGen: ApisToolGeneratorHelper,
     private readonly accessPolicy: AccessPolicyService,
+    private readonly credentialRefs: CredentialRefResolver,
   ) {}
+
+  /**
+   * Move a secret out of `api.authentication.config` into a Credential
+   * row bound to the API (`credentials.apiId`, the reference
+   * ToolAuthService already prefers). The row keeps the public part of
+   * the config plus `credentialId`. Returns true when the row changed.
+   */
+  private async moveInlineAuth(api: Api): Promise<boolean> {
+    const split = splitInlineApiAuth(api.authentication);
+    if (!split) return false;
+    const managedBy = { kind: 'api' as const, id: api.id };
+    const currentId = api.authentication?.config?.credentialId as string | undefined;
+    const current = currentId ? await this.credentialRefs.load(api.organizationId, currentId).catch(() => null) : null;
+    let row: Credential;
+    if (current && CredentialRefResolver.isManagedBy(current, managedBy) && current.type === split.credentialType) {
+      row = await this.credentialRefs.rotateManaged(api.organizationId, current.id, { config: split.secretConfig, managedBy });
+      row.keyName = split.keyName;
+      row.keyLocation = split.keyLocation;
+    } else {
+      row = await this.credentialRefs.createManaged(api.organizationId, {
+        name: `${api.name} ${api.authentication.type} auth`,
+        description: `Authentication for the API "${api.name}"`,
+        type: split.credentialType,
+        config: split.secretConfig,
+        keyName: split.keyName,
+        keyLocation: split.keyLocation,
+        apiId: api.id,
+        managedBy,
+      });
+    }
+    api.authentication = { type: api.authentication.type, config: { ...split.publicConfig, credentialId: row.id } };
+    return true;
+  }
+
+  /**
+   * The inline shape the request builders read, with the secret filled
+   * in from the credential the API points at. Rows not yet moved still
+   * carry the secret inline (shim).
+   */
+  private async authenticationForRequest(api: Api): Promise<Api['authentication'] | null> {
+    const auth = api.authentication;
+    if (!auth || auth.type === 'none') return null;
+    const credentialId = auth.config?.credentialId as string | undefined;
+    if (!credentialId) return auth;
+    const resolved = await this.credentialRefs.resolve(api.organizationId, credentialId, {
+      context: { purpose: 'api_test', resourceType: 'api', resourceId: api.id },
+    });
+    return inlineApiAuthView(auth, resolved.config) as Api['authentication'];
+  }
 
   async create(createApiData: CreateApiData, userId?: string): Promise<Api> {
     // Check if organization exists
@@ -217,14 +270,21 @@ export class ApisService {
       status: ApiStatus.ACTIVE,
       organizationId,
       headers: data.headers || {},
-      authentication: data.authentication || null,
+      // An inline secret never reaches the row: it goes to the store
+      // right after the first save (the credential row needs the API id).
+      authentication: hasInlineApiSecret(data.authentication) ? null : (data.authentication || null),
       rateLimits: data.rateLimits || null,
       timeoutMs: data.timeoutMs || 30000,
       retryAttempts: data.retryAttempts || 3,
       version: '1.0.0',
     });
 
-    const saved = await this.apiRepository.save(api);
+    let saved = await this.apiRepository.save(api);
+    if (hasInlineApiSecret(data.authentication)) {
+      saved.authentication = data.authentication;
+      await this.moveInlineAuth(saved);
+      saved = await this.apiRepository.save(saved);
+    }
 
     // Audit log (fire-and-forget)
     this.auditLogService.logCreate(organizationId, undefined, AuditResource.API, saved.id, saved.name, { type: 'http' });
@@ -304,6 +364,8 @@ export class ApisService {
     } else if (updateAny.visibility === 'team' && updateAny.teamId !== undefined) {
       api.teamId = updateAny.teamId;
     }
+    // An inline secret in the new authentication moves to the store.
+    await this.moveInlineAuth(api);
     const saved = await this.apiRepository.save(api);
 
     // Audit log (fire-and-forget)
@@ -486,9 +548,12 @@ export class ApisService {
         maxRedirects: 0,
       };
 
-      // Add authentication if configured
-      if (api.authentication && api.authentication.type !== 'none') {
-        this.toolGen.applyAuthentication(config, api.authentication);
+      // Add authentication if configured. The secret comes from the
+      // credential store; the inline config is the shim for rows the
+      // startup backfill has not moved yet.
+      const auth = await this.authenticationForRequest(api);
+      if (auth && auth.type !== 'none') {
+        this.toolGen.applyAuthentication(config, auth);
       }
 
       // Add default headers

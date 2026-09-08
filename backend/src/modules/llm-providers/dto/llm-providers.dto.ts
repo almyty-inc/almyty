@@ -9,7 +9,11 @@ export interface CreateLlmProviderDto {
   name: string;
   description?: string;
   type: LlmProviderType;
+  /** `apiKey` / `usageApiKey` here are pasted keys; they become Credential rows, never provider columns. */
   configuration: LlmProviderConfig;
+  /** Point the provider at an existing connection instead of pasting a key. */
+  credentialId?: string | null;
+  usageCredentialId?: string | null;
   capabilities?: LlmProvider['capabilities'];
   metadata?: LlmProvider['metadata'];
   // Team-scoping fields from the dashboard VisibilityField.
@@ -21,6 +25,9 @@ export interface UpdateLlmProviderDto {
   name?: string;
   description?: string;
   configuration?: Partial<LlmProviderConfig>;
+  /** A new connection to point at; null clears the reference (and deletes a key the provider created). */
+  credentialId?: string | null;
+  usageCredentialId?: string | null;
   capabilities?: Partial<LlmProvider['capabilities']>;
   metadata?: Partial<LlmProvider['metadata']>;
   visibility?: 'org' | 'team';

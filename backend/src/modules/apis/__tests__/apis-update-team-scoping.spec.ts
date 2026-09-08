@@ -1,3 +1,5 @@
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
+import { makeCredentialRefFake } from '../../../test/credential-ref.fake';
 import { Test, TestingModule } from '@nestjs/testing'
 import { getRepositoryToken } from '@nestjs/typeorm'
 import { DataSource } from 'typeorm'
@@ -52,6 +54,7 @@ describe('ApisService.update team-scoping sanitize', () => {
         { provide: ApisImportHelper, useValue: {} },
         { provide: ApisToolGeneratorHelper, useValue: { generateToolsFromApi: jest.fn() } },
         { provide: AccessPolicyService, useValue: accessPolicy },
+        { provide: CredentialRefResolver, useValue: makeCredentialRefFake().resolver },
       ],
     }).compile()
 

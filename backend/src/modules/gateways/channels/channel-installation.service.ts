@@ -3,12 +3,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { ChannelInstallation } from '../../../entities/channel-installation.entity';
+import { CredentialType } from '../../../entities/credential.entity';
 import { Gateway } from '../../../entities/gateway.entity';
 import { OrganizationRole } from '../../../entities/user-organization.entity';
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 
-/** Credential keys whose values are encrypted at rest. */
+/** Credential keys whose values are secrets (encrypted by the store). */
 const SECRET_CREDENTIAL_KEYS = new Set(['bot_token', 'access_token', 'refresh_token']);
 
 export interface UpsertInstallationInput {
@@ -36,6 +38,7 @@ export class ChannelInstallationService {
     @InjectRepository(ChannelInstallation)
     private readonly installationRepository: Repository<ChannelInstallation>,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    private readonly credentialRefs: CredentialRefResolver,
     // @Global notifications pipeline; @Optional() keeps existing unit
     // tests (constructed without it) working.
     @Optional()
@@ -45,18 +48,17 @@ export class ChannelInstallationService {
   /**
    * Create or refresh the installation for (gateway, tenant). Reinstalls
    * (including into a previously revoked workspace) reactivate the row
-   * with fresh credentials and bump installedAt.
+   * with fresh credentials and bump installedAt. The credentials go to
+   * the org's credential store; the row only keeps the reference.
    */
   async upsert(gateway: Gateway, input: UpsertInstallationInput): Promise<ChannelInstallation> {
-    const encrypted = await this.encryptCredentials(gateway.organizationId, input.credentials);
-
     let installation = await this.installationRepository.findOne({
       where: { gatewayId: gateway.id, externalTenantId: input.externalTenantId },
     });
     const isNew = !installation;
 
     if (installation) {
-      installation.credentials = encrypted;
+      installation.credentials = null;
       installation.status = 'active';
       installation.metadata = { ...(installation.metadata || {}), ...(input.metadata || {}) };
       installation.installedAt = new Date();
@@ -65,14 +67,19 @@ export class ChannelInstallationService {
         gatewayId: gateway.id,
         organizationId: gateway.organizationId,
         externalTenantId: input.externalTenantId,
-        credentials: encrypted,
+        credentials: null,
+        credentialId: null,
         status: 'active',
         metadata: input.metadata || null,
         installedAt: new Date(),
       });
     }
 
-    const saved = await this.installationRepository.save(installation);
+    // Saved first so the credential row can name the installation it
+    // belongs to; the reference is written with the second save.
+    let saved = await this.installationRepository.save(installation);
+    await this.attachCredentials(saved, input.credentials);
+    saved = await this.installationRepository.save(saved);
 
     // security.sso_install — new external-workspace installs grant an
     // outside tenant access through this gateway; org admins should
@@ -105,7 +112,9 @@ export class ChannelInstallationService {
    * Resolve the decrypted credentials for an active installation of
    * `gatewayId` in `externalTenantId`, or null when the tenant never
    * installed / was revoked — callers fall back to the gateway's own
-   * single-workspace configuration in that case.
+   * single-workspace configuration in that case. The credential
+   * reference is the source of truth; the stored blob is the shim for
+   * rows the startup backfill has not moved yet.
    */
   async resolveCredentials(
     gatewayId: string,
@@ -114,8 +123,15 @@ export class ChannelInstallationService {
     const installation = await this.installationRepository.findOne({
       where: { gatewayId, externalTenantId, status: 'active' },
     });
-    if (!installation || !installation.credentials) return null;
-    return this.decryptCredentials(installation.organizationId, installation.credentials);
+    if (!installation) return null;
+    if (installation.credentialId) {
+      const resolved = await this.credentialRefs.resolve(installation.organizationId, installation.credentialId, {
+        context: { purpose: 'channel_inbound', resourceType: 'channel_installation', resourceId: installation.id },
+      });
+      return resolved.config;
+    }
+    if (!installation.credentials) return null;
+    return this.decryptLegacyCredentials(installation.organizationId, installation.credentials);
   }
 
   /** Sanitized list for the dashboard — credentials never leave the server. */
@@ -128,8 +144,9 @@ export class ChannelInstallationService {
   }
 
   /**
-   * Revoke an installation: status=revoked and credentials cleared so
-   * the workspace token no longer exists anywhere in our database.
+   * Revoke an installation: status=revoked, the credential row released
+   * and the shim blob cleared, so the workspace token no longer exists
+   * anywhere in our database.
    */
   async revoke(gatewayId: string, installationId: string): Promise<Record<string, any>> {
     const installation = await this.installationRepository.findOne({
@@ -138,8 +155,13 @@ export class ChannelInstallationService {
     if (!installation) {
       throw new NotFoundException('Installation not found');
     }
+    await this.credentialRefs.releaseManaged(installation.organizationId, installation.credentialId, {
+      kind: 'channel_installation',
+      id: installation.id,
+    });
     installation.status = 'revoked';
     installation.credentials = null;
+    installation.credentialId = null;
     const saved = await this.installationRepository.save(installation);
     this.logger.log(
       `revoked channel installation ${installationId} (gateway ${gatewayId}, tenant ${installation.externalTenantId})`,
@@ -156,35 +178,47 @@ export class ChannelInstallationService {
   }
 
   // ---------------------------------------------------------------------------
-  // Crypto helpers
+  // Credential store
   // ---------------------------------------------------------------------------
 
   /**
-   * Encrypt the secret credential keys for an org. A BYO-KMS org's secrets
-   * are wrapped `encrypted:kms:` via the customer CMK; every other org keeps
-   * the same platform `encrypted:gcm:` value as before (EnvelopeCryptoService
-   * falls back to the platform path when no CMK is in play).
+   * Store the workspace's credentials as a row this installation
+   * manages: rotated in place on a reinstall, deleted on revoke. Secret
+   * keys are encrypted by the store (a BYO-KMS org's through its CMK).
    */
-  private async encryptCredentials(
-    organizationId: string,
-    credentials: Record<string, any>,
-  ): Promise<Record<string, any>> {
-    const out: Record<string, any> = {};
+  private async attachCredentials(installation: ChannelInstallation, credentials: Record<string, any>): Promise<void> {
+    const config: Record<string, any> = {};
     for (const [key, value] of Object.entries(credentials || {})) {
       if (value == null) continue;
-      out[key] = SECRET_CREDENTIAL_KEYS.has(key)
-        ? await this.envelopeCrypto.encryptForOrg(organizationId, String(value))
-        : value;
+      config[key] = SECRET_CREDENTIAL_KEYS.has(key) ? String(value) : value;
     }
-    return out;
+    const managedBy = { kind: 'channel_installation' as const, id: installation.id };
+    const secretKeys = Array.from(SECRET_CREDENTIAL_KEYS);
+    const current = installation.credentialId
+      ? await this.credentialRefs.load(installation.organizationId, installation.credentialId).catch(() => null)
+      : null;
+    if (current && CredentialRefResolver.isManagedBy(current, managedBy)) {
+      await this.credentialRefs.rotateManaged(installation.organizationId, current.id, { config, secretKeys, managedBy });
+      return;
+    }
+    const row = await this.credentialRefs.createManaged(installation.organizationId, {
+      name: `Channel installation ${installation.externalTenantId}`,
+      description: `Workspace credentials for gateway ${installation.gatewayId}, tenant ${installation.externalTenantId}`,
+      type: CredentialType.CUSTOM,
+      config,
+      secretKeys,
+      managedBy,
+    });
+    installation.credentialId = row.id;
   }
 
   /**
-   * Decrypt stored credentials. Prefix routing means platform / plaintext
-   * (not-yet-migrated) values decrypt exactly as before; `encrypted:kms:`
-   * values are unwrapped via the org's CMK.
+   * Shim for rows the startup backfill has not moved yet: decrypt the
+   * stored blob. Prefix routing means platform / plaintext values decrypt
+   * exactly as before; `encrypted:kms:` values are unwrapped via the
+   * org's CMK. TODO(2026-12-01): drop with the column.
    */
-  private async decryptCredentials(
+  private async decryptLegacyCredentials(
     organizationId: string,
     credentials: Record<string, any>,
   ): Promise<Record<string, any>> {
@@ -204,6 +238,7 @@ export class ChannelInstallationService {
       gatewayId: installation.gatewayId,
       externalTenantId: installation.externalTenantId,
       status: installation.status,
+      credentialId: installation.credentialId ?? null,
       metadata: installation.metadata,
       installedAt: installation.installedAt,
       createdAt: installation.createdAt,
