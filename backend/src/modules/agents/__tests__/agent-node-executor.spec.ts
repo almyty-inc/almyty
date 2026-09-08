@@ -173,7 +173,34 @@ describe('AgentNodeExecutor', () => {
       ).rejects.toThrow(/missing 'providerId'/);
     });
 
+    it('passes a routing policy through without a providerId and returns the attribution', async () => {
+      const routing = { objective: 'cheapest', privacyTier: 'private_cloud' };
+      const attribution = { modelId: 'card-1', modelVersionId: null, vendorModelId: 'llama-3-8b', providerId: 'p-9', rationale: 'cheapest (0.20 USD/M blended), rank 1', attempt: 1, tried: [], rejected: [] };
+      llmProvidersService.chat.mockResolvedValue({
+        message: { role: 'assistant', content: 'routed' } as any,
+        usage: { totalTokens: 7 } as any,
+        cost: 0.0001,
+        routing: attribution,
+      } as any);
+
+      const result = await executor.execute(
+        node('llm_call', { routing, userPromptTemplate: 'hi' }),
+        buildContext(),
+        'org-1',
+      );
+
+      expect(llmProvidersService.chat).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({ routing }),
+        'org-1',
+        undefined,
+      );
+      expect(result.output).toBe('routed');
+      expect(result.routing).toEqual(attribution);
+    });
+
     it('throws clearly when no user prompt is provided', async () => {
+
       await expect(
         executor.execute(
           node('llm_call', { providerId: 'p1' }),

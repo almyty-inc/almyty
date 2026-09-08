@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
+
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -23,6 +24,8 @@ import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
 import { ModelNotFoundError, isModelNotFoundResponse, vendorMessage } from './model-errors';
+import { ModelRouterService, NoRouteError } from '../model-catalog/routing/model-router.service';
+
 
 import {
   validateUrl,
@@ -49,10 +52,94 @@ export class LlmChatRunnerHelper {
     private readonly modelsHelper: LlmModelsHelper,
     private readonly envelopeCrypto: EnvelopeCryptoService,
     private readonly defaultModels: DefaultModelResolver,
+    @Optional() private readonly router?: ModelRouterService,
   ) {}
 
 
+
   async callLlmProvider(
+    provider: LlmProvider,
+    request: ChatRequest,
+    session: Conversation,
+    tools: Tool[]
+  ): Promise<ChatResponse> {
+    if (request.routing) {
+      return this.callRouted(provider?.organizationId ?? session.organizationId, request, session, tools);
+    }
+    return this.callWithRetries(provider, request, session, tools);
+  }
+
+  /**
+   * Catalog-routed call: plan the candidate chain for the org, try each in
+   * order, move on when a candidate fails for a reason that is not the
+   * request's fault. The answer carries which card served it and why.
+   */
+  async callRouted(
+    organizationId: string,
+    request: ChatRequest,
+    session: Conversation,
+    tools: Tool[],
+  ): Promise<ChatResponse> {
+    if (!this.router) {
+      throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
+    }
+    const { routing, ...plain } = request;
+    const plan = await this.router.plan(organizationId, routing);
+    if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
+
+    const tried: Array<{ modelId: string; reason: string }> = [];
+    let lastError: any;
+    for (let i = 0; i < plan.candidates.length; i++) {
+      const candidate = plan.candidates[i];
+      try {
+        const response = await this.callWithRetries(candidate.provider, { ...plain, model: candidate.vendorModelId }, session, tools);
+        response.routing = {
+          modelId: candidate.modelId,
+          modelVersionId: candidate.modelVersionId,
+          vendorModelId: candidate.vendorModelId,
+          providerId: candidate.card.providerId,
+          rationale: candidate.rationale,
+          attempt: i + 1,
+          tried,
+          rejected: plan.rejected,
+        };
+        this.router.recordRoute(organizationId, response.routing, { userId: session.userId ?? undefined, conversationId: session.id });
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (!this.canAdvanceRoute(error, request.signal)) throw error;
+        const reason = error?.code ?? error?.response?.status ?? error?.message ?? 'failed';
+        tried.push({ modelId: candidate.modelId, reason: String(reason).slice(0, 200) });
+        this.logger.warn(`route candidate ${candidate.vendorModelId} (${candidate.modelId}) failed: ${reason}; trying next`);
+      }
+    }
+    throw Object.assign(lastError ?? new Error('All route candidates failed'), { code: lastError?.code ?? 'ROUTE_EXHAUSTED', tried });
+  }
+
+  /** The provider at the head of the plan; chat() uses it for the session when no provider id was given. */
+  async headProviderForRoute(organizationId: string, request: ChatRequest): Promise<LlmProvider> {
+    if (!this.router) {
+      throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
+    }
+    const plan = await this.router.plan(organizationId, request.routing ?? {});
+    if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
+    return plan.candidates[0].provider;
+  }
+
+  /**
+   * Whether a failed candidate should be walked past.
+ Request-shaped
+   * failures (bad input, payload too large, unprocessable) and a caller
+   * abort stop the walk; everything else (retired model, quota, outage,
+   * auth on that one provider) moves to the next card.
+   */
+  private canAdvanceRoute(error: any, signal?: AbortSignal): boolean {
+    if (signal?.aborted || error?.name === 'AbortError' || error?.name === 'CanceledError') return false;
+    const status = error?.response?.status ?? error?.status ?? 0;
+    return ![400, 413, 422].includes(status);
+  }
+
+  async callWithRetries(
     provider: LlmProvider,
     request: ChatRequest,
     session: Conversation,
@@ -70,7 +157,6 @@ export class LlmChatRunnerHelper {
     if (!request.model) {
       request = { ...request, model: await this.defaultModels.resolve(provider) };
     }
-
     const maxRetries = 2;
     const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
     let lastError: any;

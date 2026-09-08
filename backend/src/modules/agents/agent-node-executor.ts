@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 
 import { AgentTemplateResolver, ExecutionContext } from './agent-template-resolver';
 import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
+import type { RouteAttribution } from '../model-catalog/routing/model-router.service';
+
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -17,7 +19,10 @@ export interface NodeExecutionResult {
   cost?: number;
   tokens?: number;
   executionTime?: number;
+  /** Which catalog card answered, when the node was routed rather than pinned to a provider. */
+  routing?: RouteAttribution;
 }
+
 
 export interface NodeExecutionOptions {
   organizationId: string;
@@ -174,10 +179,12 @@ export class AgentNodeExecutor {
     const config = node.data || node.config || {};
     const startTime = Date.now();
 
-    // Resolve provider ID
+    // Resolve provider ID. A node may instead carry a routing policy and
+    // let the catalog pick the model per call.
     const providerId = config.providerId;
-    if (!providerId) {
-      throw new Error(`LLM call node '${node.id}' is missing 'providerId' in config`);
+    const routing = config.routing && typeof config.routing === 'object' ? config.routing : undefined;
+    if (!providerId && !routing) {
+      throw new Error(`LLM call node '${node.id}' is missing 'providerId' or 'routing' in config`);
     }
 
     // Resolve prompts using template resolver
@@ -212,9 +219,11 @@ export class AgentNodeExecutor {
       maxTokens: config.maxTokens,
       toolIds: config.toolIds,
       signal: options?.signal,
+      routing,
     };
 
-    this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId}, model=${config.model}`);
+
+    this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId ?? 'routed'}, model=${config.model ?? (routing ? 'routed' : 'default')}`);
 
     let response: ChatResponse;
     try {
@@ -244,7 +253,9 @@ export class AgentNodeExecutor {
       cost: response.cost || 0,
       tokens: response.usage?.totalTokens || 0,
       executionTime,
+      ...(response.routing ? { routing: response.routing } : {}),
     };
+
   }
 
   /**
