@@ -668,7 +668,15 @@ export class LlmProvidersService {
     const model = configuration?.model?.trim();
     if (!model) return;
     const probe = Object.assign(new LlmProvider(), { type, configuration, organizationId });
-    const listed = await this.modelsHelper.fetchModelsFromProvider(probe);
+    let listed: Array<{ id: string }>;
+    try {
+      listed = await this.modelsHelper.fetchModelsFromProvider(probe);
+    } catch (err: any) {
+      // A vendor that cannot be listed (no /models, network) leaves nothing
+      // to check against; the first real call reports a wrong id instead.
+      this.logger.debug(`model list unavailable for ${type}: ${err?.message ?? err}`);
+      return;
+    }
     if (listed.length === 0) return;
     if (listed.some((m) => m.id === model)) return;
     const sample = listed.slice(0, 5).map((m) => m.id).join(', ');
