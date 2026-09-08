@@ -28,7 +28,7 @@ function card(over: Partial<Model>): Model {
 function provider(over: Partial<LlmProvider> = {}): LlmProvider {
   return Object.assign(new LlmProvider(), {
     id: 'p1', organizationId: 'org', name: 'stored', type: LlmProviderType.CUSTOM,
-    status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: { baseUrl: 'https://x/v1' }, ...over,
+    status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: { apiUrl: 'https://x/v1' }, ...over,
   });
 }
 
@@ -73,7 +73,7 @@ describe('ModelRouterService', () => {
     const p = plan.candidates[0].provider;
     expect(p.type).toBe(LlmProviderType.CUSTOM);
     expect(p.id).toBe('endpoint:e');
-    expect(p.configuration).toEqual({ baseUrl: 'https://ep.example/v1', model: 'my-llama', apiKey: 'hf_secret' });
+    expect(p.configuration).toEqual({ apiUrl: 'https://ep.example/v1', model: 'my-llama', apiKey: 'hf_secret' });
   });
 
   it('rejects cards whose endpoint has no url', async () => {

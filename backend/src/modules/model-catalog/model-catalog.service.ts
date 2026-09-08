@@ -190,7 +190,7 @@ export class ModelCatalogService {
    * it. Selectable after one passing validation run, like every card.
    */
   async registerEndpoint(organizationId: string, input: RegisterEndpointInput, userId?: string): Promise<Model> {
-    const configuration: Record<string, any> = { baseUrl: input.url, model: input.vendorModelId };
+    const configuration: Record<string, any> = { apiUrl: input.url, model: input.vendorModelId };
     if (input.apiKey) configuration.apiKey = input.apiKey;
     this.runner.validateProviderConfiguration(LlmProviderType.CUSTOM, configuration);
     const provider = this.providers.create({

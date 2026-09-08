@@ -75,7 +75,7 @@ describe('ModelCatalogService', () => {
 
   it('registers a hand-run endpoint as an encrypted custom provider plus a private card', async () => {
     const card = await svc.registerEndpoint('org', { name: 'vllm-box', url: 'https://vllm.internal/v1', apiKey: 'sk-plain', vendorModelId: 'llama-3-8b', region: 'eu-central' }, 'u');
-    expect(runner.validateProviderConfiguration).toHaveBeenCalledWith(LlmProviderType.CUSTOM, expect.objectContaining({ baseUrl: 'https://vllm.internal/v1', model: 'llama-3-8b' }));
+    expect(runner.validateProviderConfiguration).toHaveBeenCalledWith(LlmProviderType.CUSTOM, expect.objectContaining({ apiUrl: 'https://vllm.internal/v1', model: 'llama-3-8b' }));
     const provider = providers.rows.find((p) => p.name === 'vllm-box')!;
     expect(provider.type).toBe(LlmProviderType.CUSTOM);
     expect(provider.configuration.apiKey).not.toBe('sk-plain');
