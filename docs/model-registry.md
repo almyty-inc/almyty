@@ -52,9 +52,13 @@ Required: `schemaVersion` (1), `base`, `tokenizer`, `license`, `created`, `files
 
 Registering an `s3://` version reads and validates `almyty-manifest.json` at the URI and fills base, size, digest and quantizations from it; an unreadable manifest is an error. For `hf://` and `file://` the manifest is optional: when absent, `base` must be given and the version carries `metadata.manifest: null`. A version cannot be deleted while a deployment that is not torn down references it (`VERSION_IN_USE`).
 
-## Configuration
+## Connection
 
-`MODEL_REGISTRY_S3_ENDPOINT`, `MODEL_REGISTRY_S3_REGION`, `MODEL_REGISTRY_S3_ACCESS_KEY`, `MODEL_REGISTRY_S3_SECRET_KEY`, `MODEL_REGISTRY_S3_BUCKET`. Each falls back to the matching `STORAGE_S3_*` value, so one bucket can serve uploads and the registry. `HF_TOKEN` is used only for `hf://` reads of gated repos.
+The registry is the organization's own bucket. Every read and write resolves through the organization's registry connection: a credential of type `s3_compatible` with `endpoint` (for non-AWS S3), `region`, `bucket`, optional `prefix`, `accessKeyId` and `secretAccessKey`, encrypted like every other credential. `ModelRegistryService.connectionFor(organizationId)` is the single seam; adapters get the same keys through `ModelDeploymentsService.credentialsFor()` as `registryAccessKeyId`, `registrySecretAccessKey`, `registryEndpoint`, `registryRegion`, `registryBucket` whenever the version lives at an `s3://` URI.
+
+An organization without a connection cannot register an `s3://` version or deploy one: the API answers `REGISTRY_NOT_CONNECTED` and the UI opens the connect sheet. There is no shared bucket and no silent fallback.
+
+`MODEL_REGISTRY_S3_*` (falling back to `STORAGE_S3_*`) has one job: on first boot of a single-tenant self-host, when exactly one organization exists and it has no registry connection, they seed that organization's connection. With two or more organizations they are ignored and a warning is logged.
 
 ## Rules
 

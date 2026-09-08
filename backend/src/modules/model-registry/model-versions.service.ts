@@ -73,7 +73,7 @@ export class ModelVersionsService {
     let manifestSha: string | null = null;
     let sizeBytes: number | null = null;
     try {
-      const described = await this.registry.describeVersion(input.registryUri);
+      const described = await this.registry.describeVersion(input.registryUri, organizationId);
       manifest = described.manifest;
       manifestSha = described.manifestSha;
       sizeBytes = described.sizeBytes;

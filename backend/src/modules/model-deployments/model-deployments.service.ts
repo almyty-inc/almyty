@@ -12,6 +12,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { AdapterRegistry } from './adapters/adapter.registry';
 import { AdapterCredentials } from './adapters/adapter.interface';
+import { ModelRegistryService } from '../model-registry/model-registry.service';
 
 export const MODEL_RECONCILE_QUEUE = 'model-reconcile';
 export const MODEL_RECONCILE_JOB = 'reconcile';
@@ -44,6 +45,7 @@ export class ModelDeploymentsService {
     private readonly adapters: AdapterRegistry,
     private readonly envelopeCrypto: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly registry?: ModelRegistryService,
   ) {}
 
   async list(organizationId: string): Promise<ModelDeployment[]> {
@@ -122,6 +124,12 @@ export class ModelDeploymentsService {
   }
 
   /** Credentials for the adapter: the vault entry named in providerConfig, else the config's own secrets. */
+  /**
+   * Everything an adapter may need for one call: the deployment's own
+   * credential (vault reference first, inline secrets second) plus the
+   * organization's registry keys when the version lives in its bucket.
+   * Registry keys never come from the environment or from providerConfig.
+   */
   async credentialsFor(deployment: ModelDeployment): Promise<AdapterCredentials> {
     await this.envelopeCrypto.warmOrg(deployment.organizationId);
     const config = deployment.getDecryptedProviderConfig();
@@ -132,7 +140,13 @@ export class ModelDeploymentsService {
       creds = { ...(credential.getDecryptedConfig() as Record<string, string>) };
     }
     for (const [k, v] of Object.entries(config)) {
-      if (k !== 'credentialId' && ModelDeployment.isSecretKey(k) && typeof v === 'string') creds[k] = v;
+      if (k !== 'credentialId' && ModelDeployment.isSecretKey(k) && typeof v === 'string' && !/^registry/i.test(k)) creds[k] = v;
+    }
+    if (this.registry) {
+      const version = deployment.modelVersionId ? await this.versions.findOne({ where: { id: deployment.modelVersionId } }) : null;
+      if (version?.registryUri?.startsWith('s3://')) {
+        creds = { ...creds, ...(await this.registry.adapterCredentialsFor(deployment.organizationId)) };
+      }
     }
     return creds;
   }
