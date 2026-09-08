@@ -68,9 +68,23 @@ Core (Apache): entities, adapter interface, both adapters, reconcile, router tie
 
 ## Gates (Phase A done =)
 
+Each gate is proved by specs that run in CI in fixture mode; the live halves (a real account per adapter) are run by hand with `CONFORMANCE_LIVE=<adapter>` and the evidence goes in the PR.
+
 1. Hand-registered custom OpenAI-compatible endpoint; router selects it under a privacy/cost policy; run audit shows model + version + rationale.
+   - [x] `POST /models/register-endpoint` creates the provider row + card, validation run flips it selectable: `modules/model-catalog/__tests__/model-catalog.service.spec.ts`
+   - [x] Selection under privacy ceiling, region, capability and budget headroom, with a rationale per candidate: `modules/model-catalog/routing/__tests__/model-router.spec.ts`
+   - [x] Plan resolution to a callable provider (stored row or transient endpoint provider) and the `model_routed` audit row with model, version, rationale, attempt: `modules/model-catalog/routing/__tests__/model-router.service.spec.ts`
+   - [x] The routed walk in the chat runner: attribution on the answer, advance on provider faults, stop on request faults: `modules/llm-providers/__tests__/routed-call.spec.ts`
+   - [x] Tier 2 (verify escalation, behind `MODEL_ROUTER_VERIFY_ESCALATION`): `modules/model-catalog/routing/__tests__/verify-escalation.spec.ts`
 2. Same ModelVersion deployed from S3 to HF Endpoints and to Modal by changing only providerType + providerConfig; chat traffic flows through both via the gateway; router never referenced provider specifics.
+   - [x] One version, two adapters (stub + HF Endpoints over the API fixture), both ready, one card each with its own `endpointRef.url`, transition audit rows carry the adapter key, no config/handle/actual cross-talk, router plans over both cards with a URL + model + bearer and nothing else: `modules/model-deployments/__tests__/gates/same-version-two-adapters.spec.ts`
+   - [x] Modal request shape and state mapping in fixture mode: `modules/model-deployments/__tests__/conformance/modal.conformance.spec.ts`
+   - [ ] Live: one HF Endpoints run and one Modal run of the same version, evidence in the PR.
 3. Conformance green (fixtures) for both adapters + one live run each; budget cap scales a deployment to zero and audits it.
+   - [x] Per-adapter conformance in fixture mode: `modules/model-deployments/__tests__/conformance/*.conformance.spec.ts` (shared cases in `conformance.suite.ts`)
+   - [x] Roll-call over everything the module registers: contract, secrets declared, secrets encrypted at rest (known gaps listed in the spec): `modules/model-deployments/__tests__/gates/all-adapters-fixture-green.spec.ts`
+   - [x] Budget cap: reconcile until spend crosses the limit, desired replicas 0, `scale(ref, 0)`, `model_deployment_budget_stop` audit with spent/limit, `model.deployment.budget_stop` notification, no repeat on later ticks: `modules/model-deployments/__tests__/gates/budget-cap-scale-to-zero.spec.ts` (single-tick case also in `model-deployments.processor.spec.ts`)
+   - [ ] Live: one conformance run per shipped adapter (`CONFORMANCE_LIVE=<key>`), never in CI.
 
 ## Non-goals (Phase A)
 
