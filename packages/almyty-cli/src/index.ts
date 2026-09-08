@@ -59,6 +59,7 @@ const SUBCOMMANDS: Record<string, Subcommand> = {
   acp: { pkg: '@almyty/acp-server', help: 'Run the ACP agent server' },
   runner: { pkg: '@almyty/runner', help: 'Long-running daemon to run agents on this machine' },
   models: { pkg: '@almyty/models', help: 'Model catalog: cards, validation, deployments' },
+  connections: { pkg: '@almyty/connections', help: 'Connect third-party accounts: connectors, connect, validate, grants' },
 };
 
 
@@ -105,6 +106,12 @@ Models:
   models validate <id>              One real call; passing makes a card selectable
   models deploy ...                 Deploy a registered version through an adapter
   models deployments                Desired vs actual state and spend
+
+Connections:
+  connections connectors            What can be connected, and how
+  connections connect <key>         Connect an account (API key prompt or OAuth URL)
+  connections list                  Connected accounts with health
+  connections grant <id> ...        Let a user, team, role, agent or workspace use a connection
 
 Other:
   help, --help          Show this help
