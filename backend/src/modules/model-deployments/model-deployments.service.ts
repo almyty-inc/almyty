@@ -77,8 +77,22 @@ export class ModelDeploymentsService {
     if (desired.region && caps.regions.length > 0 && !caps.regions.includes(desired.region)) {
       throw new BadRequestException({ code: 'ADAPTER_REGION_UNAVAILABLE', message: `${adapter.displayName} is not available in ${desired.region}` });
     }
-    const problems = validateAgainstSchema(dto.providerConfig ?? {}, adapter.configSchema());
+    // A connection satisfies the schema's secret fields; they are then
+    // refused inline (below) so the secret lives in one place.
+    const schema = dto.credentialId ? schemaWithoutSecretRequirements(adapter.configSchema()) : adapter.configSchema();
+    const problems = validateAgainstSchema(dto.providerConfig ?? {}, schema);
     if (problems.length) throw new BadRequestException({ code: 'PROVIDER_CONFIG_INVALID', message: problems.join('; ') });
+    // One place for the secret: a deployment that names a connection may
+    // not also paste one. The form creates the connection first.
+    if (dto.credentialId) {
+      const inline = inlineSecretKeys(dto.providerConfig ?? {}, adapter.configSchema());
+      if (inline.length) {
+        throw new BadRequestException({
+          code: 'PROVIDER_CONFIG_INLINE_SECRET',
+          message: `providerConfig carries a secret (${inline.join(', ')}) while credentialId is set; put the secret on the connection`,
+        });
+      }
+    }
 
     const deployment = this.deployments.create({
       organizationId,
@@ -191,6 +205,22 @@ export function validateAgainstSchema(config: Record<string, any>, schema: Recor
     if (Array.isArray(def.enum) && !def.enum.includes(value)) problems.push(`${key} must be one of ${def.enum.join(', ')}`);
   }
   return problems;
+}
+
+/** The adapter schema with its `x-secret` fields no longer required: a credentialId supplies them. */
+export function schemaWithoutSecretRequirements(schema: Record<string, any>): Record<string, any> {
+  const props: Record<string, any> = schema?.properties ?? {};
+  const required = (schema?.required ?? []).filter((key: string) => props[key]?.['x-secret'] !== true);
+  return { ...schema, required };
+}
+
+/** providerConfig keys that hold a pasted secret: marked `x-secret` in the adapter schema, or secret-looking by name. */
+export function inlineSecretKeys(config: Record<string, any>, schema: Record<string, any>): string[] {
+  const props: Record<string, any> = schema?.properties ?? {};
+  return Object.entries(config)
+    .filter(([key, value]) => key !== 'credentialId' && typeof value === 'string' && value.length > 0)
+    .filter(([key]) => props[key]?.['x-secret'] === true || ModelDeployment.isSecretKey(key))
+    .map(([key]) => key);
 }
 
 export type { ModelDeploymentState };

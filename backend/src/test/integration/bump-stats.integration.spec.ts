@@ -350,6 +350,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         {} as any, // defaultModels
         { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
         makeEnvelopeCryptoMock(), // envelopeCrypto
+        {} as any, // LlmProviderSecretsHelper — stats tests never touch keys
       );
     });
 

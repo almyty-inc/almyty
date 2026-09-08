@@ -33,6 +33,7 @@ import {
   ollamaPrivateUrlsAllowed,
 } from '../../common/security/url-validator';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 
 /**
  * Provider-call mechanics extracted from LlmChatHelper:
@@ -53,6 +54,7 @@ export class LlmChatRunnerHelper {
     private readonly envelopeCrypto: EnvelopeCryptoService,
     private readonly defaultModels: DefaultModelResolver,
     @Optional() private readonly router?: ModelRouterService,
+    @Optional() private readonly secrets?: LlmProviderSecretsHelper,
   ) {}
 
 
@@ -161,6 +163,15 @@ export class LlmChatRunnerHelper {
     // point for outbound provider calls, so it covers chat, streaming, and the
     // health check path.
     await this.envelopeCrypto.warmOrg(provider.organizationId);
+    // The credential reference: policy check (grants seam) and a fresh
+    // read of the row before the sync getters run. Optional only for
+    // specs that build the runner by hand; the module always wires it.
+    if (this.secrets) {
+      await this.secrets.withResolvedSecrets(provider, {
+        principal: session?.userId ? { id: session.userId } : undefined,
+        context: { purpose: 'llm_call', resourceType: 'llm_provider', resourceId: provider.id },
+      });
+    }
 
     // Settle the model once, up front. Provider implementations never
     // guess: when neither the request nor the provider names one, the

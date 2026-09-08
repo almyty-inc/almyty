@@ -5,6 +5,7 @@ import { callLlmProviderHttp, llmCallOptionsFor } from './providers/safe-request
 import { LlmProvider, LlmProviderType } from '../../entities/llm-provider.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { PriceFeedService } from '../model-catalog/pricing/price-feed.service';
+import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 
 @Injectable()
 export class LlmModelsHelper {
@@ -15,6 +16,7 @@ export class LlmModelsHelper {
     // Absent in specs that build the helper by hand and in any module
     // that does not import ModelCatalogModule; the seed table then applies.
     @Optional() private readonly priceFeed?: PriceFeedService,
+    @Optional() private readonly secrets?: LlmProviderSecretsHelper,
   ) {}
 
   async fetchModelsFromProvider(provider: LlmProvider): Promise<Array<{
@@ -26,6 +28,12 @@ export class LlmModelsHelper {
     // Warm the org's DEK cache so the sync getDecryptedApiKey reads below can
     // unwrap a customer-managed key. No-op for non-KMS orgs.
     await this.envelopeCrypto.warmOrg(provider.organizationId);
+    // Credential reference: policy check and a fresh read of the row.
+    if (this.secrets && provider.credentialId) {
+      await this.secrets.withResolvedSecrets(provider, {
+        context: { purpose: 'model_list', resourceType: 'llm_provider', resourceId: provider.id },
+      });
+    }
     try {
       switch (provider.type) {
         case LlmProviderType.OPENAI:

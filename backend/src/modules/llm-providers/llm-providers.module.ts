@@ -17,6 +17,7 @@ import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { DefaultModelResolver } from './default-model.resolver';
+import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 
 import { ModelCatalogModule } from '../model-catalog/model-catalog.module';
 
@@ -41,7 +42,7 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     // needs the runner back, hence the forwardRef.
     forwardRef(() => ModelCatalogModule),
   ],
-  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper, DefaultModelResolver],
+  providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper, DefaultModelResolver, LlmProviderSecretsHelper],
   controllers: [LlmProvidersController, LlmSessionsController],
   exports: [LlmProvidersService, LlmModelsHelper, LlmChatRunnerHelper],
 })

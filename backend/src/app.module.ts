@@ -109,6 +109,7 @@ import { ModelCatalogModule } from './modules/model-catalog/model-catalog.module
 import { ModelRegistryModule } from './modules/model-registry/model-registry.module';
 import { ModelDeploymentsModule } from './modules/model-deployments/model-deployments.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
+import { CredentialRefModule } from './modules/credentials/credential-ref.module';
 
 // EE feature modules (sso, rbac, audit-export, approval-policies, billing,
 // ee-stubs, compliance, chargeback) live under `ee/` and are loaded at
@@ -333,6 +334,7 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     ModelRegistryModule,
     ModelDeploymentsModule,
     ConnectionsModule,
+    CredentialRefModule,
     KmsModule,
     // EE feature modules are loaded dynamically so the OSS build compiles +
     // boots without the commercial `ee/` tree present (loadEeModules() → []).
