@@ -71,7 +71,8 @@ Routing needs the catalog module wired in (it is, in `app.module.ts`); without i
 
 `GET /model-adapters` describes every registered adapter as data: capabilities and a JSON schema for its config (`x-secret: true` marks fields that are encrypted at rest and never returned). `POST /model-deployments` records desired state; the reconcile queue (`MODEL_RECONCILE_CRON`, default every 2 minutes) is the only thing that talks to a provider. `POST /model-deployments/:id/scale { replicas }` and `/teardown` change desired state only.
 
-Adapters in Phase A: `huggingface-endpoints` (REST), `modal` (drives the `modal` CLI; Modal has no HTTP API), and `stub` outside production. Each passes the same conformance suite in fixture mode; set `CONFORMANCE_LIVE=<adapter key>` with real credentials to run it live. Adapters never import each other (`adapter-isolation.spec.ts` enforces it).
+Adapters in Phase A: `huggingface-endpoints` (REST), `modal` (drives the `modal` CLI; Modal has no HTTP API), `ollama` (pulls or creates the model on a local or remote Ollama server, loads it, unloads on scale-to-zero, deletes on teardown; `hf://` versions pull through `hf.co/`, `s3://` versions need `registryMirrorPath` on the host), `custom-endpoint` (watches and prices an OpenAI-compatible server managed elsewhere; cannot deploy), and `stub` outside production.
+ Each passes the same conformance suite in fixture mode; set `CONFORMANCE_LIVE=<adapter key>` with real credentials to run it live. Adapters never import each other (`adapter-isolation.spec.ts` enforces it).
 
 A deployment with a `budgetId` is charged from the adapter's cost snapshot on every reconcile. Reaching the budget scales it to zero, writes `model_deployment_budget_stop`, and notifies.
 
