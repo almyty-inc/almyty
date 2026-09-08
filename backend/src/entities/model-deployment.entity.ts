@@ -47,7 +47,7 @@ export interface ModelDeploymentDesired {
 }
 
 /** providerConfig keys treated as secrets, whatever the adapter calls them. */
-const SECRET_KEY = /(token|secret|password|apikey|api_key|credential)/i;
+const SECRET_KEY = /(token|secret|password|apikey|api_key|credential|accesskey|access_key|serviceaccount)/i;
 
 @Entity('model_deployments')
 @VersionedEntity()
