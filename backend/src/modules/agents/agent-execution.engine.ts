@@ -430,7 +430,9 @@ export class AgentExecutionEngine {
             executionTime: result.executionTime || 0,
             startedAt,
             completedAt,
+            ...(result.routing ? { routing: result.routing } : {}),
           };
+
 
           totalCost += result.cost || 0;
           totalTokens += result.tokens || 0;

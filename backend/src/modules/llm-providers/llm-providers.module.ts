@@ -36,11 +36,13 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     ]),
     forwardRef(() => ToolsModule),
     AuthorizationModule,
-    // Supplies PriceFeedService so cost calculation reads live prices.
-    ModelCatalogModule,
+    // Supplies PriceFeedService (live prices for cost calculation) and the
+    // ModelRouterService the chat runner walks; the catalog's validation run
+    // needs the runner back, hence the forwardRef.
+    forwardRef(() => ModelCatalogModule),
   ],
   providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper, DefaultModelResolver],
   controllers: [LlmProvidersController, LlmSessionsController],
-  exports: [LlmProvidersService],
+  exports: [LlmProvidersService, LlmModelsHelper, LlmChatRunnerHelper],
 })
 export class LlmProvidersModule {}

@@ -12,6 +12,7 @@ on:
           - mcp-server
           - auth-cli
           - agents-cli
+          - models-cli
           - chat-cli
           - almyty-cli
           - acp-server
@@ -61,6 +62,9 @@ jobs:
           - id: agents-cli
             npm_name: "@almyty/agents"
             dir: packages/agents-cli
+          - id: models-cli
+            npm_name: "@almyty/models"
+            dir: packages/models-cli
           - id: chat-cli
             npm_name: "@almyty/chat"
             dir: packages/chat-cli

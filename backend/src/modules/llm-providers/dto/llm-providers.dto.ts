@@ -1,3 +1,5 @@
+import type { RoutingPolicy } from '../../model-catalog/routing/model-router';
+import type { RouteAttribution } from '../../model-catalog/routing/model-router.service';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../../entities/llm-provider.entity';
 import { MessageRole, MessageContent, ToolCall } from '../../../entities/message.entity';
 
@@ -60,7 +62,14 @@ export interface ChatRequest {
    * ToolExecutorService.executeTool.
    */
   signal?: AbortSignal;
+  /**
+   * When set, the catalog picks the model: the runner walks the policy's
+   * candidates in order and records which card answered (see
+   * ChatResponse.routing). `model` is then ignored.
+   */
+  routing?: RoutingPolicy;
 }
+
 
 export interface ChatResponse {
   message: {
@@ -80,7 +89,10 @@ export interface ChatResponse {
   messageId: string;
   cached?: boolean;
   responseTime: number;
+  /** Present when the catalog router chose the model for this call. */
+  routing?: RouteAttribution;
 }
+
 
 export interface LlmProviderSearchFilters {
   search?: string;

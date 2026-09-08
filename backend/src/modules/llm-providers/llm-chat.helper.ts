@@ -51,7 +51,7 @@ export class LlmChatHelper {
   ) {}
 
   async chat(
-    providerId: string,
+    providerId: string | null | undefined,
     request: ChatRequest,
     organizationId: string,
     userId?: string
@@ -59,9 +59,14 @@ export class LlmChatHelper {
     const startTime = Date.now();
 
     try {
-      const provider = await this.providers.getProvider(providerId, organizationId, true);
+      // With a routing policy the catalog chooses the model. The head of
+      // the plan stands in as the session's provider; the runner walks the
+      // whole chain and stamps the answering card on the response.
+      const provider = providerId
+        ? await this.providers.getProvider(providerId, organizationId, true)
+        : await this.runner.headProviderForRoute(organizationId, request);
 
-      if (!provider.isHealthy) {
+      if (!provider.isHealthy && !request.routing) {
         throw new BadRequestException(LLM_HEALTH_GATE_MESSAGE);
       }
 
