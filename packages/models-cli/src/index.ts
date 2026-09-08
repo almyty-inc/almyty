@@ -71,8 +71,13 @@ Catalog:
   validate <id>                        Run one real call; passing makes the card selectable
   delete <id>
 
+Versions:
+  versions                             Registered model versions (weights)
+  register-version --name n --uri <s3://bucket/key@etag | hf://org/repo@rev | file:///path@sha> [--base b] [--quantizations q1,q2]
+
 Deployments:
-  adapters                             Registered adapters, capabilities and config schema
+  adapters 
+                            Registered adapters, capabilities and config schema
   deploy --model-version id --adapter key [--config '<json>'] [--desired '<json>'] [--credential id] [--budget id] [--model cardId]
   deployments                          List deployments (desired vs actual, spend)
   scale <deploymentId> <replicas>
@@ -149,7 +154,21 @@ export function deployBody(flags: ParsedArgs['flags']): Record<string, unknown> 
   return body;
 }
 
+export function registerVersionBody(flags: ParsedArgs['flags']): Record<string, unknown> {
+  const body: Record<string, unknown> = { name: need(flags, 'name'), registryUri: need(flags, 'uri') };
+  if (str(flags, 'base')) body.base = str(flags, 'base');
+  if (str(flags, 'quantizations')) body.quantizations = String(str(flags, 'quantizations')).split(',').map((s) => s.trim()).filter(Boolean);
+  return body;
+}
+
+export function formatVersion(v: any): string {
+  const size = v.sizeBytes ? `  ${(Number(v.sizeBytes) / 1e9).toFixed(2)} GB` : '';
+  const q = v.quantizations?.length ? `  [${v.quantizations.join(', ')}]` : '';
+  return `${v.name}  ${v.base}${size}${q}\n    ${v.id}  ${v.registryUri}`;
+}
+
 export function formatCard(c: any): string {
+
   const price = c.effectivePricing ? `$${c.effectivePricing.inPerMTok}/$${c.effectivePricing.outPerMTok} per M (${c.pricingSource})` : 'unpriced';
   const flag = c.selectable ? 'selectable' : `not selectable (validation: ${c.validationStatus}${c.lastValidationError ? `: ${c.lastValidationError}` : ''})`;
   return `${c.name}  [${c.vendorModelId}]  ${c.privacyTier}${c.region ? `/${c.region}` : ''}  ${price}\n    ${c.id}  ${flag}`;
@@ -220,7 +239,18 @@ async function main(): Promise<void> {
       console.log('Deleted.');
       return;
     }
+    case 'versions': {
+      const res = await q('/model-versions');
+      out(args, res.data, () => (res.data.length ? res.data.map(formatVersion).join('\n') : 'No versions registered.'));
+      return;
+    }
+    case 'register-version': {
+      const res = await post('/model-versions', registerVersionBody(args.flags));
+      out(args, res.data, () => `Registered.\n${formatVersion(res.data)}`);
+      return;
+    }
     case 'adapters': {
+
       const res = await q('/model-adapters');
       out(args, res.data, () => res.data.map((a: any) => `${a.key}  ${a.displayName}\n    ${Object.entries(a.capabilities).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ')}`).join('\n'));
       return;
