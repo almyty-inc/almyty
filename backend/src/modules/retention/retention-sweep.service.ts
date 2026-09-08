@@ -15,6 +15,9 @@ import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Gateway } from '../../entities/gateway.entity';
+import { AgentApp, appPrivacyFrom } from '../../entities/agent-app.entity';
+import { AppDistribution } from '../../entities/agent-app-distribution.entity';
+
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -94,6 +97,13 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     // tests (constructed without it) working.
     @Optional()
     private readonly notifications?: NotificationsService,
+    @Optional()
+    @InjectRepository(AgentApp)
+    private readonly appRepository?: Repository<AgentApp>,
+    @Optional()
+    @InjectRepository(AppDistribution)
+    private readonly distributionRepository?: Repository<AppDistribution>,
+
   ) {}
 
   onModuleInit(): void {
@@ -161,6 +171,15 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       counts.conversations = swept.conversations;
       counts.messages = swept.messages;
     }
+
+    // Products may keep their visitors' conversations for less time than
+    // the organization does. Never more: an app setting shortens the
+    // policy, it cannot extend it.
+    const perApp = await this.sweepApps(policy.organizationId, policy.conversationsDays ?? null);
+    counts.conversations += perApp.conversations;
+    counts.messages += perApp.messages;
+    counts.agentRuns += perApp.runs;
+
 
     if (policy.requestLogsDays != null) {
       counts.requestLogs = await this.sweepRequestLogs(
@@ -250,6 +269,49 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
    * themselves. agent_runs.conversationId is ON DELETE SET NULL, so runs
    * survive their conversation.
    */
+  /**
+   * Per-app retention for hosted-chat and widget visitors.
+   *
+   * Scoped through the app's published gateways, the way request logs
+   * are. Runs have no gateway column, so they go through the
+   * conversations being removed; agent_runs.conversationId is SET NULL,
+   * so they are deleted first or they would outlive their transcript.
+   */
+  async sweepApps(
+    organizationId: string,
+    orgConversationDays: number | null,
+  ): Promise<{ conversations: number; messages: number; runs: number }> {
+    const out = { conversations: 0, messages: 0, runs: 0 };
+    if (!this.appRepository || !this.distributionRepository) return out;
+    const apps = await this.appRepository.find({ where: { organizationId } });
+    for (const app of apps) {
+      const appDays = appPrivacyFrom(app.privacy).retentionDays;
+      if (appDays == null) continue;
+      const effectiveDays = orgConversationDays == null ? appDays : Math.min(appDays, orgConversationDays);
+      const distributions = await this.distributionRepository.find({ where: { appId: app.id }, select: { gatewayId: true } });
+      const gatewayIds = distributions.map((d) => d.gatewayId).filter((id): id is string => !!id);
+      if (gatewayIds.length === 0) continue;
+      const cutoff = this.cutoff(effectiveDays);
+      for (let batch = 0; batch < MAX_BATCHES_PER_CLASS; batch++) {
+        const rows = await this.conversationRepository.find({
+          where: { organizationId, gatewayId: In(gatewayIds), createdAt: LessThan(cutoff) },
+          select: { id: true },
+          take: SWEEP_BATCH,
+        });
+        if (rows.length === 0) break;
+        const ids = rows.map((r) => r.id);
+        const runs = await this.runRepository.delete({ conversationId: In(ids), status: In(TERMINAL_RUN_STATUSES) });
+        out.runs += runs.affected ?? 0;
+        const messages = await this.messageRepository.delete({ conversationId: In(ids) });
+        out.messages += messages.affected ?? 0;
+        const conversations = await this.conversationRepository.delete({ id: In(ids) });
+        out.conversations += conversations.affected ?? ids.length;
+        if (rows.length < SWEEP_BATCH) break;
+      }
+    }
+    return out;
+  }
+
   private async sweepConversations(
     organizationId: string,
     cutoff: Date,

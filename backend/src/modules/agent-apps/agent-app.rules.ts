@@ -1,4 +1,4 @@
-import { AppAuthMode } from '../../entities/agent-app.entity';
+import { AgentApp, AppAuthMode } from '../../entities/agent-app.entity';
 import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
 import { missingCredentials, servesOverGateway } from './distribution-publish';
 
@@ -87,6 +87,27 @@ export interface AppContext {
 }
 
 /** True when anyone holding the link or the artifact can use it. */
+/**
+ * The limits a new product starts with.
+ *
+ * Open-to-anyone products get a ceiling on every axis from the moment
+ * they exist: sixty messages an hour per visitor is a real conversation,
+ * one hundred and twenty per address covers an office behind one NAT,
+ * and half a dollar per run bounds a runaway tool loop. Gated products
+ * (sign-in required) start with only the cost cap, since the identity
+ * gate already stands between an unknown visitor and the model keys.
+ */
+export const DEFAULT_PUBLIC_APP_LIMITS: NonNullable<AgentApp['limits']> = {
+  costCapCents: 50,
+  perUserRateLimit: 60,
+  perIpRateLimit: 120,
+};
+
+export function defaultLimitsFor(authMode: AppAuthMode | undefined): NonNullable<AgentApp['limits']> {
+  if ((authMode ?? AppAuthMode.PUBLIC_LINK) === AppAuthMode.PUBLIC_LINK) return { ...DEFAULT_PUBLIC_APP_LIMITS };
+  return { costCapCents: DEFAULT_PUBLIC_APP_LIMITS.costCapCents, perUserRateLimit: null, perIpRateLimit: null };
+}
+
 export function isOpenToAnyone(authMode: AppAuthMode | string | undefined): boolean {
   return (authMode ?? AppAuthMode.PUBLIC_LINK) === AppAuthMode.PUBLIC_LINK;
 }

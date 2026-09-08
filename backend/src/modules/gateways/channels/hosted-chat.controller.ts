@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpException,
   HttpStatus,
@@ -170,6 +171,71 @@ export class HostedChatController {
     };
   }
 
+  @Delete(':slug/conversations/:conversationId')
+  @ApiOperation({ summary: 'Delete one of this visitor conversations' })
+  async deleteConversation(
+    @Param('slug') slug: string,
+    @Param('conversationId') conversationId: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { gateway, endUser } = await this.admitted(slug, req, res);
+    this.requireVisitorRight(gateway, 'visitorCanDelete');
+    await this.hostedChat.deleteConversation(endUser, conversationId);
+    return { success: true };
+  }
+
+  @Delete(':slug/me')
+  @ApiOperation({ summary: 'Erase everything this chat holds about the visitor' })
+  async deleteMe(@Param('slug') slug: string, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const { gateway, endUser } = await this.admitted(slug, req, res);
+    this.requireVisitorRight(gateway, 'visitorCanDelete');
+    await this.hostedChat.deleteVisitor(gateway, endUser);
+    res.clearCookie(HostedChatService.SESSION_COOKIE, { path: '/' });
+    return { success: true };
+  }
+
+  @Get(':slug/export')
+  @ApiOperation({ summary: 'Download everything this chat holds about the visitor' })
+  async exportMe(@Param('slug') slug: string, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const { gateway, endUser } = await this.admitted(slug, req, res);
+    this.requireVisitorRight(gateway, 'visitorCanExport');
+    // The expensive one: a visitor's whole history in one response.
+    const own = await this.gatewayRateLimit.checkVisitor(gateway, {
+      endUserId: endUser.id,
+      clientHash: HostedChatService.hashClient(this.clientIp(req)),
+    });
+    if (own.limited) {
+      if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));
+      throw new HttpException({ code: own.code ?? 'VISITOR_RATE_LIMITED', message: own.message }, HttpStatus.TOO_MANY_REQUESTS);
+    }
+    const data = await this.hostedChat.exportVisitor(gateway, endUser);
+    res.setHeader('Content-Disposition', `attachment; filename="${slug}-my-data.json"`);
+    return data;
+  }
+
+  /** The shared preamble: resolve the surface and the visitor, issue the cookie, apply the auth gate. */
+  private async admitted(slug: string, req: Request, res: Response): Promise<{ gateway: Gateway; endUser: EndUser }> {
+    const gateway = await this.hostedChat.findBySlug(slug);
+    const { endUser, issuedSessionKey } = await this.hostedChat.resolveEndUser(
+      gateway,
+      this.sessionFrom(req),
+      this.clientIp(req),
+    );
+    this.setSessionCookie(res, issuedSessionKey);
+    await this.requireVisitor(gateway, endUser);
+    return { gateway, endUser };
+  }
+
+  /** A product may switch visitor self-service off; say so with a stable code. */
+  private requireVisitorRight(gateway: Gateway, right: 'visitorCanDelete' | 'visitorCanExport'): void {
+    if (hostedChatConfigFrom(gateway.configuration)[right]) return;
+    throw new HttpException(
+      { code: 'VISITOR_RIGHT_DISABLED', message: 'This chat does not offer that. Please contact the operator of this app.' },
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
   @Get(':slug/conversations')
   @ApiOperation({ summary: 'This visitor conversations' })
   async listConversations(
@@ -260,7 +326,14 @@ export class HostedChatController {
       message,
       // Still traceable back to whoever actually sent it, in the column
       // that means a visitor.
-      { conversationId: conversation.id, endUserId: endUser.id },
+      {
+        conversationId: conversation.id,
+        endUserId: endUser.id,
+        // Whether this product lets visitor conversations feed shared
+        // memory; the runtime's auto-save policy reads it off the run.
+        metadata: { visitorMemory: hostedChatConfigFrom(gateway.configuration).visitorMemory },
+      },
+
     );
 
     return {

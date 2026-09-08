@@ -183,7 +183,10 @@ export class AgentRuntimeService implements OnModuleInit {
       parentRunId?: string;
       conversationId?: string;
       endUserId?: string | null;
+      /** Extra run metadata the surface wants the runtime to see (e.g. visitorMemory). */
+      metadata?: Record<string, any>;
     },
+
   ): Promise<AgentRun> {
     const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
     if (!agent) throw new NotFoundException('Agent not found');
@@ -299,9 +302,11 @@ export class AgentRuntimeService implements OnModuleInit {
         maxToolCalls: 100,
       },
       parentRunId: options?.parentRunId || null,
+      ...(options?.metadata ? { metadata: { ...options.metadata } } : {}),
     });
 
     const savedRun = await this.runRepository.save(run);
+
     savedRun.agent = agent;
 
     // Audit the ceilings that actually applied, resolved rather than
