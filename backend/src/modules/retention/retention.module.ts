@@ -9,6 +9,8 @@ import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { Gateway } from '../../entities/gateway.entity';
+import { AgentApp } from '../../entities/agent-app.entity';
+import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { RetentionService } from './retention.service';
@@ -26,6 +28,8 @@ import { RetentionController } from './retention.controller';
       UsageMetric,
       AuditLog,
       Gateway,
+      AgentApp,
+      AppDistribution,
     ]),
     AuditLogModule,
   ],

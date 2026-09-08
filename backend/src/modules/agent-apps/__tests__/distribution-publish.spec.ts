@@ -216,14 +216,17 @@ describe('rateLimitFor', () => {
     expect(rateLimitFor(app({ limits: { perIpRateLimit: 30 } }))).toEqual({ enabled: false, perIpPerHour: 30 });
   });
 
-  it('keeps the surface ceiling for messaging channels, which cannot tell visitors apart yet', () => {
+  it('keeps the surface ceiling for messaging channels and adds the per-sender share', () => {
     // Their ingress only runs the surface check; without this a public
     // Slack or Telegram distribution would have no ceiling at all.
     expect(rateLimitFor(app({ limits: { perUserRateLimit: 10, perIpRateLimit: 90 } }), DistributionTarget.SLACK)).toEqual({
       enabled: true,
       requestsPerHour: 90,
       requestsPerMinute: 2,
+      perVisitorPerHour: 10,
+      perIpPerHour: 90,
     });
+
   });
 
   it('is disabled outright for an app without limits', () => {
