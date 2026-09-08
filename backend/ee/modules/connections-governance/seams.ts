@@ -75,7 +75,7 @@ export interface ConnectionPrincipalSource {
 
 // ── Policy hook (core resolver seam) ───────────────────────────────
 
-export const CONNECTIONS_GOVERNANCE_HOOK = 'EE_CONNECTIONS_GOVERNANCE_HOOK';
+export { CONNECTIONS_GOVERNANCE_HOOK } from '../../../src/common/ee-hooks/ee-hooks';
 
 export interface GovernanceUseContext extends UseContext {
   purpose?: string;

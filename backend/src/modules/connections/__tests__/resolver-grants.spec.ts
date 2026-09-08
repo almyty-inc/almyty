@@ -49,4 +49,30 @@ describe('ConnectionsResolverService with grants', () => {
     expect(grants.grantDefaultForOrgConnection).not.toHaveBeenCalled();
     void h;
   });
+
+  it('asks the EE governance hook after the grant said yes, and its refusal wins', async () => {
+    const decision = { allowed: true, via: 'grant' };
+    const grants = { assertCanUse: jest.fn().mockResolvedValue(decision), recordResolve: jest.fn(), grantDefaultForOrgConnection: jest.fn().mockResolvedValue(null) };
+    const governance = { beforeConnect: jest.fn().mockResolvedValue(undefined), beforeUse: jest.fn().mockResolvedValue(undefined) };
+    const h = buildHarness({ routes: [openai], grants });
+    const admin = principal('u-admin', ORG, 'admin');
+    const org: any = await h.service.connect(admin, ORG, 'openai', { input: { apiKey: 'sk-org-wide-key' } });
+    const resolver = new ConnectionsResolverService(h.service, h.catalog, h.audit, grants as any, governance as any);
+    const member = principal('u-member', ORG, 'member');
+    await resolver.resolveForUse(member, org.connection.id, { purpose: 'llm_call', resourceType: 'agent', resourceId: 'a-1' });
+    expect(governance.beforeUse).toHaveBeenCalledWith(ORG, expect.objectContaining({ id: org.connection.id }), { userId: 'u-member', agentId: 'a-1', workspaceId: undefined }, expect.objectContaining({ purpose: 'llm_call' }), decision);
+
+    governance.beforeUse.mockRejectedValueOnce(Object.assign(new Error('policy'), { response: { code: 'CONNECTION_POLICY_DENIED' } }));
+    await expect(resolver.resolveForUse(member, org.connection.id)).rejects.toMatchObject({ response: { code: 'CONNECTION_POLICY_DENIED' } });
+    expect(grants.recordResolve).toHaveBeenCalledTimes(1);
+  });
+
+  it('connect asks the governance hook before writing anything', async () => {
+    const governance = { beforeConnect: jest.fn().mockRejectedValue(Object.assign(new Error('denied'), { response: { code: 'CONNECTION_POLICY_DENIED' } })), beforeUse: jest.fn() };
+    const h = buildHarness({ routes: [openai] });
+    (h.service as any).governance = governance;
+    await expect(h.service.connect(principal('u-admin', ORG, 'admin'), ORG, 'openai', { input: { apiKey: 'sk-org-wide-key' } })).rejects.toMatchObject({ response: { code: 'CONNECTION_POLICY_DENIED' } });
+    expect(governance.beforeConnect).toHaveBeenCalledWith(ORG, 'openai', 'org');
+    expect(h.credentials.rows).toHaveLength(0);
+  });
 });

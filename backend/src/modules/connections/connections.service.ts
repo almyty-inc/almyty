@@ -32,6 +32,7 @@ import { ConnectionValidationService } from './connection-validation.service';
 import { ConnectorCatalogService } from './connector-catalog.service';
 import { GrantsService } from './grants/grants.service';
 import { RotationService, RotateOutcome } from './rotation/rotation.service';
+import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
 import { interpolate, schemaViolations, secretFieldsOf, splitSecrets } from './connector-schema';
 import {
   ConnectMethod,
@@ -107,6 +108,7 @@ export class ConnectionsService {
     @Optional() @Inject(CONNECT_STATE_STORE) stateStore?: ConnectStateStore,
     @Optional() private readonly grants?: GrantsService,
     @Optional() private readonly rotation?: RotationService,
+    @Optional() @Inject(CONNECTIONS_GOVERNANCE_HOOK) private readonly governance?: ConnectionsGovernanceHook,
   ) {
     this.stateStore = stateStore ?? stateStoreFactory.create();
   }
@@ -146,6 +148,7 @@ export class ConnectionsService {
     const method = this.pickMethod(connector, body.method);
     const owner: ConnectionOwner = body.owner ?? 'org';
     await this.assertCanCreate(principal, organizationId, owner);
+    await this.governance?.beforeConnect(organizationId, connector.key, owner);
     const ownerUserId = owner === 'user' ? principal.id : null;
 
     if (REDIRECT_METHODS.includes(method.type)) {
@@ -288,6 +291,7 @@ export class ConnectionsService {
     this.assertCanManage(principal, row);
     const connector = await this.catalog.require(organizationId, row.connectorKey!);
     const method = this.pickMethod(connector, (row.metadata?.connectMethod as ConnectMethodType | undefined));
+    await this.governance?.beforeConnect(organizationId, connector.key, row.ownerUserId ? 'user' : 'org');
 
     if (REDIRECT_METHODS.includes(method.type)) {
       return this.startRedirect({
@@ -298,26 +302,7 @@ export class ConnectionsService {
     // Gate 5: providers with a key-provisioning API rotate in place, no
     // form, no browser. Anything else falls through to the re-connect flow.
     if (!body.input && this.rotation) {
-      const current = await this.decryptConfig(row);
-      const outcome = await this.rotation.rotate(
-        { id: row.id, organizationId, connectorKey: row.connectorKey!, name: row.name, secrets: current, keyPageUrl: method.keyPageUrl ?? connector.keyPageUrl ?? null },
-        {
-          userId: principal.id,
-          validate: async (next) => {
-            const verdict = await this.validation.validate(connector, { ...current, ...next } as Record<string, any>, { organizationId });
-            return { ok: verdict.ok, error: verdict.error, accountLabel: verdict.accountLabel ?? undefined };
-          },
-          persist: async (next, meta) => {
-            const { plain } = splitSecrets(current, method.schema);
-            await this.finalize({
-              connector, method, organizationId, userId: principal.id, ownerUserId: row.ownerUserId,
-              config: { ...plain, ...next }, existing: row, expiresAt: meta.expiresAt, action: AuditAction.CONNECTION_ROTATE,
-            });
-            row.metadata = { ...(row.metadata ?? {}), rotatedAt: meta.rotatedAt.toISOString(), rotatedLabel: meta.label ?? null };
-            await this.credentials.save(row);
-          },
-        },
-      );
+      const outcome = await this.rotateInPlace(row, connector, method, principal.id);
       if (!outcome.manual) {
         const fresh = await this.load(organizationId, id);
         return { pending: false, connection: this.view(fresh, connector), rotation: outcome };
@@ -334,6 +319,52 @@ export class ConnectionsService {
       config: input, existing: row, action: AuditAction.CONNECTION_ROTATE,
     });
     return { pending: false, connection: view };
+  }
+
+  /**
+   * The provider-API rotation seam: mint, validate through the connector
+   * probe, persist encrypted with the plain handle fields kept, retire the
+   * old key. Returns manual:true when the connector cannot mint keys.
+   * Used by the API (with the actor) and by the EE scheduler (system).
+   */
+  async rotateInPlace(row: Credential, connector: ConnectorDefinition, method: ConnectMethod, userId: string | null): Promise<RotateOutcome> {
+    if (!this.rotation) return { manual: true, reason: 'rotation module not wired', keyPageUrl: method.keyPageUrl ?? connector.keyPageUrl ?? null };
+    const organizationId = row.organizationId;
+    const current = await this.decryptConfig(row);
+    return this.rotation.rotate(
+      { id: row.id, organizationId, connectorKey: row.connectorKey!, name: row.name, secrets: current, keyPageUrl: method.keyPageUrl ?? connector.keyPageUrl ?? null },
+      {
+        userId: userId ?? undefined,
+        validate: async (next) => {
+          const verdict = await this.validation.validate(connector, { ...current, ...next } as Record<string, any>, { organizationId });
+          return { ok: verdict.ok, error: verdict.error, accountLabel: verdict.accountLabel ?? undefined };
+        },
+        persist: async (next, meta) => {
+          const { plain } = splitSecrets(current, method.schema);
+          await this.finalize({
+            connector, method, organizationId, userId: userId ?? 'system', ownerUserId: row.ownerUserId,
+            config: { ...plain, ...next }, existing: row, expiresAt: meta.expiresAt, action: AuditAction.CONNECTION_ROTATE,
+          });
+          row.metadata = { ...(row.metadata ?? {}), rotatedAt: meta.rotatedAt.toISOString(), secretRotatedAt: meta.rotatedAt.toISOString(), rotatedLabel: meta.label ?? null };
+          await this.credentials.save(row);
+        },
+      },
+    );
+  }
+
+  /** System rotation for the EE scheduler: any organization, no actor, provider API only. */
+  async rotateAsSystem(connectionId: string): Promise<{ rotated: boolean; manual?: boolean; error?: string }> {
+    const row = await this.credentials.findOne({ where: { id: connectionId } });
+    if (!row || !row.connectorKey) return { rotated: false, error: 'connection not found' };
+    const connector = await this.catalog.find(row.organizationId, row.connectorKey);
+    if (!connector) return { rotated: false, error: `unknown connector ${row.connectorKey}` };
+    const method = this.pickMethod(connector, (row.metadata?.connectMethod as ConnectMethodType | undefined));
+    try {
+      const outcome = await this.rotateInPlace(row, connector, method, null);
+      return outcome.manual ? { rotated: false, manual: true, error: outcome.reason } : { rotated: true };
+    } catch (err: any) {
+      return { rotated: false, error: err?.message ?? String(err) };
+    }
   }
 
   async disconnect(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<{ revoked: boolean; revokeError?: string }> {
