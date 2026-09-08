@@ -1,4 +1,5 @@
 # Model registry
+Model registry
 
 Status: ACCEPTED (part of the models layer, docs/design/models-layer.md)
 
@@ -44,6 +45,12 @@ Weights are plain safetensors. Nothing about where the model will run is stored 
 ```
 
 Required: `schemaVersion` (1), `base`, `tokenizer`, `license`, `created`, `files` (at least one, relative paths only). The manifest's canonical SHA-256 is recorded on the version as `manifestSha`; the sum of `files[].sizeBytes` becomes `sizeBytes`.
+
+## API
+
+`GET /model-versions`, `POST /model-versions { name, registryUri, base?, quantizations?, lineage?, metadata? }`, `GET /model-versions/:id`, `DELETE /model-versions/:id`. CLI: `almyty models versions`, `almyty models register-version --name n --uri <pinned uri> [--base b] [--quantizations q1,q2]`.
+
+Registering an `s3://` version reads and validates `almyty-manifest.json` at the URI and fills base, size, digest and quantizations from it; an unreadable manifest is an error. For `hf://` and `file://` the manifest is optional: when absent, `base` must be given and the version carries `metadata.manifest: null`. A version cannot be deleted while a deployment that is not torn down references it (`VERSION_IN_USE`).
 
 ## Configuration
 
