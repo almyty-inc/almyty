@@ -17,6 +17,7 @@ import { MODEL_RECONCILE_JOB, MODEL_RECONCILE_QUEUE, ModelDeploymentsService } f
 const REPEAT_JOB_ID = 'model-reconcile-sweep';
 const SWEEP_JOB = 'sweep';
 const DEFAULT_CRON = '*/2 * * * *';
+const REGISTER_INTERVAL_MS = 10 * 60 * 1000;
 /** A deployment the provider no longer knows, past this age, is torn down as an orphan. */
 const ORPHAN_GRACE_MS = 30 * 60 * 1000;
 
@@ -60,15 +61,28 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
       this.logger.log('Model reconcile sweep disabled');
       return;
     }
+    await this.registerSweep(true);
+    // Bull keeps the repeatable job in Redis only. A flushed or replaced
+    // Redis would otherwise leave every deployment in 'scaling' until the
+    // next restart, so the registration is re-asserted periodically.
+    const timer = setInterval(() => void this.registerSweep(false), REGISTER_INTERVAL_MS);
+    timer.unref?.();
+  }
+
+  /** Idempotent: re-adding the same jobId + cron is a no-op for Bull; a changed cron evicts the old entry. */
+  async registerSweep(verbose: boolean): Promise<void> {
     const cron = this.cron() as string;
     try {
-      for (const repeatable of await this.queue.getRepeatableJobs()) {
+      const repeatables = await this.queue.getRepeatableJobs();
+      for (const repeatable of repeatables) {
         if (repeatable.id === REPEAT_JOB_ID && repeatable.cron !== cron) {
           await this.queue.removeRepeatableByKey(repeatable.key);
         }
       }
+      const present = repeatables.some((r) => r.id === REPEAT_JOB_ID && r.cron === cron);
       await this.queue.add(SWEEP_JOB, {}, { jobId: REPEAT_JOB_ID, repeat: { cron }, removeOnComplete: true, removeOnFail: true });
-      this.logger.log(`Model reconcile sweep registered: "${cron}"`);
+      if (verbose) this.logger.log(`Model reconcile sweep registered: "${cron}"`);
+      else if (!present) this.logger.warn(`Model reconcile sweep was missing from Redis and has been re-registered ("${cron}")`);
     } catch (error: any) {
       this.logger.error(`Failed to schedule model reconcile sweep: ${error.message}`);
     }
