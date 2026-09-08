@@ -11,11 +11,11 @@ describe('ConnectionsResolverService with grants', () => {
   const openai = { method: 'GET', url: 'https://api.openai.com/v1/models', handle: () => ({ status: 200, body: { data: [{ id: 'gpt-4o' }] } }) };
 
   async function setup(grants: any) {
-    const h = buildHarness({ routes: [openai] });
+    const h = buildHarness({ routes: [openai], grants });
     const admin = principal('u-admin', ORG, 'admin');
     const org = await h.service.connect(admin, ORG, 'openai', { input: { apiKey: 'sk-org-wide-key' } });
     const resolver = new ConnectionsResolverService(h.service, h.catalog, h.audit, grants);
-    return { h, resolver, orgId: org.connection.id };
+    return { h, resolver, orgId: (org as any).connection.id };
   }
 
   it('resolves through the grant decision and records exactly one resolve row via the grants service', async () => {
