@@ -134,6 +134,10 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      '/ee': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       '/connectors': {
         target: apiTarget,
         changeOrigin: true,
