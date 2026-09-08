@@ -92,6 +92,7 @@ packages/
 ├── auth-cli/          # @almyty/auth — browser-based login, token storage
 ├── agents-cli/        # @almyty/agents — list, run, inspect agents
 ├── models-cli/        # @almyty/models — model cards, validation, deployments
+├── connections-cli/   # @almyty/connections — connect third-party accounts, validate, grants
 ├── chat-cli/          # @almyty/chat — interactive agent REPL
 ├── skills-cli/        # @almyty/skills — install API skills into 30+ AI coding agents
 ├── mcp-server/        # @almyty/mcp-server — skill-first MCP proxy
@@ -116,6 +117,7 @@ packages/
 - **Frontend tests**: 82 vitest files, ~589 tests + Playwright E2E suite (`frontend/tests/e2e/`)
 - **Agent Skills**: Compliant with https://agentskills.io spec
 - **Models layer** (`docs/models.md`): support is registry data, never a code list. A card is usable only via `Model.isSelectable()` (active + callable + one passed validation run). Pricing is automatic (LiteLLM feed + OpenRouter cross-check); the table in `llm-models.helper.ts` is an offline seed only. Invariants: deployment adapters never import each other; `providerConfig` is opaque to everything but its adapter; only the reconcile processor mutates a provider; routed calls stamp `routing` attribution on the response, node result and audit log.
+- **Connections** (`docs/connections.md`): the single store for every third-party secret is `credentials`; connectors are data (`GET /connectors`), a connection is a Credential with connectorKey/accountLabel/health, use goes through grants (`connection_grants`) and every resolve is audited. No module may add a secret column of its own (`no-secrets-outside-credentials.spec.ts` ratchets this). The model registry is an org-owned `s3_compatible` connection; env `MODEL_REGISTRY_S3_*` only seeds a single-tenant install.
 
 ---
 
