@@ -197,10 +197,10 @@ describe('gate 2: one ModelVersion, two adapters, provider specifics never cross
       expect(c.modelVersionId).toBe(VERSION.id);
       expect(c.provider.type).toBe(LlmProviderType.CUSTOM);
       const configuration = c.provider.configuration as Record<string, any>;
-      expect(configuration.baseUrl).toBe(own.endpointRef!.url);
+      expect(configuration.apiUrl).toBe(own.endpointRef!.url);
       expect(configuration.model).toBe('qwen3-0.6b');
       // The transient provider is URL + model + bearer; no adapter field reaches the caller.
-      expect(Object.keys(configuration).sort()).toEqual(['apiKey', 'baseUrl', 'model']);
+      expect(Object.keys(configuration).sort()).toEqual(['apiKey', 'apiUrl', 'model']);
       expect(c.rationale).toMatch(/^cheapest/);
     }
     expect(providers.findOne).not.toHaveBeenCalled();

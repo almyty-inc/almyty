@@ -111,5 +111,6 @@ npx @almyty/models teardown <deploymentId>
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
 | `MODEL_RECONCILE_CRON` | `*/2 * * * *` | Deployment reconcile sweep; `off` disables |
 | `MODEL_STUB_ADAPTER` | unset | `true` registers the stub adapter in production too |
+| `LLM_ALLOW_PRIVATE_URLS` | unset | `true` lets custom providers and endpoint cards reach private or loopback hosts (a vLLM box on the LAN); mirrors `OLLAMA_ALLOW_PRIVATE_URLS` |
 | `MODEL_REGISTRY_S3_*` | falls back to `STORAGE_S3_*` | Single-tenant seed only: creates the one organization's registry connection on first boot; ignored with more than one organization |
 | `CONFORMANCE_LIVE` | unset | Adapter key whose conformance spec runs against the real provider |
