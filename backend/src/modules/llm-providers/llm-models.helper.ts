@@ -35,6 +35,20 @@ export class LlmModelsHelper {
         case LlmProviderType.GROQ:
         case LlmProviderType.TOGETHER:
         case LlmProviderType.OPENROUTER:
+        // OpenAI-compatible inference hosts: GET <base>/models. Perplexity's
+        // legacy Sonar base and Z.ai do not document /models; a failed
+        // list rejects like every other type (test-connection reports it)
+        // and DefaultModelResolver turns it into NO_MODEL_CONFIGURED
+        // rather than guessing an id.
+        case LlmProviderType.FIREWORKS:
+        case LlmProviderType.CEREBRAS:
+        case LlmProviderType.DEEPINFRA:
+        case LlmProviderType.NOVITA:
+        case LlmProviderType.PERPLEXITY:
+        case LlmProviderType.ZAI:
+        case LlmProviderType.BASETEN:
+        case LlmProviderType.NEBIUS:
+        case LlmProviderType.SAMBANOVA:
           return this.fetchOpenAIModels(provider);
         case LlmProviderType.OLLAMA:
           // Native /api/tags — lists locally pulled models. Works
@@ -339,6 +353,28 @@ export class LlmModelsHelper {
         // default users can raise per provider.
         return { ...openaiCompatible, maxTokens: 32768 };
 
+      // OpenAI-compatible inference hosts: tool calling and streaming on
+      // the OpenAI path. maxTokens is a conservative context default
+      // (the served models vary); the model card carries the real value.
+      case LlmProviderType.FIREWORKS:
+      case LlmProviderType.DEEPINFRA:
+      case LlmProviderType.NOVITA:
+      case LlmProviderType.BASETEN:
+      case LlmProviderType.NEBIUS:
+      case LlmProviderType.SAMBANOVA:
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.CEREBRAS:
+        return { ...openaiCompatible, maxTokens: 65536 };
+
+      case LlmProviderType.ZAI:
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.PERPLEXITY:
+        // Sonar answers are web-grounded; the chat surface streams but
+        // does not take OpenAI-style tools, so tool flags stay off.
+        return { ...baseCapabilities, supportedModels: [], maxTokens: 128000, supportsStreaming: true };
+
       default:
         return baseCapabilities;
     }
@@ -583,6 +619,21 @@ export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[
   [LlmProviderType.HUGGINGFACE]: [],
   // Zero-cost by design (local inference) — see doc comment above.
   [LlmProviderType.OLLAMA]: [],
+  // OpenAI-compatible inference hosts added 2026-09: priced by the live
+  // feed only (LiteLLM carries fireworks_ai, cerebras, deepinfra, novita,
+  // perplexity, zai, baseten, nebius and sambanova). No seed rows on
+  // purpose: prices are automatic, and the hosts' rates for shared open
+  // models must not be borrowed from a vendor table (see
+  // HOSTED_OPEN_MODEL_TYPES below).
+  [LlmProviderType.FIREWORKS]: [],
+  [LlmProviderType.CEREBRAS]: [],
+  [LlmProviderType.DEEPINFRA]: [],
+  [LlmProviderType.NOVITA]: [],
+  [LlmProviderType.PERPLEXITY]: [],
+  [LlmProviderType.ZAI]: [],
+  [LlmProviderType.BASETEN]: [],
+  [LlmProviderType.NEBIUS]: [],
+  [LlmProviderType.SAMBANOVA]: [],
   [LlmProviderType.CUSTOM]: [],
 };
 
@@ -604,6 +655,21 @@ const GLOBAL_PRICING_FALLBACK: DefaultModelPricing[] = [
 ];
 
 /**
+ * Hosts that serve other vendors' open models at host-specific rates.
+ * Priced by the live feed (LiteLLM lists every one of them); the seed
+ * table stays empty and the cross-provider fallback is skipped for them.
+ */
+export const HOSTED_OPEN_MODEL_TYPES: ReadonlySet<LlmProviderType> = new Set([
+  LlmProviderType.FIREWORKS,
+  LlmProviderType.CEREBRAS,
+  LlmProviderType.DEEPINFRA,
+  LlmProviderType.NOVITA,
+  LlmProviderType.BASETEN,
+  LlmProviderType.NEBIUS,
+  LlmProviderType.SAMBANOVA,
+]);
+
+/**
  * Default pricing lookup for a (model, providerType) pair.
  * Returns { input, output } in dollars per 1K tokens, or null if unknown.
  */
@@ -618,6 +684,11 @@ export function getDefaultModelPricing(
   // hosted vendor's list price. Explicit per-provider overrides via
   // metadata.modelInfo still apply (handled in calculateProviderCost).
   if (providerType === LlmProviderType.OLLAMA) return null;
+  // Hosted open-model vendors serve the same model ids as each other and
+  // as the model authors, at their own rates. Never price them from a
+  // vendor table via the fallback ('deepseek-v3' on Novita is not billed
+  // at DeepSeek's list price); the live feed prices them per host.
+  if (HOSTED_OPEN_MODEL_TYPES.has(providerType)) return null;
   const rules = DEFAULT_MODEL_PRICING[providerType] ?? [];
   for (const rule of rules) {
     if (model.includes(rule.match)) return { input: rule.input, output: rule.output };

@@ -305,6 +305,15 @@ export class LlmChatHelper {
         LlmProviderType.GROQ,
         LlmProviderType.TOGETHER,
         LlmProviderType.OPENROUTER,
+        LlmProviderType.FIREWORKS,
+        LlmProviderType.CEREBRAS,
+        LlmProviderType.DEEPINFRA,
+        LlmProviderType.NOVITA,
+        LlmProviderType.PERPLEXITY,
+        LlmProviderType.ZAI,
+        LlmProviderType.BASETEN,
+        LlmProviderType.NEBIUS,
+        LlmProviderType.SAMBANOVA,
         LlmProviderType.ANTHROPIC,
       ].includes(provider.type);
 
@@ -391,6 +400,15 @@ export class LlmChatHelper {
         case LlmProviderType.GROQ:
         case LlmProviderType.TOGETHER:
         case LlmProviderType.OPENROUTER:
+        case LlmProviderType.FIREWORKS:
+        case LlmProviderType.CEREBRAS:
+        case LlmProviderType.DEEPINFRA:
+        case LlmProviderType.NOVITA:
+        case LlmProviderType.PERPLEXITY:
+        case LlmProviderType.ZAI:
+        case LlmProviderType.BASETEN:
+        case LlmProviderType.NEBIUS:
+        case LlmProviderType.SAMBANOVA:
         case LlmProviderType.OLLAMA:
           response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
           break;

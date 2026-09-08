@@ -94,6 +94,15 @@ const providerLogos: Record<string, string> = {
   cohere: '🌀',
   huggingface: '🤗',
   ollama: '🦙',
+  fireworks: '✧',
+  cerebras: '◎',
+  deepinfra: '∞',
+  novita: '◈',
+  perplexity: '◇',
+  zai: '❋',
+  baseten: '▣',
+  nebius: '◉',
+  sambanova: '◆',
   custom: '⚙️'
 }
 

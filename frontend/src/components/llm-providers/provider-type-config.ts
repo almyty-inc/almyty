@@ -19,6 +19,15 @@ export const providerLogos: Record<string, string> = {
   cohere: '🌀',
   huggingface: '🤗',
   ollama: '🦙',
+  fireworks: '✧',
+  cerebras: '◎',
+  deepinfra: '∞',
+  novita: '◈',
+  perplexity: '◇',
+  zai: '❋',
+  baseten: '▣',
+  nebius: '◉',
+  sambanova: '◆',
   custom: '⚙️',
 }
 
@@ -80,4 +89,15 @@ export const providerKeyUrls: Record<string, string> = {
   cohere: 'https://dashboard.cohere.com/api-keys',
   huggingface: 'https://huggingface.co/settings/tokens',
   ollama: 'https://ollama.com/settings/keys',
+  // OpenAI-compatible inference hosts (backend catalog is the source of
+  // truth; verified 2026-09-08 in docs/design/call-only-vendors.md).
+  fireworks: 'https://app.fireworks.ai/settings/users/api-keys',
+  cerebras: 'https://cloud.cerebras.ai',
+  deepinfra: 'https://deepinfra.com/dash/api_keys',
+  novita: 'https://novita.ai/settings/key-management',
+  perplexity: 'https://console.perplexity.ai',
+  zai: 'https://z.ai/manage-apikey/apikey-list',
+  baseten: 'https://app.baseten.co/settings/api_keys',
+  nebius: 'https://tokenfactory.nebius.com/settings/api-keys',
+  sambanova: 'https://cloud.sambanova.ai/apis',
 }

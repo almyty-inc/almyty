@@ -29,6 +29,27 @@ export class NoModelAvailableError extends BadRequestException {
   }
 }
 
+/** Family order shared by hosts that serve other vendors' open models. */
+const OPEN_MODEL_HOST_PREFERENCE: RegExp[] = [
+  /llama.*instruct/i,
+  /qwen.*instruct/i,
+  /deepseek-v\d/i,
+  /llama/i,
+  /qwen/i,
+  /deepseek/i,
+];
+
+/** Hosts whose default falls back to the first served model when no preferred family is listed. */
+const OPEN_MODEL_HOSTS: ReadonlySet<LlmProviderType> = new Set([
+  LlmProviderType.FIREWORKS,
+  LlmProviderType.CEREBRAS,
+  LlmProviderType.DEEPINFRA,
+  LlmProviderType.NOVITA,
+  LlmProviderType.BASETEN,
+  LlmProviderType.NEBIUS,
+  LlmProviderType.SAMBANOVA,
+]);
+
 /** Ordered family preferences per provider type; first regex with a match wins. */
 const FAMILY_PREFERENCE: Partial<Record<LlmProviderType, RegExp[]>> = {
   [LlmProviderType.ANTHROPIC]: [/^claude-sonnet-\d/, /^claude-opus-\d/, /^claude-haiku-\d/, /^claude-/],
@@ -42,6 +63,18 @@ const FAMILY_PREFERENCE: Partial<Record<LlmProviderType, RegExp[]>> = {
   [LlmProviderType.TOGETHER]: [/llama-[\d.]+-70b-instruct-turbo$/i, /llama.*instruct/i, /llama/i],
   [LlmProviderType.OPENROUTER]: [/^anthropic\/claude-sonnet-\d/, /^openai\/gpt-\d+(\.\d+)?$/, /^anthropic\/claude-/, /^openai\/gpt-/],
   [LlmProviderType.COHERE]: [/^command-a/, /^command-r-plus/, /^command-r/, /^command/],
+  [LlmProviderType.PERPLEXITY]: [/^sonar-pro$/, /^sonar$/, /^sonar-/, /^sonar/],
+  [LlmProviderType.ZAI]: [/^glm-[\d.]+$/, /^glm-[\d.]+-flash$/, /^glm-/],
+  // Hosted open-model vendors list many authors' models under the
+  // authors' own ids (often "org/model"); prefer instruct Llama, then
+  // Qwen, then DeepSeek, then anything in those families.
+  [LlmProviderType.FIREWORKS]: OPEN_MODEL_HOST_PREFERENCE,
+  [LlmProviderType.CEREBRAS]: OPEN_MODEL_HOST_PREFERENCE,
+  [LlmProviderType.DEEPINFRA]: OPEN_MODEL_HOST_PREFERENCE,
+  [LlmProviderType.NOVITA]: OPEN_MODEL_HOST_PREFERENCE,
+  [LlmProviderType.BASETEN]: OPEN_MODEL_HOST_PREFERENCE,
+  [LlmProviderType.NEBIUS]: OPEN_MODEL_HOST_PREFERENCE,
+  [LlmProviderType.SAMBANOVA]: OPEN_MODEL_HOST_PREFERENCE,
 };
 
 /**
@@ -72,7 +105,16 @@ export class DefaultModelResolver {
     const hit = this.cache.get(key);
     if (hit && hit.expiresAt > Date.now()) return hit.model;
 
-    const models = await this.modelsHelper.fetchModelsFromProvider(provider);
+    // A listing failure (no /models on this base, network, auth) is the
+    // same "nothing to choose from" as an empty list: report it under
+    // NO_MODEL_CONFIGURED with the vendor's reason, never guess an id.
+    let models: Awaited<ReturnType<LlmModelsHelper['fetchModelsFromProvider']>>;
+    try {
+      models = await this.modelsHelper.fetchModelsFromProvider(provider);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new NoModelAvailableError(provider, `the vendor could not list its models (${reason})`);
+    }
     const ids = models.map((m) => m.id).filter((id): id is string => typeof id === 'string' && id.length > 0);
     if (ids.length === 0) {
       throw new NoModelAvailableError(provider, 'the vendor returned no models to choose from');
@@ -107,7 +149,10 @@ export function pickPreferredModel(type: LlmProviderType, ids: string[]): string
       const matches = pool.filter((id) => re.test(id));
       if (matches.length > 0) return newest(matches);
     }
-    return undefined;
+    // Hosts serve a moving catalog of other vendors' open models; when no
+    // preferred family is listed, the first chat model served is still a
+    // sound default. First-party vendors fail instead (see resolve()).
+    return OPEN_MODEL_HOSTS.has(type) ? pool[0] : undefined;
   }
   // Ollama / HuggingFace / custom: whatever the endpoint serves first.
   return pool[0];

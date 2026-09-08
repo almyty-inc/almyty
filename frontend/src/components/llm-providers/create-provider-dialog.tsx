@@ -108,6 +108,15 @@ export function CreateProviderDialog({
                     <SelectItem value="cohere">Cohere</SelectItem>
                     <SelectItem value="huggingface">HuggingFace</SelectItem>
                     <SelectItem value="ollama">Ollama</SelectItem>
+                    <SelectItem value="fireworks">Fireworks AI</SelectItem>
+                    <SelectItem value="cerebras">Cerebras</SelectItem>
+                    <SelectItem value="deepinfra">DeepInfra</SelectItem>
+                    <SelectItem value="novita">Novita</SelectItem>
+                    <SelectItem value="perplexity">Perplexity</SelectItem>
+                    <SelectItem value="zai">Z.ai (GLM)</SelectItem>
+                    <SelectItem value="baseten">Baseten</SelectItem>
+                    <SelectItem value="nebius">Nebius Token Factory</SelectItem>
+                    <SelectItem value="sambanova">SambaNova</SelectItem>
                     <SelectItem value="custom">Custom</SelectItem>
                   </SelectContent>
                 </Select>
