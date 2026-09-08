@@ -17,6 +17,7 @@ import {
 import { useNotifications } from '@/store/app'
 import {
   AUTH_MODE_LABELS,
+  appPrivacyFrom,
   agentAppsApi,
   isOpenToAnyone,
   type AgentApp,
@@ -57,11 +58,22 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
   const [perIp, setPerIp] = useState(
     app.limits?.perIpRateLimit != null ? String(app.limits.perIpRateLimit) : '',
   )
+  const initialPrivacy = appPrivacyFrom(app.privacy)
+  const [retentionDays, setRetentionDays] = useState(
+    initialPrivacy.retentionDays != null ? String(initialPrivacy.retentionDays) : '',
+  )
+  const [visitorCanDelete, setVisitorCanDelete] = useState(initialPrivacy.visitorCanDelete)
+  const [visitorCanExport, setVisitorCanExport] = useState(initialPrivacy.visitorCanExport)
+  const [visitorMemory, setVisitorMemory] = useState(initialPrivacy.visitorMemory)
   const [shell, setShell] = useState(app.capabilities?.shell === true)
   const [fsRead, setFsRead] = useState((app.capabilities?.filesystemRead ?? []).join(', '))
 
   const open = isOpenToAnyone(authMode)
   const wantsLocal = shell || fsRead.trim().length > 0
+  const retentionValue = Number(retentionDays)
+  const retentionError =
+    retentionDays.trim().length > 0 &&
+    (!Number.isInteger(retentionValue) || retentionValue < 1)
 
   const save = useMutation({
     mutationFn: () =>
@@ -82,6 +94,12 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
           costCapCents: costCap.trim() ? Math.round(Number(costCap) * 100) : null,
           perUserRateLimit: perUser.trim() ? Number(perUser) : null,
           perIpRateLimit: perIp.trim() ? Number(perIp) : null,
+        },
+        privacy: {
+          retentionDays: retentionDays.trim() ? retentionValue : null,
+          visitorCanDelete,
+          visitorCanExport,
+          visitorMemory,
         },
         capabilities: {
           ...(app.capabilities ?? {}),
@@ -154,6 +172,83 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
           <p className="text-xs text-muted-foreground">
             Required by the EU AI Act (Art. 50). Leave blank for the default wording.
           </p>
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-lg border p-4">
+        <div className="space-y-1">
+          <h3 className="text-sm font-medium">Privacy &amp; visitor data</h3>
+          <p className="text-xs text-muted-foreground">
+            Choose how long this app keeps visitor activity, what visitors can do with
+            their own data, and whether conversations may enter shared agent memory.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="app-retention-days">Delete visitor data after (days)</Label>
+          <Input
+            id="app-retention-days"
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            value={retentionDays}
+            onChange={(e) => setRetentionDays(e.target.value)}
+            placeholder="Use organization policy"
+            aria-invalid={retentionError || undefined}
+            aria-describedby="app-retention-help"
+          />
+          <p
+            id="app-retention-help"
+            className={retentionError ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}
+          >
+            {retentionError
+              ? 'Enter a whole number of at least 1 day.'
+              : 'Leave blank to inherit the organization policy. An app can shorten that policy, never extend it.'}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="app-visitor-export">Let visitors download their data</Label>
+            <p className="text-xs text-muted-foreground">
+              On by default. Adds a JSON download to the hosted chat.
+            </p>
+          </div>
+          <Switch
+            id="app-visitor-export"
+            checked={visitorCanExport}
+            onCheckedChange={setVisitorCanExport}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="app-visitor-delete">Let visitors delete their data</Label>
+            <p className="text-xs text-muted-foreground">
+              On by default. Visitors can remove one conversation or everything about them.
+            </p>
+          </div>
+          <Switch
+            id="app-visitor-delete"
+            checked={visitorCanDelete}
+            onCheckedChange={setVisitorCanDelete}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-md border p-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="app-visitor-memory">Include visitor conversations in memory</Label>
+            <p className="text-xs text-muted-foreground">
+              Off by default. When enabled, visitor conversations may be summarized into
+              shared agent memory and influence answers to other visitors.
+            </p>
+          </div>
+          <Switch
+            id="app-visitor-memory"
+            checked={visitorMemory}
+            onCheckedChange={setVisitorMemory}
+          />
         </div>
       </section>
 
@@ -269,7 +364,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
       </section>
 
       <div className="flex justify-end">
-        <Button disabled={save.isPending} onClick={() => save.mutate()}>
+        <Button disabled={save.isPending || retentionError} onClick={() => save.mutate()}>
           {save.isPending ? 'Saving...' : 'Save'}
         </Button>
       </div>
