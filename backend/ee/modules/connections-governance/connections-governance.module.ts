@@ -21,11 +21,13 @@ import { CONNECTIONS_GOVERNANCE_QUEUE, ConnectionsGovernanceProcessor } from './
 import { ConnectionsGovernanceService } from './connections-governance.service';
 import { GroupPrincipalSyncService } from './group-principal-sync.service';
 import {
+  CONNECTION_GRANT_REVOKER,
   CONNECTION_PRINCIPAL_SOURCE,
   CONNECTION_ROTATOR,
   CONNECTIONS_GOVERNANCE_HOOK,
-  NoopConnectionRotator,
 } from './seams';
+import { ConnectionsRotatorBridge } from '../../../src/modules/connections/connections-rotator.bridge';
+import { GrantsService } from '../../../src/modules/connections/grants/grants.service';
 
 /**
  * EE (connections_governance): org-wide policy over the Connections
@@ -52,8 +54,8 @@ import {
     ConnectionsGovernanceHookImpl,
     ConnectionsGovernanceProcessor,
     GroupPrincipalSyncService,
-    // TODO(lead): replace with { provide: CONNECTION_ROTATOR, useExisting: RotationService } once gate 5 lands.
-    { provide: CONNECTION_ROTATOR, useClass: NoopConnectionRotator },
+    { provide: CONNECTION_ROTATOR, useExisting: ConnectionsRotatorBridge },
+    { provide: CONNECTION_GRANT_REVOKER, useExisting: GrantsService },
     { provide: CONNECTIONS_GOVERNANCE_HOOK, useExisting: ConnectionsGovernanceHookImpl },
     { provide: CONNECTION_PRINCIPAL_SOURCE, useExisting: GroupPrincipalSyncService },
   ],

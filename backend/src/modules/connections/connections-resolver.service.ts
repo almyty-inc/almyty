@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -7,6 +7,7 @@ import { ConnectionView, ConnectorDefinition } from './connector.types';
 import { ConnectionsService } from './connections.service';
 import { CONNECTIONS_READ, ConnectionPrincipal, membershipOf, principalHasPermission } from './connections.permissions';
 import { GrantsService } from './grants/grants.service';
+import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
 
 export interface ResolvedConnection {
   connection: ConnectionView;
@@ -37,6 +38,7 @@ export class ConnectionsResolverService {
     private readonly catalog: ConnectorCatalogService,
     private readonly auditLog: AuditLogService,
     @Optional() private readonly grants?: GrantsService,
+    @Optional() @Inject(CONNECTIONS_GOVERNANCE_HOOK) private readonly governance?: ConnectionsGovernanceHook,
   ) {}
 
   async resolveForUse(principal: ConnectionPrincipal, connectionId: string, context: ResolveContext = { purpose: 'use' }): Promise<ResolvedConnection> {
@@ -51,6 +53,8 @@ export class ConnectionsResolverService {
       // matching grant (user, team, role, agent, workspace). Throws
       // CONNECTION_NOT_GRANTED with the reason.
       const decision = await this.grants.assertCanUse(principal, row, context);
+      // EE governance (optional): org policy over who may use what, after the grant said yes.
+      await this.governance?.beforeUse(row.organizationId, row, { userId: principal.id, agentId: context.resourceType === 'agent' ? context.resourceId : undefined, workspaceId: context.resourceType === 'workspace' ? context.resourceId : undefined }, context, decision);
       const resolved = await this.materialize(row.id, row.organizationId, principal.id, context, true);
       await this.grants.recordResolve(principal, row, context, decision);
       return resolved;
