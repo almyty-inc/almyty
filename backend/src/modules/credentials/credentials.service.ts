@@ -399,32 +399,27 @@ export class CredentialsService {
   // ──────────────────────────────────────────────
 
   private maskCredential(credential: Credential): Credential {
-    const sensitiveFields = [
-      'password',
-      'secret',
-      'token',
-      'key',
-      'client_secret',
-      'apiKey',
-      'accessToken',
-      'refreshToken',
-      'headerValue',
-      'clientSecret',
-    ];
+    // Anything that looks like a secret by name, plus any value that is
+    // encrypted at rest (managed rows carry snake_case channel keys and
+    // nested header maps the name list never knew about).
+    const secretName = /(password|secret|token|apikey|api_key|accesskey|access_key|privatekey|private_key|credential|headervalue|bearer|serviceaccount)/i;
+    const mask = (val: unknown): string => {
+      const s = String(val);
+      if (s.startsWith('encrypted:') || s.length <= 8) return '********';
+      return s.substring(0, 4) + '****' + s.substring(s.length - 4);
+    };
+    const maskObject = (obj: Record<string, any>): Record<string, any> => {
+      const out: Record<string, any> = {};
+      for (const [field, value] of Object.entries(obj)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) out[field] = maskObject(value);
+        else if (typeof value === 'string' && (value.startsWith('encrypted:') || (secretName.test(field) && field !== 'keyName' && field !== 'keyLocation'))) out[field] = mask(value);
+        else out[field] = value;
+      }
+      return out;
+    };
 
     if (credential.config && typeof credential.config === 'object') {
-      const masked = { ...credential.config };
-      for (const field of sensitiveFields) {
-        if (masked[field]) {
-          const val = String(masked[field]);
-          if (val.length > 8) {
-            masked[field] = val.substring(0, 4) + '****' + val.substring(val.length - 4);
-          } else {
-            masked[field] = '********';
-          }
-        }
-      }
-      credential.config = masked;
+      credential.config = maskObject(credential.config);
     }
 
     return credential;
