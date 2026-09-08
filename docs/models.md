@@ -85,6 +85,8 @@ npx @almyty/models register --name <n> --provider <providerId> --model <vendorMo
 npx @almyty/models register-endpoint --name <n> --url <base url> --model <vendorModelId> [--api-key k] [--tier ...] [--region ...]
 npx @almyty/models sync <providerId>
 npx @almyty/models validate <id>
+npx @almyty/models versions
+npx @almyty/models register-version --name <n> --uri <pinned registry uri> [--base b] [--quantizations q1,q2]
 npx @almyty/models adapters
 npx @almyty/models deploy --model-version <modelVersionId> --adapter <key> [--config '<json>'] [--desired '<json>'] [--credential <id>] [--budget <id>] [--model <cardId>]
 npx @almyty/models deployments
