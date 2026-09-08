@@ -31,6 +31,7 @@ import {
 import { ConnectionValidationService } from './connection-validation.service';
 import { ConnectorCatalogService } from './connector-catalog.service';
 import { GrantsService } from './grants/grants.service';
+import { RotationService, RotateOutcome } from './rotation/rotation.service';
 import { interpolate, schemaViolations, secretFieldsOf, splitSecrets } from './connector-schema';
 import {
   ConnectMethod,
@@ -72,8 +73,7 @@ export interface PendingForm {
   method: ConnectMethodType;
   form: { schema: ConnectMethod['schema']; keyPageUrl: string | null };
 }
-
-export type ConnectResult = PendingRedirect | PendingForm | { pending: false; connection: ConnectionView };
+export type ConnectResult = PendingRedirect | PendingForm | { pending: false; connection: ConnectionView; rotation?: RotateOutcome };
 
 /** Personal / free orgs let members keep their own keys; production tiers start closed. */
 export function defaultAllowUserScopedConnections(plan: string | null | undefined): boolean {
@@ -106,6 +106,7 @@ export class ConnectionsService {
     stateStoreFactory: ConnectStateStoreFactory,
     @Optional() @Inject(CONNECT_STATE_STORE) stateStore?: ConnectStateStore,
     @Optional() private readonly grants?: GrantsService,
+    @Optional() private readonly rotation?: RotationService,
   ) {
     this.stateStore = stateStore ?? stateStoreFactory.create();
   }
@@ -294,6 +295,34 @@ export class ConnectionsService {
         mode: body.mode ?? 'browser', input: this.plainInput(method, body.input), rotateConnectionId: row.id, requestBase,
       });
     }
+    // Gate 5: providers with a key-provisioning API rotate in place, no
+    // form, no browser. Anything else falls through to the re-connect flow.
+    if (!body.input && this.rotation) {
+      const current = await this.decryptConfig(row);
+      const outcome = await this.rotation.rotate(
+        { id: row.id, organizationId, connectorKey: row.connectorKey!, name: row.name, secrets: current, keyPageUrl: method.keyPageUrl ?? connector.keyPageUrl ?? null },
+        {
+          userId: principal.id,
+          validate: async (next) => {
+            const verdict = await this.validation.validate(connector, { ...current, ...next } as Record<string, any>, { organizationId });
+            return { ok: verdict.ok, error: verdict.error, accountLabel: verdict.accountLabel ?? undefined };
+          },
+          persist: async (next, meta) => {
+            const { plain } = splitSecrets(current, method.schema);
+            await this.finalize({
+              connector, method, organizationId, userId: principal.id, ownerUserId: row.ownerUserId,
+              config: { ...plain, ...next }, existing: row, expiresAt: meta.expiresAt, action: AuditAction.CONNECTION_ROTATE,
+            });
+            row.metadata = { ...(row.metadata ?? {}), rotatedAt: meta.rotatedAt.toISOString(), rotatedLabel: meta.label ?? null };
+            await this.credentials.save(row);
+          },
+        },
+      );
+      if (!outcome.manual) {
+        const fresh = await this.load(organizationId, id);
+        return { pending: false, connection: this.view(fresh, connector), rotation: outcome };
+      }
+    }
     if (!body.input) {
       return { pending: true, method: method.type, form: { schema: method.schema, keyPageUrl: method.keyPageUrl ?? connector.keyPageUrl ?? null } };
     }
@@ -313,7 +342,13 @@ export class ConnectionsService {
     const connector = await this.catalog.find(organizationId, row.connectorKey!);
     let revoked = false;
     let revokeError: string | undefined;
-    if (connector?.revoke) {
+    const providerRevoke = this.rotation
+      ? await this.rotation.revoke({ id: row.id, organizationId, connectorKey: row.connectorKey!, name: row.name, secrets: await this.decryptConfig(row) }, { userId: principal.id })
+      : { supported: false, revoked: false };
+    if (providerRevoke.supported) {
+      revoked = providerRevoke.revoked;
+      revokeError = providerRevoke.error;
+    } else if (connector?.revoke) {
       const outcome = await this.validation.revoke(connector, await this.decryptConfig(row));
       revoked = outcome.ok;
       revokeError = outcome.error;
