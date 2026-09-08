@@ -46,6 +46,8 @@ import { ProtobufParserService } from '../../modules/schema-parser/parsers/proto
 import { AuditLogService } from '../../modules/audit-log/audit-log.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { JsonSchemaTranslatorService } from '../../modules/json-schema-translator/json-schema-translator.service';
+import { CredentialRefResolver } from '../../modules/credentials/credential-ref.resolver';
+import { makeCredentialRefFake } from '../credential-ref.fake';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
@@ -206,6 +208,7 @@ describeIfDb('importSchema with tool generation (real Postgres)', () => {
         ToolsStatsHelper,
         JsonSchemaTranslatorService,
         { provide: AuditLogService, useValue: { logCreate: jest.fn(), logUpdate: jest.fn(), logAction: jest.fn() } },
+        { provide: CredentialRefResolver, useValue: makeCredentialRefFake().resolver },
         { provide: getRepositoryToken(Api), useValue: ds.getRepository(Api) },
         { provide: getRepositoryToken(ApiSchema), useValue: ds.getRepository(ApiSchema) },
         { provide: getRepositoryToken(Operation), useValue: ds.getRepository(Operation) },

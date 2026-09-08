@@ -90,6 +90,10 @@ regexes = [
   '''stale-jwt-value''',
   '''attacker-controlled-secret''',
   '''rbac-integration-test-secret''',
+  # Google IAM enum values sent in the service-account key request body
+  # (connections rotation); not secrets.
+  '''KEY_ALG_RSA_2048''',
+  '''TYPE_GOOGLE_CREDENTIALS_FILE''',
   # PostHog PUBLISHABLE client key (phc_...) — a public browser-side key,
   # baked into the frontend bundle by design; not a secret.
   '''phc_[A-Za-z0-9]+''',
