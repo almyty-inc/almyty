@@ -16,6 +16,13 @@ import { HuggingFaceEndpointsAdapter } from './adapters/huggingface-endpoints.ad
 import { ModalAdapter } from './adapters/modal.adapter';
 import { OllamaAdapter } from './adapters/ollama.adapter';
 import { CustomEndpointAdapter } from './adapters/custom-endpoint.adapter';
+import { AwsBedrockImportAdapter } from './adapters/aws-bedrock-import.adapter';
+import { SageMakerAdapter } from './adapters/sagemaker.adapter';
+import { VertexAdapter } from './adapters/vertex.adapter';
+import { AzureFoundryAdapter } from './adapters/azure-foundry.adapter';
+import { RunPodAdapter } from './adapters/runpod.adapter';
+import { DigitalOceanAdapter } from './adapters/digitalocean.adapter';
+import { NebiusAdapter } from './adapters/nebius.adapter';
 
 
 import { ModelDeploymentsController } from './model-deployments.controller';
@@ -48,6 +55,13 @@ export class ModelDeploymentsModule implements OnModuleInit {
     this.adapters.register(new ModalAdapter());
     this.adapters.register(new OllamaAdapter());
     this.adapters.register(new CustomEndpointAdapter());
+    this.adapters.register(new AwsBedrockImportAdapter());
+    this.adapters.register(new SageMakerAdapter());
+    this.adapters.register(new VertexAdapter());
+    this.adapters.register(new AzureFoundryAdapter());
+    this.adapters.register(new RunPodAdapter());
+    this.adapters.register(new DigitalOceanAdapter());
+    this.adapters.register(new NebiusAdapter());
 
 
     if (process.env.NODE_ENV !== 'production' || process.env.MODEL_STUB_ADAPTER === 'true') {
