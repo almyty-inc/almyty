@@ -12,6 +12,8 @@ import { KmsModule } from '../kms/kms.module';
 import { AdapterRegistry } from './adapters/adapter.registry';
 import { StubAdapter } from './adapters/stub.adapter';
 import { HuggingFaceEndpointsAdapter } from './adapters/huggingface-endpoints.adapter';
+import { ModalAdapter } from './adapters/modal.adapter';
+
 
 import { ModelDeploymentsController } from './model-deployments.controller';
 import { MODEL_RECONCILE_QUEUE, ModelDeploymentsService } from './model-deployments.service';
@@ -39,6 +41,8 @@ export class ModelDeploymentsModule implements OnModuleInit {
 
   onModuleInit(): void {
     this.adapters.register(new HuggingFaceEndpointsAdapter());
+    this.adapters.register(new ModalAdapter());
+
 
     if (process.env.NODE_ENV !== 'production' || process.env.MODEL_STUB_ADAPTER === 'true') {
       this.adapters.register(new StubAdapter({ architectures: 'any' }));

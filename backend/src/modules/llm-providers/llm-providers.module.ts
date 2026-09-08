@@ -18,6 +18,7 @@ import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { DefaultModelResolver } from './default-model.resolver';
 
+import { ModelCatalogModule } from '../model-catalog/model-catalog.module';
 
 import { ToolsModule } from '../tools/tools.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
@@ -35,6 +36,8 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
     ]),
     forwardRef(() => ToolsModule),
     AuthorizationModule,
+    // Supplies PriceFeedService so cost calculation reads live prices.
+    ModelCatalogModule,
   ],
   providers: [LlmProvidersService, LlmModelsHelper, LlmChatHelper, LlmStatsHelper, LlmChatRunnerHelper, DefaultModelResolver],
   controllers: [LlmProvidersController, LlmSessionsController],
