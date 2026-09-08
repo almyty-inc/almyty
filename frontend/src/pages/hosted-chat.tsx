@@ -1,15 +1,34 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowUp, MessageSquarePlus, Menu, X } from 'lucide-react'
+import { ArrowUp, Download, MessageSquarePlus, Menu, MoreHorizontal, Trash2, X } from 'lucide-react'
 import type { Components } from 'react-markdown'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
 import {
   disclosureLine,
+  downloadBlob,
   hostedChatApi,
+  reloadAfterVisitorDeletion,
   type HostedChatBranding,
   type HostedChatMessage,
 } from '@/lib/hosted-chat'
@@ -33,6 +52,8 @@ interface HostedChatPageProps {
 interface PendingMessage extends HostedChatMessage {
   streaming?: boolean
 }
+
+type VisitorAction = 'export' | 'conversation' | 'visitor'
 
 /** Contrasting foreground for an arbitrary tenant colour. */
 function readableOn(hex: string): string {
@@ -120,6 +141,8 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<'conversation' | 'visitor' | null>(null)
+  const [visitorAction, setVisitorAction] = useState<VisitorAction | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const streamRef = useRef<EventSource | null>(null)
 
@@ -194,6 +217,51 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
     setError(null)
     setSidebarOpen(false)
   }, [])
+
+  const downloadMyData = useCallback(async () => {
+    setError(null)
+    setVisitorAction('export')
+    try {
+      const exported = await hostedChatApi.exportData(slug)
+      downloadBlob(exported.blob, exported.filename)
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ||
+          err?.response?.data?.error?.message ||
+          'Your data could not be downloaded. Please try again.',
+      )
+    } finally {
+      setVisitorAction(null)
+    }
+  }, [slug])
+
+  const deleteVisitorData = useCallback(async () => {
+    const action = confirmDelete
+    if (!action || (action === 'conversation' && !conversationId)) return
+
+    setConfirmDelete(null)
+    setError(null)
+    setVisitorAction(action)
+    try {
+      if (action === 'conversation') {
+        await hostedChatApi.deleteConversation(slug, conversationId!)
+        startNew()
+        await refetchConversations()
+      } else {
+        streamRef.current?.close()
+        await hostedChatApi.deleteMe(slug)
+        reloadAfterVisitorDeletion()
+      }
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.message ||
+          err?.response?.data?.error?.message ||
+          'Your data could not be deleted. Please try again.',
+      )
+    } finally {
+      setVisitorAction(null)
+    }
+  }, [confirmDelete, conversationId, refetchConversations, slug, startNew])
 
   const send = useCallback(async () => {
     const text = draft.trim()
@@ -369,20 +437,33 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b px-4 py-3">
-          {hasHistory && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              aria-label="Conversations"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
+        <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {hasHistory && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                aria-label="Conversations"
+                onClick={() => setSidebarOpen(true)}
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            )}
+            <BrandMark branding={branding} />
+          </div>
+          {(branding.visitorCanDelete || branding.visitorCanExport) && (
+            <VisitorMenu
+              canDelete={branding.visitorCanDelete}
+              canExport={branding.visitorCanExport}
+              hasConversation={conversationId !== null}
+              busy={visitorAction !== null}
+              onDeleteConversation={() => setConfirmDelete('conversation')}
+              onDownload={() => void downloadMyData()}
+              onDeleteVisitor={() => setConfirmDelete('visitor')}
+            />
           )}
-          <BrandMark branding={branding} />
         </header>
 
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4">
@@ -453,7 +534,92 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
           </div>
         </main>
       </div>
+
+      <AlertDialog
+        open={confirmDelete !== null}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {confirmDelete === 'conversation'
+                ? 'Delete this conversation?'
+                : 'Delete everything about you?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete === 'conversation'
+                ? 'This permanently removes this conversation and its messages.'
+                : 'This permanently removes all of your conversations, messages, runs, and visitor record. The page will reload with a new private visitor identity.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={visitorAction !== null}
+              onClick={() => void deleteVisitorData()}
+            >
+              {confirmDelete === 'conversation' ? 'Delete conversation' : 'Delete my data'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  )
+}
+
+function VisitorMenu({
+  canDelete,
+  canExport,
+  hasConversation,
+  busy,
+  onDeleteConversation,
+  onDownload,
+  onDeleteVisitor,
+}: {
+  canDelete: boolean
+  canExport: boolean
+  hasConversation: boolean
+  busy: boolean
+  onDeleteConversation: () => void
+  onDownload: () => void
+  onDeleteVisitor: () => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Privacy and visitor data"
+          disabled={busy}
+        >
+          <MoreHorizontal className="h-5 w-5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        {canExport && (
+          <DropdownMenuItem onClick={onDownload}>
+            <Download className="mr-2 h-4 w-4" />
+            Download my data
+          </DropdownMenuItem>
+        )}
+        {canDelete && hasConversation && (
+          <DropdownMenuItem onClick={onDeleteConversation}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete this conversation
+          </DropdownMenuItem>
+        )}
+        {canDelete && (canExport || hasConversation) && <DropdownMenuSeparator />}
+        {canDelete && (
+          <DropdownMenuItem className="text-destructive" onClick={onDeleteVisitor}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete everything about me
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

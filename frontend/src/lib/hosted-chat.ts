@@ -51,6 +51,8 @@ export interface HostedChatBranding {
   authMode: 'public_link' | 'email_otp' | 'oauth' | 'sso'
   whiteLabel: boolean
   aiDisclosure: string | null
+  visitorCanDelete: boolean
+  visitorCanExport: boolean
 }
 
 export interface HostedChatConversation {
@@ -103,7 +105,35 @@ function assertBranding(value: any): HostedChatBranding {
     greeting: typeof value.greeting === 'string' ? value.greeting : '',
     suggestedPrompts: Array.isArray(value.suggestedPrompts) ? value.suggestedPrompts : [],
     whiteLabel: value.whiteLabel === true,
+    // These rights default on in the app model. Treat an omitted value
+    // from a briefly mixed-version rollout the same way as the backend.
+    visitorCanDelete: value.visitorCanDelete !== false,
+    visitorCanExport: value.visitorCanExport !== false,
   }
+}
+
+function exportFilename(contentDisposition: unknown, slug: string): string {
+  if (typeof contentDisposition !== 'string') return `${slug}-my-data.json`
+  const match = contentDisposition.match(/filename="?([^";]+)"?/i)
+  const candidate = match?.[1]?.trim().split(/[\\/]/).pop()
+  return candidate && candidate.endsWith('.json') ? candidate : `${slug}-my-data.json`
+}
+
+/** Trigger a browser download without navigating away from the chat. */
+export function downloadBlob(blob: Blob, filename: string): void {
+  const href = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = href
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(href)
+}
+
+/** Kept as a seam so the destructive flow can be tested without reloading jsdom. */
+export function reloadAfterVisitorDeletion(): void {
+  window.location.reload()
 }
 
 export const hostedChatApi = {
@@ -123,6 +153,19 @@ export const hostedChatApi = {
       .then((r) =>
         unwrap<{ conversationId: string; title: string; messages: HostedChatMessage[] }>(r.data),
       ),
+
+  deleteConversation: (slug: string, conversationId: string) =>
+    client().delete(`/public/chat/${slug}/conversations/${conversationId}`),
+
+  deleteMe: (slug: string) => client().delete(`/public/chat/${slug}/me`),
+
+  exportData: (slug: string) =>
+    client()
+      .get<Blob>(`/public/chat/${slug}/export`, { responseType: 'blob' })
+      .then((r) => ({
+        blob: r.data,
+        filename: exportFilename(r.headers['content-disposition'], slug),
+      })),
 
   send: (slug: string, message: string, conversationId?: string) =>
     client()
