@@ -13,6 +13,7 @@ import { ConnectionsController, ConnectorsController } from './connections.contr
 import { ConnectionsService } from './connections.service';
 import { ConnectorCatalogService } from './connector-catalog.service';
 import { CustomConnector } from './connector.entity';
+import { GrantsModule } from './grants/grants.module';
 
 /**
  * Connections, gate 1: connector catalog, connect / validate / rotate /
@@ -25,6 +26,7 @@ import { CustomConnector } from './connector.entity';
     AuditLogModule,
     KmsModule,
     ModelDeploymentsModule,
+    GrantsModule,
   ],
   controllers: [ConnectorsController, ConnectionsController],
   providers: [

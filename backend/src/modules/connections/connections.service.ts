@@ -30,6 +30,7 @@ import {
 } from './connect-state.store';
 import { ConnectionValidationService } from './connection-validation.service';
 import { ConnectorCatalogService } from './connector-catalog.service';
+import { GrantsService } from './grants/grants.service';
 import { interpolate, schemaViolations, secretFieldsOf, splitSecrets } from './connector-schema';
 import {
   ConnectMethod,
@@ -104,6 +105,7 @@ export class ConnectionsService {
     private readonly configService: ConfigService,
     stateStoreFactory: ConnectStateStoreFactory,
     @Optional() @Inject(CONNECT_STATE_STORE) stateStore?: ConnectStateStore,
+    @Optional() private readonly grants?: GrantsService,
   ) {
     this.stateStore = stateStore ?? stateStoreFactory.create();
   }
@@ -517,6 +519,25 @@ export class ConnectionsService {
   }
 
   /**
+  /**
+   * Sane default, configurable: a new organization connection is usable by
+   * every member unless the org setting connectionsDefaultGrant is 'none'
+   * (then only admins, until someone grants). Never applied to user
+   * connections, which stay the owner's until shared.
+   */
+  private async applyDefaultGrant(saved: Credential, userId: string | null): Promise<void> {
+    if (!this.grants) return;
+    const org = await this.organizations.findOne({ where: { id: saved.organizationId } });
+    const setting = (org?.settings as Record<string, unknown> | null | undefined)?.connectionsDefaultGrant;
+    if (setting === 'none') return;
+    try {
+      await this.grants.grantDefaultForOrgConnection(saved, userId);
+    } catch (err: any) {
+      this.logger.warn(`default grant for connection ${saved.id} failed: ${err?.message ?? err}`);
+    }
+  }
+
+  /**
    * Validates live, stores (encrypting every secret), audits, and either
    * returns the connection or throws 422 carrying it with failed health.
    */
@@ -566,6 +587,7 @@ export class ConnectionsService {
       resourceId: saved.id, resourceName: saved.name,
       details: { connectorKey: connector.key, method: method.type, owner: args.ownerUserId ? 'user' : 'org', ok: result.ok, status: result.status, error: result.error ?? null },
     });
+    if (result.ok && !args.ownerUserId && !args.existing) await this.applyDefaultGrant(saved, args.userId);
     const view = this.view(saved, connector);
     if (!result.ok) {
       this.logger.warn(`connection ${saved.id} (${connector.key}) failed validation: ${result.error}`);
