@@ -13,6 +13,7 @@ on:
           - auth-cli
           - agents-cli
           - models-cli
+          - connections-cli
           - chat-cli
           - almyty-cli
           - acp-server
@@ -65,6 +66,9 @@ jobs:
           - id: models-cli
             npm_name: "@almyty/models"
             dir: packages/models-cli
+          - id: connections-cli
+            npm_name: "@almyty/connections"
+            dir: packages/connections-cli
           - id: chat-cli
             npm_name: "@almyty/chat"
             dir: packages/chat-cli
