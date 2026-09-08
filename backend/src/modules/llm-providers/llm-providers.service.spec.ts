@@ -373,6 +373,11 @@ describe('LlmProvidersService', () => {
       expect(failure.getResponse().message).toMatch(/claude-sonnet-5/);
     });
 
+    it('lets the save through when the listing call itself fails (no /models, network)', async () => {
+      (modelsHelperInstance.fetchModelsFromProvider as jest.Mock).mockRejectedValue(Object.assign(new Error('404'), { response: { status: 404 } }));
+      await expect(service.assertModelIsServed(LlmProviderType.PERPLEXITY, cfg('sonar'), 'org-1')).resolves.toBeUndefined();
+    });
+
     it('lets the save through when the vendor cannot list models', async () => {
       (modelsHelperInstance.fetchModelsFromProvider as jest.Mock).mockResolvedValue([]);
       await expect(service.assertModelIsServed(LlmProviderType.CUSTOM, cfg('anything'), 'org-1')).resolves.toBeUndefined();
