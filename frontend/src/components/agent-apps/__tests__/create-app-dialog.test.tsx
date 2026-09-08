@@ -1,6 +1,19 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { screen } from '@testing-library/react'
 
-import { appSlugError, slugify } from '../create-app-dialog'
+import { render } from '../../../test/setup'
+import { appSlugError, CreateAppDialog, slugify } from '../create-app-dialog'
+
+describe('CreateAppDialog', () => {
+  it('keeps safe defaults out of the creation flow and points to Settings', () => {
+    render(<CreateAppDialog open onOpenChange={vi.fn()} />)
+
+    expect(screen.getByText(/defaults are applied automatically/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Cost ceiling/i)).toBeNull()
+    expect(screen.queryByLabelText(/Messages per visitor/i)).toBeNull()
+    expect(screen.queryByLabelText(/Delete visitor data after/i)).toBeNull()
+  })
+})
 
 describe('slugify', () => {
   it('turns a display name into a usable address', () => {

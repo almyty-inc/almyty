@@ -98,7 +98,8 @@ export function CreateAppDialog({ open, onOpenChange }: CreateAppDialogProps) {
         <DialogHeader>
           <DialogTitle>Create App</DialogTitle>
           <DialogDescription>
-            An app is your agents under your own name. Add a distribution after you create it.
+            An app is your agents under your own name. Safe spending, message-rate, and
+            visitor-privacy defaults are applied automatically; change them in Settings.
           </DialogDescription>
         </DialogHeader>
 

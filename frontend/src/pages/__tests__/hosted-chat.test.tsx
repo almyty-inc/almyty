@@ -3,7 +3,12 @@ import { screen, fireEvent, waitFor } from '@testing-library/react'
 
 import { render } from '../../test/setup'
 import { HostedChatPage } from '../hosted-chat'
-import { hostedChatApi, type HostedChatBranding } from '@/lib/hosted-chat'
+import {
+  downloadBlob,
+  hostedChatApi,
+  reloadAfterVisitorDeletion,
+  type HostedChatBranding,
+} from '@/lib/hosted-chat'
 
 vi.mock('@/lib/hosted-chat', async () => {
   const actual = await vi.importActual<typeof import('@/lib/hosted-chat')>('@/lib/hosted-chat')
@@ -14,11 +19,16 @@ vi.mock('@/lib/hosted-chat', async () => {
       conversations: vi.fn(),
       messages: vi.fn(),
       send: vi.fn(),
+      deleteConversation: vi.fn(),
+      deleteMe: vi.fn(),
+      exportData: vi.fn(),
       streamUrl: vi.fn(() => 'http://localhost/stream'),
       me: vi.fn(),
       ssoLoginUrl: vi.fn((slug: string) => '/api/public/chat/' + slug + '/auth/sso/login'),
 
     },
+    downloadBlob: vi.fn(),
+    reloadAfterVisitorDeletion: vi.fn(),
   }
 })
 
@@ -49,6 +59,8 @@ const branding = (overrides: Partial<HostedChatBranding> = {}): HostedChatBrandi
   authMode: 'public_link',
   whiteLabel: false,
   aiDisclosure: null,
+  visitorCanDelete: true,
+  visitorCanExport: true,
   ...overrides,
 })
 
@@ -62,6 +74,12 @@ describe('HostedChatPage', () => {
       conversationId: 'c1',
       title: 'New chat',
       messages: [],
+    })
+    ;(hostedChatApi.deleteConversation as any).mockResolvedValue({})
+    ;(hostedChatApi.deleteMe as any).mockResolvedValue({})
+    ;(hostedChatApi.exportData as any).mockResolvedValue({
+      blob: new Blob(['{}'], { type: 'application/json' }),
+      filename: 'acme-my-data.json',
     })
   })
 
@@ -117,6 +135,63 @@ describe('HostedChatPage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Track my order' }))
     expect(screen.getByLabelText('Message')).toHaveValue('Track my order')
+  })
+
+  it('hides visitor-data controls when the tenant disabled both rights', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(
+      branding({ visitorCanDelete: false, visitorCanExport: false }),
+    )
+    render(<HostedChatPage slug="acme" />)
+
+    await screen.findByLabelText('Message')
+    expect(screen.queryByRole('button', { name: /Privacy and visitor data/i })).toBeNull()
+  })
+
+  it('downloads the visitor export without navigating away from the chat', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    render(<HostedChatPage slug="acme" />)
+
+    fireEvent.pointerDown(await screen.findByRole('button', { name: /Privacy and visitor data/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Download my data/i }))
+
+    await waitFor(() => expect(hostedChatApi.exportData).toHaveBeenCalledWith('acme'))
+    expect(downloadBlob).toHaveBeenCalledWith(expect.any(Blob), 'acme-my-data.json')
+  })
+
+  it('deletes only the selected conversation after confirmation', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.conversations as any).mockResolvedValue([
+      { id: 'c1', title: 'Order 123', createdAt: '2026-01-01' },
+    ])
+    ;(hostedChatApi.messages as any).mockResolvedValue({
+      conversationId: 'c1',
+      title: 'Order 123',
+      messages: [{ id: 'm1', role: 'user', content: 'Where is it?', createdAt: '2026-01-01' }],
+    })
+    render(<HostedChatPage slug="acme" />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Order 123' }))
+    await screen.findByText('Where is it?')
+    fireEvent.pointerDown(screen.getByRole('button', { name: /Privacy and visitor data/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Delete this conversation/i }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete conversation' }))
+
+    await waitFor(() =>
+      expect(hostedChatApi.deleteConversation).toHaveBeenCalledWith('acme', 'c1'),
+    )
+    expect(hostedChatApi.deleteMe).not.toHaveBeenCalled()
+  })
+
+  it('deletes the whole visitor record and reloads with a fresh identity', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    render(<HostedChatPage slug="acme" />)
+
+    fireEvent.pointerDown(await screen.findByRole('button', { name: /Privacy and visitor data/i }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Delete everything about me/i }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete my data' }))
+
+    await waitFor(() => expect(hostedChatApi.deleteMe).toHaveBeenCalledWith('acme'))
+    expect(reloadAfterVisitorDeletion).toHaveBeenCalled()
   })
 
   it('sends a message and streams the reply into place', async () => {
