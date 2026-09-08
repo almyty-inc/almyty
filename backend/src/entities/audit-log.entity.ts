@@ -69,7 +69,18 @@ export enum AuditAction {
   CREDENTIAL_USE = 'credential_use',
   // Data retention
   RETENTION_SWEEP = 'retention_sweep',
+
+  // Models layer
+  MODEL_REGISTERED = 'model_registered',
+  MODEL_VALIDATED = 'model_validated',
+  MODEL_PRICE_UPDATED = 'model_price_updated',
+  MODEL_ROUTED = 'model_routed',
+  MODEL_ROUTE_ESCALATED = 'model_route_escalated',
+  MODEL_DEPLOYMENT_TRANSITION = 'model_deployment_transition',
+  MODEL_DEPLOYMENT_BUDGET_STOP = 'model_deployment_budget_stop',
+  MODEL_DEPLOYMENT_ORPHAN_TEARDOWN = 'model_deployment_orphan_teardown',
 }
+
 
 export enum AuditResource {
   AGENT = 'agent',
@@ -86,6 +97,10 @@ export enum AuditResource {
   ORGANIZATION = 'organization',
   LLM_PROVIDER = 'llm_provider',
   LLM_SESSION = 'llm_session',
+  MODEL = 'model',
+  MODEL_VERSION = 'model_version',
+  MODEL_DEPLOYMENT = 'model_deployment',
+
   REFERRAL = 'referral',
 }
 
