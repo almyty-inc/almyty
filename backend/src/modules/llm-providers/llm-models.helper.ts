@@ -1,15 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import axios from 'axios';
 
 import { callLlmProviderHttp, llmCallOptionsFor } from './providers/safe-request';
 import { LlmProvider, LlmProviderType } from '../../entities/llm-provider.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { PriceFeedService } from '../model-catalog/pricing/price-feed.service';
 
 @Injectable()
 export class LlmModelsHelper {
   private readonly logger = new Logger(LlmModelsHelper.name);
 
-  constructor(private readonly envelopeCrypto: EnvelopeCryptoService) {}
+  constructor(
+    private readonly envelopeCrypto: EnvelopeCryptoService,
+    // Absent in specs that build the helper by hand and in any module
+    // that does not import ModelCatalogModule; the seed table then applies.
+    @Optional() private readonly priceFeed?: PriceFeedService,
+  ) {}
 
   async fetchModelsFromProvider(provider: LlmProvider): Promise<Array<{
     id: string;
@@ -340,8 +346,8 @@ export class LlmModelsHelper {
 
   /**
    * Calculate the cost of a provider call in dollars.
-   * Uses configured pricing from metadata if available, otherwise falls back
-   * to default pricing for well-known models.
+   * Explicit metadata pricing wins, then the live price feed, then the
+   * offline seed table.
    */
   calculateProviderCost(provider: LlmProvider, inputTokens: number, outputTokens: number): number {
     // 1. Use the provider's configured pricing from metadata if available
@@ -350,19 +356,43 @@ export class LlmModelsHelper {
       return ((inputTokens / 1000) * modelInfo.inputTokenCost) + ((outputTokens / 1000) * modelInfo.outputTokenCost);
     }
 
-    // 2. Fall back to default pricing for well-known models (per 1K tokens, in dollars)
+    // 2. Feed first, seed table second (per 1K tokens, in dollars)
     const model = (provider.configuration?.model || '').toLowerCase();
-    const pricing = getDefaultModelPricing(model, provider.type);
+    const pricing = this.getModelPricing(model, provider.type);
     if (pricing) {
       return ((inputTokens / 1000) * pricing.input) + ((outputTokens / 1000) * pricing.output);
     }
 
     return 0;
   }
+
+  /**
+   * Price for a (model, providerType) pair in dollars per 1K tokens: the
+   * feed's quote when it has one (feed prices are per 1M, hence the
+   * division), else the offline seed table. Identical to the table alone
+   * when no feed is wired in.
+   */
+  getModelPricing(
+    model: string,
+    providerType: LlmProviderType,
+  ): { input: number; output: number } | null {
+    if (!model) return null;
+    const quote = this.priceFeed?.lookup(providerType, model);
+    if (quote) {
+      return { input: quote.inPerMTok / 1000, output: quote.outPerMTok / 1000 };
+    }
+    return getDefaultModelPricing(model, providerType);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// Default model pricing catalog
+// Default model pricing catalog: OFFLINE SEED ONLY
+//
+// Live prices come from PriceFeedService (LiteLLM + OpenRouter) and win
+// whenever the feed has an entry. This table is the fallback for
+// air-gapped installs (MODEL_PRICE_FEED_DISABLED=true), for a replica
+// that has not fetched yet, and for models absent from both feeds. It is
+// not maintained as a source of truth.
 //
 // Dollars per 1K tokens (published per-1M prices divided by 1000).
 // Substring rules: the lowercased model id is matched against `match`
@@ -370,9 +400,8 @@ export class LlmModelsHelper {
 // more specific ids must precede their prefixes (gpt-4o-mini before
 // gpt-4o, gpt-4.1 before gpt-4, ...).
 //
-// These are list prices for estimation only — reconciliation against
-// provider actuals lives in the provider-usage module. Update the as-of
-// comments when refreshing numbers.
+// These are list prices for estimation only. Reconciliation against
+// provider actuals lives in the provider-usage module.
 // ────────────────────────────────────────────────────────────────────────
 
 export interface DefaultModelPricing {
