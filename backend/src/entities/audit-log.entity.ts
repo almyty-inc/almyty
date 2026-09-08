@@ -85,6 +85,7 @@ export enum AuditAction {
   CONNECTION_VALIDATE = 'connection_validate',
   CONNECTION_DISCONNECT = 'connection_disconnect',
   CONNECTION_ROTATE = 'connection_rotate',
+  CONNECTION_REVOKE = 'connection_revoke',
   CONNECTION_RESOLVE = 'connection_resolve',
   CONNECTION_GRANT = 'connection_grant',
   CONNECTION_REVOKE_GRANT = 'connection_revoke_grant',
