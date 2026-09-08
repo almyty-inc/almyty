@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -6,6 +6,7 @@ import { ConnectorCatalogService } from './connector-catalog.service';
 import { ConnectionView, ConnectorDefinition } from './connector.types';
 import { ConnectionsService } from './connections.service';
 import { CONNECTIONS_READ, ConnectionPrincipal, membershipOf, principalHasPermission } from './connections.permissions';
+import { GrantsService } from './grants/grants.service';
 
 export interface ResolvedConnection {
   connection: ConnectionView;
@@ -35,6 +36,7 @@ export class ConnectionsResolverService {
     private readonly connections: ConnectionsService,
     private readonly catalog: ConnectorCatalogService,
     private readonly auditLog: AuditLogService,
+    @Optional() private readonly grants?: GrantsService,
   ) {}
 
   async resolveForUse(principal: ConnectionPrincipal, connectionId: string, context: ResolveContext = { purpose: 'use' }): Promise<ResolvedConnection> {
@@ -44,8 +46,18 @@ export class ConnectionsResolverService {
       throw new ForbiddenException({ code: 'CONNECTION_FORBIDDEN', message: 'not a member of the connection owner organization' });
     }
 
-    // Ownership (gate 1). Gate 2: consult grants here before denying, so a
-    // workspace or agent granted a user's connection resolves it too.
+    if (this.grants) {
+      // Gate 2: owner, connections:manage on an org connection, or a
+      // matching grant (user, team, role, agent, workspace). Throws
+      // CONNECTION_NOT_GRANTED with the reason.
+      const decision = await this.grants.assertCanUse(principal, row, context);
+      const resolved = await this.materialize(row.id, row.organizationId, principal.id, context, true);
+      await this.grants.recordResolve(principal, row, context, decision);
+      return resolved;
+    }
+
+    // Ownership only (no grants module wired): org connections for any
+    // member with connections:read, user connections for their owner.
     const allowed = row.ownerUserId
       ? row.ownerUserId === principal.id
       : principalHasPermission(principal, row.organizationId, CONNECTIONS_READ);
@@ -68,12 +80,13 @@ export class ConnectionsResolverService {
     return this.materialize(row.id, organizationId, context.actorUserId, context);
   }
 
-  private async materialize(connectionId: string, organizationId: string, userId: string | undefined, context: ResolveContext): Promise<ResolvedConnection> {
+  private async materialize(connectionId: string, organizationId: string, userId: string | undefined, context: ResolveContext, audited = false): Promise<ResolvedConnection> {
     const row = (await this.connections.loadForResolve(connectionId))!;
     if (!row.isActive) throw new ForbiddenException({ code: 'CONNECTION_INACTIVE', message: 'connection is inactive' });
     const connector = await this.catalog.require(organizationId, row.connectorKey!);
     const config = await this.connections.decryptConfig(row);
-    this.auditLog.log({
+    // With grants wired the resolve row is written by GrantsService.recordResolve (it carries the grant used).
+    if (!audited) this.auditLog.log({
       organizationId, userId, action: AuditAction.CONNECTION_RESOLVE, resourceType: AuditResource.CONNECTION,
       resourceId: row.id, resourceName: row.name,
       details: { connectorKey: row.connectorKey, owner: row.ownerUserId ? 'user' : 'org', purpose: context.purpose, resourceType: context.resourceType ?? null, resourceId: context.resourceId ?? null, health: row.healthStatus },

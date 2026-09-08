@@ -1,0 +1,121 @@
+# Models
+
+An autonomous agent takes many steps, and not every step deserves the same model. A planning step wants the strongest reasoning model; a summary step wants the cheapest; anything that touches customer data may only leave the building on a private endpoint. The models layer keeps a **card** for every model your organization can call, with its price, latency, privacy tier and capabilities, and lets each step ask for the cheapest, fastest or most private model that fits. Vendor keys, a server you run, and weights you deploy yourself all end up as cards, and the router treats them alike.
+
+```
+Provider key  --+
+Endpoint URL  --+-->  Model card  -->  validation run  -->  selectable  -->  router picks it
+Deployment    --+     (price, tier,     (one real call)                     (cheapest | fastest | private)
+                       latency, caps)
+```
+
+Nothing in this layer is a hardcoded list. What almyty "supports" is whatever your cards say, and a card only counts once a real call through it has passed.
+
+## A model card
+
+A card is the machine-readable record the router reads. It carries:
+
+| Field | Meaning |
+|---|---|
+| `name` | The label shown in dropdowns |
+| `providerId` or `endpointRef.url` | How the model is called: a stored provider (your key) or an endpoint URL (a deployment, or a server you registered) |
+| `vendorModelId` | The id sent on the wire, for example `claude-sonnet-5` |
+| `capabilities` | `tools`, `vision`, `reasoning`, `embedding`, `structuredOutput` as booleans |
+| `contextLength` | Tokens of context |
+| `privacyTier` | `local`, `private_cloud` or `public` (default `public`) |
+| `region` | Where the model runs, used by region allowlists |
+| `pricing`, `pricingSource`, `pricingOverride` | Dollars per million tokens in and out, where the number came from, and an operator override that wins while set |
+| `measuredLatencyMs` | `p50` and `p95` learned from real traffic |
+| `status` | `active`, `inactive`, `error` or `deploying` |
+| `validationStatus`, `lastValidatedAt`, `lastValidationError` | The outcome of the last validation run: `never`, `passed` or `failed` |
+| `modelVersionId`, `base` | For deployed weights: the registered version and its base architecture |
+
+Every card belongs to one organization. Members can read cards; registering, editing, validating and deleting need the admin or owner role.
+
+## Support is data, not a list
+
+A card is **selectable** (the router may pick it, dropdowns show it) when all three hold:
+
+1. it has a way to be called: a provider row or an endpoint URL;
+2. its status is `active`; and
+3. one **validation run** has passed.
+
+That is the only definition of "supported". A vendor model that gets retired fails its next validation and drops out on its own; a server you brought up this morning joins the moment its validation passes. Nobody edits a list.
+
+## Where cards come from
+
+**From your providers, automatically.** Adding a provider, changing its configuration, and every passing health check import what the provider currently lists, in the background. Cards that already exist are left alone. A card whose vendor id has vanished from the list goes `inactive` with `metadata.retiredAt` and `metadata.retiredReason: "not listed by provider"`; it is never deleted, because runs and audit rows point at card ids, and it comes back on its own when the provider lists it again. An empty list (the vendor could not be asked) retires nothing. Deleting a provider retires its cards the same way and unlinks them, so they are no longer callable.
+
+**The health check is a validation.** Testing a provider makes a real call with the provider's resolved model. When it passes, that provider's card for that model records a passed validation run (with the measured latency), and the card is created if the catalog had none. A fresh organization with one healthy provider can route right away. A `MODEL_NOT_FOUND` failure marks the card `failed` with the error; any other failure leaves the catalog alone.
+
+**On boot.** Every active provider that has no cards yet is synced once at startup. Set `MODEL_CATALOG_BACKFILL=off` to skip it.
+
+**By hand.** Sync one provider or every active provider of the organization, register a card against a stored provider with a vendor id of your choosing, or register any OpenAI-compatible server you run:
+
+```bash
+$ npx @almyty/models sync 7c1e...            # one provider
+$ npx @almyty/models register --name "Qwen3 32B on our vLLM" --provider 7c1e... --model qwen3-32b --tier private_cloud --region eu-central
+$ npx @almyty/models register-endpoint --name "Lab box" --url http://10.0.0.7:8000/v1 --model qwen3-32b --tier local
+```
+
+`register-endpoint` stores the URL and key as a `custom` provider (the key is encrypted like every other) and points the card at it. See [Providers](/models/providers) for the vendor list and [CLI](/models/cli) for every verb.
+
+**From a deployment.** When a [deployment](/models/deployments) you made reaches `ready`, it fills the card it was created for with the endpoint URL.
+
+A card registered by hand starts with `validationStatus: never`. Run the validation to make it selectable:
+
+```bash
+$ npx @almyty/models validate 4f2a...
+Passed in 812 ms.
+Lab box  [qwen3-32b]  local  unpriced
+    4f2a...  selectable
+```
+
+The validation is one short real call through the card. It records the outcome, the latency, and an audit row. A failing call records the error on the card and leaves it unselectable.
+
+## Privacy tiers
+
+Tiers are ordered `local < private_cloud < public`. A routing policy names the most public tier a request may use, so a policy with `privacyTier: private_cloud` can pick a local card or a private-cloud card, never a public vendor. Set the tier when you register a card. A card registered against a stored provider defaults to `public`; one registered against an endpoint (a server you run, a deployment) defaults to `private_cloud`.
+
+## Pricing
+
+Prices are automatic. A daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads the LiteLLM cost map and cross-checks the OpenRouter models API. Cards are priced from the cached feed when they are registered and refreshed by the job. When the two sources disagree by more than 25 percent, the card keeps both numbers in `metadata.pricingDisagreement` so you can decide.
+
+`pricingSource` says where the number came from:
+
+| Source | Meaning |
+|---|---|
+| `feed:litellm` | The LiteLLM cost map |
+| `feed:openrouter` | The OpenRouter models API |
+| `native` | Reported by the provider itself (Together, OpenRouter) |
+| `adapter` | A deployment's cost snapshot, for weights you run |
+| `manual` | An operator override |
+| `unpriced` | No source had a price |
+
+An override (`pricingOverride`) wins over the feed until you clear it. A card with no price from any source is **unpriced**: the card says so, every run that used it says so, and the cost is never silently zero. Hosts that serve other authors' open models (Novita, DeepInfra and the like) are never billed at the original author's list price; without a feed quote such a model is unpriced.
+
+The router's `cheapest` objective ranks by a blended price, three quarters input and one quarter output per million tokens. Cost per run still uses the exact in and out prices; see [Cost governance](/cost-governance).
+
+## Latency
+
+`fastest` ranks by `measuredLatencyMs.p50`, which real traffic keeps current. After every routed answer the router folds the response time into the answering card: p50 as a moving average (a new sample weighs one fifth), p95 jumping to a slower sample at once and drifting back toward faster ones a tenth per sample. The estimate is written to the card at most once a minute and survives restarts. A validation run or a passing health check resets both to that single measurement.
+
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of providers that have no cards |
+| `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
+| `MODEL_RECONCILE_CRON` | `*/2 * * * *` | Deployment reconcile sweep; `off` disables |
+| `MODEL_ROUTER_VERIFY_ESCALATION` | unset | `true` lets a verifier rejection advance the route plan; see [Routing](/models/routing#verify-escalation) |
+| `MODEL_STUB_ADAPTER` | unset | `true` registers the in-memory stub adapter in production too |
+| `MODEL_REGISTRY_S3_*` | falls back to `STORAGE_S3_*` | Single-tenant seed of the one organization's registry connection on first boot; ignored with more than one organization |
+| `CONFORMANCE_LIVE` | unset | Adapter key whose conformance suite runs against the real provider |
+
+## Related
+
+- [Routing](/models/routing): the policy an agent step carries and how a model is chosen
+- [Providers](/models/providers): every vendor, and how to add an OpenAI-compatible server
+- [Deployments](/models/deployments): run your own weights on 14 providers from one registry
+- [Connections](/connections): where the keys behind providers and adapters live
+- [Autonomous agents](/agents/autonomous): the agents that do the routing

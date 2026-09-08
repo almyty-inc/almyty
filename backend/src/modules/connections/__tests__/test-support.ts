@@ -84,7 +84,7 @@ export interface Harness {
   http: ReturnType<typeof fixtureHttp>;
 }
 
-export function buildHarness(opts: { routes?: FixtureRoute[]; env?: Record<string, string>; s3Factory?: S3ProbeClientFactory; now?: () => number; adapters?: any; org?: Record<string, unknown> } = {}): Harness {
+export function buildHarness(opts: { routes?: FixtureRoute[]; env?: Record<string, string>; s3Factory?: S3ProbeClientFactory; now?: () => number; adapters?: any; org?: Record<string, unknown>; grants?: any } = {}): Harness {
   const credentials = fakeRepo<Credential>(() => new Credential());
   const organizations = fakeRepo<any>();
   organizations.rows.push({ id: 'org-1', plan: 'free', settings: null, ...(opts.org ?? {}) });
@@ -95,6 +95,6 @@ export function buildHarness(opts: { routes?: FixtureRoute[]; env?: Record<strin
   const config = fakeConfig({ PUBLIC_API_URL: 'https://api.test.almyty.com', ...(opts.env ?? {}) });
   const validation = new ConnectionValidationService(config, http.http, opts.s3Factory);
   const store = new MemoryConnectStateStore(opts.now);
-  const service = new ConnectionsService(credentials as any, organizations as any, catalog, validation, fakeEnvelope, audit, config, { create: () => store } as any, store);
+  const service = new ConnectionsService(credentials as any, organizations as any, catalog, validation, fakeEnvelope, audit, config, { create: () => store } as any, store, opts.grants);
   return { credentials, organizations, customConnectors, catalog, validation, service, store, audit, http };
 }
