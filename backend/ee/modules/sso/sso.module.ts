@@ -34,6 +34,6 @@ import { GatewaysModule } from '../../../src/modules/gateways/gateways.module';
 
   providers: [SsoConfigService, SsoService, ScimService, ScimAuthGuard],
   controllers: [SsoConfigController, SsoController, ScimController, HostedChatSsoController],
-  exports: [SsoConfigService],
+  exports: [SsoConfigService, ScimService],
 })
 export class SsoModule {}
