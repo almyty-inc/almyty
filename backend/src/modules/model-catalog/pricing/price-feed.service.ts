@@ -81,8 +81,9 @@ interface ProviderFeedMapping {
 
 /**
  * How each of our provider types shows up in the two feeds. Groq, Azure,
- * Bedrock, Together and Hugging Face have no OpenRouter namespace, so only
- * LiteLLM prices them. Ollama and custom endpoints are not in any feed.
+ * Bedrock, Together, Hugging Face and most of the OpenAI-compatible hosts
+ * have no OpenRouter namespace, so only LiteLLM prices them. Ollama and
+ * custom endpoints are not in any feed.
  */
 export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping | null> = {
   [LlmProviderType.OPENAI]: { litellm: ['openai'], openrouterPrefix: 'openai/' },
@@ -104,6 +105,19 @@ export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping 
   },
   [LlmProviderType.COHERE]: { litellm: ['cohere', 'cohere_chat'], openrouterPrefix: 'cohere/' },
   [LlmProviderType.HUGGINGFACE]: { litellm: ['huggingface'], openrouterPrefix: null },
+  // OpenAI-compatible inference hosts. LiteLLM keys are "<provider>/<vendor
+  // model id>" (Fireworks: "fireworks_ai/accounts/fireworks/models/..."),
+  // so stripping the first segment yields exactly the id the host's
+  // /models returns. Only Perplexity and Z.ai have an OpenRouter namespace.
+  [LlmProviderType.FIREWORKS]: { litellm: ['fireworks_ai'], openrouterPrefix: null },
+  [LlmProviderType.CEREBRAS]: { litellm: ['cerebras'], openrouterPrefix: null },
+  [LlmProviderType.DEEPINFRA]: { litellm: ['deepinfra'], openrouterPrefix: null },
+  [LlmProviderType.NOVITA]: { litellm: ['novita'], openrouterPrefix: null },
+  [LlmProviderType.PERPLEXITY]: { litellm: ['perplexity'], openrouterPrefix: 'perplexity/' },
+  [LlmProviderType.ZAI]: { litellm: ['zai'], openrouterPrefix: 'z-ai/' },
+  [LlmProviderType.BASETEN]: { litellm: ['baseten'], openrouterPrefix: null },
+  [LlmProviderType.NEBIUS]: { litellm: ['nebius'], openrouterPrefix: null },
+  [LlmProviderType.SAMBANOVA]: { litellm: ['sambanova'], openrouterPrefix: null },
   [LlmProviderType.OLLAMA]: null,
   [LlmProviderType.CUSTOM]: null,
 };

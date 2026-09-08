@@ -8,6 +8,7 @@ import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
 import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../../entities/agent.entity';
+import { Organization } from '../../../entities/organization.entity';
 import { A2AClientService } from '../../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../../a2a/external-agents.service';
 import { AgentVerifierHelper } from '../agent-verifier.helper';
@@ -28,6 +29,7 @@ describe('AgentNodeExecutor', () => {
   let llmProvidersService: jest.Mocked<LlmProvidersService>;
   let toolExecutorService: jest.Mocked<ToolExecutorService>;
   let agentRepo: { findOne: jest.Mock };
+  let orgRepo: { findOne: jest.Mock };
   let executionEngine: jest.Mocked<AgentExecutionEngine>;
   let templateResolver: AgentTemplateResolver;
   let a2aClientService: jest.Mocked<A2AClientService>;
@@ -51,6 +53,9 @@ describe('AgentNodeExecutor', () => {
       executeTool: jest.fn(),
     } as any;
     agentRepo = {
+      findOne: jest.fn(),
+    };
+    orgRepo = {
       findOne: jest.fn(),
     };
     executionEngine = {
@@ -82,6 +87,7 @@ describe('AgentNodeExecutor', () => {
         { provide: AgentExecutionEngine, useValue: executionEngine },
         { provide: A2AClientService, useValue: a2aClientService },
         { provide: ExternalAgentsService, useValue: externalAgentsService },
+        { provide: getRepositoryToken(Organization), useValue: orgRepo },
         AgentSubAgentExecutors,
         AgentVerifierHelper,
       ],
@@ -197,6 +203,58 @@ describe('AgentNodeExecutor', () => {
       );
       expect(result.output).toBe('routed');
       expect(result.routing).toEqual(attribution);
+    });
+
+    describe('organization default routing', () => {
+      const answer = () => llmProvidersService.chat.mockResolvedValue({
+        message: { role: 'assistant', content: 'routed' } as any,
+        usage: { totalTokens: 1 } as any,
+        cost: 0,
+        routing: { modelId: 'card-1', modelVersionId: null, vendorModelId: 'm', providerId: 'p', rationale: 'fastest', attempt: 1, tried: [], rejected: [] },
+      } as any);
+
+      it('falls back to the org default when a node names neither provider nor routing, and caches it', async () => {
+        orgRepo.findOne.mockResolvedValue({ id: 'org-1', settings: { maxApis: 5, defaultRouting: { objective: 'fastest', privacyTier: 'local' } } });
+        answer();
+
+        const first = await executor.execute(node('llm_call', { userPromptTemplate: 'hi' }), buildContext(), 'org-1');
+        await executor.execute(node('llm_call', { userPromptTemplate: 'again' }, 'n2'), buildContext(), 'org-1');
+
+        expect(llmProvidersService.chat).toHaveBeenCalledWith(
+          undefined,
+          expect.objectContaining({ routing: { objective: 'fastest', privacyTier: 'local' } }),
+          'org-1',
+          undefined,
+        );
+        expect(first.routing?.modelId).toBe('card-1');
+        expect(orgRepo.findOne).toHaveBeenCalledTimes(1);
+        expect(orgRepo.findOne).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'org-1' } }));
+      });
+
+      it('a node policy wins over the org default without reading it', async () => {
+        orgRepo.findOne.mockResolvedValue({ id: 'org-1', settings: { defaultRouting: { objective: 'fastest' } } });
+        answer();
+
+        await executor.execute(node('llm_call', { routing: { objective: 'cheapest' }, userPromptTemplate: 'hi' }), buildContext(), 'org-1');
+
+        expect(llmProvidersService.chat).toHaveBeenCalledWith(undefined, expect.objectContaining({ routing: { objective: 'cheapest' } }), 'org-1', undefined);
+        expect(orgRepo.findOne).not.toHaveBeenCalled();
+      });
+
+      it('still fails clearly when the org has no default', async () => {
+        orgRepo.findOne.mockResolvedValue({ id: 'org-1', settings: { defaultRouting: null } });
+        await expect(
+          executor.execute(node('llm_call', { userPromptTemplate: 'hi' }), buildContext(), 'org-1'),
+        ).rejects.toThrow(/no default routing policy/);
+        expect(llmProvidersService.chat).not.toHaveBeenCalled();
+      });
+
+      it('treats a repository failure as no default', async () => {
+        orgRepo.findOne.mockRejectedValue(new Error('db away'));
+        await expect(
+          executor.execute(node('llm_call', { userPromptTemplate: 'hi' }), buildContext(), 'org-1'),
+        ).rejects.toThrow(/missing 'providerId'/);
+      });
     });
 
     it('throws clearly when no user prompt is provided', async () => {

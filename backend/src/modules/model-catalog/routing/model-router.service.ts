@@ -9,6 +9,21 @@ import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { RouteCandidate, RoutingPolicy, selectCandidates } from './model-router';
 
+/** Weight of a new sample in the p50 average. */
+const LATENCY_P50_ALPHA = 0.2;
+/** How fast p95 follows a faster sample (a slower one is taken at once). */
+const LATENCY_P95_DECAY = 0.1;
+/** At most one latency write per card per minute. */
+const LATENCY_WRITE_INTERVAL_MS = 60_000;
+/** In-memory state is pruned past this many cards, dropping those idle for an hour. */
+const LATENCY_STATE_CAP = 5000;
+const LATENCY_STATE_TTL_MS = 3_600_000;
+
+interface LatencyState {
+  p50: number;
+  p95: number;
+  lastWriteAt: number;
+}
 /** What a run records about the card that answered, and the ones it walked past. */
 export interface RouteAttribution {
   modelId: string;
@@ -55,6 +70,8 @@ export class NoRouteError extends Error {
 @Injectable()
 export class ModelRouterService {
   private readonly logger = new Logger(ModelRouterService.name);
+  /** Per card id: the running latency estimate and when it last reached the database. */
+  private readonly latency = new Map<string, LatencyState>();
 
   constructor(
     @InjectRepository(Model) private readonly models: Repository<Model>,
@@ -115,6 +132,45 @@ export class ModelRouterService {
       capabilities: {},
       metadata: {},
     });
+  }
+
+  /**
+   * Learn latency from real traffic. p50 is an exponential moving average
+   * of response times; p95 jumps to a slower sample at once and decays
+   * toward faster ones slowly. State lives in memory per card, seeded
+   * from the stored value after a restart, and is written to the card at
+   * most once a minute. Never rejects; a failed write is logged.
+   */
+  async recordLatency(card: Pick<Model, 'id' | 'measuredLatencyMs'>, responseTimeMs: number, now = Date.now()): Promise<void> {
+    if (!Number.isFinite(responseTimeMs) || responseTimeMs <= 0) return;
+    let state = this.latency.get(card.id);
+    if (!state) {
+      const seed = card.measuredLatencyMs;
+      const seeded = !!seed && Number.isFinite(seed.p50);
+      state = seeded
+        ? { p50: seed!.p50, p95: Number.isFinite(seed!.p95) ? seed!.p95 : seed!.p50, lastWriteAt: 0 }
+        : { p50: responseTimeMs, p95: responseTimeMs, lastWriteAt: 0 };
+      this.latency.set(card.id, state);
+      if (!seeded) return this.flushLatency(card, state, now);
+    }
+    state.p50 += (responseTimeMs - state.p50) * LATENCY_P50_ALPHA;
+    state.p95 = responseTimeMs >= state.p95 ? responseTimeMs : state.p95 + (responseTimeMs - state.p95) * LATENCY_P95_DECAY;
+    if (now - state.lastWriteAt < LATENCY_WRITE_INTERVAL_MS) return;
+    return this.flushLatency(card, state, now);
+  }
+
+  private async flushLatency(card: Pick<Model, 'id' | 'measuredLatencyMs'>, state: LatencyState, now: number): Promise<void> {
+    state.lastWriteAt = now;
+    if (this.latency.size > LATENCY_STATE_CAP) {
+      for (const [id, s] of this.latency) if (now - s.lastWriteAt > LATENCY_STATE_TTL_MS) this.latency.delete(id);
+    }
+    const measuredLatencyMs = { p50: Math.round(state.p50), p95: Math.round(state.p95), updatedAt: new Date(now).toISOString() };
+    card.measuredLatencyMs = measuredLatencyMs;
+    try {
+      await this.models.update({ id: card.id }, { measuredLatencyMs });
+    } catch (err: any) {
+      this.logger.warn(`latency write for card ${card.id} failed: ${err?.message ?? err}`);
+    }
   }
 
   /** Fire-and-forget audit row: which card answered and why. */

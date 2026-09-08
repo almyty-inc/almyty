@@ -51,7 +51,8 @@ export class UpdateModelBodyDto {
 }
 
 export class SyncModelsBodyDto {
-  @IsUUID() providerId: string;
+  /** One provider; omit (or send no body) to sync every active provider of the org. */
+  @IsOptional() @IsUUID() providerId?: string;
 }
 
 export class ListModelsQueryDto {

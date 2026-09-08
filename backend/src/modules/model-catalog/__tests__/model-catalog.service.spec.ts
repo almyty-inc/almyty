@@ -132,4 +132,132 @@ describe('ModelCatalogService', () => {
     expect(second.created).toEqual([]);
     expect(second.skipped).toBe(2);
   });
+
+  describe('auto-population', () => {
+    const fetch = () => (svc as any).modelsHelper.fetchModelsFromProvider as jest.Mock;
+
+    it('sync retires cards the provider no longer lists and reinstates them when they return', async () => {
+      fetch().mockResolvedValueOnce([{ id: 'x' }, { id: 'y' }]);
+      await svc.syncFromProvider('org', 'p1');
+      fetch().mockResolvedValueOnce([{ id: 'x' }]);
+      const second = await svc.syncFromProvider('org', 'p1');
+      expect(second.retired.map((c) => c.vendorModelId)).toEqual(['y']);
+      const y = models.rows.find((m) => m.vendorModelId === 'y')!;
+      expect(y.status).toBe('inactive');
+      expect(y.metadata?.retiredAt).toEqual(expect.any(String));
+      expect(y.metadata?.retiredReason).toBe('not listed by provider');
+      expect(models.rows).toHaveLength(2);
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: AuditAction.UPDATE, details: expect.objectContaining({ retired: ['y'] }) }));
+      fetch().mockResolvedValueOnce([{ id: 'x' }, { id: 'y' }]);
+      const third = await svc.syncFromProvider('org', 'p1');
+      expect(third.reinstated.map((c) => c.vendorModelId)).toEqual(['y']);
+      expect(third.created).toEqual([]);
+      expect(y.status).toBe('active');
+      expect(y.metadata?.retiredAt).toBeUndefined();
+      expect(y.metadata?.reinstatedAt).toEqual(expect.any(String));
+    });
+
+    it('sync leaves a card an admin set inactive alone and retires nothing from an empty list', async () => {
+      fetch().mockResolvedValueOnce([{ id: 'x' }, { id: 'y' }]);
+      await svc.syncFromProvider('org', 'p1');
+      const y = models.rows.find((m) => m.vendorModelId === 'y')!;
+      await svc.update('org', y.id, { status: 'inactive' });
+      fetch().mockResolvedValueOnce([]);
+      const empty = await svc.syncFromProvider('org', 'p1');
+      expect(empty.retired).toEqual([]);
+      expect(models.rows.find((m) => m.vendorModelId === 'x')!.status).toBe('active');
+      fetch().mockResolvedValueOnce([{ id: 'x' }, { id: 'y' }]);
+      const again = await svc.syncFromProvider('org', 'p1');
+      expect(again.reinstated).toEqual([]);
+      expect(y.status).toBe('inactive');
+    });
+
+    it('syncAll walks every active provider and reports a provider that fails to list', async () => {
+      providers.rows.push(Object.assign(new LlmProvider(), { id: 'p2', organizationId: 'org', name: 'Broken', type: LlmProviderType.MISTRAL, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {} }));
+      providers.rows.push(Object.assign(new LlmProvider(), { id: 'p3', organizationId: 'org', name: 'Off', type: LlmProviderType.OPENAI, status: LlmProviderStatus.INACTIVE, isHealthy: true, configuration: {} }));
+      fetch().mockImplementation(async (p: LlmProvider) => {
+        if (p.id === 'p2') throw new Error('listing failed');
+        return [{ id: 'gpt-x' }];
+      });
+      const summary = await svc.syncAll('org', 'u');
+      expect(summary.created.map((c) => c.vendorModelId)).toEqual(['gpt-x']);
+      expect(summary.providers).toEqual([
+        { providerId: 'p1', name: 'OpenAI', created: 1, skipped: 0, retired: 0, reinstated: 0 },
+        { providerId: 'p2', name: 'Broken', created: 0, skipped: 0, retired: 0, reinstated: 0, error: 'listing failed' },
+      ]);
+    });
+
+    it('syncInBackground shares an in-flight sync, honours the cooldown and never rejects', async () => {
+      let release!: (v: any[]) => void;
+      fetch().mockReturnValueOnce(new Promise((r) => { release = r; }));
+      const a = svc.syncInBackground('org', 'p1', 'provider_created');
+      const b = svc.syncInBackground('org', 'p1', 'health_check');
+      expect(b).toBe(a);
+      release([{ id: 'gpt-x', name: 'GPT X' }]);
+      expect((await a)?.created.map((c) => c.vendorModelId)).toEqual(['gpt-x']);
+      expect(fetch()).toHaveBeenCalledTimes(1);
+      expect(await svc.syncInBackground('org', 'p1', 'health_check')).toBeNull();
+      fetch().mockResolvedValueOnce([{ id: 'gpt-x', name: 'GPT X' }]);
+      expect((await svc.syncInBackground('org', 'p1', 'manual', 0))?.skipped).toBe(1);
+      expect(await svc.syncInBackground('org', 'missing', 'provider_created', 0)).toBeNull();
+    });
+
+    it('backfill syncs only active providers that have no cards yet', async () => {
+      providers.rows.push(Object.assign(new LlmProvider(), { id: 'p2', organizationId: 'org2', name: 'Other', type: LlmProviderType.OPENAI, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {} }));
+      fetch().mockResolvedValueOnce([{ id: 'a' }]);
+      await svc.syncFromProvider('org', 'p1');
+      fetch().mockClear();
+      fetch().mockResolvedValue([{ id: 'b' }]);
+      const result = await svc.backfill();
+      expect(result).toEqual({ providers: 2, synced: 1, created: 1, failed: 0 });
+      expect(fetch()).toHaveBeenCalledTimes(1);
+      expect(fetch().mock.calls[0][0].id).toBe('p2');
+      expect(models.rows.find((m) => m.vendorModelId === 'b')?.organizationId).toBe('org2');
+    });
+
+    it('recordExternalValidation: a passing health check creates the card if needed and makes it selectable', async () => {
+      const card = await svc.recordExternalValidation('org', 'p1', 'gpt-probe', { passed: true, latencyMs: 120, source: 'health_check' });
+      expect(card?.validationStatus).toBe('passed');
+      expect(card?.isSelectable()).toBe(true);
+      expect(card?.measuredLatencyMs).toMatchObject({ p50: 120, p95: 120 });
+      expect(card?.metadata?.syncedFrom).toBe('health_check');
+      expect(audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: AuditAction.MODEL_VALIDATED, details: expect.objectContaining({ passed: true, source: 'health_check' }) }));
+      const again = await svc.recordExternalValidation('org', 'p1', 'gpt-probe', { passed: true, latencyMs: 90 });
+      expect(again?.id).toBe(card?.id);
+      expect(models.rows).toHaveLength(1);
+    });
+
+    it('recordExternalValidation: a failure marks an existing card and ignores an unknown one', async () => {
+      expect(await svc.recordExternalValidation('org', 'p1', 'never-seen', { passed: false, error: 'gone' })).toBeNull();
+      expect(models.rows).toHaveLength(0);
+      const card = await svc.register('org', { name: 'a', vendorModelId: 'gone-soon', providerId: 'p1' });
+      const failed = await svc.recordExternalValidation('org', 'p1', 'gone-soon', { passed: false, error: 'Model "gone-soon" is not available' });
+      expect(failed?.id).toBe(card.id);
+      expect(failed?.validationStatus).toBe('failed');
+      expect(failed?.status).toBe('error');
+      expect(failed?.lastValidationError).toContain('not available');
+    });
+
+    it('recordExternalValidation: a pass brings back a card the sync had retired', async () => {
+      fetch().mockResolvedValueOnce([{ id: 'x' }]);
+      await svc.syncFromProvider('org', 'p1');
+      fetch().mockResolvedValueOnce([{ id: 'other' }]);
+      await svc.syncFromProvider('org', 'p1');
+      expect(models.rows.find((m) => m.vendorModelId === 'x')!.status).toBe('inactive');
+      const back = await svc.recordExternalValidation('org', 'p1', 'x', { passed: true, latencyMs: 10 });
+      expect(back?.status).toBe('active');
+      expect(back?.metadata?.retiredAt).toBeUndefined();
+      expect(back?.isSelectable()).toBe(true);
+    });
+
+    it('retireProviderCards keeps the cards but takes them out of routing', async () => {
+      fetch().mockResolvedValueOnce([{ id: 'x' }, { id: 'y' }]);
+      await svc.syncFromProvider('org', 'p1');
+      await svc.recordExternalValidation('org', 'p1', 'x', { passed: true });
+      expect(await svc.retireProviderCards('org', 'p1')).toBe(2);
+      expect(models.rows).toHaveLength(2);
+      expect(models.rows.every((m) => m.status === 'inactive' && m.metadata?.retiredReason === 'provider deleted' && !m.isSelectable())).toBe(true);
+      expect(await svc.retireProviderCards('org', 'p1')).toBe(0);
+    });
+  });
 });

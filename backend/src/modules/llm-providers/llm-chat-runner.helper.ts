@@ -104,6 +104,7 @@ export class LlmChatRunnerHelper {
           rejected: plan.rejected,
         };
         this.router.recordRoute(organizationId, response.routing, { userId: session.userId ?? undefined, conversationId: session.id });
+        if (typeof response.responseTime === 'number') void this.router.recordLatency(candidate.card, response.responseTime);
         return response;
       } catch (error) {
         lastError = error;
@@ -253,6 +254,16 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.GROQ:
       case LlmProviderType.TOGETHER:
       case LlmProviderType.OPENROUTER:
+      // OpenAI-compatible inference hosts (docs/design/call-only-vendors.md).
+      case LlmProviderType.FIREWORKS:
+      case LlmProviderType.CEREBRAS:
+      case LlmProviderType.DEEPINFRA:
+      case LlmProviderType.NOVITA:
+      case LlmProviderType.PERPLEXITY:
+      case LlmProviderType.ZAI:
+      case LlmProviderType.BASETEN:
+      case LlmProviderType.NEBIUS:
+      case LlmProviderType.SAMBANOVA:
       // Ollama serves an OpenAI-compatible API under <server>/v1 —
       // chat, streaming, and tool calling all ride the OpenAI path.
       // getAuthHeaders() adds no Authorization header when no key is
@@ -391,6 +402,15 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.OPENROUTER:
       case LlmProviderType.COHERE:
       case LlmProviderType.HUGGINGFACE:
+      case LlmProviderType.FIREWORKS:
+      case LlmProviderType.CEREBRAS:
+      case LlmProviderType.DEEPINFRA:
+      case LlmProviderType.NOVITA:
+      case LlmProviderType.PERPLEXITY:
+      case LlmProviderType.ZAI:
+      case LlmProviderType.BASETEN:
+      case LlmProviderType.NEBIUS:
+      case LlmProviderType.SAMBANOVA:
         if (!config.apiKey) {
           throw new BadRequestException(`${type} provider requires an API key`);
         }
