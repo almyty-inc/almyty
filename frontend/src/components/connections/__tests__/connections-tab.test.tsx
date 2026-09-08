@@ -46,6 +46,35 @@ vi.mock('../../../store/organization', () => ({
   },
 }))
 
+// The governance section at the bottom reads the entitlement; locked by default here.
+const entitlementState = { granted: false }
+vi.mock('../../../hooks/use-entitlement', async () => {
+  const actual = await vi.importActual<any>('../../../hooks/use-entitlement')
+  const list = () => (entitlementState.granted ? ['connections_governance'] : [])
+  return {
+    ...actual,
+    useEntitlement: (feature?: string) => {
+      const entitlements = list()
+      const has = (f: string) => entitlements.includes(f)
+      if (feature === undefined) return { entitlements, has, isLoading: false, edition: 'enterprise', limit: () => -1 }
+      return { enabled: has(feature), isLoading: false, edition: 'enterprise' }
+    },
+    useEntitlements: () => ({ entitlements: list(), has: (f: string) => list().includes(f), isLoading: false, edition: 'enterprise', limit: () => -1 }),
+  }
+})
+
+vi.mock('../../../lib/connections-governance-api', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/connections-governance-api')>('../../../lib/connections-governance-api')
+  return {
+    ...actual,
+    connectionPoliciesApi: { list: vi.fn().mockResolvedValue([]), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() },
+    connectionsReviewApi: { list: vi.fn().mockResolvedValue([]), revokeGrants: vi.fn() },
+    connectionsExpiryApi: { list: vi.fn(), enforce: vi.fn() },
+    connectionsRotationApi: { candidates: vi.fn(), rotateDue: vi.fn() },
+    connectionsAuditExportApi: { download: vi.fn() },
+  }
+})
+
 const openai: Connector = { key: 'openai', kind: 'inference', displayName: 'OpenAI', description: 'GPT models', connect: [{ type: 'api_key', label: 'API key', schema: { type: 'object', properties: { apiKey: { type: 'string', 'x-secret': true } }, required: ['apiKey'] } }] }
 const slack: Connector = { key: 'slack', kind: 'channel', displayName: 'Slack', connect: [{ type: 'oauth2_code', label: 'Add to Slack' }] }
 const vllm: Connector = { key: 'office-vllm', kind: 'inference', displayName: 'Office vLLM', connect: [{ type: 'api_key' }], organizationId: 'test-org-id' }
@@ -152,5 +181,27 @@ describe('ConnectionsTab', () => {
     const toggle = await screen.findByRole('switch', { name: 'Allow user-scoped connections' })
     await waitFor(() => expect(organizationsApi.getById).toHaveBeenCalled())
     await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'))
+  })
+
+  it('shows the governance section locked without the entitlement', async () => {
+    entitlementState.granted = false
+    render(<ConnectionsTab />)
+    await screen.findByTestId('connector-card-openai')
+    const governance = screen.getByRole('region', { name: 'Governance' })
+    expect(within(governance).getByTestId('governance-locked')).toHaveTextContent('Connections governance')
+    expect(within(governance).queryByRole('tab', { name: 'Policies' })).not.toBeInTheDocument()
+  })
+
+  it('shows the governance sub-navigation with the entitlement', async () => {
+    entitlementState.granted = true
+    try {
+      render(<ConnectionsTab />)
+      await screen.findByTestId('connector-card-openai')
+      const governance = screen.getByRole('region', { name: 'Governance' })
+      expect(within(governance).getByRole('tab', { name: 'Policies' })).toHaveAttribute('aria-selected', 'true')
+      expect(await within(governance).findByText('No policies yet')).toBeInTheDocument()
+    } finally {
+      entitlementState.granted = false
+    }
   })
 })
