@@ -4,7 +4,7 @@
  * pipeline info, version history, change history, and audit log.
  */
 import React, { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Play,
   Loader2,
@@ -54,6 +54,7 @@ import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
 import { AgentConfigPanel } from './agent-config-panel'
 import { ExecutionRouting } from './routing-attribution'
+import { modelsApi } from '@/lib/models-api'
 import type { Agent, AgentExecution, AgentVersionSnapshot, AgentAuditEntry } from '@/types'
 
 interface OverviewTabProps {
@@ -98,6 +99,13 @@ export function OverviewTab({
   setScheduleInput,
 }: OverviewTabProps) {
   const queryClient = useQueryClient()
+  // Card names for the routing column: attribution carries card ids only.
+  const { data: catalogCards } = useQuery({ queryKey: ['models', 'names'], queryFn: () => modelsApi.list(), staleTime: 5 * 60 * 1000 })
+  const cardNames = React.useMemo(() => {
+    const names: Record<string, string> = {}
+    for (const card of catalogCards ?? []) names[card.id] = card.name || card.vendorModelId
+    return names
+  }, [catalogCards])
   const { success, error: errorNotif } = useNotifications()
 
   const [testInput, setTestInput] = useState('')
@@ -372,7 +380,7 @@ export function OverviewTab({
                         </Badge>
                       </TableCell>
                       <TableCell className="max-w-[320px]">
-                        <ExecutionRouting nodeResults={exec.nodeResults} />
+                        <ExecutionRouting nodeResults={exec.nodeResults} cardNames={cardNames} />
                       </TableCell>
                       <TableCell className="text-sm">
                         {exec.executionTime ? `${(exec.executionTime / 1000).toFixed(2)}s` : '--'}

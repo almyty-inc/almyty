@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { ExecutionRouting, RoutingAttribution } from '../routing-attribution'
@@ -36,6 +36,17 @@ describe('RoutingAttribution', () => {
     render(<RoutingAttribution routing={{ ...routing, attempt: 1, tried: [], rejected: [] }} />)
     expect(screen.getByTestId('routing-attribution')).toHaveTextContent('attempt 1')
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+})
+
+describe('RoutingAttribution card names', () => {
+  it('shows card names in the tried and rejected lists when a name map is given, ids otherwise', () => {
+    const routing = { modelId: 'c-1', modelVersionId: null, vendorModelId: 'gpt-x', providerId: 'p', rationale: 'cheapest', attempt: 2, tried: [{ modelId: 'c-0', reason: 'MODEL_NOT_FOUND' }], rejected: [{ modelId: 'c-9', reason: 'not selectable' }] }
+    render(<RoutingAttribution routing={routing as any} cardNames={{ 'c-0': 'Old Sonnet', 'c-9': 'Local Llama' }} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('Old Sonnet')).toBeInTheDocument()
+    expect(screen.getByText('Local Llama')).toBeInTheDocument()
+    expect(screen.queryByText('c-9')).not.toBeInTheDocument()
   })
 })
 
