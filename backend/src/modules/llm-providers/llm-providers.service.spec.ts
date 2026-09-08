@@ -21,6 +21,8 @@ import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
+import { ModelNotFoundError } from './model-errors';
+import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
 
 // jest.mock with __esModule: true short-circuits __importDefault so the
@@ -51,8 +53,14 @@ describe('LlmProvidersService', () => {
   let gatewayRepository: any;
   let toolRepository: any;
   let toolExecutorService: any;
+  let catalog: any;
 
   beforeEach(async () => {
+    catalog = {
+      syncInBackground: jest.fn().mockResolvedValue(null),
+      recordExternalValidation: jest.fn().mockResolvedValue(null),
+      retireProviderCards: jest.fn().mockResolvedValue(0),
+    };
     // The atomic stats bumps added for the counter-race fix call
     // createQueryBuilder().update().set().where().execute() on the
     // session and provider repositories. Return a noop chain that
@@ -161,6 +169,7 @@ describe('LlmProvidersService', () => {
             assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: ModelCatalogService, useValue: catalog },
       ],
     }).compile();
 
@@ -707,6 +716,145 @@ describe('LlmProvidersService', () => {
       await expect(service.deleteProvider('provider-1', 'org-1', 'user-1'))
         .rejects
         .toThrow(ForbiddenException);
+    });
+  });
+
+  describe('catalog hooks (auto-populated model cards)', () => {
+    const baseProvider = () => {
+      const p: any = {
+        id: 'provider-1', organizationId: 'org-1', name: 'OpenAI', type: LlmProviderType.OPENAI,
+        configuration: { apiKey: 'k', model: 'gpt-4o-mini' }, status: LlmProviderStatus.ACTIVE, isHealthy: true,
+        capabilities: {}, metadata: {}, maskSensitiveData: jest.fn().mockReturnThis(),
+      };
+      Object.setPrototypeOf(p, LlmProvider.prototype);
+      return p;
+    };
+
+    it('createProvider queues a catalog sync for the new provider', async () => {
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1' });
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) });
+      const p = baseProvider();
+      llmProviderRepository.create.mockReturnValue(p);
+      llmProviderRepository.save.mockResolvedValue(p);
+      jest.spyOn(runnerInstance as any, 'validateProviderConfiguration').mockImplementation();
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.createProvider({ name: 'OpenAI', type: LlmProviderType.OPENAI, configuration: { apiKey: 'k' } } as any, 'org-1', 'user-1');
+
+      expect(catalog.syncInBackground).toHaveBeenCalledWith('org-1', 'provider-1', 'provider_created');
+    });
+
+    it('updateProvider syncs only when the configuration changed', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.save.mockImplementation(async (x: any) => x);
+      jest.spyOn(runnerInstance as any, 'validateProviderConfiguration').mockImplementation();
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.updateProvider('provider-1', { name: 'Renamed' }, 'org-1', 'user-1');
+      expect(catalog.syncInBackground).not.toHaveBeenCalled();
+
+      await service.updateProvider('provider-1', { configuration: { model: 'gpt-4o' } }, 'org-1', 'user-1');
+      expect(catalog.syncInBackground).toHaveBeenCalledWith('org-1', 'provider-1', 'provider_configuration_changed');
+    });
+
+    it('deleteProvider retires the cards before the row is removed', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      const order: string[] = [];
+      catalog.retireProviderCards.mockImplementation(async () => { order.push('retire'); return 2; });
+      llmProviderRepository.remove.mockImplementation(async () => { order.push('remove'); });
+
+      await service.deleteProvider('provider-1', 'org-1', 'user-1');
+
+      expect(catalog.retireProviderCards).toHaveBeenCalledWith('org-1', 'provider-1');
+      expect(order).toEqual(['retire', 'remove']);
+    });
+
+    it('deleteProvider still removes the row when retiring fails', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      catalog.retireProviderCards.mockRejectedValue(new Error('catalog down'));
+      llmProviderRepository.remove.mockResolvedValue(undefined);
+
+      await service.deleteProvider('provider-1', 'org-1', 'user-1');
+
+      expect(llmProviderRepository.remove).toHaveBeenCalledWith(p);
+    });
+
+    it('a passing health check validates the probed card and refreshes the list', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
+        message: { role: MessageRole.ASSISTANT, content: 'Hello' },
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        model: 'gpt-4o-mini', cost: 0, responseTime: 5,
+      });
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(true);
+      expect(catalog.recordExternalValidation).toHaveBeenCalledWith(
+        'org-1', 'provider-1', 'gpt-4o-mini',
+        expect.objectContaining({ passed: true, latencyMs: expect.any(Number), source: 'health_check' }),
+      );
+      expect(catalog.syncInBackground).toHaveBeenCalledWith('org-1', 'provider-1', 'health_check');
+    });
+
+    it('a MODEL_NOT_FOUND health check failure marks the card failed and does not sync', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider')
+        .mockRejectedValue(new ModelNotFoundError('gpt-4o-mini', 'provider-1', 'openai', 'model not found'));
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(false);
+      expect(catalog.recordExternalValidation).toHaveBeenCalledWith(
+        'org-1', 'provider-1', 'gpt-4o-mini',
+        expect.objectContaining({ passed: false, source: 'health_check', error: expect.stringContaining('not available') }),
+      );
+      expect(catalog.syncInBackground).not.toHaveBeenCalled();
+    });
+
+    it('an ordinary health check failure records nothing on the catalog', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
+
+      await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(catalog.recordExternalValidation).not.toHaveBeenCalled();
+      expect(catalog.syncInBackground).not.toHaveBeenCalled();
+    });
+
+    it('a rejected catalog record never fails the health check', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      catalog.recordExternalValidation.mockRejectedValue(new Error('catalog down'));
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
+        message: { role: MessageRole.ASSISTANT, content: 'Hello' }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, model: 'gpt-4o-mini', cost: 0,
+      });
+
+      await expect(service.performHealthCheck('provider-1', 'org-1')).resolves.toMatchObject({ isHealthy: true });
+    });
+
+    it('works without the catalog wired at all', async () => {
+      (service as any).catalog = undefined;
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      llmProviderRepository.remove.mockResolvedValue(undefined);
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
+        message: { role: MessageRole.ASSISTANT, content: 'Hello' }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, model: 'gpt-4o-mini', cost: 0,
+      });
+
+      await expect(service.performHealthCheck('provider-1', 'org-1')).resolves.toMatchObject({ isHealthy: true });
+      await expect(service.deleteProvider('provider-1', 'org-1', 'user-1')).resolves.toBeUndefined();
     });
   });
 

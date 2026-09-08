@@ -90,6 +90,30 @@ const LITELLM_FIXTURE: Record<string, any> = {
     input_cost_per_token: 0.000001,
     output_cost_per_token: 0.000001,
   },
+  'cerebras/llama-3.3-70b': {
+    litellm_provider: 'cerebras',
+    mode: 'chat',
+    input_cost_per_token: 0.00000085,
+    output_cost_per_token: 0.0000012,
+  },
+  'nebius/deepseek-ai/DeepSeek-V3': {
+    litellm_provider: 'nebius',
+    mode: 'chat',
+    input_cost_per_token: 0.0000005,
+    output_cost_per_token: 0.0000015,
+  },
+  'sambanova/DeepSeek-V3.1': {
+    litellm_provider: 'sambanova',
+    mode: 'chat',
+    input_cost_per_token: 0.000003,
+    output_cost_per_token: 0.0000045,
+  },
+  'perplexity/sonar-pro': {
+    litellm_provider: 'perplexity',
+    mode: 'chat',
+    input_cost_per_token: 0.000003,
+    output_cost_per_token: 0.000015,
+  },
 };
 
 // Strings, as OpenRouter returns them.
@@ -100,6 +124,8 @@ const OPENROUTER_FIXTURE = {
     { id: 'mistralai/mistral-large-latest', pricing: { prompt: '0.000004', completion: '0.000006' } },
     { id: 'x-ai/grok-4', pricing: { prompt: '0.000003', completion: '0.000015' }, context_length: 256000 },
     { id: 'meta-llama/llama-3.3-70b-instruct', pricing: { prompt: '0.0000001', completion: '0.0000003' } },
+    { id: 'perplexity/sonar-pro', pricing: { prompt: '0.000003', completion: '0.000015' }, context_length: 200000 },
+    { id: 'z-ai/glm-5', pricing: { prompt: '0.000001', completion: '0.0000032' }, context_length: 200000 },
     { id: 'broken/no-pricing', pricing: {} },
   ],
 };
@@ -257,6 +283,21 @@ describe('PriceFeedService', () => {
         outPerMTok: 15,
       });
       expect(service.lookup('mistral', 'mistral-large-latest')).toMatchObject({ inPerMTok: 2, outPerMTok: 6 });
+    });
+
+    it('prices the OpenAI-compatible inference hosts from their LiteLLM namespaces', async () => {
+      await service.refresh();
+      // The stripped key is exactly what each host's /models returns.
+      expect(service.lookup('fireworks', 'accounts/fireworks/models/some-model')).toMatchObject({ inPerMTok: 1, outPerMTok: 1, source: 'feed:litellm' });
+      expect(service.lookup('cerebras', 'llama-3.3-70b')).toMatchObject({ inPerMTok: 0.85, outPerMTok: 1.2 });
+      expect(service.lookup('nebius', 'deepseek-ai/DeepSeek-V3')).toMatchObject({ inPerMTok: 0.5, outPerMTok: 1.5 });
+      expect(service.lookup('sambanova', 'DeepSeek-V3.1')).toMatchObject({ inPerMTok: 3, outPerMTok: 4.5 });
+      // OpenRouter cross-checks Perplexity and Z.ai under their own namespaces.
+      expect(service.lookup('perplexity', 'sonar-pro')).toMatchObject({ inPerMTok: 3, outPerMTok: 15, source: 'feed:litellm' });
+      expect(service.lookup('zai', 'glm-5')).toMatchObject({ inPerMTok: 1, outPerMTok: 3.2, source: 'feed:openrouter' });
+      // Hosts share ids with the model authors but are priced per host.
+      expect(service.lookup('deepseek', 'DeepSeek-V3.1')).toBeNull();
+      expect(service.lookup('novita', 'DeepSeek-V3.1')).toBeNull();
     });
 
     it('matches ids case-insensitively', async () => {

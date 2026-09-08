@@ -19,7 +19,7 @@ describe('LlmChatRunnerHelper.callRouted', () => {
   const ok = (model: string) => ({ message: { role: 'assistant', content: 'hi' }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, cost: 0, model, conversationId: 'conv', messageId: 'm', responseTime: 1 });
 
   function build(plan: { candidates: any[]; rejected: any[] }, dispatch: jest.Mock) {
-    const router = { plan: jest.fn().mockResolvedValue(plan), recordRoute: jest.fn() };
+    const router = { plan: jest.fn().mockResolvedValue(plan), recordRoute: jest.fn(), recordLatency: jest.fn().mockResolvedValue(undefined) };
     const runner = new LlmChatRunnerHelper(
       {} as any, {} as any, {} as any,
       { warmOrg: jest.fn().mockResolvedValue(undefined) } as any,
@@ -43,6 +43,7 @@ describe('LlmChatRunnerHelper.callRouted', () => {
       modelId: 'a', modelVersionId: 'v-a', vendorModelId: 'cheap', providerId: 'p-a', rationale: 'cheapest', attempt: 1, tried: [], rejected: [{ modelId: 'z', reason: 'lacks vision' }],
     });
     expect(router.recordRoute).toHaveBeenCalledWith('org', res.routing, { userId: 'u', conversationId: 'conv' });
+    expect(router.recordLatency).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'p-a' }), 1);
   });
 
   it('moves to the next candidate when a model is retired', async () => {

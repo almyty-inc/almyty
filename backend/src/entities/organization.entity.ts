@@ -17,6 +17,7 @@ import { Gateway } from './gateway.entity';
 import { LlmProvider } from './llm-provider.entity';
 import { Conversation } from './conversation.entity';
 import { UsageMetric } from './usage-metric.entity';
+import type { RoutingPolicy } from '../modules/model-catalog/routing/model-router';
 
 export interface OrganizationSettings {
   maxApis?: number;
@@ -31,6 +32,8 @@ export interface OrganizationSettings {
     enabled: boolean;
     endpoints: string[];
   };
+  /** Routing policy an llm_call node that names neither a provider nor a policy falls back to. */
+  defaultRouting?: RoutingPolicy | null;
 }
 
 @Entity('organizations')

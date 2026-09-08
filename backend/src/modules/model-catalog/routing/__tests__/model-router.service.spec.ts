@@ -38,14 +38,16 @@ describe('ModelRouterService', () => {
   let deployments: Record<string, ModelDeployment>;
   let audit: { log: jest.Mock };
   let svc: ModelRouterService;
+  let modelsUpdate: jest.Mock;
 
   beforeEach(() => {
     cards = [];
     providers = {};
     deployments = {};
     audit = { log: jest.fn().mockResolvedValue(null) };
+    modelsUpdate = jest.fn().mockResolvedValue({ affected: 1 });
     svc = new ModelRouterService(
-      { find: jest.fn(async () => cards) } as any,
+      { find: jest.fn(async () => cards), update: modelsUpdate } as any,
       { findOne: jest.fn(async ({ where }: any) => providers[where.id] ?? null) } as any,
       { findOne: jest.fn(async ({ where }: any) => deployments[where.id] ?? null) } as any,
       audit as any,
@@ -99,5 +101,46 @@ describe('ModelRouterService', () => {
       action: AuditAction.MODEL_ROUTED, resourceId: 'a', userId: 'u',
       details: expect.objectContaining({ modelVersionId: 'v1', rationale: 'cheapest', attempt: 2, tried: [{ modelId: 'z', reason: 'MODEL_NOT_FOUND' }], conversationId: 'c' }),
     }));
+  });
+
+  describe('recordLatency', () => {
+    const T0 = 1_700_000_000_000;
+
+    it('writes the first sample straight to the card', async () => {
+      const c = card({ id: 'a', measuredLatencyMs: null });
+      await svc.recordLatency(c, 250, T0);
+      expect(modelsUpdate).toHaveBeenCalledWith({ id: 'a' }, { measuredLatencyMs: { p50: 250, p95: 250, updatedAt: new Date(T0).toISOString() } });
+      expect(c.measuredLatencyMs).toMatchObject({ p50: 250, p95: 250 });
+    });
+
+    it('averages in memory and writes at most once a minute per card', async () => {
+      const c = card({ id: 'a', measuredLatencyMs: null });
+      await svc.recordLatency(c, 100, T0);
+      await svc.recordLatency(c, 200, T0 + 1_000);
+      await svc.recordLatency(c, 300, T0 + 30_000);
+      expect(modelsUpdate).toHaveBeenCalledTimes(1);
+      await svc.recordLatency(c, 300, T0 + 61_000);
+      expect(modelsUpdate).toHaveBeenCalledTimes(2);
+      // p50: 100 -> 120 -> 156 -> 184.8; p95 follows the slowest sample at once.
+      expect(modelsUpdate.mock.calls[1][1].measuredLatencyMs).toMatchObject({ p50: 185, p95: 300 });
+      const other = card({ id: 'b', measuredLatencyMs: null });
+      await svc.recordLatency(other, 50, T0 + 61_000);
+      expect(modelsUpdate).toHaveBeenCalledTimes(3);
+    });
+
+    it('seeds from the stored value and lets p95 decay slowly toward faster samples', async () => {
+      const c = card({ id: 'a', measuredLatencyMs: { p50: 500, p95: 1000, updatedAt: 'earlier' } });
+      await svc.recordLatency(c, 100, T0);
+      expect(modelsUpdate).toHaveBeenCalledWith({ id: 'a' }, { measuredLatencyMs: expect.objectContaining({ p50: 420, p95: 910 }) });
+    });
+
+    it('ignores unusable samples and survives a failed write', async () => {
+      const c = card({ id: 'a', measuredLatencyMs: null });
+      await svc.recordLatency(c, 0, T0);
+      await svc.recordLatency(c, Number.NaN, T0);
+      expect(modelsUpdate).not.toHaveBeenCalled();
+      modelsUpdate.mockRejectedValueOnce(new Error('db away'));
+      await expect(svc.recordLatency(c, 80, T0)).resolves.toBeUndefined();
+    });
   });
 });

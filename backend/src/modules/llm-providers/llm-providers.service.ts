@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
@@ -21,6 +21,8 @@ import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
+import { findModelNotFound } from './model-errors';
+import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
@@ -137,6 +139,12 @@ export class LlmProvidersService {
 
     private readonly accessPolicy: AccessPolicyService,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    // The catalog listens to provider lifecycle (sync on create, on a
+    // configuration change and after a passing health check). Optional:
+    // it arrives through a forwardRef and some specs build this service
+    // without it.
+    @Optional() @Inject(forwardRef(() => ModelCatalogService))
+    private readonly catalog?: ModelCatalogService,
   ) {}
 
   async createProvider(
@@ -200,6 +208,7 @@ export class LlmProvidersService {
         () => this.performHealthCheck(savedProvider.id, organizationId),
         1000,
       );
+      this.scheduleCatalogSync(savedProvider.id, organizationId, 'provider_created');
 
       this.logger.log(`LLM provider '${savedProvider.name}' created for organization ${organizationId}`);
 
@@ -284,6 +293,9 @@ export class LlmProvidersService {
         () => this.performHealthCheck(provider.id, organizationId),
         1000,
       );
+      if (updateDto.configuration) {
+        this.scheduleCatalogSync(provider.id, organizationId, 'provider_configuration_changed');
+      }
 
       this.logger.log(`LLM provider '${updatedProvider.name}' updated`);
 
@@ -391,6 +403,16 @@ export class LlmProvidersService {
       throw new ForbiddenException(decision.reason);
     }
 
+    // Retire the cards while they can still be found by providerId; the
+    // FK nulls it on delete. Kept, not deleted: runs reference card ids.
+    if (this.catalog) {
+      try {
+        await this.catalog.retireProviderCards(organizationId, providerId);
+      } catch (error: any) {
+        this.logger.warn(`Failed to retire catalog cards for provider ${providerId}: ${error.message}`);
+      }
+    }
+
     await this.llmProviderRepository.remove(provider);
 
     this.logger.log(`LLM provider '${provider.name}' deleted`);
@@ -465,6 +487,11 @@ export class LlmProvidersService {
         { isHealthy: true, lastHealthCheckAt: new Date(), lastError: null },
       );
 
+      // The probe was a real call with a real model: that is a validation
+      // run for the matching card, and a good moment to refresh the list.
+      this.recordCatalogValidation(provider, healthCheckModel, { passed: true, latencyMs: responseTime });
+      this.scheduleCatalogSync(provider.id, provider.organizationId, 'health_check');
+
       return {
         isHealthy: true,
         responseTime,
@@ -480,6 +507,12 @@ export class LlmProvidersService {
       // the bare axios transport line. Never persist the health
       // gate's own wording — that would be circular.
       const upstreamMessage = extractUpstreamErrorMessage(error);
+
+      // A retired or mistyped model is a failed validation run for its card.
+      const notFound = findModelNotFound(error);
+      if (notFound) {
+        this.recordCatalogValidation({ id: providerId, organizationId }, notFound.model, { passed: false, error: upstreamMessage });
+      }
 
       // Record a failed health check on the provider row (still
       // org-scoped so we don't touch a foreign provider on errors
@@ -645,6 +678,26 @@ export class LlmProvidersService {
         `Model "${model}" is not served by this ${type} provider. ` +
         `It may have been retired. Currently available include: ${sample}.`,
     });
+  }
+
+  // Catalog hooks. The catalog is optional at construction time (forwardRef,
+  // and some specs build this service without it); every hook is
+  // fire-and-forget and logs instead of throwing.
+
+  private scheduleCatalogSync(providerId: string, organizationId: string, reason: string): void {
+    if (!this.catalog) return;
+    void this.catalog.syncInBackground(organizationId, providerId, reason);
+  }
+
+  private recordCatalogValidation(
+    provider: { id: string; organizationId: string },
+    vendorModelId: string | undefined,
+    outcome: { passed: boolean; latencyMs?: number; error?: string },
+  ): void {
+    if (!this.catalog || !vendorModelId) return;
+    void this.catalog
+      .recordExternalValidation(provider.organizationId, provider.id, vendorModelId, { ...outcome, source: 'health_check' })
+      .catch((err) => this.logger.warn(`catalog validation record for ${vendorModelId} failed: ${err?.message ?? err}`));
   }
 
   // ── Delegations to LlmChatHelper ──

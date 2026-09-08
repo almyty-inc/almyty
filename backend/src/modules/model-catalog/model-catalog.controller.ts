@@ -49,10 +49,14 @@ export class ModelCatalogController {
 
   @Post('sync')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Import the models a stored provider lists as unvalidated cards' })
-  async sync(@Request() req: any, @Body(ValidationPipe) body: SyncModelsBodyDto) {
-    const result = await this.catalog.syncFromProvider(this.orgId(req), body.providerId, req.user?.id);
-    return { success: true, data: { created: result.created.map(view), skipped: result.skipped } };
+  @ApiOperation({ summary: 'Import what a provider lists (or, with no providerId, what every active provider lists) as unvalidated cards; vanished ids go inactive' })
+  async sync(@Request() req: any, @Body(ValidationPipe) body?: SyncModelsBodyDto) {
+    const organizationId = this.orgId(req);
+    if (body?.providerId) {
+      return { success: true, data: syncView(await this.catalog.syncFromProvider(organizationId, body.providerId, req.user?.id)) };
+    }
+    const summary = await this.catalog.syncAll(organizationId, req.user?.id);
+    return { success: true, data: { ...syncView(summary), providers: summary.providers } };
   }
 
   @Get(':id')
@@ -88,4 +92,8 @@ export class ModelCatalogController {
 
 function view(card: any) {
   return { ...card, selectable: typeof card.isSelectable === 'function' ? card.isSelectable() : false, effectivePricing: typeof card.effectivePricing === 'function' ? card.effectivePricing() : null };
+}
+
+function syncView(result: { created: any[]; skipped: number; retired: any[]; reinstated: any[] }) {
+  return { created: result.created.map(view), skipped: result.skipped, retired: result.retired.map(view), reinstated: result.reinstated.map(view) };
 }

@@ -11,6 +11,13 @@ import type { Model, ModelCapabilities, ModelPrivacyTier } from '../../../entiti
 
 export type RouteObjective = 'cheapest' | 'fastest' | 'pinned';
 
+export interface VerifyEscalationPolicy {
+  /** Re-run with the next candidate in the plan, or keep the rejected answer and stop. */
+  onVerifyFail: 'next-candidate' | 'stop';
+  /** Upper bound on re-runs per request; absent means walk the rest of the plan. */
+  maxEscalations?: number;
+}
+
 export interface RoutingPolicy {
   /** Most public tier the request may use. local < private_cloud < public. */
   privacyTier?: ModelPrivacyTier;
@@ -25,6 +32,16 @@ export interface RoutingPolicy {
   pinnedModel?: string;
   /** Cents the caller may still spend this period; cards priced above it per million are skipped. */
   budgetHeadroomCents?: number | null;
+  /**
+   * Tier 2: what to do when a verifier rejects an answer this plan produced.
+   * Only honoured when MODEL_ROUTER_VERIFY_ESCALATION is on (see verify-escalation.ts).
+   */
+  escalation?: VerifyEscalationPolicy;
+  /**
+   * Candidates at the head of the plan already tried by an earlier attempt of
+   * the same request (set by verify escalation); the plan starts after them.
+   */
+  skipCandidates?: number;
 }
 
 export interface RouteCandidate {
@@ -92,7 +109,7 @@ export function selectCandidates(cards: Model[], policy: RoutingPolicy = {}): { 
       if (card) ordered.push(toCandidate(card, `fallback chain position ${i + 1}`));
       else rejected.push({ modelId: key, reason: 'chain entry not eligible or unknown' });
     });
-    return { candidates: ordered, rejected };
+    return applySkip(ordered, rejected, policy);
   }
 
   const objective: RouteObjective = policy.objective ?? 'cheapest';
@@ -117,5 +134,17 @@ export function selectCandidates(cards: Model[], policy: RoutingPolicy = {}): { 
           : `cheapest (${price == null ? 'unpriced' : `$${price.toFixed(2)}/M blended`}), rank ${i + 1}`;
     return toCandidate(card, why);
   });
-  return { candidates, rejected };
+  return applySkip(candidates, rejected, policy);
+}
+
+/**
+ * Tier 2 escalation re-issues a request with the candidates an earlier
+ * attempt already answered from skipped. They stay visible in `rejected`
+ * so the audit row explains why the plan did not start at the top.
+ */
+function applySkip(candidates: RouteCandidate[], rejected: Array<{ modelId: string; reason: string }>, policy: RoutingPolicy) {
+  const skip = Math.max(0, Math.floor(policy.skipCandidates ?? 0));
+  if (skip === 0) return { candidates, rejected };
+  for (const c of candidates.slice(0, skip)) rejected.push({ modelId: c.modelId, reason: 'skipped after verify escalation' });
+  return { candidates: candidates.slice(skip), rejected };
 }
