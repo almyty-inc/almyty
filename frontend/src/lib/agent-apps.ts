@@ -79,6 +79,37 @@ export interface AppCapabilities {
   requireApprovalFor?: string[]
 }
 
+export interface AppPrivacy {
+  /** Null inherits the organization policy; an override may only shorten it. */
+  retentionDays?: number | null
+  visitorCanDelete?: boolean
+  visitorCanExport?: boolean
+  /** Shared agent memory may include hosted-chat visitor conversations. */
+  visitorMemory?: boolean
+}
+
+export const APP_PRIVACY_DEFAULTS: Required<AppPrivacy> = {
+  retentionDays: null,
+  visitorCanDelete: true,
+  visitorCanExport: true,
+  visitorMemory: false,
+}
+
+/** Effective values for old apps and partially populated API responses. */
+export function appPrivacyFrom(privacy: AppPrivacy | null | undefined): Required<AppPrivacy> {
+  return {
+    retentionDays:
+      typeof privacy?.retentionDays === 'number' &&
+      Number.isFinite(privacy.retentionDays) &&
+      privacy.retentionDays > 0
+        ? Math.floor(privacy.retentionDays)
+        : null,
+    visitorCanDelete: privacy?.visitorCanDelete ?? APP_PRIVACY_DEFAULTS.visitorCanDelete,
+    visitorCanExport: privacy?.visitorCanExport ?? APP_PRIVACY_DEFAULTS.visitorCanExport,
+    visitorMemory: privacy?.visitorMemory ?? APP_PRIVACY_DEFAULTS.visitorMemory,
+  }
+}
+
 export interface AppDistribution {
   id: string
   appId: string
@@ -107,6 +138,7 @@ export interface AgentApp {
   authMode: AppAuthMode
   capabilities: AppCapabilities | null
   limits: AppLimits | null
+  privacy: AppPrivacy | null
   isActive: boolean
   distributions?: AppDistribution[]
   /** From the list endpoint: whether the app's agent last failed. */
