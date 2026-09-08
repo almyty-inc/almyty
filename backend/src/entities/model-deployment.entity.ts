@@ -32,7 +32,9 @@ export type ModelDeploymentState =
   | 'scaling'
   | 'tearing_down'
   | 'orphaned'
+  | 'torn_down'
   | 'failed';
+
 
 export interface ModelDeploymentDesired {
   hardware?: string;
