@@ -128,7 +128,7 @@ export class ModelRouterService {
       type: LlmProviderType.CUSTOM,
       status: LlmProviderStatus.ACTIVE,
       isHealthy: true,
-      configuration: { baseUrl: url, model: card.vendorModelId, ...(apiKey ? { apiKey } : {}) },
+      configuration: { apiUrl: url, model: card.vendorModelId, ...(apiKey ? { apiKey } : {}) },
       capabilities: {},
       metadata: {},
     });
