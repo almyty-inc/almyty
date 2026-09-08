@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
@@ -52,6 +52,36 @@ function generatePKCE() {
     .update(codeVerifier)
     .digest('base64url');
   return { codeVerifier, codeChallenge };
+}
+
+/**
+ * PKCE (RFC 7636) primitives shared with the Connections layer. The
+ * verifier is 32 random bytes, base64url; the challenge is its SHA-256,
+ * base64url, method S256. Exported so a connector flow that keeps the
+ * verifier server-side (keyed by state) uses the same construction as
+ * the /oauth2 primitives.
+ */
+export interface PkcePair {
+  codeVerifier: string;
+  codeChallenge: string;
+  codeChallengeMethod: 'S256';
+}
+
+export function generatePkcePair(): PkcePair {
+  const { codeVerifier, codeChallenge } = generatePKCE();
+  return { codeVerifier, codeChallenge, codeChallengeMethod: 'S256' };
+}
+
+export function pkceChallengeFor(codeVerifier: string): string {
+  return createHash('sha256').update(codeVerifier).digest('base64url');
+}
+
+/** True when `codeChallenge` is the S256 challenge of `codeVerifier` (constant-time). */
+export function verifyPkceChallenge(codeVerifier: string, codeChallenge: string): boolean {
+  const expected = Buffer.from(pkceChallengeFor(codeVerifier));
+  const given = Buffer.from(codeChallenge);
+  if (expected.length !== given.length) return false;
+  return timingSafeEqual(expected, given);
 }
 
 /**

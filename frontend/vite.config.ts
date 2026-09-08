@@ -134,6 +134,15 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      '/connectors': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+      '/connections': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
       '/model-versions': {
         target: apiTarget,
         changeOrigin: true,

@@ -11,8 +11,8 @@ import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { ModelManifest, manifestSha, totalSizeBytes, validateManifest } from './manifest';
 import { ParsedRegistryUri, parseRegistryUri } from './registry-uri';
 
-/** The registry connection's credential type. Lives in the credential enum as data; the literal is used until the enum value is compiled in. */
-export const REGISTRY_CREDENTIAL_TYPE = 's3_compatible' as CredentialType;
+/** The registry connection's credential type. */
+export const REGISTRY_CREDENTIAL_TYPE = CredentialType.S3_COMPATIBLE;
 
 export interface RegistryObjectStore {
   getObject(bucket: string, key: string): Promise<Buffer>;
