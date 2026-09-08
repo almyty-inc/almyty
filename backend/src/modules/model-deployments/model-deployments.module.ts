@@ -23,6 +23,9 @@ import { AzureFoundryAdapter } from './adapters/azure-foundry.adapter';
 import { RunPodAdapter } from './adapters/runpod.adapter';
 import { DigitalOceanAdapter } from './adapters/digitalocean.adapter';
 import { NebiusAdapter } from './adapters/nebius.adapter';
+import { BasetenAdapter } from './adapters/baseten.adapter';
+import { TogetherAdapter } from './adapters/together.adapter';
+import { FireworksAdapter } from './adapters/fireworks.adapter';
 
 
 import { ModelDeploymentsController } from './model-deployments.controller';
@@ -62,6 +65,9 @@ export class ModelDeploymentsModule implements OnModuleInit {
     this.adapters.register(new RunPodAdapter());
     this.adapters.register(new DigitalOceanAdapter());
     this.adapters.register(new NebiusAdapter());
+    this.adapters.register(new BasetenAdapter());
+    this.adapters.register(new TogetherAdapter());
+    this.adapters.register(new FireworksAdapter());
 
 
     if (process.env.NODE_ENV !== 'production' || process.env.MODEL_STUB_ADAPTER === 'true') {

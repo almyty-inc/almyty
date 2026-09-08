@@ -274,7 +274,7 @@ export class LlmChatHelper {
    * SSE events in real time.
    */
   async chatStream(
-    providerId: string,
+    providerId: string | null | undefined,
     request: ChatRequest,
     organizationId: string,
     userId?: string,
@@ -288,10 +288,16 @@ export class LlmChatHelper {
 
     const startTime = Date.now();
 
+    const originalRequest = request;
     try {
-      const provider = await this.providers.getProvider(providerId, organizationId, true);
-
-      if (!provider.isHealthy) {
+      // A routing policy picks the head of the plan here: a stream cannot
+      // move to the next candidate once tokens have gone out, so the walk
+      // that the non-streaming path does is limited to this first choice.
+      const routed = request.routing ? await this.runner.planRouteHead(organizationId, request) : null;
+      const provider = routed ? routed.provider : await this.providers.getProvider(providerId as string, organizationId, true);
+      if (routed) {
+        request = { ...request, model: routed.candidate.vendorModelId, routing: undefined };
+      } else if (!provider.isHealthy) {
         throw new BadRequestException(LLM_HEALTH_GATE_MESSAGE);
       }
 
@@ -417,7 +423,7 @@ export class LlmChatHelper {
           break;
         default:
           // Should not reach here due to supportsStreaming check, but safety net
-          return this.chat(providerId, request, organizationId, userId);
+        return this.chat(providerId, originalRequest, organizationId, userId);
       }
 
       // Save final message to database
@@ -455,10 +461,24 @@ export class LlmChatHelper {
         success: true,
       });
 
+      const routing = routed
+        ? {
+            modelId: routed.candidate.modelId,
+            modelVersionId: routed.candidate.modelVersionId,
+            vendorModelId: routed.candidate.vendorModelId,
+            providerId: routed.candidate.card.providerId,
+            rationale: routed.candidate.rationale,
+            attempt: 1,
+            tried: [],
+            rejected: routed.rejected,
+          }
+        : undefined;
+      if (routing) this.runner.recordRoute(organizationId, routing, { userId, conversationId: session.id });
       return {
         ...response,
         conversationId: session.id,
         messageId: savedMessage.id,
+        ...(routing ? { routing } : {}),
       };
     } catch (error) {
       const safeBody = safeErrorBody(error.response?.data);

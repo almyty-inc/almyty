@@ -24,7 +24,7 @@ import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
 import { ModelNotFoundError, isModelNotFoundResponse, vendorMessage } from './model-errors';
-import { ModelRouterService, NoRouteError } from '../model-catalog/routing/model-router.service';
+import { ModelRouterService, NoRouteError, ResolvedCandidate, RouteAttribution } from '../model-catalog/routing/model-router.service';
 
 
 import {
@@ -118,13 +118,23 @@ export class LlmChatRunnerHelper {
   }
 
   /** The provider at the head of the plan; chat() uses it for the session when no provider id was given. */
-  async headProviderForRoute(organizationId: string, request: ChatRequest): Promise<LlmProvider> {
+  /** The head of the plan with its provider; the streaming path uses it since a stream cannot walk the chain mid-answer. */
+  async planRouteHead(organizationId: string, request: ChatRequest): Promise<{ provider: LlmProvider; candidate: ResolvedCandidate; rejected: Array<{ modelId: string; reason: string }> }> {
     if (!this.router) {
       throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
     }
     const plan = await this.router.plan(organizationId, request.routing ?? {});
     if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
-    return plan.candidates[0].provider;
+    return { provider: plan.candidates[0].provider, candidate: plan.candidates[0], rejected: plan.rejected };
+  }
+
+  async headProviderForRoute(organizationId: string, request: ChatRequest): Promise<LlmProvider> {
+    return (await this.planRouteHead(organizationId, request)).provider;
+  }
+
+  /** Audit + latency bookkeeping for a routed answer produced outside the walk (the streaming head). */
+  recordRoute(organizationId: string, attribution: RouteAttribution, context: { userId?: string; conversationId?: string }): void {
+    this.router?.recordRoute(organizationId, attribution, context);
   }
 
   /**
