@@ -1,5 +1,4 @@
 # Model registry
-Model registry
 
 Status: ACCEPTED (part of the models layer, docs/design/models-layer.md)
 
