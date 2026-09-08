@@ -1,4 +1,5 @@
 import type { Gateway, Tool, LlmProvider, User, Organization, Api, ApiAuthType } from './index';
+import type { RouteAttribution } from './models';
 // Usage Metrics Types
 export interface UsageMetric {
   id: string
@@ -368,6 +369,8 @@ export interface AgentExecution {
     error?: string
     cost?: number
     tokens?: { input: number; output: number }
+    /** Present when the node carried a routing policy: which card answered and why. */
+    routing?: RouteAttribution
   }>
   executionTime: number
   totalCost: number

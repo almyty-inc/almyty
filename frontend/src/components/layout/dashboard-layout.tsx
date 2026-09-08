@@ -101,7 +101,7 @@ const navigation: { name: string; href: string; icon: any; dataTour?: string }[]
   { name: 'Approvals', href: '/approvals', icon: Shield },
   // Configuration
   { name: 'divider', href: '', icon: null as any },
-  { name: 'Models', href: '/llm-providers', icon: Brain, dataTour: 'nav-provider' },
+  { name: 'Models', href: '/models', icon: Brain, dataTour: 'nav-provider' },
   { name: 'Memory', href: '/memories', icon: Database },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },

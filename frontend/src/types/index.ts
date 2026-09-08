@@ -482,4 +482,5 @@ export interface LlmCostConfig {
 
 export * from './usage';
 export * from './runtime';
+export * from './models';
 export * from './notification';
