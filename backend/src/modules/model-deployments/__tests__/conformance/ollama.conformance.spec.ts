@@ -94,13 +94,13 @@ describe('ollama sources', () => {
     expect(OllamaAdapter.source(req('hf://Qwen/Qwen3-0.6B-GGUF@main', {}, 'Q8_0'))).toEqual({ model: 'hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0', pull: 'hf.co/Qwen/Qwen3-0.6B-GGUF:Q8_0' });
   });
 
-  it('creates from a host path for file:// and from the mirror for s3://', () => {
+  it('creates from a host path for file://', () => {
     expect(OllamaAdapter.source(req('file:///models/q.gguf@sha'))).toEqual({ model: 'my-model-v2', from: '/models/q.gguf' });
-    expect(OllamaAdapter.source(req('s3://registry/team/q.gguf@etag', { registryMirrorPath: '/mnt/registry/' }))).toEqual({ model: 'my-model-v2', from: '/mnt/registry/registry/team/q.gguf' });
   });
 
-  it('refuses s3:// without a mirror path, before touching the server', () => {
+  it('refuses an s3:// version outright: Ollama reads the Hub or its own host, and almyty never ships the weights', () => {
     expect(() => OllamaAdapter.source(req('s3://registry/team/q.gguf@etag'))).toThrow(expect.objectContaining({ code: 'ADAPTER_UNSUPPORTED_SOURCE' }));
+    expect(() => OllamaAdapter.source(req('s3://registry/team/q.gguf@etag', { registryMirrorPath: '/mnt/registry/' }))).toThrow(expect.objectContaining({ code: 'ADAPTER_UNSUPPORTED_SOURCE' }));
   });
 
   it('after deploy the model is loaded; scale(0) unloads it and the burn rate drops to zero', async () => {
