@@ -3,6 +3,53 @@
  * and health text colors. Shared by `pages/llm-providers.tsx`, the table
  * column factory, and the provider details sheet.
  */
+import { LlmProviderType } from '@/types'
+
+/**
+ * Every provider type, with the name a person reads, in the order the
+ * create form offers them. One list, because two hand-maintained ones
+ * drift: the filter on the providers page was eight entries behind the
+ * create form, so a provider you could create could not be filtered for.
+ * `provider-types.test.ts` fails if an enum value has no entry here.
+ */
+export const providerTypeLabels: Record<LlmProviderType, string> = {
+  [LlmProviderType.OPENAI]: 'OpenAI',
+  [LlmProviderType.ANTHROPIC]: 'Anthropic',
+  [LlmProviderType.GOOGLE]: 'Google Gemini',
+  [LlmProviderType.MISTRAL]: 'Mistral AI',
+  [LlmProviderType.XAI]: 'xAI (Grok)',
+  [LlmProviderType.DEEPSEEK]: 'DeepSeek',
+  [LlmProviderType.MOONSHOT]: 'Moonshot (Kimi)',
+  [LlmProviderType.QWEN]: 'Qwen (QwenCloud)',
+  [LlmProviderType.ZAI]: 'Z.ai (GLM)',
+  [LlmProviderType.COHERE]: 'Cohere',
+  [LlmProviderType.PERPLEXITY]: 'Perplexity',
+  [LlmProviderType.GROQ]: 'Groq',
+  [LlmProviderType.TOGETHER]: 'Together AI',
+  [LlmProviderType.OPENROUTER]: 'OpenRouter',
+  [LlmProviderType.FIREWORKS]: 'Fireworks AI',
+  [LlmProviderType.CEREBRAS]: 'Cerebras',
+  [LlmProviderType.DEEPINFRA]: 'DeepInfra',
+  [LlmProviderType.NOVITA]: 'Novita',
+  [LlmProviderType.BASETEN]: 'Baseten',
+  [LlmProviderType.NEBIUS]: 'Nebius Token Factory',
+  [LlmProviderType.SAMBANOVA]: 'SambaNova',
+  [LlmProviderType.HUGGINGFACE]: 'Hugging Face',
+  [LlmProviderType.AZURE_OPENAI]: 'Azure OpenAI',
+  [LlmProviderType.AZURE_AI_FOUNDRY]: 'Azure AI Foundry',
+  [LlmProviderType.AWS_BEDROCK]: 'AWS Bedrock',
+  [LlmProviderType.VERTEX_AI]: 'Google Vertex AI',
+  [LlmProviderType.DIGITALOCEAN]: 'DigitalOcean Gradient',
+  [LlmProviderType.RUNPOD]: 'RunPod',
+  [LlmProviderType.MODAL]: 'Modal',
+  [LlmProviderType.OLLAMA]: 'Ollama',
+  [LlmProviderType.CUSTOM]: 'Custom',
+}
+
+/** The list both the create form and the page filter render. */
+export const providerTypeOptions: { value: LlmProviderType; label: string }[] = (
+  Object.entries(providerTypeLabels) as [LlmProviderType, string][]
+).map(([value, label]) => ({ value, label }))
 
 export const providerLogos: Record<string, string> = {
   openai: '🤖',
