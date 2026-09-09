@@ -198,6 +198,33 @@ Tool executions return errors in a tool-specific format:
 | Sandbox error | JavaScript tool threw an exception |
 | LLM error | LLM provider returned an error |
 
+## Models and Connections Codes
+
+The [Models API](/api-reference/models-api) and [Connections API](/api-reference/connections-api) use the same envelope with these codes:
+
+| Code | Status | Meaning |
+|------|--------|---------|
+| `NO_ROUTE` | 400 | No model card satisfies the routing policy; the response lists every rejected card with a reason |
+| `ROUTE_EXHAUSTED` | provider's | Every route candidate failed for a provider-side reason; the response lists what was tried |
+| `ROUTING_UNAVAILABLE` | 400 | A routing policy was sent but the catalog module is not wired into this deployment |
+| `MODEL_NOT_FOUND` | 400 | The provider does not serve the configured model; the card is marked `failed` |
+| `MODEL_NOT_CALLABLE` | 400 | A card needs a `providerId` or an `endpointRef.url` |
+| `MODEL_EXISTS` | 400 | A card for that provider and vendor id (or that name, for an endpoint) already exists; the message carries its id |
+| `REGISTRY_NOT_CONNECTED` | 400 | The organization has no registry connection, so an `s3://` version cannot be registered or deployed |
+| `VERSION_IN_USE` | 409 | A deployment that is not torn down still references the version |
+| `ADAPTER_UNKNOWN` | 400 | `providerType` names no registered adapter |
+| `ADAPTER_UNSUPPORTED_OPERATION` | 400 | The adapter cannot do this (deploy through `custom-endpoint`, more than one replica per VM, a registry source it does not read) |
+| `ADAPTER_AUTH` | 401 | The provider rejected the deployment's credential |
+| `ADAPTER_ERROR` | provider's | The provider refused the request; `lastError` on the deployment carries its message |
+| `CONNECTION_VALIDATION_FAILED` | 422 | The provider rejected the credential; the connection is kept with health `failed` |
+| `USER_CONNECTIONS_DISABLED` | 403 | Personal connections are off for this organization |
+| `CONNECTIONS_PERMISSION_REQUIRED` | 403 | The action needs `connections:manage` |
+| `CONNECT_STATE_INVALID` | 400 | The sign-in state is unknown, used, or older than 10 minutes |
+| `CONNECT_EXCHANGE_FAILED`, `CONNECT_DENIED` | 400 | The provider refused the code exchange, or the user declined |
+| `CONNECTOR_UNKNOWN`, `CONNECTOR_KEY_TAKEN`, `CONNECTOR_INVALID` | 404, 409, 400 | Unknown connector key; a custom key that shadows a built-in one; a definition that fails validation |
+| `CONNECTION_NOT_GRANTED` | 403 | The run's principal has no way to use this connection; `reason` says which rule refused |
+| `CONNECTION_GRANT_FORBIDDEN`, `GRANT_NOT_FOUND`, `GRANT_PRINCIPAL_NOT_FOUND`, `GRANT_AGENT_NOT_OWNED`, `GRANT_WORKSPACE_NOT_OWNED` | 403, 404, 404, 403, 403 | The caller may not manage grants on this connection; the grant or the principal does not exist; the agent or workspace is not the caller's |
+
 ## Handling Errors in Code
 
 ### JavaScript

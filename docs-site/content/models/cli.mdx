@@ -1,0 +1,176 @@
+# Models CLI
+
+`@almyty/models` manages the model catalog from the terminal: list and register cards, validate them, register versions of your own weights, deploy them through an adapter, and watch what each deployment costs. It shares the login of every other almyty CLI.
+
+```bash
+$ npx @almyty/auth login
+$ npx @almyty/models --help
+```
+
+The umbrella CLI exposes the same verbs as `almyty models <verb>`. Every command takes `--json` for raw output, `ALMYTY_TOKEN` to skip the stored login, and `ALMYTY_URL` to point at another deployment.
+
+## Cards
+
+List every card, or only the ones the router may pick:
+
+```bash
+$ npx @almyty/models list
+Claude Sonnet  [claude-sonnet-5]  public  $3/$15 per M (feed:litellm)
+    9b0d...  selectable
+Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
+    4f2a...  not selectable (validation: never)
+
+$ npx @almyty/models list --selectable
+```
+
+Show one card:
+
+```bash
+$ npx @almyty/models get 9b0d...
+```
+
+Register a card against a stored provider, naming the vendor id yourself:
+
+```bash
+$ npx @almyty/models register \
+    --name "Qwen3 32B on our vLLM" \
+    --provider 7c1e... \
+    --model qwen3-32b \
+    --tier private_cloud \
+    --region eu-central \
+    --context 32768
+Registered.
+Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
+    4f2a...  not selectable (validation: never)
+Run: almyty models validate 4f2a...
+```
+
+Register an OpenAI-compatible server you run (the URL and key become a `custom` provider):
+
+```bash
+$ npx @almyty/models register-endpoint \
+    --name "Lab box" \
+    --url http://10.0.0.7:8000/v1 \
+    --model qwen3-32b \
+    --api-key sk-lab \
+    --tier local
+```
+
+Import what a provider currently lists, as unvalidated cards:
+
+```bash
+$ npx @almyty/models sync 7c1e...
+12 card(s) created, 3 already present.
+```
+
+Run the validation that makes a card selectable. The exit code is 1 when it fails:
+
+```bash
+$ npx @almyty/models validate 4f2a...
+Passed in 812 ms.
+Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
+    4f2a...  selectable
+
+$ npx @almyty/models validate 4f2a... ; echo $?
+Failed: model qwen3-32b is not served by this endpoint
+1
+```
+
+Remove a card:
+
+```bash
+$ npx @almyty/models delete 4f2a...
+Deleted.
+```
+
+| Flag | Commands | Meaning |
+|---|---|---|
+| `--tier` | register, register-endpoint | `public`, `private_cloud` or `local` |
+| `--region` | register, register-endpoint | Region label used by routing allowlists |
+| `--context` | register | Context length in tokens |
+| `--api-key` | register-endpoint | Bearer token the server expects |
+| `--selectable` | list | Only cards the router may pick |
+
+## Versions
+
+A version is a pinned registry URI for weights you own. See [Deployments](/models/deployments#the-registry) for the URI shapes and the manifest.
+
+```bash
+$ npx @almyty/models versions
+qwen3-14b-support-ft  qwen3-14b  29.00 GB  [bf16, awq-int4]
+    a91c...  s3://acme-models/qwen3-14b-support@e3b0c442
+
+$ npx @almyty/models register-version \
+    --name qwen3-14b-support-ft \
+    --uri s3://acme-models/qwen3-14b-support@e3b0c442
+Registered.
+qwen3-14b-support-ft  qwen3-14b  29.00 GB  [bf16, awq-int4]
+    a91c...  s3://acme-models/qwen3-14b-support@e3b0c442
+```
+
+An `s3://` version reads its base, size and quantizations from `almyty-manifest.json` at the URI. For `hf://` and `file://` the manifest is optional; pass `--base` when it is absent, and `--quantizations q1,q2` to record them.
+
+## Deployments
+
+List the adapters and what each can do:
+
+```bash
+$ npx @almyty/models adapters
+modal  Modal
+    architectures="any" lora="merged" serverless=true dedicated=false scaleToZero=true regions=[] registrySources=["s3"]
+huggingface-endpoints  Hugging Face Inference Endpoints
+    architectures="any" lora="merged" serverless=false dedicated=true scaleToZero=true regions=["us-east-1","us-west-2","eu-west-1","eu-central-1","ap-southeast-1"] registrySources=["s3","hub"]
+...
+```
+
+`--json` includes each adapter's config schema, the same data the deploy form renders from.
+
+Deploy a version. `--config` is the adapter's provider config (validated against its schema, secret fields encrypted), `--desired` the hardware and scale you want:
+
+```bash
+$ npx @almyty/models deploy \
+    --model-version a91c... \
+    --adapter modal \
+    --config '{"tokenId":"ak-...","tokenSecret":"as-...","workspace":"acme","gpu":"A100-80GB"}' \
+    --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}' \
+    --budget 5d3f...
+Queued.
+c07b...  modal  pending  replicas ?/1
+```
+
+| Flag | Meaning |
+|---|---|
+| `--model-version` | The version to deploy (required) |
+| `--adapter` | Adapter key from `adapters` (required) |
+| `--config` | JSON provider config for the adapter |
+| `--desired` | JSON desired state: `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
+| `--credential` | A stored credential the adapter reads secrets from instead of `--config` |
+| `--budget` | A spend budget; reaching it scales the deployment to zero |
+| `--model` | A card that already exists for this version; the deployment fills its endpoint once ready and keeps pricing it. Without it, register the ready URL with `register-endpoint` |
+
+Watch desired against actual state and spend:
+
+```bash
+$ npx @almyty/models deployments
+c07b...  modal  ready  replicas 1/1  spent 2.40 USD
+e18a...  huggingface-endpoints  failed  replicas 0/1  spent 0.00 USD
+    quota exceeded for nvidia-a10g in eu-west-1
+```
+
+Scale (0 scales to zero) and tear down. Both change desired state; the reconcile sweep does the work within two minutes:
+
+```bash
+$ npx @almyty/models scale c07b... 0
+c07b...  modal  scaling  replicas 1/0  spent 2.40 USD
+
+$ npx @almyty/models teardown c07b...
+c07b...  modal  tearing_down  replicas 1/0  spent 2.40 USD
+```
+
+Teardown removes the endpoint. The weights stay in your registry.
+
+## Related
+
+- [Models](/models): what a card is and when it is selectable
+- [Deployments](/models/deployments): the registry, adapters and reconcile loop
+- [CLI overview](/cli): the other almyty CLIs and the shared login

@@ -238,6 +238,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         {} as any, // ApisImportHelper
         {} as any, // ApisToolGeneratorHelper
         { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}."organizationId" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // AccessPolicyService
+        {} as any, // CredentialRefResolver — isolation tests never touch auth
       );
 
       const apiRepo = fx.ds.getRepository(Api);
@@ -664,6 +665,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         {} as any, // defaultModels
         { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}.\"organizationId\" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // accessPolicy
         makeEnvelopeCryptoMock(), // envelopeCrypto
+        {} as any, // LlmProviderSecretsHelper — isolation tests never touch keys
       );
 
       const provRepo = fx.ds.getRepository(LlmProvider);

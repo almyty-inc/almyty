@@ -24,10 +24,10 @@ export type McpSourceAuthType = 'none' | 'bearer' | 'headers';
  * row with type='mcp'; execution proxies tools/call through
  * McpClientService.
  *
- * authConfig secret values (bearer token, custom header values) are
- * encrypted at rest with the field-crypto AES-256-GCM scheme — the
- * same ENCRYPTION_KEY that covers credentials and LLM provider keys.
- * The API layer never returns authConfig; only authType is exposed.
+ * The auth secret lives in the org's credential store (`credentialId`);
+ * `authConfig` is the read-through shim for rows not yet moved by the
+ * startup backfill. The API layer never returns either; only authType
+ * and the credential reference are exposed.
  */
 @Entity('mcp_sources')
 @Index(['organizationId', 'name'], { unique: true })
@@ -48,6 +48,19 @@ export class McpSource {
   @Column({ type: 'varchar', length: 16, default: 'none' })
   authType: McpSourceAuthType;
 
+  /**
+   * The auth secret: a Credential row in the org's store (bearer_token
+   * with `token`, or custom with `headers`). Resolved through
+   * CredentialRefResolver on every call.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  credentialId: string | null;
+
+  /**
+   * Read-through shim only: rows the startup backfill has not moved yet
+   * still carry the encrypted values here. Never written any more.
+   * TODO(2026-12-01): drop the shim.
+   */
   @Column({ type: 'json', nullable: true })
   authConfig: {
     /** Encrypted bearer token (field-crypto format). */

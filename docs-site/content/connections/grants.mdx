@@ -1,0 +1,75 @@
+# Grants
+
+A [connection](/connections) is used by anyone other than its owner only through a grant. A grant hands one connection to one principal: a user, a team, a role, an agent, or a workspace. Grants are what let an autonomous agent run against a key without every member of the organization being able to reach that key, and what let a personal key be lent to one agent without becoming an organization key.
+
+## Principals
+
+| Principal | Matches when |
+|---|---|
+| `user` | The caller is that user |
+| `team` | The caller belongs to that team in the connection's organization |
+| `role` | The caller holds that organization role (`owner`, `admin`, `member`, `viewer`) |
+| `agent` | The use happens inside a run of that agent |
+| `workspace` | The use happens inside that workspace |
+
+`user`, `team`, `role` and `agent` are identity-shaped; a `workspace` is a run location. A workspace can be a grant target but never owns a connection.
+
+## Permissions
+
+| Permission | Allows |
+|---|---|
+| `use` | Resolving the secret for a run |
+| `manage` | Everything `use` allows, plus listing, adding and revoking grants on the connection |
+
+One grant exists per connection and principal; granting again refreshes its permission, budget and expiry in place. A grant may carry an expiry, after which it counts as absent, and a spend budget of its own (stored and returned now; enforced at resolve time by the Enterprise governance module). Disconnecting removes every grant on the connection.
+
+## Who may use a connection
+
+In order; the first rule that applies decides:
+
+1. The **owner** of a personal connection always may.
+2. A **team-visibility** connection is usable only by members of that team; `connections:manage` bypasses this, as it does elsewhere.
+3. **`connections:manage`** (owners and admins) may use any organization connection. It does not reach into personal connections.
+4. Otherwise a matching, unexpired `use` or `manage` grant is needed.
+
+A refusal always says why: `no grant on this org-scoped connection`, `no grant on this user-scoped connection`, `not a member of the connection team`. A run that is refused fails with `CONNECTION_NOT_GRANTED` and the reason.
+
+What follows from the rules:
+
+- A plain member does not use an organization connection until something grants it. To make a connection organization-wide, grant `role: member` (and `role: viewer` if viewers run agents).
+- Owners and admins use every organization connection without a grant.
+- A personal connection is invisible to everyone but its owner until the owner grants it, typically to one of their agents.
+
+## Who may manage grants
+
+| Connection | Actor | List | Grant | Revoke |
+|---|---|---|---|---|
+| personal | its owner | yes | yes | yes |
+| personal | holder of a `manage` grant | yes | yes | yes |
+| personal | `connections:manage` | yes | no | yes |
+| personal | anyone else | no | no | no |
+| organization | `connections:manage` | yes | yes | yes |
+| organization | holder of a `manage` grant (a team member, when team-visibility) | yes | yes | yes |
+| organization | anyone else | no | no | no |
+
+An admin can stop a personal secret from being shared without being able to hand it out.
+
+Granting also checks the target. A `user` must be an active member of the organization, a `team` must exist in it, a `role` must be one of the four built-in roles, an `agent` or `workspace` must exist in the organization, and a `budgetId` must belong to it. Without `connections:manage`, an actor may only bind a connection to an agent they created or a workspace they own: a member grants their own personal connection to their own agent with no admin involved, and binding it to somebody else's agent is an admin decision.
+
+## Managing grants
+
+Grants live on the connection. Open **Settings**, then **Connections**, select the connection, and use its grants editor to list them, add one (a principal type and id, plus an optional permission, budget and expiry) and revoke one; the same three operations are on the [Connections API](/api-reference/connections-api#grants). Granting and revoking write `connection_grant` and `connection_revoke_grant` to the audit log with the principal, permission, budget, expiry and how the actor was authorised.
+
+A revoke takes effect at once on the instance that handled it and within 30 seconds on any other; expiry is evaluated against the clock on every use.
+
+## What a run sees
+
+When a run resolves a connection it records one `connection_resolve` audit row: who asked (user, agent, workspace), which connection, the run and purpose, and how the decision was reached (owner, `connections:manage`, or the grant that carried it). The secret goes only into the request to the provider it belongs to.
+
+Jobs without a user (schedulers, the deployment reconcile loop) resolve organization connections for the organization; a personal connection resolves for them only with its owner as actor, or through a grant to the run's agent or workspace.
+
+## Related
+
+- [Connections](/connections): connecting, validating, rotating
+- [Organizations](/organizations): roles and permissions
+- [Advanced RBAC](/enterprise/advanced-rbac): custom roles that carry `connections:manage`

@@ -101,7 +101,7 @@ const navigation: { name: string; href: string; icon: any; dataTour?: string }[]
   { name: 'Approvals', href: '/approvals', icon: Shield },
   // Configuration
   { name: 'divider', href: '', icon: null as any },
-  { name: 'Models', href: '/llm-providers', icon: Brain, dataTour: 'nav-provider' },
+  { name: 'Models', href: '/models', icon: Brain, dataTour: 'nav-provider' },
   { name: 'Memory', href: '/memories', icon: Database },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
@@ -110,7 +110,7 @@ const navigation: { name: string; href: string; icon: any; dataTour?: string }[]
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, isAuthenticated, logout, hasHydrated } = useAuthStore()
+  const { user, isAuthenticated, logout, hasHydrated, authChecked } = useAuthStore()
   const { currentOrganization, organizations, setCurrentOrganization, fetchOrganizations } = useOrganizationStore()
   const queryClient = useQueryClient()
   const { sidebarOpen, setSidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse } = useAppStore()
@@ -138,12 +138,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, [darkMode])
 
   // Check authentication and redirect if not logged in (only after hydration)
+  // Check authentication and redirect if not logged in: only after the
+  // persisted store hydrated AND checkAuth has asked the server. A valid
+  // httpOnly cookie with an empty persisted store used to bounce to the
+  // sign-in page before /auth/profile had a chance to answer.
   useEffect(() => {
-    if (hasHydrated && !isAuthenticated) {
+    if (hasHydrated && authChecked && !isAuthenticated) {
       navigate('/auth/login')
       return
     }
-  }, [isAuthenticated, hasHydrated, navigate])
+  }, [isAuthenticated, hasHydrated, authChecked, navigate])
 
   // Initialize organizations from user data when available
   useEffect(() => {

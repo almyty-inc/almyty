@@ -131,6 +131,14 @@ export class Gateway {
   @Column()
   endpoint: string; // e.g., /gateways/my-mcp-gateway
 
+  /**
+   * Per-type settings. For channel types the secrets (bot token,
+   * signing secret, app secret, ...) live in the credential store:
+   * `credentialId` names the connection and `credentialKeys` lists the
+   * secret names it holds (never values). Inline secret keys are the
+   * read-through shim for rows the startup backfill has not moved yet
+   * (ConsumerSecretBackfillService), resolved by ChannelCredentialService.
+   */
   @Column({ type: 'json' })
   configuration: Record<string, any>;
 

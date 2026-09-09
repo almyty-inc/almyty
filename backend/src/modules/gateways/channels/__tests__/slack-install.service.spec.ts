@@ -184,3 +184,35 @@ describe('SlackInstallService', () => {
     });
   });
 });
+
+describe('SlackInstallService — app client secret on a connection', () => {
+  const channelCredentials = { resolveConfig: jest.fn() };
+  const service = new SlackInstallService(
+    { get: () => 'https://api.example.com' } as any,
+    { upsert: jest.fn() } as any,
+    platformEnvelope as any,
+    channelCredentials as any,
+  );
+  const onConnection = () =>
+    ({
+      id: 'gw-1', name: 'Support Bot', type: GatewayType.SLACK, organizationId: 'org-1',
+      configuration: { client_id: '123.456', credentialId: 'cred-1', credentialKeys: ['bot_token', 'client_secret'] },
+    } as unknown as Gateway);
+
+  beforeEach(() => channelCredentials.resolveConfig.mockReset());
+
+  it('is installable when the connection holds client_secret and reads it through the store', async () => {
+    channelCredentials.resolveConfig.mockResolvedValue({ client_secret: 'from-store', bot_token: 'x' });
+    expect(service.isInstallable(onConnection())).toBe(true);
+    expect(service.getClientId(onConnection())).toBe('123.456');
+    await expect(service.getClientCredentials(onConnection())).resolves.toEqual({ clientId: '123.456', clientSecret: 'from-store' });
+    expect(channelCredentials.resolveConfig).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), 'channel_outbound');
+  });
+
+  it('refuses when the connection holds no client_secret', async () => {
+    const gateway = onConnection();
+    gateway.configuration.credentialKeys = ['bot_token'];
+    expect(service.isInstallable(gateway)).toBe(false);
+    expect(() => service.getClientId(gateway)).toThrow(BadRequestException);
+  });
+});

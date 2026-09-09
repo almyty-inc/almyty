@@ -16,8 +16,9 @@ export type ChannelInstallationStatus = 'active' | 'revoked';
  * One row per external workspace/tenant a channel gateway is installed
  * into. Lets a single channel deployment (e.g. one Slack app backed by
  * one gateway) serve unlimited customer workspaces: each OAuth install
- * stores that workspace's own credentials (bot token etc., encrypted
- * via field-crypto) keyed by the platform tenant id (Slack team_id).
+ * stores that workspace's own credentials (bot token etc.) as a
+ * Credential row in the org's store, keyed by the platform tenant id
+ * (Slack team_id).
  *
  * `externalTenantId` is deliberately platform-agnostic — Microsoft
  * Teams multi-tenant (AAD tenant id) or any other n-workspace channel
@@ -46,8 +47,17 @@ export class ChannelInstallation {
   externalTenantId: string;
 
   /**
-   * Per-workspace credentials (e.g. { bot_token }). Secret values are
-   * stored encrypted (field-crypto AES-256-GCM); cleared on revoke.
+   * The workspace's own secret (bot token etc.): a Credential row in the
+   * org's store, resolved through CredentialRefResolver per inbound
+   * event. Released when the installation is revoked.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  credentialId: string | null;
+
+  /**
+   * Read-through shim only: rows the startup backfill has not moved yet
+   * still carry the encrypted values here. Never written any more; set
+   * to null on revoke. TODO(2026-12-01): drop the shim.
    */
   @Column({ type: 'jsonb', nullable: true })
   credentials: Record<string, any> | null;

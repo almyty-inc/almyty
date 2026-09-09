@@ -10,7 +10,9 @@ import { Repository } from 'typeorm';
 
 import { McpSource, McpSourceStatus, McpSourceAuthType } from '../../entities/mcp-source.entity';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
+import { CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { computeToolHash } from '../../common/security/tool-integrity';
 import {
   McpClientService,
@@ -24,8 +26,12 @@ export interface CreateMcpSourceInput {
   description?: string;
   url: string;
   authType?: McpSourceAuthType;
+  /** A pasted token; becomes a Credential row the source manages. */
   bearerToken?: string;
+  /** Pasted custom headers; same, as one custom-type row. */
   headers?: Record<string, string>;
+  /** An existing connection to use instead of pasting a secret. */
+  credentialId?: string;
 }
 
 export interface McpSyncSummary {
@@ -56,7 +62,23 @@ export class McpSourcesService {
     private readonly toolRepository: Repository<Tool>,
     private readonly mcpClient: McpClientService,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    private readonly credentialRefs: CredentialRefResolver,
   ) {}
+
+  /**
+   * Which auth shape a new source uses: explicit, else implied by what
+   * was pasted, else by the type of the connection it points at.
+   */
+  private async resolveAuthType(organizationId: string, input: CreateMcpSourceInput): Promise<McpSourceAuthType> {
+    if (input.authType) return input.authType;
+    if (input.bearerToken) return 'bearer';
+    if (input.headers) return 'headers';
+    if (input.credentialId) {
+      const row = await this.credentialRefs.load(organizationId, input.credentialId);
+      return row.type === CredentialType.CUSTOM ? 'headers' : 'bearer';
+    }
+    return 'none';
+  }
 
   // ─── CRUD ─────────────────────────────────────────────────────────
 
@@ -85,19 +107,29 @@ export class McpSourcesService {
       throw new ConflictException(`An MCP source named '${name}' already exists in this organization`);
     }
 
-    const authType: McpSourceAuthType = input.authType ?? (input.bearerToken ? 'bearer' : input.headers ? 'headers' : 'none');
+    const authType = await this.resolveAuthType(organizationId, input);
     const source = this.sourceRepository.create({
       name,
       description: input.description?.trim() || null,
       url,
       authType,
-      authConfig: await this.encryptAuthConfig(organizationId, authType, input),
+      authConfig: null,
+      credentialId: null,
       status: McpSourceStatus.ACTIVE,
       organizationId,
       createdBy: userId ?? null,
       toolCount: 0,
     });
-    const saved = await this.sourceRepository.save(source);
+    // Saved first so the credential row can name the source it belongs
+    // to; a failure to store the secret removes the half-made source.
+    let saved = await this.sourceRepository.save(source);
+    try {
+      await this.attachCredential(saved, authType, input);
+    } catch (err) {
+      await this.sourceRepository.remove(saved).catch(() => undefined);
+      throw err;
+    }
+    if (saved.credentialId) saved = await this.sourceRepository.save(saved);
 
     let sync: McpSyncSummary | null = null;
     let syncError: string | null = null;
@@ -133,6 +165,8 @@ export class McpSourcesService {
     if (tools.length > 0) {
       await this.toolRepository.remove(tools);
     }
+    // The token row this source created goes with it; a shared connection stays.
+    await this.credentialRefs.releaseManaged(organizationId, source.credentialId, { kind: 'mcp_source', id: source.id });
     await this.sourceRepository.remove(source);
     return { removedTools: tools.length };
   }
@@ -334,40 +368,85 @@ export class McpSourcesService {
   private async connectionConfig(source: McpSource, options: McpExecuteOptions = {}): Promise<McpConnectionConfig> {
     return {
       url: source.url,
-      headers: await this.decryptAuthHeaders(source),
+      headers: await this.authHeaders(source),
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     };
   }
 
-  private async encryptAuthConfig(
-    organizationId: string,
-    authType: McpSourceAuthType,
-    input: CreateMcpSourceInput,
-  ): Promise<McpSource['authConfig']> {
+  /**
+   * The credential a source was created with. A pasted token or header
+   * map becomes a row this source manages; a credentialId points at a
+   * shared connection (its type decides the auth shape).
+   */
+  private async attachCredential(source: McpSource, authType: McpSourceAuthType, input: CreateMcpSourceInput): Promise<void> {
+    const managedBy = { kind: 'mcp_source' as const, id: source.id };
+    if (input.credentialId) {
+      const row = await this.credentialRefs.load(source.organizationId, input.credentialId);
+      source.credentialId = row.id;
+      return;
+    }
     if (authType === 'bearer') {
       const token = (input.bearerToken ?? '').trim();
       if (!token) throw new BadRequestException('bearerToken is required for bearer auth');
-      return { bearerToken: await this.envelopeCrypto.encryptForOrg(organizationId, token) };
+      const row = await this.credentialRefs.createManaged(source.organizationId, {
+        name: `${source.name} MCP token`,
+        description: `Bearer token for the MCP server "${source.name}"`,
+        type: CredentialType.BEARER_TOKEN,
+        config: { token },
+        connectorKey: null,
+        managedBy,
+      });
+      source.credentialId = row.id;
+      return;
     }
     if (authType === 'headers') {
       const headers = input.headers ?? {};
       if (Object.keys(headers).length === 0) {
         throw new BadRequestException('headers are required for header auth');
       }
-      const encrypted: Record<string, string> = {};
       for (const [key, value] of Object.entries(headers)) {
         if (/[\r\n]/.test(key) || /[\r\n]/.test(String(value))) {
           throw new BadRequestException('header names/values must not contain newlines');
         }
-        encrypted[key] = await this.envelopeCrypto.encryptForOrg(organizationId, String(value));
       }
-      return { headers: encrypted };
+      const row = await this.credentialRefs.createManaged(source.organizationId, {
+        name: `${source.name} MCP headers`,
+        description: `Auth headers for the MCP server "${source.name}"`,
+        type: CredentialType.CUSTOM,
+        config: { headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, String(v)])) },
+        secretKeys: ['headers'],
+        connectorKey: null,
+        managedBy,
+      });
+      source.credentialId = row.id;
     }
-    return null;
   }
 
-  private async decryptAuthHeaders(source: McpSource): Promise<Record<string, string>> {
+  /**
+   * Auth headers for a call. The credential reference is the source of
+   * truth; `authConfig` is the read-through shim for rows the startup
+   * backfill has not moved yet.
+   */
+  private async authHeaders(source: McpSource): Promise<Record<string, string>> {
+    if (source.credentialId) {
+      const resolved = await this.credentialRefs.resolve(source.organizationId, source.credentialId, {
+        context: { purpose: 'mcp_call', resourceType: 'mcp_source', resourceId: source.id },
+      });
+      const headers: Record<string, string> = { ...resolved.credential.getAuthHeaders() };
+      const custom = resolved.config.headers;
+      if (custom && typeof custom === 'object') {
+        for (const [key, value] of Object.entries(custom)) {
+          if (typeof value === 'string' && !/[\r\n]/.test(key) && !/[\r\n]/.test(value)) headers[key] = value;
+        }
+      }
+      return headers;
+    }
+    return this.decryptLegacyAuthHeaders(source);
+  }
+
+  /** Shim: rows whose secret is still in authConfig. TODO(2026-12-01): drop with the column. */
+  private async decryptLegacyAuthHeaders(source: McpSource): Promise<Record<string, string>> {
     const headers: Record<string, string> = {};
     const orgId = source.organizationId;
     if (source.authType === 'bearer' && source.authConfig?.bearerToken) {

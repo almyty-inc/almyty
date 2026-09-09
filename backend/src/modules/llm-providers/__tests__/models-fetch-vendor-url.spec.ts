@@ -49,4 +49,45 @@ describe('fetchOpenAIModels vendor URL resolution', () => {
     const cfg = (callLlmProviderHttp as jest.Mock).mock.calls[0][0];
     expect(cfg.url).toBe('https://mistral.internal.example/v1/models');
   });
+
+  it.each([
+    [LlmProviderType.FIREWORKS, 'https://api.fireworks.ai/inference/v1/models'],
+    [LlmProviderType.CEREBRAS, 'https://api.cerebras.ai/v1/models'],
+    [LlmProviderType.DEEPINFRA, 'https://api.deepinfra.com/v1/openai/models'],
+    [LlmProviderType.NOVITA, 'https://api.novita.ai/openai/models'],
+    [LlmProviderType.PERPLEXITY, 'https://api.perplexity.ai/router/v1/models'],
+    [LlmProviderType.ZAI, 'https://api.z.ai/api/paas/v4/models'],
+    [LlmProviderType.BASETEN, 'https://inference.baseten.co/v1/models'],
+    [LlmProviderType.NEBIUS, 'https://api.tokenfactory.nebius.com/v1/models'],
+    [LlmProviderType.SAMBANOVA, 'https://api.sambanova.ai/v1/models'],
+  ])('%s lists models from its own OpenAI-compatible base with a Bearer key', async (type, expectedUrl) => {
+    const provider = makeProvider(type);
+    const models = await helper.fetchModelsFromProvider(provider);
+    const cfg = (callLlmProviderHttp as jest.Mock).mock.calls[0][0];
+    expect(cfg.url).toBe(expectedUrl);
+    expect(cfg.headers.Authorization).toBe('Bearer test-key');
+    expect(models.map((m) => m.id)).toEqual(['codestral-latest']);
+  });
+
+  it('keeps host-namespaced ids verbatim (Fireworks accounts/... and org/model ids)', async () => {
+    (callLlmProviderHttp as jest.Mock).mockResolvedValue({
+      data: { data: [
+        { id: 'accounts/fireworks/models/llama-v3p1-70b-instruct', created: 2 },
+        { id: 'accounts/fireworks/models/nomic-embed-text-v1', created: 1 },
+      ] },
+    });
+    const models = await helper.fetchModelsFromProvider(makeProvider(LlmProviderType.FIREWORKS));
+    expect(models.map((m) => m.id)).toEqual(['accounts/fireworks/models/llama-v3p1-70b-instruct']);
+  });
+
+  it('surfaces a failed listing on a base without /models (same contract as every type; the resolver maps it)', async () => {
+    // Perplexity's legacy Sonar base (https://api.perplexity.ai) has no
+    // /models. The rejection reaches the caller: /test-connection turns it
+    // into ok:false, DefaultModelResolver into NO_MODEL_CONFIGURED.
+    (callLlmProviderHttp as jest.Mock).mockRejectedValue(Object.assign(new Error('Request failed with status code 404'), { response: { status: 404 } }));
+    const provider = makeProvider(LlmProviderType.PERPLEXITY);
+    (provider.configuration as any).apiUrl = 'https://api.perplexity.ai';
+    await expect(helper.fetchModelsFromProvider(provider)).rejects.toThrow('status code 404');
+    expect((callLlmProviderHttp as jest.Mock).mock.calls[0][0].url).toBe('https://api.perplexity.ai/models');
+  });
 });

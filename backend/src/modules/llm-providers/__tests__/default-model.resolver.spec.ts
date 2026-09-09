@@ -44,6 +44,28 @@ describe('pickPreferredModel', () => {
     expect(pickPreferredModel(LlmProviderType.ANTHROPIC, ['claude-sonnet-9'])).toBe('claude-sonnet-9');
     expect(pickPreferredModel(LlmProviderType.OPENAI, ['gpt-12'])).toBe('gpt-12');
   });
+
+  it('prefers sonar-pro on Perplexity and plain glm-N on Z.ai, without knowing ids', () => {
+    expect(pickPreferredModel(LlmProviderType.PERPLEXITY, ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'])).toBe('sonar-pro');
+    expect(pickPreferredModel(LlmProviderType.PERPLEXITY, ['sonar-reasoning', 'sonar'])).toBe('sonar');
+    expect(pickPreferredModel(LlmProviderType.ZAI, ['glm-4.5-air', 'glm-5.3-flash', 'glm-5', 'glm-5.3', 'embedding-3'])).toBe('glm-5.3');
+    expect(pickPreferredModel(LlmProviderType.ZAI, ['glm-9'])).toBe('glm-9');
+  });
+
+  it('picks an instruct Llama, then Qwen, then DeepSeek on hosted open-model vendors', () => {
+    const fireworks = ['accounts/fireworks/models/deepseek-v3', 'accounts/fireworks/models/qwen3-235b-a22b-instruct-2507', 'accounts/fireworks/models/llama-v3p1-70b-instruct', 'accounts/fireworks/models/llama-v3p3-70b-instruct'];
+    expect(pickPreferredModel(LlmProviderType.FIREWORKS, fireworks)).toBe('accounts/fireworks/models/llama-v3p3-70b-instruct');
+    expect(pickPreferredModel(LlmProviderType.NEBIUS, ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen3-32B-Instruct'])).toBe('Qwen/Qwen3-32B-Instruct');
+    expect(pickPreferredModel(LlmProviderType.NEBIUS, ['Qwen/Qwen3-32B', 'deepseek-ai/DeepSeek-V3'])).toBe('deepseek-ai/DeepSeek-V3');
+    expect(pickPreferredModel(LlmProviderType.SAMBANOVA, ['DeepSeek-V3.1', 'DeepSeek-R1'])).toBe('DeepSeek-V3.1');
+  });
+
+  it('falls back to the first served chat model on a host when no preferred family is listed', () => {
+    expect(pickPreferredModel(LlmProviderType.CEREBRAS, ['gpt-oss-120b', 'zai-glm-4.7'])).toBe('gpt-oss-120b');
+    expect(pickPreferredModel(LlmProviderType.NOVITA, ['text-embedding-x', 'minimax/minimax-m2.1'])).toBe('minimax/minimax-m2.1');
+    // A first-party vendor still fails rather than guessing.
+    expect(pickPreferredModel(LlmProviderType.PERPLEXITY, ['r1-1776'])).toBeUndefined();
+  });
 });
 
 describe('DefaultModelResolver', () => {
@@ -85,5 +107,14 @@ describe('DefaultModelResolver', () => {
   it('fails rather than guessing when nothing the vendor lists is a chat model', async () => {
     fetchModels.mockResolvedValue([{ id: 'text-embedding-3-large' }]);
     await expect(resolver.resolve(provider(LlmProviderType.OPENAI))).rejects.toBeInstanceOf(NoModelAvailableError);
+  });
+
+  it('reports NO_MODEL_CONFIGURED with the vendor reason when the listing itself fails (no /models on the base)', async () => {
+    fetchModels.mockRejectedValue(new Error('Request failed with status code 404'));
+    const p = provider(LlmProviderType.PERPLEXITY);
+    await expect(resolver.resolve(p)).rejects.toBeInstanceOf(NoModelAvailableError);
+    await expect(resolver.resolve(p)).rejects.toMatchObject({ code: 'NO_MODEL_CONFIGURED' });
+    await expect(resolver.resolve(p)).rejects.toThrow(/could not list its models \(Request failed with status code 404\)/);
+    await expect(resolver.resolve(p)).rejects.toThrow(/Set a model on the provider/);
   });
 });

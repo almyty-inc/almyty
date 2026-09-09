@@ -11,7 +11,11 @@ export function LlmCallNode({ data, selected }: NodeProps) {
         <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">LLM Call</span>
       </div>
       <div className="p-3">
-        <div className="text-sm font-medium truncate">{(data.model as string) || 'Select model'}</div>
+        <div className="text-sm font-medium truncate">
+          {data.routing && typeof data.routing === 'object'
+            ? `Routed: ${((data.routing as { objective?: string }).objective) || 'cheapest'}`
+            : (data.model as string) || 'Select model'}
+        </div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
           {data.systemPrompt ? String(data.systemPrompt).substring(0, 40) + '...' : 'No system prompt'}
         </div>

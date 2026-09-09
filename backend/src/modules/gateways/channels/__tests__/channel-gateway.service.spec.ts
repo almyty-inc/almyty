@@ -413,3 +413,51 @@ describe('ChannelGatewayService.testConnection', () => {
     });
   });
 });
+
+describe('ChannelGatewayService — secrets through the credential store', () => {
+  let fetchMock: ReturnType<typeof installFetchMock>;
+  const channelCredentials = { resolveConfig: jest.fn() };
+
+  const build = () =>
+    new ChannelGatewayService(
+      null as any, null as any, null as any, null as any,
+      new ChatWidgetAdapter(null as any), new SlackAdapter(), new DiscordAdapter(), new TelegramAdapter(),
+      new WhatsAppAdapter(), new WhatsAppCloudAdapter(), new SmsAdapter(), new EmailAdapter(), new WebhookAdapter(),
+      new GoogleChatAdapter(), new MicrosoftTeamsAdapter(), new SignalAdapter(), new MatrixAdapter(), new IrcAdapter(),
+      undefined, undefined, undefined, channelCredentials as any,
+    );
+
+  beforeEach(() => {
+    fetchMock = installFetchMock();
+    channelCredentials.resolveConfig.mockReset();
+  });
+  afterEach(() => fetchMock.restore());
+
+  it('testConnection probes with the connection token, not the row', async () => {
+    channelCredentials.resolveConfig.mockResolvedValue({ bot_token: 'xoxb-from-store' });
+    fetchMock.setNextResponse({ json: { ok: true, user: 'bot' } });
+    const gateway = { id: 'gw-1', type: GatewayType.SLACK, organizationId: 'org-1', configuration: { credentialId: 'cred-1', credentialKeys: ['bot_token'] } } as unknown as Gateway;
+
+    const res = await build().testConnection(gateway);
+
+    expect(channelCredentials.resolveConfig).toHaveBeenCalledWith(gateway, 'channel_outbound');
+    expect(fetchMock.calls[0].init.headers.Authorization).toBe('Bearer xoxb-from-store');
+    expect(res.ok).toBe(true);
+  });
+
+  it('handleInboundMessage verifies with the resolved config and fails closed when the store yields nothing', async () => {
+    channelCredentials.resolveConfig.mockResolvedValue({ credentialId: 'cred-1' });
+    const service = build();
+    const eventRepository = { create: jest.fn((e: any) => e), save: jest.fn(async (e: any) => e) };
+    (service as any).eventRepository = eventRepository;
+    const gateway = {
+      id: 'gw-1', type: GatewayType.SLACK, organizationId: 'org-1', isActive: () => true,
+      configuration: { credentialId: 'cred-1', credentialKeys: ['signing_secret'] },
+    } as unknown as Gateway;
+
+    await service.handleInboundMessage(gateway, { type: 'event_callback', event: { type: 'message', text: 'hi', user: 'U1' } }, {}, '{}');
+
+    expect(channelCredentials.resolveConfig).toHaveBeenCalledWith(gateway, 'channel_inbound');
+    expect(eventRepository.save.mock.calls[0][0]).toMatchObject({ status: 'failed', errorMessage: 'signature verification failed' });
+  });
+});

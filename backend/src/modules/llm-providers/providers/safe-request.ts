@@ -4,6 +4,7 @@ import {
   validateUrl,
   validateUrlAllowingPrivate,
   ollamaPrivateUrlsAllowed,
+  customLlmPrivateUrlsAllowed,
 } from '../../../common/security/url-validator';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
@@ -77,7 +78,8 @@ export interface LlmCallOptions {
 export function llmCallOptionsFor(provider: LlmProvider): LlmCallOptions {
   return {
     allowPrivateUrls:
-      provider.type === LlmProviderType.OLLAMA && ollamaPrivateUrlsAllowed(),
+      (provider.type === LlmProviderType.OLLAMA && ollamaPrivateUrlsAllowed()) ||
+      (provider.type === LlmProviderType.CUSTOM && customLlmPrivateUrlsAllowed()),
   };
 }
 

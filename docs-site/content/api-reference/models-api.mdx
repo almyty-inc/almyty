@@ -1,0 +1,165 @@
+# Models API
+
+> This is the HTTP API reference. For the concepts, see [Models](/models), [Routing](/models/routing) and [Deployments](/models/deployments).
+
+REST reference for the model catalog, the model registry and deployments. Every response is wrapped in `{ success, data }`; every route is scoped to the caller's current organization.
+
+## Catalog
+
+| Method | Endpoint | Role | Description |
+|--------|----------|------|-------------|
+| `GET` | `/models` | member | List cards. Filters: `status`, `privacyTier`, `providerId`, `selectable=true` |
+| `POST` | `/models` | admin | Register a card against a stored provider or an endpoint |
+| `POST` | `/models/register-endpoint` | admin | Register an OpenAI-compatible server as a card (creates a `custom` provider) |
+| `POST` | `/models/sync` | admin | Import what one provider lists (`{ providerId }`), or every active provider with no body |
+| `GET` | `/models/:id` | member | Card detail |
+| `PATCH` | `/models/:id` | admin | Update privacy tier, region, capabilities, price override, status |
+| `POST` | `/models/:id/validate` | admin | One real call through the card; passing makes it selectable |
+| `DELETE` | `/models/:id` | admin | Remove a card |
+
+Every card in a response carries two computed fields: `selectable` (the support rule) and `effectivePricing` (the override when set, else the feed price).
+
+### Register a card
+
+```bash
+curl -X POST https://api.almyty.com/models \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Qwen3 32B on our vLLM",
+    "providerId": "7c1e...",
+    "vendorModelId": "qwen3-32b",
+    "privacyTier": "private_cloud",
+    "region": "eu-central",
+    "capabilities": { "tools": true },
+    "contextLength": 32768
+  }'
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Display name |
+| `vendorModelId` | string | Yes | The id sent on the wire |
+| `providerId` | uuid | One of | A stored provider |
+| `endpointRef` | object | One of | `{ url }` of an endpoint |
+| `modelVersionId` | uuid | No | A registered version, for deployed weights |
+| `capabilities` | object | No | Booleans: `tools`, `vision`, `reasoning`, `embedding`, `structuredOutput` |
+| `contextLength` | integer | No | Context in tokens |
+| `privacyTier` | string | No | `local`, `private_cloud`, `public` (default) |
+| `region` | string | No | Region label |
+| `pricingOverride` | object | No | `{ inPerMTok, outPerMTok, currency? }`, dollars per million tokens |
+| `base` | string | No | Base architecture, for example `qwen3-14b` |
+| `metadata` | object | No | Free-form |
+
+`POST /models/register-endpoint` takes `name`, `url`, `vendorModelId`, optional `apiKey`, `capabilities`, `contextLength`, `privacyTier`, `region`, `pricingOverride`.
+
+### Validate
+
+```bash
+curl -X POST https://api.almyty.com/models/4f2a.../validate \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "passed": true,
+    "latencyMs": 812,
+    "model": { "id": "4f2a...", "validationStatus": "passed", "selectable": true, "...": "..." }
+  }
+}
+```
+
+A failed run answers with `success: false`, `passed: false` and `error`, and records the error on the card.
+
+### Sync
+
+`POST /models/sync` with no body returns a per-provider summary; with `{ providerId }` the summary for that provider: `created` and `reinstated` cards, `retired` cards, `skipped` count, and `error` per provider where the vendor could not be asked.
+
+### Card fields
+
+`id`, `name`, `providerId`, `providerType`, `vendorModelId`, `endpointRef`, `base`, `modelVersionId`, `capabilities`, `contextLength`, `pricing`, `pricingSource` (`feed:litellm`, `feed:openrouter`, `native`, `adapter`, `manual`, `unpriced`), `pricingFetchedAt`, `pricingOverride`, `measuredLatencyMs` (`{ p50, p95, updatedAt }`), `privacyTier`, `region`, `status` (`active`, `inactive`, `error`, `deploying`), `validationStatus` (`never`, `passed`, `failed`), `lastValidatedAt`, `lastValidationError`, `metadata`, `createdAt`, `updatedAt`, plus the computed `selectable` and `effectivePricing`.
+
+## Routing
+
+A routing policy travels inside an LLM Call node's config, an autonomous agent's `modelConfig.routing`, or the organization's `settings.defaultRouting`; there is no routing endpoint of its own. The shape and every field are on [Routing](/models/routing#the-policy). The organization default is written with:
+
+```bash
+curl -X PATCH https://api.almyty.com/organizations/$ORG \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "settings": { "defaultRouting": { "objective": "cheapest", "privacyTier": "private_cloud" } } }'
+```
+
+`null` clears it; other `settings` keys are left as they are. The attribution of a routed answer (`routing` on the chat response, on `nodeResults[nodeId]`, and on autonomous step output) is `{ modelId, modelVersionId, vendorModelId, providerId, rationale, attempt, tried, rejected }`.
+
+## Versions
+
+| Method | Endpoint | Role | Description |
+|--------|----------|------|-------------|
+| `GET` | `/model-versions` | member | List registered versions |
+| `POST` | `/model-versions` | admin | Register a pinned registry URI |
+| `GET` | `/model-versions/:id` | member | Version detail with manifest summary |
+| `DELETE` | `/model-versions/:id` | admin | Remove a version no live deployment references |
+
+```bash
+curl -X POST https://api.almyty.com/model-versions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "qwen3-14b-support-ft", "registryUri": "s3://acme-models/qwen3-14b-support@e3b0c442" }'
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Version name |
+| `registryUri` | string | Yes | `s3://bucket/prefix@etag`, `hf://org/repo@sha` or `file:///path@sha`; the pin is required |
+| `base` | string | For `hf://` and `file://` without a manifest | Base architecture |
+| `quantizations` | string[] | No | For example `["bf16", "awq-int4"]` |
+| `lineage` | object | No | `{ trainingJobId?, datasetRef?, parentVersionId? }` |
+| `metadata` | object | No | Free-form |
+
+Errors: `REGISTRY_NOT_CONNECTED` (no registry connection for the organization on an `s3://` URI), `VERSION_IN_USE` on delete.
+
+## Deployments
+
+| Method | Endpoint | Role | Description |
+|--------|----------|------|-------------|
+| `GET` | `/model-adapters` | member | Registered adapters: `key`, `displayName`, `capabilities`, `configSchema` |
+| `GET` | `/model-deployments` | member | List deployments |
+| `POST` | `/model-deployments` | admin | Create a deployment (desired state); reconcile does the rest |
+| `GET` | `/model-deployments/:id` | member | Desired vs actual, state, cost |
+| `POST` | `/model-deployments/:id/scale` | admin | `{ replicas }`; 0 scales to zero |
+| `POST` | `/model-deployments/:id/teardown` | admin | Tear the endpoint down; weights stay |
+| `DELETE` | `/model-deployments/:id` | admin | Same as teardown |
+
+```bash
+curl -X POST https://api.almyty.com/model-deployments \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "modelVersionId": "a91c...",
+    "providerType": "huggingface-endpoints",
+    "desired": { "replicas": 1, "region": "eu-west-1", "privacyTier": "private_cloud" },
+    "providerConfig": { "token": "hf_...", "namespace": "acme", "region": "eu-west-1", "instanceType": "nvidia-a10g" },
+    "budgetId": "5d3f..."
+  }'
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `modelVersionId` | uuid | Yes | The version to run |
+| `providerType` | string | Yes | Adapter key from `GET /model-adapters` |
+| `desired` | object | No | `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
+| `providerConfig` | object | No | Validated against the adapter's `configSchema`; `x-secret` fields encrypted |
+| `credentialId` | uuid | No | A stored credential whose fields the adapter reads |
+| `budgetId` | uuid | No | Spend budget; reaching it scales to zero |
+| `modelId` | uuid | No | A card that already exists for this version; filled with the endpoint once ready |
+
+A deployment in a response carries `state` (`pending`, `deploying`, `ready`, `degraded`, `scaling`, `tearing_down`, `torn_down`, `orphaned`, `failed`), `desired`, `actual` (`state`, `url`, `replicas`, `hardware`, `region`, `message`, `spentCents`, `ratePerHourCents`), `externalRef`, `lastReconcileAt`, `lastError`, `budgetId`, and `providerConfig` with every secret shown as `********`.
+
+Adapter errors carry `ADAPTER_UNKNOWN`, `ADAPTER_UNSUPPORTED_OPERATION` (the adapter cannot do this, for example deploy through `custom-endpoint`), `ADAPTER_AUTH`, `ADAPTER_ERROR`.
+
+## Audit actions
+
+`model_registered`, `model_validated`, `model_price_updated`, `model_routed`, `model_route_escalated`, deployment transitions, `model_deployment_budget_stop`, `model_deployment_orphan_teardown`.

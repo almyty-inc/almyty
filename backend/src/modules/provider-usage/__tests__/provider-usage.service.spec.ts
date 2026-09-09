@@ -55,25 +55,34 @@ describe('ProviderUsageService', () => {
     expect(providerUsageCapability(LlmProviderType.ANTHROPIC).supported).toBe(true);
   });
 
-  it('flags the other 13 provider types as unsupported', () => {
+  it('flags the other 22 provider types as unsupported', () => {
     const unsupported = listProviderUsageCapabilities().filter((c) => !c.supported);
     expect(unsupported.map((c) => c.type).sort()).toEqual(
       [
         LlmProviderType.AWS_BEDROCK,
         LlmProviderType.AZURE_OPENAI,
+        LlmProviderType.BASETEN,
+        LlmProviderType.CEREBRAS,
         LlmProviderType.COHERE,
         LlmProviderType.CUSTOM,
+        LlmProviderType.DEEPINFRA,
         LlmProviderType.DEEPSEEK,
+        LlmProviderType.FIREWORKS,
         LlmProviderType.GOOGLE,
         LlmProviderType.GROQ,
         LlmProviderType.HUGGINGFACE,
         LlmProviderType.MISTRAL,
+        LlmProviderType.NEBIUS,
+        LlmProviderType.NOVITA,
         // Ollama is local inference — nothing is billed, so there is no
         // usage/cost API to ingest.
         LlmProviderType.OLLAMA,
         LlmProviderType.OPENROUTER,
+        LlmProviderType.PERPLEXITY,
+        LlmProviderType.SAMBANOVA,
         LlmProviderType.TOGETHER,
         LlmProviderType.XAI,
+        LlmProviderType.ZAI,
       ].sort(),
     );
     // every unsupported entry must carry an explanatory note

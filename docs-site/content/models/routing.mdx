@@ -1,0 +1,107 @@
+# Routing
+
+A step in an agent does not have to name a provider. It can carry a **routing policy** instead: the constraints the step has (privacy ceiling, region, capabilities, budget) and what to optimise for (cheapest, fastest, or a model you pin). The router turns the organization's [model cards](/models) into an ordered plan, calls the first candidate, and moves on to the next when a provider fails. Every answer records which card served it and why.
+
+```json
+{
+  "routing": {
+    "objective": "cheapest",
+    "privacyTier": "private_cloud",
+    "regions": ["eu-central"],
+    "capabilities": { "tools": true },
+    "fallbackChain": ["<card id or vendor model id>", "..."],
+    "pinnedModel": "<card id or vendor model id>",
+    "budgetHeadroomCents": 500,
+    "escalation": { "onVerifyFail": "next-candidate", "maxEscalations": 2 }
+  }
+}
+```
+
+## Where a policy goes
+
+- **An LLM Call node** in a workflow agent takes `routing` in place of `providerId`.
+- **An autonomous agent** takes `modelConfig.routing`, which replaces `providerId` for every step of the run.
+- **The organization default** (`settings.defaultRouting`) applies to any LLM Call node that names neither a provider nor a policy.
+
+A policy on the node always wins over the organization default. A node with neither, in an organization without a default, fails with a message that says so.
+
+## The policy
+
+| Field | Type | Meaning |
+|---|---|---|
+| `objective` | `cheapest`, `fastest`, `pinned` | How the eligible cards are ordered. Default `cheapest` |
+| `privacyTier` | `local`, `private_cloud`, `public` | The most public tier the request may use, in the order `local < private_cloud < public` |
+| `regions` | string[] | Allowlist of card regions; empty or absent means any. A card without a region is never excluded by this filter |
+| `capabilities` | object of booleans | Every `true` flag must be present on the card (`tools`, `vision`, `reasoning`, `embedding`, `structuredOutput`) |
+| `fallbackChain` | string[] | An explicit order of card ids or vendor model ids. When set, it replaces the objective ordering; entries that are not eligible are skipped and recorded |
+| `pinnedModel` | string | With `objective: pinned`, the card (or vendor model id) that must come first; the rest of the plan follows in price order |
+| `budgetHeadroomCents` | integer or null | Cents the caller may still spend this period. A card whose blended price for a million tokens exceeds it is skipped; unpriced cards pass this filter |
+| `escalation` | `{ onVerifyFail, maxEscalations? }` | What a verifier rejection does to the plan; see [Verify escalation](#verify-escalation) |
+
+The organization default has the same shape and is read and written through the organization endpoints: `PATCH /organizations/:id { settings: { defaultRouting } }` sets it, `null` clears it, and other `settings` keys are left as they are. The update validates every field. The executor caches the default for 30 seconds per organization, so a change applies to the next run, not the one in flight.
+
+## How a plan is built
+
+Selection is pure: the same cards and the same policy always give the same plan.
+
+1. **Filter.** A card is eligible when it is [selectable](/models#support-is-data-not-a-list), its privacy tier is at or below the ceiling, its region is allowed, it has every required capability, and its price fits the budget headroom. Each card that fails records a reason (`privacy tier public above ceiling private_cloud`, `lacks tools`, `over budget headroom`, and so on).
+2. **Order.** With a `fallbackChain`, the plan is the chain in the order given. Otherwise `cheapest` sorts by blended feed price (three quarters input, one quarter output, per million tokens), `fastest` by measured p50 latency, and `pinned` moves the pinned card to the front of the price order. Unpriced or unmeasured cards sort last.
+3. **Resolve.** Each candidate is paired with something callable: the stored provider row, or a transient provider built from the card's endpoint URL and the deployment's token. A card whose provider is unhealthy or inactive is rejected at this point with the provider's status as the reason.
+
+## Walking the plan
+
+The chat runner calls the first candidate. If the call fails for a reason that is **not the request's fault** (a retired model, quota, an outage, an authentication problem on that provider), the candidate is recorded in `tried` with the reason and the next one is called. A **request-shaped** failure (400, 413, 422) or a caller abort stops the walk and surfaces the error, because the next model would fail the same way. When every candidate fails, the last error is returned with the code `ROUTE_EXHAUSTED` and the `tried` list.
+
+### Streaming
+
+A stream cannot switch models mid-answer. A streamed request takes the head of the plan and stamps the same attribution with `attempt: 1`. If the head fails before the first token, the request fails; there is no fallback inside a stream.
+
+## Attribution
+
+Every routed answer says what happened:
+
+```json
+{
+  "modelId": "4f2a...",
+  "modelVersionId": null,
+  "vendorModelId": "qwen3-32b",
+  "providerId": "7c1e...",
+  "rationale": "cheapest ($0.41/M blended), rank 1",
+  "attempt": 1,
+  "tried": [],
+  "rejected": [
+    { "modelId": "9b0d...", "reason": "privacy tier public above ceiling private_cloud" }
+  ]
+}
+```
+
+- **Node results.** On a workflow run, `nodeResults[<nodeId>].routing` shows which card served each LLM Call node and why.
+- **Run steps.** On an autonomous run, each step that called a model carries the same object, and the chat response itself carries it as `routing`.
+- **Audit log.** Every routed call writes a `model_routed` entry with the model, version, rationale and attempt, next to `model_registered`, `model_validated` and `model_price_updated` for the catalog itself.
+
+## Verify escalation
+
+Tier 1 walks the plan when a candidate fails to answer. Tier 2 walks it when a candidate answered but a [verifier](/agents/autonomous) rejected the answer. It is off by default; set `MODEL_ROUTER_VERIFY_ESCALATION=true` on the API to enable it, then add an `escalation` block to the policy:
+
+| Field | Meaning |
+|---|---|
+| `onVerifyFail` | `next-candidate` re-runs the step with the next candidate in the plan; `stop` keeps the rejected answer and lets the verify flow handle it (revise loop, condition branch) |
+| `maxEscalations` | Upper bound on re-runs per request; absent means walk the rest of the plan |
+
+On a rejection the run re-issues the request with the candidates already tried skipped, so the plan starts after them; those candidates stay visible in `rejected` with the reason `skipped after verify escalation`. The run's working memory carries the adjusted policy and the count, and the run emits a `route.escalated` event. The escalation stops when the plan has no further candidate, when `maxEscalations` is spent, or when the run was cancelled. With the flag off, every failed verdict is a stop.
+
+## Errors
+
+| Code | Status | When |
+|---|---|---|
+| `NO_ROUTE` | 400 | No card satisfies the policy. The message says how many cards were rejected and the response carries the `rejected` list with a reason per card, or says that no models are registered at all |
+| `ROUTE_EXHAUSTED` | provider's | Every candidate was called and every one failed for a provider-side reason. The response carries `tried` |
+| `ROUTING_UNAVAILABLE` | 400 | The request carried a policy but the catalog module is not wired into this deployment. Routing never falls back silently to a fixed provider |
+
+A `NO_ROUTE` on a policy that used to work usually means the card it relied on failed its last validation. `npx @almyty/models list` shows every card with why it is not selectable.
+
+## Related
+
+- [Models](/models): cards, validation, pricing and latency
+- [Cost governance](/cost-governance): the budgets `budgetHeadroomCents` is meant to reflect
+- [Autonomous agents](/agents/autonomous): verifiers and constraints
