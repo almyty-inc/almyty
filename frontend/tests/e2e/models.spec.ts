@@ -6,6 +6,11 @@ import { AddressInfo } from 'net'
  * Models layer: catalog, providers, validation, price override, endpoint
  * registration, sync, and the routed llm_call node.
  *
+ * The catalog is the default tab and shows a card grid, with the table
+ * behind a toggle and an origin filter beside it, so the assertions below
+ * read the grid first and switch to the table where a per-column value is
+ * the point.
+ *
  * Auth is the httpOnly cookie set by POST /auth/register, issued through
  * page.request so it lands in the browser context; nothing touches
  * localStorage. Every models/provider API response is checked to be JSON,
@@ -147,6 +152,12 @@ async function openRowActions(page: Page, cardName: string) {
   await page.getByRole('button', { name: `Actions for ${cardName}` }).click()
 }
 
+/** The table is behind a toggle; the cards are what the page opens on. */
+async function showTable(page: Page) {
+  await page.getByRole('button', { name: 'Table', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Table', exact: true })).toHaveAttribute('aria-pressed', 'true')
+}
+
 test.describe.configure({ mode: 'serial' })
 
 test.describe('Models: catalog and providers', () => {
@@ -180,14 +191,19 @@ test.describe('Models: catalog and providers', () => {
     expect(res.status()).toBe(200)
     expect(res.headers()['content-type']).toContain('application/json')
 
-    await expect(page.getByRole('heading', { name: 'Models' })).toBeVisible()
-    await expect(page.getByText('0 cards, 0 usable by agents')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'No model cards yet' })).toBeVisible()
+    // The page heading and the empty-state heading both say "models", so
+    // the page one is matched exactly rather than by substring.
+    await expect(page.getByRole('heading', { name: 'Models', exact: true })).toBeVisible()
+    const empty = page.getByRole('status').filter({ hasText: 'No models yet' })
+    await expect(empty.getByRole('heading', { name: 'No models yet' })).toBeVisible()
+    // Nothing to summarise until there is at least one card.
+    await expect(page.getByTestId('catalog-summary')).toHaveCount(0)
+    await expect(page.getByTestId('catalog-cards')).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Register endpoint' }).first()).toBeVisible()
     // Sync is pointless with no providers, so the empty-state CTA is disabled.
-    await expect(page.getByRole('main').getByRole('button', { name: 'Sync from providers' }).last()).toBeDisabled()
+    await expect(empty.getByRole('button', { name: 'Sync from providers' })).toBeDisabled()
 
-    for (const tab of ['Deployments', 'Versions', 'Providers']) {
+    for (const tab of ['Catalog', 'Deployments', 'Providers', 'Tracked artifacts']) {
       await expect(page.getByRole('tab', { name: tab })).toBeVisible()
     }
   })
@@ -214,7 +230,25 @@ test.describe('Models: catalog and providers', () => {
     // health check records a passing validation for the model it called.
     await waitForSelectableCard(page)
     await page.goto('/models')
-    await expect(page.getByText(/2 cards, [12] usable by agents/)).toBeVisible()
+
+    // The catalog opens on the cards, and says what the agents can use.
+    await expect(page.getByTestId('catalog-summary')).toContainText(/[12] of 2 models/)
+    await expect(page.getByTestId('catalog-vendors')).toContainText('E2E Ollama')
+    const grid = page.getByTestId('catalog-cards')
+    await expect(grid.getByRole('listitem')).toHaveCount(2)
+    await expect(grid).toContainText('e2e-small:latest')
+    await expect(grid).toContainText('e2e-large:latest')
+    await expect(grid.getByRole('listitem').filter({ hasText: 'e2e-small:latest' })).toContainText('Vendor key')
+    // Both came from a vendor key, so the deployment origin filter empties the grid.
+    await page.getByLabel('Filter by where it came from').click()
+    await page.getByRole('option', { name: 'Deployed by you' }).click()
+    await expect(page.getByText('0 of 2 shown')).toBeVisible()
+    await page.getByLabel('Filter by where it came from').click()
+    await page.getByRole('option', { name: 'Any origin' }).click()
+    await expect(grid.getByRole('listitem')).toHaveCount(2)
+
+    // The table is the same data, one row per card.
+    await showTable(page)
     const small = page.getByRole('row').filter({ hasText: 'e2e-small:latest' })
     const large = page.getByRole('row').filter({ hasText: 'e2e-large:latest' })
     await expect(small).toBeVisible()
@@ -231,7 +265,7 @@ test.describe('Models: catalog and providers', () => {
     await expect(page.getByText('Validation passed', { exact: true })).toBeVisible()
     await expect(large.getByRole('cell', { name: 'Passed' })).toBeVisible()
     await expect(large.getByRole('cell', { name: 'Selectable', exact: true })).toBeVisible()
-    await expect(page.getByText('2 cards, 2 usable by agents')).toBeVisible()
+    await expect(page.getByTestId('catalog-summary')).toContainText('2 of 2 models')
     expect(fake?.calls.some((c) => c.includes('/chat/completions')) ?? true).toBe(true)
 
     // Price override through the Edit sheet.
@@ -272,14 +306,19 @@ test.describe('Models: catalog and providers', () => {
     await dialog.locator('#endpoint-url').fill(`${llmUrl}/v1`)
     await dialog.locator('#endpoint-model-id').fill('e2e-small')
     const registered = page.waitForResponse((r) => r.url().includes('/models/register-endpoint'))
-    await dialog.getByRole('button', { name: /Register/ }).last().click()
+    await dialog.getByRole('button', { name: 'Register endpoint', exact: true }).click()
     const res = await registered
     expect(res.headers()['content-type']).toContain('application/json')
     expect(res.status(), await res.text()).toBe(201)
     await expect(page.getByText('Endpoint registered', { exact: true })).toBeVisible()
-    const row = page.getByRole('row').filter({ hasText: 'E2E endpoint' })
-    await expect(row).toBeVisible()
-    await expect(row.getByRole('cell', { name: 'Not validated' })).toBeVisible()
+
+    // An endpoint card sits in the same grid as the vendor ones, with the
+    // model id it sends and no validation run behind it yet.
+    const card = page.getByTestId('catalog-cards').getByRole('listitem').filter({ hasText: 'E2E endpoint' })
+    await expect(card).toBeVisible()
+    await expect(card).toContainText('e2e-small')
+    await expect(card).toContainText('Not validated')
+    await expect(card).toContainText('Not selectable')
 
     // Validation runs one real call through the endpoint. A localhost URL is
     // only reachable when the backend allows private URLs for custom

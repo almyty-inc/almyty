@@ -119,26 +119,50 @@ describe('adapter matching', () => {
 })
 
 describe('readAdapterRefusal', () => {
-  it('lifts the message and the accepted schemes off the 400', () => {
+  /**
+   * The server wraps every error as `{ error: { code, message, ... } }`.
+   * These tests used the flat shape, which nothing ever sends, so they
+   * passed while the refusal panel was dead against a live server. The
+   * wrapped shape is the real one and is asserted first.
+   */
+  it('lifts the message and the accepted schemes off the wrapped 400 the server actually sends', () => {
     const err = {
       response: {
-        data: { code: 'ADAPTER_UNSUPPORTED_SOURCE', message: 'Amazon Bedrock cannot run hf://x@1', accepts: ['s3://', 'bedrock://'] },
+        data: {
+          error: {
+            code: 'ADAPTER_UNSUPPORTED_SOURCE',
+            message: 'Amazon Bedrock cannot run hf://x@1',
+            accepts: ['s3://', 'bedrock://'],
+            statusCode: 400,
+            timestamp: '2026-09-09T00:00:00.000Z',
+            path: '/model-deployments',
+          },
+        },
       },
     }
     expect(readAdapterRefusal(err)).toEqual({ code: 'ADAPTER_UNSUPPORTED_SOURCE', message: 'Amazon Bedrock cannot run hf://x@1', accepts: ['s3://', 'bedrock://'] })
   })
 
+  it('still reads a flat body, for a handler that answers without the filter', () => {
+    const err = { response: { data: { code: 'ADAPTER_UNSUPPORTED_SOURCE', message: 'Amazon Bedrock cannot run hf://x@1', accepts: ['s3://'] } } }
+    expect(readAdapterRefusal(err)).toEqual({ code: 'ADAPTER_UNSUPPORTED_SOURCE', message: 'Amazon Bedrock cannot run hf://x@1', accepts: ['s3://'] })
+  })
+
   it('keeps the other model errors that have no accepts list', () => {
-    expect(readAdapterRefusal({ response: { data: { code: 'MODEL_REQUIRED', message: 'Name the model to run' } } })).toEqual({
+    expect(readAdapterRefusal({ response: { data: { error: { code: 'MODEL_REQUIRED', message: 'Name the model to run' } } } })).toEqual({
       code: 'MODEL_REQUIRED',
       message: 'Name the model to run',
       accepts: [],
+    })
+    expect(readAdapterRefusal({ response: { data: { error: { code: 'REGISTRY_URI_INVALID', message: 'registryUri must be an artifact with a pin' } } } })).toMatchObject({
+      code: 'REGISTRY_URI_INVALID',
     })
   })
 
   it('ignores anything that is not a model refusal', () => {
     expect(readAdapterRefusal(new Error('network down'))).toBeNull()
-    expect(readAdapterRefusal({ response: { data: { message: 'Unauthorized' } } })).toBeNull()
+    expect(readAdapterRefusal({ response: { data: { error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } } } })).toBeNull()
+    expect(readAdapterRefusal({ response: { data: { error: {} } } })).toBeNull()
     expect(readAdapterRefusal({ response: { data: {} } })).toBeNull()
   })
 })

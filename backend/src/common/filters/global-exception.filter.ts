@@ -19,6 +19,12 @@ interface BodyParserError extends Error {
   type: string;
 }
 
+/**
+ * Keys the filter owns in the error body. Everything else on an
+ * exception payload belongs to whoever threw it and is forwarded.
+ */
+const RESERVED_ERROR_KEYS = new Set(['code', 'message', 'statusCode', 'timestamp', 'path', 'error']);
+
 const BODY_PARSER_MESSAGES: Record<string, string> = {
   'entity.too.large': 'Request body too large',
   'encoding.unsupported': 'Unsupported content encoding',
@@ -78,6 +84,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let status: number;
     let message: string;
     let code: string;
+    /** Extra fields the thrower put on the payload, forwarded as-is. */
+    let details: Record<string, unknown> = {};
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -92,6 +100,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       code = (typeof exResponse === 'object' && exResponse !== null && (exResponse as any).code)
         ? String((exResponse as any).code)
         : this.getCodeFromStatus(status);
+
+      // Anything else on the payload is the thrower's own structured
+      // detail, meant for the client: `accepts` on an unsupported source,
+      // `retryAfter`, a field list. Forward it rather than discarding it.
+      if (typeof exResponse === 'object' && exResponse !== null) {
+        details = Object.fromEntries(
+          Object.entries(exResponse as Record<string, unknown>).filter(
+            ([k]) => !RESERVED_ERROR_KEYS.has(k),
+          ),
+        );
+      }
 
       // Flatten array messages from ValidationPipe
       if (Array.isArray(message)) {
@@ -156,6 +175,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         statusCode: status,
         timestamp: new Date().toISOString(),
         path: request.path,
+        // Whatever else the thrower attached to the payload. Without this
+        // the body was rebuilt from five fixed fields, so a handler that
+        // threw `{ code, message, accepts }` to tell the client what it
+        // could have sent instead had that stripped on the way out, and
+        // the unit test asserting it passed because it never crossed the
+        // wire. Reserved keys are excluded so they cannot be overridden.
+        ...details,
       },
     });
   }

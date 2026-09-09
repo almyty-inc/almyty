@@ -218,6 +218,12 @@ export class ModelCatalogService {
         privacyTier: input.privacyTier ?? 'private_cloud',
         region: input.region,
         pricingOverride: input.pricingOverride,
+        // The card records where it is served from, the same field a
+        // deployment fills, minus the deploymentId that marks one we run.
+        // Without this a hand-registered endpoint was indistinguishable
+        // from a vendor key, so it was badged wrong and the "your
+        // endpoint" filter matched nothing.
+        endpointRef: { url: input.url },
         metadata: { endpoint: input.url },
       },
       userId,

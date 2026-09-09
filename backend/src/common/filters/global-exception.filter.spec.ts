@@ -188,3 +188,68 @@ describe('GlobalExceptionFilter — Sentry 5xx reporting', () => {
     }
   });
 });
+
+describe('GlobalExceptionFilter: structured detail reaches the client', () => {
+  let filter: GlobalExceptionFilter;
+  let mockResponse: any;
+  let mockHost: any;
+
+  const body = () => mockResponse.json.mock.calls[0][0].error;
+
+  beforeEach(() => {
+    filter = new GlobalExceptionFilter();
+    jest.spyOn((filter as any).logger, 'error').mockImplementation(() => undefined);
+    mockResponse = { setHeader: jest.fn(), status: jest.fn().mockReturnThis(), json: jest.fn().mockReturnThis() };
+    mockHost = {
+      switchToHttp: jest.fn().mockReturnValue({
+        getResponse: jest.fn().mockReturnValue(mockResponse),
+        getRequest: jest.fn().mockReturnValue({ method: 'POST', path: '/model-deployments', headers: {} }),
+      }),
+    };
+  });
+
+  /**
+   * The body used to be rebuilt from five fixed fields, so a handler that
+   * threw `{ code, message, accepts }` to tell the caller what it could
+   * have sent had `accepts` stripped on the way out. The service spec
+   * asserting it passed, because it never crossed the wire, and the UI
+   * panel that renders it was dead code against a live server.
+   */
+  it('forwards the fields a handler attached, not just code and message', () => {
+    filter.catch(
+      new BadRequestException({
+        code: 'ADAPTER_UNSUPPORTED_SOURCE',
+        message: 'Hugging Face Inference Endpoints cannot run s3://weights/x@e3b0',
+        accepts: ['hf://'],
+      }),
+      mockHost,
+    );
+    expect(body()).toMatchObject({
+      code: 'ADAPTER_UNSUPPORTED_SOURCE',
+      message: expect.stringContaining('cannot run s3://'),
+      accepts: ['hf://'],
+      statusCode: 400,
+      path: '/model-deployments',
+    });
+  });
+
+  it('keeps its own fields authoritative, so a payload cannot forge the status or the path', () => {
+    filter.catch(
+      new BadRequestException({ code: 'X', message: 'm', statusCode: 200, path: '/elsewhere', timestamp: 'nope' }),
+      mockHost,
+    );
+    expect(body()).toMatchObject({ statusCode: 400, path: '/model-deployments' });
+    expect(body().timestamp).not.toBe('nope');
+  });
+
+  it('adds nothing when the payload carries nothing extra', () => {
+    filter.catch(new NotFoundException('Deployment not found'), mockHost);
+    expect(Object.keys(body()).sort()).toEqual(['code', 'message', 'path', 'statusCode', 'timestamp']);
+  });
+
+  it('leaves a ValidationPipe payload alone, whose keys are all reserved', () => {
+    filter.catch(new BadRequestException({ statusCode: 400, message: ['a must be a string', 'b is required'], error: 'Bad Request' }), mockHost);
+    expect(body().message).toBe('a must be a string; b is required');
+    expect(Object.keys(body()).sort()).toEqual(['code', 'message', 'path', 'statusCode', 'timestamp']);
+  });
+});
