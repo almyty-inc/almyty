@@ -55,7 +55,15 @@ import {
 import { AI_DISCLOSURE_CHANNEL_TYPES } from './channel-setup'
 import { ChannelSetupPanel } from './channel-setup-panel'
 import { ChannelInstallationsPanel } from './channel-installations-panel'
+import {
+  ChannelBackingConnection,
+  ChannelCredentialsSection,
+  backingConnectionId,
+  buildChannelConnectionPatch,
+  buildDeployChannelConfig,
+} from './channel-credentials-section'
 import type { Gateway } from '@/types'
+import type { Connection } from '@/types/connections'
 
 interface InterfacesTabProps {
   agentId: string
@@ -93,6 +101,9 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
   const [newInterfaceType, setNewInterfaceType] = useState<string>('a2a')
   const [newInterfaceName, setNewInterfaceName] = useState('')
   const [interfaceConfig, setInterfaceConfig] = useState<Record<string, any>>({})
+  // The connection standing in for the pasted tokens of the channel being
+  // deployed. Reset on type change and after a deploy.
+  const [channelConnection, setChannelConnection] = useState<Connection | null>(null)
   // Deployed channel whose setup instructions are open. Set right after a
   // successful deploy and from the "Setup" button on every channel card.
   const [setupGateway, setSetupGateway] = useState<Gateway | null>(null)
@@ -135,13 +146,18 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
         type: newInterfaceType,
         agentId,
         endpoint: `/${slug}`,
-        configuration: interfaceConfig,
+        configuration: buildDeployChannelConfig({
+          type: newInterfaceType,
+          config: interfaceConfig,
+          connection: channelConnection,
+        }),
       })
     },
     onSuccess: (created: any) => {
       captureEvent('channel_deployed', { channelType: newInterfaceType })
       success('Channel Deployed', 'Gateway has been created for this agent.')
-      queryClient.invalidateQueries({ queryKey: ['agent-gateways', agentId] })
+      setInterfaceConfig({})
+      setChannelConnection(null)
       setDeployInterfaceOpen(false)
       setNewInterfaceName('')
       setNewInterfaceType('a2a')
@@ -152,6 +168,31 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
     },
     onError: (err: any) => {
       errorNotif('Deploy Failed', err?.response?.data?.message || err?.message || 'Failed to deploy channel')
+    },
+  })
+
+  // Point a deployed channel at another connection, or drop the one
+  // backing it. Same rule as the gateway-side form: the secret keys the
+  // connection held go with it.
+  const setChannelConnectionMutation = useMutation({
+    mutationFn: ({ gateway, connection }: { gateway: Gateway; connection: Connection | null }) =>
+      gatewaysApi.update(gateway.id, {
+        configuration: buildChannelConnectionPatch({
+          type: gateway.type as string,
+          configuration: (gateway as any).configuration,
+          connection,
+        }),
+      }),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['agent-gateways', agentId] })
+      if (variables.connection) {
+        success('Connection Updated', `${variables.connection.name} now backs this channel.`)
+      } else {
+        success('Connection Removed', 'Paste credentials or pick another connection to keep this channel working.')
+      }
+    },
+    onError: (err: any) => {
+      errorNotif('Update Failed', err?.response?.data?.message || err?.message || 'Failed to update the channel connection')
     },
   })
 
@@ -230,7 +271,11 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {gateways.map((gw) => {
             const gwType = gw.type
+            const credentialId = backingConnectionId(gw.configuration)
+            // A connection supplies the secrets, so the masked-token rows
+            // are dropped in favour of the account it names.
             const configSummary = getInterfaceConfigSummary(gwType, gw.configuration || {})
+              .filter((item) => !(credentialId && item.secret))
 
             return (
               <Card key={gw.id} className="hover:shadow-md transition-shadow">
@@ -247,6 +292,17 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
                       {gw.status}
                     </Badge>
                   </div>
+
+                  {/* Backed by a connection: the account, not a masked token. */}
+                  {credentialId && (
+                    <ChannelBackingConnection
+                      type={gwType}
+                      configuration={gw.configuration}
+                      isSaving={setChannelConnectionMutation.isPending}
+                      onSwap={(connection) => setChannelConnectionMutation.mutate({ gateway: gw, connection })}
+                      onDisconnect={() => setChannelConnectionMutation.mutate({ gateway: gw, connection: null })}
+                    />
+                  )}
 
                   {/* Configuration summary */}
                   {configSummary.length > 0 && (
@@ -320,7 +376,7 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
           <div className="space-y-4">
             <div>
               <Label htmlFor="channel-type">Type</Label>
-              <Select value={newInterfaceType} onValueChange={(val) => { setNewInterfaceType(val); setInterfaceConfig(getDefaultInterfaceConfig(val)) }}>
+              <Select value={newInterfaceType} onValueChange={(val) => { setNewInterfaceType(val); setInterfaceConfig(getDefaultInterfaceConfig(val)); setChannelConnection(null) }}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
@@ -369,18 +425,20 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
               </div>
             )}
 
+            <ChannelCredentialsSection
+              type={newInterfaceType}
+              config={interfaceConfig}
+              onConfigChange={setInterfaceConfig}
+              connection={channelConnection}
+              onConnectionChange={setChannelConnection}
+            />
+
+            {/* Slack app-level OAuth. Separate from the bot credentials a
+                connection supplies: this pair is what makes the channel
+                installable in other workspaces. */}
             {newInterfaceType === 'slack' && (
               <div className="space-y-3 rounded-md border p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Slack Settings</p>
-                <div>
-                  <Label htmlFor="cfg-slack-token">Bot Token</Label>
-                  <Input id="cfg-slack-token" type="password" placeholder="xoxb-..." value={interfaceConfig.bot_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, bot_token: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="cfg-slack-secret">Signing Secret</Label>
-                  <Input id="cfg-slack-secret" type="password" placeholder="Signing secret" value={interfaceConfig.signing_secret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, signing_secret: e.target.value }))} className="mt-1" />
-                </div>
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-1">Multi-workspace installs (optional)</p>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Multi-workspace installs (optional)</p>
                 <div>
                   <Label htmlFor="cfg-slack-client-id">OAuth Client ID</Label>
                   <Input id="cfg-slack-client-id" placeholder="Slack app client ID" value={interfaceConfig.client_id || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, client_id: e.target.value }))} className="mt-1" />
@@ -390,68 +448,6 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
                   <Input id="cfg-slack-client-secret" type="password" placeholder="Slack app client secret" value={interfaceConfig.client_secret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, client_secret: e.target.value }))} className="mt-1" />
                 </div>
                 <p className="text-xs text-muted-foreground">With OAuth credentials set, this channel gets an "Add to Slack" install link so any workspace can install it.</p>
-              </div>
-            )}
-
-            {newInterfaceType === 'discord' && (
-              <div className="space-y-3 rounded-md border p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Discord Settings</p>
-                <div>
-                  <Label htmlFor="cfg-discord-token">Bot Token</Label>
-                  <Input id="cfg-discord-token" type="password" placeholder="Bot token" value={interfaceConfig.bot_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, bot_token: e.target.value }))} className="mt-1" />
-                </div>
-              </div>
-            )}
-
-            {newInterfaceType === 'telegram' && (
-              <div className="space-y-3 rounded-md border p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Telegram Settings</p>
-                <div>
-                  <Label htmlFor="cfg-telegram-token">Bot Token</Label>
-                  <Input id="cfg-telegram-token" type="password" placeholder="123456:ABC-DEF..." value={interfaceConfig.bot_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, bot_token: e.target.value }))} className="mt-1" />
-                </div>
-                <p className="text-xs text-muted-foreground">The Telegram webhook is registered automatically on deploy.</p>
-              </div>
-            )}
-
-            {(newInterfaceType === 'whatsapp' || newInterfaceType === 'sms') && (
-              <div className="space-y-3 rounded-md border p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Twilio Settings</p>
-                <div>
-                  <Label htmlFor="cfg-twilio-sid">Account SID</Label>
-                  <Input id="cfg-twilio-sid" placeholder="AC..." value={interfaceConfig.twilio_account_sid || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, twilio_account_sid: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="cfg-twilio-token">Auth Token</Label>
-                  <Input id="cfg-twilio-token" type="password" placeholder="Auth token" value={interfaceConfig.twilio_auth_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, twilio_auth_token: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="cfg-twilio-phone">{newInterfaceType === 'whatsapp' ? 'WhatsApp Sender Number' : 'Phone Number'}</Label>
-                  <Input id="cfg-twilio-phone" placeholder="+15551234567" value={interfaceConfig.phone_number || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phone_number: e.target.value }))} className="mt-1" />
-                </div>
-                <p className="text-xs text-muted-foreground">The number's inbound webhook is registered automatically where the platform supports it.</p>
-              </div>
-            )}
-
-            {newInterfaceType === 'whatsapp_cloud' && (
-              <div className="space-y-3 rounded-md border p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">WhatsApp Cloud Settings</p>
-                <div>
-                  <Label htmlFor="cfg-wac-token">Access Token</Label>
-                  <Input id="cfg-wac-token" type="password" placeholder="Meta access token" value={interfaceConfig.access_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, access_token: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="cfg-wac-phone-id">Phone Number ID</Label>
-                  <Input id="cfg-wac-phone-id" placeholder="Phone number ID" value={interfaceConfig.phone_number_id || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, phone_number_id: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="cfg-wac-verify">Verify Token</Label>
-                  <Input id="cfg-wac-verify" type="password" placeholder="Webhook verify token" value={interfaceConfig.verify_token || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, verify_token: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="cfg-wac-secret">App Secret</Label>
-                  <Input id="cfg-wac-secret" type="password" placeholder="Meta app secret" value={interfaceConfig.app_secret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, app_secret: e.target.value }))} className="mt-1" />
-                </div>
               </div>
             )}
 

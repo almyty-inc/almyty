@@ -65,7 +65,7 @@ export function isChannelType(t: string | undefined | null): t is ChannelType {
   return !!t && (CHANNEL_TYPES as string[]).includes(t)
 }
 
-interface FieldDef {
+export interface ChannelFieldDef {
   key: string
   label: string
   placeholder?: string
@@ -74,7 +74,13 @@ interface FieldDef {
   required?: boolean
 }
 
-const FIELD_SETS: Record<ChannelType, FieldDef[]> = {
+type FieldDef = ChannelFieldDef
+
+/**
+ * The credential fields each channel adapter reads, shared with the
+ * agent-side deploy dialog so both surfaces ask for the same keys.
+ */
+export const CHANNEL_FIELD_SETS: Record<ChannelType, ChannelFieldDef[]> = {
   slack: [
     { key: 'bot_token', label: 'Bot token', placeholder: 'xoxb-...', secret: true, required: true },
     { key: 'signing_secret', label: 'Signing secret', placeholder: 'Slack app signing secret', secret: true, required: false, helper: 'Used to verify inbound webhook signatures.' },
@@ -137,6 +143,8 @@ const FIELD_SETS: Record<ChannelType, FieldDef[]> = {
   chat_widget: [],
 }
 
+const FIELD_SETS = CHANNEL_FIELD_SETS
+
 export interface ChannelConfigFormProps {
   gateway: {
     id: string
@@ -156,9 +164,14 @@ export interface ChannelConfigFormProps {
   connections?: Connection[]
 }
 
-/** The connector key the backend gives a channel's managed connection. */
+/**
+ * The connector key the backend gives a channel's managed connection:
+ * `channel-<type>` with the gateway type's underscores dasherized, the
+ * same rule as channelKey() in the backend connector catalog (connector
+ * keys are [a-z0-9-]).
+ */
 export function channelConnectorKey(type: string): string {
-  return `channel-${type}`
+  return `channel-${type.replace(/_/g, '-')}`
 }
 
 /**
