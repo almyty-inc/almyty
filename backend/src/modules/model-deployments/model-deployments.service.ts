@@ -212,8 +212,13 @@ export class ModelDeploymentsService {
       if (k !== 'credentialId' && ModelDeployment.isSecretKey(k) && typeof v === 'string' && !/^registry/i.test(k)) creds[k] = v;
     }
     if (this.registry) {
+      // The reference is the version's when there is one and the
+      // deployment's own when the model was named inline. Keying this on
+      // modelVersionId alone left an s3:// deployment with no registry
+      // keys, which is exactly the Bedrock and SageMaker case.
       const version = deployment.modelVersionId ? await this.versions.findOne({ where: { id: deployment.modelVersionId } }) : null;
-      if (version?.registryUri?.startsWith('s3://')) {
+      const reference = version?.registryUri ?? deployment.modelRef ?? '';
+      if (reference.startsWith('s3://')) {
         creds = { ...creds, ...(await this.registry.adapterCredentialsFor(deployment.organizationId)) };
       }
     }
@@ -237,7 +242,7 @@ export class ModelDeploymentsService {
         action,
         resourceType: AuditResource.MODEL_DEPLOYMENT,
         resourceId: d.id,
-        resourceName: `${d.providerType}:${d.modelVersionId}`,
+        resourceName: `${d.providerType}:${d.modelVersionId ?? d.modelRef ?? "?"}`,
         details: { state: d.state, providerType: d.providerType, ...details },
       })
       .catch(() => undefined);

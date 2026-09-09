@@ -126,6 +126,20 @@ describe('ModelDeploymentsService', () => {
     expect(credentials.findOne).toHaveBeenCalledWith({ where: { id: 'c-1', organizationId: 'org-1' } });
   });
 
+  it('hands the registry keys to a deployment whose s3 model was named inline, not only to a registered version', async () => {
+    const modelRegistry = { adapterCredentialsFor: jest.fn(async () => ({ registryBucket: 'b', registryAccessKeyId: 'ak', registrySecretAccessKey: 'sk' })) } as any;
+    const withRegistry = new ModelDeploymentsService(deployments, versions, credentials, queue, registry, envelope, { log: jest.fn(async () => null) } as any, modelRegistry);
+
+    const inline = Object.assign(new ModelDeployment(), { organizationId: 'org-1', modelVersionId: null, modelRef: 's3://acme/qwen@etag', providerConfig: {} });
+    expect(await withRegistry.credentialsFor(inline)).toMatchObject({ registryBucket: 'b' });
+    expect(versions.findOne).not.toHaveBeenCalled();
+
+    // A hub model needs no bucket, so nothing is resolved for it.
+    modelRegistry.adapterCredentialsFor.mockClear();
+    const hub = Object.assign(new ModelDeployment(), { organizationId: 'org-1', modelVersionId: null, modelRef: 'hf://Qwen/Qwen3-0.6B@main', providerConfig: {} });
+    expect(await withRegistry.credentialsFor(hub)).toEqual({});
+    expect(modelRegistry.adapterCredentialsFor).not.toHaveBeenCalled();
+  });
   it('with the credential store wired, the vault entry resolves through it and a refused row refuses the deploy', async () => {
     const credentialRefs = {
       resolve: jest.fn().mockResolvedValue({ config: { token: 'from-store', region: 'eu' } }),

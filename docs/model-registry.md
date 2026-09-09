@@ -4,7 +4,7 @@ Status: ACCEPTED (part of the models layer, docs/design/models-layer.md)
 
 The registry is optional. almyty supports inference through the providers, so a deployment normally points at whatever its provider natively reads, most often a Hugging Face repository, and the weights never touch us.
 
-The registry exists for the two cases where object storage is the native path: the AWS adapters, where Bedrock and SageMaker load model artifacts from S3 by design, and a self-host pointing its own server at its own store. An earlier version of this document required every adapter to deploy from S3 alone. That was wrong, and it forced a workaround per provider; each adapter now declares the sources its provider can really read, native default first.
+The registry exists for the providers that read object storage themselves: Bedrock and SageMaker load model artifacts from S3 by design, Fireworks imports from a bucket with your own role, Baseten mirrors from S3 or Cloud Storage through its delivery network, Vertex reads Cloud Storage, and a self-host points its own server at its own store. An earlier version of this document required every adapter to deploy from S3 alone. That was wrong, and it forced a workaround per provider; each adapter now declares the sources its provider can really read, native default first.
 
 ## Registry URIs
 

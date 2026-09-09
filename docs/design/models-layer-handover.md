@@ -125,13 +125,14 @@ Live runs are blocked on provider credentials, not on code.
 
 ## The registry is now a minority path
 
-With `hub` as the native default for most providers, the per-organization
-S3 registry connection matters only to `aws-bedrock-import`, `sagemaker`,
-`fireworks` and a self-hosted setup. Nothing else demands a bucket as a
-precondition, and there is no install-wide bucket:
-`ModelRegistryService.connectionFor` resolves a per-organization
-`s3_compatible` credential, with environment seeding restricted to
-single-tenant installs.
+With `hub` as the native default for most providers, a bucket is needed
+only where the provider reads object storage itself: `aws-bedrock-import`
+and `sagemaker` (S3 only), `fireworks` (S3 only), `baseten` (its delivery
+network mirrors from S3 or Cloud Storage), `vertex` (Cloud Storage) and a
+self-hosted setup. Nothing else demands one as a precondition, and there
+is no install-wide bucket: `ModelRegistryService.connectionFor` resolves a
+per-organization `s3_compatible` credential, with environment seeding
+restricted to single-tenant installs.
 
 ## Deleted, not deprecated
 
