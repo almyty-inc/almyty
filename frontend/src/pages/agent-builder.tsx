@@ -227,11 +227,11 @@ export function AgentBuilderPage() {
         errors.push('Pipeline must have at least one Output node')
       }
 
-      // Check that all LLM call nodes have a provider selected
+      // Check that all LLM call nodes have a provider selected or a routing policy
       const llmNodes = pipeline.nodes.filter((n) => n.type === 'llm_call')
       for (const llmNode of llmNodes) {
-        if (!llmNode.data?.providerId) {
-          errors.push(`LLM Call node "${llmNode.id}" is missing a provider`)
+        if (!llmNode.data?.providerId && !llmNode.data?.routing) {
+          errors.push(`LLM Call node "${llmNode.id}" is missing a provider or a routing policy`)
         }
       }
     } else {

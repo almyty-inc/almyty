@@ -67,6 +67,7 @@ import { HostedChatService } from './channels/hosted-chat.service';
 // Multi-workspace channel installations (OAuth installs)
 import { ChannelInstallation } from '../../entities/channel-installation.entity';
 import { ChannelInstallationService } from './channels/channel-installation.service';
+import { ChannelCredentialService } from './channels/channel-credential.service';
 import { SlackInstallService } from './channels/slack-install.service';
 import { ChannelInstallController } from './channels/channel-install.controller';
 import { ChannelInstallationsController } from './channels/channel-installations.controller';
@@ -108,6 +109,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     ChannelWebhookRegistrar,
     EmailProvisioningService,
     ChannelInstallationService,
+    ChannelCredentialService,
     SlackInstallService,
     ChatWidgetAdapter,
     SlackAdapter,
@@ -152,8 +154,8 @@ import { ChannelInstallationsController } from './channels/channel-installations
     ChannelGatewayService,
     DiscordGatewayTransport,
     ChannelWebhookRegistrar,
-    EmailProvisioningService,
     ChannelInstallationService,
+    ChannelCredentialService,
   ],
 })
 export class GatewaysModule {}

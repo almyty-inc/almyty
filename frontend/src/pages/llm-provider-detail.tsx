@@ -35,6 +35,8 @@ const providerLogos: Record<string, string> = {
   openai: '🤖', anthropic: '🧠', google: '✦', mistral: '🔷', xai: '𝕏',
   deepseek: '🔮', groq: '⚡', together: '🤝', openrouter: '🔀',
   azure_openai: '☁️', aws_bedrock: '🪨', cohere: '🌀', huggingface: '🤗', custom: '⚙️',
+  fireworks: '✧', cerebras: '◎', deepinfra: '∞', novita: '◈', perplexity: '◇',
+  zai: '❋', baseten: '▣', nebius: '◉', sambanova: '◆',
 }
 
 const statusColors: Record<string, string> = {

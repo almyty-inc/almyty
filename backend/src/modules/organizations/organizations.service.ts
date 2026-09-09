@@ -175,8 +175,15 @@ export class OrganizationsService {
       }
     }
 
-    // Update organization
-    Object.assign(organization, updateOrganizationDto);
+    // Settings are patched, not replaced: a client sending only
+    // { settings: { defaultRouting } } must not wipe the limits or the
+    // pending invites other features keep in the same column. A key set
+    // to null clears it.
+    const { settings, ...rest } = updateOrganizationDto;
+    Object.assign(organization, rest);
+    if (settings) {
+      organization.settings = { ...(organization.settings ?? {}), ...settings };
+    }
 
     return this.organizationRepository.save(organization);
   }

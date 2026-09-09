@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean, MaxLength, IsUUID, ValidateIf } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 import { LlmProviderType, LlmProviderStatus } from '../../../entities/llm-provider.entity';
@@ -105,6 +105,17 @@ export class CreateLlmProviderBodyDto {
   @IsOptional()
   @IsString()
   teamId?: string | null;
+
+  /** Use an existing connection instead of pasting configuration.apiKey. */
+  @IsOptional()
+  @ValidateIf((o) => o.credentialId !== null)
+  @IsUUID()
+  credentialId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((o) => o.usageCredentialId !== null)
+  @IsUUID()
+  usageCredentialId?: string | null;
 }
 
 export class UpdateLlmProviderBodyDto {
@@ -129,6 +140,17 @@ export class UpdateLlmProviderBodyDto {
   @IsOptional()
   @IsObject()
   metadata?: Partial<CreateLlmProviderBodyDto['metadata']>;
+
+  /** Point the provider at an existing connection; null clears it (a key the provider created is deleted). */
+  @IsOptional()
+  @ValidateIf((o) => o.credentialId !== null)
+  @IsUUID()
+  credentialId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((o) => o.usageCredentialId !== null)
+  @IsUUID()
+  usageCredentialId?: string | null;
 
   // Team-scoping fields sent by the dashboard create/update dialogs.
   // The VisibilityField component always emits both; without these

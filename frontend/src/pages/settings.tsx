@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Settings, Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, CreditCard, Gift, Bell } from 'lucide-react'
+import { Settings, Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, CreditCard, Gift, Bell, Plug } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,11 +20,12 @@ import { ComplianceSettings } from '@/components/settings/compliance-settings'
 import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { DataRetentionCard } from '@/components/settings/data-retention-card'
 import { NotificationPreferences } from '@/components/settings/notification-preferences'
+import { ConnectionsTab } from '@/components/connections/connections-tab'
 import { BillingTab } from '@/components/BillingTab'
 import { PlanBadge } from '@/components/plan-indicator'
 import { authApi, organizationsApi } from '@/lib/api'
 
-const SETTINGS_TABS = ['organization', 'members', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso', 'rbac', 'approvals', 'compliance'] as const
+const SETTINGS_TABS = ['organization', 'members', 'connections', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso', 'rbac', 'approvals', 'compliance'] as const
 type SettingsTab = typeof SETTINGS_TABS[number]
 
 function getSettingsTab(pathname: string): SettingsTab {
@@ -66,6 +67,7 @@ export function SettingsPage() {
         {([
           { key: 'organization' as SettingsTab, label: 'Organization', icon: Building },
           { key: 'members' as SettingsTab, label: 'Members & Teams', icon: Users },
+          { key: 'connections' as SettingsTab, label: 'Connections', icon: Plug },
           { key: 'billing' as SettingsTab, label: 'Billing', icon: CreditCard },
           { key: 'referrals' as SettingsTab, label: 'Referrals', icon: Gift },
           { key: 'profile' as SettingsTab, label: 'Profile', icon: User },
@@ -95,6 +97,7 @@ export function SettingsPage() {
       <div>
         {settingsTab === 'organization' && <OrganizationTab organization={currentOrganization} />}
         {settingsTab === 'members' && <MembersAndTeamsTab organizationId={currentOrganization?.id} />}
+        {settingsTab === 'connections' && <ConnectionsTab />}
         {settingsTab === 'billing' && <BillingTab organizationId={currentOrganization?.id} />}
         {settingsTab === 'referrals' && <ReferralsTab />}
         {settingsTab === 'profile' && <ProfileTab />}

@@ -71,11 +71,14 @@ export class UserOrganization {
   // Methods
   hasPermission(permission: string): boolean {
     // Role-based permissions
+    // Connections layer (docs/design/connections.md): every member can
+    // read the masked connection list and keep user-scoped connections;
+    // org-scoped connections need connections:manage.
     const rolePermissions = {
-      [OrganizationRole.OWNER]: ['read', 'write', 'delete', 'admin', 'billing', 'invite'],
-      [OrganizationRole.ADMIN]: ['read', 'write', 'delete', 'invite'],
-      [OrganizationRole.MEMBER]: ['read', 'write'],
-      [OrganizationRole.VIEWER]: ['read'],
+      [OrganizationRole.OWNER]: ['read', 'write', 'delete', 'admin', 'billing', 'invite', 'connections:read', 'connections:manage'],
+      [OrganizationRole.ADMIN]: ['read', 'write', 'delete', 'invite', 'connections:read', 'connections:manage'],
+      [OrganizationRole.MEMBER]: ['read', 'write', 'connections:read'],
+      [OrganizationRole.VIEWER]: ['read', 'connections:read'],
     };
 
     const hasRolePermission = rolePermissions[this.role]?.includes(permission) || false;

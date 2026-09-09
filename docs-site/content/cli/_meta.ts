@@ -8,4 +8,5 @@ export default {
   'mcp-server': 'MCP Server',
   runner: 'Runner',
   'acp-server': 'ACP Server',
+  models: { title: 'Models', href: '/models/cli' },
 }

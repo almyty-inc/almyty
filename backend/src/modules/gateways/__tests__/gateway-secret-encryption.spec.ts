@@ -3,6 +3,9 @@ import { GatewaysController } from '../gateways.controller';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { encryptField, isEncrypted, decryptField } from '../../../common/security/field-crypto';
 import { MASKED_CHANNEL_SECRET } from '../channels/channel-config.helper';
+import { ChannelCredentialService } from '../channels/channel-credential.service';
+import { makeCredentialRefFake } from '../../../test/credential-ref.fake';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 
 /**
  * Channel secrets at rest + on the API surface:
@@ -239,5 +242,139 @@ describe('GatewaysController — API responses mask channel secrets', () => {
     const res = await controller.updateGateway('gw-1', {} as any, req);
 
     expect(res.data.configuration.bot_token).toBe(MASKED_CHANNEL_SECRET);
+  });
+});
+
+describe('GatewaysService — channel secrets go to the credential store', () => {
+  let gatewayRepository: any;
+  let store: ReturnType<typeof makeCredentialRefFake>;
+
+  const makeService = () =>
+    new GatewaysService(
+      gatewayRepository,
+      {} as any,
+      {} as any,
+      { findOne: jest.fn().mockResolvedValue({ hasPermissionInOrganization: () => true }) } as any,
+      { findOne: jest.fn().mockResolvedValue({ id: 'org-1', canAddMoreGateways: () => true }) } as any,
+      {} as any,
+      { logCreate: jest.fn(), logUpdate: jest.fn(), logDelete: jest.fn(), computeChanges: jest.fn().mockReturnValue({}) } as any,
+      {} as any,
+      { validateGatewayConfiguration: jest.fn(), createDefaultAuth: jest.fn().mockResolvedValue(undefined) } as any,
+      { assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), canAccess: jest.fn().mockResolvedValue({ allowed: true }) } as any,
+      undefined,
+      undefined,
+      undefined,
+      makeEnvelopeCryptoMock(),
+      new ChannelCredentialService(store.resolver, makeEnvelopeCryptoMock()),
+    );
+
+  beforeEach(() => {
+    store = makeCredentialRefFake();
+    let seq = 0;
+    gatewayRepository = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((dto: any) => ({ ...dto })),
+      save: jest.fn(async (g: any) => ({ ...g, id: g.id ?? `gw-${++seq}` })),
+      remove: jest.fn(async (g: any) => g),
+    };
+  });
+
+  it('createGateway stores the pasted token as a managed connection and never on the row', async () => {
+    const service = makeService();
+
+    const created = await service.createGateway(
+      { name: 'tg-bot', type: GatewayType.TELEGRAM, agentId: 'agent-1', endpoint: '/tg-bot', configuration: { bot_token: '123456:plain-token', aiDisclosure: true } } as any,
+      'org-1',
+      'user-1',
+    );
+
+    for (const call of gatewayRepository.save.mock.calls) {
+      expect(JSON.stringify(call[0].configuration)).not.toContain('plain-token');
+    }
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0].connectorKey).toBe('channel-telegram');
+    expect(store.rows[0].metadata.managedBy).toEqual({ kind: 'gateway_channel', id: `${created.id}:telegram` });
+    expect(created.configuration).toEqual({ aiDisclosure: true, credentialId: store.rows[0].id, credentialKeys: ['bot_token'] });
+    expect((await store.resolver.resolve('org-1', store.rows[0].id)).config.bot_token).toBe('123456:plain-token');
+  });
+
+  it('createGateway with a chosen connection references it and saves no secret', async () => {
+    const shared = store.seed({ organizationId: 'org-1', type: 'custom' as any, connectorKey: 'channel-telegram', config: { bot_token: encryptField('shared') } });
+    const service = makeService();
+
+    const created = await service.createGateway(
+      { name: 'tg-bot', type: GatewayType.TELEGRAM, agentId: 'agent-1', endpoint: '/tg-bot', configuration: { credentialId: shared.id } } as any,
+      'org-1',
+      'user-1',
+    );
+
+    expect(created.configuration).toEqual({ credentialId: shared.id, credentialKeys: ['bot_token'] });
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it('updateGateway moves a legacy inline token into the store and drops the round-tripped mask', async () => {
+    gatewayRepository.findOne.mockResolvedValue({
+      id: 'gw-1', name: 'tg-bot', type: GatewayType.TELEGRAM, status: GatewayStatus.ACTIVE, organizationId: 'org-1', endpoint: '/tg-bot',
+      configuration: { bot_token: encryptField('123456:stored-token'), aiDisclosure: true }, isSystem: false,
+    } as unknown as Gateway);
+    const service = makeService();
+
+    const updated = await service.updateGateway('gw-1', { configuration: { bot_token: MASKED_CHANNEL_SECRET, aiDisclosure: false } } as any, 'org-1', 'user-1');
+
+    expect(updated.configuration).toEqual({ aiDisclosure: false, credentialId: store.rows[0].id, credentialKeys: ['bot_token'] });
+    expect(JSON.stringify(gatewayRepository.save.mock.calls[0][0].configuration)).not.toContain('stored-token');
+    expect((await store.resolver.resolve('org-1', store.rows[0].id)).config.bot_token).toBe('123456:stored-token');
+  });
+
+  it('updateGateway with credentialId null releases the managed row', async () => {
+    const first = { bot_token: 'x' };
+    const channels = new ChannelCredentialService(store.resolver, makeEnvelopeCryptoMock());
+    await channels.persistSecrets({ id: 'gw-1', type: GatewayType.TELEGRAM, organizationId: 'org-1', configuration: first }, first, null);
+    gatewayRepository.findOne.mockResolvedValue({
+      id: 'gw-1', name: 'tg-bot', type: GatewayType.TELEGRAM, status: GatewayStatus.ACTIVE, organizationId: 'org-1', endpoint: '/tg-bot', configuration: first, isSystem: false,
+    } as unknown as Gateway);
+    const service = makeService();
+
+    const updated = await service.updateGateway('gw-1', { configuration: { credentialId: null } } as any, 'org-1', 'user-1');
+
+    expect(updated.configuration).toEqual({});
+    expect(store.rows).toHaveLength(0);
+  });
+
+  it('deleteGateway releases the managed row', async () => {
+    const first = { bot_token: 'x' };
+    const channels = new ChannelCredentialService(store.resolver, makeEnvelopeCryptoMock());
+    await channels.persistSecrets({ id: 'gw-1', type: GatewayType.TELEGRAM, organizationId: 'org-1', configuration: first }, first, null);
+    gatewayRepository.findOne.mockResolvedValue({
+      id: 'gw-1', name: 'tg-bot', type: GatewayType.TELEGRAM, status: GatewayStatus.ACTIVE, organizationId: 'org-1', endpoint: '/tg-bot', configuration: first, isSystem: false,
+    } as unknown as Gateway);
+    const service = makeService();
+    jest.spyOn(service, 'getGateway').mockResolvedValue(gatewayRepository.findOne.mock.results[0]?.value ?? await gatewayRepository.findOne());
+
+    await service.deleteGateway('gw-1', 'org-1', 'user-1');
+
+    expect(store.rows).toHaveLength(0);
+    expect(gatewayRepository.remove).toHaveBeenCalled();
+  });
+});
+
+describe('GatewaysController — a channel on a connection shows a mask, never a token', () => {
+  const req = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+
+  it('GET /gateways/:id masks the keys the connection holds and keeps the reference', async () => {
+    const controller = new GatewaysController(
+      { getGateway: jest.fn().mockResolvedValue({ id: 'gw-1', type: GatewayType.SLACK, configuration: { credentialId: 'cred-1', credentialKeys: ['bot_token', 'signing_secret'], client_id: 'A1' } }) } as any,
+      {} as any, {} as any, {} as any, {} as any, {} as any, {} as any,
+    );
+
+    const res = await controller.getGateway('gw-1', req);
+
+    expect(res.data.configuration).toEqual({
+      credentialId: 'cred-1',
+      credentialKeys: ['bot_token', 'signing_secret'],
+      client_id: 'A1',
+      bot_token: MASKED_CHANNEL_SECRET,
+      signing_secret: MASKED_CHANNEL_SECRET,
+    });
   });
 });

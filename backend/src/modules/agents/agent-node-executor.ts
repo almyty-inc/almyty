@@ -1,9 +1,13 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { AgentTemplateResolver, ExecutionContext } from './agent-template-resolver';
 import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
+import type { RouteAttribution } from '../model-catalog/routing/model-router.service';
+import type { RoutingPolicy } from '../model-catalog/routing/model-router';
+import { Organization } from '../../entities/organization.entity';
+
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { Agent, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -17,7 +21,10 @@ export interface NodeExecutionResult {
   cost?: number;
   tokens?: number;
   executionTime?: number;
+  /** Which catalog card answered, when the node was routed rather than pinned to a provider. */
+  routing?: RouteAttribution;
 }
+
 
 export interface NodeExecutionOptions {
   organizationId: string;
@@ -35,12 +42,15 @@ export interface NodeExecutionOptions {
    */
   signal?: AbortSignal;
 }
+/** How long an organization's default routing policy is reused before it is read again. */
+const DEFAULT_ROUTING_TTL_MS = 30_000;
 
 // Verify-node types (VerifyPolicy, etc.) now live with the shared verifier.
 
 @Injectable()
 export class AgentNodeExecutor {
   private readonly logger = new Logger(AgentNodeExecutor.name);
+  private readonly defaultRoutingCache = new Map<string, { policy: RoutingPolicy | null; expiresAt: number }>();
 
   constructor(
     private readonly templateResolver: AgentTemplateResolver,
@@ -54,7 +64,34 @@ export class AgentNodeExecutor {
     private readonly externalAgentsService: ExternalAgentsService,
     private readonly subAgents: AgentSubAgentExecutors,
     private readonly verifier: AgentVerifierHelper,
+    // Optional so the many specs that build the executor without it keep
+    // working; without it there is simply no organization default.
+    @Optional() @InjectRepository(Organization)
+    private readonly organizationRepository?: Repository<Organization>,
   ) {}
+
+  /**
+   * The organization's default routing policy (organization settings,
+   * `defaultRouting`), consulted only when an llm_call node names neither
+   * a provider nor a policy. Cached briefly so a pipeline of many nodes
+   * reads it once; null when unset or when the repository is not wired.
+   */
+  async defaultRoutingFor(organizationId: string): Promise<RoutingPolicy | null> {
+    const hit = this.defaultRoutingCache.get(organizationId);
+    if (hit && hit.expiresAt > Date.now()) return hit.policy;
+    let policy: RoutingPolicy | null = null;
+    if (this.organizationRepository) {
+      try {
+        const org = await this.organizationRepository.findOne({ where: { id: organizationId }, select: { id: true, settings: true } });
+        const raw = org?.settings?.defaultRouting;
+        policy = raw && typeof raw === 'object' ? raw : null;
+      } catch (err: any) {
+        this.logger.warn(`Could not read default routing for organization ${organizationId}: ${err?.message ?? err}`);
+      }
+    }
+    this.defaultRoutingCache.set(organizationId, { policy, expiresAt: Date.now() + DEFAULT_ROUTING_TTL_MS });
+    return policy;
+  }
 
   /**
    * Executes a single pipeline node and returns the result.
@@ -174,10 +211,21 @@ export class AgentNodeExecutor {
     const config = node.data || node.config || {};
     const startTime = Date.now();
 
-    // Resolve provider ID
+    // Resolve provider ID. A node may instead carry a routing policy and
+    // let the catalog pick the model per call; a node with neither uses
+    // the organization's default policy when one is set.
     const providerId = config.providerId;
-    if (!providerId) {
-      throw new Error(`LLM call node '${node.id}' is missing 'providerId' in config`);
+    let routing: RoutingPolicy | undefined = config.routing && typeof config.routing === 'object' ? config.routing : undefined;
+    let routingSource = routing ? 'node' : undefined;
+    if (!providerId && !routing) {
+      const orgDefault = await this.defaultRoutingFor(organizationId);
+      if (orgDefault) {
+        routing = orgDefault;
+        routingSource = 'organization default';
+      }
+    }
+    if (!providerId && !routing) {
+      throw new Error(`LLM call node '${node.id}' is missing 'providerId' or 'routing' in config, and the organization has no default routing policy`);
     }
 
     // Resolve prompts using template resolver
@@ -212,9 +260,11 @@ export class AgentNodeExecutor {
       maxTokens: config.maxTokens,
       toolIds: config.toolIds,
       signal: options?.signal,
+      routing,
     };
 
-    this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId}, model=${config.model}`);
+
+    this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId ?? `routed (${routingSource})`}, model=${config.model ?? (routing ? 'routed' : 'default')}`);
 
     let response: ChatResponse;
     try {
@@ -244,7 +294,9 @@ export class AgentNodeExecutor {
       cost: response.cost || 0,
       tokens: response.usage?.totalTokens || 0,
       executionTime,
+      ...(response.routing ? { routing: response.routing } : {}),
     };
+
   }
 
   /**

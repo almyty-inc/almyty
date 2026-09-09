@@ -121,6 +121,36 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      '/models': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/model-adapters': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+      '/model-deployments': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+      '/ee': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+      '/connectors': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+      '/connections': {
+        target: apiTarget,
+        changeOrigin: true,
+        bypass: bypassHtmlGetRequests,
+      },
+      '/model-versions': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       '/memory': {
         target: apiTarget,
         changeOrigin: true,

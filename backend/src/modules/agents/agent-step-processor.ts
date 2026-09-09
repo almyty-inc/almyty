@@ -15,6 +15,8 @@ import { AgentContextCompactor } from './agent-context-compactor.helper';
 import { checkRunLimits, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
+import type { RoutingPolicy } from '../model-catalog/routing/model-router';
+import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
 import { shouldAutoSaveMemory } from './memory-autosave.policy';
 
 
@@ -187,20 +189,24 @@ export class AgentStepProcessor {
 
       const allToolDefs = [...llmTools, ...subAgentDefs];
 
-      // Determine the LLM provider
+      // Determine the LLM provider, or the routing policy that picks one
+      // per step. A revision after a verifier rejection may carry a policy
+      // in working memory that skips the candidates already tried.
       const providerId = agent.modelConfig?.providerId;
-      if (!providerId) {
-        throw new Error('Agent has no LLM provider configured (modelConfig.providerId is missing)');
+      const routing: RoutingPolicy | undefined = run.workingMemory?.routing ?? agent.modelConfig?.routing;
+      if (!providerId && !routing) {
+        throw new Error('Agent has no LLM provider configured (modelConfig.providerId or modelConfig.routing is missing)');
       }
 
       // Build the chat request
       const chatRequest: ChatRequest = {
         messages: messages as any[],
-        model: agent.modelConfig?.model,
+        model: routing ? undefined : agent.modelConfig?.model,
         temperature: agent.modelConfig?.temperature,
         maxTokens: agent.modelConfig?.maxTokens,
         tools: allToolDefs.length > 0 ? allToolDefs : undefined,
         skipToolExecution: true, // We handle tool execution ourselves
+        ...(routing ? { routing } : {}),
       };
 
       // Call the LLM
@@ -500,7 +506,7 @@ export class AgentStepProcessor {
         run.steps.push({
           type: 'llm_call',
           input: { messageCount: messages.length, toolCount: allToolDefs.length },
-          output: { toolCalls: responseMessage.toolCalls.map(tc => ({ name: tc.name, hasResult: !!tc.result })) },
+          output: { toolCalls: responseMessage.toolCalls.map(tc => ({ name: tc.name, hasResult: !!tc.result })), ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
           cost: stepCost,
           tokens: { input: stepInputTokens, output: stepOutputTokens },
           duration: stepDuration,
@@ -548,6 +554,7 @@ export class AgentStepProcessor {
           if (!verifyPanel.passed && revisions < maxLoops) {
             // Send the answer back for revision.
             run.workingMemory = { ...(run.workingMemory || {}), verifyRevisions: revisions + 1 };
+            this.escalateRouteOnVerifyFail(run, agent, verifyPanel, llmResponse);
             const critique = this.verifier.formatFailuresForRevision(
               verifyPanel.failures,
               revisions + 1,
@@ -752,6 +759,28 @@ export class AgentStepProcessor {
    * has no checkers (so the caller completes normally). Aggregate checker
    * cost/tokens are added to the run here so the caller doesn't double-count.
    */
+  /**
+   * Tier 2 routing: after a verifier rejection, move the revision to the
+   * next candidate of the route when the policy allows it. Working memory
+   * carries the adjusted policy and the escalation count; the next step
+   * reads it in place of the agent's own policy. No policy, flag off, or
+   * budget spent means the revision stays on the same model.
+   */
+  escalateRouteOnVerifyFail(run: AgentRun, agent: Agent, verifyPanel: { passed: boolean; failures?: any[] }, llmResponse: { routing?: { attempt?: number } } | undefined): void {
+    const activePolicy: RoutingPolicy | undefined = run.workingMemory?.routing ?? agent.modelConfig?.routing;
+    const escalation = decideEscalation(activePolicy, verifyPanel, {
+      attempt: planPosition(llmResponse?.routing?.attempt, activePolicy),
+      escalations: run.workingMemory?.routeEscalations ?? 0,
+    });
+    if (escalation.action !== 'escalate' || !activePolicy) return;
+    run.workingMemory = {
+      ...(run.workingMemory || {}),
+      routing: nextRoutingPolicy(activePolicy, escalation),
+      routeEscalations: (run.workingMemory?.routeEscalations ?? 0) + 1,
+    };
+    this.s.emitEvent(run.id, 'route.escalated', { step: run.currentStep, reason: escalation.reason, nextAttempt: escalation.nextAttempt });
+  }
+
   private async runAutonomousVerify(
     run: AgentRun,
     agent: Agent,

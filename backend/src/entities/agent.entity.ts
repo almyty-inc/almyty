@@ -1,3 +1,4 @@
+import type { RoutingPolicy } from '../modules/model-catalog/routing/model-router';
 import {
   Entity,
   Column,
@@ -122,6 +123,13 @@ export class Agent {
     model?: string;
     temperature?: number;
     maxTokens?: number;
+    /**
+     * Catalog routing for autonomous runs: when set, the run picks a model
+     * per step from the org's cards instead of pinning providerId/model.
+     * Verify escalation (routing.escalation) moves to the next candidate
+     * when the verifier rejects an answer.
+     */
+    routing?: RoutingPolicy;
     /**
      * Context compaction for long autonomous runs (off unless enabled). When the
      * assembled context exceeds maxContextTokens, the old prefix is summarized

@@ -86,7 +86,7 @@ export function CommandPalette() {
     { id: 'nav-tool-hub', label: 'Tool Hub', icon: Store, action: () => go('/tool-hub'), keywords: ['templates', 'catalog'] },
     { id: 'nav-apis', label: 'APIs', icon: Globe, action: () => go('/apis'), keywords: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] },
     { id: 'nav-credentials', label: 'Credentials', icon: Key, action: () => go('/credentials'), keywords: ['vault', 'secrets', 'access keys'] },
-    { id: 'nav-llm-providers', label: 'Models', icon: Brain, action: () => go('/llm-providers'), keywords: ['openai', 'anthropic', 'claude', 'gpt'] },
+    { id: 'nav-llm-providers', label: 'Models', icon: Brain, action: () => go('/models'), keywords: ['openai', 'anthropic', 'claude', 'gpt', 'catalog', 'routing'] },
     { id: 'nav-memories', label: 'Memory', icon: Database, action: () => go('/memories'), keywords: ['facts', 'preferences'] },
     { id: 'nav-chat', label: 'Chat', icon: MessageSquare, action: () => go('/chat'), keywords: ['conversation'] },
     { id: 'nav-analytics', label: 'Analytics', icon: BarChart3, action: () => go('/analytics'), keywords: ['metrics', 'usage', 'audit', 'requests', 'logs'] },
@@ -99,7 +99,7 @@ export function CommandPalette() {
     { id: 'act-new-gateway', label: 'Create Gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways?new=1') },
     { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, LLM, or SDK', icon: Plus, action: () => go('/tools?new=1') },
     { id: 'act-new-api', label: 'Import API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis?new=1') },
-    { id: 'act-new-provider', label: 'Add LLM Provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/llm-providers?new=1') },
+    { id: 'act-new-provider', label: 'Add LLM Provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/models?tab=providers&new=1') },
     { id: 'act-new-credential', label: 'Add Credential', hint: 'Store a vault secret', icon: Plus, action: () => go('/credentials?new=1') },
   ]
 
