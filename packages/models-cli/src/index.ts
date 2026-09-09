@@ -9,8 +9,8 @@
  *   almyty models sync <providerId>
  *   almyty models validate <id>
  *   almyty models adapters
- *   almyty models deploy --model-version <modelVersionId> --adapter <key> [--config json] [--desired json] [--credential id] [--budget id] [--model cardId]
- --adapter <key> [--config json] [--desired json] [--credential id] [--budget id] [--model cardId]
+ *   almyty models deploy <model> --adapter <key> [--base b] [--config json] [--desired json] [--credential id] [--budget id] [--card id]
+ *   almyty models deploy --model-version <id> --adapter <key> [...]
  *   almyty models deployments
  *   almyty models scale <deploymentId> <replicas>
  *   almyty models teardown <deploymentId>
@@ -71,14 +71,22 @@ Catalog:
   validate <id>                        Run one real call; passing makes the card selectable
   delete <id>
 
-Versions:
-  versions                             Registered model versions (weights)
-  register-version --name n --uri <s3://bucket/key@etag | hf://org/repo@rev | file:///path@sha> [--base b] [--quantizations q1,q2]
+Versions (optional: register an artifact only if you want lineage and evals on it):
+  versions                             Registered model versions
+  register-version --name n --uri <hf://org/repo@sha | s3://bucket/key@etag | gs://bucket/key@gen | file:///path@sha> [--base b] [--quantizations q1,q2]
 
 Deployments:
-  adapters 
-                            Registered adapters, capabilities and config schema
-  deploy --model-version id --adapter key [--config '<json>'] [--desired '<json>'] [--credential id] [--budget id] [--model cardId]
+  adapters                             Registered adapters, what each can run, and its config schema
+  deploy <model> --adapter key [--base b] [--config '<json>'] [--desired '<json>'] [--credential id] [--budget id] [--card id]
+  deploy --model-version id --adapter key [...]
+                                       <model> is where the model lives:
+                                         hf://org/repo@sha       a Hugging Face repository
+                                         s3://bucket/prefix@etag, gs://bucket/prefix@gen, file:///path@sha
+                                         bedrock:// sagemaker:// vertex:// foundry:// azureml://
+                                         fireworks:// together:// baseten://
+                                                                 a model already on that platform
+                                       The adapters command lists what each provider accepts; one
+                                       that cannot read your source is refused before anything runs.
   deployments                          List deployments (desired vs actual, spend)
   scale <deploymentId> <replicas>
   teardown <deploymentId>
@@ -138,19 +146,30 @@ export function registerEndpointBody(flags: ParsedArgs['flags']): Record<string,
   return body;
 }
 
-export function deployBody(flags: ParsedArgs['flags']): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    modelVersionId: need(flags, 'model-version'),
-
-    providerType: need(flags, 'adapter'),
-  };
+/**
+ * Naming the model is configuration, so the model reference is the
+ * positional argument: `deploy hf://org/repo@sha --adapter huggingface-endpoints`.
+ * `--model-version` is the other way in, for people who registered an
+ * artifact to get lineage and evaluation history with it.
+ */
+export function deployBody(flags: ParsedArgs['flags'], positional: string[] = []): Record<string, unknown> {
+  const model = positional[0] ?? str(flags, 'model');
+  const modelVersion = str(flags, 'model-version');
+  if (!model && !modelVersion) {
+    console.error('Name the model to run (deploy hf://org/repo@sha --adapter <key>), or pass --model-version <id>.');
+    process.exit(1);
+  }
+  const body: Record<string, unknown> = { providerType: need(flags, 'adapter') };
+  if (modelVersion) body.modelVersionId = modelVersion;
+  else body.model = model;
+  if (str(flags, 'base')) body.base = str(flags, 'base');
   const providerConfig = json(flags, 'config');
   const desired = json(flags, 'desired');
   if (providerConfig) body.providerConfig = providerConfig;
   if (desired) body.desired = desired;
   if (str(flags, 'credential')) body.credentialId = str(flags, 'credential');
   if (str(flags, 'budget')) body.budgetId = str(flags, 'budget');
-  if (str(flags, 'model')) body.modelId = str(flags, 'model');
+  if (str(flags, 'card')) body.modelId = str(flags, 'card');
   return body;
 }
 
@@ -256,7 +275,7 @@ async function main(): Promise<void> {
       return;
     }
     case 'deploy': {
-      const res = await post('/model-deployments', deployBody(args.flags));
+      const res = await post('/model-deployments', deployBody(args.flags, args.positional));
       out(args, res.data, () => `Queued.\n${formatDeployment(res.data)}`);
       return;
     }

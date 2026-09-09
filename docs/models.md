@@ -80,14 +80,28 @@ Routing needs the catalog module wired in (it is, in `app.module.ts`); without i
 
 ## Deployments
 
-`GET /model-adapters` describes every registered adapter as data: capabilities and a JSON schema for its config (`x-secret: true` marks fields that are encrypted at rest and never returned). `POST /model-deployments` records desired state; the reconcile queue (`MODEL_RECONCILE_CRON`, default every 2 minutes) is the only thing that talks to a provider. `POST /model-deployments/:id/scale { replicas }` and `/teardown` change desired state only.
+`GET /model-adapters` describes every registered adapter as data: capabilities, the model references it accepts (`modelSchemes`), and a JSON schema for its config (`x-secret: true` marks fields that are encrypted at rest and never returned). `POST /model-deployments` records desired state; the reconcile queue (`MODEL_RECONCILE_CRON`, default every 2 minutes) is the only thing that talks to a provider. `POST /model-deployments/:id/scale { replicas }` and `/teardown` change desired state only.
 
-### Where the weights come from
+### Naming the model is configuration
 
-almyty is not in the hosting business. A deployment runs on the provider's own managed product, and the weights come from wherever that provider natively reads them, most often a Hugging Face repository. `registrySources` on each adapter names what its provider can really read, native default first, and a version from a source the provider cannot read is refused rather than routed through us. Weight files never pass through almyty.
+A deployment takes the model as a string. There is nothing to register first:
 
-That makes our own object storage optional. It is needed only where a provider reads object storage natively, which today means the AWS adapters, and for a self-host pointing its own server at its own store. Connecting a registry bucket is not a precondition for anything else: a card from a configured provider, a registered endpoint, and a deployment from a Hugging Face repository all work without one.
- Each passes the same conformance suite in fixture mode; set `CONFORMANCE_LIVE=<adapter key>` with real credentials to run it live. Adapters never import each other (`adapter-isolation.spec.ts` enforces it).
+```
+POST /model-deployments { "model": "hf://Qwen/Qwen3-0.6B@main", "providerType": "huggingface-endpoints" }
+POST /model-deployments { "model": "fireworks://accounts/acme/models/qwen3-tuned", "providerType": "fireworks" }
+```
+
+Two kinds of reference. An **artifact** points at bytes and is pinned, so the deployment is reproducible: `hf://org/repo@sha`, `s3://bucket/prefix@etag`, `gs://bucket/prefix@generation`, `file:///path@sha`. A **provider reference** names a model that already exists on a platform, which versions it itself, so no pin is needed: `bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`.
+
+`modelVersionId` still works and is the other way in. Register a version when you want lineage, a manifest digest and evaluation history attached to your own artifact; skip it when you just want to run a model that is already somewhere.
+
+### Where the weights come from, and who can read them
+
+almyty is not in the hosting business. A deployment runs on the provider's own managed product, and the weights come from wherever that provider natively reads them, most often a Hugging Face repository. `registrySources` on each adapter names what its provider can really read, native default first. Weight files never pass through almyty.
+
+That means the two do not mix freely, and the API says so rather than letting you find out from a provider error. Bedrock custom import reads S3 and cannot take a Hub repo. Hugging Face Inference Endpoints serves a Hub repo and nothing else. Vertex wants Cloud Storage or Model Garden. A provider reference runs only on the provider that owns it. A mismatch is refused at submit with `ADAPTER_UNSUPPORTED_SOURCE` and the list of what that adapter does accept, and `modelSchemes` lets a form filter in either direction: the providers that can run the model you have, or the sources the provider you picked will take.
+
+That also makes our own object storage optional. It is needed only where a provider reads object storage natively, which today means the AWS adapters and Fireworks, and for a self-host pointing its own server at its own store. Connecting a registry bucket is not a precondition for anything else: a card from a configured provider, a registered endpoint, and a deployment from a Hugging Face repository all work without one. Each adapter passes the same conformance suite in fixture mode; set `CONFORMANCE_LIVE=<adapter key>` with real credentials to run it live. Adapters never import each other (`adapter-isolation.spec.ts` enforces it).
 
 A deployment with a `budgetId` is charged from the adapter's cost snapshot on every reconcile. Reaching the budget scales it to zero, writes `model_deployment_budget_stop`, and notifies.
 
@@ -103,7 +117,8 @@ npx @almyty/models validate <id>
 npx @almyty/models versions
 npx @almyty/models register-version --name <n> --uri <pinned registry uri> [--base b] [--quantizations q1,q2]
 npx @almyty/models adapters
-npx @almyty/models deploy --model-version <modelVersionId> --adapter <key> [--config '<json>'] [--desired '<json>'] [--credential <id>] [--budget <id>] [--model <cardId>]
+npx @almyty/models deploy <model> --adapter <key> [--base b] [--config '<json>'] [--desired '<json>'] [--credential <id>] [--budget <id>] [--card <cardId>]
+npx @almyty/models deploy --model-version <modelVersionId> --adapter <key> [...]
 npx @almyty/models deployments
 npx @almyty/models scale <deploymentId> <replicas>
 npx @almyty/models teardown <deploymentId>
