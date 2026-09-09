@@ -40,7 +40,6 @@ import { GrantsService } from '../../../src/modules/connections/grants/grants.se
  * `CONNECTION_PRINCIPAL_SOURCE` bindings resolve from core's
  * `@Optional()` injections without core importing anything from `ee/`.
  */
-@Global()
 @Module({
   imports: [
     TypeOrmModule.forFeature([ConnectionPolicy, Credential, ConnectionGrant, Agent, User, AuditLog, SpendBudget, UserTeam, Team, UserOrganization]),
@@ -56,10 +55,8 @@ import { GrantsService } from '../../../src/modules/connections/grants/grants.se
     GroupPrincipalSyncService,
     { provide: CONNECTION_ROTATOR, useExisting: ConnectionsRotatorBridge },
     { provide: CONNECTION_GRANT_REVOKER, useExisting: GrantsService },
-    { provide: CONNECTIONS_GOVERNANCE_HOOK, useExisting: ConnectionsGovernanceHookImpl },
-    { provide: CONNECTION_PRINCIPAL_SOURCE, useExisting: GroupPrincipalSyncService },
   ],
   controllers: [ConnectionsGovernanceController],
-  exports: [ConnectionsGovernanceService, GroupPrincipalSyncService, CONNECTIONS_GOVERNANCE_HOOK, CONNECTION_PRINCIPAL_SOURCE],
+  exports: [ConnectionsGovernanceService, GroupPrincipalSyncService, ConnectionsGovernanceHookImpl],
 })
 export class ConnectionsGovernanceModule {}

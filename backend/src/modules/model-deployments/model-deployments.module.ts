@@ -10,7 +10,7 @@ import { Credential } from '../../entities/credential.entity';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { KmsModule } from '../kms/kms.module';
 import { ModelRegistryModule } from '../model-registry/model-registry.module';
-import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
+import { EndpointProviderModule } from '../llm-providers/endpoint-provider.module';
 import { AdapterRegistry } from './adapters/adapter.registry';
 import { StubAdapter } from './adapters/stub.adapter';
 import { HuggingFaceEndpointsAdapter } from './adapters/huggingface-endpoints.adapter';
@@ -46,7 +46,7 @@ import { ModelDeploymentsProcessor } from './model-deployments.processor';
     AuditLogModule,
     KmsModule,
     ModelRegistryModule,
-    forwardRef(() => LlmProvidersModule),
+    EndpointProviderModule,
   ],
   providers: [AdapterRegistry, ModelDeploymentsService, ModelDeploymentsProcessor],
   controllers: [ModelDeploymentsController],
