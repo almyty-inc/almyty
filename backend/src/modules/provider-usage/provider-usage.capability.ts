@@ -176,6 +176,48 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     label: 'SambaNova',
     note: 'No documented programmatic usage/cost API. Not ingested.',
   },
+  [LlmProviderType.MOONSHOT]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Moonshot (Kimi)',
+    note: 'GET /v1/users/me/balance reports remaining balance only, not per-model usage or cost. Not ingested.',
+  },
+  [LlmProviderType.QWEN]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Qwen (QwenCloud)',
+    note: 'No documented programmatic usage/cost API on compatible-mode. Not ingested.',
+  },
+  [LlmProviderType.VERTEX_AI]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Google Vertex AI',
+    note: 'Usage and cost live in Cloud Billing export, not on the inference API. Not ingested.',
+  },
+  [LlmProviderType.AZURE_AI_FOUNDRY]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Azure AI Foundry',
+    note: 'Usage and cost live in Azure Cost Management, not on the data plane. Not ingested.',
+  },
+  [LlmProviderType.DIGITALOCEAN]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'DigitalOcean Gradient',
+    note: 'No documented programmatic usage/cost API for serverless inference. Not ingested.',
+  },
+  [LlmProviderType.RUNPOD]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'RunPod',
+    note: 'No documented programmatic usage/cost API for public endpoints. Not ingested.',
+  },
+  [LlmProviderType.MODAL]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Modal',
+    note: 'No documented programmatic usage/cost API for endpoints. Not ingested.',
+  },
   [LlmProviderType.CUSTOM]: {
     supported: false,
     requiresAdminKey: false,

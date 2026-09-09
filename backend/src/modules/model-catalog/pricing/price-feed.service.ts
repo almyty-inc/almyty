@@ -118,6 +118,25 @@ export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping 
   [LlmProviderType.BASETEN]: { litellm: ['baseten'], openrouterPrefix: null },
   [LlmProviderType.NEBIUS]: { litellm: ['nebius'], openrouterPrefix: null },
   [LlmProviderType.SAMBANOVA]: { litellm: ['sambanova'], openrouterPrefix: null },
+  // First-party model families. LiteLLM keys checked against the live cost
+  // map 2026-09-09: `moonshot` (24 chat entries), and `dashscope` /
+  // `qwencloud` / `qwen_ai_platform` (45 each, byte-identical mirrors of one
+  // catalog). `moonshot_ai` and `qwen` do not exist as feed keys.
+  [LlmProviderType.MOONSHOT]: { litellm: ['moonshot'], openrouterPrefix: 'moonshotai/' },
+  [LlmProviderType.QWEN]: { litellm: ['dashscope', 'qwencloud', 'qwen_ai_platform'], openrouterPrefix: 'qwen/' },
+  // Cloud and serverless call targets. Vertex prices under its own
+  // namespaces (the partner ones cover Model Garden). Foundry serves the
+  // customer's deployments, which are priced by the underlying model, and
+  // DigitalOcean / RunPod / Modal have no LiteLLM namespace at all - those
+  // stay unpriced rather than borrowing another vendor's list price.
+  [LlmProviderType.VERTEX_AI]: {
+    litellm: ['vertex_ai-language-models', 'vertex_ai-moonshot_models', 'vertex_ai-qwen_models'],
+    openrouterPrefix: null,
+  },
+  [LlmProviderType.AZURE_AI_FOUNDRY]: { litellm: ['azure_ai'], openrouterPrefix: null },
+  [LlmProviderType.DIGITALOCEAN]: null,
+  [LlmProviderType.RUNPOD]: null,
+  [LlmProviderType.MODAL]: null,
   [LlmProviderType.OLLAMA]: null,
   [LlmProviderType.CUSTOM]: null,
 };

@@ -9,8 +9,22 @@ import { requireModel } from '../model-errors';
 
 
 /**
+ * Headers a caller supplies in place of `provider.getAuthHeaders()`.
+ *
+ * `getAuthHeaders()` is synchronous, which is fine for every vendor whose
+ * credential is a static token. Vertex AI is not one: it authenticates with
+ * a one-hour OAuth access token minted from a service-account key, so its
+ * adapter mints the token and hands the resulting headers in here rather
+ * than duplicating the whole OpenAI body builder.
+ */
+export interface OpenAiAuthOverride {
+  headers?: Record<string, string>;
+}
+
+/**
  * Handles OpenAI-compatible provider calls (OpenAI, Azure OpenAI, Mistral, xAI,
- * DeepSeek, Groq, Together, OpenRouter).
+ * DeepSeek, Groq, Together, OpenRouter, and every OpenAI-compatible host in
+ * docs/design/call-only-vendors.md).
  */
 export async function callOpenAI(
   provider: LlmProvider,
@@ -19,9 +33,10 @@ export async function callOpenAI(
   tools: Tool[],
   startTime: number,
   calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
+  auth?: OpenAiAuthOverride,
 ): Promise<ChatResponse> {
   const apiUrl = provider.getApiUrl();
-  const headers = provider.getAuthHeaders();
+  const headers = auth?.headers ?? provider.getAuthHeaders();
 
   // Prepare OpenAI request
   const openaiRequest: Record<string, unknown> = {
@@ -215,9 +230,10 @@ export async function callOpenAIStream(
   startTime: number,
   calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
   onChunk: (chunk: StreamChunk) => void,
+  auth?: OpenAiAuthOverride,
 ): Promise<ChatResponse> {
   const apiUrl = provider.getApiUrl();
-  const headers = provider.getAuthHeaders();
+  const headers = auth?.headers ?? provider.getAuthHeaders();
 
   const openaiRequest = buildOpenAIRequestBody(provider, request, conversation, tools, true);
 

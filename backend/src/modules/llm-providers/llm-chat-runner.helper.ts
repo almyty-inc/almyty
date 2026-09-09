@@ -9,8 +9,8 @@ import {
   callAnthropic,
   callAnthropicStream,
   callGoogle,
-  callCohere,
-  callHuggingFace,
+  callPerplexity,
+  callVertex,
   callCustomProvider,
 } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderConfig } from '../../entities/llm-provider.entity';
@@ -280,13 +280,27 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.CEREBRAS:
       case LlmProviderType.DEEPINFRA:
       case LlmProviderType.NOVITA:
-      case LlmProviderType.PERPLEXITY:
       case LlmProviderType.ZAI:
       case LlmProviderType.BASETEN:
       case LlmProviderType.NEBIUS:
       case LlmProviderType.SAMBANOVA:
-      // Ollama serves an OpenAI-compatible API under <server>/v1 —
-      // chat, streaming, and tool calling all ride the OpenAI path.
+      // Cloud and aggregator surfaces that speak OpenAI chat completions:
+      // Bedrock's /openai/v1 (bearer, no SigV4), Cohere's Compatibility
+      // API, and the Hugging Face Inference Providers router. Verified
+      // 2026-09-09.
+      case LlmProviderType.AWS_BEDROCK:
+      case LlmProviderType.AWS_BEDROCK:
+      case LlmProviderType.COHERE:
+      case LlmProviderType.HUGGINGFACE:
+      // First-party model families with OpenAI-compatible APIs.
+      case LlmProviderType.MOONSHOT:
+      case LlmProviderType.QWEN:
+      // The customer's own cloud, and vendor serverless we can call
+      // without deploying: all OpenAI-compatible with a static token.
+      case LlmProviderType.AZURE_AI_FOUNDRY:
+      case LlmProviderType.DIGITALOCEAN:
+      case LlmProviderType.RUNPOD:
+      case LlmProviderType.MODAL:
       // getAuthHeaders() adds no Authorization header when no key is
       // configured (Ollama needs none).
       case LlmProviderType.OLLAMA:
@@ -295,10 +309,15 @@ export class LlmChatRunnerHelper {
         return callAnthropic(provider, request, session, tools, startTime, costFn);
       case LlmProviderType.GOOGLE:
         return callGoogle(provider, request, session, tools, startTime, costFn);
-      case LlmProviderType.COHERE:
-        return callCohere(provider, request, session, tools, startTime, costFn);
-      case LlmProviderType.HUGGINGFACE:
-        return callHuggingFace(provider, request, session, tools, startTime);
+      // Perplexity's generally available surface is Responses-shaped, not
+      // chat-completions shaped, so it has its own dispatch.
+      case LlmProviderType.PERPLEXITY:
+        return callPerplexity(provider, request, session, tools, startTime, costFn);
+      // Vertex speaks the OpenAI shape but cannot use the synchronous
+      // getAuthHeaders(): its adapter mints a short-lived OAuth token from
+      // the service-account key first.
+      case LlmProviderType.VERTEX_AI:
+        return callVertex(provider, request, session, tools, startTime, costFn);
       case LlmProviderType.CUSTOM:
         return callCustomProvider(provider, request, session, tools, startTime);
       default:
@@ -432,8 +451,56 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.BASETEN:
       case LlmProviderType.NEBIUS:
       case LlmProviderType.SAMBANOVA:
+      case LlmProviderType.MOONSHOT:
+      case LlmProviderType.QWEN:
+      case LlmProviderType.DIGITALOCEAN:
+      case LlmProviderType.MODAL:
         if (!config.apiKey) {
           throw new BadRequestException(`${type} provider requires an API key`);
+        }
+        break;
+
+      case LlmProviderType.AZURE_AI_FOUNDRY:
+        // `model` is the customer's deployment name on this surface, so a
+        // resource with no deployment named cannot be called at all.
+        if (!config.apiKey || !config.azure?.resourceName || !config.azure?.deploymentName) {
+          throw new BadRequestException(
+            'Azure AI Foundry provider requires API key, resource name, and deployment name',
+          );
+        }
+        break;
+
+      case LlmProviderType.RUNPOD:
+        // Every RunPod URL carries an endpoint: a public catalog slug
+        // (nothing to deploy) or the customer's own serverless endpoint id.
+        // There is no shared base without one.
+        if (!config.apiKey) {
+          throw new BadRequestException('RunPod provider requires an API key');
+        }
+        if (!config.runpod?.endpointId) {
+          throw new BadRequestException(
+            'RunPod provider requires an endpoint: a public model slug (e.g. gpt-oss-120b) or your own endpoint id',
+          );
+        }
+        break;
+
+      case LlmProviderType.VERTEX_AI:
+        // The credential is a service-account JSON key (or a current access
+        // token); the project selects whose quota is spent. Location
+        // defaults to `global`. There is no model listing on this surface,
+        // so a model must be named up front rather than discovered.
+        if (!config.apiKey) {
+          throw new BadRequestException(
+            'Vertex AI provider requires a Google Cloud service-account JSON key as its credential',
+          );
+        }
+        if (!config.vertex?.projectId) {
+          throw new BadRequestException('Vertex AI provider requires a Google Cloud project id');
+        }
+        if (!config.model) {
+          throw new BadRequestException(
+            'Vertex AI provider requires a model (e.g. google/gemini-3.5-flash): this surface serves no model list to choose from',
+          );
         }
         break;
 
@@ -461,14 +528,25 @@ export class LlmChatRunnerHelper {
       }
 
       case LlmProviderType.AZURE_OPENAI:
+        // The deployment name is the `model` on the /openai/v1 surface, so
+        // it is still required: it is what a call actually names.
         if (!config.apiKey || !config.azure?.resourceName || !config.azure?.deploymentName) {
           throw new BadRequestException('Azure OpenAI provider requires API key, resource name, and deployment name');
         }
         break;
 
       case LlmProviderType.AWS_BEDROCK:
+        // Region selects the host and the model set; the Bedrock API key is
+        // the bearer token on the OpenAI-compatible surface. Requiring the
+        // key here is new: before this change Bedrock validated with a
+        // region alone, and then had no dispatch path at all, so a provider
+        // saved cleanly and every chat through it threw "Unsupported LLM
+        // provider type".
         if (!config.bedrock?.region) {
           throw new BadRequestException('AWS Bedrock provider requires region');
+        }
+        if (!config.apiKey) {
+          throw new BadRequestException('AWS Bedrock provider requires a Bedrock API key');
         }
         break;
 

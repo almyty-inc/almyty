@@ -53,20 +53,56 @@ describe('fetchOpenAIModels vendor URL resolution', () => {
   it.each([
     [LlmProviderType.FIREWORKS, 'https://api.fireworks.ai/inference/v1/models'],
     [LlmProviderType.CEREBRAS, 'https://api.cerebras.ai/v1/models'],
-    [LlmProviderType.DEEPINFRA, 'https://api.deepinfra.com/v1/openai/models'],
-    [LlmProviderType.NOVITA, 'https://api.novita.ai/openai/models'],
-    [LlmProviderType.PERPLEXITY, 'https://api.perplexity.ai/router/v1/models'],
+    // DeepInfra documents the OpenAI-shaped listing one segment ABOVE its
+    // chat base, so this is deliberately not `<chat base>/models`.
+    [LlmProviderType.DEEPINFRA, 'https://api.deepinfra.com/v1/models'],
+    [LlmProviderType.NOVITA, 'https://api.novita.ai/openai/v1/models'],
+    [LlmProviderType.PERPLEXITY, 'https://api.perplexity.ai/v1/models'],
     [LlmProviderType.ZAI, 'https://api.z.ai/api/paas/v4/models'],
     [LlmProviderType.BASETEN, 'https://inference.baseten.co/v1/models'],
     [LlmProviderType.NEBIUS, 'https://api.tokenfactory.nebius.com/v1/models'],
     [LlmProviderType.SAMBANOVA, 'https://api.sambanova.ai/v1/models'],
-  ])('%s lists models from its own OpenAI-compatible base with a Bearer key', async (type, expectedUrl) => {
+    // Bedrock's OpenAI surface lists with the same bearer key as chat - no
+    // SigV4 and no control-plane host.
+    [LlmProviderType.AWS_BEDROCK, 'https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/models'],
+    // Cohere chats on /compatibility/v1 but documents its listing only on
+    // the native host.
+    [LlmProviderType.COHERE, 'https://api.cohere.com/v1/models'],
+    [LlmProviderType.HUGGINGFACE, 'https://router.huggingface.co/v1/models'],
+  ])('%s lists models from its documented listing URL with a Bearer key', async (type, expectedUrl) => {
     const provider = makeProvider(type);
     const models = await helper.fetchModelsFromProvider(provider);
     const cfg = (callLlmProviderHttp as jest.Mock).mock.calls[0][0];
     expect(cfg.url).toBe(expectedUrl);
     expect(cfg.headers.Authorization).toBe('Bearer test-key');
     expect(models.map((m) => m.id)).toEqual(['codestral-latest']);
+  });
+
+  it('sends the Azure API key in api-key, not Authorization', async () => {
+    const provider = makeProvider(LlmProviderType.AZURE_OPENAI);
+    (provider.configuration as any).azure = { resourceName: 'res', deploymentName: 'dep' };
+    await helper.fetchModelsFromProvider(provider);
+    const cfg = (callLlmProviderHttp as jest.Mock).mock.calls[0][0];
+    expect(cfg.url).toBe('https://res.openai.azure.com/openai/v1/models');
+    expect(cfg.headers['api-key']).toBe('test-key');
+    expect(cfg.headers.Authorization).toBeUndefined();
+  });
+
+  it('a configured apiUrl steps over the documented listing override', async () => {
+    const provider = makeProvider(LlmProviderType.DEEPINFRA);
+    (provider.configuration as any).apiUrl = 'https://proxy.example/v1';
+    await helper.fetchModelsFromProvider(provider);
+    expect((callLlmProviderHttp as jest.Mock).mock.calls[0][0].url).toBe('https://proxy.example/v1/models');
+  });
+
+  it('reads a bare-array listing (Together) and a {models:[...]} listing (Cohere)', async () => {
+    (callLlmProviderHttp as jest.Mock).mockResolvedValue({ data: [{ id: 'moonshotai/Kimi-K2-Instruct' }] });
+    const together = await helper.fetchModelsFromProvider(makeProvider(LlmProviderType.TOGETHER));
+    expect(together.map((m) => m.id)).toEqual(['moonshotai/Kimi-K2-Instruct']);
+
+    (callLlmProviderHttp as jest.Mock).mockResolvedValue({ data: { models: [{ name: 'command-a-03-2025' }] } });
+    const cohere = await helper.fetchModelsFromProvider(makeProvider(LlmProviderType.COHERE));
+    expect(cohere.map((m) => m.id)).toEqual(['command-a-03-2025']);
   });
 
   it('keeps host-namespaced ids verbatim (Fireworks accounts/... and org/model ids)', async () => {
@@ -81,13 +117,12 @@ describe('fetchOpenAIModels vendor URL resolution', () => {
   });
 
   it('surfaces a failed listing on a base without /models (same contract as every type; the resolver maps it)', async () => {
-    // Perplexity's legacy Sonar base (https://api.perplexity.ai) has no
-    // /models. The rejection reaches the caller: /test-connection turns it
-    // into ok:false, DefaultModelResolver into NO_MODEL_CONFIGURED.
+    // Z.ai documents no /models at all. The rejection reaches the caller:
+    // /test-connection turns it into ok:false, DefaultModelResolver into
+    // NO_MODEL_CONFIGURED. Never a guessed model id.
     (callLlmProviderHttp as jest.Mock).mockRejectedValue(Object.assign(new Error('Request failed with status code 404'), { response: { status: 404 } }));
-    const provider = makeProvider(LlmProviderType.PERPLEXITY);
-    (provider.configuration as any).apiUrl = 'https://api.perplexity.ai';
+    const provider = makeProvider(LlmProviderType.ZAI);
     await expect(helper.fetchModelsFromProvider(provider)).rejects.toThrow('status code 404');
-    expect((callLlmProviderHttp as jest.Mock).mock.calls[0][0].url).toBe('https://api.perplexity.ai/models');
+    expect((callLlmProviderHttp as jest.Mock).mock.calls[0][0].url).toBe('https://api.z.ai/api/paas/v4/models');
   });
 });

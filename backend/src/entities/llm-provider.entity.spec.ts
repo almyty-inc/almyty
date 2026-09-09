@@ -405,13 +405,18 @@ describe('LlmProvider Entity', () => {
       expect(provider.getApiUrl()).toBe('https://generativelanguage.googleapis.com/v1beta');
     });
 
-    it('should return Cohere URL', () => {
+    it('should return the Cohere OpenAI-compatible base, not native /v2', () => {
       provider.type = LlmProviderType.COHERE;
 
-      expect(provider.getApiUrl()).toBe('https://api.cohere.ai/v2');
+      // /v2/chat is Cohere's own shape (its own SSE events, a structured
+      // content array). Chat rides the Compatibility API so it can go down
+      // the shared OpenAI path; the model list stays on the native host,
+      // which is what getModelsUrl() is for. Verified 2026-09-09.
+      expect(provider.getApiUrl()).toBe('https://api.cohere.ai/compatibility/v1');
+      expect(provider.getModelsUrl()).toBe('https://api.cohere.com/v1/models');
     });
 
-    it('should return Azure OpenAI URL', () => {
+    it('should return the Azure OpenAI v1 base, with no api-version query string', () => {
       provider.type = LlmProviderType.AZURE_OPENAI;
       provider.configuration.azure = {
         resourceName: 'myresource',
@@ -419,16 +424,27 @@ describe('LlmProvider Entity', () => {
         apiVersion: '2024-02-01',
       };
 
-      expect(provider.getApiUrl()).toBe(
-        'https://myresource.openai.azure.com/openai/deployments/gpt-4?api-version=2024-02-01'
-      );
+      // The old shape returned a base that already carried a query string,
+      // so the shared OpenAI client produced
+      // ".../deployments/gpt-4?api-version=2024-02-01/chat/completions" -
+      // a URL that could never have answered. The /openai/v1 surface takes
+      // no api-version at all, and the deployment name is the model.
+      expect(provider.getApiUrl()).toBe('https://myresource.openai.azure.com/openai/v1');
+      expect(provider.getApiUrl()).not.toContain('?');
     });
 
-    it('should return AWS Bedrock URL', () => {
+    it('should return the AWS Bedrock OpenAI-compatible base', () => {
       provider.type = LlmProviderType.AWS_BEDROCK;
       provider.configuration.bedrock = { region: 'us-west-2' };
 
-      expect(provider.getApiUrl()).toBe('https://bedrock-runtime.us-west-2.amazonaws.com');
+      // The /openai/v1 suffix is deliberate: it is Bedrock's
+      // OpenAI-compatible surface on the runtime host, which takes a
+      // Bedrock API key as a bearer token (no SigV4) and serves both
+      // /chat/completions and /models. Before this, Bedrock resolved to the
+      // bare host and had no dispatch case at all, so it could not answer.
+      // Verified 2026-09-09, see docs/design/call-only-vendors.md.
+      expect(provider.getApiUrl()).toBe('https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1');
+      expect(provider.getModelsUrl()).toBe('https://bedrock-runtime.us-west-2.amazonaws.com/openai/v1/models');
     });
 
     it('should return Huggingface URL', () => {

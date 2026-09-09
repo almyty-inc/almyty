@@ -48,6 +48,9 @@ const OPEN_MODEL_HOSTS: ReadonlySet<LlmProviderType> = new Set([
   LlmProviderType.BASETEN,
   LlmProviderType.NEBIUS,
   LlmProviderType.SAMBANOVA,
+  LlmProviderType.DIGITALOCEAN,
+  LlmProviderType.RUNPOD,
+  LlmProviderType.MODAL,
 ]);
 
 /** Ordered family preferences per provider type; first regex with a match wins. */
@@ -63,7 +66,12 @@ const FAMILY_PREFERENCE: Partial<Record<LlmProviderType, RegExp[]>> = {
   [LlmProviderType.TOGETHER]: [/llama-[\d.]+-70b-instruct-turbo$/i, /llama.*instruct/i, /llama/i],
   [LlmProviderType.OPENROUTER]: [/^anthropic\/claude-sonnet-\d/, /^openai\/gpt-\d+(\.\d+)?$/, /^anthropic\/claude-/, /^openai\/gpt-/],
   [LlmProviderType.COHERE]: [/^command-a/, /^command-r-plus/, /^command-r/, /^command/],
-  [LlmProviderType.PERPLEXITY]: [/^sonar-pro$/, /^sonar$/, /^sonar-/, /^sonar/],
+  // The Agent API lists ids as "creator/model" (perplexity/sonar,
+  // openai/gpt-5.6-sol, anthropic/claude-opus-5, ...). Perplexity's own
+  // web-grounded Sonar is the sensible default for a Perplexity provider;
+  // the bare `sonar` forms are the retiring legacy Sonar ids, kept so a
+  // provider still pointed at that surface resolves.
+  [LlmProviderType.PERPLEXITY]: [/^perplexity\/sonar$/, /^perplexity\//, /^sonar-pro$/, /^sonar$/, /^sonar/],
   [LlmProviderType.ZAI]: [/^glm-[\d.]+$/, /^glm-[\d.]+-flash$/, /^glm-/],
   // Hosted open-model vendors list many authors' models under the
   // authors' own ids (often "org/model"); prefer instruct Llama, then
@@ -75,6 +83,20 @@ const FAMILY_PREFERENCE: Partial<Record<LlmProviderType, RegExp[]>> = {
   [LlmProviderType.BASETEN]: OPEN_MODEL_HOST_PREFERENCE,
   [LlmProviderType.NEBIUS]: OPEN_MODEL_HOST_PREFERENCE,
   [LlmProviderType.SAMBANOVA]: OPEN_MODEL_HOST_PREFERENCE,
+  [LlmProviderType.DIGITALOCEAN]: OPEN_MODEL_HOST_PREFERENCE,
+  [LlmProviderType.RUNPOD]: OPEN_MODEL_HOST_PREFERENCE,
+  [LlmProviderType.MODAL]: OPEN_MODEL_HOST_PREFERENCE,
+  // Moonshot serves only Kimi; prefer the plain flagship id over the
+  // coding and high-speed variants. No literal ids: the vendor's own list
+  // decides which K generation is current.
+  [LlmProviderType.MOONSHOT]: [/^kimi-k[\d.]+$/, /^kimi-k/, /^kimi-/],
+  // Qwen's tiers are max > plus > flash. Undated aliases win over dated
+  // snapshots via the shared NOT_A_DEFAULT filter.
+  [LlmProviderType.QWEN]: [/^qwen[\d.]*-max$/, /^qwen[\d.]*-plus$/, /^qwen[\d.]*-flash$/, /^qwen[\d.]*-max/, /^qwen/],
+  // Bedrock and Foundry list ids we cannot rank meaningfully (inference
+  // profile ids and the customer's own deployment names), so neither gets
+  // a preference: pickPreferredModel falls through to the first served
+  // chat model, and a user who wants a specific one sets it.
 };
 
 /**
@@ -100,6 +122,16 @@ export class DefaultModelResolver {
   async resolve(provider: LlmProvider): Promise<string> {
     const configured = provider.configuration?.model?.trim();
     if (configured) return configured;
+
+    // Azure OpenAI names a DEPLOYMENT in the `model` field, not a catalog
+    // model id, and `GET /openai/v1/models` lists the catalog rather than
+    // the resource's deployments. Picking from that list would name
+    // something the resource has not deployed, so the configured
+    // deployment name is the default instead.
+    if (provider.type === LlmProviderType.AZURE_OPENAI) {
+      const deployment = provider.configuration?.azure?.deploymentName?.trim();
+      if (deployment) return deployment;
+    }
 
     const key = provider.id ?? `${provider.type}:${provider.getApiUrl?.() ?? ''}`;
     const hit = this.cache.get(key);
