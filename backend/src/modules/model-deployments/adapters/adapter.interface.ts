@@ -11,7 +11,17 @@
  * `AdapterCapabilities`, not through new required methods.
  */
 
-export type RegistrySource = 's3' | 'hub' | 'local';
+/**
+ * Where an adapter can read weights from.
+ *
+ *   hub   a Hugging Face repository, which is what most managed
+ *         providers import from and the default for nearly all of them
+ *   s3    object storage the provider itself reads (AWS: SageMaker and
+ *         Bedrock load model artifacts from S3 by design)
+ *   gcs   Google Cloud Storage, the same story on Vertex
+ *   local a path on the machine that serves the model
+ */
+export type RegistrySource = 'hub' | 's3' | 'gcs' | 'local';
 
 export interface AdapterCapabilities {
   /** Model architectures the adapter can serve, or 'any' for a raw container. */
@@ -25,7 +35,13 @@ export interface AdapterCapabilities {
   scaleToZero: boolean;
   /** Regions the provider offers; empty means the provider chooses. */
   regions: string[];
-  /** Where it can read weights from. Every adapter must include 's3'. */
+  /**
+   * Where this provider can actually read weights from, most preferred
+   * first. The first entry is the native default: what the provider's
+   * own documentation tells you to use. An adapter declares only what it
+   * really supports, so a version it cannot read is refused with a clear
+   * error instead of being smuggled in through the platform.
+   */
   registrySources: RegistrySource[];
 }
 
@@ -137,11 +153,21 @@ export interface ModelProviderAdapter {
   jobStatus?: never;
 }
 
-/** Every adapter must be able to read weights from S3 alone. */
+/**
+ * What every adapter owes its caller.
+ *
+ * There used to be a rule here that every adapter must declare 's3'. It
+ * was wrong: almyty supports inference through the providers, and most
+ * providers import from a Hugging Face repository, not from our object
+ * storage. The rule forced a workaround per provider (a presigned
+ * archive, a placeholder repository, weight bytes streamed through this
+ * backend) instead of each one using its documented path. An adapter now
+ * declares what it can really read, native default first.
+ */
 export function assertAdapterContract(adapter: ModelProviderAdapter): void {
   const caps = adapter.capabilities();
-  if (!caps.registrySources.includes('s3')) {
-    throw new Error(`${adapter.key}: registrySources must include 's3'`);
+  if (!Array.isArray(caps.registrySources) || caps.registrySources.length === 0) {
+    throw new Error(`${adapter.key}: registrySources must name at least one source this provider can read`);
   }
   if (!adapter.key || !/^[a-z][a-z0-9-]*$/.test(adapter.key)) {
     throw new Error(`${adapter.key}: key must be lowercase kebab-case`);

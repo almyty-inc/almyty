@@ -2,7 +2,9 @@
 
 Status: ACCEPTED (part of the models layer, docs/design/models-layer.md)
 
-The registry is where a version's weights live. It is vendor-neutral by construction: every adapter must be able to deploy from an S3-compatible bucket alone, and the conformance suite exercises no other source.
+The registry is optional. almyty supports inference through the providers, so a deployment normally points at whatever its provider natively reads, most often a Hugging Face repository, and the weights never touch us.
+
+The registry exists for the two cases where object storage is the native path: the AWS adapters, where Bedrock and SageMaker load model artifacts from S3 by design, and a self-host pointing its own server at its own store. An earlier version of this document required every adapter to deploy from S3 alone. That was wrong, and it forced a workaround per provider; each adapter now declares the sources its provider can really read, native default first.
 
 ## Registry URIs
 
@@ -63,4 +65,5 @@ An organization without a connection cannot register an `s3://` version or deplo
 
 - Versions are never deleted by the platform. Deployments come and go; weights stay.
 - An adapter receives the registry URI and reads from it with credentials handed to it per call. It never stores them.
-- The `hf://` scheme may be absent from a deployment entirely; an adapter that lists only `['s3']` in `registrySources` is complete.
+- An adapter that lists no `s3` in `registrySources` is complete and normal: it means the provider reads its weights somewhere else, which is the common case.
+- Weight files never pass through almyty. An adapter that cannot read a version's source refuses the deploy and names what it does accept.
