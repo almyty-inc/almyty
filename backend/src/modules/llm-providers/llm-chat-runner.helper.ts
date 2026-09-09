@@ -86,7 +86,7 @@ export class LlmChatRunnerHelper {
       throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
     }
     const { routing, ...plain } = request;
-    const plan = await this.router.plan(organizationId, routing);
+    const plan = await this.router.plan(organizationId, routing, session.userId ? { id: session.userId } : undefined);
     if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
 
     const tried: Array<{ modelId: string; reason: string }> = [];
@@ -121,17 +121,17 @@ export class LlmChatRunnerHelper {
 
   /** The provider at the head of the plan; chat() uses it for the session when no provider id was given. */
   /** The head of the plan with its provider; the streaming path uses it since a stream cannot walk the chain mid-answer. */
-  async planRouteHead(organizationId: string, request: ChatRequest): Promise<{ provider: LlmProvider; candidate: ResolvedCandidate; rejected: Array<{ modelId: string; reason: string }> }> {
+  async planRouteHead(organizationId: string, request: ChatRequest, principal?: { id: string }): Promise<{ provider: LlmProvider; candidate: ResolvedCandidate; rejected: Array<{ modelId: string; reason: string }> }> {
     if (!this.router) {
       throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
     }
-    const plan = await this.router.plan(organizationId, request.routing ?? {});
+    const plan = await this.router.plan(organizationId, request.routing ?? {}, principal);
     if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
     return { provider: plan.candidates[0].provider, candidate: plan.candidates[0], rejected: plan.rejected };
   }
 
-  async headProviderForRoute(organizationId: string, request: ChatRequest): Promise<LlmProvider> {
-    return (await this.planRouteHead(organizationId, request)).provider;
+  async headProviderForRoute(organizationId: string, request: ChatRequest, principal?: { id: string }): Promise<LlmProvider> {
+    return (await this.planRouteHead(organizationId, request, principal)).provider;
   }
 
   /** Audit + latency bookkeeping for a routed answer produced outside the walk (the streaming head). */

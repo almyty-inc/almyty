@@ -293,7 +293,7 @@ export class LlmChatHelper {
       // A routing policy picks the head of the plan here: a stream cannot
       // move to the next candidate once tokens have gone out, so the walk
       // that the non-streaming path does is limited to this first choice.
-      const routed = request.routing ? await this.runner.planRouteHead(organizationId, request) : null;
+      const routed = request.routing ? await this.runner.planRouteHead(organizationId, request, userId ? { id: userId } : undefined) : null;
       const provider = routed ? routed.provider : await this.providers.getProvider(providerId as string, organizationId, true);
       if (routed) {
         request = { ...request, model: routed.candidate.vendorModelId, routing: undefined };

@@ -153,7 +153,11 @@ export class ModelDeploymentsService {
     if (config.credentialId) {
       if (this.credentialRefs) {
         // Through the store: inactive, expired or ungranted rows refuse here.
+        // The deployment's creator is the acting user for a background
+        // reconcile, so a personal connection is checked against their
+        // grants rather than silently allowed.
         const resolved = await this.credentialRefs.resolve(deployment.organizationId, config.credentialId, {
+          principal: deployment.createdBy ? { id: deployment.createdBy } : undefined,
           context: { purpose: 'deploy', resourceType: 'model_deployment', resourceId: deployment.id },
         });
         creds = { ...(resolved.config as Record<string, string>) };
