@@ -9,7 +9,7 @@
     "test:smoke": "RUN_CLI_SMOKE=1 vitest run"
   },
   "devDependencies": {
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "postcss": "^8.5.23"
