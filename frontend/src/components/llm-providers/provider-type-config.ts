@@ -28,6 +28,13 @@ export const providerLogos: Record<string, string> = {
   baseten: '▣',
   nebius: '◉',
   sambanova: '◆',
+  moonshot: '☾',
+  qwen: '通',
+  vertex_ai: '▲',
+  azure_ai_foundry: '⬡',
+  digitalocean: '🌊',
+  runpod: '⬢',
+  modal: '◐',
   custom: '⚙️',
 }
 
@@ -100,4 +107,13 @@ export const providerKeyUrls: Record<string, string> = {
   baseten: 'https://app.baseten.co/settings/api_keys',
   nebius: 'https://tokenfactory.nebius.com/settings/api-keys',
   sambanova: 'https://cloud.sambanova.ai/apis',
+  // First-party model families and cloud / serverless call targets
+  // (verified 2026-09-09).
+  moonshot: 'https://platform.kimi.ai/console/api-keys',
+  qwen: 'https://home.qwencloud.com/api-keys',
+  vertex_ai: 'https://console.cloud.google.com/iam-admin/serviceaccounts',
+  azure_ai_foundry: 'https://ai.azure.com',
+  digitalocean: 'https://cloud.digitalocean.com/model-studio/manage-keys',
+  runpod: 'https://console.runpod.io/user/settings',
+  modal: 'https://modal.com/docs/guide/endpoint-integrations',
 }

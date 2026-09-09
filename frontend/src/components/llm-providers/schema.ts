@@ -12,6 +12,49 @@ export function baseUrlSupported(type: string | undefined | null): type is 'olla
   return type === 'ollama' || type === 'custom'
 }
 
+/**
+ * Structural configuration a provider needs before it can be called at all:
+ * a region, a project, a resource, an endpoint. These are NOT secrets - they
+ * are what makes the base URL resolvable - and without them the backend
+ * rejects the save. AWS Bedrock and Azure OpenAI were both selectable in the
+ * create dialog with no field for theirs, so neither could ever be created.
+ */
+export const STRUCTURAL_FIELDS: Record<string, Array<{
+  name: 'region' | 'resourceName' | 'deploymentName' | 'projectId' | 'location' | 'endpointId'
+  label: string
+  placeholder: string
+  required: boolean
+  hint?: string
+}>> = {
+  aws_bedrock: [
+    { name: 'region', label: 'AWS region', placeholder: 'us-east-1', required: true,
+      hint: 'Selects the bedrock-runtime host and which models are available there.' },
+  ],
+  azure_openai: [
+    { name: 'resourceName', label: 'Resource name', placeholder: 'my-openai-resource', required: true },
+    { name: 'deploymentName', label: 'Deployment name', placeholder: 'gpt-4o', required: true,
+      hint: 'The deployment name is what a call names as its model.' },
+  ],
+  azure_ai_foundry: [
+    { name: 'resourceName', label: 'Resource name', placeholder: 'my-foundry-resource', required: true },
+    { name: 'deploymentName', label: 'Deployment name', placeholder: 'deepseek-v3', required: true,
+      hint: 'The deployment name is what a call names as its model.' },
+  ],
+  vertex_ai: [
+    { name: 'projectId', label: 'Google Cloud project id', placeholder: 'my-project-123', required: true },
+    { name: 'location', label: 'Location', placeholder: 'global', required: false,
+      hint: 'global (default) or a region such as us-central1.' },
+  ],
+  runpod: [
+    { name: 'endpointId', label: 'Endpoint', placeholder: 'gpt-oss-120b', required: true,
+      hint: 'A public model slug (nothing to deploy) or your own serverless endpoint id.' },
+  ],
+}
+
+export function structuralFieldsFor(type: string | undefined | null) {
+  return (type && STRUCTURAL_FIELDS[type]) || []
+}
+
 /** Shown under every Base URL field: the server refuses private hosts unless told otherwise. */
 export const BASE_URL_PRIVATE_HOST_HINT =
   'Private or LAN hosts (10.x, 192.168.x, .internal, localhost) need LLM_ALLOW_PRIVATE_URLS=true on the almyty server.'
@@ -47,9 +90,34 @@ export const createProviderSchema = z.object({
   connectionId: z.string().optional(),
   // Set when the user picked an existing vault credential / connection.
   credentialId: z.string().optional(),
+  // Structural configuration (see STRUCTURAL_FIELDS). Flat on the form,
+  // nested into configuration.{bedrock,azure,vertex,runpod} on submit.
+  region: z.string().optional(),
+  resourceName: z.string().optional(),
+  deploymentName: z.string().optional(),
+  projectId: z.string().optional(),
+  location: z.string().optional(),
+  endpointId: z.string().optional(),
+  // Vertex takes a service-account JSON key rather than an API key, and a
+  // model must be named because that surface serves no model list.
+  model: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.type === 'custom' && !isHttpUrl(data.apiUrl)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Base URL is required (http or https)', path: ['apiUrl'] })
+  }
+  // Every structural field the chosen type marks required. Without this the
+  // form submits, the backend rejects it, and the user sees a bare 400.
+  for (const field of structuralFieldsFor(data.type)) {
+    if (field.required && !(data as Record<string, any>)[field.name]?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `${field.label} is required`, path: [field.name] })
+    }
+  }
+  if (data.type === 'vertex_ai' && !data.model?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Model is required: Vertex AI serves no model list to choose from',
+      path: ['model'],
+    })
   }
   if (data.type === 'ollama') {
     // Key optional; when provided it still has to look like a token.
@@ -93,6 +161,16 @@ export function buildProviderCreateBody(data: CreateProviderFormData): Record<st
   const credentialId = data.connectionId || data.credentialId || undefined
   const apiKey = credentialId ? undefined : pastedKey(data.apiKey)
   const usageApiKey = pastedKey(data.usageApiKey)
+  const trimmed = (value?: string) => (value?.trim() ? value.trim() : undefined)
+  // Structural config, nested the way the entity reads it.
+  const bedrock = trimmed(data.region) ? { region: trimmed(data.region) } : undefined
+  const azure = trimmed(data.resourceName) || trimmed(data.deploymentName)
+    ? { resourceName: trimmed(data.resourceName), deploymentName: trimmed(data.deploymentName) }
+    : undefined
+  const vertex = trimmed(data.projectId) || trimmed(data.location)
+    ? { projectId: trimmed(data.projectId), location: trimmed(data.location) }
+    : undefined
+  const runpod = trimmed(data.endpointId) ? { endpointId: trimmed(data.endpointId) } : undefined
   return {
     name: data.name,
     type: data.type,
@@ -106,6 +184,11 @@ export function buildProviderCreateBody(data: CreateProviderFormData): Record<st
       ...(data.organizationId && { organizationId: data.organizationId }),
       // Admin-scoped usage/cost API key, only when one was typed.
       ...(usageApiKey && { usageApiKey }),
+      ...(trimmed(data.model) && { model: trimmed(data.model) }),
+      ...(bedrock && { bedrock }),
+      ...(azure && { azure }),
+      ...(vertex && { vertex }),
+      ...(runpod && { runpod }),
     },
   }
 }
@@ -172,6 +255,13 @@ export type LlmProviderType =
   | 'baseten'
   | 'nebius'
   | 'sambanova'
+  | 'moonshot'
+  | 'qwen'
+  | 'vertex_ai'
+  | 'azure_ai_foundry'
+  | 'digitalocean'
+  | 'runpod'
+  | 'modal'
   | 'custom'
 
 export type LlmProviderStatus = 'active' | 'inactive' | 'error' | 'configuring'

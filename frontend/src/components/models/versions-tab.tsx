@@ -90,12 +90,14 @@ export function VersionsTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Versions</h2>
-          <p className="text-sm text-muted-foreground">Immutable weights in the registry, pinned by etag or sha. Any adapter can deploy any of them.</p>
+          <h2 className="text-lg font-semibold">Tracked artifacts</h2>
+          <p className="text-sm text-muted-foreground">
+            Optional. Most people never register anything here: naming the model on a deployment is enough. Register an artifact only when you want an immutable record of your own weights, pinned by etag or sha.
+          </p>
         </div>
-        <Button onClick={() => setRegisterOpen(true)} disabled={!orgId}>
+        <Button variant="outline" onClick={() => setRegisterOpen(true)} disabled={!orgId}>
           <Plus className="mr-2 h-4 w-4" />
-          Register version
+          Register artifact
         </Button>
       </div>
 
