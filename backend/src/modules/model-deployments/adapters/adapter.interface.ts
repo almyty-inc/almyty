@@ -1,11 +1,12 @@
 /**
  * The frozen contract every deployment adapter implements.
  *
- * An adapter turns a registry version into a running endpoint on one
- * provider and reports what it costs. It knows nothing about the catalog,
- * the router or other adapters: it may not import or invoke another
- * adapter, must work with the S3 registry source alone, and receives
- * credentials as arguments rather than holding them.
+ * An adapter turns a model version into a running endpoint on one
+ * provider's own managed product and reports what it costs. It knows
+ * nothing about the catalog, the router or other adapters: it may not
+ * import or invoke another adapter, reads weights only from a source its
+ * provider natively supports, and receives credentials as arguments
+ * rather than holding them. Weight files never pass through almyty.
  *
  * Changing this file is a spec change. Add capabilities through
  * `AdapterCapabilities`, not through new required methods.

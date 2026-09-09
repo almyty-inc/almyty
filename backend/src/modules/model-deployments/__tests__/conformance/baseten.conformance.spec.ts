@@ -148,51 +148,89 @@ runConformance(live ? 'baseten (LIVE)' : 'baseten (fixture)', {
 describe('baseten request shape', () => {
   const s3Version = { id: 'v', name: 'q', registryUri: 's3://registry/models/q@etag', base: 'qwen3-0.6b', quantizations: [], manifestSha: 's' };
 
-  it('serves an S3 registry version by mounting the bucket path with the registry keys in a workspace secret', async () => {
+  it('mounts a hub version through BDN with the customer token in a workspace secret, not in the body', async () => {
     const f = fixtureHttp();
     const a = new BasetenAdapter(f.http);
     const ref = await a.deploy(
       {
         deploymentId: 'abc-123',
         organizationId: 'org',
-        version: s3Version,
-        desired: { replicas: 1, minScale: 0, maxScale: 2, region: 'eu-central-1' },
-        providerConfig: { registryEndpoint: 'https://minio.local', registryRegion: 'eu-central-1', registryAccessKeyId: 'AK' },
+        version: { id: 'v', name: 'q', registryUri: 'hf://Qwen/Qwen3-0.6B@abc123', base: 'qwen3', quantizations: [], manifestSha: 's' },
+        desired: { replicas: 1, minScale: 0, maxScale: 2, region: 'eu-central-1', hardware: 'H100:2' },
+        providerConfig: {},
       },
-      { apiKey: 'bt_valid', registryAccessKeyId: 'AK', registrySecretAccessKey: 'SK' },
+      { apiKey: 'bt_valid', hfToken: 'hf_secret' },
     );
     const [secretCall, createCall] = f.http.post.mock.calls;
     expect(secretCall[0]).toBe('https://api.baseten.co/v1/secrets');
-    expect(secretCall[1]).toEqual({ name: 'aws_secret_json', value: JSON.stringify({ aws_access_key_id: 'AK', aws_secret_access_key: 'SK', aws_region: 'eu-central-1' }) });
+    expect(secretCall[1]).toEqual({ name: 'hf_access_token', value: 'hf_secret' });
     expect(createCall[0]).toBe('https://api.baseten.co/v1/llm_models');
     expect(createCall[2].headers.Authorization).toBe('Bearer bt_valid');
     const body = createCall[1];
     expect(body.name).toBe('almyty-abc123');
-    expect(body.resources).toEqual({ accelerator: 'H100', use_gpu: true });
+    expect(body.resources).toEqual({ accelerator: 'H100:2', use_gpu: true });
     expect(body.region).toBe('eu-central-1');
-    expect(body.weights).toEqual([{ source: 's3://registry/models/q', mount_location: '/models/almyty' }]);
-    expect(body.llm_config).toMatchObject({ engine_backend: 'vllm', checkpoint_name: '/models/almyty', served_model_name: 'q', tensor_parallel_size: 1 });
-    expect(body.environment_variables).toEqual({ AWS_ENDPOINT_URL: 'https://minio.local' });
+    // Baseten mirrors the repo itself; the per-source auth block names the secret, never the token.
+    expect(body.weights).toEqual([
+      { source: 'hf://Qwen/Qwen3-0.6B@abc123', mount_location: '/models/almyty', auth: { auth_method: 'CUSTOM_SECRET', auth_secret_name: 'hf_access_token' } },
+    ]);
+    expect(body.llm_config).toEqual({
+      engine_backend: 'vllm',
+      checkpoint_name: '/models/almyty',
+      model_name: '/models/almyty',
+      model_path: '/models/almyty',
+      model_path_for_tokenizer: '/models/almyty',
+      served_model_name: 'q',
+      tensor_parallel_size: 2,
+    });
     expect(body.autoscaling_settings).toEqual({ min_replica: 0, max_replica: 2, scale_down_delay: 120 });
-    // Secrets never travel in the deployment body.
-    expect(JSON.stringify(body)).not.toContain('SK');
+    expect(body).not.toHaveProperty('environment_variables');
+    expect(JSON.stringify(body)).not.toContain('hf_secret');
     expect(ref.url).toBe('https://model-mdl1.api.baseten.co/deployment/dep1/sync/v1');
   });
 
-  it('serves a hub version straight from hf://org/repo@rev with no registry secret', async () => {
+  it('serves a public hub repo with no secret and no auth block', async () => {
     const f = fixtureHttp();
     const a = new BasetenAdapter(f.http);
     await a.deploy(
-      { deploymentId: 'd', organizationId: 'org', version: { id: 'v', name: 'q', registryUri: 'hf://Qwen/Qwen3-0.6B@abc123', base: 'qwen3', quantizations: [], manifestSha: 's' }, desired: { hardware: 'H100:2' }, providerConfig: {} },
+      { deploymentId: 'd', organizationId: 'org', version: { id: 'v', name: 'q', registryUri: 'hf://Qwen/Qwen3-0.6B@abc123', base: 'qwen3', quantizations: [], manifestSha: 's' }, desired: {}, providerConfig: {} },
       { apiKey: 'bt_valid' },
     );
     expect(f.http.post.mock.calls).toHaveLength(1);
-    const body = f.http.post.mock.calls[0][1];
-    expect(body.weights).toEqual([{ source: 'hf://Qwen/Qwen3-0.6B@abc123', mount_location: '/models/almyty' }]);
-    expect(body.resources.accelerator).toBe('H100:2');
-    expect(body.llm_config.tensor_parallel_size).toBe(2);
-    expect(body.environment_variables).toEqual({});
+    expect(f.http.post.mock.calls[0][1].weights).toEqual([{ source: 'hf://Qwen/Qwen3-0.6B@abc123', mount_location: '/models/almyty' }]);
     expect(f.secrets.size).toBe(0);
+  });
+
+  it('mounts an object-storage version by bucket path, with the read keys in the documented aws_credentials secret', async () => {
+    const f = fixtureHttp();
+    const a = new BasetenAdapter(f.http);
+    await a.deploy(
+      {
+        deploymentId: 'd',
+        organizationId: 'org',
+        version: s3Version,
+        desired: {},
+        providerConfig: { registryRegion: 'eu-central-1', registryAccessKeyId: 'AK' },
+      },
+      { apiKey: 'bt_valid', registryAccessKeyId: 'AK', registrySecretAccessKey: 'SK' },
+    );
+    const [secretCall, createCall] = f.http.post.mock.calls;
+    // Exactly the key names Baseten documents; access_key_id without the aws_ prefix fails auth.
+    expect(secretCall[1]).toEqual({ name: 'aws_credentials', value: JSON.stringify({ aws_access_key_id: 'AK', aws_secret_access_key: 'SK', aws_region: 'eu-central-1' }) });
+    // The registry's @etag pin is not part of the bucket path.
+    expect(createCall[1].weights).toEqual([
+      { source: 's3://registry/models/q', mount_location: '/models/almyty', auth: { auth_method: 'CUSTOM_SECRET', auth_secret_name: 'aws_credentials' } },
+    ]);
+    expect(JSON.stringify(createCall[1])).not.toContain('SK');
+  });
+
+  it('refuses a source BDN cannot mirror, before calling Baseten', async () => {
+    const f = fixtureHttp();
+    const a = new BasetenAdapter(f.http);
+    await expect(
+      a.deploy({ deploymentId: 'd', organizationId: 'org', version: { ...s3Version, registryUri: 'file:///srv/models/q' }, desired: {}, providerConfig: {} }, { apiKey: 'bt_valid' }),
+    ).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_SOURCE' });
+    expect(f.http.post).not.toHaveBeenCalled();
   });
 
   it('scales through autoscaling_settings plus activate, and deactivates for zero', async () => {

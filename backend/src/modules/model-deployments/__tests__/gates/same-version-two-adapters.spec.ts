@@ -25,7 +25,7 @@ import { REGISTRY_KEYS, ensureTestKey, fakeAudit, fakeEnvelope, fakeQueue, fakeR
  * over its API fixture (the same fixture the conformance suite uses).
  */
 const ORG = 'org-gate2';
-const VERSION = { id: 'v-shared', organizationId: ORG, name: 'qwen3-0.6b', base: 'qwen3-0.6b', registryUri: 's3://registry/models/qwen3-0.6b@etag-1', quantizations: [], manifestSha: 'sha-1' };
+const VERSION = { id: 'v-shared', organizationId: ORG, name: 'qwen3-0.6b', base: 'qwen3-0.6b', registryUri: 'hf://Qwen/Qwen3-0.6B@main', quantizations: [], manifestSha: 'sha-1' };
 
 const card = (id: string, name: string): Model =>
   Object.assign(new Model(), {
@@ -175,16 +175,20 @@ describe('gate 2: one ModelVersion, two adapters, provider specifics never cross
     expect(hfDeploy.mock.calls[0][0].providerConfig).not.toHaveProperty('simulate');
     expect(stubDeploy.mock.calls[0][0].providerConfig).not.toHaveProperty('namespace');
 
-    // Registry keys reached both adapters as credentials (not through providerConfig) and stayed out of every stored field.
-    expect(modelRegistry.adapterCredentialsFor).toHaveBeenCalledWith(ORG);
+    // A hub version needs no registry key at all, so none is resolved and
+    // none is handed to an adapter; providerConfig never carries one either.
+    expect(modelRegistry.adapterCredentialsFor).not.toHaveBeenCalled();
     for (const spy of [stubDeploy, hfDeploy]) {
-      expect(spy.mock.calls[0][1]).toMatchObject({ registryAccessKeyId: REGISTRY_KEYS.registryAccessKeyId, registrySecretAccessKey: REGISTRY_KEYS.registrySecretAccessKey });
+      expect(spy.mock.calls[0][1]).not.toHaveProperty('registrySecretAccessKey');
       expect(spy.mock.calls[0][0].providerConfig).not.toHaveProperty('registryAccessKeyId');
       expect(spy.mock.calls[0][0].providerConfig).not.toHaveProperty('registrySecretAccessKey');
     }
     const hfBody = fixture.http.post.mock.calls[0][1];
-    expect(hfBody.model.image.custom.secrets).toEqual({ AWS_ACCESS_KEY_ID: REGISTRY_KEYS.registryAccessKeyId, AWS_SECRET_ACCESS_KEY: REGISTRY_KEYS.registrySecretAccessKey });
-    expect(hfBody.model.image.custom.env).toMatchObject({ ALMYTY_REGISTRY_URI: VERSION.registryUri });
+    // Hugging Face builds the endpoint from the Hub repository itself, so no
+    // registry location and no registry key belongs anywhere in the request.
+    expect(hfBody.model).toMatchObject({ repository: 'Qwen/Qwen3-0.6B', revision: 'main' });
+    expect(JSON.stringify(hfBody)).not.toContain(REGISTRY_KEYS.registryAccessKeyId);
+    expect(JSON.stringify(hfBody)).not.toContain(REGISTRY_KEYS.registrySecretAccessKey);
     const stored = JSON.stringify([s.providerConfig, s.externalRef, s.actual, h.providerConfig, h.externalRef, h.actual, audit.rows]);
     expect(stored).not.toContain(REGISTRY_KEYS.registrySecretAccessKey);
     expect(stored).not.toContain(REGISTRY_KEYS.registryAccessKeyId);
