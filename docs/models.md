@@ -82,7 +82,11 @@ Routing needs the catalog module wired in (it is, in `app.module.ts`); without i
 
 `GET /model-adapters` describes every registered adapter as data: capabilities and a JSON schema for its config (`x-secret: true` marks fields that are encrypted at rest and never returned). `POST /model-deployments` records desired state; the reconcile queue (`MODEL_RECONCILE_CRON`, default every 2 minutes) is the only thing that talks to a provider. `POST /model-deployments/:id/scale { replicas }` and `/teardown` change desired state only.
 
-Adapters in Phase A: `huggingface-endpoints` (REST), `modal` (drives the `modal` CLI; Modal has no HTTP API), `ollama` (pulls or creates the model on a local or remote Ollama server, loads it, unloads on scale-to-zero, deletes on teardown; `hf://` versions pull through `hf.co/`, `s3://` versions need `registryMirrorPath` on the host), `custom-endpoint` (watches and prices an OpenAI-compatible server managed elsewhere; cannot deploy), and `stub` outside production.
+### Where the weights come from
+
+almyty is not in the hosting business. A deployment runs on the provider's own managed product, and the weights come from wherever that provider natively reads them, most often a Hugging Face repository. `registrySources` on each adapter names what its provider can really read, native default first, and a version from a source the provider cannot read is refused rather than routed through us. Weight files never pass through almyty.
+
+That makes our own object storage optional. It is needed only where a provider reads object storage natively, which today means the AWS adapters, and for a self-host pointing its own server at its own store. Connecting a registry bucket is not a precondition for anything else: a card from a configured provider, a registered endpoint, and a deployment from a Hugging Face repository all work without one.
  Each passes the same conformance suite in fixture mode; set `CONFORMANCE_LIVE=<adapter key>` with real credentials to run it live. Adapters never import each other (`adapter-isolation.spec.ts` enforces it).
 
 A deployment with a `budgetId` is charged from the adapter's cost snapshot on every reconcile. Reaching the budget scales it to zero, writes `model_deployment_budget_stop`, and notifies.
