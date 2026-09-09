@@ -1,0 +1,92 @@
+# Providers
+
+A provider is a key almyty calls a vendor with. Add one and its models become [cards](/models) in the background; the first passing health check makes the default model selectable, and the router can pick it. almyty ships 24 provider types, and any server that speaks the OpenAI chat API can be registered without one.
+
+![Models page](/screenshots/models.png)
+
+Adding, testing and editing a provider in the dashboard is described in [AI Models](/llm-providers). This page is the vendor reference.
+
+## Two kinds of vendor
+
+- **Call-only vendors** host models and answer chat requests. almyty calls them with your key. That is every entry below.
+- **Deployment providers** run weights you own. Those are [adapters](/models/deployments), and a few names appear on both lists (Together, Fireworks, Baseten, Nebius) because the vendor both hosts a catalog and rents GPUs.
+
+## Provider types
+
+| Type | Vendor | Default base URL | Live model list | Dispatch |
+|---|---|---|---|---|
+| `openai` | OpenAI | `https://api.openai.com/v1` | yes | OpenAI-compatible |
+| `anthropic` | Anthropic | `https://api.anthropic.com/v1` | yes | native |
+| `google` | Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | yes | native |
+| `mistral` | Mistral | `https://api.mistral.ai/v1` | yes | OpenAI-compatible |
+| `xai` | xAI | `https://api.x.ai/v1` | yes | OpenAI-compatible |
+| `deepseek` | DeepSeek | `https://api.deepseek.com/v1` | yes | OpenAI-compatible |
+| `groq` | Groq | `https://api.groq.com/openai/v1` | yes | OpenAI-compatible |
+| `together` | Together | `https://api.together.xyz/v1` | yes | OpenAI-compatible |
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | yes | OpenAI-compatible |
+| `azure_openai` | Azure OpenAI | `https://<resource>.openai.azure.com/openai/deployments/<deployment>` | no (deployment name) | OpenAI-compatible |
+| `aws_bedrock` | AWS Bedrock | `https://bedrock-runtime.<region>.amazonaws.com` | no | no chat dispatch yet, so its cards never validate and never route |
+| `cohere` | Cohere | `https://api.cohere.ai/v2` | yes | native |
+| `huggingface` | Hugging Face Inference | `https://api-inference.huggingface.co/models` | no | native |
+| `ollama` | Ollama, local or cloud | `http://localhost:11434` (`/v1` is appended) | yes (`/api/tags`) | OpenAI-compatible |
+| `fireworks` | Fireworks AI | `https://api.fireworks.ai/inference/v1` | yes, with a key | OpenAI-compatible |
+| `cerebras` | Cerebras | `https://api.cerebras.ai/v1` | yes | OpenAI-compatible |
+| `deepinfra` | DeepInfra | `https://api.deepinfra.com/v1/openai` | yes, with a key | OpenAI-compatible |
+| `novita` | Novita | `https://api.novita.ai/openai` | yes, public | OpenAI-compatible |
+| `perplexity` | Perplexity | `https://api.perplexity.ai/router/v1` | yes, with a key | OpenAI-compatible |
+| `zai` | Z.ai | `https://api.z.ai/api/paas/v4` | not documented; set a model by hand | OpenAI-compatible |
+| `baseten` | Baseten Model API | `https://inference.baseten.co/v1` | yes, with prices and context | OpenAI-compatible |
+| `nebius` | Nebius Token Factory | `https://api.tokenfactory.nebius.com/v1` | yes, with a key | OpenAI-compatible |
+| `sambanova` | SambaNova | `https://api.sambanova.ai/v1` | yes, public | OpenAI-compatible |
+| `custom` | Any OpenAI-compatible server | your `baseUrl` | yes (`GET <base>/models`) | OpenAI-compatible |
+
+Every native type ships with its default base URL; set `baseUrl` to point at a compatible proxy. The key field takes whatever token the vendor issues and is encrypted at rest.
+
+**Live model list.** Where the vendor serves `GET <base>/models`, the model dropdown is populated from it, a configured model is checked against it on save, and a blank model resolves to the vendor's current default by family (never a hardcoded id). Where the list is not served, set the model explicitly; the health check and the catalog surface the vendor's reason when a listing fails.
+
+**Dispatch.** Sixteen of the types ride one OpenAI-compatible code path: chat, streaming and tool calling all go to `<base>/chat/completions` with a Bearer key. Anthropic, Gemini, Cohere and Hugging Face have their own clients. Nothing vendor-specific is added for an OpenAI-compatible host beyond its base URL, its key page and its price-feed namespace.
+
+### Notes per vendor
+
+- **Perplexity** is mid-transition. The default base is the OpenAI-compatible Router API (`/router/v1`, private preview). The legacy Sonar endpoint at `https://api.perplexity.ai` still answers chat completions but serves no model list; set it as `baseUrl` with an explicit model.
+- **Z.ai** documents no model list. Set a model; the health check reports the listing error if the vendor rejects the request.
+- **Novita** documents `api.novita.ai/openai`; the older `/v3/openai` base still answers.
+- **Nebius AI Studio** is now Nebius Token Factory; the old host still answers, the docs name the new one.
+- **Ollama** is keyless for a local server. Private URLs are blocked by default; self-hosters opt in with `OLLAMA_ALLOW_PRIVATE_URLS=true`. Ollama Cloud (`https://ollama.com`) takes a key and needs no opt-in. See [AI Models](/llm-providers#local-models-with-ollama).
+- **Hosts that serve other authors' open models** (DeepInfra, Novita, Together, Fireworks, Baseten, Nebius, SambaNova, Cerebras, OpenRouter) are priced from the feed under their own namespace. A DeepSeek model on Novita is never billed at DeepSeek's list price; without a feed quote it is unpriced.
+- **Usage reconciliation.** None of the nine OpenAI-compatible hosts publishes a usage or billing API, so [cost governance](/cost-governance) cannot reconcile estimates against actuals for them.
+- **Replicate** is not a provider type: its API is predictions-based and has no chat completions endpoint to ride.
+
+## Keys
+
+A key belongs to one provider row, is encrypted at rest with the platform key (or your own KMS on Enterprise), and is never returned by the API. The provider form links to each vendor's key page. Vendors that offer a sign-in flow can be connected without pasting anything: OpenRouter mints a key scoped to almyty when you approve it. See [Connections](/connections).
+
+## Any other OpenAI-compatible server
+
+vLLM, TGI, llama.cpp, a LiteLLM proxy, a vendor that is not on the list: if it answers `POST <base>/chat/completions`, register it as a card. The URL and key become a `custom` provider row behind the scenes and the card points at it.
+
+```bash
+$ npx @almyty/models register-endpoint \
+    --name "Lab box" \
+    --url http://10.0.0.7:8000/v1 \
+    --model qwen3-32b \
+    --tier local \
+    --region office
+Registered.
+Lab box  [qwen3-32b]  local/office  unpriced
+    4f2a...  not selectable (validation: never)
+Run: almyty models validate 4f2a...
+
+$ npx @almyty/models validate 4f2a...
+Passed in 640 ms.
+Lab box  [qwen3-32b]  local/office  unpriced
+    4f2a...  selectable
+```
+
+`--api-key` adds a Bearer token when the server checks one. A self-run server has no feed price, so give the card a price override if you want `cheapest` to weigh it, or leave it unpriced and let the router place it last. A server the reconcile loop should watch and price as a deployment is registered the same way and shows up under the `custom-endpoint` [adapter](/models/deployments#custom-endpoint).
+
+## Related
+
+- [AI Models](/llm-providers): the provider form, connection test and parameters
+- [Models](/models): cards, validation and pricing
+- [Connections](/connections): keys, sign-in flows and who may use them

@@ -9,12 +9,16 @@ import { Tool, ToolType, ToolStatus } from '../../../entities/tool.entity';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { encryptField, decryptField, isEncrypted } from '../../../common/security/field-crypto';
+import { CredentialType } from '../../../entities/credential.entity';
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
+import { FakeCredentialStore, makeCredentialRefFake } from '../../../test/credential-ref.fake';
 
 describe('McpSourcesService', () => {
   let service: McpSourcesService;
   let sourceRepository: any;
   let toolRepository: any;
   let mcpClient: any;
+  let store: FakeCredentialStore;
 
   const baseSource = (): McpSource =>
     ({
@@ -65,6 +69,7 @@ describe('McpSourcesService', () => {
       callTool: jest.fn(),
     };
 
+    store = makeCredentialRefFake();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         McpSourcesService,
@@ -72,6 +77,7 @@ describe('McpSourcesService', () => {
         { provide: getRepositoryToken(McpSource), useValue: sourceRepository },
         { provide: getRepositoryToken(Tool), useValue: toolRepository },
         { provide: McpClientService, useValue: mcpClient },
+        { provide: CredentialRefResolver, useValue: store.resolver },
       ],
     }).compile();
 
@@ -119,7 +125,32 @@ describe('McpSourcesService', () => {
       expect(savedTools[0].definitionHash).toEqual(expect.any(String));
     });
 
-    it('encrypts the bearer token at rest and never returns authConfig', async () => {
+    it('stores a pasted bearer token as a credential row the source references, never on the row', async () => {
+      sourceRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(baseSource())
+        .mockResolvedValueOnce(baseSource());
+      mcpClient.listTools.mockResolvedValue(remoteListing([]));
+
+      const result = await service.create(
+        { name: 'weather', url: 'https://mcp.example.com/mcp', bearerToken: 'super-secret' },
+        'org-1',
+      );
+
+      const first = sourceRepository.save.mock.calls[0][0];
+      expect(first.authType).toBe('bearer');
+      expect(first.authConfig).toBeNull();
+      const withRef = sourceRepository.save.mock.calls[1][0];
+      expect(withRef.credentialId).toBe(store.rows[0].id);
+      expect(store.rows[0].type).toBe(CredentialType.BEARER_TOKEN);
+      expect(store.rows[0].metadata.managedBy).toEqual({ kind: 'mcp_source', id: 'src-1' });
+      expect(isEncrypted(store.rows[0].config.token)).toBe(true);
+      expect(decryptField(store.rows[0].config.token)).toBe('super-secret');
+      expect(JSON.stringify(sourceRepository.save.mock.calls)).not.toContain('super-secret');
+      expect((result.source as any).authConfig).toBeUndefined();
+    });
+
+    it('stores pasted headers as one custom credential row with every value encrypted', async () => {
       sourceRepository.findOne
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(baseSource())
@@ -127,15 +158,57 @@ describe('McpSourcesService', () => {
       mcpClient.listTools.mockResolvedValue(remoteListing([]));
 
       await service.create(
-        { name: 'weather', url: 'https://mcp.example.com/mcp', bearerToken: 'super-secret' },
+        { name: 'weather', url: 'https://mcp.example.com/mcp', headers: { 'X-Api-Key': 'k-123' } },
         'org-1',
       );
 
-      const persisted = sourceRepository.save.mock.calls[0][0];
-      expect(persisted.authType).toBe('bearer');
-      expect(persisted.authConfig.bearerToken).not.toContain('super-secret');
-      expect(isEncrypted(persisted.authConfig.bearerToken)).toBe(true);
-      expect(decryptField(persisted.authConfig.bearerToken)).toBe('super-secret');
+      expect(sourceRepository.save.mock.calls[0][0].authType).toBe('headers');
+      expect(store.rows[0].type).toBe(CredentialType.CUSTOM);
+      expect(isEncrypted(store.rows[0].config.headers['X-Api-Key'])).toBe(true);
+      expect(decryptField(store.rows[0].config.headers['X-Api-Key'])).toBe('k-123');
+    });
+
+    it('points at an existing connection when credentialId is given (auth type from the row)', async () => {
+      const row = store.seed({ organizationId: 'org-1', type: CredentialType.BEARER_TOKEN, config: { token: 'x' } });
+      sourceRepository.findOne
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(baseSource())
+        .mockResolvedValueOnce(baseSource());
+      mcpClient.listTools.mockResolvedValue(remoteListing([]));
+
+      await service.create({ name: 'weather', url: 'https://mcp.example.com/mcp', credentialId: row.id }, 'org-1');
+
+      expect(sourceRepository.save.mock.calls[0][0].authType).toBe('bearer');
+      expect(sourceRepository.save.mock.calls[1][0].credentialId).toBe(row.id);
+      expect(store.rows).toHaveLength(1);
+    });
+
+    it('rejects a credentialId of another organization', async () => {
+      const row = store.seed({ organizationId: 'org-2', type: CredentialType.BEARER_TOKEN, config: { token: 'x' } });
+      sourceRepository.findOne.mockResolvedValueOnce(null);
+
+      await expect(service.create({ name: 'weather', url: 'https://mcp.example.com/mcp', credentialId: row.id }, 'org-1'))
+        .rejects.toMatchObject({ response: { code: 'CREDENTIAL_NOT_FOUND' } });
+      expect(sourceRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('removes the half-made source when the secret cannot be stored', async () => {
+      sourceRepository.findOne.mockResolvedValueOnce(null);
+      mcpClient.listTools.mockResolvedValue(remoteListing([]));
+
+      await expect(service.create({ name: 'weather', url: 'https://mcp.example.com/mcp', authType: 'bearer' }, 'org-1'))
+        .rejects.toThrow('bearerToken is required');
+      expect(sourceRepository.remove).toHaveBeenCalled();
+    });
+
+    it('releases the managed credential row when the source is removed', async () => {
+      const src = { ...baseSource(), credentialId: 'cred-x' };
+      store.seed({ id: 'cred-x', organizationId: 'org-1', config: { token: 'x' }, metadata: { managedBy: { kind: 'mcp_source', id: 'src-1' } } });
+      sourceRepository.findOne.mockResolvedValue(src);
+
+      await service.remove('src-1', 'org-1');
+
+      expect(store.rows).toHaveLength(0);
     });
 
     it('keeps the source but reports the error when the initial sync fails', async () => {
@@ -299,6 +372,43 @@ describe('McpSourcesService', () => {
       expect(mcpClient.callTool.mock.calls[0][0].headers).toEqual({ 'X-Api-Key': 'k-123' });
     });
 
+
+    it('resolves a bearer credential reference and sends the bearer header', async () => {
+      const row = store.seed({
+        organizationId: 'org-1',
+        type: CredentialType.BEARER_TOKEN,
+        config: { token: encryptField('ref-secret') },
+      });
+      sourceRepository.findOne.mockResolvedValue({ ...baseSource(), authType: 'bearer', credentialId: row.id });
+      mcpClient.callTool.mockResolvedValue({ content: [], isError: false });
+
+      await service.executeToolCall('org-1', { sourceId: 'src-1', remoteName: 't' }, {});
+
+      expect(mcpClient.callTool.mock.calls[0][0].headers).toEqual({ Authorization: 'Bearer ref-secret' });
+    });
+
+    it('resolves a custom-headers credential reference (nested values decrypted)', async () => {
+      const row = store.seed({
+        organizationId: 'org-1',
+        type: CredentialType.CUSTOM,
+        config: { headers: { 'X-Api-Key': encryptField('k-ref') } },
+      });
+      sourceRepository.findOne.mockResolvedValue({ ...baseSource(), authType: 'headers', credentialId: row.id });
+      mcpClient.callTool.mockResolvedValue({ content: [], isError: false });
+
+      await service.executeToolCall('org-1', { sourceId: 'src-1', remoteName: 't' }, {});
+
+      expect(mcpClient.callTool.mock.calls[0][0].headers).toEqual({ 'X-Api-Key': 'k-ref' });
+    });
+
+    it('fails the call when the referenced credential is inactive', async () => {
+      const row = store.seed({ organizationId: 'org-1', isActive: false, type: CredentialType.BEARER_TOKEN, config: { token: 'x' } });
+      sourceRepository.findOne.mockResolvedValue({ ...baseSource(), authType: 'bearer', credentialId: row.id });
+
+      await expect(service.executeToolCall('org-1', { sourceId: 'src-1', remoteName: 't' }, {}))
+        .rejects.toMatchObject({ response: { code: 'CREDENTIAL_INACTIVE' } });
+      expect(mcpClient.callTool).not.toHaveBeenCalled();
+    });
     it('fails with a typed error when the source is gone', async () => {
       sourceRepository.findOne.mockResolvedValue(null);
       await expect(

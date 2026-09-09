@@ -232,6 +232,16 @@ export function ollamaPrivateUrlsAllowed(): boolean {
 }
 
 /**
+ * Same posture for custom OpenAI-compatible providers and endpoint cards
+ * (a vLLM box on the LAN is the normal case for a self-host). Hosted
+ * deployments leave LLM_ALLOW_PRIVATE_URLS unset so tenant-supplied
+ * private URLs stay blocked.
+ */
+export function customLlmPrivateUrlsAllowed(): boolean {
+  return process.env.LLM_ALLOW_PRIVATE_URLS === 'true';
+}
+
+/**
  * Reduced validation used when a private-URL escape hatch
  * (OLLAMA_ALLOW_PRIVATE_URLS / MCP_ALLOW_PRIVATE_URLS) is active:
  * the URL must still be parseable, http(s)-only, and free of embedded

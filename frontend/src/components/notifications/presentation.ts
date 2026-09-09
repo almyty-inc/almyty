@@ -86,6 +86,24 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
     label: 'Retention sweep',
     description: 'Old data was removed by your data retention policy.',
   },
+  'connections.expiring': {
+    icon: KeyRound,
+    accentClass: 'text-amber-500',
+    label: 'Connection expiring',
+    description: 'A connected account expires soon. Rotate it before it stops working.',
+  },
+  'connections.expired': {
+    icon: KeyRound,
+    accentClass: 'text-red-500',
+    label: 'Connection expired',
+    description: 'A connected account has expired and its grants were paused.',
+  },
+  'connections.rotation_due': {
+    icon: KeyRound,
+    accentClass: 'text-cyan-500',
+    label: 'Rotation due',
+    description: 'A connection is older than your rotation rule allows.',
+  },
   'account.welcome': {
     icon: User,
     accentClass: 'text-cyan-500',

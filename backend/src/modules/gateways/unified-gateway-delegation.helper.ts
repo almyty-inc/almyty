@@ -13,7 +13,7 @@ import { setProtocolContext } from '../../common/interceptors/protocol-context';
 import { GatewayRateLimitService } from './gateway-rate-limit.service';
 import { ChannelGatewayService } from './channels/channel-gateway.service';
 import { WhatsAppCloudAdapter } from './channels/adapters/whatsapp-cloud.adapter';
-import { getChannelConfig } from './channels/channel-config.helper';
+import { ChannelCredentialService } from './channels/channel-credential.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Organization } from '../../entities/organization.entity';
 import { McpService } from '../mcp/mcp.service';
@@ -78,9 +78,10 @@ export class UnifiedGatewayDelegation {
     private readonly channelGatewayService: ChannelGatewayService,
     @Optional() private readonly metrics?: MetricsRecorderService,
     // Optional so positional unit tests can construct the helper; when
-    // present, warms a BYO-KMS org's DEK before the sync getChannelConfig
-    // reads on the channel webhook path.
+    // present, warms a BYO-KMS org's DEK before the channel config read.
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
+    // Optional for the same reason; resolves the gateway's connection.
+    @Optional() private readonly channelCredentials?: ChannelCredentialService,
   ) {}
 
   async handleGatewayRequest(
@@ -177,10 +178,14 @@ export class UnifiedGatewayDelegation {
     res: Response,
     body: any,
   ) {
-    // Warm the org's DEK before the sync getChannelConfig reads below so a
-    // BYO-KMS gateway's `encrypted:kms:` secrets unwrap (no-op for non-KMS
-    // orgs, which never produce kms values).
-    await this.envelopeCrypto?.warmOrg(gateway.organizationId);
+    // The channel's effective configuration: the connection's secrets
+    // (through the credential store) over the normalized, decrypted row.
+    const channelConfig = await ChannelCredentialService.resolveWith(
+      this.channelCredentials,
+      this.envelopeCrypto,
+      gateway,
+      'channel_inbound',
+    );
 
     // Meta's webhook verification handshake for WhatsApp Cloud is a
     // GET (hub.mode=subscribe&hub.verify_token=...&hub.challenge=...)
@@ -190,7 +195,7 @@ export class UnifiedGatewayDelegation {
     if (req.method === 'GET' && gateway.type === GatewayType.WHATSAPP_CLOUD) {
       const challenge = WhatsAppCloudAdapter.handleVerification(
         (req.query as Record<string, any>) ?? {},
-        getChannelConfig(gateway.configuration, gateway.organizationId),
+        channelConfig,
       );
       if (challenge === null) {
         throw new HttpException('Webhook verification failed', HttpStatus.FORBIDDEN);
@@ -220,7 +225,7 @@ export class UnifiedGatewayDelegation {
       : undefined;
 
     const adapter = this.channelGatewayService.getAdapter(gateway.type);
-    const verified = await adapter.verifyWebhook(body, headers, getChannelConfig(gateway.configuration, gateway.organizationId), rawBody);
+    const verified = await adapter.verifyWebhook(body, headers, channelConfig, rawBody);
     if (!verified) {
       this.bumpGatewayCounters(gateway.id, false);
       throw new HttpException('Webhook signature verification failed', HttpStatus.UNAUTHORIZED);

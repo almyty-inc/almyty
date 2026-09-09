@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
+
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -23,6 +24,8 @@ import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
 import { ModelNotFoundError, isModelNotFoundResponse, vendorMessage } from './model-errors';
+import { ModelRouterService, NoRouteError, ResolvedCandidate, RouteAttribution } from '../model-catalog/routing/model-router.service';
+
 
 import {
   validateUrl,
@@ -30,6 +33,7 @@ import {
   ollamaPrivateUrlsAllowed,
 } from '../../common/security/url-validator';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 
 /**
  * Provider-call mechanics extracted from LlmChatHelper:
@@ -49,10 +53,106 @@ export class LlmChatRunnerHelper {
     private readonly modelsHelper: LlmModelsHelper,
     private readonly envelopeCrypto: EnvelopeCryptoService,
     private readonly defaultModels: DefaultModelResolver,
+    @Optional() private readonly router?: ModelRouterService,
+    @Optional() private readonly secrets?: LlmProviderSecretsHelper,
   ) {}
 
 
+
   async callLlmProvider(
+    provider: LlmProvider,
+    request: ChatRequest,
+    session: Conversation,
+    tools: Tool[]
+  ): Promise<ChatResponse> {
+    if (request.routing) {
+      return this.callRouted(provider?.organizationId ?? session.organizationId, request, session, tools);
+    }
+    return this.callWithRetries(provider, request, session, tools);
+  }
+
+  /**
+   * Catalog-routed call: plan the candidate chain for the org, try each in
+   * order, move on when a candidate fails for a reason that is not the
+   * request's fault. The answer carries which card served it and why.
+   */
+  async callRouted(
+    organizationId: string,
+    request: ChatRequest,
+    session: Conversation,
+    tools: Tool[],
+  ): Promise<ChatResponse> {
+    if (!this.router) {
+      throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
+    }
+    const { routing, ...plain } = request;
+    const plan = await this.router.plan(organizationId, routing, session.userId ? { id: session.userId } : undefined);
+    if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
+
+    const tried: Array<{ modelId: string; reason: string }> = [];
+    let lastError: any;
+    for (let i = 0; i < plan.candidates.length; i++) {
+      const candidate = plan.candidates[i];
+      try {
+        const response = await this.callWithRetries(candidate.provider, { ...plain, model: candidate.vendorModelId }, session, tools);
+        response.routing = {
+          modelId: candidate.modelId,
+          modelVersionId: candidate.modelVersionId,
+          vendorModelId: candidate.vendorModelId,
+          providerId: candidate.card.providerId,
+          rationale: candidate.rationale,
+          attempt: i + 1,
+          tried,
+          rejected: plan.rejected,
+        };
+        this.router.recordRoute(organizationId, response.routing, { userId: session.userId ?? undefined, conversationId: session.id });
+        if (typeof response.responseTime === 'number') void this.router.recordLatency(candidate.card, response.responseTime);
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (!this.canAdvanceRoute(error, request.signal)) throw error;
+        const reason = error?.code ?? error?.response?.status ?? error?.message ?? 'failed';
+        tried.push({ modelId: candidate.modelId, reason: String(reason).slice(0, 200) });
+        this.logger.warn(`route candidate ${candidate.vendorModelId} (${candidate.modelId}) failed: ${reason}; trying next`);
+      }
+    }
+    throw Object.assign(lastError ?? new Error('All route candidates failed'), { code: lastError?.code ?? 'ROUTE_EXHAUSTED', tried });
+  }
+
+  /** The provider at the head of the plan; chat() uses it for the session when no provider id was given. */
+  /** The head of the plan with its provider; the streaming path uses it since a stream cannot walk the chain mid-answer. */
+  async planRouteHead(organizationId: string, request: ChatRequest, principal?: { id: string }): Promise<{ provider: LlmProvider; candidate: ResolvedCandidate; rejected: Array<{ modelId: string; reason: string }> }> {
+    if (!this.router) {
+      throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
+    }
+    const plan = await this.router.plan(organizationId, request.routing ?? {}, principal);
+    if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
+    return { provider: plan.candidates[0].provider, candidate: plan.candidates[0], rejected: plan.rejected };
+  }
+
+  async headProviderForRoute(organizationId: string, request: ChatRequest, principal?: { id: string }): Promise<LlmProvider> {
+    return (await this.planRouteHead(organizationId, request, principal)).provider;
+  }
+
+  /** Audit + latency bookkeeping for a routed answer produced outside the walk (the streaming head). */
+  recordRoute(organizationId: string, attribution: RouteAttribution, context: { userId?: string; conversationId?: string }): void {
+    this.router?.recordRoute(organizationId, attribution, context);
+  }
+
+  /**
+   * Whether a failed candidate should be walked past.
+ Request-shaped
+   * failures (bad input, payload too large, unprocessable) and a caller
+   * abort stop the walk; everything else (retired model, quota, outage,
+   * auth on that one provider) moves to the next card.
+   */
+  private canAdvanceRoute(error: any, signal?: AbortSignal): boolean {
+    if (signal?.aborted || error?.name === 'AbortError' || error?.name === 'CanceledError') return false;
+    const status = error?.response?.status ?? error?.status ?? 0;
+    return ![400, 413, 422].includes(status);
+  }
+
+  async callWithRetries(
     provider: LlmProvider,
     request: ChatRequest,
     session: Conversation,
@@ -63,6 +163,15 @@ export class LlmChatRunnerHelper {
     // point for outbound provider calls, so it covers chat, streaming, and the
     // health check path.
     await this.envelopeCrypto.warmOrg(provider.organizationId);
+    // The credential reference: policy check (grants seam) and a fresh
+    // read of the row before the sync getters run. Optional only for
+    // specs that build the runner by hand; the module always wires it.
+    if (this.secrets) {
+      await this.secrets.withResolvedSecrets(provider, {
+        principal: session?.userId ? { id: session.userId } : undefined,
+        context: { purpose: 'llm_call', resourceType: 'llm_provider', resourceId: provider.id },
+      });
+    }
 
     // Settle the model once, up front. Provider implementations never
     // guess: when neither the request nor the provider names one, the
@@ -70,7 +179,6 @@ export class LlmChatRunnerHelper {
     if (!request.model) {
       request = { ...request, model: await this.defaultModels.resolve(provider) };
     }
-
     const maxRetries = 2;
     const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
     let lastError: any;
@@ -167,6 +275,16 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.GROQ:
       case LlmProviderType.TOGETHER:
       case LlmProviderType.OPENROUTER:
+      // OpenAI-compatible inference hosts (docs/design/call-only-vendors.md).
+      case LlmProviderType.FIREWORKS:
+      case LlmProviderType.CEREBRAS:
+      case LlmProviderType.DEEPINFRA:
+      case LlmProviderType.NOVITA:
+      case LlmProviderType.PERPLEXITY:
+      case LlmProviderType.ZAI:
+      case LlmProviderType.BASETEN:
+      case LlmProviderType.NEBIUS:
+      case LlmProviderType.SAMBANOVA:
       // Ollama serves an OpenAI-compatible API under <server>/v1 —
       // chat, streaming, and tool calling all ride the OpenAI path.
       // getAuthHeaders() adds no Authorization header when no key is
@@ -305,6 +423,15 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.OPENROUTER:
       case LlmProviderType.COHERE:
       case LlmProviderType.HUGGINGFACE:
+      case LlmProviderType.FIREWORKS:
+      case LlmProviderType.CEREBRAS:
+      case LlmProviderType.DEEPINFRA:
+      case LlmProviderType.NOVITA:
+      case LlmProviderType.PERPLEXITY:
+      case LlmProviderType.ZAI:
+      case LlmProviderType.BASETEN:
+      case LlmProviderType.NEBIUS:
+      case LlmProviderType.SAMBANOVA:
         if (!config.apiKey) {
           throw new BadRequestException(`${type} provider requires an API key`);
         }

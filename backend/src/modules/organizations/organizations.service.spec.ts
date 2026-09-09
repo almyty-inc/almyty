@@ -226,6 +226,20 @@ describe('OrganizationsService', () => {
       expect(organizationRepository.save).toHaveBeenCalled();
     });
 
+    it('patches settings instead of replacing them', async () => {
+      const mockOrg = { id: 'org-1', name: 'Acme', settings: { maxApis: 5, pendingInvites: [{ email: 'a@b.c' }], defaultRouting: { objective: 'cheapest' } } };
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+      organizationRepository.save.mockImplementation(async (o: any) => o);
+
+      const result = await service.update('org-1', { settings: { defaultRouting: { objective: 'fastest', privacyTier: 'local' } } } as any);
+
+      expect(result.settings).toEqual({ maxApis: 5, pendingInvites: [{ email: 'a@b.c' }], defaultRouting: { objective: 'fastest', privacyTier: 'local' } });
+
+      const cleared = await service.update('org-1', { settings: { defaultRouting: null } } as any);
+      expect(cleared.settings.defaultRouting).toBeNull();
+      expect(cleared.settings.maxApis).toBe(5);
+    });
+
     it('should throw NotFoundException if organization not found', async () => {
       organizationRepository.findOne.mockResolvedValue(null);
 

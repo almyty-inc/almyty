@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -6,6 +6,8 @@ import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { ChannelInstallationService } from './channel-installation.service';
 import { ChannelInstallation } from '../../../entities/channel-installation.entity';
+import { MASKED_CHANNEL_SECRET, hasChannelSecret } from './channel-config.helper';
+import { ChannelCredentialService } from './channel-credential.service';
 
 /** Bot scopes requested on install. */
 export const SLACK_INSTALL_SCOPES = 'chat:write,app_mentions:read,im:history';
@@ -39,6 +41,9 @@ export class SlackInstallService {
     private readonly configService: ConfigService,
     private readonly installationService: ChannelInstallationService,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    // Optional so positional unit tests can construct the service;
+    // resolves the gateway's connection for the app client secret.
+    @Optional() private readonly channelCredentials?: ChannelCredentialService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -96,8 +101,7 @@ export class SlackInstallService {
   getClientId(gateway: Gateway): string {
     const cfg = gateway.configuration || {};
     const clientId = cfg.client_id || cfg.clientId;
-    const rawSecret = cfg.client_secret || cfg.clientSecret;
-    if (!clientId || !rawSecret) {
+    if (!clientId || !hasChannelSecret(cfg, 'client_secret')) {
       throw new BadRequestException(
         'This Slack channel is not configured for multi-workspace installs (client_id and client_secret required)',
       );
@@ -107,7 +111,9 @@ export class SlackInstallService {
 
   /**
    * The gateway's Slack app OAuth client credentials, or throws 400. The
-   * `client_secret` is decrypted org-aware: a BYO-KMS org's secret is
+   * `client_secret` comes from the gateway's connection through the
+   * credential store; an inline value (the shim for rows the backfill
+   * has not moved) is decrypted org-aware: a BYO-KMS org's secret is
    * unwrapped via the customer CMK, platform / plaintext values decrypt
    * exactly as before (prefix routing in EnvelopeCryptoService).
    */
@@ -117,17 +123,28 @@ export class SlackInstallService {
     const cfg = gateway.configuration || {};
     const clientId = this.getClientId(gateway);
     const rawSecret = cfg.client_secret || cfg.clientSecret;
-    const clientSecret = await this.envelopeCrypto.decryptForOrg(
-      gateway.organizationId,
-      String(rawSecret),
+    if (typeof rawSecret === 'string' && rawSecret.length > 0 && rawSecret !== MASKED_CHANNEL_SECRET) {
+      const clientSecret = await this.envelopeCrypto.decryptForOrg(gateway.organizationId, rawSecret);
+      return { clientId, clientSecret };
+    }
+    const resolved = await ChannelCredentialService.resolveWith(
+      this.channelCredentials,
+      this.envelopeCrypto,
+      gateway,
+      'channel_outbound',
     );
-    return { clientId, clientSecret };
+    if (!resolved.client_secret) {
+      throw new BadRequestException(
+        'This Slack channel is not configured for multi-workspace installs (client_id and client_secret required)',
+      );
+    }
+    return { clientId, clientSecret: String(resolved.client_secret) };
   }
 
   isInstallable(gateway: Gateway): boolean {
     if (gateway.type !== GatewayType.SLACK) return false;
     const cfg = gateway.configuration || {};
-    return !!(cfg.client_id || cfg.clientId) && !!(cfg.client_secret || cfg.clientSecret);
+    return !!(cfg.client_id || cfg.clientId) && hasChannelSecret(cfg, 'client_secret');
   }
 
   /** `<PUBLIC_API_URL|BASE_URL|requestBase>/gateways/:id/install/slack/callback` */

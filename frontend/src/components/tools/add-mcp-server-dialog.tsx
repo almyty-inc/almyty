@@ -15,6 +15,10 @@ import {
 } from '@/components/ui/dialog'
 import { mcpSourcesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectedChip } from '@/components/connections/connected-chip'
+import { ConnectionSelect } from '@/components/connections/connection-select'
+import type { Connection } from '@/types/connections'
 
 interface AddMcpServerDialogProps {
   open: boolean
@@ -34,11 +38,13 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [bearerToken, setBearerToken] = useState('')
+  const [connection, setConnection] = useState<Connection | null>(null)
 
   const resetForm = () => {
     setName('')
     setUrl('')
     setBearerToken('')
+    setConnection(null)
   }
 
   const createMutation = useMutation({
@@ -46,11 +52,14 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
       if (!organizationId) {
         return Promise.reject(new Error('No organization context'))
       }
-      return mcpSourcesApi.create(organizationId, {
+      // A connection stands in for the pasted token: the backend resolves
+      // the secret from the credential row it points at.
+      const payload: Parameters<typeof mcpSourcesApi.create>[1] = {
         name: name.trim(),
         url: url.trim(),
-        ...(bearerToken.trim() ? { bearerToken: bearerToken.trim() } : {}),
-      })
+        ...(connection ? { credentialId: connection.id } : bearerToken.trim() ? { bearerToken: bearerToken.trim() } : {}),
+      }
+      return mcpSourcesApi.create(organizationId, payload)
     },
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['mcp-sources'] })
@@ -145,10 +154,37 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
               maxLength={4096}
               onChange={(e) => setBearerToken(e.target.value)}
               autoComplete="off"
+              disabled={!!connection}
             />
             <p className="text-xs text-muted-foreground">
-              Sent as an Authorization header. Stored encrypted.
+              {connection
+                ? 'The connection supplies the token; nothing is pasted here.'
+                : 'Sent as an Authorization header. Stored encrypted.'}
             </p>
+            {connection ? (
+              <ConnectedChip connection={connection} onClear={() => setConnection(null)} />
+            ) : (
+              <>
+                <ConnectionSelect
+                  id="mcp-source-connection"
+                  kind="mcp"
+                  value=""
+                  onChange={(next) => {
+                    if (!next) return
+                    setConnection(next)
+                    setBearerToken('')
+                  }}
+                  helper="A connection made earlier, of kind MCP server."
+                />
+                <ConnectAccountButton
+                  kind="mcp"
+                  onConnected={(next) => {
+                    setConnection(next)
+                    setBearerToken('')
+                  }}
+                />
+              </>
+            )}
           </div>
 
           <DialogFooter>

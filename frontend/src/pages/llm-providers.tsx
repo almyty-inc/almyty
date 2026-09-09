@@ -39,17 +39,25 @@ import { CreateProviderDialog } from '@/components/llm-providers/create-provider
 import { EditProviderDialog } from '@/components/llm-providers/edit-provider-dialog'
 import { TestProviderDialog } from '@/components/llm-providers/test-provider-dialog'
 import {
+  buildProviderCreateBody,
+  buildProviderUpdateBody,
   createProviderSchema,
   type CreateProviderFormData,
   type LlmProvider,
 } from '@/components/llm-providers/schema'
 import { buildProviderColumns } from '@/components/llm-providers/columns'
 
-export function LlmProvidersPage() {
+interface LlmProvidersPageProps {
+  /** Rendered inside the Models page: no page title, the tab already names it. */
+  embedded?: boolean
+}
+
+export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {}) {
   useEffect(() => {
+    if (embedded) return
     document.title = 'AI Models | almyty'
     return () => { document.title = 'almyty' }
-  }, [])
+  }, [embedded])
 
   const navigate = useNavigate()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -177,35 +185,27 @@ export function LlmProvidersPage() {
     }
   })
 
-  // Form hook for edit provider
+  // Form hook for edit provider. credentialId / usageCredentialId stay
+  // undefined (keep) unless the dialog's credential slot sets them: a
+  // connection id points the provider at it, null clears it.
   const editForm = useForm<any>({
     defaultValues: {
       name: '',
       model: '',
       maxTokens: 4096,
       temperature: 0.7,
+      apiKey: '',
       usageApiKey: '',
+      apiUrl: '',
+      credentialId: undefined,
+      usageCredentialId: undefined,
     }
   })
 
   const createProviderMutation = useMutation({
     mutationFn: async (data: CreateProviderFormData) => {
       try {
-        return await llmProvidersApi.create({
-          name: data.name,
-          type: data.type,
-          configuration: {
-            // Ollama is keyless — only send the key when one was typed
-            // (the zod schema enforces presence for all other types).
-            ...(data.apiKey && { apiKey: data.apiKey }),
-            // Optional server URL (Ollama base URL field).
-            ...(data.apiUrl && { apiUrl: data.apiUrl }),
-            ...(data.organizationId && { organizationId: data.organizationId }),
-            // Admin-scoped usage/cost API key (issue #241) — only sent
-            // when the user actually entered one.
-            ...(data.usageApiKey && { usageApiKey: data.usageApiKey }),
-          }
-        })
+        return await llmProvidersApi.create(buildProviderCreateBody(data))
       } catch (error) {
         console.error('Create provider error:', error)
         throw error
@@ -225,17 +225,7 @@ export function LlmProvidersPage() {
 
   const updateProviderMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return llmProvidersApi.update(id, {
-        name: data.name,
-        configuration: {
-          model: data.model,
-          maxTokens: data.maxTokens,
-          temperature: data.temperature,
-          // Only send the admin usage key when a new one was typed —
-          // an empty field means "keep the existing (encrypted) key".
-          ...(data.usageApiKey && { usageApiKey: data.usageApiKey }),
-        }
-      })
+      return llmProvidersApi.update(id, buildProviderUpdateBody(data))
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
@@ -284,9 +274,13 @@ export function LlmProvidersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">AI Models</h1>
+          {embedded ? (
+            <h2 className="text-lg font-semibold">Providers</h2>
+          ) : (
+            <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">AI Models</h1>
+          )}
           <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) \u00B7 $${totalCost.toFixed(2)} total cost \u00B7 ${pluralized(totalRequests, 'request')}`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) · $${totalCost.toFixed(2)} total cost · ${pluralized(totalRequests, 'request')}`}
           </p>
         </div>
         {/* Only show Add Provider button when not in empty state */}
@@ -360,6 +354,15 @@ export function LlmProvidersPage() {
                   <SelectItem value="openai">OpenAI</SelectItem>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
                   <SelectItem value="google">Google Gemini</SelectItem>
+                  <SelectItem value="fireworks">Fireworks AI</SelectItem>
+                  <SelectItem value="cerebras">Cerebras</SelectItem>
+                  <SelectItem value="deepinfra">DeepInfra</SelectItem>
+                  <SelectItem value="novita">Novita</SelectItem>
+                  <SelectItem value="perplexity">Perplexity</SelectItem>
+                  <SelectItem value="zai">Z.ai</SelectItem>
+                  <SelectItem value="baseten">Baseten</SelectItem>
+                  <SelectItem value="nebius">Nebius Token Factory</SelectItem>
+                  <SelectItem value="sambanova">SambaNova</SelectItem>
                   <SelectItem value="mistral">Mistral AI</SelectItem>
                   <SelectItem value="xai">xAI</SelectItem>
                   <SelectItem value="deepseek">DeepSeek</SelectItem>

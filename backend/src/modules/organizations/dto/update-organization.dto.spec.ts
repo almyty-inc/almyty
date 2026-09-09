@@ -63,4 +63,39 @@ describe('UpdateOrganizationDto', () => {
     const errs = await violations(UpdateOrganizationDto, { rogue: 'attack' });
     expect(errs.some((e) => e.startsWith('rogue:'))).toBe(true);
   });
+
+  describe('settings.defaultRouting', () => {
+    const policy = {
+      objective: 'cheapest', privacyTier: 'private_cloud', regions: ['eu-central'], capabilities: { tools: true },
+      fallbackChain: ['card-1', 'vendor/model'], pinnedModel: 'card-1', budgetHeadroomCents: 500,
+    };
+
+    it('accepts a full policy', async () => {
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: policy } })).toEqual([]);
+    });
+
+    it('accepts null to clear it, and leaves other settings keys alone', async () => {
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: null, maxApis: 5, pendingInvites: [] } })).toEqual([]);
+      expect(await violations(UpdateOrganizationDto, { settings: { maxApis: 5 } })).toEqual([]);
+    });
+
+    it('rejects an unknown objective, a bad tier and a non-object', async () => {
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: { objective: 'random' } } })).toEqual(['settings:organizationSettings']);
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: { privacyTier: 'secret' } } })).toEqual(['settings:organizationSettings']);
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: 'cheapest' } })).toEqual(['settings:organizationSettings']);
+    });
+
+    it('rejects non-boolean capabilities, non-string chains, fractional budgets and unknown keys', async () => {
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: { capabilities: { tools: 'yes' } } } })).toEqual(['settings:organizationSettings']);
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: { fallbackChain: [1] } } })).toEqual(['settings:organizationSettings']);
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: { budgetHeadroomCents: 12.5 } } })).toEqual(['settings:organizationSettings']);
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: { model: 'x' } } })).toEqual(['settings:organizationSettings']);
+    });
+
+    it('names the offending field in the message', async () => {
+      const dto = plainToInstance(UpdateOrganizationDto, { settings: { defaultRouting: { objective: 'random' } } });
+      const [error] = await validate(dto);
+      expect(error.constraints?.organizationSettings).toContain('defaultRouting.objective');
+    });
+  });
 });

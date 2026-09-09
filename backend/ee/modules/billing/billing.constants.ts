@@ -94,6 +94,7 @@ export const PLAN_ENTITLEMENTS: Record<string, string[]> = {
     EE_ENTITLEMENTS.APPROVAL_POLICY,
     EE_ENTITLEMENTS.COMPLIANCE_PACK,
     EE_ENTITLEMENTS.AUDIT_EXPORT,
+    EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE,
   ],
   // Enterprise (custom / contact sales) = Business + SCIM (part of SSO),
   // customer-managed keys/private cloud, and cost attribution.
@@ -105,6 +106,7 @@ export const PLAN_ENTITLEMENTS: Record<string, string[]> = {
     EE_ENTITLEMENTS.AUDIT_EXPORT,
     EE_ENTITLEMENTS.BYO_KMS,
     EE_ENTITLEMENTS.CHARGEBACK,
+    EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE,
   ],
 };
 

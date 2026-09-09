@@ -67,13 +67,14 @@ export const PLANS: Record<PlanKey, PlanMeta> = {
 export const PLAN_ENTITLEMENTS: Record<PlanKey, string[]> = {
   free: [],
   pro: [],
-  business: ['sso', 'advanced_rbac', 'approval_policy', 'compliance_pack', 'audit_export'],
+  business: ['sso', 'advanced_rbac', 'approval_policy', 'compliance_pack', 'audit_export', 'connections_governance'],
   enterprise: [
     'sso',
     'advanced_rbac',
     'approval_policy',
     'compliance_pack',
     'audit_export',
+    'connections_governance',
     'byo_kms',
     'chargeback',
   ],
@@ -105,6 +106,7 @@ export const FEATURE_MATRIX: FeatureRow[] = [
   { label: 'Approval policies', entitlement: 'approval_policy' },
   { label: 'PII filtering / compliance pack', entitlement: 'compliance_pack' },
   { label: 'Audit export', entitlement: 'audit_export' },
+  { label: 'Connections governance', entitlement: 'connections_governance' },
   { label: 'BYO-KMS (customer-managed keys)', entitlement: 'byo_kms' },
   { label: 'Cost attribution / chargeback', entitlement: 'chargeback' },
   { label: 'Priority support / SLAs', includedIn: ['enterprise'] },
