@@ -146,14 +146,55 @@ instead, not deleted quietly:
 `ollama.conformance.spec.ts` now proves an `s3://` version is refused with
 `ADAPTER_UNSUPPORTED_SOURCE`, including when a mirror path is configured.
 
+## Bugs that only a live request could show
+
+Worth reading before reviewing, because they say where to look. Every one
+of these shipped with a green unit suite, and each was found by running
+the thing rather than by testing it.
+
+1. **The feature was unreachable over HTTP.** `CreateModelDeploymentBodyDto`
+   still demanded a uuid `modelVersionId`, so the validation pipe rejected
+   every request the new API exists to accept, before any of the correct
+   service logic ran. Service specs call the service directly and never
+   cross the pipe. Guarded now by `create-deployment.dto.spec.ts`, which
+   drives the DTO through `ValidationPipe` the way Nest does.
+2. **`accepts` never left the server.** `GlobalExceptionFilter` rebuilt
+   every error body from five fixed fields, dropping the list of schemes a
+   handler attached to say what it would have taken. A unit test asserted
+   that field and passed, because it never crossed the wire, and the panel
+   that renders it was dead code against a live server. The filter now
+   forwards whatever the thrower attached.
+3. **The models page could not show any server error.** Three copies of a
+   local helper read `data.message` while the server wraps errors under
+   `error`, so every toast read "Request failed with status code 400".
+4. **Registry credentials were keyed on the version row**, so a deployment
+   naming its bucket inline reached Bedrock, SageMaker or Fireworks with
+   none. That is the whole "run my own weights on my own account" path.
+5. **A registered endpoint was badged as a vendor key.** `registerEndpoint`
+   wrote the URL to `metadata` and left `endpointRef` null, which is the
+   field the UI reads, so its origin filter matched nothing.
+
+For each of these the fix was reverted once to watch the new test fail, so
+the guards are proven rather than assumed.
+
 ## Known open, with owners
 
 | Item | State | Owner |
 |------|-------|-------|
-| Live conformance runs, all 15 adapters | blocked on credentials | Frane supplies keys |
-| AWS Bedrock chat dispatch | in progress; it validated at save and had no dispatch case, so a Bedrock provider could never answer | provider agent |
-| Perplexity base URL | in progress; legacy Sonar retires 2026-09-27 | provider agent |
-| Kimi (Moonshot) and Qwen (DashScope) as first-class providers | in progress | provider agent |
-| Cloud catalogs as call targets (Vertex, Foundry serverless, Bedrock) and DigitalOcean Gradient Serverless | in progress | provider agent |
-| Models UI rebuilt around model-as-configuration | in progress | UI agent |
-| DigitalOcean Dedicated Inference is public preview; Gradient Inference Hub is private preview | gate on availability, expect API drift | open |
+| Live conformance runs, all 15 adapters | blocked on credentials; no adapter has ever run against a real account | Frane supplies keys |
+| Live provider runs with real keys | blocked on the same | Frane |
+| DigitalOcean Dedicated Inference is public preview, Gradient Inference Hub is private preview | gated on availability, expect API drift | open |
+| Nebius Custom Weights Hub is support-gated beta with no upload API | almyty can point at weights Nebius already holds, not register one | open |
+| MiniMax and Upstage Solar | the cleanest remaining provider additions, not started | open |
+
+## What is verified, and how
+
+- Backend 411 suites / 7,071 tests, frontend 123 files / 962 tests, both
+  typechecks clean, dev-proxy and npm-lockstep invariants pass.
+- Nine end-to-end tests against a real stack (Postgres, Redis, the API and
+  the built frontend), covering a versionless deploy through to `ready`,
+  scale to zero and teardown on the stub adapter, the provider list
+  narrowing both ways, and the server refusal rendering with its accepts
+  list.
+- Every adapter's behaviour against provider documentation, dated, with
+  URLs. **Not** against a live provider account.
