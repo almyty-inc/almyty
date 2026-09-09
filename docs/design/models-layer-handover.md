@@ -47,7 +47,9 @@ document that invites reintroducing it.
 
 `POST /model-deployments` takes the model as a string. `modelVersionId` is
 optional and exists only for operators tracking their own artifacts with
-lineage and evaluation history.
+lineage and evaluation history. A version may hold either kind of
+reference: registering a provider reference is allowed and gives the same
+lineage, though the platform, not the version, owns its immutability.
 
 The URI grammar has two kinds. **Artifacts** point at bytes and must be
 pinned, because the version has to be immutable:
