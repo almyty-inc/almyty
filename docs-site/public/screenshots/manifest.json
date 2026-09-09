@@ -159,7 +159,8 @@
     },
     {
       "id": "apps-settings",
-      "title": "App Settings tab with cost ceiling and rate limits",
+      "capturedAt": "2026-09-08T07:59:28.902Z",
+      "title": "App Settings tab with visitor privacy controls, cost ceiling, and rate limits",
       "path": "screenshots/apps-settings.png"
     },
     {
@@ -171,6 +172,12 @@
       "id": "apps-hosted-chat",
       "title": "Branded hosted chat surface",
       "path": "screenshots/apps-hosted-chat.png"
+    },
+    {
+      "id": "apps-hosted-chat-privacy",
+      "capturedAt": "2026-09-08T08:04:35.743Z",
+      "title": "Hosted chat privacy menu with visitor export and deletion controls",
+      "path": "screenshots/apps-hosted-chat-privacy.png"
     },
     {
       "id": "apps-slack-credentials",
