@@ -20,13 +20,19 @@ const VENDOR_BASES: Array<[LlmProviderType, string]> = [
   [LlmProviderType.FIREWORKS, 'https://api.fireworks.ai/inference/v1'],
   [LlmProviderType.CEREBRAS, 'https://api.cerebras.ai/v1'],
   [LlmProviderType.DEEPINFRA, 'https://api.deepinfra.com/v1/openai'],
-  [LlmProviderType.NOVITA, 'https://api.novita.ai/openai'],
-  [LlmProviderType.PERPLEXITY, 'https://api.perplexity.ai/router/v1'],
+  [LlmProviderType.NOVITA, 'https://api.novita.ai/openai/v1'],
   [LlmProviderType.ZAI, 'https://api.z.ai/api/paas/v4'],
   [LlmProviderType.BASETEN, 'https://inference.baseten.co/v1'],
   [LlmProviderType.NEBIUS, 'https://api.tokenfactory.nebius.com/v1'],
   [LlmProviderType.SAMBANOVA, 'https://api.sambanova.ai/v1'],
 ];
+
+/**
+ * Perplexity was in this list until 2026-09-09. It is not OpenAI-compatible
+ * on any surface a normal customer can reach: the chat-completions alias
+ * retires 2026-09-27 and the Router that serves one is private preview. Its
+ * Responses-shaped dispatch is covered by perplexity.provider.spec.ts.
+ */
 
 function makeProvider(type: LlmProviderType, configuration: Record<string, unknown> = { apiKey: 'test-key' }): LlmProvider {
   return Object.assign(new LlmProvider(), {
@@ -41,9 +47,9 @@ function makeProvider(type: LlmProviderType, configuration: Record<string, unkno
 describe('OpenAI-compatible inference hosts', () => {
   const modelsHelper = new LlmModelsHelper(makeEnvelopeCryptoMock());
 
-  it('enumerates the nine new types under stable string values', () => {
+  it('enumerates the eight types under stable string values', () => {
     expect(VENDOR_BASES.map(([type]) => type)).toEqual([
-      'fireworks', 'cerebras', 'deepinfra', 'novita', 'perplexity', 'zai', 'baseten', 'nebius', 'sambanova',
+      'fireworks', 'cerebras', 'deepinfra', 'novita', 'zai', 'baseten', 'nebius', 'sambanova',
     ]);
     for (const [type] of VENDOR_BASES) expect(Object.values(LlmProviderType)).toContain(type);
   });
@@ -64,19 +70,14 @@ describe('OpenAI-compatible inference hosts', () => {
     expect(() => runner.validateProviderConfiguration(type, { apiKey: 'k' })).not.toThrow();
   });
 
-  it('flags tool calling and streaming on the OpenAI tool format, except Perplexity which only streams', () => {
+  it('flags tool calling and streaming on the OpenAI tool format', () => {
     for (const [type] of VENDOR_BASES) {
       const caps = modelsHelper.getDefaultCapabilities(type);
       expect(caps.supportsStreaming).toBe(true);
       expect(caps.supportedModels).toEqual([]);
-      if (type === LlmProviderType.PERPLEXITY) {
-        expect(caps.supportsToolUse).toBe(false);
-        expect(caps.supportedToolFormats).toEqual([]);
-      } else {
-        expect(caps.supportsToolUse).toBe(true);
-        expect(caps.supportsFunctionCalling).toBe(true);
-        expect(caps.supportedToolFormats).toEqual(['openai']);
-      }
+      expect(caps.supportsToolUse).toBe(true);
+      expect(caps.supportsFunctionCalling).toBe(true);
+      expect(caps.supportedToolFormats).toEqual(['openai']);
     }
   });
 

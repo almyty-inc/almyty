@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenEx
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
+import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callPerplexity, callPerplexityStream, callVertex, callVertexStream, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
 import { Message, MessageRole, MessageType, MessageStatus, ToolCall, MessageContent } from '../../entities/message.entity';
@@ -302,6 +302,9 @@ export class LlmChatHelper {
       }
 
       // Determine if the provider supports streaming
+      // Every type whose dispatch has a streaming implementation. A type
+      // absent here falls back to a non-streaming call rather than
+      // failing, but it must then also be absent from the switch below.
       const supportsStreaming = [
         LlmProviderType.OPENAI,
         LlmProviderType.AZURE_OPENAI,
@@ -320,6 +323,17 @@ export class LlmChatHelper {
         LlmProviderType.BASETEN,
         LlmProviderType.NEBIUS,
         LlmProviderType.SAMBANOVA,
+        LlmProviderType.MOONSHOT,
+        LlmProviderType.QWEN,
+        LlmProviderType.AZURE_AI_FOUNDRY,
+        LlmProviderType.DIGITALOCEAN,
+        LlmProviderType.RUNPOD,
+        LlmProviderType.MODAL,
+        LlmProviderType.VERTEX_AI,
+        LlmProviderType.AWS_BEDROCK,
+        LlmProviderType.COHERE,
+        LlmProviderType.HUGGINGFACE,
+        LlmProviderType.OLLAMA,
         LlmProviderType.ANTHROPIC,
       ].includes(provider.type);
 
@@ -410,16 +424,30 @@ export class LlmChatHelper {
         case LlmProviderType.CEREBRAS:
         case LlmProviderType.DEEPINFRA:
         case LlmProviderType.NOVITA:
-        case LlmProviderType.PERPLEXITY:
         case LlmProviderType.ZAI:
         case LlmProviderType.BASETEN:
         case LlmProviderType.NEBIUS:
         case LlmProviderType.SAMBANOVA:
+        case LlmProviderType.AWS_BEDROCK:
+        case LlmProviderType.COHERE:
+        case LlmProviderType.HUGGINGFACE:
+        case LlmProviderType.MOONSHOT:
+        case LlmProviderType.QWEN:
+        case LlmProviderType.AZURE_AI_FOUNDRY:
+        case LlmProviderType.DIGITALOCEAN:
+        case LlmProviderType.RUNPOD:
+        case LlmProviderType.MODAL:
         case LlmProviderType.OLLAMA:
           response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
           break;
         case LlmProviderType.ANTHROPIC:
           response = await callAnthropicStream(provider, request, session, tools, startTime, costFn, onChunk);
+          break;
+        case LlmProviderType.PERPLEXITY:
+          response = await callPerplexityStream(provider, request, session, tools, startTime, costFn, onChunk);
+          break;
+        case LlmProviderType.VERTEX_AI:
+          response = await callVertexStream(provider, request, session, tools, startTime, costFn, onChunk);
           break;
         default:
           // Should not reach here due to supportsStreaming check, but safety net
