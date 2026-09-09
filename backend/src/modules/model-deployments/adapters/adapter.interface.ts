@@ -36,6 +36,8 @@ export interface AdapterCredentials {
 
 export interface DeploymentDesired {
   hardware?: string;
+  /** The operator asked for the endpoint to go away; the reconcile loop keeps trying until it has. */
+  teardownRequested?: boolean;
   replicas?: number;
   minScale?: number;
   maxScale?: number;
@@ -77,6 +79,13 @@ export interface ActualState {
   hardware?: string;
   region?: string;
   message?: string;
+  /**
+   * The OpenAI-compatible base of this endpoint, when the adapter knows
+   * it: chat is POSTed to `<openAiBase>/chat/completions`. Adapters whose
+   * `url` is already that base may leave it unset; the catalog falls back
+   * to appending `/v1` when the URL does not carry it.
+   */
+  openAiBase?: string;
   /** Anything else the adapter observed. Must not contain secrets. */
   details?: Record<string, any>;
 }

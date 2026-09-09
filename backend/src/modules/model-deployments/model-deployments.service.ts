@@ -132,6 +132,9 @@ export class ModelDeploymentsService {
     if (d.state !== 'tearing_down') {
       const from = d.state;
       d.state = 'tearing_down';
+      // The intent outlives the state: a teardown that fails a tick must
+      // be retried, not forgotten because the row moved to degraded.
+      d.desired = { ...d.desired, teardownRequested: true } as ModelDeployment['desired'];
       await this.deployments.save(d);
       this.audit(d, AuditAction.MODEL_DEPLOYMENT_TRANSITION, userId, { from, to: 'tearing_down' });
     }

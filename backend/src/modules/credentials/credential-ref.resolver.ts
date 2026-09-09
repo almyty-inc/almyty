@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
+import { CONNECTIONS_GOVERNANCE_HOOK, ConnectionsGovernanceHook } from '../../common/ee-hooks/ee-hooks';
 import { decryptField, isEncrypted } from '../../common/security/field-crypto';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
@@ -140,6 +141,7 @@ export class CredentialRefResolver {
     private readonly credentials: Repository<Credential>,
     private readonly envelopeCrypto: EnvelopeCryptoService,
     @Optional() @Inject(CONNECTION_USE_POLICY) policy?: ConnectionUsePolicy,
+    @Optional() @Inject(CONNECTIONS_GOVERNANCE_HOOK) private readonly governance?: ConnectionsGovernanceHook,
   ) {
     this.policy = policy ?? new AllowAllConnectionUsePolicy();
   }
@@ -168,6 +170,17 @@ export class CredentialRefResolver {
       throw new ForbiddenException({ code: 'CREDENTIAL_EXPIRED', message: 'credential has expired' });
     }
     await this.policy.assertCanUse({ organizationId, credential, principal: opts.principal, context: opts.context });
+    // Org policy (EE) has the last word, on every consumer path and not
+    // just the connections API: a connector the organization forbade, or
+    // a scope rule about who may use what, applies here too.
+    if (credential.connectorKey && this.governance) {
+      await this.governance.beforeUse(
+        organizationId,
+        credential as unknown as { id: string; organizationId: string; connectorKey?: string | null; ownerUserId?: string | null },
+        { userId: opts.principal?.id, ...(opts.context?.resourceType === 'agent' ? { agentId: opts.context.resourceId } : {}), ...(opts.context?.resourceType === 'workspace' ? { workspaceId: opts.context.resourceId } : {}) },
+        { purpose: opts.context?.purpose, resourceType: opts.context?.resourceType, resourceId: opts.context?.resourceId },
+      );
+    }
     await this.envelopeCrypto.warmOrg(organizationId);
     const config = this.decryptDeep(credential.getDecryptedConfig(), organizationId);
     return { credential, config, secrets: CredentialRefResolver.secretsOf(config) };

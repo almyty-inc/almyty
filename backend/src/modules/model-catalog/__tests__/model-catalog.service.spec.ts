@@ -28,6 +28,7 @@ describe('ModelCatalogService', () => {
   let router: { providerFor: jest.Mock };
   let audit: { log: jest.Mock };
   let priceFeed: { lookup: jest.Mock };
+  let endpointProviders: { upsert: jest.Mock; deactivate: jest.Mock };
   let svc: ModelCatalogService;
 
   const storedProvider = Object.assign(new LlmProvider(), {
@@ -41,6 +42,14 @@ describe('ModelCatalogService', () => {
     router = { providerFor: jest.fn() };
     audit = { log: jest.fn().mockResolvedValue(null) };
     priceFeed = { lookup: jest.fn().mockReturnValue(null) };
+    endpointProviders = {
+      upsert: jest.fn(async (input: any) => {
+        const row = Object.assign(new LlmProvider(), { id: 'p-endpoint', organizationId: input.organizationId, name: input.name, type: LlmProviderType.OPENAI, credentialId: 'cred-managed', configuration: { apiUrl: input.apiUrl, model: input.model } });
+        providers.rows.push(row);
+        return row;
+      }),
+      deactivate: jest.fn(),
+    };
     svc = new ModelCatalogService(
       models as any,
       { findOne: jest.fn().mockResolvedValue(null) } as any,
@@ -51,6 +60,7 @@ describe('ModelCatalogService', () => {
       priceFeed as any,
       undefined,
       audit as any,
+      endpointProviders as any,
     );
   });
 
@@ -73,13 +83,17 @@ describe('ModelCatalogService', () => {
     await expect(svc.register('org', { name: 'b', vendorModelId: 'm', providerId: 'p1' })).rejects.toMatchObject({ response: { code: 'MODEL_EXISTS' } });
   });
 
-  it('registers a hand-run endpoint as an encrypted custom provider plus a private card', async () => {
+  it('registers a hand-run endpoint as a stored OpenAI-compatible provider whose key lives in the credential store', async () => {
     const card = await svc.registerEndpoint('org', { name: 'vllm-box', url: 'https://vllm.internal/v1', apiKey: 'sk-plain', vendorModelId: 'llama-3-8b', region: 'eu-central' }, 'u');
-    expect(runner.validateProviderConfiguration).toHaveBeenCalledWith(LlmProviderType.CUSTOM, expect.objectContaining({ apiUrl: 'https://vllm.internal/v1', model: 'llama-3-8b' }));
+    expect(endpointProviders.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      organizationId: 'org', name: 'vllm-box', apiUrl: 'https://vllm.internal/v1', model: 'llama-3-8b', apiKey: 'sk-plain', region: 'eu-central',
+    }));
     const provider = providers.rows.find((p) => p.name === 'vllm-box')!;
-    expect(provider.type).toBe(LlmProviderType.CUSTOM);
-    expect(provider.configuration.apiKey).not.toBe('sk-plain');
-    expect(provider.configuration.apiKey.startsWith('encrypted:')).toBe(true);
+    // Chat goes to <apiUrl>/chat/completions on the OpenAI path, and the
+    // key is a credential reference, never an inline value on the row.
+    expect(provider.type).toBe(LlmProviderType.OPENAI);
+    expect(provider.credentialId).toBe('cred-managed');
+    expect(provider.configuration.apiKey).toBeUndefined();
     expect(card.providerId).toBe(provider.id);
     expect(card.privacyTier).toBe('private_cloud');
     expect(card.region).toBe('eu-central');
