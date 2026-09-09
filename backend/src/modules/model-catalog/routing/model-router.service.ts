@@ -125,7 +125,9 @@ export class ModelRouterService {
         const referenced = config.credentialId && this.credentialRefs
           ? await this.credentialRefs.tryResolve(card.organizationId, config.credentialId, { context: { purpose: 'llm_call', resourceType: 'model', resourceId: card.id } })
           : null;
-        const source: Record<string, any> = referenced?.config ?? config;
+        // With a credentialId the store is the only source: an unresolvable
+        // row must not fall back to whatever inline value was pasted once.
+        const source: Record<string, any> = config.credentialId && this.credentialRefs ? (referenced?.config ?? {}) : config;
         const secret = Object.keys(source).find((k) => k !== 'credentialId' && ModelDeployment.isSecretKey(k) && typeof source[k] === 'string');
         apiKey = secret ? source[secret] : undefined;
       }
