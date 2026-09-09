@@ -3,6 +3,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ModelDeployment } from '../../../entities/model-deployment.entity';
 import { AdapterRegistry } from '../adapters/adapter.registry';
 import { StubAdapter } from '../adapters/stub.adapter';
+import { TogetherAdapter } from '../adapters/together.adapter';
 import { ModelDeploymentsService, validateAgainstSchema } from '../model-deployments.service';
 
 describe('validateAgainstSchema', () => {
@@ -51,6 +52,51 @@ describe('ModelDeploymentsService', () => {
     expect(queue.add).not.toHaveBeenCalled();
   });
 
+  it('takes the model as configuration, with no version registered anywhere', async () => {
+    const d = await service.create('org-1', 'u-1', { model: 'hf://Qwen/Qwen3-0.6B@main', base: 'qwen3-0.6b', providerType: 'stub', providerConfig: { token: 'valid' } });
+    expect(versions.findOne).not.toHaveBeenCalled();
+    expect(d.modelVersionId).toBeNull();
+    expect(d.modelRef).toBe('hf://Qwen/Qwen3-0.6B@main');
+    expect(d.modelBase).toBe('qwen3-0.6b');
+    expect(queue.add).toHaveBeenCalled();
+  });
+
+  it('runs a model that already lives on a provider, which needs no pin', async () => {
+    // create() only reads capabilities and the config schema; nothing here reaches the network.
+    registry.register(new TogetherAdapter({ get: jest.fn(), post: jest.fn() } as any));
+    const d = await service.create('org-1', 'u-1', { model: 'together://acme/qwen3-tuned', providerType: 'together', providerConfig: { apiKey: 'k' } });
+    expect(d.modelRef).toBe('together://acme/qwen3-tuned');
+    expect(d.modelVersionId).toBeNull();
+  });
+
+  it('refuses a model the provider cannot read, and says what it does accept', async () => {
+    // The stub declares hub, s3 and local, so gs:// is outside it.
+    await expect(
+      service.create('org-1', 'u-1', { model: 'gs://bucket/qwen@17', base: 'qwen3-0.6b', providerType: 'stub', providerConfig: { token: 'valid' } }),
+    ).rejects.toMatchObject({ response: { code: 'ADAPTER_UNSUPPORTED_SOURCE', accepts: expect.arrayContaining(['hf://', 's3://', 'file://']) } });
+    expect(deployments.save).not.toHaveBeenCalled();
+  });
+
+  it('refuses a provider reference aimed at a different provider', async () => {
+    await expect(
+      service.create('org-1', 'u-1', { model: 'bedrock://arn:aws:bedrock:us-east-1:1:imported-model/abc', providerType: 'stub', providerConfig: { token: 'valid' } }),
+    ).rejects.toMatchObject({ response: { code: 'ADAPTER_UNSUPPORTED_SOURCE' } });
+  });
+
+  it('refuses an unpinned artifact and a deployment that names no model at all', async () => {
+    await expect(
+      service.create('org-1', 'u-1', { model: 'hf://Qwen/Qwen3-0.6B', providerType: 'stub', providerConfig: { token: 'valid' } }),
+    ).rejects.toMatchObject({ response: { code: 'REGISTRY_URI_INVALID' } });
+    await expect(
+      service.create('org-1', 'u-1', { providerType: 'stub', providerConfig: { token: 'valid' } } as any),
+    ).rejects.toMatchObject({ response: { code: 'MODEL_REQUIRED' } });
+  });
+
+  it('prefers the registered version over an inline model when both are given', async () => {
+    const d = await service.create('org-1', 'u-1', { modelVersionId: 'v-1', model: 'hf://Qwen/Qwen3-0.6B@main', providerType: 'stub', providerConfig: { token: 'valid' } });
+    expect(d.modelVersionId).toBe('v-1');
+    expect(d.modelRef).toBeNull();
+  });
   it('saves desired state with secrets encrypted, defaults scale-to-zero, and enqueues a reconcile', async () => {
     const d = await service.create('org-1', 'u-1', { modelVersionId: 'v-1', providerType: 'stub', providerConfig: { token: 'valid', image: 'x' }, budgetId: null });
     expect(d.state).toBe('pending');
