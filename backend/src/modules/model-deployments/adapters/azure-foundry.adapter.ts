@@ -59,6 +59,11 @@ const ARM = 'https://management.azure.com';
 const ML_API_VERSION = '2024-10-01';
 const AI_API_VERSION = '2024-10-01';
 const LOGIN = 'https://login.microsoftonline.com';
+// Only the own-weights route names a container, and Azure pulls images
+// from a registry it can reach: an Azure Container Registry reference, or
+// a public image mirrored into one. The default here is a starting point
+// the operator is expected to replace with their own registry path, the
+// same constraint Vertex enforces.
 const DEFAULT_IMAGE = 'vllm/vllm-openai:latest';
 const DEFAULT_INSTANCE = 'Standard_NC24ads_A100_v4';
 const DEFAULT_SKU = 'GlobalStandard';
