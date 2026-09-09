@@ -191,7 +191,9 @@ export class ModelCatalogService {
    */
   async registerEndpoint(organizationId: string, input: RegisterEndpointInput, userId?: string): Promise<Model> {
     const configuration: Record<string, any> = { apiUrl: input.url, model: input.vendorModelId };
-    if (input.apiKey) configuration.apiKey = input.apiKey;
+    // The custom provider only sends a bearer when told to; a key without
+    // custom.authMethod would be stored and never used.
+    if (input.apiKey) Object.assign(configuration, { apiKey: input.apiKey, custom: { authMethod: 'bearer' } });
     this.runner.validateProviderConfiguration(LlmProviderType.CUSTOM, configuration);
     const provider = this.providers.create({
       organizationId,

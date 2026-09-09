@@ -79,4 +79,19 @@ describe('ModelDeploymentsService', () => {
     expect(creds).toEqual({ token: 'from-vault', region: 'eu', hfApiKey: 'hf_plain' });
     expect(credentials.findOne).toHaveBeenCalledWith({ where: { id: 'c-1', organizationId: 'org-1' } });
   });
+
+  it('with the credential store wired, the vault entry resolves through it and a refused row refuses the deploy', async () => {
+    const credentialRefs = {
+      resolve: jest.fn().mockResolvedValue({ config: { token: 'from-store', region: 'eu' } }),
+    };
+    const withRefs = new ModelDeploymentsService(deployments, versions, credentials, queue, registry, envelope, { log: jest.fn(async () => null) } as any, undefined, credentialRefs as any);
+    const d = Object.assign(new ModelDeployment(), { id: 'dep-1', organizationId: 'org-1', providerConfig: { credentialId: 'c-1', image: 'x' } });
+    d.encryptSensitiveData();
+    expect(await withRefs.credentialsFor(d)).toEqual({ token: 'from-store', region: 'eu' });
+    expect(credentialRefs.resolve).toHaveBeenCalledWith('org-1', 'c-1', { context: { purpose: 'deploy', resourceType: 'model_deployment', resourceId: 'dep-1' } });
+    expect(credentials.findOne).not.toHaveBeenCalled();
+
+    credentialRefs.resolve.mockRejectedValueOnce(Object.assign(new Error('inactive'), { code: 'CREDENTIAL_INACTIVE' }));
+    await expect(withRefs.credentialsFor(d)).rejects.toMatchObject({ code: 'CREDENTIAL_INACTIVE' });
+  });
 });

@@ -7,6 +7,7 @@ import { ModelDeployment } from '../../../entities/model-deployment.entity';
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { RouteCandidate, RoutingPolicy, selectCandidates } from './model-router';
 
 /** Weight of a new sample in the p50 average. */
@@ -78,6 +79,7 @@ export class ModelRouterService {
     @InjectRepository(LlmProvider) private readonly providers: Repository<LlmProvider>,
     @InjectRepository(ModelDeployment) private readonly deployments: Repository<ModelDeployment>,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() private readonly credentialRefs?: CredentialRefResolver,
   ) {}
 
   async plan(organizationId: string, policy: RoutingPolicy = {}): Promise<RoutePlan> {
@@ -116,9 +118,16 @@ export class ModelRouterService {
     if (card.endpointRef?.deploymentId) {
       const deployment = await this.deployments.findOne({ where: { id: card.endpointRef.deploymentId, organizationId: card.organizationId } });
       if (deployment) {
+        // The deployment's vault credential wins (resolved through the
+        // credential store, so an inactive, expired or ungranted row
+        // yields nothing); inline secrets are the fallback.
         const config = deployment.getDecryptedProviderConfig();
-        const secret = Object.keys(config).find((k) => ModelDeployment.isSecretKey(k) && typeof config[k] === 'string');
-        apiKey = secret ? config[secret] : undefined;
+        const referenced = config.credentialId && this.credentialRefs
+          ? await this.credentialRefs.tryResolve(card.organizationId, config.credentialId, { context: { purpose: 'llm_call', resourceType: 'model', resourceId: card.id } })
+          : null;
+        const source: Record<string, any> = referenced?.config ?? config;
+        const secret = Object.keys(source).find((k) => k !== 'credentialId' && ModelDeployment.isSecretKey(k) && typeof source[k] === 'string');
+        apiKey = secret ? source[secret] : undefined;
       }
     }
     return Object.assign(new LlmProvider(), {
@@ -128,7 +137,8 @@ export class ModelRouterService {
       type: LlmProviderType.CUSTOM,
       status: LlmProviderStatus.ACTIVE,
       isHealthy: true,
-      configuration: { apiUrl: url, model: card.vendorModelId, ...(apiKey ? { apiKey } : {}) },
+      // The custom provider sends a bearer only when custom.authMethod says so.
+      configuration: { apiUrl: url, model: card.vendorModelId, ...(apiKey ? { apiKey, custom: { authMethod: 'bearer' } } : {}) },
       capabilities: {},
       metadata: {},
     });

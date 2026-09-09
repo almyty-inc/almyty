@@ -25,7 +25,8 @@ describe('eligible', () => {
     expect(eligible(card({ privacyTier: 'public' }), { privacyTier: 'private_cloud' }).ok).toBe(false);
     expect(eligible(card({ privacyTier: 'local' }), { privacyTier: 'private_cloud' }).ok).toBe(true);
     expect(eligible(card({ region: 'us' }), { regions: ['eu'] }).ok).toBe(false);
-    expect(eligible(card({ region: null }), { regions: ['eu'] }).ok).toBe(true);
+    expect(eligible(card({ region: null }), { regions: ['eu'] })).toEqual({ ok: false, reason: 'region unknown, policy requires one of eu' });
+    expect(eligible(card({ region: null }), {}).ok).toBe(true);
     expect(eligible(card({ capabilities: { tools: false } }), { capabilities: { tools: true } }).ok).toBe(false);
     expect(eligible(card({ capabilities: { tools: true } }), { capabilities: { tools: true } }).ok).toBe(true);
   });
