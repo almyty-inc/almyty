@@ -30,18 +30,7 @@ import { llmProvidersApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { CredentialPicker } from '@/components/credential-picker'
 import { currentProviderFailure } from '@/lib/provider-health'
-
-const providerLogos: Record<string, string> = {
-  openai: '🤖', anthropic: '🧠', google: '✦', mistral: '🔷', xai: '𝕏',
-  deepseek: '🔮', groq: '⚡', together: '🤝', openrouter: '🔀',
-  azure_openai: '☁️', aws_bedrock: '🪨', cohere: '🌀', huggingface: '🤗', custom: '⚙️',
-  fireworks: '✧', cerebras: '◎', deepinfra: '∞', novita: '◈', perplexity: '◇',
-  zai: '❋', baseten: '▣', nebius: '◉', sambanova: '◆',
-}
-
-const statusColors: Record<string, string> = {
-  active: 'bg-green-500', inactive: 'bg-muted-foreground', error: 'bg-red-500', configuring: 'bg-yellow-500',
-}
+import { providerLogos, statusColors } from '@/components/llm-providers/provider-type-config'
 
 export function LlmProviderDetailPage() {
   const { id } = useParams<{ id: string }>()

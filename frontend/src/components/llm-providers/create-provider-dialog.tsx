@@ -27,7 +27,7 @@ import { VisibilityField, type VisibilityValue } from '@/components/ui/visibilit
 import { useOrganizationStore } from '@/store/organization'
 import { ExternalLink, TestTube, CheckCircle2, XCircle } from 'lucide-react'
 import { llmProvidersApi } from '@/lib/api'
-import { providerKeyUrls, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
+import { providerKeyUrls, providerTypeOptions, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
 import { BASE_URL_PRIVATE_HOST_HINT, structuralFieldsFor } from './schema'
 
 interface CreateProviderDialogProps {
@@ -99,37 +99,9 @@ export function CreateProviderDialog({
                     <SelectValue placeholder="Select provider type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="anthropic">Anthropic</SelectItem>
-                    <SelectItem value="google">Google Gemini</SelectItem>
-                    <SelectItem value="mistral">Mistral AI</SelectItem>
-                    <SelectItem value="xai">xAI (Grok)</SelectItem>
-                    <SelectItem value="deepseek">DeepSeek</SelectItem>
-                    <SelectItem value="moonshot">Moonshot (Kimi)</SelectItem>
-                    <SelectItem value="qwen">Qwen (QwenCloud)</SelectItem>
-                    <SelectItem value="zai">Z.ai (GLM)</SelectItem>
-                    <SelectItem value="cohere">Cohere</SelectItem>
-                    <SelectItem value="perplexity">Perplexity</SelectItem>
-                    <SelectItem value="groq">Groq</SelectItem>
-                    <SelectItem value="together">Together AI</SelectItem>
-                    <SelectItem value="openrouter">OpenRouter</SelectItem>
-                    <SelectItem value="fireworks">Fireworks AI</SelectItem>
-                    <SelectItem value="cerebras">Cerebras</SelectItem>
-                    <SelectItem value="deepinfra">DeepInfra</SelectItem>
-                    <SelectItem value="novita">Novita</SelectItem>
-                    <SelectItem value="baseten">Baseten</SelectItem>
-                    <SelectItem value="nebius">Nebius Token Factory</SelectItem>
-                    <SelectItem value="sambanova">SambaNova</SelectItem>
-                    <SelectItem value="huggingface">Hugging Face</SelectItem>
-                    <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
-                    <SelectItem value="azure_ai_foundry">Azure AI Foundry</SelectItem>
-                    <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
-                    <SelectItem value="vertex_ai">Google Vertex AI</SelectItem>
-                    <SelectItem value="digitalocean">DigitalOcean Gradient</SelectItem>
-                    <SelectItem value="runpod">RunPod</SelectItem>
-                    <SelectItem value="modal">Modal</SelectItem>
-                    <SelectItem value="ollama">Ollama</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
+                    {providerTypeOptions.map(({ value, label }) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
