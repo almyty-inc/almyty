@@ -116,7 +116,7 @@ export class ConnectionValidationService {
       case 'aws_caller_identity':
       case 'aws_assume_role': return this.awsIdentity(config, context.organizationId);
       case 'gcp_service_account': return this.gcpServiceAccount(config);
-      case 'oauth2_client_credentials': return this.clientCredentials(spec.tokenUrl, spec.scope, config);
+      case 'oauth2_client_credentials': return this.clientCredentials(spec, config);
       case 's3_bucket': return this.s3Bucket(config);
       case 'mcp_initialize': return this.mcpInitialize(config);
       default: return fail(`unknown validation kind ${(spec as any).kind}`);
@@ -140,7 +140,7 @@ export class ConnectionValidationService {
     const auth = spec.auth ?? 'bearer';
     if (secret) {
       if (auth === 'bearer') headers['Authorization'] = `Bearer ${secret}`;
-      else if (auth === 'header') headers[spec.headerName ?? 'X-API-Key'] = String(secret);
+      else if (auth === 'header') headers[spec.headerName ?? 'X-API-Key'] = `${spec.headerPrefix ?? ''}${String(secret)}`;
       else if (auth === 'query') {
         const u = new URL(url);
         u.searchParams.set(spec.queryParam ?? 'key', String(secret));
@@ -164,14 +164,32 @@ export class ConnectionValidationService {
     }
     const text = await res.text().catch(() => '');
     if (!res.ok) return statusToResult(res.status, shortBody(text));
-    let label: string | undefined;
-    if (spec.accountLabelPath) {
-      try {
-        const v = readPath(JSON.parse(text), spec.accountLabelPath);
-        if (typeof v === 'string' && v.trim()) label = v.trim();
-      } catch {
-        // A 2xx without JSON still validates; the label just falls back.
+    let body: unknown;
+    let parsed = false;
+    try {
+      body = JSON.parse(text);
+      parsed = true;
+    } catch {
+      // A 2xx without JSON still validates; the label just falls back.
+    }
+    // Providers that answer 200 with an in-band failure (Slack, Telegram)
+    // declare `okPath`; a falsy value there is a rejected credential.
+    if (spec.okPath) {
+      if (!parsed) return fail('provider answered 200 with a body that is not JSON');
+      if (!readPath(body, spec.okPath)) {
+        const detail = readPath(body, spec.errorPath ?? 'error');
+        return fail(`provider rejected the credential${detail ? ` (${shortBody(String(detail))})` : ''}`);
       }
+    }
+    let label: string | undefined;
+    if (parsed && spec.accountLabelPath) {
+      const v = readPath(body, spec.accountLabelPath);
+      if (typeof v === 'string' && v.trim()) label = v.trim();
+      else if (typeof v === 'number') label = String(v);
+    }
+    if (!label && spec.accountLabelFrom) {
+      const v = config[spec.accountLabelFrom];
+      if (typeof v === 'string' && v.trim()) label = v.trim();
     }
     return { ok: true, status: 'valid', accountLabel: label };
   }
@@ -285,11 +303,16 @@ export class ConnectionValidationService {
     return { ok: true, status: 'valid', accountLabel: `${sa.client_email}${config.project || sa.project_id ? ` (${config.project || sa.project_id})` : ''}` };
   }
 
-  private async clientCredentials(tokenUrlTemplate: string, scope: string, config: Record<string, any>): Promise<ValidationResult> {
-    const tokenUrl = interpolate(tokenUrlTemplate, config);
+  private async clientCredentials(
+    spec: { tokenUrl: string; scope: string; clientIdField?: string; clientSecretField?: string },
+    config: Record<string, any>,
+  ): Promise<ValidationResult> {
+    const tokenUrl = interpolate(spec.tokenUrl, config);
     const refused = this.guardUrl(tokenUrl);
     if (refused) return fail(`token URL refused: ${refused}`);
-    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: String(config.clientId ?? ''), client_secret: String(config.clientSecret ?? ''), scope }).toString();
+    const clientId = config[spec.clientIdField ?? 'clientId'];
+    const clientSecret = config[spec.clientSecretField ?? 'clientSecret'];
+    const body = new URLSearchParams({ grant_type: 'client_credentials', client_id: String(clientId ?? ''), client_secret: String(clientSecret ?? ''), scope: spec.scope }).toString();
     const res = await this.http(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' }, body });
     const text = await res.text().catch(() => '');
     if (!res.ok) {
@@ -297,8 +320,9 @@ export class ConnectionValidationService {
       try { detail = JSON.parse(text).error_description ?? detail; } catch { /* keep body */ }
       return statusToResult(res.status, shortBody(String(detail)));
     }
-    const label = config.tenantId ? `${config.clientId}@${config.tenantId}` : String(config.clientId ?? '');
-    return { ok: true, status: 'valid', accountLabel: label || undefined, scopesGranted: [scope] };
+    const tenant = config.tenantId ?? config.tenant_id;
+    const label = tenant ? `${clientId}@${tenant}` : String(clientId ?? '');
+    return { ok: true, status: 'valid', accountLabel: label || undefined, scopesGranted: [spec.scope] };
   }
 
   private async s3Bucket(config: Record<string, any>): Promise<ValidationResult> {
