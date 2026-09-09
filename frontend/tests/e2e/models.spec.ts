@@ -313,12 +313,24 @@ test.describe('Models: catalog and providers', () => {
     await expect(page.getByText('Endpoint registered', { exact: true })).toBeVisible()
 
     // An endpoint card sits in the same grid as the vendor ones, with the
-    // model id it sends and no validation run behind it yet.
+    // model id it sends and no validation run behind it yet. It is badged
+    // as the customer's own endpoint rather than a vendor key: the card
+    // carries endpointRef.url and no deploymentId, which is what tells
+    // those three origins apart.
     const card = page.getByTestId('catalog-cards').getByRole('listitem').filter({ hasText: 'E2E endpoint' })
     await expect(card).toBeVisible()
     await expect(card).toContainText('e2e-small')
+    await expect(card).toContainText('Your endpoint')
     await expect(card).toContainText('Not validated')
     await expect(card).toContainText('Not selectable')
+
+    // And the origin filter finds it, which it could not when the card
+    // looked like a vendor one.
+    await page.getByLabel('Filter by where it came from').click()
+    await page.getByRole('option', { name: 'Your endpoint' }).click()
+    await expect(page.getByTestId('catalog-cards').getByRole('listitem').filter({ hasText: 'E2E endpoint' })).toBeVisible()
+    await page.getByLabel('Filter by where it came from').click()
+    await page.getByRole('option', { name: 'Any origin' }).click()
 
     // Validation runs one real call through the endpoint. A localhost URL is
     // only reachable when the backend allows private URLs for custom
