@@ -28,7 +28,8 @@ import {
 } from '@/components/ui/sheet'
 
 import { llmProvidersApi } from '@/lib/api'
-import { CredentialPicker } from '@/components/credential-picker'
+import { CredentialRefSummary, isMaskedKey } from './credential-slot'
+import type { LlmProviderCredentialRef } from './schema'
 
 interface LlmProvider {
   id: string
@@ -37,8 +38,11 @@ interface LlmProvider {
   type: string
   status: 'active' | 'inactive' | 'error' | 'configuring'
   organizationId: string
+  credentialRef?: LlmProviderCredentialRef | null
+  usageCredentialRef?: LlmProviderCredentialRef | null
   configuration: {
     apiKey?: string
+    usageApiKey?: string
     baseUrl?: string
     region?: string
     model?: string
@@ -94,6 +98,15 @@ const providerLogos: Record<string, string> = {
   cohere: '🌀',
   huggingface: '🤗',
   ollama: '🦙',
+  fireworks: '✧',
+  cerebras: '◎',
+  deepinfra: '∞',
+  novita: '◈',
+  perplexity: '◇',
+  zai: '❋',
+  baseten: '▣',
+  nebius: '◉',
+  sambanova: '◆',
   custom: '⚙️'
 }
 
@@ -126,10 +139,6 @@ export function ProviderDetailsSheet({
   toggleProviderStatusMutation,
   onOpenTestDialog,
 }: ProviderDetailsSheetProps) {
-  // Credential state for API key
-  const [providerCredentialId, setProviderCredentialId] = useState('')
-  const [providerApiKey, setProviderApiKey] = useState('')
-
   // Chat state
   const [chatMessages, setChatMessages] = useState<Array<{
     role: 'user' | 'assistant' | 'tool'
@@ -388,14 +397,25 @@ export function ProviderDetailsSheet({
                   <CardTitle className="text-sm">API Configuration</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <CredentialPicker
-                    label="API Key"
-                    value={providerCredentialId}
-                    onSelect={(id) => setProviderCredentialId(id)}
-                    onNewKey={(key) => setProviderApiKey(key)}
-                    newKeyValue={providerApiKey || selectedProvider.configuration.apiKey || ''}
-                    filterType="api_key"
-                  />
+                  {/* The key itself never comes back, masked or not: what is
+                      shown is the connection behind it (name, connector,
+                      health) or that a pasted key is on file. */}
+                  <div className="space-y-1.5">
+                    <Label>API key</Label>
+                    <CredentialRefSummary
+                      credentialRef={selectedProvider.credentialRef}
+                      hasStoredKey={isMaskedKey(selectedProvider.configuration.apiKey)}
+                    />
+                  </div>
+                  {(selectedProvider.usageCredentialRef || isMaskedKey(selectedProvider.configuration.usageApiKey)) && (
+                    <div className="space-y-1.5">
+                      <Label>Usage API key</Label>
+                      <CredentialRefSummary
+                        credentialRef={selectedProvider.usageCredentialRef}
+                        hasStoredKey={isMaskedKey(selectedProvider.configuration.usageApiKey)}
+                      />
+                    </div>
+                  )}
                   <div>
                     <Label>Base URL</Label>
                     <Input

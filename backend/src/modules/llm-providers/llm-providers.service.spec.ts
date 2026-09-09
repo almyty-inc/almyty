@@ -14,6 +14,9 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { isEncrypted } from '../../common/security/field-crypto';
+import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
+import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
+import { FakeCredentialStore, makeCredentialRefFake } from '../../test/credential-ref.fake';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { LlmChatHelper } from './llm-chat.helper';
@@ -21,6 +24,8 @@ import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
+import { ModelNotFoundError } from './model-errors';
+import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
 
 // jest.mock with __esModule: true short-circuits __importDefault so the
@@ -51,8 +56,15 @@ describe('LlmProvidersService', () => {
   let gatewayRepository: any;
   let toolRepository: any;
   let toolExecutorService: any;
+  let catalog: any;
+  let store: FakeCredentialStore;
 
   beforeEach(async () => {
+    catalog = {
+      syncInBackground: jest.fn().mockResolvedValue(null),
+      recordExternalValidation: jest.fn().mockResolvedValue(null),
+      retireProviderCards: jest.fn().mockResolvedValue(0),
+    };
     // The atomic stats bumps added for the counter-race fix call
     // createQueryBuilder().update().set().where().execute() on the
     // session and provider repositories. Return a noop chain that
@@ -64,10 +76,13 @@ describe('LlmProvidersService', () => {
       execute: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
+    store = makeCredentialRefFake();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LlmProvidersService,
         { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
+        { provide: CredentialRefResolver, useValue: store.resolver },
+        LlmProviderSecretsHelper,
         {
           provide: getRepositoryToken(LlmProvider),
           useValue: {
@@ -161,6 +176,7 @@ describe('LlmProvidersService', () => {
             assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined),
           },
         },
+        { provide: ModelCatalogService, useValue: catalog },
       ],
     }).compile();
 
@@ -269,7 +285,7 @@ describe('LlmProvidersService', () => {
       },
     };
 
-    it('accepts usageApiKey on create and persists it encrypted', async () => {
+    it('stores a pasted usageApiKey and apiKey as credential rows the provider references, never on the row', async () => {
       const dto: CreateLlmProviderDto = {
         ...baseCreateDto,
         configuration: { ...baseCreateDto.configuration, usageApiKey: 'sk-admin-plain-123' },
@@ -284,18 +300,33 @@ describe('LlmProvidersService', () => {
         Object.setPrototypeOf(entity, LlmProvider.prototype);
         return entity;
       });
-      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      llmProviderRepository.save.mockImplementation(async (p: any) => Object.assign(p, { id: p.id ?? 'provider-1' }));
       jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
 
       const result = await service.createProvider(dto, 'org-1', 'user-1');
 
-      const saved = llmProviderRepository.save.mock.calls[0][0];
-      expect(saved.configuration.usageApiKey).not.toBe('sk-admin-plain-123');
-      expect(isEncrypted(saved.configuration.usageApiKey)).toBe(true);
-      // Transparent decrypt contract: read sites go through the getter.
+      // The first save carries no key at all; the second carries the references.
+      const first = llmProviderRepository.save.mock.calls[0][0];
+      expect(first.configuration.apiKey).toBeUndefined();
+      expect(first.configuration.usageApiKey).toBeUndefined();
+      const saved = llmProviderRepository.save.mock.calls[1][0];
+      expect(saved.credentialId).toBeDefined();
+      expect(saved.usageCredentialId).toBeDefined();
+      expect(saved.credentialId).not.toBe(saved.usageCredentialId);
+      expect(JSON.stringify(llmProviderRepository.save.mock.calls.map((c: any[]) => c[0].configuration))).not.toContain('plain');
+
+      // Both rows are encrypted at rest, owned by this provider, tagged with the vendor.
+      const inference = store.rows.find((r) => r.id === saved.credentialId)!;
+      const usage = store.rows.find((r) => r.id === saved.usageCredentialId)!;
+      expect(isEncrypted(inference.config.apiKey)).toBe(true);
+      expect(isEncrypted(usage.config.apiKey)).toBe(true);
+      expect(inference.metadata.managedBy).toEqual({ kind: 'llm_provider', id: 'provider-1' });
+      expect(usage.metadata.managedBy).toEqual({ kind: 'llm_provider_usage', id: 'provider-1' });
+      expect(inference.connectorKey).toBe('openai');
+
+      // Transparent read contract: the sync getters read through the references.
+      expect((result as LlmProvider).getDecryptedApiKey()).toBe('test-api-key');
       expect((result as LlmProvider).getDecryptedUsageApiKey()).toBe('sk-admin-plain-123');
-      // The inference key is encrypted independently.
-      expect(isEncrypted(saved.configuration.apiKey)).toBe(true);
     });
 
     it('rejects a non-string usageApiKey on create', async () => {
@@ -315,7 +346,7 @@ describe('LlmProvidersService', () => {
         .toThrow(BadRequestException);
     });
 
-    it('carries usageApiKey through a configuration update and encrypts it', async () => {
+    it('moves an inline key (shim) and a pasted usageApiKey into credential rows on update', async () => {
       const mockProvider: any = {
         id: 'provider-1',
         name: 'Provider',
@@ -338,12 +369,103 @@ describe('LlmProvidersService', () => {
 
       // Merged into the existing configuration without clobbering it...
       expect(mockProvider.configuration.temperature).toBe(0.7);
-      expect(mockProvider.configuration.apiKey).toBeDefined();
-      // ...and stored encrypted, decryptable via the getter.
-      expect(mockProvider.configuration.usageApiKey).not.toBe('sk-ant-admin-plain');
-      expect(isEncrypted(mockProvider.configuration.usageApiKey)).toBe(true);
+      // ...the inline inference key left the row for a managed credential...
+      expect(mockProvider.configuration.apiKey).toBeUndefined();
+      expect(mockProvider.credentialId).toBeDefined();
+      expect(mockProvider.getDecryptedApiKey()).toBe('inference-key');
+      // ...and the usage key never touched the row.
+      expect(mockProvider.configuration.usageApiKey).toBeUndefined();
+      expect(mockProvider.usageCredentialId).toBeDefined();
       expect(mockProvider.getDecryptedUsageApiKey()).toBe('sk-ant-admin-plain');
       expect(llmProviderRepository.save).toHaveBeenCalledWith(mockProvider);
+    });
+
+    it('rotates the managed row in place when a new key is pasted, and ignores the mask marker', async () => {
+      const mockProvider: any = {
+        id: 'provider-1', name: 'Provider', type: LlmProviderType.OPENAI, organizationId: 'org-1',
+        configuration: { apiKey: 'first-key' }, capabilities: {},
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.updateProvider('provider-1', { configuration: { apiKey: 'second-key' } }, 'org-1', 'user-1');
+      const firstRef = mockProvider.credentialId;
+      expect(mockProvider.getDecryptedApiKey()).toBe('second-key');
+
+      await service.updateProvider('provider-1', { configuration: { apiKey: '***masked***', temperature: 0.2 } }, 'org-1', 'user-1');
+      expect(mockProvider.credentialId).toBe(firstRef);
+      expect(mockProvider.getDecryptedApiKey()).toBe('second-key');
+      expect(mockProvider.configuration.temperature).toBe(0.2);
+      expect(store.rows).toHaveLength(1);
+    });
+
+    it('points at a shared connection on credentialId, releases the managed row, and null clears it', async () => {
+      const shared = store.seed({ organizationId: 'org-1', name: 'Team OpenAI', config: { apiKey: 'shared-key' }, connectorKey: 'openai', healthStatus: 'valid' });
+      const mockProvider: any = {
+        id: 'provider-1', name: 'Provider', type: LlmProviderType.OPENAI, organizationId: 'org-1',
+        configuration: { apiKey: 'own-key' }, capabilities: {},
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.updateProvider('provider-1', { configuration: { temperature: 0.1 } }, 'org-1', 'user-1');
+      expect(store.rows).toHaveLength(2); // shared + the managed row the inline key moved into
+
+      await service.updateProvider('provider-1', { credentialId: shared.id }, 'org-1', 'user-1');
+      expect(mockProvider.credentialId).toBe(shared.id);
+      expect(mockProvider.getDecryptedApiKey()).toBe('shared-key');
+      expect(store.rows).toHaveLength(1); // managed row released, shared row kept
+      expect(mockProvider.maskSensitiveData().credentialRef).toEqual({ id: shared.id, name: 'Team OpenAI', connectorKey: 'openai', healthStatus: 'valid' });
+      expect(mockProvider.maskSensitiveData().configuration.apiKey).toBe('***masked***');
+
+      // A vendor that needs a key refuses to be left without one.
+      await expect(service.updateProvider('provider-1', { credentialId: null }, 'org-1', 'user-1'))
+        .rejects.toThrow('requires an API key');
+      expect(mockProvider.credentialId).toBe(shared.id);
+      expect(store.rows).toHaveLength(1); // a shared connection is never deleted by a consumer
+
+      // A keyless vendor can drop the reference.
+      const ollama: any = { id: 'provider-2', name: 'Local', type: LlmProviderType.OLLAMA, organizationId: 'org-1', configuration: { apiUrl: 'https://ollama.example.com' }, credentialId: shared.id, credential: shared, capabilities: {} };
+      Object.setPrototypeOf(ollama, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(ollama);
+      await service.updateProvider('provider-2', { credentialId: null }, 'org-1', 'user-1');
+      expect(ollama.credentialId).toBeNull();
+      expect(ollama.getDecryptedApiKey()).toBeUndefined();
+      expect(store.rows).toHaveLength(1);
+    });
+
+    it('rejects a credentialId of another organization', async () => {
+      const foreign = store.seed({ organizationId: 'org-2', config: { apiKey: 'x' } });
+      const mockProvider: any = {
+        id: 'provider-1', name: 'Provider', type: LlmProviderType.OPENAI, organizationId: 'org-1',
+        configuration: {}, credentialId: null, capabilities: {},
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      await expect(service.updateProvider('provider-1', { credentialId: foreign.id }, 'org-1', 'user-1'))
+        .rejects.toMatchObject({ response: { code: 'CREDENTIAL_NOT_FOUND' } });
+    });
+
+    it('deletes the managed rows with the provider', async () => {
+      const mockProvider: any = {
+        id: 'provider-1', name: 'Provider', type: LlmProviderType.OPENAI, organizationId: 'org-1',
+        configuration: {}, credentialId: null, usageCredentialId: null, capabilities: {},
+      };
+      Object.setPrototypeOf(mockProvider, LlmProvider.prototype);
+      llmProviderRepository.findOne.mockResolvedValue(mockProvider);
+      llmProviderRepository.save.mockImplementation(async (p: any) => p);
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+      await service.updateProvider('provider-1', { configuration: { apiKey: 'k', usageApiKey: 'u' } }, 'org-1', 'user-1');
+      expect(store.rows).toHaveLength(2);
+
+      await service.deleteProvider('provider-1', 'org-1', 'user-1');
+
+      expect(store.rows).toHaveLength(0);
+      expect(llmProviderRepository.remove).toHaveBeenCalled();
     });
   });
 
@@ -364,6 +486,11 @@ describe('LlmProvidersService', () => {
       expect(failure.getResponse().message).toMatch(/claude-sonnet-5/);
     });
 
+    it('lets the save through when the listing call itself fails (no /models, network)', async () => {
+      (modelsHelperInstance.fetchModelsFromProvider as jest.Mock).mockRejectedValue(Object.assign(new Error('404'), { response: { status: 404 } }));
+      await expect(service.assertModelIsServed(LlmProviderType.PERPLEXITY, cfg('sonar'), 'org-1')).resolves.toBeUndefined();
+    });
+
     it('lets the save through when the vendor cannot list models', async () => {
       (modelsHelperInstance.fetchModelsFromProvider as jest.Mock).mockResolvedValue([]);
       await expect(service.assertModelIsServed(LlmProviderType.CUSTOM, cfg('anything'), 'org-1')).resolves.toBeUndefined();
@@ -380,9 +507,9 @@ describe('LlmProvidersService', () => {
       organizationRepository.findOne.mockResolvedValue({ id: 'org-1' });
       userRepository.findOne.mockResolvedValue({ id: 'user-1', hasPermissionInOrganization: () => true });
       llmProviderRepository.create.mockImplementation((v: any) => Object.assign(new LlmProvider(), v));
-      llmProviderRepository.save.mockImplementation(async (v: any) => ({ id: 'p-new', ...v }));
+      llmProviderRepository.save.mockImplementation(async (v: any) => Object.assign(v, { id: 'p-new' }));
       await service.createProvider({ name: 'n', type: LlmProviderType.OPENAI, configuration: cfg('gpt-5') } as any, 'org-1', 'user-1');
-      expect(spy).toHaveBeenCalledWith(LlmProviderType.OPENAI, expect.objectContaining({ model: 'gpt-5' }), 'org-1');
+      expect(spy).toHaveBeenCalledWith(LlmProviderType.OPENAI, expect.objectContaining({ model: 'gpt-5' }), 'org-1', expect.objectContaining({ apiKey: 'k' }));
     });
   });
 
@@ -619,6 +746,7 @@ describe('LlmProvidersService', () => {
 
       const mockQueryBuilder = {
         where: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
@@ -645,6 +773,7 @@ describe('LlmProvidersService', () => {
 
     it('should handle search filters', async () => {
       const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
@@ -707,6 +836,145 @@ describe('LlmProvidersService', () => {
       await expect(service.deleteProvider('provider-1', 'org-1', 'user-1'))
         .rejects
         .toThrow(ForbiddenException);
+    });
+  });
+
+  describe('catalog hooks (auto-populated model cards)', () => {
+    const baseProvider = () => {
+      const p: any = {
+        id: 'provider-1', organizationId: 'org-1', name: 'OpenAI', type: LlmProviderType.OPENAI,
+        configuration: { apiKey: 'k', model: 'gpt-4o-mini' }, status: LlmProviderStatus.ACTIVE, isHealthy: true,
+        capabilities: {}, metadata: {}, maskSensitiveData: jest.fn().mockReturnThis(),
+      };
+      Object.setPrototypeOf(p, LlmProvider.prototype);
+      return p;
+    };
+
+    it('createProvider queues a catalog sync for the new provider', async () => {
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1' });
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) });
+      const p = baseProvider();
+      llmProviderRepository.create.mockReturnValue(p);
+      llmProviderRepository.save.mockResolvedValue(p);
+      jest.spyOn(runnerInstance as any, 'validateProviderConfiguration').mockImplementation();
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.createProvider({ name: 'OpenAI', type: LlmProviderType.OPENAI, configuration: { apiKey: 'k' } } as any, 'org-1', 'user-1');
+
+      expect(catalog.syncInBackground).toHaveBeenCalledWith('org-1', 'provider-1', 'provider_created');
+    });
+
+    it('updateProvider syncs only when the configuration changed', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.save.mockImplementation(async (x: any) => x);
+      jest.spyOn(runnerInstance as any, 'validateProviderConfiguration').mockImplementation();
+      jest.spyOn(service, 'performHealthCheck').mockResolvedValue({} as any);
+
+      await service.updateProvider('provider-1', { name: 'Renamed' }, 'org-1', 'user-1');
+      expect(catalog.syncInBackground).not.toHaveBeenCalled();
+
+      await service.updateProvider('provider-1', { configuration: { model: 'gpt-4o' } }, 'org-1', 'user-1');
+      expect(catalog.syncInBackground).toHaveBeenCalledWith('org-1', 'provider-1', 'provider_configuration_changed');
+    });
+
+    it('deleteProvider retires the cards before the row is removed', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      const order: string[] = [];
+      catalog.retireProviderCards.mockImplementation(async () => { order.push('retire'); return 2; });
+      llmProviderRepository.remove.mockImplementation(async () => { order.push('remove'); });
+
+      await service.deleteProvider('provider-1', 'org-1', 'user-1');
+
+      expect(catalog.retireProviderCards).toHaveBeenCalledWith('org-1', 'provider-1');
+      expect(order).toEqual(['retire', 'remove']);
+    });
+
+    it('deleteProvider still removes the row when retiring fails', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      catalog.retireProviderCards.mockRejectedValue(new Error('catalog down'));
+      llmProviderRepository.remove.mockResolvedValue(undefined);
+
+      await service.deleteProvider('provider-1', 'org-1', 'user-1');
+
+      expect(llmProviderRepository.remove).toHaveBeenCalledWith(p);
+    });
+
+    it('a passing health check validates the probed card and refreshes the list', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
+        message: { role: MessageRole.ASSISTANT, content: 'Hello' },
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        model: 'gpt-4o-mini', cost: 0, responseTime: 5,
+      });
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(true);
+      expect(catalog.recordExternalValidation).toHaveBeenCalledWith(
+        'org-1', 'provider-1', 'gpt-4o-mini',
+        expect.objectContaining({ passed: true, latencyMs: expect.any(Number), source: 'health_check' }),
+      );
+      expect(catalog.syncInBackground).toHaveBeenCalledWith('org-1', 'provider-1', 'health_check');
+    });
+
+    it('a MODEL_NOT_FOUND health check failure marks the card failed and does not sync', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider')
+        .mockRejectedValue(new ModelNotFoundError('gpt-4o-mini', 'provider-1', 'openai', 'model not found'));
+
+      const result = await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(result.isHealthy).toBe(false);
+      expect(catalog.recordExternalValidation).toHaveBeenCalledWith(
+        'org-1', 'provider-1', 'gpt-4o-mini',
+        expect.objectContaining({ passed: false, source: 'health_check', error: expect.stringContaining('not available') }),
+      );
+      expect(catalog.syncInBackground).not.toHaveBeenCalled();
+    });
+
+    it('an ordinary health check failure records nothing on the catalog', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockRejectedValue(new Error('API Error'));
+
+      await service.performHealthCheck('provider-1', 'org-1');
+
+      expect(catalog.recordExternalValidation).not.toHaveBeenCalled();
+      expect(catalog.syncInBackground).not.toHaveBeenCalled();
+    });
+
+    it('a rejected catalog record never fails the health check', async () => {
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      catalog.recordExternalValidation.mockRejectedValue(new Error('catalog down'));
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
+        message: { role: MessageRole.ASSISTANT, content: 'Hello' }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, model: 'gpt-4o-mini', cost: 0,
+      });
+
+      await expect(service.performHealthCheck('provider-1', 'org-1')).resolves.toMatchObject({ isHealthy: true });
+    });
+
+    it('works without the catalog wired at all', async () => {
+      (service as any).catalog = undefined;
+      const p = baseProvider();
+      llmProviderRepository.findOne.mockResolvedValue(p);
+      llmProviderRepository.update.mockResolvedValue({ affected: 1 });
+      llmProviderRepository.remove.mockResolvedValue(undefined);
+      jest.spyOn(runnerInstance as any, 'callLlmProvider').mockResolvedValue({
+        message: { role: MessageRole.ASSISTANT, content: 'Hello' }, usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, model: 'gpt-4o-mini', cost: 0,
+      });
+
+      await expect(service.performHealthCheck('provider-1', 'org-1')).resolves.toMatchObject({ isHealthy: true });
+      await expect(service.deleteProvider('provider-1', 'org-1', 'user-1')).resolves.toBeUndefined();
     });
   });
 

@@ -355,6 +355,59 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     ),
   }),
 
+  // ── Connections (key layer) ──────────────────────────────────────────
+
+  'connections.expiring': (p) => ({
+    subject: sanitizeSubject(`A connected account expires in ${p.daysLeft ?? 'a few'} day${Number(p.daysLeft) === 1 ? '' : 's'}`),
+    html: renderBaseLayout({
+      heading: 'Connection expiring',
+      bodyHtml:
+        para(
+          `The <strong>${esc(p.connectorName || p.connectorKey || 'connected account')}</strong> connection${p.connectionName ? ` <strong>${esc(p.connectionName)}</strong>` : ''} expires on <strong>${esc(p.expiresAt || 'soon')}</strong>.`,
+        ) + para('Rotate it before then so agents that depend on it keep working.'),
+      button: p.connectionsUrl ? { label: 'Open connections', url: p.connectionsUrl } : undefined,
+      footerNote: 'You receive this because you own the connection or manage connections for the organization.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `The ${p.connectorName || p.connectorKey || 'connected account'} connection${p.connectionName ? ` ${p.connectionName}` : ''} expires on ${p.expiresAt || 'soon'}. Rotate it in Settings, Connections.${p.connectionsUrl ? ` ${p.connectionsUrl}` : ''}`,
+    ),
+  }),
+
+  'connections.expired': (p) => ({
+    subject: sanitizeSubject(`A connected account has expired: ${p.connectorName || p.connectorKey || 'connection'}`),
+    html: renderBaseLayout({
+      heading: 'Connection expired',
+      bodyHtml:
+        para(
+          `The <strong>${esc(p.connectorName || p.connectorKey || 'connected account')}</strong> connection${p.connectionName ? ` <strong>${esc(p.connectionName)}</strong>` : ''} has expired.`,
+        ) + para(p.grantsPaused ? 'Its grants were paused; agents using it will fail until it is rotated.' : 'Agents using it will fail until it is rotated.'),
+      button: p.connectionsUrl ? { label: 'Rotate now', url: p.connectionsUrl } : undefined,
+      footerNote: 'You receive this because you own the connection or manage connections for the organization.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `The ${p.connectorName || p.connectorKey || 'connected account'} connection${p.connectionName ? ` ${p.connectionName}` : ''} has expired. Rotate it in Settings, Connections.${p.connectionsUrl ? ` ${p.connectionsUrl}` : ''}`,
+    ),
+  }),
+
+  'connections.rotation_due': (p) => ({
+    subject: sanitizeSubject(`Rotation due: ${p.connectorName || p.connectorKey || 'a connected account'}`),
+    html: renderBaseLayout({
+      heading: 'Rotation due',
+      bodyHtml:
+        para(
+          `The <strong>${esc(p.connectorName || p.connectorKey || 'connected account')}</strong> connection${p.connectionName ? ` <strong>${esc(p.connectionName)}</strong>` : ''} is <strong>${esc(p.ageDays ?? '')}</strong> days old, older than your rotation rule allows.`,
+        ) + para(p.automatic ? 'Automatic rotation is not available for this provider, so it needs a hand.' : 'Rotate it from Settings, Connections.'),
+      button: p.connectionsUrl ? { label: 'Rotate now', url: p.connectionsUrl } : undefined,
+      footerNote: 'Rotation rules are set by your organization admins under Connections governance.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `The ${p.connectorName || p.connectorKey || 'connected account'} connection${p.connectionName ? ` ${p.connectionName}` : ''} is ${p.ageDays ?? ''} days old and due for rotation.${p.connectionsUrl ? ` ${p.connectionsUrl}` : ''}`,
+    ),
+  }),
+
   // ── Lifecycle activation emails (new-signup cadence) ─────────────────
   // Sent by the lifecycle module: welcome on verify, a state-aware T+2
   // nudge, a T+5 showcase, a T+10 last touch, and a post-activation

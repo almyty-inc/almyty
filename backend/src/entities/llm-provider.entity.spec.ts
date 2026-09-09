@@ -563,5 +563,12 @@ describe('LlmProvider Entity', () => {
       expect(publicView.id).toBe('prov-1');
       expect(publicView.name).toBe('Test Provider');
     });
+
+    it('keeps the public server URL so the edit form can prefill it', () => {
+      provider.configuration = { ...provider.configuration, apiUrl: 'https://llm.example.internal/v1' } as any;
+      const publicView = provider.toPublicView();
+      expect(publicView.configuration.apiUrl).toBe('https://llm.example.internal/v1');
+      expect(publicView.configuration.apiKey).toBeUndefined();
+    });
   });
 });

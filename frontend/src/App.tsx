@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react'
-import { Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 
@@ -36,8 +36,8 @@ const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisP
 const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ default: m.ApiDetailPage })))
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
-const LlmProvidersPage = lazy(() => import('@/pages/llm-providers').then(m => ({ default: m.LlmProvidersPage })))
 const LlmProviderDetailPage = lazy(() => import('@/pages/llm-provider-detail').then(m => ({ default: m.LlmProviderDetailPage })))
+const ModelsPage = lazy(() => import('@/pages/models').then(m => ({ default: m.ModelsPage })))
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ default: m.AnalyticsPage })))
 const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
@@ -74,6 +74,23 @@ function DashboardLayoutOutlet() {
       <Outlet />
     </DashboardLayout>
   )
+}
+
+// The providers list moved under Models as a tab. Old links (command
+// palette history, onboarding cards, bookmarks) still land there, with the
+// query string intact so `?new=1` keeps opening the add-provider dialog.
+function LlmProvidersRedirect() {
+  const location = useLocation()
+  const params = new URLSearchParams(location.search)
+  params.set('tab', 'providers')
+  return <Navigate to={`/models?${params.toString()}`} replace />
+}
+
+// The OAuth callback for the Connections layer lands the browser on
+// /connections?connection=<id>&status=...; the gallery lives under Settings.
+function ConnectionsRedirect() {
+  const location = useLocation()
+  return <Navigate to={`/settings/connections${location.search}`} replace />
 }
 
 import { HostedChatPage } from '@/pages/hosted-chat'
@@ -136,12 +153,14 @@ function App() {
           <Route path="/workspaces" element={<WorkspacesPage />} />
           <Route path="/workspaces/:id" element={<WorkspaceDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
-          <Route path="/llm-providers" element={<LlmProvidersPage />} />
+          <Route path="/models" element={<ModelsPage />} />
+          <Route path="/llm-providers" element={<LlmProvidersRedirect />} />
           <Route path="/llm-providers/:id" element={<LlmProviderDetailPage />} />
           <Route path="/analytics/*" element={<AnalyticsPage />} />
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/credentials/*" element={<CredentialsPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
+          <Route path="/connections" element={<ConnectionsRedirect />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />

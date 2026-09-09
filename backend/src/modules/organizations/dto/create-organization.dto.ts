@@ -1,7 +1,8 @@
-import { IsString, IsOptional, IsUrl, MinLength, MaxLength, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsUrl, MinLength, MaxLength, IsObject, Validate } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrganizationSettings } from '../../../entities/organization.entity';
+import { OrganizationSettingsConstraint } from './organization-settings.dto';
 
 const stripHtml = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
@@ -64,6 +65,7 @@ export class CreateOrganizationDto {
   })
   @IsOptional()
   @IsObject()
+  @Validate(OrganizationSettingsConstraint)
   settings?: OrganizationSettings;
 
   @ApiPropertyOptional({

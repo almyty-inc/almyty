@@ -16,6 +16,8 @@ import { memoriesApi, type MemoryTier, type MemoryMode } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import type { Connection } from '@/types/connections'
 
 type Item = {
   id: string
@@ -583,6 +585,9 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave }: Co
   const softcap = config?.softcapBehavior ?? 'warn_log'
 
   const externalBackends = backends.filter((b) => b.id !== 'almyty-native')
+  // Accounts connected through the connect sheet during this visit, so the
+  // picker can name them before the credentials list catches up.
+  const [connected, setConnected] = useState<Record<string, Connection>>({})
 
   function patch(next: Partial<typeof routing> | { softcap_behavior?: typeof softcap }) {
     const isSoftcap = 'softcap_behavior' in next
@@ -681,8 +686,19 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave }: Co
                     {credentials.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
+                    {connected[b.id] && !credentials.some((c) => c.id === connected[b.id].id) && (
+                      <SelectItem value={connected[b.id].id}>{connected[b.id].name} (connected account)</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
+                <ConnectAccountButton
+                  kind="memory"
+                  label="Connect"
+                  onConnected={(connection) => {
+                    setConnected((prev) => ({ ...prev, [b.id]: connection }))
+                    patch({ credentials: { ...creds, [b.id]: connection.id } })
+                  }}
+                />
               </div>
             ))}
             {credentials.length === 0 && (

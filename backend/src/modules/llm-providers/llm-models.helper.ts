@@ -1,15 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import axios from 'axios';
 
 import { callLlmProviderHttp, llmCallOptionsFor } from './providers/safe-request';
 import { LlmProvider, LlmProviderType } from '../../entities/llm-provider.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { PriceFeedService } from '../model-catalog/pricing/price-feed.service';
+import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 
 @Injectable()
 export class LlmModelsHelper {
   private readonly logger = new Logger(LlmModelsHelper.name);
 
-  constructor(private readonly envelopeCrypto: EnvelopeCryptoService) {}
+  constructor(
+    private readonly envelopeCrypto: EnvelopeCryptoService,
+    // Absent in specs that build the helper by hand and in any module
+    // that does not import ModelCatalogModule; the seed table then applies.
+    @Optional() private readonly priceFeed?: PriceFeedService,
+    @Optional() private readonly secrets?: LlmProviderSecretsHelper,
+  ) {}
 
   async fetchModelsFromProvider(provider: LlmProvider): Promise<Array<{
     id: string;
@@ -20,6 +28,12 @@ export class LlmModelsHelper {
     // Warm the org's DEK cache so the sync getDecryptedApiKey reads below can
     // unwrap a customer-managed key. No-op for non-KMS orgs.
     await this.envelopeCrypto.warmOrg(provider.organizationId);
+    // Credential reference: policy check and a fresh read of the row.
+    if (this.secrets && provider.credentialId) {
+      await this.secrets.withResolvedSecrets(provider, {
+        context: { purpose: 'model_list', resourceType: 'llm_provider', resourceId: provider.id },
+      });
+    }
     try {
       switch (provider.type) {
         case LlmProviderType.OPENAI:
@@ -29,6 +43,20 @@ export class LlmModelsHelper {
         case LlmProviderType.GROQ:
         case LlmProviderType.TOGETHER:
         case LlmProviderType.OPENROUTER:
+        // OpenAI-compatible inference hosts: GET <base>/models. Perplexity's
+        // legacy Sonar base and Z.ai do not document /models; a failed
+        // list rejects like every other type (test-connection reports it)
+        // and DefaultModelResolver turns it into NO_MODEL_CONFIGURED
+        // rather than guessing an id.
+        case LlmProviderType.FIREWORKS:
+        case LlmProviderType.CEREBRAS:
+        case LlmProviderType.DEEPINFRA:
+        case LlmProviderType.NOVITA:
+        case LlmProviderType.PERPLEXITY:
+        case LlmProviderType.ZAI:
+        case LlmProviderType.BASETEN:
+        case LlmProviderType.NEBIUS:
+        case LlmProviderType.SAMBANOVA:
           return this.fetchOpenAIModels(provider);
         case LlmProviderType.OLLAMA:
           // Native /api/tags — lists locally pulled models. Works
@@ -333,6 +361,28 @@ export class LlmModelsHelper {
         // default users can raise per provider.
         return { ...openaiCompatible, maxTokens: 32768 };
 
+      // OpenAI-compatible inference hosts: tool calling and streaming on
+      // the OpenAI path. maxTokens is a conservative context default
+      // (the served models vary); the model card carries the real value.
+      case LlmProviderType.FIREWORKS:
+      case LlmProviderType.DEEPINFRA:
+      case LlmProviderType.NOVITA:
+      case LlmProviderType.BASETEN:
+      case LlmProviderType.NEBIUS:
+      case LlmProviderType.SAMBANOVA:
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.CEREBRAS:
+        return { ...openaiCompatible, maxTokens: 65536 };
+
+      case LlmProviderType.ZAI:
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.PERPLEXITY:
+        // Sonar answers are web-grounded; the chat surface streams but
+        // does not take OpenAI-style tools, so tool flags stay off.
+        return { ...baseCapabilities, supportedModels: [], maxTokens: 128000, supportsStreaming: true };
+
       default:
         return baseCapabilities;
     }
@@ -340,8 +390,8 @@ export class LlmModelsHelper {
 
   /**
    * Calculate the cost of a provider call in dollars.
-   * Uses configured pricing from metadata if available, otherwise falls back
-   * to default pricing for well-known models.
+   * Explicit metadata pricing wins, then the live price feed, then the
+   * offline seed table.
    */
   calculateProviderCost(provider: LlmProvider, inputTokens: number, outputTokens: number): number {
     // 1. Use the provider's configured pricing from metadata if available
@@ -350,19 +400,43 @@ export class LlmModelsHelper {
       return ((inputTokens / 1000) * modelInfo.inputTokenCost) + ((outputTokens / 1000) * modelInfo.outputTokenCost);
     }
 
-    // 2. Fall back to default pricing for well-known models (per 1K tokens, in dollars)
+    // 2. Feed first, seed table second (per 1K tokens, in dollars)
     const model = (provider.configuration?.model || '').toLowerCase();
-    const pricing = getDefaultModelPricing(model, provider.type);
+    const pricing = this.getModelPricing(model, provider.type);
     if (pricing) {
       return ((inputTokens / 1000) * pricing.input) + ((outputTokens / 1000) * pricing.output);
     }
 
     return 0;
   }
+
+  /**
+   * Price for a (model, providerType) pair in dollars per 1K tokens: the
+   * feed's quote when it has one (feed prices are per 1M, hence the
+   * division), else the offline seed table. Identical to the table alone
+   * when no feed is wired in.
+   */
+  getModelPricing(
+    model: string,
+    providerType: LlmProviderType,
+  ): { input: number; output: number } | null {
+    if (!model) return null;
+    const quote = this.priceFeed?.lookup(providerType, model);
+    if (quote) {
+      return { input: quote.inPerMTok / 1000, output: quote.outPerMTok / 1000 };
+    }
+    return getDefaultModelPricing(model, providerType);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// Default model pricing catalog
+// Default model pricing catalog: OFFLINE SEED ONLY
+//
+// Live prices come from PriceFeedService (LiteLLM + OpenRouter) and win
+// whenever the feed has an entry. This table is the fallback for
+// air-gapped installs (MODEL_PRICE_FEED_DISABLED=true), for a replica
+// that has not fetched yet, and for models absent from both feeds. It is
+// not maintained as a source of truth.
 //
 // Dollars per 1K tokens (published per-1M prices divided by 1000).
 // Substring rules: the lowercased model id is matched against `match`
@@ -370,9 +444,8 @@ export class LlmModelsHelper {
 // more specific ids must precede their prefixes (gpt-4o-mini before
 // gpt-4o, gpt-4.1 before gpt-4, ...).
 //
-// These are list prices for estimation only — reconciliation against
-// provider actuals lives in the provider-usage module. Update the as-of
-// comments when refreshing numbers.
+// These are list prices for estimation only. Reconciliation against
+// provider actuals lives in the provider-usage module.
 // ────────────────────────────────────────────────────────────────────────
 
 export interface DefaultModelPricing {
@@ -554,6 +627,21 @@ export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[
   [LlmProviderType.HUGGINGFACE]: [],
   // Zero-cost by design (local inference) — see doc comment above.
   [LlmProviderType.OLLAMA]: [],
+  // OpenAI-compatible inference hosts added 2026-09: priced by the live
+  // feed only (LiteLLM carries fireworks_ai, cerebras, deepinfra, novita,
+  // perplexity, zai, baseten, nebius and sambanova). No seed rows on
+  // purpose: prices are automatic, and the hosts' rates for shared open
+  // models must not be borrowed from a vendor table (see
+  // HOSTED_OPEN_MODEL_TYPES below).
+  [LlmProviderType.FIREWORKS]: [],
+  [LlmProviderType.CEREBRAS]: [],
+  [LlmProviderType.DEEPINFRA]: [],
+  [LlmProviderType.NOVITA]: [],
+  [LlmProviderType.PERPLEXITY]: [],
+  [LlmProviderType.ZAI]: [],
+  [LlmProviderType.BASETEN]: [],
+  [LlmProviderType.NEBIUS]: [],
+  [LlmProviderType.SAMBANOVA]: [],
   [LlmProviderType.CUSTOM]: [],
 };
 
@@ -575,6 +663,21 @@ const GLOBAL_PRICING_FALLBACK: DefaultModelPricing[] = [
 ];
 
 /**
+ * Hosts that serve other vendors' open models at host-specific rates.
+ * Priced by the live feed (LiteLLM lists every one of them); the seed
+ * table stays empty and the cross-provider fallback is skipped for them.
+ */
+export const HOSTED_OPEN_MODEL_TYPES: ReadonlySet<LlmProviderType> = new Set([
+  LlmProviderType.FIREWORKS,
+  LlmProviderType.CEREBRAS,
+  LlmProviderType.DEEPINFRA,
+  LlmProviderType.NOVITA,
+  LlmProviderType.BASETEN,
+  LlmProviderType.NEBIUS,
+  LlmProviderType.SAMBANOVA,
+]);
+
+/**
  * Default pricing lookup for a (model, providerType) pair.
  * Returns { input, output } in dollars per 1K tokens, or null if unknown.
  */
@@ -589,6 +692,11 @@ export function getDefaultModelPricing(
   // hosted vendor's list price. Explicit per-provider overrides via
   // metadata.modelInfo still apply (handled in calculateProviderCost).
   if (providerType === LlmProviderType.OLLAMA) return null;
+  // Hosted open-model vendors serve the same model ids as each other and
+  // as the model authors, at their own rates. Never price them from a
+  // vendor table via the fallback ('deepseek-v3' on Novita is not billed
+  // at DeepSeek's list price); the live feed prices them per host.
+  if (HOSTED_OPEN_MODEL_TYPES.has(providerType)) return null;
   const rules = DEFAULT_MODEL_PRICING[providerType] ?? [];
   for (const rule of rules) {
     if (model.includes(rule.match)) return { input: rule.input, output: rule.output };

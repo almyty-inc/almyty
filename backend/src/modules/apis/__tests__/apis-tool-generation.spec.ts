@@ -1,3 +1,5 @@
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
+import { makeCredentialRefFake } from '../../../test/credential-ref.fake';
 /**
  * Tests for tool generation from API operations.
  *
@@ -76,6 +78,7 @@ describe('ApisService - tool generation', () => {
         { provide: AuditLogService, useValue: { logCreate: jest.fn() } },
         { provide: DataSource, useValue: {} },
         { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } },
+        { provide: CredentialRefResolver, useValue: makeCredentialRefFake().resolver },
       ],
     }).compile();
 

@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CredentialPicker } from '@/components/credential-picker'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectedChip } from '@/components/connections/connected-chip'
+import type { Connection } from '@/types/connections'
 import {
   Dialog,
   DialogContent,
@@ -25,6 +28,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { ExternalLink, TestTube, CheckCircle2, XCircle } from 'lucide-react'
 import { llmProvidersApi } from '@/lib/api'
 import { providerKeyUrls, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
+import { BASE_URL_PRIVATE_HOST_HINT } from './schema'
 
 interface CreateProviderDialogProps {
   open: boolean
@@ -43,6 +47,7 @@ export function CreateProviderDialog({
   const [visibility, setVisibility] = React.useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [testing, setTesting] = React.useState(false)
   const [testResult, setTestResult] = React.useState<any>(null)
+  const [connectedAccount, setConnectedAccount] = React.useState<Connection | null>(null)
   const handleTestConnection = async () => {
     const type = createForm.watch('type')
     const apiKey = createForm.watch('apiKey')
@@ -108,6 +113,15 @@ export function CreateProviderDialog({
                     <SelectItem value="cohere">Cohere</SelectItem>
                     <SelectItem value="huggingface">HuggingFace</SelectItem>
                     <SelectItem value="ollama">Ollama</SelectItem>
+                    <SelectItem value="fireworks">Fireworks AI</SelectItem>
+                    <SelectItem value="cerebras">Cerebras</SelectItem>
+                    <SelectItem value="deepinfra">DeepInfra</SelectItem>
+                    <SelectItem value="novita">Novita</SelectItem>
+                    <SelectItem value="perplexity">Perplexity</SelectItem>
+                    <SelectItem value="zai">Z.ai (GLM)</SelectItem>
+                    <SelectItem value="baseten">Baseten</SelectItem>
+                    <SelectItem value="nebius">Nebius Token Factory</SelectItem>
+                    <SelectItem value="sambanova">SambaNova</SelectItem>
                     <SelectItem value="custom">Custom</SelectItem>
                   </SelectContent>
                 </Select>
@@ -122,11 +136,28 @@ export function CreateProviderDialog({
           <CredentialPicker
             label={createForm.watch('type') === 'ollama' ? 'API Key (optional)' : 'API Key'}
             value={createForm.watch('credentialId') || ''}
-            onSelect={(id) => { createForm.setValue('credentialId', id); createForm.setValue('apiKey', '') }}
-            onNewKey={(key) => { createForm.setValue('apiKey', key); createForm.setValue('credentialId', '') }}
+            onSelect={(id) => { createForm.setValue('credentialId', id); createForm.setValue('apiKey', ''); createForm.setValue('connectionId', '') }}
+            onNewKey={(key) => { createForm.setValue('apiKey', key); createForm.setValue('credentialId', ''); createForm.setValue('connectionId', '') }}
             newKeyValue={createForm.watch('apiKey') || ''}
             filterType="api_key"
           />
+          {/* Or connect an account through the Connections layer */}
+          {createForm.watch('connectionId') && connectedAccount ? (
+            <ConnectedChip connection={connectedAccount} onClear={() => { createForm.setValue('connectionId', ''); setConnectedAccount(null) }} />
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">or</span>
+              <ConnectAccountButton
+                kind="inference"
+                onConnected={(connection) => {
+                  setConnectedAccount(connection)
+                  createForm.setValue('connectionId', connection.id)
+                  createForm.setValue('apiKey', '')
+                  createForm.setValue('credentialId', '')
+                }}
+              />
+            </div>
+          )}
           {providerKeyUrls[createForm.watch('type')] && (
             <a
               href={providerKeyUrls[createForm.watch('type')]}
@@ -165,6 +196,22 @@ export function CreateProviderDialog({
                   placeholder="http://localhost:11434"
                 />
               </div>
+            </div>
+          )}
+          {createForm.watch('type') === 'custom' && (
+            <div>
+              <Label htmlFor="apiUrl">Base URL</Label>
+              <Input
+                id="apiUrl"
+                {...createForm.register('apiUrl')}
+                placeholder="https://llm.example.internal/v1"
+              />
+              {createForm.formState.errors.apiUrl && (
+                <p className="text-xs text-destructive mt-1">{String(createForm.formState.errors.apiUrl.message)}</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Any OpenAI-compatible server (vLLM, LM Studio, llama.cpp, a gateway). {BASE_URL_PRIVATE_HOST_HINT}
+              </p>
             </div>
           )}
           {createForm.watch('apiKey') && (

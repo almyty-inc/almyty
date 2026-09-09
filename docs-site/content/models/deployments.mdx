@@ -1,0 +1,198 @@
+# Deployments
+
+Weights you own, running where you choose. Register a version of your fine-tune in your own bucket once, then deploy it to any of 14 providers by naming an adapter and its config. When the endpoint is ready it becomes a [model card](/models) with a privacy tier, a region and a price, and the [router](/models/routing) picks it like any vendor model. Scale it to zero, cap what it may spend, tear it down; the weights stay.
+
+```
+Registry (your bucket)          Deployment                       Catalog
+s3://acme-models/qwen@e3b0  ->  adapter + config + desired  ->   card (endpoint, tier, price)
+almyty-manifest.json            reconcile every 2 min             router picks it
+```
+
+The whole flow from the terminal:
+
+```bash
+$ npx @almyty/models register-version --name qwen3-14b-support-ft --uri s3://acme-models/qwen3-14b-support@e3b0c442
+$ npx @almyty/models deploy --model-version a91c... --adapter huggingface-endpoints \
+    --config '{"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}' \
+    --desired '{"replicas":1,"privacyTier":"private_cloud","region":"eu-west-1"}'
+$ npx @almyty/models deployments --json | jq -r '.[0].actual.url'
+https://acme-qwen3-14b.eu-west-1.aws.endpoints.huggingface.cloud/v1
+$ npx @almyty/models register-endpoint --name "Support fine-tune" --url https://acme-qwen3-14b.eu-west-1.aws.endpoints.huggingface.cloud/v1 \
+    --model qwen3-14b-support-ft --tier private_cloud --region eu-west-1
+$ npx @almyty/models validate 4f2a...
+Passed in 1210 ms.
+```
+
+## The registry
+
+The registry is where a version's weights live. It is your organization's own bucket: connect an S3-compatible store (AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces) under [Connections](/connections) with its endpoint, region, bucket, optional prefix and access keys. Every read and write goes through that connection. There is no shared bucket and no silent fallback: an organization without a registry connection cannot register an `s3://` version or deploy one, and the API answers `REGISTRY_NOT_CONNECTED`.
+
+A single-tenant self-host can seed the one organization's connection from `MODEL_REGISTRY_S3_*` (falling back to `STORAGE_S3_*`) on first boot. With two or more organizations those variables are ignored.
+
+### URIs
+
+A version points at exactly one of:
+
+| Shape | Meaning |
+|---|---|
+| `s3://bucket/prefix@etag` | The default. Any S3-compatible store |
+| `hf://org/repo@sha` | A read-only source on the Hugging Face hub. Optional, never required |
+| `file:///abs/path@sha` | Weights on a runner or Ollama host |
+
+The part after `@` pins the exact bytes. A URI without a pin is refused, because a version must be immutable.
+
+### Layout and manifest
+
+```
+<prefix>/
+  almyty-manifest.json
+  model.safetensors            (or sharded model-00001-of-0000N.safetensors)
+  tokenizer files as referenced by the manifest
+```
+
+Weights are plain safetensors. Nothing about where the model will run is stored here.
+
+```json
+{
+  "schemaVersion": 1,
+  "base": "qwen3-14b",
+  "tokenizer": "s3://acme-models/qwen3-14b-support@e3b0c442/tokenizer",
+  "chatTemplate": "chatml",
+  "license": "Apache-2.0",
+  "created": "2026-09-08T09:00:00Z",
+  "files": [{ "path": "model.safetensors", "sizeBytes": 29000000000, "sha256": "..." }],
+  "quantizations": ["bf16", "awq-int4"],
+  "lineage": { "parentVersionId": "..." }
+}
+```
+
+Required: `schemaVersion` (1), `base`, `tokenizer`, `license`, `created` and at least one entry in `files` with relative paths. The manifest's canonical SHA-256 is recorded on the version as `manifestSha`; the sum of `files[].sizeBytes` becomes `sizeBytes`.
+
+## Versions
+
+Registering an `s3://` version reads and validates the manifest at the URI and fills base, size, digest and quantizations from it; an unreadable manifest is an error. For `hf://` and `file://` the manifest is optional: when absent, `base` must be given.
+
+A version cannot be deleted while a deployment that is not torn down references it (`VERSION_IN_USE`). The platform never deletes weights on its own: deployments come and go, versions stay.
+
+## Adapters are data
+
+An adapter is the code that talks to one provider. Everything a form or a script needs to use it is served as data by `GET /model-adapters`, so shipping a new adapter changes no UI:
+
+| Field | Meaning |
+|---|---|
+| `key`, `displayName` | The adapter id you pass as `providerType`, and its label |
+| `capabilities.architectures` | Model families it accepts, or `any` |
+| `capabilities.lora` | `merged`, `multi` or `none` |
+| `capabilities.serverless`, `capabilities.dedicated` | Whether it runs without a dedicated instance, on one, or either |
+| `capabilities.scaleToZero` | Whether replicas 0 stops the bill |
+| `capabilities.regions` | Regions the provider offers; empty means the provider chooses or the list is dynamic |
+| `capabilities.registrySources` | Which URI schemes it can deploy from: `s3`, `hub`, `local`. Every adapter accepts `s3` |
+| `configSchema` | A JSON schema for the adapter's `providerConfig`. Properties marked `"x-secret": true` are encrypted at rest and never returned |
+
+An architecture mismatch or an unsupported registry source is refused when the deployment is submitted, not discovered as a provider error later.
+
+Adapters never import each other, and every one passes the same conformance suite in fixture mode: deploy a tiny model from S3, poll to ready, chat through it, scale to zero, tear down, and report a sane cost, plus the failure cases (unsupported architecture, quota, expired credential, orphan). `CONFORMANCE_LIVE=<adapter key>` runs the same suite against the real provider with real credentials; it never runs in CI.
+
+## Desired and actual
+
+A deployment is desired state. `POST /model-deployments` records what you want; the reconcile sweep (`MODEL_RECONCILE_CRON`, every two minutes by default, plus an immediate run after each change) is the only thing that talks to the provider.
+
+| Field | Meaning |
+|---|---|
+| `modelVersionId` | The version to run |
+| `providerType` | The adapter key |
+| `desired` | `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
+| `providerConfig` | The adapter's config, validated against its schema; secrets encrypted in place |
+| `credentialId` | A stored credential whose fields the adapter reads; inline secrets in `providerConfig` are layered over it |
+| `budgetId` | A [spend budget](/cost-governance); reaching it scales the deployment to zero |
+| `modelId` | A card that already exists for this version; the deployment fills its endpoint once ready and keeps pricing it |
+
+Registry keys are never part of `providerConfig`. When the version lives at an `s3://` URI, the reconcile loop hands the adapter the organization's registry connection per call; the adapter never stores them.
+
+Each tick reads the endpoint, compares it with the desired state, acts (deploy, scale, tear down) or marks the row `degraded`, writes what it saw into `actual` (state, URL, replicas, hardware, region, a message), records the cost snapshot, and writes an audit event with the adapter key and the transition. The deployment moves through `pending`, `deploying`, `ready`, `degraded`, `scaling`, `tearing_down`, `torn_down`, `failed` or `orphaned`. `lastError` carries the provider's last message.
+
+`POST /model-deployments/:id/scale { replicas }` and `POST /model-deployments/:id/teardown` change desired state only; `DELETE` is the same as teardown. Reading a deployment back shows every secret in `providerConfig` as `********`.
+
+When a deployment reaches `ready`, the card named by `modelId` gets `endpointRef.url` and `endpointRef.deploymentId`, becomes `active`, and takes the region the provider reports (or the desired one). Where the provider reports a per-token price, the card is priced from the cost snapshot (`pricingSource: adapter`) unless an override is set. A deployment without `modelId` has no card yet: register its `actual.url` with `register-endpoint` (a card registered against an endpoint defaults to the `private_cloud` tier), then validate it. Either way, validate the card and it is selectable.
+
+## Budgets and scale to zero
+
+A deployment with a `budgetId` is charged from the adapter's cost snapshot on every reconcile: spend so far, the current burn rate in cents per hour, and a per-token price where the provider has one. Reaching the budget sets desired replicas to 0, scales the endpoint down, writes a `model_deployment_budget_stop` audit entry with the amount and the limit, and sends a `model.deployment.budget_stop` notification. It does not repeat on later ticks.
+
+What "scale to zero" costs depends on the provider, and each adapter's `scaleToZero` capability says whether replicas 0 stops the bill. Where it does not (DigitalOcean bills a powered-off droplet, Vertex keeps a replica), the section below says what replicas 0 does instead and what still bills. Most providers publish no billing API, so spend is usually the configured hourly rate times observed running time, marked as an estimate.
+
+## Orphans
+
+A deployment the provider no longer knows (the endpoint was deleted from the vendor console, or the account went away) is reported `missing` by the adapter. A row that is still `deploying` gets 30 minutes of grace; past that, or in any other state, the row is marked `orphaned`, anything left at the provider is torn down, and a `model_deployment_orphan_teardown` audit entry is written. Weights are never touched.
+
+## Adapters
+
+The registry side is the same for every adapter: an `s3://` version, the organization's registry connection, and the provider running a vLLM OpenAI-compatible server (or its own managed engine) on those bytes. What differs is the account you need, what replicas 0 means there, and how spend is measured.
+
+### huggingface-endpoints
+
+Hugging Face Inference Endpoints, the managed product path. Needs a Hugging Face token with the Inference Endpoints write scope and your namespace (user or organization); choose the cloud (`aws`, `gcp`, `azure`), region, instance type and size, and the endpoint type (`protected` by default). Sources: `s3` and `hub`. An S3 version is served by the vLLM image with the registry URI in its environment and the registry's read keys passed as endpoint secrets; a hub version uses the repository and revision directly. Regions: `us-east-1`, `us-west-2`, `eu-west-1`, `eu-central-1`, `ap-southeast-1`. Replicas 0 calls the endpoint's scale-to-zero (nothing billed, resumed on the next positive count); the endpoint also scales to zero on its own after `scaleToZeroTimeoutMinutes` idle (15 by default, minimum 5). Cost is `hourlyRateCents` times running time, since Hugging Face publishes no billing API.
+
+### modal
+
+Modal, the raw-container path and the conformance reference. Needs a Modal token id and secret (`ak-`/`as-`) and your workspace slug; pick the GPU (`A10G` by default, up to `B200`), the vLLM image, `maxContainers` and the scale-down window. Source: `s3` only. Modal has no HTTP API for deploying or stopping apps, so the adapter drives the `modal` CLI with a generated app file; the API container must ship the `modal` package. Modal is serverless and scales to zero by itself; `replicas` is the container ceiling. Regions are not selectable. Cost is `hourlyRateCents` times observed running time, marked as an estimate; Modal exposes no billing API.
+
+### ollama
+
+Any Ollama server: the local tier, or one you run elsewhere. Needs the server URL and, only behind an authenticating proxy, a bearer token. Sources: `hub` (pulled straight from the hub through `hf.co/`), `local` (a GGUF or directory on the Ollama host), and `s3` through `registryMirrorPath`, a directory on the host where the registry is mounted or synced, because Ollama cannot read S3 itself. A plain library tag can be pulled by setting `tag`. Deploy pulls or creates the model and loads it (`keepAlive` `-1` keeps it in memory); scale to zero unloads it; teardown deletes it. Ollama bills nothing; set `hourlyRateCents` to account for a rented box. A private URL needs `OLLAMA_ALLOW_PRIVATE_URLS=true` on a self-hosted API.
+
+### custom-endpoint
+
+An OpenAI-compatible server somebody else runs (vLLM, TGI, llama.cpp, a LiteLLM proxy, a vendor). It cannot deploy, scale or tear down; it exists so the reconcile loop can watch such an endpoint and the catalog can price it like every other card. Config: the base URL, an optional key, the model id sent on the wire, and either per-token prices or an hourly rate. Registering one goes through `register-endpoint` on the [Providers](/models/providers#any-other-openai-compatible-server) page.
+
+### baseten
+
+Baseten dedicated deployments through the BIS-LLM engine. Needs a Baseten API key; choose the accelerator (`H100`, `H100:2`, `A10G`, `L4`, ...), the engine backend (`vllm` or `trtllm`), the scale-down delay and the concurrency target. Sources: `s3` and `hub`. S3 registry keys are stored as a workspace-level Baseten secret (`aws_secret_json` by default, `registrySecretName` to change it) shared by every deployment in the workspace, upserted on each deploy and never deleted on teardown; a non-AWS registry endpoint goes in the environment. Regions are enabled per workspace by Baseten support, so `regions` is empty and `region` is a slug from your account. Scale to zero deactivates the deployment (`INACTIVE`, nothing billed); a positive count sets the replica bounds and activates it. Spend comes from Baseten's billing summary for the last 31 days and the rate from its instance price list, with `hourlyRateCents` as the fallback when the key lacks billing scope.
+
+### together
+
+Together AI dedicated endpoints for a version you own (Together-hosted models are call-only, see [Providers](/models/providers)). Needs a Together API key; choose the hardware id (`1x_nvidia_h100_80gb_sxm` and the like from Together's hardware list), an optional availability zone, and an idle-stop timeout. Sources: `s3` and `hub`. Together cannot read `s3://` with keys, so an S3 version needs a presigned HTTPS URL of a `.tar.gz` or `.zip` of the version (`registryArchiveUrlSecret`, expiring in at least 100 minutes); a hub version uploads directly. The upload runs inside the first deploy and returns a `together://` URI that later deploys of the same version reuse. Scale to zero stops the endpoint (billed nothing); a positive count sets `min_replicas` and starts it. The rate comes from the hardware list price, `hourlyRateCents` as fallback; spend is rate times uptime because Together publishes no spend endpoint. Teardown deletes the endpoint and leaves the uploaded model for reuse.
+
+### fireworks
+
+Fireworks AI on-demand deployments. Needs a Fireworks API key and your account id; choose the accelerator (`NVIDIA_H100_80GB` by default through `NVIDIA_B300_288GB` and AMD MI300X, MI325X, MI350X), the count, an optional precision, placement (`GLOBAL`, `US`, `EUROPE`, `APAC` or one of 26 single regions) and the scale-to-zero window (1 hour by default, minimum 5 minutes). Sources: `s3` and `hub`. Fireworks has no server-side import, so the adapter streams the checkpoint itself from your registry or the hub to Fireworks' signed upload URLs; one Fireworks model per version, reused by later deploys of the same version. New accounts have quota in `GLOBAL` only, and single-region placement costs 1.5x. Scale to zero sets the replica floor to 0; a scaled-to-zero deployment answers 503 while it wakes, and Fireworks deletes deployments with a zero floor and no traffic for seven days. Cost is a list-price estimate from the built-in per-GPU table (or `hourlyRateCents`) times accelerators, placement and running replicas.
+
+### aws-bedrock-import
+
+Amazon Bedrock Custom Model Import, in your own AWS account. Needs an access key pair (or temporary credentials with a session token), the region (`us-east-1`, `us-east-2`, `us-west-2`, `eu-central-1` only), and an import service role ARN that can read the registry bucket; optional KMS key and VPC. Source: `s3` only, read by the role directly, so the registry bucket must be readable from that account. Architectures are gated by prefix of the version's base (`mistral`, `mixtral`, `flan`, `llama`, `mllama`, `gpt_bigcode`, `qwen2`, `qwen3`, `gpt-oss`); weights must be in Hugging Face format under 200 GB. Bedrock is serverless: it adds and removes model copies itself, so `scale(n)` records a ceiling and replicas 0 marks the model standby with a zero rate; nothing is sent to AWS. The endpoint is the runtime invoke URL with the imported model ARN, signed by the gateway's Bedrock dispatch. An import takes 15 to 45 minutes and has no cancel API; teardown deletes the imported model once the job has finished. Cost is an estimate from `hourlyRateCents` (custom model units per copy times the per-unit rate) times hours since import.
+
+### sagemaker
+
+Amazon SageMaker real-time endpoints, in your own AWS account. Needs an access key pair (or temporary credentials), the region, and an execution role ARN that can pull the image and read the registry bucket; choose the instance type (`ml.g5.xlarge` by default), the container image (the LMI vLLM deep learning container for the region by default), volume size, timeouts, extra environment, optional KMS key and VPC. Source: `s3` only; the bucket must live in, or be shared with, that AWS account, so a MinIO or cross-cloud registry needs copying first. Three resources are created per deployment (model, endpoint config, endpoint) and cleaned up together on failure. Scale to zero is expressed through managed instance scaling when `minScale`/`maxScale` are given and replicas 0 sends a desired count of 0; without managed scaling SageMaker refuses 0. Cost is `hourlyRateCents` times observed instances. An endpoint takes 8 to 15 minutes to come in service.
+
+### vertex
+
+Google Vertex AI endpoints, in your own GCP project. Needs a service account key JSON with `roles/aiplatform.user` (or a short-lived access token), the project id and location (`us-central1` by default); choose the machine type, accelerator (`NVIDIA_L4` by default) and count, and optionally a dedicated endpoint DNS. Source: `s3` only: the vLLM container streams weights straight from your registry, with the registry keys and endpoint in the container environment (visible to anyone who can read the model resource, so use a scoped read-only key). Deploy creates the endpoint and uploads the model in seconds, then the model deployment runs 10 to 20 minutes. Vertex never scales dedicated resources to zero, so `scaleToZero` is false; replicas 0 undeploys the model and keeps the endpoint (zero burn), a positive count redeploys. Teardown undeploys, then deletes the endpoint and the model. Cost is `hourlyRateCents` per replica times replicas; the replica count reported is the configured minimum.
+
+### azure-foundry
+
+Azure AI Foundry managed online endpoints, driven through the ARM API. Needs a subscription, resource group and workspace (Foundry project), and either a service principal (tenant, client id, client secret) or an ARM access token; choose the region (`eastus` by default, 13 regions listed), instance type, container image and endpoint auth mode (`Key` by default). Sources: `s3` and `hub`. Azure model assets accept only Azure URIs, so an S3 version is served by the vLLM image with the registry URI, endpoint and read keys in its environment variables (Azure has no separate secret channel for deployments); `azureml://` and blob URIs are mounted as model assets. The endpoint forwards one route, `/v1/chat/completions`, so the gateway cannot list models through it. Managed deployments keep at least one instance: replicas 0 deletes the deployment and keeps the endpoint and its URL; a positive count recreates it. Cost is `hourlyRateCents` times capacity over running time because Cost Management reports a day late. Teardown deletes the endpoint; environment and model versions stay in the workspace as history.
+
+### runpod
+
+RunPod serverless endpoints running the vLLM worker. Needs a RunPod API key; choose the GPU type id, count, worker image, data centers (`US-IL-1`, `EU-RO-1`, `AP-JP-1` and others, or empty to let RunPod choose), container disk, idle timeout, scaler and flashboot. Sources: `s3` and `hub`. The stock worker does not read S3: an S3 version needs either the almyty worker image (the stock image plus a fetch step, set through `image`) or a network volume already synced to `/runpod-volume/almyty/model`; a hub version works with the stock image unchanged. RunPod has no secret store for templates, so registry keys and the hub token are written into the template environment. Replicas are always-on workers: `scale(n)` sets the worker floor, replicas 0 sets both bounds to 0 (the only way to stop cold starts); with a floor of 0 and a ceiling above it the endpoint is `ready` with 0 replicas and starts on demand. Cost is `hourlyRateCents` per worker times the larger of running workers and the floor.
+
+### digitalocean
+
+One GPU Droplet per deployment running the vLLM container. Needs a DigitalOcean API token with droplet read and write scopes; choose the region (`nyc2`, `tor1`, `atl1`), GPU size (H100, H200, L40S, RTX 4000/6000 Ada, MI300X), base image, SSH keys and an optional VPC. Sources: `s3` and `hub`; weights arrive through cloud-init, which syncs the S3 version with the AWS CLI container (any S3 endpoint) or passes the hub repo to vLLM. One replica per droplet; more is refused. A powered-off droplet still bills at its full hourly rate, so `scaleToZero` is false: replicas 0 powers the droplet off (compute stops, cost does not) and only teardown stops the bill. vLLM listens on plain HTTP on the public address with no auth: put the droplet in a VPC and front it, or restrict the gateway to it, before exposing it. Cost comes from the droplet's own hourly price on every read.
+
+### nebius
+
+One GPU VM per deployment on Nebius AI Cloud compute, the EU-hosted option. Needs a project id and subnet, and either a service account authorized key (service account id, key id, PEM private key) or a 12-hour IAM access token; choose the platform (`gpu-h100-sxm` and others), preset, boot image family, disk size and type. Sources: `s3` and `hub`, arriving through cloud-init as on DigitalOcean. The API host defaults to the EU gateway; `apiHost` and `authHost` are configurable for other regions, and `regions` lists `eu-north1`, `eu-west1`, `us-central1`. Two resources per deployment (boot disk, then instance), cleaned up together on failure. One replica per VM. Replicas 0 stops the VM: a stopped VM bills only its disk, so `scaleToZero` is true and the compute rate is reported as 0 while stopped. vLLM listens on plain HTTP on the public address; restrict it by security group or front it. Cost is `hourlyRateCents` while the VM is not stopped; Nebius exposes no spend API. Nebius Token Factory dedicated endpoints are call-only until its custom-weights upload is public.
+
+### stub
+
+An in-memory adapter for development and the conformance suite. Registered outside production, or in production with `MODEL_STUB_ADAPTER=true`. Its `simulate` field forces `quota_exceeded` or `fail_ready` outcomes.
+
+## Related
+
+- [Models](/models): the card a deployment fills
+- [Routing](/models/routing): how a deployed model gets picked
+- [Connections](/connections): the registry connection and provider accounts
+- [Cost governance](/cost-governance): budgets a deployment can be tied to
+- [Models CLI](/models/cli): every verb with examples
