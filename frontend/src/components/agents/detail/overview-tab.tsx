@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/alert-dialog'
 
 import { agentsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
@@ -101,6 +102,7 @@ export function OverviewTab({
 
   const [testInput, setTestInput] = useState('')
   const [testOutput, setTestOutput] = useState<string | null>(null)
+  const [testError, setTestError] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [webhookSaving, setWebhookSaving] = useState(false)
   const [scheduleSaving, setScheduleSaving] = useState(false)
@@ -123,15 +125,16 @@ export function OverviewTab({
   const handleTest = () => {
     setTestLoading(true)
     setTestOutput(null)
+    setTestError(null)
     agentsApi.invoke(agent.id, { message: testInput })
       .then((res: any) => {
         const output = res?.output || JSON.stringify(res)
         setTestOutput(typeof output === 'string' ? output : JSON.stringify(output, null, 2))
         setTestInput('')
       })
-      .catch((err: any) => {
-        const msg = err.response?.data?.message || err.message || 'Invocation failed'
-        setTestOutput(`Error: ${msg}`)
+      .catch((err: unknown) => {
+        const msg = getApiErrorMessage(err, 'Invocation failed')
+        setTestError(msg)
         errorNotif('Invocation Failed', msg)
       })
       .finally(() => setTestLoading(false))
@@ -169,12 +172,17 @@ export function OverviewTab({
                   {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 </Button>
               </div>
+              {testError && (
+                <div role="alert" className="bg-destructive/10 text-destructive rounded-lg p-3 text-sm whitespace-pre-wrap">
+                  {testError}
+                </div>
+              )}
               {testOutput && (
                 <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[200px] overflow-auto">
                   {testOutput}
                 </div>
               )}
-              {!testOutput && (
+              {!testOutput && !testError && (
                 <p className="text-xs text-muted-foreground">Send a message to invoke this agent and see the response.</p>
               )}
             </div>
