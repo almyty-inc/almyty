@@ -240,6 +240,10 @@ describe('buildChannelConfigPatch', () => {
 
   it('names the managed connector of an adapter', () => {
     expect(channelConnectorKey('slack')).toBe('channel-slack')
+    // Connector keys are [a-z0-9-]; the backend catalog dasherizes the
+    // gateway type's underscores and so must this.
+    expect(channelConnectorKey('whatsapp_cloud')).toBe('channel-whatsapp-cloud')
+    expect(channelConnectorKey('google_chat')).toBe('channel-google-chat')
   })
 })
 

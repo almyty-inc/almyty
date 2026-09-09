@@ -140,6 +140,21 @@ export interface HttpProbe {
   body?: unknown;
   /** Dot path into the JSON response that names the account, e.g. `data.label`. */
   accountLabelPath?: string;
+  /** Config field used as the account label when the response names nothing (never a secret field). */
+  accountLabelFrom?: string;
+  /**
+   * Prefix put in front of the secret for the `header` auth style, e.g.
+   * `Bot ` for Discord's `Authorization: Bot <token>`.
+   */
+  headerPrefix?: string;
+  /**
+   * Dot path to a field that must be truthy for a 2xx to count as valid.
+   * Slack answers HTTP 200 with `{"ok": false, "error": "invalid_auth"}`
+   * for a rejected token, so the status code alone proves nothing.
+   */
+  okPath?: string;
+  /** Dot path to the provider's error string, read when `okPath` is falsy. */
+  errorPath?: string;
   /** Environment variable that, when `true`, allows private/loopback URLs (Ollama on localhost). */
   privateUrlsEnv?: string;
 }
@@ -160,7 +175,13 @@ export type ValidationSpec =
   | { kind: 'aws_caller_identity' }
   | { kind: 'aws_assume_role' }
   | { kind: 'gcp_service_account' }
-  | { kind: 'oauth2_client_credentials'; tokenUrl: string; scope: string }
+  /**
+   * Client-credentials token exchange. `clientIdField` / `clientSecretField`
+   * name the config fields holding the pair when they are not the default
+   * `clientId` / `clientSecret` (Microsoft Teams stores `bot_id` /
+   * `bot_password`, the names its Bot Framework adapter reads).
+   */
+  | { kind: 'oauth2_client_credentials'; tokenUrl: string; scope: string; clientIdField?: string; clientSecretField?: string }
   | { kind: 's3_bucket' }
   | { kind: 'mcp_initialize' };
 

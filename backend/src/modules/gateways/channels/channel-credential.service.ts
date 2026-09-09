@@ -17,9 +17,16 @@ export type ChannelUsePurpose = 'channel_inbound' | 'channel_outbound';
 /** The slice of a gateway the channel credential paths need. */
 export type ChannelGatewayRef = Pick<Gateway, 'id' | 'type' | 'organizationId' | 'configuration'> & { name?: string };
 
-/** Managed rows are tagged with the vendor as their connector: `channel-slack`, `channel-telegram`, ... */
+/**
+ * Managed rows are tagged with the vendor as their connector:
+ * `channel-slack`, `channel-telegram`, `channel-whatsapp-cloud`, ... The
+ * gateway type's underscores are dasherized because connector keys are
+ * `[a-z0-9-]` (see validateConnectorDefinition); the catalog builds its
+ * channel keys the same way, so a gateway's managed row and a connection
+ * made in the connect sheet land on the same connector.
+ */
 export function channelConnectorKey(type: string): string {
-  return `channel-${type}`;
+  return `channel-${type.replace(/_/g, '-')}`;
 }
 
 /** The consumer identity a channel credential row is managed by: one per gateway and adapter. */
