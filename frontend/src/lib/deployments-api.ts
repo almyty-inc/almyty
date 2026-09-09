@@ -252,9 +252,14 @@ export function runnableAdapters(adapters: ModelAdapter[], scheme: ModelScheme |
 /**
  * Read the backend's ADAPTER_UNSUPPORTED_SOURCE refusal off an axios error,
  * so the form can show what the provider does accept instead of a bare 400.
+ *
+ * The server wraps every error as `{ error: { code, message, ... } }`, so
+ * the flat shape is checked only as a fallback for a handler that answers
+ * without the filter.
  */
 export function readAdapterRefusal(error: unknown): AdapterRefusal | null {
-  const data = (error as { response?: { data?: any } })?.response?.data
+  const body = (error as { response?: { data?: any } })?.response?.data
+  const data = body?.error ?? body
   if (!data) return null
   const accepts = Array.isArray(data.accepts) ? data.accepts.filter((a: unknown): a is string => typeof a === 'string') : []
   const message = typeof data.message === 'string' ? data.message : ''

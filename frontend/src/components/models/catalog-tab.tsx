@@ -58,10 +58,7 @@ import { EditModelSheet } from './edit-model-sheet'
 export const MODELS_QUERY_KEY = ['models', 'catalog'] as const
 
 const ORIGIN_FILTERS: Array<'all' | ModelOrigin> = ['all', 'vendor', 'deployment', 'endpoint']
-
-function errorMessage(error: any, fallback: string): string {
-  return error?.response?.data?.message || error?.message || fallback
-}
+import { getApiErrorMessage as errorMessage } from '@/lib/api-error'
 
 /**
  * The catalog: which models this organization can run right now, where

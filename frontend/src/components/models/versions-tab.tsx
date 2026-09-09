@@ -12,11 +12,7 @@ import { DeployDialog } from './deployments/deploy-dialog'
 import { RegisterVersionDialog } from './versions/register-version-dialog'
 import { VersionDetailSheet } from './versions/version-detail-sheet'
 import { VersionsList } from './versions/versions-list'
-
-function errorMessage(err: unknown, fallback: string): string {
-  const e = err as { response?: { data?: { message?: string } }; message?: string }
-  return e?.response?.data?.message ?? e?.message ?? fallback
-}
+import { getApiErrorMessage as errorMessage } from '@/lib/api-error'
 
 export function VersionsTab() {
   const { currentOrganization } = useOrganizationStore()

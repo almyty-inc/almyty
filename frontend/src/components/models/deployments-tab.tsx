@@ -11,11 +11,7 @@ import type { AdapterRefusal, CreateModelDeploymentBody, ModelAdapter, ModelDepl
 import { DeployDialog } from './deployments/deploy-dialog'
 import { DeploymentDetailSheet } from './deployments/deployment-detail-sheet'
 import { DeploymentsList } from './deployments/deployments-list'
-
-function errorMessage(err: unknown, fallback: string): string {
-  const e = err as { response?: { data?: { message?: string } }; message?: string }
-  return e?.response?.data?.message ?? e?.message ?? fallback
-}
+import { getApiErrorMessage as errorMessage } from '@/lib/api-error'
 
 export function DeploymentsTab() {
   const { currentOrganization } = useOrganizationStore()
