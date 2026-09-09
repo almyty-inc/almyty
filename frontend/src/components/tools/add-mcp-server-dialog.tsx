@@ -17,6 +17,7 @@ import { mcpSourcesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { ConnectAccountButton } from '@/components/connections/connect-sheet'
 import { ConnectedChip } from '@/components/connections/connected-chip'
+import { ConnectionSelect } from '@/components/connections/connection-select'
 import type { Connection } from '@/types/connections'
 
 interface AddMcpServerDialogProps {
@@ -51,11 +52,12 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
       if (!organizationId) {
         return Promise.reject(new Error('No organization context'))
       }
-      const payload: Parameters<typeof mcpSourcesApi.create>[1] & { connectionId?: string } = {
+      // A connection stands in for the pasted token: the backend resolves
+      // the secret from the credential row it points at.
+      const payload: Parameters<typeof mcpSourcesApi.create>[1] = {
         name: name.trim(),
         url: url.trim(),
-        ...(bearerToken.trim() ? { bearerToken: bearerToken.trim() } : {}),
-        ...(connection ? { connectionId: connection.id } : {}),
+        ...(connection ? { credentialId: connection.id } : bearerToken.trim() ? { bearerToken: bearerToken.trim() } : {}),
       }
       return mcpSourcesApi.create(organizationId, payload)
     },
@@ -152,20 +154,36 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
               maxLength={4096}
               onChange={(e) => setBearerToken(e.target.value)}
               autoComplete="off"
+              disabled={!!connection}
             />
             <p className="text-xs text-muted-foreground">
-              Sent as an Authorization header. Stored encrypted.
+              {connection
+                ? 'The connection supplies the token; nothing is pasted here.'
+                : 'Sent as an Authorization header. Stored encrypted.'}
             </p>
             {connection ? (
               <ConnectedChip connection={connection} onClear={() => setConnection(null)} />
             ) : (
-              <ConnectAccountButton
-                kind="mcp"
-                onConnected={(next) => {
-                  setConnection(next)
-                  setBearerToken('')
-                }}
-              />
+              <>
+                <ConnectionSelect
+                  id="mcp-source-connection"
+                  kind="mcp"
+                  value=""
+                  onChange={(next) => {
+                    if (!next) return
+                    setConnection(next)
+                    setBearerToken('')
+                  }}
+                  helper="A connection made earlier, of kind MCP server."
+                />
+                <ConnectAccountButton
+                  kind="mcp"
+                  onConnected={(next) => {
+                    setConnection(next)
+                    setBearerToken('')
+                  }}
+                />
+              </>
             )}
           </div>
 

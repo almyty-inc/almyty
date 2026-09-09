@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Api } from '../../entities/api.entity';
 import { ChannelInstallation } from '../../entities/channel-installation.entity';
 import { Credential } from '../../entities/credential.entity';
+import { Gateway } from '../../entities/gateway.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { McpSource } from '../../entities/mcp-source.entity';
 import { ConsumerSecretBackfillService } from './consumer-secret-backfill.service';
@@ -26,7 +27,7 @@ import {
  */
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([Credential, LlmProvider, McpSource, ChannelInstallation, Api])],
+  imports: [TypeOrmModule.forFeature([Credential, LlmProvider, McpSource, ChannelInstallation, Api, Gateway])],
   providers: [
     { provide: CONNECTION_USE_POLICY, useClass: AllowAllConnectionUsePolicy },
     CredentialRefResolver,

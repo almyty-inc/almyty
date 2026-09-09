@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { JsonSchemaForm, schemaDefaults, validateSchemaValues, type SchemaFormValues } from '@/components/ui/json-schema-form'
+import { JsonSchemaForm, schemaDefaults, schemaWithoutSecretRequirements, secretPropertyKeys, stripSecretValues, validateSchemaValues, type SchemaFormValues } from '@/components/ui/json-schema-form'
 import { ConnectAccountButton } from '@/components/connections/connect-sheet'
 import { ConnectedChip } from '@/components/connections/connected-chip'
+import { ConnectionSelect } from '@/components/connections/connection-select'
 import type { Connection } from '@/types/connections'
 import { budgetsApi, credentialsApi } from '@/lib/api'
 import { formatCents } from '@/lib/deployments-api'
@@ -88,7 +89,12 @@ export function buildDeployBody(state: DeployFormState): DeployBuildResult {
   if (state.desired.quantization.trim()) desired.quantization = state.desired.quantization.trim()
   if (state.desired.privacyTier) desired.privacyTier = state.desired.privacyTier
 
-  const config = validateSchemaValues(state.adapter?.configSchema, state.config, { mode: 'create' })
+  // A connection (a picked credential or one made in the connect sheet)
+  // supplies the adapter's secrets: they are neither required nor sent, so
+  // the backend never sees PROVIDER_CONFIG_INLINE_SECRET from this form.
+  const connectionId = state.credentialId || state.connectionId || ''
+  const schema = connectionId ? schemaWithoutSecretRequirements(state.adapter?.configSchema) : state.adapter?.configSchema
+  const config = validateSchemaValues(schema, state.config, { mode: 'create' })
   for (const [k, v] of Object.entries(config.errors)) errors[`config.${k}`] = v
 
   if (Object.keys(errors).length > 0) return { ok: false, errors }
@@ -98,11 +104,16 @@ export function buildDeployBody(state: DeployFormState): DeployBuildResult {
     providerType: state.adapter!.key,
   }
   if (Object.keys(desired).length > 0) body.desired = desired
-  if (Object.keys(config.value).length > 0) body.providerConfig = config.value
-  if (state.credentialId) body.credentialId = state.credentialId
-  if (state.connectionId) body.connectionId = state.connectionId
+  const providerConfig = connectionId ? stripSecretValues(state.adapter?.configSchema, config.value) : config.value
+  if (Object.keys(providerConfig).length > 0) body.providerConfig = providerConfig
+  if (connectionId) body.credentialId = connectionId
   if (state.budgetId) body.budgetId = state.budgetId
   return { ok: true, body }
+}
+
+/** True when the adapter form has x-secret fields the user would otherwise paste. */
+export function adapterHasSecrets(adapter: ModelAdapter | null): boolean {
+  return !!adapter && secretPropertyKeys(adapter.configSchema).length > 0
 }
 
 export function describeBudget(b: SpendBudgetSummary): string {
@@ -181,6 +192,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
   const setDesiredField = (key: keyof DesiredFormValues, value: string) => setDesired((prev) => ({ ...prev, [key]: value }))
   const regions = adapter?.capabilities.regions ?? []
   const quantizations = version?.quantizations ?? []
+  const usingConnection = !!credentialId || !!connection
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -275,7 +287,16 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">{adapter ? `${adapter.displayName} configuration` : 'Adapter configuration'}</legend>
             {adapter ? (
-              <JsonSchemaForm schema={adapter.configSchema} value={config} onChange={setConfig} errors={configErrors} mode="create" />
+              <>
+                <JsonSchemaForm schema={adapter.configSchema} value={config} onChange={setConfig} errors={configErrors} mode="create" hideSecrets={usingConnection} />
+                {adapterHasSecrets(adapter) && (
+                  <p className="text-xs text-muted-foreground" data-testid="deploy-secret-hint">
+                    {usingConnection
+                      ? 'The connection supplies the secret fields; they are left out of this request.'
+                      : 'Recommended: connect the account below instead of pasting its secret here, so it is stored once and can be rotated.'}
+                  </p>
+                )}
+              </>
             ) : (
               <p className="text-sm text-muted-foreground">Pick an adapter to see its settings.</p>
             )}
@@ -284,7 +305,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="deploy-credential">Credential</Label>
-              <select id="deploy-credential" className={SELECT_CLASS} value={credentialId} onChange={(e) => setCredentialId(e.target.value)}>
+              <select id="deploy-credential" className={SELECT_CLASS} value={credentialId} onChange={(e) => setCredentialId(e.target.value)} disabled={!!connection}>
                 <option value="">None</option>
                 {credentials.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -296,13 +317,26 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
               {connection ? (
                 <ConnectedChip connection={connection} onClear={() => setConnection(null)} />
               ) : (
-                <ConnectAccountButton
-                  kind="deployment"
-                  onConnected={(next) => {
-                    setConnection(next)
-                    setCredentialId('')
-                  }}
-                />
+                <>
+                  <ConnectionSelect
+                    id="deploy-connection"
+                    kind="deployment"
+                    preferConnectorKey={adapter ? `deploy-${adapter.key}` : undefined}
+                    value=""
+                    onChange={(next) => {
+                      if (!next) return
+                      setConnection(next)
+                      setCredentialId('')
+                    }}
+                  />
+                  <ConnectAccountButton
+                    kind="deployment"
+                    onConnected={(next) => {
+                      setConnection(next)
+                      setCredentialId('')
+                    }}
+                  />
+                </>
               )}
             </div>
             <div className="space-y-1.5">

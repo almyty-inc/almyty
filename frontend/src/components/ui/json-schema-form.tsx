@@ -50,6 +50,31 @@ export function isSecretProperty(prop: JsonSchemaProperty): boolean {
   return prop['x-secret'] === true
 }
 
+/** The x-secret property names of a schema. */
+export function secretPropertyKeys(schema: JsonSchemaObject | null | undefined): string[] {
+  return Object.entries(schema?.properties ?? {})
+    .filter(([, prop]) => isSecretProperty(prop))
+    .map(([key]) => key)
+}
+
+/**
+ * The schema with its secrets no longer required: what a form validates
+ * against once a connection supplies them. Mirrors the backend's
+ * schemaWithoutSecretRequirements.
+ */
+export function schemaWithoutSecretRequirements(schema: JsonSchemaObject | null | undefined): JsonSchemaObject | null | undefined {
+  if (!schema) return schema
+  const secrets = new Set(secretPropertyKeys(schema))
+  return { ...schema, required: (schema.required ?? []).filter((key) => !secrets.has(key)) }
+}
+
+/** The values without their x-secret entries. */
+export function stripSecretValues(schema: JsonSchemaObject | null | undefined, values: SchemaFormValues): SchemaFormValues {
+  const secrets = new Set(secretPropertyKeys(schema))
+  const out: SchemaFormValues = {}
+  for (const [key, v] of Object.entries(values)) if (!secrets.has(key)) out[key] = v
+  return out
+}
 /**
  * Validate and coerce. Numbers arrive as strings from inputs; blanks are
  * dropped; required fields must be present (a secret is exempt in edit mode,
@@ -130,16 +155,18 @@ export interface JsonSchemaFormProps {
   /** In edit mode a blank secret keeps the stored value. */
   mode?: 'create' | 'edit'
   disabled?: boolean
+  /** Leave the x-secret fields out: a connection supplies them. */
+  hideSecrets?: boolean
   className?: string
 }
 
-export function JsonSchemaForm({ schema, value, onChange, errors = {}, mode = 'create', disabled, className }: JsonSchemaFormProps) {
+export function JsonSchemaForm({ schema, value, onChange, errors = {}, mode = 'create', disabled, hideSecrets, className }: JsonSchemaFormProps) {
   const prefix = useId()
-  const entries = Object.entries(schema?.properties ?? {})
+  const entries = Object.entries(schema?.properties ?? {}).filter(([, prop]) => !(hideSecrets && isSecretProperty(prop)))
   const required = new Set(schema?.required ?? [])
 
   if (entries.length === 0) {
-    return <p className={cn('text-sm text-muted-foreground', className)}>This adapter needs no configuration.</p>
+    return <p className={cn('text-sm text-muted-foreground', className)}>{hideSecrets && Object.keys(schema?.properties ?? {}).length > 0 ? 'The connection covers every setting of this adapter.' : 'This adapter needs no configuration.'}</p>
   }
 
   const set = (key: string, next: unknown) => onChange({ ...value, [key]: next })

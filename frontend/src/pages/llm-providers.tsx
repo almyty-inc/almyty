@@ -39,6 +39,8 @@ import { CreateProviderDialog } from '@/components/llm-providers/create-provider
 import { EditProviderDialog } from '@/components/llm-providers/edit-provider-dialog'
 import { TestProviderDialog } from '@/components/llm-providers/test-provider-dialog'
 import {
+  buildProviderCreateBody,
+  buildProviderUpdateBody,
   createProviderSchema,
   type CreateProviderFormData,
   type LlmProvider,
@@ -183,35 +185,27 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
     }
   })
 
-  // Form hook for edit provider
+  // Form hook for edit provider. credentialId / usageCredentialId stay
+  // undefined (keep) unless the dialog's credential slot sets them: a
+  // connection id points the provider at it, null clears it.
   const editForm = useForm<any>({
     defaultValues: {
       name: '',
       model: '',
       maxTokens: 4096,
       temperature: 0.7,
+      apiKey: '',
       usageApiKey: '',
+      apiUrl: '',
+      credentialId: undefined,
+      usageCredentialId: undefined,
     }
   })
 
   const createProviderMutation = useMutation({
     mutationFn: async (data: CreateProviderFormData) => {
       try {
-        return await llmProvidersApi.create({
-          name: data.name,
-          type: data.type,
-          configuration: {
-            // Ollama is keyless — only send the key when one was typed
-            // (the zod schema enforces presence for all other types).
-            ...(data.apiKey && { apiKey: data.apiKey }),
-            // Optional server URL (Ollama base URL field).
-            ...(data.apiUrl && { apiUrl: data.apiUrl }),
-            ...(data.organizationId && { organizationId: data.organizationId }),
-            // Admin-scoped usage/cost API key (issue #241) — only sent
-            // when the user actually entered one.
-            ...(data.usageApiKey && { usageApiKey: data.usageApiKey }),
-          }
-        })
+        return await llmProvidersApi.create(buildProviderCreateBody(data))
       } catch (error) {
         console.error('Create provider error:', error)
         throw error
@@ -231,17 +225,7 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
 
   const updateProviderMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return llmProvidersApi.update(id, {
-        name: data.name,
-        configuration: {
-          model: data.model,
-          maxTokens: data.maxTokens,
-          temperature: data.temperature,
-          // Only send the admin usage key when a new one was typed —
-          // an empty field means "keep the existing (encrypted) key".
-          ...(data.usageApiKey && { usageApiKey: data.usageApiKey }),
-        }
-      })
+      return llmProvidersApi.update(id, buildProviderUpdateBody(data))
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })

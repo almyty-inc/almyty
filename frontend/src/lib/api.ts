@@ -645,7 +645,20 @@ export const toolsApi = {
 export const mcpSourcesApi = {
   getAll: (organizationId: string) => apiGet(`/organizations/${organizationId}/mcp-sources`),
 
-  create: (organizationId: string, data: { name: string; url: string; description?: string; bearerToken?: string }) =>
+  create: (
+    organizationId: string,
+    data: {
+      name: string
+      url: string
+      description?: string
+      /** A pasted bearer token; becomes a credential row the source manages. */
+      bearerToken?: string
+      /** Pasted custom headers; same, as one custom-type row. */
+      headers?: Record<string, string>
+      /** An existing connection of kind mcp; used instead of a pasted secret. */
+      credentialId?: string
+    },
+  ) =>
     apiPost(`/organizations/${organizationId}/mcp-sources`, data),
 
   sync: (organizationId: string, id: string) =>

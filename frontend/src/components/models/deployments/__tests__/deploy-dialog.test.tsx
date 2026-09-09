@@ -10,6 +10,16 @@ vi.mock('../../../../lib/api', () => ({
   budgetsApi: { list: vi.fn() },
 }))
 
+vi.mock('../../../../lib/connections-api', () => ({
+  connectionsApi: {
+    list: vi.fn().mockResolvedValue([
+      { id: 'conn-hf', name: 'HF endpoints', connectorKey: 'deploy-huggingface-endpoints', kind: 'deployment', owner: 'org', health: { status: 'valid' }, createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'conn-modal', name: 'Modal', connectorKey: 'modal', kind: 'deployment', owner: 'org', health: { status: 'valid' }, createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'conn-openai', name: 'OpenAI', connectorKey: 'openai', kind: 'inference', owner: 'org', health: { status: 'valid' }, createdAt: '2026-01-01T00:00:00.000Z' },
+    ]),
+  },
+}))
+
 vi.mock('../../../../store/organization', () => ({
   useOrganizationStore: () => ({ currentOrganization: { id: 'test-org-id', name: 'Test Org' } }),
 }))
@@ -51,12 +61,11 @@ describe('buildDeployBody', () => {
     expect(r).toEqual({ ok: true, body: { modelVersionId: 'v-1', providerType: 'ollama' } })
   })
 
-  it('builds the full body with coerced numbers, secret and ids', () => {
+  it('builds the full body with coerced numbers and ids, and leaves the pasted secret in without a connection', () => {
     const r = buildDeployBody({
       ...base,
       desired: { hardware: 'a10g', replicas: '2', minScale: '0', maxScale: '4', quantization: 'awq-int4', region: 'eu-west-1', privacyTier: 'private_cloud' },
       config: { baseUrl: 'http://gpu:11434', token: 'hf_secret', hourlyRateCents: '120' },
-      credentialId: 'cred-1',
       budgetId: 'budget-1',
     })
     expect(r).toEqual({
@@ -66,10 +75,30 @@ describe('buildDeployBody', () => {
         providerType: 'ollama',
         desired: { replicas: 2, minScale: 0, maxScale: 4, hardware: 'a10g', region: 'eu-west-1', quantization: 'awq-int4', privacyTier: 'private_cloud' },
         providerConfig: { baseUrl: 'http://gpu:11434', token: 'hf_secret', hourlyRateCents: 120 },
-        credentialId: 'cred-1',
         budgetId: 'budget-1',
       },
     })
+  })
+
+  it('strips the x-secret values and sends credentialId when a vault credential is chosen', () => {
+    const r = buildDeployBody({ ...base, config: { baseUrl: 'http://gpu:11434', token: 'hf_secret', hourlyRateCents: '120' }, credentialId: 'cred-1' })
+    expect(r).toEqual({
+      ok: true,
+      body: { modelVersionId: 'v-1', providerType: 'ollama', desired: { replicas: 1 }, providerConfig: { baseUrl: 'http://gpu:11434', hourlyRateCents: 120 }, credentialId: 'cred-1' },
+    })
+  })
+
+  it('sends a connect-sheet connection as credentialId and no longer requires the schema secrets', () => {
+    // hf requires apiToken; with a connection the token is neither required nor sent.
+    const r = buildDeployBody({ ...base, adapter: hfAdapter, config: { namespace: 'acme' }, connectionId: 'conn-1' })
+    expect(r).toEqual({ ok: true, body: { modelVersionId: 'v-1', providerType: 'huggingface-endpoints', desired: { replicas: 1 }, providerConfig: { namespace: 'acme' }, credentialId: 'conn-1' } })
+    if (r.ok) expect(r.body).not.toHaveProperty('connectionId')
+  })
+
+  it('still requires the schema secret when nothing supplies it', () => {
+    const r = buildDeployBody({ ...base, adapter: hfAdapter, config: { namespace: 'acme' } })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors['config.apiToken']).toMatch(/required/)
   })
 })
 
@@ -119,9 +148,10 @@ describe('DeployDialog', () => {
     fireEvent.change(screen.getByLabelText('Replicas'), { target: { value: '2' } })
     fireEvent.change(screen.getByLabelText('Hardware'), { target: { value: 'a10g' } })
 
-    await waitFor(() => expect(screen.getByRole('option', { name: 'HF token (api_key)' })).toBeInTheDocument())
-    fireEvent.change(screen.getByLabelText('Credential'), { target: { value: 'cred-1' } })
+    // No connection chosen: the inline path stays, with a hint towards a connection.
+    expect(screen.getByTestId('deploy-secret-hint')).toHaveTextContent(/Recommended: connect the account/)
     // Inactive budgets are not offered.
+    await waitFor(() => expect(screen.getByRole('option', { name: /per month/ })).toBeInTheDocument())
     const budget = screen.getByLabelText('Spend budget') as HTMLSelectElement
     expect(Array.from(budget.options).map((o) => o.value)).toEqual(['', 'budget-1'])
     fireEvent.change(budget, { target: { value: 'budget-1' } })
@@ -134,9 +164,53 @@ describe('DeployDialog', () => {
       providerType: 'huggingface-endpoints',
       desired: { replicas: 2, hardware: 'a10g', region: 'eu-west-1', quantization: 'awq-int4' },
       providerConfig: { apiToken: 'hf_live_123', namespace: 'acme' },
-      credentialId: 'cred-1',
       budgetId: 'budget-1',
     })
+  })
+
+  it('hides the secret fields and sends only credentialId once a vault credential is picked', async () => {
+    const onSubmit = vi.fn()
+    render(<DeployDialog open onOpenChange={() => {}} adapters={[hfAdapter]} versions={[makeVersion()]} onSubmit={onSubmit} />)
+    fireEvent.click(screen.getByRole('radio', { name: /Hugging Face Endpoints/ }))
+    fireEvent.change(screen.getByLabelText('Version'), { target: { value: 'v-1' } })
+    fireEvent.change(screen.getByLabelText('API token'), { target: { value: 'hf_typed' } })
+    fireEvent.change(screen.getByLabelText('Namespace'), { target: { value: 'acme' } })
+
+    await waitFor(() => expect(screen.getByRole('option', { name: 'HF token (api_key)' })).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Credential'), { target: { value: 'cred-1' } })
+
+    // The x-secret field is gone from the form and the hint flips.
+    expect(screen.queryByLabelText('API token')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Namespace')).toBeInTheDocument()
+    expect(screen.getByTestId('deploy-secret-hint')).toHaveTextContent(/connection supplies the secret/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+    expect(onSubmit).toHaveBeenCalledWith({
+      modelVersionId: 'v-1',
+      providerType: 'huggingface-endpoints',
+      desired: { replicas: 1 },
+      providerConfig: { namespace: 'acme' },
+      credentialId: 'cred-1',
+    })
+  })
+
+  it('offers existing deployment connections and sends the picked one as credentialId', async () => {
+    const onSubmit = vi.fn()
+    render(<DeployDialog open onOpenChange={() => {}} adapters={[hfAdapter]} versions={[makeVersion()]} onSubmit={onSubmit} />)
+    fireEvent.click(screen.getByRole('radio', { name: /Hugging Face Endpoints/ }))
+    fireEvent.change(screen.getByLabelText('Version'), { target: { value: 'v-1' } })
+
+    const select = (await screen.findByLabelText('Use an existing connection')) as HTMLSelectElement
+    // Only the adapter's own connector is listed when it has a connection; the OpenAI key is not.
+    await waitFor(() => expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'conn-hf']))
+    fireEvent.change(select, { target: { value: 'conn-hf' } })
+
+    expect(await screen.findByTestId('connected-chip')).toHaveTextContent('HF endpoints')
+    expect(screen.queryByLabelText('API token')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Credential')).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+    expect(onSubmit).toHaveBeenCalledWith({ modelVersionId: 'v-1', providerType: 'huggingface-endpoints', desired: { replicas: 1 }, credentialId: 'conn-hf' })
   })
 
   it('blocks submit and shows errors when the adapter, version or a required secret is missing', () => {

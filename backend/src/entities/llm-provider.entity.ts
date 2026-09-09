@@ -682,6 +682,8 @@ export class LlmProvider {
         temperature: configuration?.temperature,
         timeout: configuration?.timeout,
         retries: configuration?.retries,
+        // The server URL is public (ollama, custom); the edit form prefills it.
+        apiUrl: configuration?.apiUrl,
       },
     };
   }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { createProviderSchema } from '../schema'
+import { baseUrlSupported, createProviderSchema } from '../schema'
 
 /**
  * Keyless create is allowed for ollama only — every other provider type
@@ -71,5 +71,26 @@ describe('createProviderSchema', () => {
       apiKey: 'sk-test-1234567890',
     })
     expect(result.success).toBe(true)
+  })
+})
+
+describe('createProviderSchema: custom (OpenAI-compatible) base URL', () => {
+  it('requires an http(s) base URL for the custom type', () => {
+    const missing = createProviderSchema.safeParse({ name: 'vLLM', type: 'custom', apiKey: 'sk-12345678' })
+    expect(missing.success).toBe(false)
+    expect(missing.success ? [] : missing.error.issues.map((i) => i.path.join('.'))).toContain('apiUrl')
+
+    const notAUrl = createProviderSchema.safeParse({ name: 'vLLM', type: 'custom', apiKey: 'sk-12345678', apiUrl: 'llm.example.internal' })
+    expect(notAUrl.success).toBe(false)
+
+    const ok = createProviderSchema.safeParse({ name: 'vLLM', type: 'custom', apiKey: 'sk-12345678', apiUrl: 'https://llm.example.internal/v1' })
+    expect(ok.success).toBe(true)
+  })
+
+  it('keeps the base URL optional for every other type', () => {
+    expect(createProviderSchema.safeParse({ name: 'x', type: 'openai', apiKey: 'sk-12345678' }).success).toBe(true)
+    expect(baseUrlSupported('custom')).toBe(true)
+    expect(baseUrlSupported('ollama')).toBe(true)
+    expect(baseUrlSupported('openai')).toBe(false)
   })
 })

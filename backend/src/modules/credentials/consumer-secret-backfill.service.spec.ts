@@ -1,5 +1,6 @@
 import { Api } from '../../entities/api.entity';
 import { ChannelInstallation } from '../../entities/channel-installation.entity';
+import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { LlmProvider, LlmProviderType } from '../../entities/llm-provider.entity';
 import { McpSource } from '../../entities/mcp-source.entity';
 import { encryptField, isEncrypted } from '../../common/security/field-crypto';
@@ -13,16 +14,17 @@ const repoOf = <T>(rows: T[]) => ({
 });
 
 describe('ConsumerSecretBackfillService', () => {
-  const build = (fixtures: { providers?: LlmProvider[]; sources?: McpSource[]; installations?: ChannelInstallation[]; apis?: Api[] } = {}) => {
+  const build = (fixtures: { providers?: LlmProvider[]; sources?: McpSource[]; installations?: ChannelInstallation[]; apis?: Api[]; gateways?: Gateway[] } = {}) => {
     const store = makeCredentialRefFake();
     const providers = repoOf(fixtures.providers ?? []);
     const sources = repoOf(fixtures.sources ?? []);
     const installations = repoOf(fixtures.installations ?? []);
     const apis = repoOf(fixtures.apis ?? []);
+    const gateways = repoOf(fixtures.gateways ?? []);
     const service = new ConsumerSecretBackfillService(
-      providers as any, sources as any, installations as any, apis as any, makeEnvelopeCryptoMock(), store.resolver,
+      providers as any, sources as any, installations as any, apis as any, makeEnvelopeCryptoMock(), store.resolver, gateways as any,
     );
-    return { service, store, providers, sources, installations, apis };
+    return { service, store, providers, sources, installations, apis, gateways };
   };
 
   it('moves inline LLM provider keys into managed rows and clears the row, skipping providers already on references', async () => {
@@ -98,6 +100,29 @@ describe('ConsumerSecretBackfillService', () => {
     expect(row.keyLocation).toBe('header');
     expect(isEncrypted(row.config.apiKey)).toBe(true);
     expect(api.authentication).toEqual({ type: 'api_key', config: { headerName: 'X-Key', location: 'header', credentialId: row.id } });
+  });
+
+  it('moves inline channel gateway secrets into a managed connection and skips gateways already on a reference', async () => {
+    const legacy = Object.assign(new Gateway(), {
+      id: 'g-1', name: 'support', type: GatewayType.SLACK, organizationId: 'org-1',
+      configuration: { bot_token: encryptField('xoxb-1'), signingSecret: 'sig', client_id: 'A1', aiDisclosure: true },
+    });
+    const done = Object.assign(new Gateway(), {
+      id: 'g-2', name: 'done', type: GatewayType.TELEGRAM, organizationId: 'org-1',
+      configuration: { credentialId: 'c-1', credentialKeys: ['bot_token'] },
+    });
+    const mcp = Object.assign(new Gateway(), { id: 'g-3', name: 'tools', type: GatewayType.MCP, organizationId: 'org-1', configuration: { transport: 'http' } });
+    const { service, store, gateways } = build({ gateways: [legacy, done, mcp] });
+
+    const report = await service.run();
+
+    expect(report.gatewayChannels).toEqual({ moved: 1, skipped: 2, failed: 0 });
+    const row = store.rows[0];
+    expect(row.connectorKey).toBe('channel-slack');
+    expect(row.metadata.managedBy).toEqual({ kind: 'gateway_channel', id: 'g-1:slack' });
+    expect(legacy.configuration).toEqual({ client_id: 'A1', aiDisclosure: true, credentialId: row.id, credentialKeys: ['bot_token', 'signing_secret'] });
+    expect((await store.resolver.resolve('org-1', row.id)).config).toEqual({ bot_token: 'xoxb-1', signing_secret: 'sig' });
+    expect(gateways.save).toHaveBeenCalledTimes(1);
   });
 
   it('is idempotent: a second run moves nothing', async () => {

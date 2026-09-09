@@ -30,7 +30,7 @@ import { SignalAdapter } from './adapters/signal.adapter';
 import { MatrixAdapter } from './adapters/matrix.adapter';
 import { IrcAdapter } from './adapters/irc.adapter';
 import { ChannelInstallationService } from './channel-installation.service';
-import { getChannelConfig } from './channel-config.helper';
+import { ChannelCredentialService, ChannelUsePurpose } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 
 @Injectable()
@@ -71,6 +71,9 @@ export class ChannelGatewayService {
     // Per-sender share of a public channel surface. Optional for the same
     // positional-construction reason as the two above.
     @Optional() private readonly gatewayRateLimit?: GatewayRateLimitService,
+    // Optional for the same reason. When present, channel secrets are
+    // read from the credential store the gateway's connection lives in.
+    @Optional() private readonly channelCredentials?: ChannelCredentialService,
   ) {
 
     this.adapters = new Map<string, BaseAdapter>([
@@ -97,6 +100,15 @@ export class ChannelGatewayService {
   // ---------------------------------------------------------------------------
   // Adapter lookup
   // ---------------------------------------------------------------------------
+
+  /**
+   * The channel's effective configuration: connection secrets merged
+   * over the normalized, decrypted row. Public so the unified endpoint
+   * and the transports read through the same seam.
+   */
+  async channelConfig(gateway: Gateway, purpose: ChannelUsePurpose): Promise<Record<string, any>> {
+    return ChannelCredentialService.resolveWith(this.channelCredentials, this.envelopeCrypto, gateway, purpose);
+  }
 
   getAdapter(type: string): BaseAdapter {
     const adapter = this.adapters.get(type);
@@ -127,11 +139,6 @@ export class ChannelGatewayService {
 
     const adapter = this.getAdapter(gateway.type);
 
-    // Warm the org's DEK before the sync getChannelConfig read below so a
-    // BYO-KMS gateway's `encrypted:kms:` secrets unwrap. No-op for non-KMS
-    // orgs (they never produce kms values).
-    await this.envelopeCrypto?.warmOrg(gateway.organizationId);
-
     // Multi-workspace resolution: when the payload carries a platform
     // tenant id (e.g. Slack team_id) and an active installation exists
     // for it, that installation's credentials (its own bot token)
@@ -139,13 +146,11 @@ export class ChannelGatewayService {
     // verification context and the reply. Gateways without
     // installations keep the existing single-credential behavior.
     //
-    // getChannelConfig decrypts secrets stored encrypted at rest and
+    // channelConfig resolves the gateway's connection through the
+    // credential store (inline values are the shim), decrypts and
     // normalizes legacy camelCase keys onto the snake_case names the
     // adapters read.
-    let effectiveConfig: Record<string, any> = getChannelConfig(
-      gateway.configuration,
-      gateway.organizationId,
-    );
+    let effectiveConfig: Record<string, any> = await this.channelConfig(gateway, 'channel_inbound');
     const tenantId = adapter.extractTenantId(body);
     if (tenantId && this.installationService) {
       try {
@@ -276,13 +281,8 @@ export class ChannelGatewayService {
 
           const formatted = adapter.formatOutbound({ text: responseText });
           try {
-            // The run may have outlived the DEK cache TTL — re-warm before
-            // the sync getChannelConfig fallback read (no-op for non-KMS orgs).
-            if (!sendConfig) {
-              await this.envelopeCrypto?.warmOrg(gateway.organizationId);
-            }
             await adapter.sendResponse(
-              sendConfig ?? getChannelConfig(gateway.configuration, gateway.organizationId),
+              sendConfig ?? (await this.channelConfig(gateway, 'channel_outbound')),
               formatted,
               {
               // Every key normalizeInbound recorded is forwarded, because
@@ -617,10 +617,9 @@ export class ChannelGatewayService {
   async testConnection(gateway: Gateway): Promise<{ ok: boolean; detail: string }> {
     const adapter = this.getAdapter(gateway.type);
     // Decrypted + key-normalized view — testConnection exercises the
-    // same credentials the adapters would use. Warm first so a BYO-KMS
-    // gateway's kms secrets unwrap (no-op for non-KMS orgs).
-    await this.envelopeCrypto?.warmOrg(gateway.organizationId);
-    const cfg = getChannelConfig(gateway.configuration, gateway.organizationId);
+    // same credentials the adapters would use, resolved through the
+    // credential store when the channel points at a connection.
+    const cfg = await this.channelConfig(gateway, 'channel_outbound');
     try {
       switch (gateway.type) {
         case GatewayType.SLACK: {

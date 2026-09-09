@@ -1,7 +1,7 @@
 /**
  * One consumer end to end: the Add MCP Server dialog's "Connect an account"
  * action opens the connect sheet, and the connection it returns lands in the
- * dialog's own payload as connectionId while the pasted token is dropped.
+ * dialog's own payload as credentialId while the pasted token is dropped.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -106,7 +106,7 @@ describe('AddMcpServerDialog connect entry point', () => {
     expect(screen.getByLabelText(/auth token/i)).toHaveValue('')
 
     fireEvent.click(screen.getByRole('button', { name: /add server/i }))
-    await waitFor(() => expect(mcpSourcesApi.create).toHaveBeenCalledWith('org-1', { name: 'weather', url: 'https://mcp.example.com/mcp', connectionId: 'conn-mcp-1' }))
+    await waitFor(() => expect(mcpSourcesApi.create).toHaveBeenCalledWith('org-1', { name: 'weather', url: 'https://mcp.example.com/mcp', credentialId: 'conn-mcp-1' }))
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 

@@ -17,9 +17,12 @@ import { GatewayInitHelper } from './gateway-init.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import {
   encryptChannelConfigSecrets,
+  hasInlineChannelSecret,
   restoreMaskedChannelSecrets,
+  splitChannelConfigSecrets,
   type ChannelSecretEnvelope,
 } from './channels/channel-config.helper';
+import { ChannelCredentialService } from './channels/channel-credential.service';
 import { encryptField as platformEncryptField } from '../../common/security/field-crypto';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
@@ -186,6 +189,9 @@ export class GatewaysService {
     // path (byte-identical to the pre-KMS behavior); when present, a BYO-KMS
     // org's secrets are wrapped with the customer CMK.
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
+    // Optional for the same reason. When present, channel secrets are
+    // moved to the credential store instead of being encrypted inline.
+    @Optional() private readonly channelCredentials?: ChannelCredentialService,
   ) {}
 
   /**
@@ -291,6 +297,34 @@ export class GatewaysService {
   }
 
   /**
+   * Channel secrets belong in the credential store. With the channel
+   * credential service wired (always, outside positional unit tests)
+   * pasted values become a managed connection and the row keeps only
+   * `credentialId` + `credentialKeys`; without it the inline encryption
+   * path above is the fallback.
+   */
+  private async storeChannelSecrets(
+    gateway: Gateway,
+    configuration: Record<string, any> | undefined,
+    previous: Record<string, any> | null | undefined,
+  ): Promise<void> {
+    if (!configuration) return;
+    if (!this.channelCredentials) {
+      await this.encryptConfigSecrets(configuration, gateway.organizationId);
+      return;
+    }
+    await this.channelCredentials.persistSecrets(gateway, configuration, previous);
+  }
+
+  private async releaseChannelCredential(gateway: Gateway): Promise<void> {
+    try {
+      await this.channelCredentials?.release(gateway);
+    } catch (err: any) {
+      this.logger.warn(`Failed to release channel credential of gateway ${gateway.id}: ${err?.message ?? err}`);
+    }
+  }
+
+  /**
    * Envelope used to encrypt channel secrets. Prefers the injected
    * EnvelopeCryptoService (org-aware BYO-KMS routing); when it is absent
    * (positional unit tests), falls back to the platform field-crypto path,
@@ -375,19 +409,32 @@ export class GatewaysService {
         (createGatewayDto as any).teamId,
       );
 
-      // Encrypt channel OAuth client secrets at rest before persisting.
-      await this.encryptConfigSecrets(createGatewayDto.configuration, organizationId);
+      // Channel secrets go to the credential store, never onto the row.
+      // The managed row names the gateway, so it is created after the
+      // first save; until then the row carries only the public part.
+      const inlineConfiguration = createGatewayDto.configuration;
+      const deferSecrets = !!this.channelCredentials && !!inlineConfiguration
+        && (hasInlineChannelSecret(inlineConfiguration) || 'credentialId' in inlineConfiguration);
+      if (!deferSecrets) {
+        await this.encryptConfigSecrets(createGatewayDto.configuration, organizationId);
+      }
 
       // Create the gateway
       const gateway = this.gatewayRepository.create({
         ...createGatewayDto,
+        ...(deferSecrets ? { configuration: splitChannelConfigSecrets(inlineConfiguration).publicConfig } : {}),
         kind,
         endpoint,
         organizationId,
         status: GatewayStatus.ACTIVE,
       });
 
-      const savedGateway = await this.gatewayRepository.save(gateway);
+      let savedGateway = await this.gatewayRepository.save(gateway);
+      if (deferSecrets) {
+        savedGateway.configuration = inlineConfiguration;
+        await this.storeChannelSecrets(savedGateway, savedGateway.configuration, null);
+        savedGateway = await this.gatewayRepository.save(savedGateway);
+      }
 
       this.logger.log(`[CREATE_GATEWAY] Gateway saved to DB: id=${savedGateway.id}, name='${savedGateway.name}', org=${savedGateway.organizationId}`);
 
@@ -469,7 +516,7 @@ export class GatewaysService {
         if (gateway.type === GatewayType.HOSTED_CHAT) {
           await this.assertHostedChatSlugAvailable(gateway.configuration, gateway.id);
         }
-        await this.encryptConfigSecrets(gateway.configuration, organizationId);
+        await this.storeChannelSecrets(gateway, gateway.configuration, oldValues.configuration);
       }
 
       const updatedGateway = await this.gatewayRepository.save(gateway);
@@ -788,6 +835,7 @@ export class GatewaysService {
       throw new ForbiddenException(decision3.reason);
     }
 
+    await this.releaseChannelCredential(gateway);
     await this.gatewayRepository.remove(gateway);
 
     this.stopDiscordTransport(gateway);
