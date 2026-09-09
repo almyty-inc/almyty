@@ -71,8 +71,11 @@ export function eligible(card: Model, policy: RoutingPolicy): { ok: true } | { o
   if (policy.privacyTier && TIER_RANK[card.privacyTier] > TIER_RANK[policy.privacyTier]) {
     return { ok: false, reason: `privacy tier ${card.privacyTier} above ceiling ${policy.privacyTier}` };
   }
-  if (policy.regions && policy.regions.length > 0 && card.region && !policy.regions.includes(card.region)) {
-    return { ok: false, reason: `region ${card.region} not allowed` };
+  if (policy.regions && policy.regions.length > 0) {
+    // An explicit allowlist is a data-residency statement: a card with no
+    // known region cannot prove it is inside it, so it does not qualify.
+    if (!card.region) return { ok: false, reason: 'region unknown, policy requires one of ' + policy.regions.join(', ') };
+    if (!policy.regions.includes(card.region)) return { ok: false, reason: `region ${card.region} not allowed` };
   }
   for (const [cap, needed] of Object.entries(policy.capabilities ?? {})) {
     if (needed && !(card.capabilities as any)?.[cap]) return { ok: false, reason: `lacks ${cap}` };

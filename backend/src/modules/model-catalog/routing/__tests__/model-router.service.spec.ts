@@ -73,7 +73,7 @@ describe('ModelRouterService', () => {
     const p = plan.candidates[0].provider;
     expect(p.type).toBe(LlmProviderType.CUSTOM);
     expect(p.id).toBe('endpoint:e');
-    expect(p.configuration).toEqual({ apiUrl: 'https://ep.example/v1', model: 'my-llama', apiKey: 'hf_secret' });
+    expect(p.configuration).toEqual({ apiUrl: 'https://ep.example/v1', model: 'my-llama', apiKey: 'hf_secret', custom: { authMethod: 'bearer' } });
   });
 
   it('rejects cards whose endpoint has no url', async () => {
@@ -142,5 +142,36 @@ describe('ModelRouterService', () => {
       modelsUpdate.mockRejectedValueOnce(new Error('db away'));
       await expect(svc.recordLatency(c, 80, T0)).resolves.toBeUndefined();
     });
+  });
+
+  it('endpoint cards: the deployment vault credential wins over inline secrets and the bearer is actually sent', async () => {
+    const dep = Object.assign(new ModelDeployment(), { id: 'd1', organizationId: 'org', providerConfig: { credentialId: 'cred-1', token: 'inline-stale' } });
+    deployments.d1 = dep;
+    const credentialRefs = { tryResolve: jest.fn().mockResolvedValue({ config: { token: 'vault-fresh' } }) };
+    const withRefs = new ModelRouterService(
+      { find: jest.fn(async () => cards) } as any,
+      { findOne: jest.fn(async () => null) } as any,
+      { findOne: jest.fn(async ({ where }: any) => deployments[where.id] ?? null) } as any,
+      audit as any,
+      credentialRefs as any,
+    );
+    cards = [card({ id: 'e', providerId: null, endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' }, vendorModelId: 'my-llama' })];
+    const plan = await withRefs.plan('org', {});
+    const p = plan.candidates[0].provider;
+    expect(credentialRefs.tryResolve).toHaveBeenCalledWith('org', 'cred-1', { context: { purpose: 'llm_call', resourceType: 'model', resourceId: 'e' } });
+    expect(p.configuration.apiKey).toBe('vault-fresh');
+    expect(p.configuration.custom).toEqual({ authMethod: 'bearer' });
+    expect(p.getAuthHeaders()).toMatchObject({ Authorization: 'Bearer vault-fresh' });
+  });
+
+  it('endpoint cards: an unresolvable vault credential yields no bearer instead of the stale inline one', async () => {
+    const dep = Object.assign(new ModelDeployment(), { id: 'd1', organizationId: 'org', providerConfig: { credentialId: 'cred-gone', token: 'inline-stale' } });
+    deployments.d1 = dep;
+    const credentialRefs = { tryResolve: jest.fn().mockResolvedValue(null) };
+    const withRefs = new ModelRouterService({ find: jest.fn(async () => cards) } as any, { findOne: jest.fn(async () => null) } as any, { findOne: jest.fn(async ({ where }: any) => deployments[where.id] ?? null) } as any, audit as any, credentialRefs as any);
+    cards = [card({ id: 'e', providerId: null, endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' } })];
+    const plan = await withRefs.plan('org', {});
+    expect(plan.candidates[0].provider.configuration.apiKey).toBeUndefined();
+    expect(plan.candidates[0].provider.getAuthHeaders().Authorization).toBeUndefined();
   });
 });

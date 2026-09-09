@@ -200,7 +200,7 @@ describe('gate 2: one ModelVersion, two adapters, provider specifics never cross
       expect(configuration.apiUrl).toBe(own.endpointRef!.url);
       expect(configuration.model).toBe('qwen3-0.6b');
       // The transient provider is URL + model + bearer; no adapter field reaches the caller.
-      expect(Object.keys(configuration).sort()).toEqual(['apiKey', 'apiUrl', 'model']);
+      expect(Object.keys(configuration).sort()).toEqual(['apiKey', 'apiUrl', 'custom', 'model']);
       expect(c.rationale).toMatch(/^cheapest/);
     }
     expect(providers.findOne).not.toHaveBeenCalled();

@@ -13,6 +13,7 @@ import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { AdapterRegistry } from './adapters/adapter.registry';
 import { AdapterCredentials } from './adapters/adapter.interface';
 import { ModelRegistryService } from '../model-registry/model-registry.service';
+import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 
 export const MODEL_RECONCILE_QUEUE = 'model-reconcile';
 export const MODEL_RECONCILE_JOB = 'reconcile';
@@ -46,6 +47,7 @@ export class ModelDeploymentsService {
     private readonly envelopeCrypto: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly registry?: ModelRegistryService,
+    @Optional() private readonly credentialRefs?: CredentialRefResolver,
   ) {}
 
   async list(organizationId: string): Promise<ModelDeployment[]> {
@@ -149,9 +151,17 @@ export class ModelDeploymentsService {
     const config = deployment.getDecryptedProviderConfig();
     let creds: AdapterCredentials = {};
     if (config.credentialId) {
-      const credential = await this.credentials.findOne({ where: { id: config.credentialId, organizationId: deployment.organizationId } });
-      if (!credential) throw Object.assign(new Error('deployment credential not found'), { code: 'ADAPTER_AUTH' });
-      creds = { ...(credential.getDecryptedConfig() as Record<string, string>) };
+      if (this.credentialRefs) {
+        // Through the store: inactive, expired or ungranted rows refuse here.
+        const resolved = await this.credentialRefs.resolve(deployment.organizationId, config.credentialId, {
+          context: { purpose: 'deploy', resourceType: 'model_deployment', resourceId: deployment.id },
+        });
+        creds = { ...(resolved.config as Record<string, string>) };
+      } else {
+        const credential = await this.credentials.findOne({ where: { id: config.credentialId, organizationId: deployment.organizationId } });
+        if (!credential) throw Object.assign(new Error('deployment credential not found'), { code: 'ADAPTER_AUTH' });
+        creds = { ...(credential.getDecryptedConfig() as Record<string, string>) };
+      }
     }
     for (const [k, v] of Object.entries(config)) {
       if (k !== 'credentialId' && ModelDeployment.isSecretKey(k) && typeof v === 'string' && !/^registry/i.test(k)) creds[k] = v;
