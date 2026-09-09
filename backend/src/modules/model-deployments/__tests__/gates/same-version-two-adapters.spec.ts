@@ -1,8 +1,9 @@
 import { Model } from '../../../../entities/model.entity';
 import { ModelDeployment } from '../../../../entities/model-deployment.entity';
 import { AuditAction } from '../../../../entities/audit-log.entity';
-import { LlmProviderType } from '../../../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderType } from '../../../../entities/llm-provider.entity';
 import { ModelRouterService } from '../../../model-catalog/routing/model-router.service';
+import { EndpointProviderHelper } from '../../../llm-providers/endpoint-provider.helper';
 import { AdapterRegistry } from '../../adapters/adapter.registry';
 import { HuggingFaceEndpointsAdapter } from '../../adapters/huggingface-endpoints.adapter';
 import { StubAdapter } from '../../adapters/stub.adapter';
@@ -44,6 +45,7 @@ describe('gate 2: one ModelVersion, two adapters, provider specifics never cross
   let audit: ReturnType<typeof fakeAudit>;
   let service: ModelDeploymentsService;
   let processor: ModelDeploymentsProcessor;
+  let providerRows: ReturnType<typeof fakeRepo<any>>;
   let stubDeploy: jest.SpyInstance;
   let hfDeploy: jest.SpyInstance;
   let modelRegistry: ReturnType<typeof fakeRegistry>;
@@ -74,7 +76,9 @@ describe('gate 2: one ModelVersion, two adapters, provider specifics never cross
 
     modelRegistry = fakeRegistry();
     service = new ModelDeploymentsService(deployments as any, versions as any, credentials as any, queue as any, registry, fakeEnvelope as any, audit as any, modelRegistry as any);
-    processor = new ModelDeploymentsProcessor(queue as any, deployments as any, versions as any, models as any, budgets as any, registry, service, { emit: jest.fn(async () => undefined) } as any);
+    providerRows = fakeRepo<any>(() => new LlmProvider());
+    const endpointProviders = new EndpointProviderHelper(providerRows as any, { applyKey: jest.fn(async () => undefined) } as any);
+    processor = new ModelDeploymentsProcessor(queue as any, deployments as any, versions as any, models as any, budgets as any, registry, service, { emit: jest.fn(async () => undefined) } as any, endpointProviders);
 
     // Only providerType and providerConfig differ between the two requests.
     const common = { modelVersionId: VERSION.id, desired: { replicas: 1, region: undefined } };
@@ -186,23 +190,27 @@ describe('gate 2: one ModelVersion, two adapters, provider specifics never cross
     expect(stored).not.toContain(REGISTRY_KEYS.registryAccessKeyId);
   });
 
-  it('lets the router plan over both cards without any provider specifics', async () => {
-    const providers = fakeRepo<any>(() => ({}));
-    const router = new ModelRouterService(models as any, providers as any, deployments as any, audit as any);
+  it('gives each card its own stored provider row and lets the router plan over both, with no provider specifics', async () => {
+    const router = new ModelRouterService(models as any, providerRows as any, deployments as any, audit as any);
     const plan = await router.plan(ORG, { objective: 'cheapest', privacyTier: 'private_cloud' });
     expect(plan.rejected).toEqual([]);
     expect(plan.candidates.map((c) => c.modelId).sort()).toEqual(['m-hf', 'm-stub']);
+    const seen = new Set<string>();
     for (const c of plan.candidates) {
       const own = models.get(c.modelId);
       expect(c.modelVersionId).toBe(VERSION.id);
-      expect(c.provider.type).toBe(LlmProviderType.CUSTOM);
+      // A real row on the OpenAI-compatible path: chat goes to
+      // <apiUrl>/chat/completions, and a conversation can reference it.
+      expect(c.provider.type).toBe(LlmProviderType.OPENAI);
+      expect(c.provider.id).toBe(own.providerId);
+      expect(seen.has(c.provider.id)).toBe(false);
+      seen.add(c.provider.id);
       const configuration = c.provider.configuration as Record<string, any>;
-      expect(configuration.apiUrl).toBe(own.endpointRef!.url);
+      expect(configuration.apiUrl).toBe(EndpointProviderHelper.baseFor(own.endpointRef!.url));
       expect(configuration.model).toBe('qwen3-0.6b');
-      // The transient provider is URL + model + bearer; no adapter field reaches the caller.
-      expect(Object.keys(configuration).sort()).toEqual(['apiKey', 'apiUrl', 'custom', 'model']);
+      // URL + model only; no adapter field and no inline secret reach the caller.
+      expect(Object.keys(configuration).sort()).toEqual(['apiUrl', 'model']);
       expect(c.rationale).toMatch(/^cheapest/);
     }
-    expect(providers.findOne).not.toHaveBeenCalled();
   });
 });

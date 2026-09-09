@@ -64,7 +64,7 @@ export class LlmChatHelper {
       // whole chain and stamps the answering card on the response.
       const provider = providerId
         ? await this.providers.getProvider(providerId, organizationId, true)
-        : await this.runner.headProviderForRoute(organizationId, request);
+        : await this.runner.headProviderForRoute(organizationId, request, userId ? { id: userId } : undefined);
 
       if (!provider.isHealthy && !request.routing) {
         throw new BadRequestException(LLM_HEALTH_GATE_MESSAGE);

@@ -74,6 +74,8 @@ The answer records what happened. `ChatResponse.routing` and the node result car
 
 Autonomous agents route too: `modelConfig.routing` on the agent replaces `providerId` for every step. Streaming takes the head of the plan (a stream cannot switch models mid-answer) and stamps the same attribution with attempt 1. With `MODEL_ROUTER_VERIFY_ESCALATION=true` and `routing.escalation: { onVerifyFail: 'next-candidate', maxEscalations? }`, a verifier rejection sends the revision to the next candidate of the plan instead of the same model; the run's working memory carries the adjusted policy and the count, and the run emits `route.escalated`.
 
+Every card is called through a stored provider row. A card served by an endpoint we deployed gets one written when the deployment reaches ready, and `POST /models/register-endpoint` writes one too; both are `openai` providers pointed at the OpenAI-compatible base, so chat goes to `<base>/chat/completions` and the key lives in the credential store like any other provider's. A card with no usable provider row is not a candidate, and a provider whose connection no longer resolves for the caller drops out of the plan rather than being called without it.
+
 Routing needs the catalog module wired in (it is, in `app.module.ts`); without it a routed request fails with `ROUTING_UNAVAILABLE` rather than silently falling back.
 
 ## Deployments

@@ -101,49 +101,29 @@ export class ModelRouterService {
     }
     return { candidates: resolved, rejected };
   }
-
   /**
-   * The provider a card is called through. A stored provider row wins; a
-   * card that only has an endpoint (a deployment we made) gets a transient
-   * custom provider pointed at that URL, with the deployment's token as
-   * bearer when there is one.
+   * The stored provider a card is called through. Endpoint-backed cards
+   * carry one too (written when the deployment reached ready, or when the
+   * endpoint was registered), so there is no transient provider: a card
+   * without a usable row is simply not a candidate. Failing closed is
+   * deliberate, an endpoint whose credential no longer resolves must not
+   * be called unauthenticated.
    */
   async providerFor(card: Model, principal?: { id: string }): Promise<LlmProvider | null> {
-    if (card.providerId) {
-      return this.providers.findOne({ where: { id: card.providerId, organizationId: card.organizationId } });
+    if (!card.providerId) return null;
+    const provider = await this.providers.findOne({ where: { id: card.providerId, organizationId: card.organizationId } });
+    if (!provider) return null;
+    if (this.credentialRefs && provider.credentialId) {
+      // The row references a connection: it must still resolve for this
+      // caller, or the candidate drops out of the plan.
+      const resolved = await this.credentialRefs.tryResolve(provider.organizationId, provider.credentialId, {
+        principal,
+        context: { purpose: 'llm_call', resourceType: 'model', resourceId: card.id },
+      });
+      if (!resolved) return null;
+      provider.credential = resolved.credential;
     }
-    const url = card.endpointRef?.url;
-    if (!url) return null;
-    let apiKey: string | undefined;
-    if (card.endpointRef?.deploymentId) {
-      const deployment = await this.deployments.findOne({ where: { id: card.endpointRef.deploymentId, organizationId: card.organizationId } });
-      if (deployment) {
-        // The deployment's vault credential wins (resolved through the
-        // credential store, so an inactive, expired or ungranted row
-        // yields nothing); inline secrets are the fallback.
-        const config = deployment.getDecryptedProviderConfig();
-        const referenced = config.credentialId && this.credentialRefs
-          ? await this.credentialRefs.tryResolve(card.organizationId, config.credentialId, { principal, context: { purpose: 'llm_call', resourceType: 'model', resourceId: card.id } })
-          : null;
-        // With a credentialId the store is the only source: an unresolvable
-        // row must not fall back to whatever inline value was pasted once.
-        const source: Record<string, any> = config.credentialId && this.credentialRefs ? (referenced?.config ?? {}) : config;
-        const secret = Object.keys(source).find((k) => k !== 'credentialId' && ModelDeployment.isSecretKey(k) && typeof source[k] === 'string');
-        apiKey = secret ? source[secret] : undefined;
-      }
-    }
-    return Object.assign(new LlmProvider(), {
-      id: `endpoint:${card.id}`,
-      organizationId: card.organizationId,
-      name: card.name,
-      type: LlmProviderType.CUSTOM,
-      status: LlmProviderStatus.ACTIVE,
-      isHealthy: true,
-      // The custom provider sends a bearer only when custom.authMethod says so.
-      configuration: { apiUrl: url, model: card.vendorModelId, ...(apiKey ? { apiKey, custom: { authMethod: 'bearer' } } : {}) },
-      capabilities: {},
-      metadata: {},
-    });
+    return provider;
   }
 
   /**

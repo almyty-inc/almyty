@@ -10,6 +10,7 @@ import { Model } from '../../entities/model.entity';
 import { SpendBudget } from '../../entities/spend-budget.entity';
 import { AuditAction } from '../../entities/audit-log.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EndpointProviderHelper } from '../llm-providers/endpoint-provider.helper';
 import { AdapterRegistry } from './adapters/adapter.registry';
 import { ActualState, EndpointRef, ModelProviderAdapter } from './adapters/adapter.interface';
 import { MODEL_RECONCILE_JOB, MODEL_RECONCILE_QUEUE, ModelDeploymentsService } from './model-deployments.service';
@@ -50,6 +51,7 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     private readonly adapters: AdapterRegistry,
     private readonly service: ModelDeploymentsService,
     @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly endpointProviders?: EndpointProviderHelper,
   ) {}
 
   cron(): string | undefined {
@@ -102,6 +104,15 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
    */
   private async recordError(d: ModelDeployment, error: any): Promise<ModelDeployment> {
     const message = error?.message ?? String(error);
+    // A teardown that failed keeps its state, so the next tick tries the
+    // delete again instead of reading the endpoint back to life.
+    if (d.state === 'tearing_down' || (d.desired as Record<string, any>).teardownRequested) {
+      d.lastError = message.slice(0, 2000);
+      d.lastReconcileAt = new Date();
+      d.actual = { ...(d.actual ?? {}), consecutiveErrors: ((d.actual?.consecutiveErrors as number | undefined) ?? 0) + 1, lastErrorAt: new Date().toISOString() };
+      this.logger.warn(`Teardown of ${d.id} failed, will retry: ${message}`);
+      return this.deployments.save(d);
+    }
     const terminal = TERMINAL_ERROR_CODES.includes(error?.code);
     const consecutive = ((d.actual?.consecutiveErrors as number | undefined) ?? 0) + 1;
     if (terminal || consecutive >= MAX_TRANSIENT_ERRORS || !d.externalRef) {
@@ -165,12 +176,16 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     try {
       const creds = await this.service.credentialsFor(d);
 
-      if (d.state === 'tearing_down') {
+      if (d.state === 'tearing_down' || (d.desired as Record<string, any>).teardownRequested) {
+        // Asked to go away: it stops being routable now, not when the
+        // provider finally confirms the delete.
+        await this.clearCard(d, 'deployment is being torn down');
         if (d.externalRef) await adapter.teardown(d.externalRef, creds);
         d.externalRef = null;
         d.actual = { ...(d.actual ?? {}), state: 'stopped', message: 'endpoint removed' };
         await this.clearCard(d, 'deployment torn down', true);
-        return this.transition(d, 'tearing_down', 'torn_down');
+        d.desired = { ...d.desired, teardownRequested: false } as ModelDeployment['desired'];
+        return this.transition(d, d.state, 'torn_down');
       }
 
       if (!d.externalRef) {
@@ -277,6 +292,8 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     const card = await this.models.findOne({ where: { id: d.modelId, organizationId: d.organizationId } });
     if (!card) return;
     if (card.endpointRef?.deploymentId && card.endpointRef.deploymentId !== d.id) return;
+    // The provider row answers for this endpoint, so it stops too.
+    await this.endpointProviders?.deactivate(d.organizationId, card.providerId, d.id).catch(() => undefined);
     if (card.status === 'inactive' && (!forget || !card.endpointRef)) return;
     card.status = 'inactive';
     if (forget) card.endpointRef = null;
@@ -289,13 +306,37 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     if (!d.modelId) return;
     const card = await this.models.findOne({ where: { id: d.modelId, organizationId: d.organizationId } });
     if (!card) return;
-    card.endpointRef = { url: actual.url ?? d.externalRef?.url, deploymentId: d.id, providerType: d.providerType };
+    const url = actual.url ?? (d.externalRef?.url as string | undefined);
+    card.endpointRef = { url, deploymentId: d.id, providerType: d.providerType };
     card.status = 'active';
     if (card.metadata?.unroutableSince) {
       const { unroutableSince, unroutableReason, ...rest } = card.metadata as Record<string, any>;
       card.metadata = rest;
     }
     card.region = actual.region ?? d.desired.region ?? card.region;
+
+    // A card is called through a real provider row: conversations carry a
+    // provider foreign key and stats are written per provider id, so a
+    // transient object would break the first chat that used it.
+    if (url && this.endpointProviders) {
+      try {
+        const config = d.getDecryptedProviderConfig();
+        const provider = await this.endpointProviders.upsert({
+          organizationId: d.organizationId,
+          providerId: card.providerId,
+          name: card.name || `${d.providerType} endpoint`,
+          apiUrl: EndpointProviderHelper.baseFor(url, actual.openAiBase),
+          model: card.vendorModelId,
+          credentialId: (config.credentialId as string | undefined) ?? undefined,
+          managedById: d.id,
+          region: card.region,
+        });
+        card.providerId = provider.id;
+        card.providerType = provider.type;
+      } catch (error: any) {
+        this.logger.warn(`could not write the endpoint provider for card ${card.id}: ${error?.message ?? error}`);
+      }
+    }
     await this.models.save(card);
   }
 

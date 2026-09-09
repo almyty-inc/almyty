@@ -154,4 +154,29 @@ describe('deployment lifecycle hardening', () => {
     expect(card().status).toBe('active');
     expect(card().metadata?.unroutableReason).toBeUndefined();
   });
+
+  it('a teardown that fails once is retried, and never brings the endpoint back to life', async () => {
+    await processor.reconcile(id);
+    expect(card().status).toBe('active');
+    await service.teardown(ORG, id, 'owner-1');
+
+    const teardown = jest.spyOn(stub, 'teardown');
+    teardown.mockRejectedValueOnce(Object.assign(new Error('provider 503'), { code: 'ADAPTER_ERROR' }));
+    const stuck = (await processor.reconcile(id))!;
+    // The intent survives the failure: still tearing down, still asked for.
+    expect(stuck.state).toBe('tearing_down');
+    expect((stuck.desired as any).teardownRequested).toBe(true);
+    expect(stuck.lastError).toContain('provider 503');
+    expect(stuck.externalRef).toBeTruthy();
+    expect(card().status).toBe('inactive');
+
+    const done = (await processor.reconcile(id))!;
+    expect(teardown).toHaveBeenCalledTimes(2);
+    expect(done.state).toBe('torn_down');
+    expect(done.externalRef).toBeNull();
+    expect((done.desired as any).teardownRequested).toBe(false);
+    expect(card().status).toBe('inactive');
+    expect(card().endpointRef).toBeNull();
+    teardown.mockRestore();
+  });
 });

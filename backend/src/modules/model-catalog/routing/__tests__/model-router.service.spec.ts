@@ -64,16 +64,20 @@ describe('ModelRouterService', () => {
     expect(plan.candidates[0].provider).toBe(providers.p1);
   });
 
-  it('builds a transient custom provider for endpoint-only cards, using the deployment secret as key', async () => {
-    const dep = Object.assign(new ModelDeployment(), { id: 'd1', organizationId: 'org', providerConfig: { token: 'hf_secret', region: 'eu' } });
-    deployments.d1 = dep;
-    cards = [card({ id: 'e', providerId: null, endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' }, vendorModelId: 'my-llama' })];
+  it('an endpoint card is called through its stored provider row, never a transient one', async () => {
+    providers.p9 = provider({ id: 'p9', name: 'deployed llama', type: LlmProviderType.OPENAI, configuration: { apiUrl: 'https://ep.example/v1', model: 'my-llama' } });
+    cards = [card({ id: 'e', providerId: 'p9', endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' }, vendorModelId: 'my-llama' })];
     const plan = await svc.plan('org', {});
     expect(plan.candidates).toHaveLength(1);
-    const p = plan.candidates[0].provider;
-    expect(p.type).toBe(LlmProviderType.CUSTOM);
-    expect(p.id).toBe('endpoint:e');
-    expect(p.configuration).toEqual({ apiUrl: 'https://ep.example/v1', model: 'my-llama', apiKey: 'hf_secret', custom: { authMethod: 'bearer' } });
+    expect(plan.candidates[0].provider).toBe(providers.p9);
+    expect(plan.candidates[0].provider.id).not.toMatch(/^endpoint:/);
+  });
+
+  it('a card whose endpoint has no provider row yet is not a candidate', async () => {
+    cards = [card({ id: 'e', providerId: null, endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' } })];
+    const plan = await svc.plan('org', {});
+    expect(plan.candidates).toEqual([]);
+    expect(plan.rejected[0]).toMatchObject({ modelId: 'e', reason: 'no callable provider' });
   });
 
   it('rejects cards whose endpoint has no url', async () => {
@@ -144,34 +148,27 @@ describe('ModelRouterService', () => {
     });
   });
 
-  it('endpoint cards: the deployment vault credential wins over inline secrets and the bearer is actually sent', async () => {
-    const dep = Object.assign(new ModelDeployment(), { id: 'd1', organizationId: 'org', providerConfig: { credentialId: 'cred-1', token: 'inline-stale' } });
-    deployments.d1 = dep;
-    const credentialRefs = { tryResolve: jest.fn().mockResolvedValue({ config: { token: 'vault-fresh' } }) };
+  it('a provider that references a connection is only a candidate while that connection resolves', async () => {
+    providers.p9 = provider({ id: 'p9', name: 'deployed llama', type: LlmProviderType.OPENAI, credentialId: 'cred-1', configuration: { apiUrl: 'https://ep.example/v1' } });
+    cards = [card({ id: 'e', providerId: 'p9', endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' } })];
+    const credentialRefs = { tryResolve: jest.fn().mockResolvedValue({ credential: { id: 'cred-1' }, config: { apiKey: 'vault-fresh' } }) };
     const withRefs = new ModelRouterService(
       { find: jest.fn(async () => cards) } as any,
-      { findOne: jest.fn(async () => null) } as any,
+      { findOne: jest.fn(async ({ where }: any) => providers[where.id] ?? null) } as any,
       { findOne: jest.fn(async ({ where }: any) => deployments[where.id] ?? null) } as any,
       audit as any,
       credentialRefs as any,
     );
-    cards = [card({ id: 'e', providerId: null, endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' }, vendorModelId: 'my-llama' })];
-    const plan = await withRefs.plan('org', {});
-    const p = plan.candidates[0].provider;
-    expect(credentialRefs.tryResolve).toHaveBeenCalledWith('org', 'cred-1', { context: { purpose: 'llm_call', resourceType: 'model', resourceId: 'e' } });
-    expect(p.configuration.apiKey).toBe('vault-fresh');
-    expect(p.configuration.custom).toEqual({ authMethod: 'bearer' });
-    expect(p.getAuthHeaders()).toMatchObject({ Authorization: 'Bearer vault-fresh' });
-  });
 
-  it('endpoint cards: an unresolvable vault credential yields no bearer instead of the stale inline one', async () => {
-    const dep = Object.assign(new ModelDeployment(), { id: 'd1', organizationId: 'org', providerConfig: { credentialId: 'cred-gone', token: 'inline-stale' } });
-    deployments.d1 = dep;
-    const credentialRefs = { tryResolve: jest.fn().mockResolvedValue(null) };
-    const withRefs = new ModelRouterService({ find: jest.fn(async () => cards) } as any, { findOne: jest.fn(async () => null) } as any, { findOne: jest.fn(async ({ where }: any) => deployments[where.id] ?? null) } as any, audit as any, credentialRefs as any);
-    cards = [card({ id: 'e', providerId: null, endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' } })];
-    const plan = await withRefs.plan('org', {});
-    expect(plan.candidates[0].provider.configuration.apiKey).toBeUndefined();
-    expect(plan.candidates[0].provider.getAuthHeaders().Authorization).toBeUndefined();
+    const plan = await withRefs.plan('org', {}, { id: 'u-1' });
+    expect(plan.candidates).toHaveLength(1);
+    expect(credentialRefs.tryResolve).toHaveBeenCalledWith('org', 'cred-1', { principal: { id: 'u-1' }, context: { purpose: 'llm_call', resourceType: 'model', resourceId: 'e' } });
+
+    // Revoked, expired, or not granted to this caller: the card drops out
+    // rather than being called without the key.
+    credentialRefs.tryResolve.mockResolvedValue(null);
+    const closed = await withRefs.plan('org', {}, { id: 'u-1' });
+    expect(closed.candidates).toEqual([]);
+    expect(closed.rejected[0]).toMatchObject({ modelId: 'e', reason: 'no callable provider' });
   });
 });

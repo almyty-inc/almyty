@@ -13,6 +13,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmChatRunnerHelper } from '../llm-providers/llm-chat-runner.helper';
 import { LlmModelsHelper } from '../llm-providers/llm-models.helper';
+import { EndpointProviderHelper } from '../llm-providers/endpoint-provider.helper';
 import { PriceFeedService } from './pricing/price-feed.service';
 import { ModelRouterService } from './routing/model-router.service';
 
@@ -115,6 +116,7 @@ export class ModelCatalogService {
     @Optional() private readonly priceFeed?: PriceFeedService,
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
+    @Optional() @Inject(forwardRef(() => EndpointProviderHelper)) private readonly endpointProviders?: EndpointProviderHelper,
   ) {}
 
   list(organizationId: string, filter: { status?: Model['status']; privacyTier?: ModelPrivacyTier; providerId?: string; selectable?: boolean } = {}): Promise<Model[]> {
@@ -190,36 +192,33 @@ export class ModelCatalogService {
    * it. Selectable after one passing validation run, like every card.
    */
   async registerEndpoint(organizationId: string, input: RegisterEndpointInput, userId?: string): Promise<Model> {
-    const configuration: Record<string, any> = { apiUrl: input.url, model: input.vendorModelId };
-    // The custom provider only sends a bearer when told to; a key without
-    // custom.authMethod would be stored and never used.
-    if (input.apiKey) Object.assign(configuration, { apiKey: input.apiKey, custom: { authMethod: 'bearer' } });
-    this.runner.validateProviderConfiguration(LlmProviderType.CUSTOM, configuration);
-    const provider = this.providers.create({
+    if (!this.endpointProviders) {
+      throw new BadRequestException({ code: 'ENDPOINT_REGISTRATION_UNAVAILABLE', message: 'Endpoint registration is not available in this deployment' });
+    }
+    // A registered endpoint is a real provider row on the OpenAI-compatible
+    // path (chat at <base>/chat/completions), and its key lives in the
+    // credential store like every other provider's, never inline.
+    const provider = await this.endpointProviders.upsert({
       organizationId,
       name: input.name,
-      type: LlmProviderType.CUSTOM,
-      configuration,
-      capabilities: this.modelsHelper.getDefaultCapabilities(LlmProviderType.CUSTOM),
-      status: LlmProviderStatus.ACTIVE,
-      isHealthy: true,
-      metadata: { endpoint: input.url },
+      apiUrl: input.url,
+      model: input.vendorModelId,
+      apiKey: input.apiKey,
+      managedById: `endpoint:${organizationId}:${input.name}`,
+      region: input.region,
     });
-
-    if (this.envelopeCrypto) await provider.encryptSensitiveDataForOrg(this.envelopeCrypto);
-    else provider.encryptSensitiveData();
-    const savedProvider = await this.providers.save(provider);
     return this.register(
       organizationId,
       {
         name: input.name,
         vendorModelId: input.vendorModelId,
-        providerId: savedProvider.id,
+        providerId: provider.id,
         capabilities: input.capabilities,
         contextLength: input.contextLength,
         privacyTier: input.privacyTier ?? 'private_cloud',
         region: input.region,
         pricingOverride: input.pricingOverride,
+        metadata: { endpoint: input.url },
       },
       userId,
     );
