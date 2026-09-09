@@ -415,35 +415,500 @@ const OTHER_CONNECTORS: ConnectorDefinition[] = [
     keyPageUrl: null,
     docsUrl: null,
   },
+];
+
+// ---------------------------------------------------------------------------
+// Chat channels
+//
+// One connector per chat channel type, keyed `channel-<type>` with the
+// gateway type dasherized, exactly what ChannelCredentialService writes
+// on a managed row (`channelConnectorKey`). Every form field is spelled
+// the way the matching adapter under gateways/channels/adapters reads it
+// (snake_case), so a connection made in the connect sheet drops straight
+// into `ChannelCredentialService.resolveConfig` with no translation.
+//
+// Endpoints and auth shapes below were verified on 2026-09-09; the table
+// in docs/connections.md ("Chat channels") records what each probe was
+// checked against.
+// ---------------------------------------------------------------------------
+
+/** `channel-<type>` with the gateway type's underscores dasherized (connector keys are `[a-z0-9-]`). */
+function channelKey(type: string): string {
+  return `channel-${type.replace(/_/g, '-')}`;
+}
+
+/**
+ * Verified 2026-09-09: POST https://slack.com/api/auth.test with
+ * `Authorization: Bearer <bot token>` answers HTTP 200 for a rejected
+ * token too, carrying `{"ok": false, "error": "invalid_auth"}`, so the
+ * probe reads `ok` rather than trusting the status. `team` is the
+ * workspace name.
+ */
+const SLACK_AUTH_TEST: HttpProbe = {
+  kind: 'http',
+  url: 'https://slack.com/api/auth.test',
+  method: 'POST',
+  auth: 'bearer',
+  secretField: 'bot_token',
+  okPath: 'ok',
+  errorPath: 'error',
+  accountLabelPath: 'team',
+};
+
+/**
+ * Slack sends scopes comma separated on the authorize URL; the redirect
+ * builder joins `scopes` with spaces, so the comma list travels as one
+ * entry. `scopesNeeded` carries them individually for display.
+ */
+const SLACK_SCOPES = ['chat:write', 'app_mentions:read', 'im:history'];
+
+const TWILIO_CONSOLE = 'https://console.twilio.com/';
+
+/**
+ * Verified 2026-09-09: GET
+ * https://api.twilio.com/2010-04-01/Accounts/<AccountSid>.json with HTTP
+ * basic auth (Account SID as the user, auth token as the password)
+ * returns the account, `friendly_name` included.
+ */
+const TWILIO_ACCOUNT_PROBE: HttpProbe = {
+  kind: 'http',
+  url: 'https://api.twilio.com/2010-04-01/Accounts/{{twilio_account_sid}}.json',
+  method: 'GET',
+  auth: 'basic',
+  usernameField: 'twilio_account_sid',
+  secretField: 'twilio_auth_token',
+  accountLabelPath: 'friendly_name',
+};
+
+/** The Twilio form both the WhatsApp and the SMS channel adapters read. */
+function twilioMethod(numberTitle: string, numberDescription: string): ConnectMethod {
+  return {
+    type: 'api_key',
+    label: 'Twilio account',
+    description: 'Account SID and auth token from the Twilio console home.',
+    schema: {
+      type: 'object',
+      properties: {
+        twilio_account_sid: { type: 'string', title: 'Account SID', pattern: '^AC[0-9a-fA-F]{32}$' },
+        twilio_auth_token: { type: 'string', title: 'Auth token', 'x-secret': true, minLength: 16 },
+        phone_number: { type: 'string', title: numberTitle, description: numberDescription },
+      },
+      required: ['twilio_account_sid', 'twilio_auth_token', 'phone_number'],
+    },
+    credentialType: CredentialType.API_KEY,
+    keyPageUrl: TWILIO_CONSOLE,
+  };
+}
+
+const CHANNEL_CONNECTORS: ConnectorDefinition[] = [
   {
-    key: 'channel-webhook',
+    key: channelKey('slack'),
+    kind: 'channel',
+    displayName: 'Slack',
+    description: 'A Slack app that posts as a bot and receives events; installed through Slack OAuth or with a bot token pasted from the app config page.',
+    connect: [
+      {
+        type: 'oauth2_code',
+        label: 'Install the Slack app',
+        description: 'Redirects to Slack, asks the workspace to approve the bot scopes, and stores the bot token it returns.',
+        credentialType: CredentialType.API_KEY,
+        secretField: 'bot_token',
+        keyPageUrl: 'https://api.slack.com/apps',
+        oauth: {
+          authorizeUrl: 'https://slack.com/oauth/v2/authorize',
+          tokenUrl: 'https://slack.com/api/oauth.v2.access',
+          scopes: [SLACK_SCOPES.join(',')],
+          clientId: 'platform',
+          tokenField: 'access_token',
+        },
+      },
+      {
+        type: 'api_key',
+        label: 'Bot token',
+        description: 'From the Slack app config page: OAuth & Permissions for the bot token, Basic Information for the signing secret.',
+        schema: {
+          type: 'object',
+          properties: {
+            bot_token: { type: 'string', title: 'Bot user OAuth token', 'x-secret': true, pattern: '^xox[bp]-', description: 'Starts with xoxb-.' },
+            signing_secret: { type: 'string', title: 'Signing secret', 'x-secret': true, description: 'Needed to verify inbound Slack events.' },
+          },
+          required: ['bot_token'],
+        },
+        credentialType: CredentialType.API_KEY,
+        keyPageUrl: 'https://api.slack.com/apps',
+      },
+    ],
+    capabilities: ['send', 'receive'],
+    scopesNeeded: SLACK_SCOPES,
+    validation: SLACK_AUTH_TEST,
+    keyPageUrl: 'https://api.slack.com/apps',
+    docsUrl: 'https://docs.slack.dev/authentication/installing-with-oauth',
+  },
+  {
+    key: channelKey('discord'),
+    kind: 'channel',
+    displayName: 'Discord',
+    description: 'A Discord bot that replies in servers and DMs.',
+    // Verified 2026-09-09: GET https://discord.com/api/v10/users/@me answers
+    // 401 with no credential; the bot token goes in `Authorization: Bot <token>`.
+    connect: [{
+      type: 'api_key',
+      label: 'Bot token',
+      description: 'Developer portal, your application, Bot, Reset Token.',
+      schema: {
+        type: 'object',
+        properties: {
+          bot_token: { type: 'string', title: 'Bot token', 'x-secret': true, minLength: 20 },
+        },
+        required: ['bot_token'],
+      },
+      credentialType: CredentialType.API_KEY,
+      keyPageUrl: 'https://discord.com/developers/applications',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: {
+      kind: 'http',
+      url: 'https://discord.com/api/v10/users/@me',
+      method: 'GET',
+      auth: 'header',
+      headerName: 'Authorization',
+      headerPrefix: 'Bot ',
+      secretField: 'bot_token',
+      accountLabelPath: 'username',
+    },
+    keyPageUrl: 'https://discord.com/developers/applications',
+    docsUrl: 'https://docs.discord.com/developers/resources/user',
+  },
+  {
+    key: channelKey('telegram'),
+    kind: 'channel',
+    displayName: 'Telegram',
+    description: 'A Telegram bot created with BotFather.',
+    // Verified 2026-09-09: the token is a path segment,
+    // https://api.telegram.org/bot<token>/getMe, and the User sits under
+    // `result`. A bad token answers `{"ok": false, ...}`.
+    connect: [{
+      type: 'api_key',
+      label: 'Bot token',
+      description: 'Message @BotFather, /newbot or /token, and paste what it prints.',
+      schema: {
+        type: 'object',
+        properties: {
+          bot_token: { type: 'string', title: 'Bot token', 'x-secret': true, pattern: '^\\d+:[A-Za-z0-9_-]{20,}$' },
+          webhook_secret_token: { type: 'string', title: 'Webhook secret token', 'x-secret': true, description: 'Optional; Telegram echoes it on every inbound update so almyty can reject forgeries.' },
+        },
+        required: ['bot_token'],
+      },
+      credentialType: CredentialType.API_KEY,
+      keyPageUrl: 'https://t.me/botfather',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: {
+      kind: 'http',
+      url: 'https://api.telegram.org/bot{{bot_token}}/getMe',
+      method: 'GET',
+      auth: 'none',
+      okPath: 'ok',
+      errorPath: 'description',
+      accountLabelPath: 'result.username',
+    },
+    keyPageUrl: 'https://t.me/botfather',
+    docsUrl: 'https://core.telegram.org/bots/api#getme',
+  },
+  {
+    key: channelKey('whatsapp'),
+    kind: 'channel',
+    displayName: 'WhatsApp (Twilio)',
+    description: 'WhatsApp through a Twilio sender; the same account credentials as SMS.',
+    connect: [twilioMethod('WhatsApp sender', 'The WhatsApp-enabled Twilio number, in whatsapp:+E.164 form.')],
+    capabilities: ['send', 'receive'],
+    validation: TWILIO_ACCOUNT_PROBE,
+    keyPageUrl: TWILIO_CONSOLE,
+    docsUrl: 'https://www.twilio.com/docs/whatsapp',
+  },
+  {
+    key: channelKey('sms'),
+    kind: 'channel',
+    displayName: 'SMS (Twilio)',
+    description: 'Text messages through a Twilio phone number.',
+    connect: [twilioMethod('Twilio number', 'The sending phone number in E.164 form.')],
+    capabilities: ['send', 'receive'],
+    validation: TWILIO_ACCOUNT_PROBE,
+    keyPageUrl: TWILIO_CONSOLE,
+    docsUrl: 'https://www.twilio.com/docs/messaging',
+  },
+  {
+    key: channelKey('whatsapp_cloud'),
+    kind: 'channel',
+    displayName: 'WhatsApp Cloud API (Meta)',
+    description: 'WhatsApp straight from Meta, no Twilio in between.',
+    // Verified 2026-09-09: GET https://graph.facebook.com/<version>/<phone
+    // number id> with `Authorization: Bearer <access token>` returns
+    // display_phone_number, verified_name, quality_rating and id. v23.0 is
+    // available until 2027-10-08; v21.0 expires 2027-01-21.
+    connect: [{
+      type: 'api_key',
+      label: 'Cloud API credentials',
+      description: 'Meta app dashboard, WhatsApp, API Setup.',
+      schema: {
+        type: 'object',
+        properties: {
+          phone_number_id: { type: 'string', title: 'Phone number ID', pattern: '^\\d{5,}$' },
+          access_token: { type: 'string', title: 'Access token', 'x-secret': true, minLength: 20 },
+          app_secret: { type: 'string', title: 'App secret', 'x-secret': true, description: 'Verifies the X-Hub-Signature-256 on inbound webhooks.' },
+          verify_token: { type: 'string', title: 'Webhook verify token', 'x-secret': true, description: 'The string you also type into the Meta webhook setup form.' },
+        },
+        required: ['phone_number_id', 'access_token'],
+      },
+      credentialType: CredentialType.API_KEY,
+      keyPageUrl: 'https://developers.facebook.com/apps',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: {
+      kind: 'http',
+      url: 'https://graph.facebook.com/v23.0/{{phone_number_id}}',
+      method: 'GET',
+      auth: 'bearer',
+      secretField: 'access_token',
+      accountLabelPath: 'display_phone_number',
+    },
+    keyPageUrl: 'https://developers.facebook.com/apps',
+    docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api/reference/phone-numbers',
+  },
+  {
+    key: channelKey('microsoft_teams'),
+    kind: 'channel',
+    displayName: 'Microsoft Teams',
+    description: 'A Bot Framework bot registered as an Azure Bot resource.',
+    // Verified 2026-09-09: the bot exchanges its app id and password at
+    // POST https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token,
+    // grant_type=client_credentials, scope https://api.botframework.com/.default,
+    // form encoded. Multi-tenant bots use the literal tenant `botframework.com`.
+    connect: [{
+      type: 'api_key',
+      label: 'Bot registration',
+      description: 'Azure Bot resource, Configuration: the Microsoft App ID, its client secret, and the tenant the app lives in.',
+      schema: {
+        type: 'object',
+        properties: {
+          bot_id: { type: 'string', title: 'Microsoft App ID' },
+          bot_password: { type: 'string', title: 'Client secret', 'x-secret': true, minLength: 8 },
+          tenant_id: { type: 'string', title: 'Tenant', default: 'botframework.com', description: 'The directory (tenant) id for a single-tenant bot; botframework.com for a multi-tenant one.' },
+          service_url: { type: 'string', title: 'Service URL', format: 'uri', description: 'Optional; learned from the first inbound activity when left empty.' },
+        },
+        required: ['bot_id', 'bot_password', 'tenant_id'],
+      },
+      credentialType: CredentialType.OAUTH2,
+      keyPageUrl: 'https://portal.azure.com/',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: {
+      kind: 'oauth2_client_credentials',
+      tokenUrl: 'https://login.microsoftonline.com/{{tenant_id}}/oauth2/v2.0/token',
+      scope: 'https://api.botframework.com/.default',
+      clientIdField: 'bot_id',
+      clientSecretField: 'bot_password',
+    },
+    keyPageUrl: 'https://portal.azure.com/',
+    docsUrl: 'https://learn.microsoft.com/azure/bot-service/rest-api/bot-framework-rest-connector-authentication',
+  },
+  {
+    key: channelKey('google_chat'),
+    kind: 'channel',
+    displayName: 'Google Chat',
+    description: 'Posts into a Google Chat space through an incoming webhook.',
+    // The webhook URL already carries its own `key` and `token` query
+    // params, so calling it is the only way to test it and that would
+    // post a message into the space. Checked for shape instead. The URL
+    // is never used as the account label: its `token` is a secret.
+    connect: [{
+      type: 'api_key',
+      label: 'Incoming webhook',
+      description: 'In the Chat space: Apps & integrations, Webhooks, Add webhook, then copy the URL.',
+      schema: {
+        type: 'object',
+        properties: {
+          webhook_url: { type: 'string', title: 'Webhook URL', format: 'uri', description: 'https://chat.googleapis.com/v1/spaces/.../messages?key=...&token=... The token in it is a secret.' },
+          verification_token: { type: 'string', title: 'Verification token', 'x-secret': true, description: 'Optional; checked on inbound events from the Chat app.' },
+        },
+        required: ['webhook_url'],
+      },
+      credentialType: CredentialType.CUSTOM,
+      keyPageUrl: 'https://console.cloud.google.com/workspace-api',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: { kind: 'format', fields: { webhook_url: '^https://chat\\.googleapis\\.com/v1/spaces/' }, urlFields: ['webhook_url'] },
+    keyPageUrl: 'https://console.cloud.google.com/workspace-api',
+    docsUrl: 'https://developers.google.com/workspace/chat/quickstart/webhooks',
+  },
+  {
+    key: channelKey('signal'),
+    kind: 'channel',
+    displayName: 'Signal',
+    description: 'Signal through a signal-cli REST bridge you run yourself.',
+    // The bridge is your own host, usually on a private network the SSRF
+    // guard refuses, and it has no credential to check beyond the shared
+    // inbound token. Shape check only.
+    connect: [{
+      type: 'api_key',
+      label: 'Bridge',
+      description: 'The signal-cli-rest-api instance and the number it is registered as.',
+      schema: {
+        type: 'object',
+        properties: {
+          api_url: { type: 'string', title: 'Bridge URL', format: 'uri', description: 'Base URL of your signal-cli-rest-api, e.g. https://signal.internal.example.com.' },
+          phone_number: { type: 'string', title: 'Registered number', pattern: '^\\+[1-9]\\d{6,14}$' },
+          inbound_token: { type: 'string', title: 'Inbound token', 'x-secret': true, description: 'Shared secret the bridge sends on inbound posts.' },
+        },
+        required: ['api_url', 'phone_number'],
+      },
+      credentialType: CredentialType.CUSTOM,
+    }],
+    capabilities: ['send', 'receive'],
+    validation: { kind: 'format', fields: { phone_number: '^\\+[1-9]\\d{6,14}$' }, accountLabelFrom: 'phone_number' },
+    keyPageUrl: null,
+    docsUrl: 'https://github.com/bbernhard/signal-cli-rest-api',
+  },
+  {
+    key: channelKey('matrix'),
+    kind: 'channel',
+    displayName: 'Matrix',
+    description: 'A Matrix bot user on any homeserver.',
+    // Verified 2026-09-09 against the client-server spec: GET
+    // <homeserver>/_matrix/client/v3/account/whoami with
+    // `Authorization: Bearer <access token>` returns { user_id, device_id?,
+    // is_guest? }; an unknown token is 401 M_UNKNOWN_TOKEN.
+    connect: [{
+      type: 'api_key',
+      label: 'Access token',
+      description: 'Log the bot user in once (or use Element, Settings, Help & About) and copy its access token.',
+      schema: {
+        type: 'object',
+        properties: {
+          homeserver_url: { type: 'string', title: 'Homeserver URL', format: 'uri', default: 'https://matrix.org' },
+          access_token: { type: 'string', title: 'Access token', 'x-secret': true, minLength: 16 },
+          room_id: { type: 'string', title: 'Default room id', description: 'Optional; the room replies go to when a message names none.' },
+          inbound_token: { type: 'string', title: 'Inbound token', 'x-secret': true, description: 'Optional; shared secret on the inbound webhook.' },
+        },
+        required: ['homeserver_url', 'access_token'],
+      },
+      credentialType: CredentialType.BEARER_TOKEN,
+    }],
+    capabilities: ['send', 'receive'],
+    validation: {
+      kind: 'http',
+      url: '{{homeserver_url}}/_matrix/client/v3/account/whoami',
+      method: 'GET',
+      auth: 'bearer',
+      secretField: 'access_token',
+      accountLabelPath: 'user_id',
+    },
+    keyPageUrl: null,
+    docsUrl: 'https://spec.matrix.org/latest/client-server-api/#get_matrixclientv3accountwhoami',
+  },
+  {
+    key: channelKey('irc'),
+    kind: 'channel',
+    displayName: 'IRC',
+    description: 'IRC through a bridge that speaks HTTP on almyty side.',
+    // The bridge is yours; there is no vendor endpoint to ask. The
+    // outbound webhook URL is shape-checked and the bearer token is
+    // stored for the adapter to send.
+    connect: [{
+      type: 'api_key',
+      label: 'Bridge',
+      schema: {
+        type: 'object',
+        properties: {
+          webhook_url: { type: 'string', title: 'Bridge webhook URL', format: 'uri', description: 'Where almyty POSTs outbound lines.' },
+          bridge_token: { type: 'string', title: 'Bridge token', 'x-secret': true, description: 'Sent as a bearer token on outbound posts.' },
+          inbound_token: { type: 'string', title: 'Inbound token', 'x-secret': true, description: 'Shared secret the bridge sends on inbound posts.' },
+          channel: { type: 'string', title: 'Default channel', description: '#channel, or a nick for private messages.' },
+          nick: { type: 'string', title: 'Relay nick', default: 'bot' },
+        },
+        required: ['webhook_url'],
+      },
+      credentialType: CredentialType.CUSTOM,
+    }],
+    capabilities: ['send', 'receive'],
+    validation: { kind: 'format', urlFields: ['webhook_url'], accountLabelFrom: 'nick' },
+    keyPageUrl: null,
+    docsUrl: null,
+  },
+  {
+    key: channelKey('email'),
+    kind: 'channel',
+    displayName: 'Email (Resend)',
+    description: 'Sends and answers mail through Resend.',
+    // Verified 2026-09-09: GET https://api.resend.com/api-keys answers 401
+    // without an Authorization header and returns { object, has_more, data }
+    // with a bearer key. Nothing in the response names the account, so the
+    // reply address is the label.
+    connect: [{
+      type: 'api_key',
+      label: 'Resend API key',
+      description: 'Resend dashboard, API Keys.',
+      schema: {
+        type: 'object',
+        properties: {
+          resend_api_key: { type: 'string', title: 'API key', 'x-secret': true, pattern: '^re_' },
+          reply_from: { type: 'string', title: 'From address', description: 'The verified sender replies go out as.' },
+          inbound_address: { type: 'string', title: 'Inbound address', description: 'Optional; the address mail arrives on.' },
+          resend_inbound_signing_secret: { type: 'string', title: 'Inbound signing secret', 'x-secret': true, description: 'Optional; verifies the Svix signature on inbound mail webhooks.' },
+        },
+        required: ['resend_api_key'],
+      },
+      credentialType: CredentialType.API_KEY,
+      keyPageUrl: 'https://resend.com/api-keys',
+    }],
+    capabilities: ['send', 'receive'],
+    validation: {
+      kind: 'http',
+      url: 'https://api.resend.com/api-keys',
+      method: 'GET',
+      auth: 'bearer',
+      secretField: 'resend_api_key',
+      accountLabelFrom: 'reply_from',
+    },
+    keyPageUrl: 'https://resend.com/api-keys',
+    docsUrl: 'https://resend.com/docs/api-reference/api-keys/list-api-keys',
+  },
+  {
+    key: channelKey('webhook'),
     kind: 'channel',
     displayName: 'Outbound webhook',
-    description: 'An HTTPS endpoint that receives channel events, signed with a shared secret.',
+    description: 'An HTTPS endpoint of yours that receives channel events, signed with a shared secret.',
+    // Your endpoint, not a vendor's: calling it would deliver a message.
+    // Shape check only.
     connect: [{
       type: 'api_key',
       label: 'Webhook URL and secret',
       schema: {
         type: 'object',
         properties: {
-          url: { type: 'string', title: 'Webhook URL', format: 'uri' },
+          callback_url: { type: 'string', title: 'Webhook URL', format: 'uri' },
           secret: { type: 'string', title: 'Signing secret', 'x-secret': true, minLength: 16 },
         },
-        required: ['url', 'secret'],
+        required: ['callback_url', 'secret'],
       },
       credentialType: CredentialType.CUSTOM,
     }],
     capabilities: ['deliver'],
-    validation: { kind: 'format', urlFields: ['url'], accountLabelFrom: 'url' },
+    validation: { kind: 'format', urlFields: ['callback_url'], accountLabelFrom: 'callback_url' },
     keyPageUrl: null,
     docsUrl: null,
   },
 ];
 
+export const CHANNEL_CONNECTOR_KEYS: readonly string[] = CHANNEL_CONNECTORS.map((c) => c.key);
+
+export { CHANNEL_CONNECTORS };
+
 export const BUILTIN_CONNECTORS: readonly ConnectorDefinition[] = [
   ...INFERENCE_CONNECTORS,
   ...DEPLOYMENT_CONNECTORS,
   ...CLOUD_CONNECTORS,
+  ...CHANNEL_CONNECTORS,
   ...OTHER_CONNECTORS,
 ];
 

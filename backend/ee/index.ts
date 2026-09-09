@@ -17,6 +17,7 @@ import { EeStubsModule } from './modules/ee-stubs/ee-stubs.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { ChargebackModule } from './modules/chargeback/chargeback.module';
 import { ConnectionsGovernanceModule } from './modules/connections-governance/connections-governance.module';
+import { ConnectionsGovernanceHookModule } from './modules/connections-governance/connections-governance.hook.module';
 
 /** Every EE feature module, in the order the app should register them. */
 export const EE_MODULES = [
@@ -28,5 +29,6 @@ export const EE_MODULES = [
   EeStubsModule,
   ComplianceModule,
   ChargebackModule,
+  ConnectionsGovernanceHookModule,
   ConnectionsGovernanceModule,
 ];

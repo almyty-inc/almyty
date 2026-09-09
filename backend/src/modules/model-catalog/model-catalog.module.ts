@@ -9,6 +9,7 @@ import { LlmProvider } from '../../entities/llm-provider.entity';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { KmsModule } from '../kms/kms.module';
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
+import { EndpointProviderModule } from '../llm-providers/endpoint-provider.module';
 import { PriceFeedService } from './pricing/price-feed.service';
 import { MODEL_PRICE_FEED_QUEUE, PriceFeedProcessor } from './pricing/price-feed.processor';
 import { ModelRouterService } from './routing/model-router.service';
@@ -30,6 +31,7 @@ import { ModelCatalogController } from './model-catalog.controller';
     AuditLogModule,
     KmsModule,
     forwardRef(() => LlmProvidersModule),
+    EndpointProviderModule,
   ],
   providers: [PriceFeedService, PriceFeedProcessor, CatalogSyncProcessor, ModelRouterService, ModelCatalogService],
   controllers: [ModelCatalogController],
