@@ -287,7 +287,10 @@ Stated so the next pass knows where to look.
 - Cohere's `/compatibility/v1/models` could not be distinguished from
   absent without a key (it 401s), which is why the listing stays on the
   documented native `/v1/models`.
-- `frontend/src/pages/llm-providers.tsx` (the type filter dropdown) and
-  `frontend/src/pages/llm-provider-detail.tsx` (a third copy of the logo
-  map) still carry stale hand-written type lists. Both are outside the
-  files this pass owns; they are cosmetic, not functional.
+- Closed on 2026-09-09: the type filter on `frontend/src/pages/llm-providers.tsx`
+  and the third logo map in `frontend/src/pages/llm-provider-detail.tsx` were
+  stale hand-written lists. Not cosmetic after all: the filter was eight
+  entries behind the create form, so a provider a user could create could
+  never be filtered for. Both now render from `providerTypeLabels` in
+  `frontend/src/components/llm-providers/provider-type-config.ts`, and
+  `provider-types.test.ts` fails when an enum value has no label or logo.
