@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog'
 
 import { agentsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
 
@@ -36,6 +37,7 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
   const [invokeResult, setInvokeResult] = useState<Record<string, unknown> | null>(null)
 
   const invokeMutation = useMutation({
+    onMutate: () => setInvokeResult(null),
     mutationFn: async () => {
       let input: any
       try {
@@ -51,8 +53,8 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
       queryClient.invalidateQueries({ queryKey: ['agent-executions', agent.id] })
       queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
     },
-    onError: (err: any) => {
-      errorNotif('Invocation Failed', err?.response?.data?.message || err?.message || 'Failed to invoke agent')
+    onError: (err: unknown) => {
+      errorNotif('Invocation Failed', getApiErrorMessage(err, 'Failed to invoke agent'))
     },
   })
 
@@ -102,9 +104,9 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
             </div>
           )}
 
-          {invokeMutation.error && (
-            <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-              {(invokeMutation.error as any)?.message || 'Execution failed'}
+          {invokeMutation.isError && (
+            <div role="alert" className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+              {getApiErrorMessage(invokeMutation.error, 'Execution failed')}
             </div>
           )}
         </div>

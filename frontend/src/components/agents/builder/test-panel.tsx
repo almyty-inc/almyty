@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { agentsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 export interface TestPanelProps {
   agentId: string
@@ -19,18 +20,20 @@ export interface TestPanelProps {
 export function TestPanel({ agentId, onClose }: TestPanelProps) {
   const [testInput, setTestInput] = useState('{"message": "Hello"}')
   const [testOutput, setTestOutput] = useState<string | null>(null)
+  const [testError, setTestError] = useState<string | null>(null)
   const [testLoading, setTestLoading] = useState(false)
 
   const runTest = async () => {
     if (!agentId) return
     setTestLoading(true)
     setTestOutput(null)
+    setTestError(null)
     try {
       const input = JSON.parse(testInput)
       const result = await agentsApi.invoke(agentId, input)
       setTestOutput(JSON.stringify(result, null, 2))
-    } catch (err: any) {
-      setTestOutput(`Error: ${err?.response?.data?.message || err?.message || 'Execution failed'}`)
+    } catch (err: unknown) {
+      setTestError(getApiErrorMessage(err, 'Execution failed'))
     } finally {
       setTestLoading(false)
     }
@@ -61,8 +64,8 @@ export function TestPanel({ agentId, onClose }: TestPanelProps) {
         </div>
         <div className="flex-1 space-y-2">
           <Label className="text-xs">Output</Label>
-          <pre className="font-mono text-xs bg-background border rounded-md p-3 h-[170px] overflow-auto whitespace-pre-wrap">
-            {testOutput || 'Run the agent to see output...'}
+          <pre role={testError ? 'alert' : 'status'} className={`font-mono text-xs bg-background border rounded-md p-3 h-[170px] overflow-auto whitespace-pre-wrap ${testError ? 'text-destructive' : ''}`}>
+            {testError ? `Error: ${testError}` : testOutput || 'Run the agent to see output...'}
           </pre>
         </div>
       </div>
