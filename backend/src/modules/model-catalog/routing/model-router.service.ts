@@ -82,13 +82,13 @@ export class ModelRouterService {
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
   ) {}
 
-  async plan(organizationId: string, policy: RoutingPolicy = {}): Promise<RoutePlan> {
+  async plan(organizationId: string, policy: RoutingPolicy = {}, principal?: { id: string }): Promise<RoutePlan> {
     const cards = await this.models.find({ where: { organizationId }, order: { createdAt: 'ASC' } });
     const { candidates, rejected } = selectCandidates(cards, policy);
     const resolved: ResolvedCandidate[] = [];
     for (const c of candidates) {
       const card = cards.find((k) => k.id === c.modelId)!;
-      const provider = await this.providerFor(card);
+      const provider = await this.providerFor(card, principal);
       if (!provider) {
         rejected.push({ modelId: card.id, reason: 'no callable provider' });
         continue;
@@ -108,7 +108,7 @@ export class ModelRouterService {
    * custom provider pointed at that URL, with the deployment's token as
    * bearer when there is one.
    */
-  async providerFor(card: Model): Promise<LlmProvider | null> {
+  async providerFor(card: Model, principal?: { id: string }): Promise<LlmProvider | null> {
     if (card.providerId) {
       return this.providers.findOne({ where: { id: card.providerId, organizationId: card.organizationId } });
     }
@@ -123,7 +123,7 @@ export class ModelRouterService {
         // yields nothing); inline secrets are the fallback.
         const config = deployment.getDecryptedProviderConfig();
         const referenced = config.credentialId && this.credentialRefs
-          ? await this.credentialRefs.tryResolve(card.organizationId, config.credentialId, { context: { purpose: 'llm_call', resourceType: 'model', resourceId: card.id } })
+          ? await this.credentialRefs.tryResolve(card.organizationId, config.credentialId, { principal, context: { purpose: 'llm_call', resourceType: 'model', resourceId: card.id } })
           : null;
         // With a credentialId the store is the only source: an unresolvable
         // row must not fall back to whatever inline value was pasted once.

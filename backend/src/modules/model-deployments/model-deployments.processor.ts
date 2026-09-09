@@ -20,6 +20,12 @@ const DEFAULT_CRON = '*/2 * * * *';
 const REGISTER_INTERVAL_MS = 10 * 60 * 1000;
 /** A deployment the provider no longer knows, past this age, is torn down as an orphan. */
 const ORPHAN_GRACE_MS = 30 * 60 * 1000;
+/** Nothing to reconcile: the row is finished, whatever a stale job thinks. */
+const TERMINAL_STATES: ModelDeploymentState[] = ['torn_down', 'orphaned'];
+/** Consecutive read failures before a still-existing endpoint is called failed. */
+const MAX_TRANSIENT_ERRORS = 3;
+/** Errors that say the deployment itself is wrong, not the connection to the provider. */
+const TERMINAL_ERROR_CODES = ['ADAPTER_UNSUPPORTED_ARCHITECTURE', 'ADAPTER_UNSUPPORTED_SOURCE', 'ADAPTER_UNSUPPORTED_OPERATION', 'CREDENTIAL_NOT_FOUND', 'CREDENTIAL_INACTIVE', 'CREDENTIAL_EXPIRED', 'CONNECTION_NOT_GRANTED'];
 
 /**
  * The only thing that talks to adapters.
@@ -88,6 +94,31 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     }
   }
 
+  /**
+   * A read that failed is not the same as an endpoint that failed. A
+   * timeout or a 503 keeps the row observable (degraded, still swept) and
+   * only becomes terminal after MAX_TRANSIENT_ERRORS in a row, so one
+   * blip never stops the budget cap of a running paid endpoint.
+   */
+  private async recordError(d: ModelDeployment, error: any): Promise<ModelDeployment> {
+    const message = error?.message ?? String(error);
+    const terminal = TERMINAL_ERROR_CODES.includes(error?.code);
+    const consecutive = ((d.actual?.consecutiveErrors as number | undefined) ?? 0) + 1;
+    if (terminal || consecutive >= MAX_TRANSIENT_ERRORS || !d.externalRef) {
+      return this.fail(d, message);
+    }
+    const from = d.state;
+    d.state = 'degraded';
+    d.lastError = message.slice(0, 2000);
+    d.lastReconcileAt = new Date();
+    d.actual = { ...(d.actual ?? {}), consecutiveErrors: consecutive, lastErrorAt: new Date().toISOString() };
+    const saved = await this.deployments.save(d);
+    this.logger.warn(`Reconcile of ${d.id} failed (${consecutive}/${MAX_TRANSIENT_ERRORS}): ${message}`);
+    if (from !== 'degraded') this.service.audit(saved, AuditAction.MODEL_DEPLOYMENT_TRANSITION, null, { from, to: 'degraded', error: d.lastError, consecutiveErrors: consecutive });
+    await this.clearCard(saved, 'deployment is degraded');
+    return saved;
+  }
+
   @Process(SWEEP_JOB)
   async handleSweep(): Promise<{ reconciled: number }> {
     const active = await this.deployments.find({
@@ -95,8 +126,16 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
       order: { lastReconcileAt: 'ASC' },
       take: 200,
     });
+    // A failed row whose endpoint still exists is still costing money: keep
+    // reading it so the budget cap and the orphan check keep working. A
+    // failed row with nothing at the provider is left alone.
+    const failedWithEndpoint = (await this.deployments.find({
+      where: { state: 'failed' as ModelDeploymentState },
+      order: { lastReconcileAt: 'ASC' },
+      take: 100,
+    })).filter((d) => Boolean(d.externalRef));
     let reconciled = 0;
-    for (const d of active) {
+    for (const d of [...active, ...failedWithEndpoint]) {
       await this.reconcile(d.id);
       reconciled++;
     }
@@ -117,9 +156,12 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
   async reconcile(deploymentId: string): Promise<ModelDeployment | null> {
     const d = await this.deployments.findOne({ where: { id: deploymentId } });
     if (!d) return null;
+    // Terminal states are done. A job left in the queue from before a
+    // teardown would otherwise see no externalRef and deploy the thing
+    // again, at the customer's expense.
+    if (TERMINAL_STATES.includes(d.state)) return d;
     const adapter = this.adapters.get(d.providerType);
     if (!adapter) return this.fail(d, `unknown adapter ${d.providerType}`);
-
     try {
       const creds = await this.service.credentialsFor(d);
 
@@ -127,6 +169,7 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
         if (d.externalRef) await adapter.teardown(d.externalRef, creds);
         d.externalRef = null;
         d.actual = { ...(d.actual ?? {}), state: 'stopped', message: 'endpoint removed' };
+        await this.clearCard(d, 'deployment torn down', true);
         return this.transition(d, 'tearing_down', 'torn_down');
       }
 
@@ -151,7 +194,10 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
       }
 
       const actual = await adapter.readEndpoint(d.externalRef as EndpointRef, creds);
-      d.actual = sanitizeActual(actual);
+      // missingSince outlives the actual it was recorded in: the orphan
+      // grace is measured from the first missing read, not from this one.
+      const missingSince = d.actual?.missingSince as string | undefined;
+      d.actual = { ...sanitizeActual(actual), consecutiveErrors: 0, ...(missingSince ? { missingSince } : {}) };
       d.lastReconcileAt = new Date();
 
       if (actual.state === 'missing') return this.markOrphan(d);
@@ -169,11 +215,13 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
         actual.state === 'ready' ? 'ready' : actual.state === 'stopped' ? (wantReplicas === 0 ? 'ready' : 'degraded') : actual.state === 'degraded' ? 'degraded' : 'deploying';
       await this.transition(d, d.state, next, undefined);
 
-      if (next === 'ready') await this.fillCard(d, actual);
+      if (next === 'ready' && actual.state === 'ready') await this.fillCard(d, actual);
+      // Stopped (scaled to zero, paused, budget cap) is not servable.
+      else if (actual.state === 'stopped' || next === 'degraded') await this.clearCard(d, `endpoint is ${actual.state}`);
       await this.chargeBudget(d, adapter, creds);
       return d;
     } catch (error: any) {
-      return this.fail(d, error?.message ?? String(error));
+      return this.recordError(d, error);
     }
   }
 
@@ -193,22 +241,47 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     d.lastReconcileAt = new Date();
     const saved = await this.deployments.save(d);
     this.service.audit(saved, AuditAction.MODEL_DEPLOYMENT_TRANSITION, null, { from, to: 'failed', error: d.lastError });
+    await this.clearCard(saved, 'deployment failed');
     return saved;
   }
 
   /** The provider forgot it. Past the grace period the row is orphaned and anything left is torn down. Weights stay. */
   private async markOrphan(d: ModelDeployment): Promise<ModelDeployment> {
-    const age = Date.now() - new Date(d.updatedAt ?? d.createdAt).getTime();
+    // The grace runs from the first missing read, not from updatedAt: every
+    // tick saves the row, so an updatedAt window would never close.
+    const firstMissing = (d.actual?.missingSince as string | undefined) ?? new Date().toISOString();
+    const age = Date.now() - new Date(firstMissing).getTime();
     if (d.state === 'deploying' && age < ORPHAN_GRACE_MS) {
+      d.actual = { ...(d.actual ?? {}), missingSince: firstMissing };
       await this.deployments.save(d);
       return d;
     }
     const from = d.state;
     d.state = 'orphaned';
     d.lastError = 'endpoint no longer exists at the provider';
+    d.actual = { ...(d.actual ?? {}), missingSince: firstMissing };
     const saved = await this.deployments.save(d);
-    this.service.audit(saved, AuditAction.MODEL_DEPLOYMENT_ORPHAN_TEARDOWN, null, { from, to: 'orphaned' });
+    this.service.audit(saved, AuditAction.MODEL_DEPLOYMENT_ORPHAN_TEARDOWN, null, { from, to: 'orphaned', missingSince: firstMissing });
+    await this.clearCard(saved, 'endpoint no longer exists at the provider', true);
     return saved;
+  }
+
+  /**
+   * The endpoint is no longer serving, so the card must stop being
+   * routable. A card whose endpoint was torn down or orphaned loses the
+   * URL as well; one that is merely stopped or degraded keeps it so a
+   * later ready tick can light it up again without re-registering.
+   */
+  private async clearCard(d: ModelDeployment, reason: string, forget = false): Promise<void> {
+    if (!d.modelId) return;
+    const card = await this.models.findOne({ where: { id: d.modelId, organizationId: d.organizationId } });
+    if (!card) return;
+    if (card.endpointRef?.deploymentId && card.endpointRef.deploymentId !== d.id) return;
+    if (card.status === 'inactive' && (!forget || !card.endpointRef)) return;
+    card.status = 'inactive';
+    if (forget) card.endpointRef = null;
+    card.metadata = { ...(card.metadata ?? {}), unroutableSince: new Date().toISOString(), unroutableReason: reason };
+    await this.models.save(card);
   }
 
   /** A ready deployment fills its catalog card so the router can see it. */
@@ -218,6 +291,10 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     if (!card) return;
     card.endpointRef = { url: actual.url ?? d.externalRef?.url, deploymentId: d.id, providerType: d.providerType };
     card.status = 'active';
+    if (card.metadata?.unroutableSince) {
+      const { unroutableSince, unroutableReason, ...rest } = card.metadata as Record<string, any>;
+      card.metadata = rest;
+    }
     card.region = actual.region ?? d.desired.region ?? card.region;
     await this.models.save(card);
   }
