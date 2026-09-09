@@ -29,7 +29,7 @@ describe('deployment inline secret guard', () => {
       const registry = new AdapterRegistry();
       registry.register(new StubAdapter({ architectures: 'any' }));
       const key = registry.list()[0].key;
-      const versions = { findOne: jest.fn(async () => ({ id: 'v-1', base: 'llama', organizationId: 'org-1', registryUri: 'hf://x' })) };
+      const versions = { findOne: jest.fn(async () => ({ id: 'v-1', base: 'llama', organizationId: 'org-1', registryUri: 'hf://meta-llama/Llama-3-8B@main' })) };
       const deployments = { create: jest.fn((d: any) => ({ ...d, encryptSensitiveDataForOrg: async () => undefined })), save: jest.fn(async (d: any) => ({ id: 'd-1', ...d })) };
       const queue = { add: jest.fn(async () => undefined) };
       const service = new ModelDeploymentsService(deployments as any, versions as any, {} as any, queue as any, registry, makeEnvelopeCryptoMock(), { log: jest.fn(async () => null) } as any);
