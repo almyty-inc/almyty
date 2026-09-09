@@ -140,6 +140,37 @@ describe('DiscordGatewayTransport', () => {
       transport.sync({ ...gateway(), type: GatewayType.SLACK } as Gateway);
       expect(transport.activeConnectionCount).toBe(0);
     });
+
+    it('sync() starts a gateway whose token lives on a connection (no inline value)', () => {
+      transport.sync({ ...gateway(), configuration: { credentialId: 'cred-1', credentialKeys: ['bot_token'] } } as unknown as Gateway);
+      expect(transport.activeConnectionCount).toBe(1);
+    });
+
+    it('identifies with the token resolved through the credential store, waiting for it when HELLO comes first', async () => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => { release = resolve; });
+      const channelCredentials = {
+        resolveConfig: jest.fn(async () => { await pending; return { bot_token: 'token-from-store' }; }),
+      };
+      const withStore = new DiscordGatewayTransport(gatewayRepo as any, channelService as any, undefined, undefined, channelCredentials as any);
+      withStore.socketFactory = transport.socketFactory;
+      withStore.random = () => 0.5;
+      const gw = { ...gateway(), configuration: { credentialId: 'cred-1', credentialKeys: ['bot_token'] } } as unknown as Gateway;
+
+      withStore.start(gw);
+      hello(sockets[0]);
+      // HELLO arrived before the store answered: nothing is sent yet.
+      expect(sockets[0].sent).toHaveLength(0);
+      expect(channelCredentials.resolveConfig).toHaveBeenCalledWith(gw, 'channel_inbound');
+
+      release();
+      // Drain the microtask chain (resolveWith -> resolveConfig -> then).
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+
+      expect(sockets[0].sent[0].op).toBe(2);
+      expect(sockets[0].sent[0].d.token).toBe('token-from-store');
+      withStore.onModuleDestroy();
+    });
   });
 
   describe('identify', () => {

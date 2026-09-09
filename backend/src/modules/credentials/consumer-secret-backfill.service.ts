@@ -5,8 +5,11 @@ import { IsNull, Not, Repository } from 'typeorm';
 import { Api } from '../../entities/api.entity';
 import { ChannelInstallation } from '../../entities/channel-installation.entity';
 import { CredentialType } from '../../entities/credential.entity';
+import { Gateway } from '../../entities/gateway.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { McpSource } from '../../entities/mcp-source.entity';
+import { hasInlineChannelSecret } from '../gateways/channels/channel-config.helper';
+import { ChannelCredentialService } from '../gateways/channels/channel-credential.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmProviderSecretsHelper } from '../llm-providers/llm-provider-secrets.helper';
 import { CredentialRefResolver } from './credential-ref.resolver';
@@ -23,6 +26,7 @@ export interface BackfillReport {
   mcpSources: BackfillCount;
   channelInstallations: BackfillCount;
   apis: BackfillCount;
+  gatewayChannels: BackfillCount;
 }
 
 const CHANNEL_SECRET_KEYS = ['bot_token', 'access_token', 'refresh_token'];
@@ -30,10 +34,10 @@ const CHANNEL_SECRET_KEYS = ['bot_token', 'access_token', 'refresh_token'];
 /**
  * One-shot startup routine: every third-party secret still sitting on a
  * consumer row (LLM provider inline keys, MCP source authConfig, channel
- * installation credentials, API inline authentication) moves into a
- * Credential row the consumer then references. Idempotent: a row that
- * already references a credential, or has nothing inline, is skipped.
- * Counts are logged; values never are.
+ * installation credentials, API inline authentication, channel gateway
+ * configuration) moves into a Credential row the consumer then
+ * references. Idempotent: a row that already references a credential,
+ * or has nothing inline, is skipped. Counts are logged; values never are.
  *
  * Runs on application bootstrap unless SECRET_BACKFILL=off (or in the
  * test environment). `run()` can also be called on demand.
@@ -49,6 +53,7 @@ export class ConsumerSecretBackfillService implements OnApplicationBootstrap {
     @InjectRepository(Api) private readonly apis: Repository<Api>,
     private readonly envelopeCrypto: EnvelopeCryptoService,
     private readonly credentialRefs: CredentialRefResolver,
+    @InjectRepository(Gateway) private readonly gateways: Repository<Gateway>,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -62,6 +67,7 @@ export class ConsumerSecretBackfillService implements OnApplicationBootstrap {
       mcpSources: await this.backfillMcpSources(),
       channelInstallations: await this.backfillChannelInstallations(),
       apis: await this.backfillApis(),
+      gatewayChannels: await this.backfillGatewayChannels(),
     };
     for (const [store, count] of Object.entries(report)) {
       this.logger.log(`secret backfill ${store}: moved=${count.moved} skipped=${count.skipped} failed=${count.failed}`);
@@ -156,6 +162,31 @@ export class ConsumerSecretBackfillService implements OnApplicationBootstrap {
       } catch (err: any) {
         count.failed++;
         this.logger.warn(`channel installation ${installation.id}: ${err?.message ?? err}`);
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Inline channel secrets on a gateway row (bot tokens, signing and app
+   * secrets, ...) -> the managed row the gateway references. Same write
+   * path as a gateway update, so the row shape is identical.
+   */
+  private async backfillGatewayChannels(): Promise<BackfillCount> {
+    const count: BackfillCount = { moved: 0, skipped: 0, failed: 0 };
+    const channels = new ChannelCredentialService(this.credentialRefs, this.envelopeCrypto);
+    for (const gateway of await this.gateways.find()) {
+      if (!hasInlineChannelSecret(gateway.configuration)) { count.skipped++; continue; }
+      try {
+        await this.envelopeCrypto.warmOrg(gateway.organizationId);
+        const configuration = { ...gateway.configuration };
+        await channels.persistSecrets(gateway, configuration, gateway.configuration);
+        gateway.configuration = configuration;
+        await this.gateways.save(gateway);
+        count.moved++;
+      } catch (err: any) {
+        count.failed++;
+        this.logger.warn(`gateway ${gateway.id}: ${err?.message ?? err}`);
       }
     }
     return count;

@@ -57,7 +57,6 @@ export const CHANNEL_SECRET_CONFIG_KEYS: readonly string[] = [
   'app_secret',
   'appSecret',
   'verify_token',
-  'verifyToken',
   // Email (Resend)
   'resend_api_key',
   'resendApiKey',
@@ -65,6 +64,10 @@ export const CHANNEL_SECRET_CONFIG_KEYS: readonly string[] = [
   // IRC bridge
   'bridge_token',
   'inbound_token',
+  // Outbound webhook HMAC secret
+  'secret',
+  // Google Chat bot verification token
+  'verification_token',
 ];
 
 /**
@@ -183,7 +186,10 @@ export async function encryptChannelConfigSecrets(
 
 /**
  * Response-surface masking: replace secret values with a fixed
- * placeholder. Non-secret keys are untouched. Returns a new object.
+ * placeholder. Non-secret keys are untouched. Keys the channel's
+ * connection holds (`credentialKeys`, names only) are masked as well so
+ * a client sees "a value exists" without the store ever being read.
+ * Returns a new object.
  */
 export function maskChannelConfigSecrets(
   configuration?: Record<string, any> | null,
@@ -194,6 +200,9 @@ export function maskChannelConfigSecrets(
     if (typeof out[key] === 'string' && out[key]) {
       out[key] = MASKED_CHANNEL_SECRET;
     }
+  }
+  for (const key of credentialKeysOf(configuration)) {
+    if (!out[key]) out[key] = MASKED_CHANNEL_SECRET;
   }
   return out;
 }
@@ -220,4 +229,81 @@ export function restoreMaskedChannelSecrets(
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Connection reference
+//
+// A channel gateway's secrets live in the credential store; the
+// configuration keeps `credentialId` (the row) and `credentialKeys` (the
+// names of the secret keys that row holds, never values). Inline values
+// are the read-through shim for rows the startup backfill has not moved
+// yet, and are moved the next time the gateway is written.
+// ---------------------------------------------------------------------------
+
+/** The snake_case secret keys the adapters read; what a channel credential row stores. */
+export const CHANNEL_CREDENTIAL_KEYS: readonly string[] = CHANNEL_SECRET_CONFIG_KEYS.filter(
+  (key) => !(key in LEGACY_CHANNEL_CONFIG_KEY_MAP),
+);
+
+/** Whether `key` names a channel secret the credential row may hold. */
+export function isChannelCredentialKey(key: string): boolean {
+  return CHANNEL_CREDENTIAL_KEYS.includes(key);
+}
+
+/** `configuration.credentialKeys`, filtered to known secret names. */
+export function credentialKeysOf(configuration?: Record<string, any> | null): string[] {
+  const keys = configuration?.credentialKeys;
+  if (!Array.isArray(keys)) return [];
+  return keys.filter((k): k is string => typeof k === 'string' && isChannelCredentialKey(k));
+}
+
+/** The channel secret keys a credential row's config carries (names only). */
+export function channelSecretKeysIn(config?: Record<string, any> | null): string[] {
+  return Object.keys(config ?? {}).filter(
+    (key) => isChannelCredentialKey(key) && typeof config![key] === 'string' && config![key].length > 0,
+  );
+}
+
+/**
+ * True when the channel has a value for `key`: inline (either spelling,
+ * the shim) or on its connection (`credentialKeys`). Never reads the
+ * store, so it is safe on a sync path.
+ */
+export function hasChannelSecret(configuration: Record<string, any> | null | undefined, key: string): boolean {
+  const normalized = normalizeChannelConfigKeys(configuration);
+  const inline = normalized[key];
+  if (typeof inline === 'string' && inline.length > 0 && inline !== MASKED_CHANNEL_SECRET) return true;
+  return credentialKeysOf(configuration).includes(key);
+}
+
+export interface SplitChannelConfig {
+  /** Secret values keyed by their canonical snake_case name; may still be encrypted at rest. */
+  secrets: Record<string, string>;
+  /** The configuration without any secret key (either spelling). */
+  publicConfig: Record<string, any>;
+}
+
+/**
+ * Split a configuration into the secrets that belong in the store and
+ * the public part that stays on the gateway. Masked placeholders are
+ * not secrets. Returns a new object; the input is never mutated.
+ */
+export function splitChannelConfigSecrets(configuration?: Record<string, any> | null): SplitChannelConfig {
+  const normalized = normalizeChannelConfigKeys(configuration);
+  const secrets: Record<string, string> = {};
+  for (const key of CHANNEL_CREDENTIAL_KEYS) {
+    const value = normalized[key];
+    if (typeof value === 'string' && value.length > 0 && value !== MASKED_CHANNEL_SECRET) {
+      secrets[key] = value;
+    }
+  }
+  const publicConfig: Record<string, any> = { ...(configuration || {}) };
+  for (const key of CHANNEL_SECRET_CONFIG_KEYS) delete publicConfig[key];
+  return { secrets, publicConfig };
+}
+
+/** True when the configuration still carries a secret value inline (the shim). */
+export function hasInlineChannelSecret(configuration?: Record<string, any> | null): boolean {
+  return Object.keys(splitChannelConfigSecrets(configuration).secrets).length > 0;
 }

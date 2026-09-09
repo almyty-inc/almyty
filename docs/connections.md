@@ -111,6 +111,7 @@ next call.
 | API | `credentials.apiId` (the row is bound to the API; tool execution already prefers it) | a row of the matching type; the API keeps the public part of its auth config plus `credentialId` |
 | Deployment | `providerConfig.credentialId` | the connection made in the form first. A request that names a `credentialId` and also pastes an `x-secret` value is refused (`PROVIDER_CONFIG_INLINE_SECRET`) |
 | Memory backend | `memory_workspace_config.overrides.routing.credentials` | a `memory_backend` row |
+| Chat channel (single workspace) | `gateways.configuration.credentialId` (plus `credentialKeys`, the secret names the row holds) | a `custom` row tagged `channel-<adapter>` with the bot token, signing secret, app secret, Twilio auth token, ... the adapter reads; rotated in place on the next paste, deleted with the gateway. The read seam is `ChannelCredentialService` in the gateways module |
 
 Instead of pasting, every form can name an existing connection
 (`credentialId`); null clears it, and a vendor that needs a key refuses
@@ -125,7 +126,8 @@ alone.
 
 The old columns (`llm_providers.configuration.apiKey` and
 `usageApiKey`, `mcp_sources.authConfig`, `channel_installations.credentials`,
-`apis.authentication.config`) are read-through shims: a startup routine
+`apis.authentication.config`, the secret keys inside `gateways.configuration`)
+are read-through shims: a startup routine
 (`ConsumerSecretBackfillService`, switch off with `SECRET_BACKFILL=off`)
 moves every value it finds into a credential row, and a row is also
 moved the next time it is written. A build check
@@ -133,7 +135,6 @@ moved the next time it is written. A build check
 the entities and fails on any new secret column; the shims sit on its
 allow-list with the date they go away.
 
-Not yet on a reference, listed on that allow-list: the gateway's own
-channel configuration (bot tokens of single-workspace channels) and
-outbound webhook secrets, standalone HTTP tool auth, the audit stream
-token and the SSO client secret and SCIM token.
+Not yet on a reference, listed on that allow-list: outbound webhook
+secrets, standalone HTTP tool auth, the audit stream token and the SSO
+client secret and SCIM token.

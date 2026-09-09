@@ -28,6 +28,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { ExternalLink, TestTube, CheckCircle2, XCircle } from 'lucide-react'
 import { llmProvidersApi } from '@/lib/api'
 import { providerKeyUrls, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
+import { BASE_URL_PRIVATE_HOST_HINT } from './schema'
 
 interface CreateProviderDialogProps {
   open: boolean
@@ -195,6 +196,22 @@ export function CreateProviderDialog({
                   placeholder="http://localhost:11434"
                 />
               </div>
+            </div>
+          )}
+          {createForm.watch('type') === 'custom' && (
+            <div>
+              <Label htmlFor="apiUrl">Base URL</Label>
+              <Input
+                id="apiUrl"
+                {...createForm.register('apiUrl')}
+                placeholder="https://llm.example.internal/v1"
+              />
+              {createForm.formState.errors.apiUrl && (
+                <p className="text-xs text-destructive mt-1">{String(createForm.formState.errors.apiUrl.message)}</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Any OpenAI-compatible server (vLLM, LM Studio, llama.cpp, a gateway). {BASE_URL_PRIVATE_HOST_HINT}
+              </p>
             </div>
           )}
           {createForm.watch('apiKey') && (

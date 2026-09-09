@@ -59,3 +59,11 @@ describe('RegisterEndpointDialog', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 })
+
+describe('RegisterEndpointDialog base URL field', () => {
+  it('suggests a hostname, not a private address, and explains the private-host switch', () => {
+    render(<RegisterEndpointDialog open onOpenChange={() => {}} onSubmit={vi.fn()} />)
+    expect(screen.getByLabelText('Base URL')).toHaveAttribute('placeholder', 'https://llm.example.internal/v1')
+    expect(screen.getByText(/LLM_ALLOW_PRIVATE_URLS=true/)).toBeInTheDocument()
+  })
+})

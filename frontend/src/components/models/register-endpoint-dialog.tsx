@@ -94,7 +94,8 @@ export function RegisterEndpointDialog({ open, onOpenChange, onSubmit, submittin
           </div>
           <div>
             <Label htmlFor="endpoint-url">Base URL</Label>
-            <Input id="endpoint-url" className="mt-1 font-mono" placeholder="http://10.0.0.5:8000/v1" {...form.register('url')} />
+            <Input id="endpoint-url" className="mt-1 font-mono" placeholder="https://llm.example.internal/v1" {...form.register('url')} />
+            <p className="text-xs text-muted-foreground mt-1">Private or LAN hosts (10.x, 192.168.x, .internal, localhost) need LLM_ALLOW_PRIVATE_URLS=true on the almyty server.</p>
             {errors.url && <p className="text-xs text-destructive mt-1">{errors.url.message}</p>}
           </div>
           <div>
