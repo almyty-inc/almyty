@@ -2,38 +2,22 @@ import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 
 import { render } from '../../../../test/setup'
-import { parseRegistryUri } from '../../../../lib/deployments-api'
 import { RegisterVersionDialog, registerVersionSchema, toRegisterBody } from '../register-version-dialog'
 
-describe('parseRegistryUri', () => {
-  it('accepts the three shapes and splits them', () => {
-    expect(parseRegistryUri('s3://registry/qwen3-14b@e3b0c442')).toEqual({ ok: true, value: { scheme: 's3', location: 'registry', prefix: 'qwen3-14b', pin: 'e3b0c442' } })
-    expect(parseRegistryUri('s3://bucket@etag')).toEqual({ ok: true, value: { scheme: 's3', location: 'bucket', prefix: '', pin: 'etag' } })
-    expect(parseRegistryUri('hf://Qwen/Qwen3-14B@abc123')).toEqual({ ok: true, value: { scheme: 'hf', location: 'Qwen/Qwen3-14B', prefix: '', pin: 'abc123' } })
-    expect(parseRegistryUri(' file:///models/qwen@sha256:ff ')).toEqual({ ok: true, value: { scheme: 'file', location: '/models/qwen', prefix: '', pin: 'sha256:ff' } })
-  })
-
-  it('refuses a URI without a pin', () => {
-    const r = parseRegistryUri('s3://registry/qwen3-14b')
-    expect(r.ok).toBe(false)
-    if (!r.ok) expect(r.error).toMatch(/@pin is required/)
-  })
-
-  it('refuses unknown schemes, traversal, relative file paths and bad hub ids', () => {
-    expect(parseRegistryUri('gs://bucket/x@1').ok).toBe(false)
-    expect(parseRegistryUri('s3://bucket/../x@1').ok).toBe(false)
-    expect(parseRegistryUri('file://models/x@1').ok).toBe(false)
-    expect(parseRegistryUri('hf://onlyorg@1').ok).toBe(false)
-    expect(parseRegistryUri('').ok).toBe(false)
-  })
-})
-
+// The grammar itself is covered in src/lib/__tests__/deployments-api.test.ts.
 describe('registerVersionSchema + toRegisterBody', () => {
   it('validates the URI grammar through zod', () => {
     const bad = registerVersionSchema.safeParse({ name: 'n', base: 'b', registryUri: 'hf://org/repo' })
     expect(bad.success).toBe(false)
     if (!bad.success) expect(bad.error.issues.map((i) => i.path.join('.'))).toContain('registryUri')
     expect(registerVersionSchema.safeParse({ name: 'n', base: 'b', registryUri: 'hf://org/repo@main' }).success).toBe(true)
+    expect(registerVersionSchema.safeParse({ name: 'n', base: 'b', registryUri: 'gs://bucket/p@17' }).success).toBe(true)
+  })
+
+  it('refuses a model a platform already holds: there is no artifact to track', () => {
+    const r = registerVersionSchema.safeParse({ name: 'n', base: 'b', registryUri: 'fireworks://accounts/acme/models/support' })
+    expect(r.success).toBe(false)
+    if (!r.success) expect(r.error.issues[0].message).toMatch(/Name it on the deployment instead/)
   })
 
   it('splits quantizations and drops empty lineage', () => {
@@ -55,7 +39,7 @@ describe('RegisterVersionDialog', () => {
     fireEvent.change(screen.getByLabelText('Base architecture'), { target: { value: 'qwen3-14b' } })
     fireEvent.change(screen.getByLabelText('Registry URI'), { target: { value: 's3://registry/support-bot-v3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Register' }))
-    expect(await screen.findByText(/The @pin is required/)).toBeInTheDocument()
+    expect(await screen.findByText(/needs an @pin/)).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
   })
 

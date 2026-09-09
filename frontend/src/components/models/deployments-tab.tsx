@@ -4,10 +4,10 @@ import { Plus, RefreshCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { QueryError } from '@/components/ui/query-error'
-import { DEPLOYMENT_POLL_MS, isInFlightState, modelAdaptersApi, modelDeploymentsApi, modelVersionsApi } from '@/lib/deployments-api'
+import { DEPLOYMENT_POLL_MS, isInFlightState, modelAdaptersApi, modelDeploymentsApi, modelVersionsApi, readAdapterRefusal } from '@/lib/deployments-api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
-import type { CreateModelDeploymentBody, ModelAdapter, ModelDeployment, ModelVersion } from '@/types/deployments'
+import type { AdapterRefusal, CreateModelDeploymentBody, ModelAdapter, ModelDeployment, ModelVersion } from '@/types/deployments'
 import { DeployDialog } from './deployments/deploy-dialog'
 import { DeploymentDetailSheet } from './deployments/deployment-detail-sheet'
 import { DeploymentsList } from './deployments/deployments-list'
@@ -24,6 +24,7 @@ export function DeploymentsTab() {
   const notify = useNotifications()
   const [deployOpen, setDeployOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<AdapterRefusal | null>(null)
 
   const deploymentsQuery = useQuery<ModelDeployment[]>({
     queryKey: ['model-deployments', orgId],
@@ -62,12 +63,17 @@ export function DeploymentsTab() {
 
   const createMutation = useMutation({
     mutationFn: (body: CreateModelDeploymentBody) => modelDeploymentsApi.create(body),
+    onMutate: () => setRefusal(null),
     onSuccess: () => {
       invalidate()
       setDeployOpen(false)
       notify.success('Deployment queued', 'The reconcile loop brings the endpoint up.')
     },
-    onError: (err) => notify.error('Could not create deployment', errorMessage(err, 'The server rejected the request.')),
+    onError: (err) => {
+      // A refusal names what the provider does accept; keep it on the form.
+      setRefusal(readAdapterRefusal(err))
+      notify.error('Could not create deployment', errorMessage(err, 'The server rejected the request.'))
+    },
   })
   const scaleMutation = useMutation({
     mutationFn: ({ id, replicas }: { id: string; replicas: number }) => modelDeploymentsApi.scale(id, replicas),
@@ -104,16 +110,18 @@ export function DeploymentsTab() {
         <div>
           <h2 className="text-lg font-semibold">Deployments</h2>
           <p className="text-sm text-muted-foreground">
-            {deployments.length === 0 ? 'Versions running on a provider show up here.' : `${deployments.length} ${deployments.length === 1 ? 'deployment' : 'deployments'}${inFlight ? `, ${inFlight} in flight (refreshing every ${DEPLOYMENT_POLL_MS / 1000}s)` : ''}`}
+            {deployments.length === 0
+              ? 'Models you run on a provider show up here. Name the model, pick who runs it, and the reconcile loop does the rest.'
+              : `${deployments.length} ${deployments.length === 1 ? 'deployment' : 'deployments'}${inFlight ? `, ${inFlight} in flight (refreshing every ${DEPLOYMENT_POLL_MS / 1000}s)` : ''}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => deploymentsQuery.refetch()} disabled={deploymentsQuery.isFetching} aria-label="Refresh deployments">
             <RefreshCw className={deploymentsQuery.isFetching ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} />
           </Button>
-          <Button onClick={() => setDeployOpen(true)} disabled={!orgId}>
+          <Button onClick={() => { setRefusal(null); setDeployOpen(true) }} disabled={!orgId}>
             <Plus className="mr-2 h-4 w-4" />
-            Deploy
+            Run a model
           </Button>
         </div>
       </div>
@@ -124,7 +132,18 @@ export function DeploymentsTab() {
         <DeploymentsList deployments={deployments} adapters={adapters} versions={versions} loading={deploymentsQuery.isLoading} onSelect={(d) => setSelectedId(d.id)} onDeploy={() => setDeployOpen(true)} />
       )}
 
-      <DeployDialog open={deployOpen} onOpenChange={setDeployOpen} adapters={adapters} versions={versions} onSubmit={(body) => createMutation.mutate(body)} submitting={createMutation.isPending} />
+      <DeployDialog
+        open={deployOpen}
+        onOpenChange={(open) => {
+          if (!open) setRefusal(null)
+          setDeployOpen(open)
+        }}
+        adapters={adapters}
+        versions={versions}
+        refusal={refusal}
+        onSubmit={(body) => createMutation.mutate(body)}
+        submitting={createMutation.isPending}
+      />
 
       <DeploymentDetailSheet
         deployment={selected}

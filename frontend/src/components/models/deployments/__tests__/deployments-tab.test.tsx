@@ -94,28 +94,47 @@ describe('DeploymentsTab', () => {
     await waitFor(() => expect(teardown).toHaveBeenCalledWith('d-1'))
   })
 
-  it('opens the deploy dialog and posts the body', async () => {
+  it('opens the run dialog and posts a body built from a model reference alone', async () => {
     list.mockResolvedValue([])
     render(<DeploymentsTab />)
     await screen.findByText('No deployments yet')
-    fireEvent.click(screen.getByRole('button', { name: /^Deploy$/ }))
-    await screen.findByText('Deploy a version', { selector: 'h2' })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Run a model' })[0])
+    await screen.findByText('Run a model', { selector: 'h2' })
+    fireEvent.change(screen.getByLabelText('Where is the model?'), { target: { value: 'hf://Qwen/Qwen3-14B@abc123' } })
     fireEvent.click(await screen.findByRole('radio', { name: /Ollama/ }))
-    fireEvent.change(screen.getByLabelText('Version'), { target: { value: 'v-1' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /^Deploy$/ }).at(-1)!)
-    await waitFor(() => expect(create).toHaveBeenCalledWith({ modelVersionId: 'v-1', providerType: 'ollama', desired: { replicas: 1 }, providerConfig: { baseUrl: 'http://localhost:11434' } }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({
+        model: 'hf://Qwen/Qwen3-14B@abc123',
+        providerType: 'ollama',
+        desired: { replicas: 1 },
+        providerConfig: { baseUrl: 'http://localhost:11434' },
+      }),
+    )
     await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Deployment queued', expect.any(String)))
   })
 
-  it('surfaces a server error on create', async () => {
+  it('keeps a server refusal on the form, with what the provider does accept', async () => {
     list.mockResolvedValue([])
-    create.mockRejectedValue({ response: { data: { message: 'ADAPTER_UNKNOWN' } } })
+    create.mockRejectedValue({
+      response: {
+        data: {
+          code: 'ADAPTER_UNSUPPORTED_SOURCE',
+          message: 'Ollama cannot run gs://bucket/x@1: this provider reads hub, local',
+          accepts: ['hf://', 'file://'],
+        },
+      },
+    })
     render(<DeploymentsTab />)
     await screen.findByText('No deployments yet')
-    fireEvent.click(screen.getByRole('button', { name: /^Deploy$/ }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Run a model' })[0])
+    fireEvent.change(screen.getByLabelText('Where is the model?'), { target: { value: 'hf://Qwen/Qwen3-14B@abc123' } })
     fireEvent.click(await screen.findByRole('radio', { name: /Ollama/ }))
-    fireEvent.change(screen.getByLabelText('Version'), { target: { value: 'v-1' } })
-    fireEvent.click(screen.getAllByRole('button', { name: /^Deploy$/ }).at(-1)!)
-    await waitFor(() => expect(notify.error).toHaveBeenCalledWith('Could not create deployment', 'ADAPTER_UNKNOWN'))
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy' }))
+
+    const refusal = await screen.findByTestId('adapter-refusal')
+    expect(refusal).toHaveTextContent('Ollama cannot run gs://bucket/x@1')
+    expect(refusal).toHaveTextContent('It accepts hf://, file://.')
+    await waitFor(() => expect(notify.error).toHaveBeenCalledWith('Could not create deployment', expect.stringContaining('Ollama cannot run')))
   })
 })

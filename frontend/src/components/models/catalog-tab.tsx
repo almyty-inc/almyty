@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Boxes, ChevronDown, Plus, RefreshCw, Server } from 'lucide-react'
+import { Boxes, ChevronDown, LayoutGrid, Plus, RefreshCw, Rows3, Server } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -44,22 +44,30 @@ import {
   type ModelPrivacyTier,
   type RegisterEndpointBody,
   type RegisterModelBody,
+  type RoutingObjective,
   type UpdateModelBody,
 } from '@/types/models'
 import { buildCatalogColumns } from './catalog-columns'
+import { CatalogCards } from './catalog-cards'
+import { MODEL_ORIGIN_LABELS, modelOrigin, type ModelOrigin } from './model-origin'
+import { CatalogSummary, RoutingSetBar } from './routing-set'
 import { RegisterEndpointDialog } from './register-endpoint-dialog'
 import { RegisterModelDialog, type ProviderOption } from './register-model-dialog'
 import { EditModelSheet } from './edit-model-sheet'
 
 export const MODELS_QUERY_KEY = ['models', 'catalog'] as const
 
+const ORIGIN_FILTERS: Array<'all' | ModelOrigin> = ['all', 'vendor', 'deployment', 'endpoint']
+
 function errorMessage(error: any, fallback: string): string {
   return error?.response?.data?.message || error?.message || fallback
 }
 
 /**
- * The catalog: every card the org has, with the filters the router applies
- * (selectable, tier, provider) and the actions that change a card's state.
+ * The catalog: which models this organization can run right now, where
+ * each one runs, whether the router may pick it, and what it costs. A card
+ * from a vendor key, one from an endpoint you deployed and one from an
+ * endpoint you registered are the same kind of thing here.
  */
 export function CatalogTab() {
   const queryClient = useQueryClient()
@@ -68,6 +76,12 @@ export function CatalogTab() {
   const [selectableOnly, setSelectableOnly] = useState(false)
   const [tierFilter, setTierFilter] = useState<'all' | ModelPrivacyTier>('all')
   const [providerFilter, setProviderFilter] = useState<'all' | string>('all')
+  const [originFilter, setOriginFilter] = useState<'all' | ModelOrigin>('all')
+  const [view, setView] = useState<'cards' | 'table'>('cards')
+
+  // The routing set: cards picked to run together, in the order picked.
+  const [pickedIds, setPickedIds] = useState<string[]>([])
+  const [objective, setObjective] = useState<RoutingObjective>('cheapest')
 
   const [endpointDialogOpen, setEndpointDialogOpen] = useState(false)
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
@@ -186,9 +200,20 @@ export function CatalogTab() {
         if (selectableOnly && !card.selectable) return false
         if (tierFilter !== 'all' && card.privacyTier !== tierFilter) return false
         if (providerFilter !== 'all' && card.providerId !== providerFilter) return false
+        if (originFilter !== 'all' && modelOrigin(card) !== originFilter) return false
         return true
       }),
-    [cards, selectableOnly, tierFilter, providerFilter],
+    [cards, selectableOnly, tierFilter, providerFilter, originFilter],
+  )
+
+  const picked = useMemo(() => new Set(pickedIds), [pickedIds])
+  const pickedCards = useMemo(
+    () => pickedIds.map((id) => cards.find((c) => c.id === id)).filter((c): c is ModelCard => !!c),
+    [pickedIds, cards],
+  )
+  const togglePick = useCallback(
+    (card: ModelCard) => setPickedIds((prev) => (prev.includes(card.id) ? prev.filter((id) => id !== card.id) : [...prev, card.id])),
+    [],
   )
 
   const columns = useMemo(
@@ -203,7 +228,6 @@ export function CatalogTab() {
     [providerNames, validatingIds, validateCard],
   )
 
-  const selectableCount = cards.filter((c) => c.selectable).length
   const isEmpty = !cardsQuery.isLoading && !cardsQuery.isError && cards.length === 0
 
   const toolbar = (
@@ -249,14 +273,22 @@ export function CatalogTab() {
           {cardsQuery.isLoading ? (
             <Skeleton className="h-4 w-56" />
           ) : (
-            <>
-              {cards.length} card{cards.length === 1 ? '' : 's'}, {selectableCount} usable by agents.
-              {' '}A card is usable once its status is active, it has a provider or endpoint, and a validation run has passed.
-            </>
+            <>Every model an agent may call, wherever it runs. A card is usable once its status is active, it has a provider or endpoint, and a validation run has passed.</>
           )}
         </p>
         {toolbar}
       </div>
+
+      {!cardsQuery.isLoading && !cardsQuery.isError && <CatalogSummary cards={cards} providerNames={providerNames} />}
+
+      <RoutingSetBar
+        cards={pickedCards}
+        providerNames={providerNames}
+        objective={objective}
+        onObjectiveChange={setObjective}
+        onRemove={togglePick}
+        onClear={() => setPickedIds([])}
+      />
 
       {cardsQuery.isError ? (
         <QueryError error={cardsQuery.error} onRetry={() => cardsQuery.refetch()} title="Couldn't load the catalog" />
@@ -265,8 +297,8 @@ export function CatalogTab() {
           <CardContent className="p-0">
             <EmptyState
               icon={Boxes}
-              title="No model cards yet"
-              description="Cards appear automatically when you sync a configured provider, and become usable after a validation run passes. You can also register a single vendor model or an OpenAI-compatible endpoint you run yourself."
+              title="No models yet"
+              description="Models appear automatically when you sync a configured vendor, and become usable after a validation run passes. You can also register a single vendor model, an OpenAI-compatible endpoint you run yourself, or run one on a provider from the Deployments tab."
               action={
                 <Button className="gap-2" onClick={() => sync.mutate(undefined)} disabled={sync.isPending || providers.length === 0}>
                   <RefreshCw className={`h-4 w-4 ${sync.isPending ? 'animate-spin' : ''}`} />
@@ -313,19 +345,62 @@ export function CatalogTab() {
                   ))}
                 </SelectContent>
               </Select>
-              {(selectableOnly || tierFilter !== 'all' || providerFilter !== 'all') && (
+              <Select value={originFilter} onValueChange={(v) => setOriginFilter(v as 'all' | ModelOrigin)}>
+                <SelectTrigger className="w-48" aria-label="Filter by where it came from">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ORIGIN_FILTERS.map((origin) => (
+                    <SelectItem key={origin} value={origin}>
+                      {origin === 'all' ? 'Any origin' : MODEL_ORIGIN_LABELS[origin]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(selectableOnly || tierFilter !== 'all' || providerFilter !== 'all' || originFilter !== 'all') && (
                 <span className="text-xs text-muted-foreground">{filtered.length} of {cards.length} shown</span>
               )}
+              <div className="ml-auto flex items-center gap-1">
+                <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="sm" className="gap-1.5" onClick={() => setView('cards')} aria-pressed={view === 'cards'}>
+                  <LayoutGrid className="h-4 w-4" />
+                  Cards
+                </Button>
+                <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="sm" className="gap-1.5" onClick={() => setView('table')} aria-pressed={view === 'table'}>
+                  <Rows3 className="h-4 w-4" />
+                  Table
+                </Button>
+              </div>
             </div>
-            <DataTable
-              columns={columns}
-              data={filtered}
-              loading={cardsQuery.isLoading}
-              searchKey="name"
-              searchPlaceholder="Search cards..."
-              hideSelectionCount
-              emptyState={<p className="text-sm text-muted-foreground py-6 text-center">No cards match these filters.</p>}
-            />
+            {view === 'cards' ? (
+              cardsQuery.isLoading ? (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} className="h-52 w-full" />
+                  ))}
+                </div>
+              ) : (
+                <CatalogCards
+                  cards={filtered}
+                  providerNames={providerNames}
+                  validatingIds={validatingIds}
+                  onValidate={(card) => validateCard.mutate(card)}
+                  onEdit={(card) => setCardToEdit(card)}
+                  onDelete={(card) => setCardToDelete(card)}
+                  picked={picked}
+                  onTogglePick={togglePick}
+                />
+              )
+            ) : (
+              <DataTable
+                columns={columns}
+                data={filtered}
+                loading={cardsQuery.isLoading}
+                searchKey="name"
+                searchPlaceholder="Search models..."
+                hideSelectionCount
+                emptyState={<p className="text-sm text-muted-foreground py-6 text-center">No models match these filters.</p>}
+              />
+            )}
           </CardContent>
         </Card>
       )}

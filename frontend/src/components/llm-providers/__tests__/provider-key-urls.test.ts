@@ -1,34 +1,17 @@
 import { describe, it, expect } from 'vitest'
 
 import { providerKeyUrls } from '../provider-type-config'
+import { LlmProviderType } from '@/types'
 
-// The provider types offered in the create-provider dialog's Select.
-// `custom` is intentionally excluded — its key lives at the user's own
-// endpoint, so there is no canonical "get your key" page.
-const KEYED_PROVIDERS = [
-  'openai',
-  'anthropic',
-  'google',
-  'mistral',
-  'xai',
-  'deepseek',
-  'groq',
-  'together',
-  'openrouter',
-  'azure_openai',
-  'aws_bedrock',
-  'cohere',
-  'huggingface',
-  'fireworks',
-  'cerebras',
-  'deepinfra',
-  'novita',
-  'perplexity',
-  'zai',
-  'baseten',
-  'nebius',
-  'sambanova',
-]
+/**
+ * Derived from the enum, not hand-written: a hardcoded list is how the
+ * provider dialogs kept shipping types with no "get your key" link. Adding
+ * an enum value now fails this until it is mapped.
+ *
+ * `custom` is intentionally excluded - its key lives at the user's own
+ * endpoint, so there is no canonical key page.
+ */
+const KEYED_PROVIDERS = Object.values(LlmProviderType).filter((t) => t !== LlmProviderType.CUSTOM)
 
 describe('providerKeyUrls', () => {
   it('has a key-acquisition URL for every non-custom provider', () => {
