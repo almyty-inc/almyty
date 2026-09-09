@@ -42,6 +42,9 @@ export const CHANNEL_SECRET_CONFIG_KEYS: readonly string[] = [
   // Slack / Discord / Telegram
   'bot_token',
   'botToken',
+  // Telegram echoes this on every inbound update so a forged webhook
+  // call can be rejected; it is a shared secret like the rest.
+  'webhook_secret_token',
   // Microsoft Teams (Bot Framework app password)
   'bot_password',
   'botPassword',

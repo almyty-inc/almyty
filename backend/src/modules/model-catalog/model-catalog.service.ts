@@ -116,7 +116,7 @@ export class ModelCatalogService {
     @Optional() private readonly priceFeed?: PriceFeedService,
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
-    @Optional() @Inject(forwardRef(() => EndpointProviderHelper)) private readonly endpointProviders?: EndpointProviderHelper,
+    @Optional() private readonly endpointProviders?: EndpointProviderHelper,
   ) {}
 
   list(organizationId: string, filter: { status?: Model['status']; privacyTier?: ModelPrivacyTier; providerId?: string; selectable?: boolean } = {}): Promise<Model[]> {
