@@ -84,6 +84,298 @@ const BEARER: VendorAuth = { scheme: 'bearer' };
  */
 export const VENDOR_CARDS: VendorCard[] = [
   {
+    key: LlmProviderType.XAI,
+    displayName: 'xAI (Grok)',
+    blurb: 'Grok 4 and the Grok code models',
+    baseUrl: 'https://api.x.ai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['xai'], openrouterPrefix: 'x-ai/' },
+    capabilities: ['Tool Use', 'Streaming', 'Vision'],
+    keyUrl: 'https://console.x.ai',
+    docsUrl: 'https://docs.x.ai/api',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.DEEPSEEK,
+    displayName: 'DeepSeek',
+    blurb: 'DeepSeek V4 and the reasoning line',
+    // Documented with no /v1 segment: chat at <base>/chat/completions.
+    baseUrl: 'https://api.deepseek.com',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['deepseek'], openrouterPrefix: 'deepseek/' },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://platform.deepseek.com/api_keys',
+    docsUrl: 'https://api-docs.deepseek.com',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.MOONSHOT,
+    displayName: 'Moonshot (Kimi)',
+    blurb: 'Kimi K3 and the K2.7 coding models',
+    // api.moonshot.cn is the mainland platform and a separate account
+    // namespace, not a mirror, so it is an apiUrl override.
+    baseUrl: 'https://api.moonshot.ai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['moonshot'], openrouterPrefix: 'moonshotai/' },
+    capabilities: ['Tool Use', 'Streaming', 'Vision', '1M Context'],
+    keyUrl: 'https://platform.kimi.ai/console/api-keys',
+    docsUrl: 'https://platform.kimi.ai/docs',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.QWEN,
+    displayName: 'Qwen (QwenCloud)',
+    blurb: 'Qwen3 Max, Plus and Flash on QwenCloud',
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    // Compatible-mode enumerates six OpenAI APIs and /models is not one.
+    listingPath: null,
+    pricing: { litellm: ['dashscope'], openrouterPrefix: 'qwen/' },
+    capabilities: ['Tool Use', 'Streaming', 'Vision', '1M Context'],
+    keyUrl: 'https://home.qwencloud.com/api-keys',
+    docsUrl: 'https://www.alibabacloud.com/help/en/model-studio/',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.ZAI,
+    displayName: 'Z.ai (GLM)',
+    blurb: 'GLM 5.3 and the GLM coding models',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: null,
+    pricing: { litellm: ['zai'], openrouterPrefix: 'z-ai/' },
+    capabilities: ['Tool Use', 'Streaming', 'Vision'],
+    keyUrl: 'https://z.ai/manage-apikey/apikey-list',
+    docsUrl: 'https://docs.z.ai/api-reference',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.GROQ,
+    displayName: 'Groq',
+    blurb: 'Open models at very low latency',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['groq'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://console.groq.com/keys',
+    docsUrl: 'https://console.groq.com/docs',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.TOGETHER,
+    displayName: 'Together AI',
+    blurb: 'A large open-model catalog, and your own fine-tunes',
+    // api.together.xyz is an undocumented legacy alias that still answers.
+    baseUrl: 'https://api.together.ai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['together_ai'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming', 'Vision'],
+    keyUrl: 'https://api.together.ai/settings/api-keys',
+    docsUrl: 'https://docs.together.ai',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.FIREWORKS,
+    displayName: 'Fireworks AI',
+    blurb: 'Open models and your own fine-tunes on dedicated GPUs',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: null,
+    pricing: { litellm: ['fireworks_ai'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming', 'Vision'],
+    keyUrl: 'https://fireworks.ai/account/api-keys',
+    docsUrl: 'https://docs.fireworks.ai',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.CEREBRAS,
+    displayName: 'Cerebras',
+    blurb: 'Open models on wafer-scale hardware',
+    baseUrl: 'https://api.cerebras.ai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['cerebras'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://cloud.cerebras.ai',
+    docsUrl: 'https://inference-docs.cerebras.ai',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.DEEPINFRA,
+    displayName: 'DeepInfra',
+    blurb: 'Open models per token, and your own weights on dedicated GPUs',
+    baseUrl: 'https://api.deepinfra.com/v1/openai',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['deepinfra'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://deepinfra.com/dash/api_keys',
+    docsUrl: 'https://deepinfra.com/docs',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.NOVITA,
+    displayName: 'Novita',
+    blurb: 'Open models, and any Hugging Face repo on a dedicated endpoint',
+    baseUrl: 'https://api.novita.ai/openai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['novita'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://novita.ai/settings/key-management',
+    docsUrl: 'https://novita.ai/docs',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.BASETEN,
+    displayName: 'Baseten',
+    blurb: 'Open models, and your own weights or container',
+    baseUrl: 'https://inference.baseten.co/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['baseten'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://app.baseten.co/settings/api_keys',
+    docsUrl: 'https://docs.baseten.co',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.NEBIUS,
+    displayName: 'Nebius Token Factory',
+    blurb: 'Open models, and LoRA adapters on curated bases',
+    // Formerly Nebius AI Studio; api.studio.nebius.com still answers but
+    // is undocumented.
+    baseUrl: 'https://api.tokenfactory.nebius.com/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['nebius'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://tokenfactory.nebius.com',
+    docsUrl: 'https://docs.tokenfactory.nebius.com',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.SAMBANOVA,
+    displayName: 'SambaNova',
+    blurb: 'Open models on RDU hardware',
+    baseUrl: 'https://api.sambanova.ai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: null,
+    pricing: { litellm: ['sambanova'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://cloud.sambanova.ai/apis',
+    docsUrl: 'https://docs.sambanova.ai',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.COHERE,
+    displayName: 'Cohere',
+    blurb: 'Command and the Cohere retrieval models',
+    // The native /v2/chat surface is not OpenAI-shaped, so chat rides the
+    // Compatibility API; the model list stays on the native /v1/models.
+    baseUrl: 'https://api.cohere.ai/compatibility/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['cohere_chat'], openrouterPrefix: 'cohere/' },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://dashboard.cohere.com/api-keys',
+    docsUrl: 'https://docs.cohere.com/reference/about',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.DIGITALOCEAN,
+    displayName: 'DigitalOcean Gradient',
+    blurb: 'Open models on DigitalOcean serverless inference',
+    baseUrl: 'https://inference.do-ai.run/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: null,
+    capabilities: ['Streaming'],
+    keyUrl: 'https://cloud.digitalocean.com/gen-ai',
+    docsUrl: 'https://docs.digitalocean.com/products/gradient-ai-platform/',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.MODAL,
+    displayName: 'Modal',
+    blurb: 'Your own endpoints on Modal',
+    baseUrl: 'https://inference.us-west.modal.direct/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: null,
+    capabilities: ['Streaming'],
+    keyUrl: 'https://modal.com/settings/tokens',
+    docsUrl: 'https://modal.com/docs',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.AWS_BEDROCK,
+    displayName: 'AWS Bedrock',
+    blurb: 'Bedrock models in your own AWS account',
+    // A Bedrock API key as a plain bearer; SigV4 is not needed here.
+    baseUrl: 'https://bedrock-runtime.{bedrock.region||us-east-1}.amazonaws.com/openai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: { litellm: ['bedrock'], openrouterPrefix: null },
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://console.aws.amazon.com/bedrock',
+    docsUrl: 'https://docs.aws.amazon.com/bedrock/',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.AZURE_AI_FOUNDRY,
+    displayName: 'Azure AI Foundry',
+    blurb: 'Foundry model deployments in your own Azure subscription',
+    baseUrl: 'https://{azure.resourceName}.services.ai.azure.com/openai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: null,
+    capabilities: ['Tool Use', 'Streaming'],
+    keyUrl: 'https://ai.azure.com',
+    docsUrl: 'https://learn.microsoft.com/azure/ai-foundry/',
+    verified: '2026-09-09',
+  },
+  {
+    key: LlmProviderType.RUNPOD,
+    displayName: 'RunPod',
+    blurb: 'Your own serverless vLLM worker',
+    // RunPod always carries an endpoint in the path; there is no shared
+    // base without one.
+    baseUrl: 'https://api.runpod.ai/v2/{runpod.endpointId}/openai/v1',
+    auth: BEARER,
+    chatPath: '/chat/completions',
+    listingPath: '/models',
+    pricing: null,
+    capabilities: ['Streaming'],
+    keyUrl: 'https://www.runpod.io/console/user/settings',
+    docsUrl: 'https://docs.runpod.io',
+    verified: '2026-09-09',
+  },
+  {
     key: LlmProviderType.OPENAI,
     displayName: 'OpenAI',
     blurb: 'GPT-5 and the o-series',
@@ -293,23 +585,28 @@ function at(configuration: Record<string, any> | undefined, path: string): strin
   const value = path.split('.').reduce<any>((acc, part) => (acc == null ? acc : acc[part]), configuration);
   return typeof value === 'string' ? value : undefined;
 }
-
 /**
- * The base URL this card resolves to for a given configuration: the
- * selected base when the vendor has several, otherwise its only one. A
- * stored `apiUrl` always wins, which is how a customer reaches a regional
- * or self-hosted variant we do not enumerate.
+ * The base URL this card resolves to for a given configuration.
+ *
+ * A stored `apiUrl` always wins, which is how a customer reaches a
+ * regional or self-hosted variant we do not enumerate. Otherwise: the
+ * selected base when the vendor serves several, and `{dotted.path}`
+ * placeholders filled from the configuration, which is how a base that
+ * embeds an account's own region, resource or endpoint id stays data.
  */
 export function cardBaseUrl(card: VendorCard, configuration: Record<string, any> = {}): string {
   const explicit = configuration.apiUrl;
   if (typeof explicit === 'string' && explicit.length > 0) return explicit;
+  let template = card.baseUrl;
   if (card.bases && card.basesField) {
     const selected = at(configuration, card.basesField);
-    if (selected && card.bases[selected]) return card.bases[selected];
+    if (selected && card.bases[selected]) template = card.bases[selected];
   }
-  return card.baseUrl;
+  return template.replace(/\{([^}]+)\}/g, (_match, path: string) => {
+    const [dotted, fallback = ''] = path.split('||');
+    return at(configuration, dotted.trim()) ?? fallback.trim();
+  });
 }
-
 /**
  * Sent on every outbound call regardless of vendor, so a card never has
  * to restate them.
