@@ -61,6 +61,33 @@ describe('a quirk is a field, not a reason to exclude a vendor', () => {
     }
   });
 
+
+  it('fills a base that embeds the account\'s own region, resource or endpoint', () => {
+    // These were switch cases building a template string. Substitution
+    // keeps them data, and the entity is the oracle for each.
+    for (const [type, configuration] of [
+      [LlmProviderType.AWS_BEDROCK, { bedrock: { region: 'eu-west-1' } }],
+      [LlmProviderType.AWS_BEDROCK, {}],
+      [LlmProviderType.AZURE_AI_FOUNDRY, { azure: { resourceName: 'my-res' } }],
+      [LlmProviderType.RUNPOD, { runpod: { endpointId: 'gpt-oss-120b' } }],
+    ] as const) {
+      const card = vendorCard(type)!;
+      expect(cardBaseUrl(card, { apiKey: 'test-key', ...configuration })).toBe(
+        makeProvider(type, configuration).getApiUrl(),
+      );
+    }
+
+    expect(cardBaseUrl(vendorCard(LlmProviderType.AWS_BEDROCK)!, { bedrock: { region: 'eu-west-1' } })).toBe(
+      'https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1',
+    );
+    // The default after || in the placeholder is what fills a missing one.
+    expect(cardBaseUrl(vendorCard(LlmProviderType.AWS_BEDROCK)!, {})).toBe(
+      'https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1',
+    );
+    expect(cardBaseUrl(vendorCard(LlmProviderType.RUNPOD)!, { runpod: { endpointId: 'ep1' } })).toBe(
+      'https://api.runpod.ai/v2/ep1/openai/v1',
+    );
+  });
   it('keeps a stored apiUrl winning, which is how a customer reaches a variant we do not list', () => {
     const card = vendorCard(LlmProviderType.OPENAI)!;
     expect(cardBaseUrl(card, { apiUrl: 'https://gateway.internal/v1' })).toBe('https://gateway.internal/v1');
