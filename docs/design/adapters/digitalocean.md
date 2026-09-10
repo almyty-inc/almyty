@@ -5,6 +5,15 @@ service DigitalOcean operates, which serves a model on dedicated GPUs
 behind an OpenAI-compatible HTTPS endpoint. Implementation:
 `backend/src/modules/model-deployments/adapters/digitalocean.adapter.ts`.
 
+**Dedicated Inference is a DigitalOcean public preview.** An account has
+to enable it from the Feature Preview page in the control panel before
+any call works, and the API may change under us. The adapter declares
+`availability: 'public_preview'` so the form says so before anything is
+created, and a 403 from the dedicated-inference routes is reported as
+`ADAPTER_PREVIEW_NOT_ENABLED` naming the opt-in, rather than as a
+rejected credential: a token that works everywhere else on the
+DigitalOcean API is still refused here until the preview is on.
+
 ## Verified (2026-09-09)
 
 **1. Is there a managed inference product?** Yes, two of them.

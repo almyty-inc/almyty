@@ -134,6 +134,17 @@ function AdapterCard({ adapter, selected, onSelect }: { adapter: ModelAdapter; s
         {selected && <Check className="h-4 w-4 text-primary" aria-hidden="true" />}
       </div>
       <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{adapter.key}</div>
+      {caps.availability && (
+        // A preview product needs the customer to opt in on the provider's
+        // side first, so say it here rather than letting an opaque refusal
+        // be the first they hear of it.
+        <p className="mt-1.5 rounded bg-amber-500/10 px-1.5 py-1 text-[11px] text-amber-700 dark:text-amber-400">
+          <span className="font-medium">
+            {caps.availability === 'public_preview' ? 'Public preview.' : 'Private preview.'}
+          </span>{' '}
+          {caps.availabilityNote ?? 'You may need access from the provider before this works.'}
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap gap-1">
         {tags.map((t) => (
           <span key={t} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">

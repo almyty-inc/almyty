@@ -44,6 +44,16 @@ export interface AdapterCapabilities {
    * error instead of being smuggled in through the platform.
    */
   registrySources: RegistrySource[];
+  /**
+   * How generally available the provider's product is. A preview product
+   * needs the customer to opt in on the provider's side before any call
+   * works, and its API may change under us, so the UI says so up front
+   * rather than letting an opaque 403 be the first the user hears of it.
+   * Absent means generally available.
+   */
+  availability?: 'public_preview' | 'private_preview';
+  /** Why it is limited, one sentence, shown next to the provider. */
+  availabilityNote?: string;
 }
 
 /** Credentials resolved by the caller from the credentials vault. Never persisted by an adapter. */

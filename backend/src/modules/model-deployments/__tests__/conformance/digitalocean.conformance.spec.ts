@@ -161,6 +161,34 @@ describe('digitalocean request shape', () => {
     expect(f.http.post).not.toHaveBeenCalled();
   });
 
+  it('says the preview has to be enabled, rather than blaming the token', async () => {
+    // Dedicated Inference is a public preview an account opts into. A
+    // token that works everywhere else on the API is still refused here
+    // until then, so the customer must be sent to the Feature Preview
+    // page and not off to check a key that is fine.
+    const f = fixtureHttp();
+    f.http.post.mockRejectedValueOnce(
+      Object.assign(new Error('403'), { response: { status: 403, data: { id: 'forbidden', message: 'dedicated inference is not enabled for this account' } } }),
+    );
+    const a = new DigitalOceanAdapter(f.http);
+    await expect(a.deploy(request, creds)).rejects.toMatchObject({
+      code: 'ADAPTER_PREVIEW_NOT_ENABLED',
+      message: expect.stringContaining('Feature Preview'),
+    });
+  });
+
+  it('still blames the token on a plain 401', async () => {
+    const f = fixtureHttp();
+    const a = new DigitalOceanAdapter(f.http);
+    await expect(a.deploy(request, { ...creds, token: 'nope' })).rejects.toMatchObject({ code: 'ADAPTER_AUTH' });
+  });
+
+  it('declares itself a public preview, so the form can say so before anything is created', () => {
+    const caps = new DigitalOceanAdapter(fixtureHttp().http).capabilities();
+    expect(caps.availability).toBe('public_preview');
+    expect(caps.availabilityNote).toMatch(/Feature Preview/);
+  });
+
   it('reads the OpenAI base off the public endpoint, rescales by patching the spec back, and tears down', async () => {
     const f = fixtureHttp();
     const a = new DigitalOceanAdapter(f.http);

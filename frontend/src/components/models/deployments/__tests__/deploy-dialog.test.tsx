@@ -233,6 +233,30 @@ describe('DeployDialog', () => {
     expect(blocked).toHaveTextContent('Fireworks reads s3://, fireworks://, not hf://')
   })
 
+  it('warns that a preview provider needs access before anything is created', () => {
+    // Dedicated Inference is a DigitalOcean public preview. Saying so on
+    // the card is the difference between a user knowing to opt in and a
+    // user reading an opaque refusal after they have filled the form.
+    const preview = {
+      ...hfAdapter,
+      key: 'digitalocean',
+      displayName: 'DigitalOcean Gradient AI',
+      modelSchemes: ['hf://'],
+      capabilities: {
+        ...hfAdapter.capabilities,
+        availability: 'public_preview' as const,
+        availabilityNote: 'Dedicated Inference is a DigitalOcean public preview: enable it from the Feature Preview page in your control panel first.',
+      },
+    }
+    render(<DeployDialog open onOpenChange={() => {}} adapters={[...allAdapters, preview]} onSubmit={() => {}} />)
+
+    const card = screen.getByRole('radio', { name: /DigitalOcean/ })
+    expect(card).toHaveTextContent('Public preview.')
+    expect(card).toHaveTextContent('Feature Preview page')
+    // A generally available provider says nothing of the sort.
+    expect(screen.getByRole('radio', { name: /Hugging Face Endpoints/ })).not.toHaveTextContent('preview')
+  })
+
   it('filters the other way: picking a provider narrows the sources on offer', () => {
     render(<DeployDialog open onOpenChange={() => {}} adapters={allAdapters} onSubmit={() => {}} />)
 

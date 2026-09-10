@@ -25,6 +25,9 @@ export interface AdapterCapabilities {
   /** Empty means the provider chooses. */
   regions: string[]
   registrySources: RegistrySource[]
+  /** Absent means generally available. A preview needs the customer to opt in with the provider first. */
+  availability?: 'public_preview' | 'private_preview'
+  availabilityNote?: string
 }
 
 /** The subset of JSON Schema adapters use for providerConfig. */
