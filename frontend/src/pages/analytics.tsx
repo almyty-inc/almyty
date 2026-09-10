@@ -38,7 +38,7 @@ const TAB_DEFINITIONS: Array<{
   { key: 'requests', label: 'Request Log', icon: Globe },
   { key: 'tools', label: 'Tools', icon: Wrench },
   { key: 'gateways', label: 'Gateways', icon: Zap },
-  { key: 'llm', label: 'LLM', icon: MessageSquare },
+  { key: 'llm', label: 'Models', icon: MessageSquare },
   { key: 'agents', label: 'Agents', icon: Bot },
   { key: 'cost', label: 'Cost', icon: DollarSign },
   { key: 'audit', label: 'Audit Trail', icon: ScrollText },

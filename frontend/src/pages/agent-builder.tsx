@@ -231,7 +231,7 @@ export function AgentBuilderPage() {
       const llmNodes = pipeline.nodes.filter((n) => n.type === 'llm_call')
       for (const llmNode of llmNodes) {
         if (!llmNode.data?.providerId && !llmNode.data?.routing) {
-          errors.push(`LLM Call node "${llmNode.id}" is missing a provider or a routing policy`)
+          errors.push(`Model Call node "${llmNode.id}" is missing a provider or a routing policy`)
         }
       }
     } else {

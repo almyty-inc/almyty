@@ -142,7 +142,7 @@ export class ModelCatalogService {
     let providerType: string | null = null;
     if (input.providerId) {
       const provider = await this.providers.findOne({ where: { id: input.providerId, organizationId } });
-      if (!provider) throw new NotFoundException('LLM provider not found');
+      if (!provider) throw new NotFoundException('Provider not found');
       providerType = provider.type;
     } else {
       providerType = input.endpointRef?.providerType ?? LlmProviderType.CUSTOM;
@@ -241,7 +241,7 @@ export class ModelCatalogService {
    */
   async syncFromProvider(organizationId: string, providerId: string, userId?: string): Promise<ProviderSyncResult> {
     const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
-    if (!provider) throw new NotFoundException('LLM provider not found');
+    if (!provider) throw new NotFoundException('Provider not found');
     const listed = await this.modelsHelper.fetchModelsFromProvider(provider);
     const existing = await this.models.find({ where: { organizationId, providerId } });
     const byVendorId = new Map(existing.map((m) => [m.vendorModelId, m]));

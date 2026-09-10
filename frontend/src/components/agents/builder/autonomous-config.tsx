@@ -171,7 +171,7 @@ export function AutonomousConfig({
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={memoryConfig.enabled || false}
               onChange={(e) => onMemoryConfigChange({ ...memoryConfig, enabled: e.target.checked })} className="rounded" />
-            <div><p className="text-sm font-medium">Enable Memory</p><p className="text-xs text-muted-foreground">Agent will recall relevant memories before each LLM call</p></div>
+            <div><p className="text-sm font-medium">Enable Memory</p><p className="text-xs text-muted-foreground">Agent will recall relevant memories before each model call</p></div>
           </label>
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={memoryConfig.autoSave || false}

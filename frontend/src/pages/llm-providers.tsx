@@ -307,7 +307,7 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
             <EmptyState
               icon={Brain}
               title="No models configured"
-              description="Connect an LLM provider to power agents and tool generation. Keys stay encrypted at rest."
+              description="Connect a provider to power agents and tool generation. Keys stay encrypted at rest."
               action={
                 <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
                   <Plus className="h-4 w-4" />

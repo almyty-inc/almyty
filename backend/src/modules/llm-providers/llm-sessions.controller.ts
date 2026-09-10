@@ -69,7 +69,7 @@ class UpdateSessionDto {
 }
 
 @Controller('llm-providers')
-@ApiTags('LLM Providers')
+@ApiTags('Providers')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class LlmSessionsController {
@@ -120,7 +120,7 @@ export class LlmSessionsController {
 
   @Get(':providerId/sessions')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Get sessions for LLM provider' })
+  @ApiOperation({ summary: 'Get model calls for a provider' })
   @ApiResponse({ status: 200, description: 'Sessions retrieved successfully' })
   async getSessions(
     @Param('providerId', ParseUUIDPipe) providerId: string,
