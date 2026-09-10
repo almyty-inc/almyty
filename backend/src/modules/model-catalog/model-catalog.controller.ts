@@ -5,7 +5,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ModelCatalogService } from './model-catalog.service';
-import { ListModelsQueryDto, RegisterEndpointBodyDto, RegisterModelBodyDto, SyncModelsBodyDto, UpdateModelBodyDto } from './dto/model-catalog-controller.dto';
+import { ListModelsQueryDto, RegisterEndpointBodyDto, RegisterModelBodyDto, RoutePreviewBodyDto, SyncModelsBodyDto, UpdateModelBodyDto } from './dto/model-catalog-controller.dto';
+import { ModelRouterService } from './routing/model-router.service';
 
 /** Cards in, cards out. Nothing here calls a provider except the validation run, which is the point of it. */
 @ApiTags('Models')
@@ -13,7 +14,10 @@ import { ListModelsQueryDto, RegisterEndpointBodyDto, RegisterModelBodyDto, Sync
 @Controller('models')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ModelCatalogController {
-  constructor(private readonly catalog: ModelCatalogService) {}
+  constructor(
+    private readonly catalog: ModelCatalogService,
+    private readonly router: ModelRouterService,
+  ) {}
 
   private orgId(req: any): string {
     const organizationId = req.user?.currentOrganizationId;
@@ -21,6 +25,25 @@ export class ModelCatalogController {
       throw new HttpException({ success: false, message: 'No organization found for user', error: 'NO_ORGANIZATION' }, HttpStatus.BAD_REQUEST);
     }
     return organizationId;
+  }
+
+  /**
+   * What a policy would choose right now, and what it would reject.
+   *
+   * L3 is usable with no agent: this takes a policy directly and answers
+   * with the ordered candidates and every rejection with its reason. It
+   * is what the policy editor previews against, and it is the honest way
+   * to answer "why did it not pick that model", which was previously only
+   * discoverable by running something. See docs/design/layers.md, L3.
+   *
+   * Nothing is called: this plans, it does not route a request.
+   */
+  @Post('route-preview')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Preview which models a routing policy would choose, and why the rest were rejected' })
+  async routePreview(@Request() req: any, @Body(new ValidationPipe({ transform: true })) body: RoutePreviewBodyDto) {
+    const plan = await this.router.preview(this.orgId(req), body ?? {}, req.user?.id ? { id: req.user.id } : undefined);
+    return { success: true, data: plan };
   }
 
   @Get()

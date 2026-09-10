@@ -51,6 +51,13 @@ export interface RoutePlan {
   rejected: Array<{ modelId: string; reason: string }>;
 }
 
+/** The same blended figure the cheapest objective ranks on, or null when unpriced. */
+function blendedPrice(card: Model): number | null {
+  const p = card.effectivePricing();
+  if (!p) return null;
+  return p.inPerMTok * 0.75 + p.outPerMTok * 0.25;
+}
+
 export class NoRouteError extends Error {
   readonly code = 'NO_ROUTE';
   constructor(readonly rejected: Array<{ modelId: string; reason: string }>) {
@@ -101,6 +108,39 @@ export class ModelRouterService {
     }
     return { candidates: resolved, rejected };
   }
+  /**
+   * The same plan, shaped for a human and carrying no secrets.
+   *
+   * `plan()` returns resolved providers because the runner needs them to
+   * make a call. A preview must never hand a provider row to an HTTP
+   * response: those carry credentials. This returns only what a person
+   * needs to understand the decision, which is also all the policy editor
+   * renders.
+   */
+  async preview(
+    organizationId: string,
+    policy: RoutingPolicy = {},
+    principal?: { id: string },
+  ): Promise<{
+    candidates: Array<{ modelId: string; name: string; vendorModelId: string; providerType: string | null; rationale: string; blendedPricePerMTok: number | null; privacyTier: string; region: string | null }>;
+    rejected: Array<{ modelId: string; reason: string }>;
+  }> {
+    const plan = await this.plan(organizationId, policy, principal);
+    return {
+      candidates: plan.candidates.map((c) => ({
+        modelId: c.modelId,
+        name: c.card.name,
+        vendorModelId: c.vendorModelId,
+        providerType: c.card.providerType ?? null,
+        rationale: c.rationale,
+        blendedPricePerMTok: blendedPrice(c.card),
+        privacyTier: c.card.privacyTier,
+        region: c.card.region ?? null,
+      })),
+      rejected: plan.rejected,
+    };
+  }
+
   /**
    * The stored provider a card is called through. Endpoint-backed cards
    * carry one too (written when the deployment reached ready, or when the
