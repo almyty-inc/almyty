@@ -84,6 +84,14 @@ export class LlmModelsHelper {
         case LlmProviderType.MINIMAX:
         case LlmProviderType.UPSTAGE:
         case LlmProviderType.WRITER:
+        // Qianfan documents GET /v2/models returning {data:[...]} with
+        // per-model pricing and context length inline. TokenHub's /models
+        // is undocumented but answers 401 on GET and 405 on POST while a
+        // bogus path 404s, so the route exists; a parse miss falls through
+        // to NO_MODEL_CONFIGURED rather than a guessed id.
+        case LlmProviderType.QIANFAN:
+        case LlmProviderType.HUNYUAN:
+          return this.fetchOpenAIModels(provider);
           return this.fetchOpenAIModels(provider);
         case LlmProviderType.OLLAMA:
           // Native /api/tags — lists locally pulled models. Works
@@ -101,6 +109,12 @@ export class LlmModelsHelper {
         //   vertex_ai  - no /models on the endpoints/openapi surface.
         //   zai,
         //   sambanova  - no documented listing on either.
+        //   volcengine - Ark has no /models: the vendor's own Python SDK
+        //                ships no models resource, and its auth gate answers
+        //                401 to any path, so attempting it would produce a
+        //                misleading credential error rather than an empty
+        //                list. The customer must also activate each model
+        //                family in the Ark console before its id answers.
         // For these, `configuration.model` must be set; DefaultModelResolver
         // reports NO_MODEL_CONFIGURED with the vendor's own reason instead
         // of naming a model id we cannot know is served.
@@ -764,6 +778,9 @@ export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[
   [LlmProviderType.MINIMAX]: [],
   [LlmProviderType.UPSTAGE]: [],
   [LlmProviderType.WRITER]: [],
+  [LlmProviderType.QIANFAN]: [],
+  [LlmProviderType.HUNYUAN]: [],
+  [LlmProviderType.VOLCENGINE]: [],
   [LlmProviderType.QWEN]: [],
   [LlmProviderType.VERTEX_AI]: [],
   [LlmProviderType.AZURE_AI_FOUNDRY]: [],

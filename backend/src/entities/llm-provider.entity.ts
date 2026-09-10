@@ -56,6 +56,12 @@ export enum LlmProviderType {
   // and its model list is {models:[{id,name}]} where name is a display
   // label. It gets its own dispatch for both reasons.
   WRITER = 'writer',
+  // Chinese vendors, on the plain-bearer OpenAI-compatible surface each now
+  // publishes alongside its signed legacy API. None needs a request
+  // signature on the surface we call. Verified 2026-09-10.
+  QIANFAN = 'qianfan',
+  HUNYUAN = 'hunyuan',
+  VOLCENGINE = 'volcengine',
   // The customer's own cloud, as a CALL target rather than a deployment
   // target. Each is a distinct product from the neighbouring type it is
   // easily confused with: vertex_ai is not the Gemini Developer API
@@ -151,6 +157,17 @@ export interface LlmProviderConfig {
    */
   runpod?: {
     endpointId?: string;
+  };
+  /**
+   * Volcengine Ark ships as two products with separate accounts, separate
+   * key namespaces and different model naming: BytePlus ModelArk for
+   * everyone outside mainland China, and Volcengine for inside it. A key
+   * from one does not work against the other, and `seed-2-0-lite-260228`
+   * on BytePlus is `doubao-seed-2-0-lite-260215` on Volcengine, so this is
+   * a choice the customer has to make rather than a host we can guess.
+   */
+  ark?: {
+    edition?: 'international' | 'mainland';
   };
   custom?: {
     headers?: Record<string, string>;
@@ -468,6 +485,33 @@ export class LlmProvider {
         // base is only correct together with the Writer dispatch case.
         // Verified 2026-09-10.
         return this.configuration.apiUrl || 'https://api.writer.com/v1';
+      case LlmProviderType.QIANFAN:
+        // Baidu ERNIE on Qianfan v2. The AK/SK-to-access-token exchange the
+        // v1 API needed is gone here: the key is one opaque
+        // `bce-v3/ALTAK-.../...` string used as a plain bearer. Verified
+        // 2026-09-10.
+        return this.configuration.apiUrl || 'https://qianfan.baidubce.com/v2';
+      case LlmProviderType.HUNYUAN:
+        // TokenHub, Tencent's model gateway, international host. Tencent's
+        // own docs say the original Hunyuan platform is migrating here and
+        // has stopped taking new model services, so the direct host
+        // (https://api.hunyuan.cloud.tencent.com/v1) is an apiUrl override
+        // rather than the default, as is the mainland TokenHub host
+        // (https://tokenhub.tencentcloudmaas.com/v1). No TC3 request
+        // signature is involved on this surface. Verified 2026-09-10.
+        return this.configuration.apiUrl || 'https://tokenhub-intl.tencentcloudmaas.com/v1';
+      case LlmProviderType.VOLCENGINE:
+        // ByteDance Doubao. Two products, not two hosts for one product:
+        // BytePlus ModelArk outside mainland China, Volcengine inside it,
+        // with separate accounts, keys and model names. International is
+        // the default because it is the one a non-China customer can sign
+        // up for. Verified 2026-09-10.
+        return (
+          this.configuration.apiUrl ||
+          (this.configuration.ark?.edition === 'mainland'
+            ? 'https://ark.cn-beijing.volces.com/api/v3'
+            : 'https://ark.ap-southeast.bytepluses.com/api/v3')
+        );
       case LlmProviderType.VERTEX_AI: {
         // Vertex's OpenAI-compatible surface. `global` uses the unprefixed
         // host; a region uses the {region}-aiplatform host. This surface
@@ -715,6 +759,9 @@ export class LlmProvider {
       case LlmProviderType.MINIMAX:
       case LlmProviderType.UPSTAGE:
       case LlmProviderType.WRITER:
+      case LlmProviderType.QIANFAN:
+      case LlmProviderType.HUNYUAN:
+      case LlmProviderType.VOLCENGINE:
       // Cloud and vendor serverless surfaces that take a static token as a
       // bearer: Foundry accepts the resource key in Authorization (which is
       // what makes it drop-in OpenAI-compatible), DigitalOcean a model

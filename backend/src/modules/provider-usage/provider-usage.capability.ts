@@ -206,6 +206,24 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     label: 'Writer (Palmyra)',
     note: 'No documented usage or cost API. Not ingested.',
   },
+  [LlmProviderType.QIANFAN]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Baidu ERNIE (Qianfan)',
+    note: 'No usage API on v2. GET /v2/models embeds per-model pricing, which is a price source rather than a spend source. Not ingested.',
+  },
+  [LlmProviderType.HUNYUAN]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Tencent Hunyuan (TokenHub)',
+    note: 'No documented usage or cost API on the TokenHub gateway. Not ingested.',
+  },
+  [LlmProviderType.VOLCENGINE]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'ByteDance Doubao (Ark)',
+    note: 'No documented usage or cost API on the Ark bearer surface. Not ingested.',
+  },
   [LlmProviderType.VERTEX_AI]: {
     supported: false,
     requiresAdminKey: false,
