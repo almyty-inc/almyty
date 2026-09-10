@@ -241,6 +241,7 @@ export type LlmProviderType =
   | 'groq'
   | 'together'
   | 'openrouter'
+  | 'straitly'
   | 'azure_openai'
   | 'aws_bedrock'
   | 'cohere'
