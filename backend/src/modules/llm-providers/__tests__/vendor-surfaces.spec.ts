@@ -50,6 +50,11 @@ describe('corrected vendor surfaces (verified 2026-09-09)', () => {
     [LlmProviderType.HUNYUAN, {}, 'https://tokenhub-intl.tencentcloudmaas.com/v1'],
     [LlmProviderType.VOLCENGINE, {}, 'https://ark.ap-southeast.bytepluses.com/api/v3'],
     [LlmProviderType.VOLCENGINE, { ark: { edition: 'mainland' } }, 'https://ark.cn-beijing.volces.com/api/v3'],
+    // Spark's generation drives the base. X2 and X1.5 both answer to the
+    // model id `spark-x`, so a default would silently serve the wrong one.
+    [LlmProviderType.SPARK, {}, 'https://spark-api-open.xf-yun.com/x2'],
+    [LlmProviderType.SPARK, { spark: { generation: 'x1.5' } }, 'https://spark-api-open.xf-yun.com/v2'],
+    [LlmProviderType.SPARK, { spark: { generation: 'legacy' } }, 'https://spark-api-open.xf-yun.com/v1'],
   ])('%s resolves its documented chat base', (type, config, expected) => {
     expect(makeProvider(type, config).getApiUrl()).toBe(expected);
   });

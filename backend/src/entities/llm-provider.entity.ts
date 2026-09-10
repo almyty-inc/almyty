@@ -62,6 +62,10 @@ export enum LlmProviderType {
   QIANFAN = 'qianfan',
   HUNYUAN = 'hunyuan',
   VOLCENGINE = 'volcengine',
+  // iFlytek Spark. Its model generations sit on different bases and the
+  // current two share the model id `spark-x`, so the generation is a
+  // required field driving the base rather than something to guess.
+  SPARK = 'spark',
   // The customer's own cloud, as a CALL target rather than a deployment
   // target. Each is a distinct product from the neighbouring type it is
   // easily confused with: vertex_ai is not the Gemini Developer API
@@ -168,6 +172,15 @@ export interface LlmProviderConfig {
    */
   ark?: {
     edition?: 'international' | 'mainland';
+  };
+  /**
+   * iFlytek Spark serves each model generation on its own base, and the
+   * current two both answer to the model id `spark-x`, so the model field
+   * cannot tell them apart. Defaulting would put most users on the wrong
+   * generation with no error saying so.
+   */
+  spark?: {
+    generation?: 'x2' | 'x1.5' | 'legacy';
   };
   custom?: {
     headers?: Record<string, string>;
@@ -512,6 +525,15 @@ export class LlmProvider {
             ? 'https://ark.cn-beijing.volces.com/api/v3'
             : 'https://ark.ap-southeast.bytepluses.com/api/v3')
         );
+      case LlmProviderType.SPARK: {
+        // Each generation is its own base and the current two share the
+        // model id `spark-x`, so this is chosen, never inferred. X2 is the
+        // current flagship; legacy carries 4.0Ultra and the generalv3
+        // line, whose Max package retired 2026-03-10 into Ultra.
+        // Verified 2026-09-10.
+        const path = { x2: 'x2', 'x1.5': 'v2', legacy: 'v1' }[this.configuration.spark?.generation ?? 'x2'];
+        return this.configuration.apiUrl || `https://spark-api-open.xf-yun.com/${path}`;
+      }
       case LlmProviderType.VERTEX_AI: {
         // Vertex's OpenAI-compatible surface. `global` uses the unprefixed
         // host; a region uses the {region}-aiplatform host. This surface
@@ -762,6 +784,7 @@ export class LlmProvider {
       case LlmProviderType.QIANFAN:
       case LlmProviderType.HUNYUAN:
       case LlmProviderType.VOLCENGINE:
+      case LlmProviderType.SPARK:
       // Cloud and vendor serverless surfaces that take a static token as a
       // bearer: Foundry accepts the resource key in Authorization (which is
       // what makes it drop-in OpenAI-compatible), DigitalOcean a model

@@ -781,6 +781,7 @@ export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[
   [LlmProviderType.QIANFAN]: [],
   [LlmProviderType.HUNYUAN]: [],
   [LlmProviderType.VOLCENGINE]: [],
+  [LlmProviderType.SPARK]: [],
   [LlmProviderType.QWEN]: [],
   [LlmProviderType.VERTEX_AI]: [],
   [LlmProviderType.AZURE_AI_FOUNDRY]: [],
