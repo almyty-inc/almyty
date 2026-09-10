@@ -624,6 +624,38 @@ improvising silently.
 
 ---
 
+## Open questions
+
+Three, recorded rather than silently decided, because the answers change a
+schema and the vocabulary is declared closed.
+
+**1. Is `dashscope_native` in the registry?** The worked example above
+gives `qwen { dashscope_native (preferred), chat_completions }`, but
+`dashscope_native` is not one of the eight protocols listed. Either the
+registry has nine entries or the example should say `chat_completions`
+only. This matters precisely because the vocabulary is closed: a ninth
+entry is a code change and an implementation, not a row. The same question
+applies to any other vendor-native shape we might want to prefer.
+
+**2. What is the preferred protocol when a vendor speaks several and the
+capabilities differ?** "Native first" answers it for a single call. It
+does not answer what a router should do when the native path lacks a
+capability the requirement asks for and the compat path has it, or the
+reverse. The current answer is that L3 filters on `(model, protocol)`
+pairs, which means a requirement can select a compat path over a native
+one. That is correct, but it means "native first" is a tie-break rather
+than a rule, and the documentation should say so plainly.
+
+**3. Where does an inbound protocol's model id resolve?** A client calling
+us with `anthropic_messages` names a model in Anthropic's namespace. That
+name has to map onto a catalog entry that might be served by a different
+vendor entirely. That mapping is L2's, but it is not specified above, and
+it is the difference between "point Claude Code at almyty" working and
+returning a confusing not-found.
+
+None of the three blocks starting L1, which is why they are recorded here
+rather than held as a gate.
+
 ## Non-goals
 
 - Training models ourselves beyond the documented verifier recipe.
