@@ -64,6 +64,8 @@ export class DigitalOceanAdapter implements ModelProviderAdapter {
       // DigitalOcean reads the Hub itself, or serves a model already in
       // its own catalog. It cannot read our object storage.
       registrySources: ['hub'],
+      availability: 'public_preview',
+      availabilityNote: 'Dedicated Inference is a DigitalOcean public preview: enable it from the Feature Preview page in your control panel first, and expect the API to change.',
     };
   }
 
@@ -96,7 +98,21 @@ export class DigitalOceanAdapter implements ModelProviderAdapter {
     const status = err?.response?.status;
     const body = err?.response?.data;
     const message = body?.message ?? err?.message ?? fallback;
-    if (status === 401 || status === 403) throw Object.assign(new Error(`credential rejected: ${message}`), { code: 'ADAPTER_AUTH', status });
+    if (status === 401 || status === 403) {
+      // Dedicated Inference is a public preview an account opts into. A
+      // token that works everywhere else on the API still gets refused
+      // here until then, so say which of the two it is rather than
+      // sending the customer to check a key that is fine.
+      if (status === 403 || /preview|not enabled|feature|opt[- ]?in|access/i.test(String(message))) {
+        throw Object.assign(
+          new Error(
+            `DigitalOcean refused the request. Dedicated Inference is a public preview: enable it from the Feature Preview page in the DigitalOcean control panel, then try again. (${message})`,
+          ),
+          { code: 'ADAPTER_PREVIEW_NOT_ENABLED', status },
+        );
+      }
+      throw Object.assign(new Error(`credential rejected: ${message}`), { code: 'ADAPTER_AUTH', status });
+    }
     // Dedicated inference serves a documented set of architectures; a
     // model it cannot run is refused at create time.
     if (/architecture|unsupported model|model .*not supported|incompatible model/i.test(String(message))) {
