@@ -34,7 +34,7 @@ export function OrchestratorSettings({ config, strategyKeys, roleKeys, onChange,
 
   return (
     <div data-testid="orchestrator-settings" className="space-y-4">
-      <div className="flex items-start justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-3">
         <div>
           <Label htmlFor="orchestrator-enabled" className="text-sm font-medium">
             Let a model choose the strategy
@@ -52,12 +52,12 @@ export function OrchestratorSettings({ config, strategyKeys, roleKeys, onChange,
       </div>
 
       {config.enabled && (
-        <div data-testid="orchestrator-detail" className="space-y-3 rounded-lg border border-zinc-800 bg-zinc-900 p-3">
+        <div data-testid="orchestrator-detail" className="space-y-3 rounded-lg border border-border bg-card p-3">
           <div>
             <Label htmlFor="orchestrator-role">Role that decides</Label>
             <select
               id="orchestrator-role"
-              className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm"
+              className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={config.roleKey}
               disabled={disabled}
               onChange={(e) => set('roleKey', e.target.value)}
@@ -90,7 +90,7 @@ export function OrchestratorSettings({ config, strategyKeys, roleKeys, onChange,
             <Label htmlFor="orchestrator-fallback">Use this strategy if it does not answer</Label>
             <select
               id="orchestrator-fallback"
-              className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-sm"
+              className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={config.fallbackStrategyKey}
               disabled={disabled}
               onChange={(e) => set('fallbackStrategyKey', e.target.value)}

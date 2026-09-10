@@ -37,9 +37,9 @@ export interface StrategyPickerProps {
 }
 
 const BAND_CLASS: Record<StrategyView['costBand'], string> = {
-  low: 'border-emerald-500/40 text-emerald-400',
-  medium: 'border-amber-500/40 text-amber-400',
-  high: 'border-rose-500/40 text-rose-400',
+  low: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400',
+  medium: 'border-amber-500/40 text-amber-600 dark:text-amber-400',
+  high: 'border-rose-500/40 text-rose-600 dark:text-rose-400',
 }
 
 export function StrategyPicker({
@@ -55,7 +55,7 @@ export function StrategyPicker({
     return (
       <div data-testid="strategies-loading" className="space-y-2">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-20 animate-pulse rounded-lg border border-zinc-800 bg-zinc-900" />
+          <div key={i} className="h-20 animate-pulse rounded-lg border border-border bg-card" />
         ))}
       </div>
     )
@@ -63,7 +63,7 @@ export function StrategyPicker({
 
   if (error) {
     return (
-      <div data-testid="strategies-error" className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
+      <div data-testid="strategies-error" className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-600 dark:text-red-400">
         {error}
       </div>
     )
@@ -94,7 +94,7 @@ export function StrategyPicker({
             onClick={() => onSelect?.(s.key)}
             className={cn(
               'w-full rounded-lg border p-3 text-left transition-colors hover:bg-accent',
-              selected ? 'border-primary bg-primary/5 ring-1 ring-primary/40' : 'border-zinc-800',
+              selected ? 'border-primary bg-primary/5 ring-1 ring-primary/40' : 'border-border',
             )}
           >
             <div className="flex items-center justify-between gap-2">
@@ -120,7 +120,7 @@ export function StrategyPicker({
                     'rounded px-1.5 py-0.5 text-[10px]',
                     availableRoles.includes(slot)
                       ? 'bg-muted text-muted-foreground'
-                      : 'bg-amber-500/10 text-amber-400',
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
                   )}
                 >
                   {slot}
@@ -132,7 +132,7 @@ export function StrategyPicker({
             {unfillable.length > 0 && (
               // Said before the run rather than after it fails: the picker
               // knows which slots this agent cannot fill.
-              <p data-testid={`strategy-unfillable-${s.key}`} className="mt-2 text-[11px] text-amber-400">
+              <p data-testid={`strategy-unfillable-${s.key}`} className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
                 This agent has no role for {unfillable.join(', ')}. Add {unfillable.length > 1 ? 'those roles' : 'that role'} before using it.
               </p>
             )}
