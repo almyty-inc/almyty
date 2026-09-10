@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 
+import { AgentRole } from '../../entities/agent-role.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
@@ -49,6 +50,7 @@ import { AgentRunsController } from './agent-runs.controller';
 import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
+import { AgentRolesService } from './agent-roles.service';
 import { AgentConstraintsModule } from '../agent-constraints/agent-constraints.module';
 import { ToolsModule } from '../tools/tools.module';
 import { MemoryModule } from '../memory/memory.module';
@@ -61,6 +63,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
   imports: [
     TypeOrmModule.forFeature([
       Agent,
+      AgentRole,
       AgentExecution,
       AgentRun,
       Tool,
@@ -86,8 +89,10 @@ import { BudgetsModule } from '../budgets/budgets.module';
     AgentConstraintsModule,
     BudgetsModule,
   ],
-  providers: [AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper],
+  providers: [
+    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper],
   controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController],
-  exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
+  exports: [
+    AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
 export class AgentsModule {}

@@ -142,6 +142,26 @@ export class ModelRouterService {
   }
 
   /**
+   * The provider for one named model. A lookup, deliberately not a plan.
+   *
+   * A filled role names a concrete model, so asking the router to "choose"
+   * between one candidate would still be routing, and a pinned role must
+   * never route. This resolves the card to something callable and nothing
+   * more. See docs/design/layers.md, L4.
+   */
+  async providerForModelId(
+    organizationId: string,
+    modelId: string,
+    principal?: { id: string },
+  ): Promise<{ card: Model; provider: LlmProvider }> {
+    const card = await this.models.findOne({ where: { id: modelId, organizationId } });
+    if (!card) throw new Error(`Model ${modelId} is not in this organization's catalog`);
+    const provider = await this.providerFor(card, principal);
+    if (!provider) throw new Error(`Model ${card.name} has no callable provider`);
+    return { card, provider };
+  }
+
+  /**
    * The stored provider a card is called through. Endpoint-backed cards
    * carry one too (written when the deployment reached ready, or when the
    * endpoint was registered), so there is no transient provider: a card
