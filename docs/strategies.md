@@ -31,7 +31,7 @@ That is enforced three times over, because the failure is silent:
 | `cascade` | Cheap drafts, verifier checks, only a failure escalates | `drafter`, `verifier`, `principal` |
 | `best_of_n` | N attempts, a judge picks | `principal`, `verifier` |
 | `panel` | Three roles answer, consensus over the disagreement | three panelists |
-| `explore_extract_patch` | Explore in parallel, compress to a brief, act on the brief | `explorer`, `summariser`, `principal`, `verifier` |
+| `explore_extract_patch` (experimental) | Explore in parallel, compress to a brief, act on the brief | `explorer`, `summariser`, `principal`, `verifier` |
 
 ## Compiling
 
@@ -64,10 +64,13 @@ slot, and puts a small structured brief into run context:
 { "relevantFiles": [], "symbols": [], "callers": [], "tests": [], "notes": "" }
 ```
 
-The saving in explore-extract-patch comes from the expensive role reading
-a brief instead of every transcript. Folding the extraction into a
-neighbouring step would hide what that compression cost, and then nobody
-could tell whether the strategy was worth running.
+Explore-extract-patch exists so that the expensive role can read a brief
+instead of every transcript. Whether that is *cheaper* is a separate
+question, and the answer depends on your workload — see "Experimental"
+below. Keeping extraction as its own step is what makes the question
+answerable at all: fold it into a neighbouring step and the compression
+cost disappears into someone else's line item, and then nobody can tell
+whether the strategy was worth running.
 
 The brief is schema-validated. A missing key is an error, **not** an empty
 array: an empty brief reads as "nothing relevant was found" and would send
@@ -81,3 +84,32 @@ reason unrelated to the work.
 coarse cost and latency bands. The bands are coarse deliberately. A
 precise number would be a lie, because the cost depends on which models
 fill the slots and this layer does not know that.
+
+## Experimental: explore-extract-patch
+
+`explore_extract_patch` is offered, and it is **not** claimed to save
+money. The picker badges it experimental for that reason.
+
+The arithmetic only works when two things hold at once:
+
+1. the exploring model is roughly an order of magnitude cheaper than the
+   principal, and
+2. the principal call stays a single generation over a prepared brief,
+   rather than running its own loop anyway.
+
+Break either and it costs more than a single call. A small price ratio
+means the rollouts are not free relative to what they save. A brief that
+balloons the input hands the expensive model more tokens, not fewer. And
+a principal that re-explores on its own has been paid for twice.
+
+The published evidence does not settle it either. SWE-Bench Pro, the
+benchmark this shape is usually argued from, is roughly 30% broken, and
+its verifier runs about 8% false positives and 24% false negatives, so a
+reported delta of a few points is inside the noise. Separately, models
+that fail together fail on the same items: the co-failure floor caps how
+much any multi-model shape can add, and `docs/routing.md` describes how
+we measure that rather than assuming it away.
+
+So what almyty ships here is the machinery and the measurement, not a
+promise. Run it against your own traffic, read the routing headroom, and
+keep it only if your numbers say so.

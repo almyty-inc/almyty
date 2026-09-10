@@ -73,6 +73,14 @@ export class Strategy {
   @Column({ default: false })
   builtIn: boolean;
 
+  /**
+   * Offered, but not claimed to pay off. An experimental shape is one
+   * whose benefit depends on a workload we cannot see, so the product
+   * gives you the option and the measurement rather than a promise.
+   */
+  @Column({ default: false })
+  experimental: boolean;
+
   @ManyToOne(() => Organization, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'organizationId' })
   organization: Organization | null;

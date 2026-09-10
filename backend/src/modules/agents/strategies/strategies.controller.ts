@@ -43,7 +43,7 @@ export class StrategiesController {
     // The seeds are the source of truth for built-ins, so a fresh install
     // that has never run the seeder still lists them. An organization's
     // own row with the same key wins, which is how you customise one.
-    const byKey = new Map<string, { key: string; displayName: string; description: string; roleSlots: string[]; shape: Strategy['shape']; builtIn: boolean }>();
+    const byKey = new Map<string, { key: string; displayName: string; description: string; roleSlots: string[]; shape: Strategy['shape']; builtIn: boolean; experimental?: boolean }>();
     for (const seed of STRATEGY_SEEDS) byKey.set(seed.key, { ...seed, builtIn: true });
     for (const row of stored) {
       if (row.organizationId === organizationId || !byKey.has(row.key)) {
@@ -54,6 +54,7 @@ export class StrategiesController {
           roleSlots: row.roleSlots,
           shape: row.shape,
           builtIn: row.organizationId === null,
+          experimental: row.experimental,
         });
       }
     }

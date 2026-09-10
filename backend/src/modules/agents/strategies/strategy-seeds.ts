@@ -10,7 +10,10 @@ import { Strategy, StrategyShape } from '../../../entities/strategy.entity';
  *
  * See docs/design/layers.md, L5.
  */
-export type StrategySeed = Pick<Strategy, 'key' | 'displayName' | 'description' | 'roleSlots' | 'shape'>;
+export type StrategySeed = Pick<Strategy, 'key' | 'displayName' | 'description' | 'roleSlots' | 'shape'> & {
+  /** Offered without a claim that it pays off. See strategies.md. */
+  experimental?: boolean;
+};
 
 const single: StrategyShape = {
   entry: 'answer',
@@ -56,9 +59,17 @@ const panel: StrategyShape = {
 
 /**
  * Explore broadly with a cheap slot, compress what was learned into a
- * brief, then let the expensive slot act on the brief rather than on the
- * whole transcript. The compression step is why this is cheaper than
- * always-frontier: the dear slot reads a brief, not everything.
+ * brief, then let the expensive slot act on the brief rather than the
+ * whole transcript.
+ *
+ * EXPERIMENTAL, and deliberately not claimed to save money. The
+ * arithmetic only works if the cheap model is roughly an order of
+ * magnitude cheaper AND the frontier call stays a single generation over
+ * a prepared brief. If the price ratio is small, or the brief balloons
+ * the input, or the frontier model runs its own loop anyway, you have
+ * paid for the rollouts and saved nothing. The product here is the
+ * machinery and the measurement, not a promise: run it against your own
+ * traffic and read the routing headroom.
  */
 const exploreExtractPatch: StrategyShape = {
   entry: 'explore',
@@ -104,7 +115,8 @@ export const STRATEGY_SEEDS: StrategySeed[] = [
     key: 'explore_extract_patch',
     displayName: 'Explore, extract, patch',
     description:
-      'A cheap role explores in parallel, a summariser compresses what was found into a brief, and the principal role acts on the brief rather than the whole transcript.',
+      'A cheap role explores in parallel, a summariser compresses what was found into a brief, and the principal role acts on the brief rather than the whole transcript. Experimental: whether it saves anything depends on your workload.',
+    experimental: true,
     roleSlots: ['explorer', 'summariser', 'principal', 'verifier'],
     shape: exploreExtractPatch,
   },

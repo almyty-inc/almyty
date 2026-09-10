@@ -75,7 +75,7 @@ describe('the roles panel shows what fills each slot', () => {
 describe('the strategy picker shows shapes, never models', () => {
   const strategies = [
     { key: 'single', displayName: 'Single call', description: 'One call on one role.', roleSlots: ['principal'], steps: 1, costBand: 'low' as const, latencyBand: 'low' as const, builtIn: true },
-    { key: 'explore_extract_patch', displayName: 'Explore, extract, patch', description: 'Explore, compress, then act on the brief.', roleSlots: ['explorer', 'summariser', 'principal', 'verifier'], steps: 5, costBand: 'high' as const, latencyBand: 'high' as const, builtIn: true },
+    { key: 'explore_extract_patch', displayName: 'Explore, extract, patch', description: 'Explore, compress, then act on the brief. Experimental: whether it saves anything depends on your workload.', roleSlots: ['explorer', 'summariser', 'principal', 'verifier'], steps: 5, costBand: 'high' as const, latencyBand: 'high' as const, builtIn: true, experimental: true },
   ]
 
   it('shows slots and bands and no model anywhere', () => {
@@ -94,6 +94,17 @@ describe('the strategy picker shows shapes, never models', () => {
     expect(warning).toHaveTextContent('explorer')
     expect(warning).toHaveTextContent('summariser')
     expect(screen.queryByTestId('strategy-unfillable-single')).not.toBeInTheDocument()
+  })
+
+  it('badges an experimental shape and says the cost band is not a promise', () => {
+    render(<StrategyPicker strategies={strategies} availableRoles={['principal']} />)
+    // A high cost band next to no caveat reads as "expensive but worth it".
+    // The badge and the line under it are what stop that reading.
+    expect(screen.getByTestId('strategy-experimental-explore_extract_patch')).toHaveTextContent('experimental')
+    expect(screen.getByTestId('strategy-caveat-explore_extract_patch')).toHaveTextContent(/not claimed to be cheaper/i)
+
+    expect(screen.queryByTestId('strategy-experimental-single')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('strategy-caveat-single')).not.toBeInTheDocument()
   })
 
   it('selects one and offers eject only for the selected shape', () => {
