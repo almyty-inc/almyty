@@ -298,6 +298,9 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.MINIMAX:
       case LlmProviderType.UPSTAGE:
       case LlmProviderType.WRITER:
+      case LlmProviderType.QIANFAN:
+      case LlmProviderType.HUNYUAN:
+      case LlmProviderType.VOLCENGINE:
       // The customer's own cloud, and vendor serverless we can call
       // without deploying: all OpenAI-compatible with a static token.
       case LlmProviderType.AZURE_AI_FOUNDRY:
@@ -459,6 +462,9 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.MINIMAX:
       case LlmProviderType.UPSTAGE:
       case LlmProviderType.WRITER:
+      case LlmProviderType.QIANFAN:
+      case LlmProviderType.HUNYUAN:
+      case LlmProviderType.VOLCENGINE:
       case LlmProviderType.DIGITALOCEAN:
       case LlmProviderType.MODAL:
         if (!config.apiKey) {

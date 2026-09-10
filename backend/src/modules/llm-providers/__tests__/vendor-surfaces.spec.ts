@@ -46,6 +46,10 @@ describe('corrected vendor surfaces (verified 2026-09-09)', () => {
     [LlmProviderType.MINIMAX, {}, 'https://api.minimax.io/v1'],
     [LlmProviderType.UPSTAGE, {}, 'https://api.upstage.ai/v1'],
     [LlmProviderType.WRITER, {}, 'https://api.writer.com/v1'],
+    [LlmProviderType.QIANFAN, {}, 'https://qianfan.baidubce.com/v2'],
+    [LlmProviderType.HUNYUAN, {}, 'https://tokenhub-intl.tencentcloudmaas.com/v1'],
+    [LlmProviderType.VOLCENGINE, {}, 'https://ark.ap-southeast.bytepluses.com/api/v3'],
+    [LlmProviderType.VOLCENGINE, { ark: { edition: 'mainland' } }, 'https://ark.cn-beijing.volces.com/api/v3'],
   ])('%s resolves its documented chat base', (type, config, expected) => {
     expect(makeProvider(type, config).getApiUrl()).toBe(expected);
   });

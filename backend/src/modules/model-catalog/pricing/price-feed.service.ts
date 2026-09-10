@@ -130,6 +130,14 @@ export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping 
   [LlmProviderType.MINIMAX]: { litellm: ['minimax'], openrouterPrefix: 'minimax/' },
   [LlmProviderType.UPSTAGE]: null,
   [LlmProviderType.WRITER]: null,
+  // Verified 2026-09-10. `tencent` in the cost map is TokenHub's catalog
+  // (third-party models), with no hunyuan-* key at all. `volcengine` exists
+  // but its chat entries carry tiered pricing only, with the flat
+  // per-token fields null, and use mainland model names a BytePlus
+  // customer never sends. Baidu has no first-party namespace.
+  [LlmProviderType.QIANFAN]: null,
+  [LlmProviderType.HUNYUAN]: { litellm: ['tencent'], openrouterPrefix: null },
+  [LlmProviderType.VOLCENGINE]: null,
   [LlmProviderType.QWEN]: { litellm: ['dashscope', 'qwencloud', 'qwen_ai_platform'], openrouterPrefix: 'qwen/' },
   // Cloud and serverless call targets. Vertex prices under its own
   // namespaces (the partner ones cover Model Garden). Foundry serves the
