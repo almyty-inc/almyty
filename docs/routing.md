@@ -74,8 +74,12 @@ Three, stated because they bound what routing can be worth.
 
 **The co-failure ceiling.** When every eligible model fails the same
 request, no routing policy helps. That rate is the mathematical ceiling on
-any routing gain, and it is measured rather than assumed: the nightly
-co-failure job reports it as routing headroom. Without that number, work
+any routing gain, and it is measured rather than assumed by the nightly
+co-failure job. On screen it is **All-model failure rate**, and it binds
+to `coFailureRate`. The neighbouring `routingHeadroomRate` is a different
+number, the share a better policy could have won, and the two must never
+appear under one label: a chart bound to the wrong field reads perfectly
+plausibly and nobody catches it by looking. Without these numbers, work
 on routing is unfalsifiable.
 
 **Cascade overhead inside agent loops.** Trying a cheaper model first

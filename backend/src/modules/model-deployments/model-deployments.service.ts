@@ -74,7 +74,7 @@ export class ModelDeploymentsService {
   /** Validate against the adapter's capabilities and schema, persist desired state, enqueue a reconcile. */
   async create(organizationId: string, userId: string | null, dto: CreateDeploymentDto): Promise<ModelDeployment> {
     const adapter = this.adapters.get(dto.providerType);
-    if (!adapter) throw new BadRequestException({ code: 'ADAPTER_UNKNOWN', message: `Unknown deployment adapter: ${dto.providerType}` });
+    if (!adapter) throw new BadRequestException({ code: 'ADAPTER_UNKNOWN', message: `Unknown deployment provider: ${dto.providerType}` });
     // A registered version is optional. Naming the model is configuration.
     const version = dto.modelVersionId
       ? await this.versions.findOne({ where: { id: dto.modelVersionId, organizationId } })

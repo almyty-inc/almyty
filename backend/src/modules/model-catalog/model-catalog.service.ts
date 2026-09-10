@@ -157,7 +157,7 @@ export class ModelCatalogService {
         : { organizationId, name: input.name },
     });
     if (duplicate) {
-      throw new BadRequestException({ code: 'MODEL_EXISTS', message: `A card for ${input.vendorModelId} already exists (${duplicate.id})` });
+      throw new BadRequestException({ code: 'MODEL_EXISTS', message: `A model for ${input.vendorModelId} already exists (${duplicate.id})` });
     }
 
     const card = this.models.create({
@@ -469,7 +469,7 @@ export class ModelCatalogService {
     const card = await this.get(organizationId, id);
     const provider = await this.router.providerFor(card);
     if (!provider) {
-      return this.recordValidation(card, false, 'Card has no callable provider', userId);
+      return this.recordValidation(card, false, 'This model has no callable provider', userId);
     }
     const session = Conversation.createConversation({
       providerId: provider.id.startsWith('endpoint:') ? undefined : provider.id,

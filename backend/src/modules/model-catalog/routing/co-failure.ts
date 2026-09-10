@@ -116,8 +116,8 @@ export function describeHeadroom(stats: CoFailureStats): string {
   }
   const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
   return (
-    `${stats.taskClass}: ${pct(stats.routingHeadroomRate)} routing headroom, ` +
-    `${pct(stats.coFailureRate)} co-failure (no policy recovers those), ` +
+    `${stats.taskClass}: ${pct(stats.coFailureRate)} all-model failure rate (no policy recovers those), ` +
+    `${pct(stats.routingHeadroomRate)} that a better policy could have won, ` +
     `over ${stats.comparableRequests} comparable requests`
   );
 }
