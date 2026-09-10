@@ -188,6 +188,24 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     label: 'Qwen (QwenCloud)',
     note: 'No documented programmatic usage/cost API on compatible-mode. Not ingested.',
   },
+  [LlmProviderType.MINIMAX]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'MiniMax',
+    note: 'No documented programmatic usage or cost API on the OpenAI-compatible surface. Not ingested.',
+  },
+  [LlmProviderType.UPSTAGE]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Upstage Solar',
+    note: 'No usage API. Rate-limit headers (X-Upstage-RateLimit-*) report remaining quota per request, not spend. Not ingested.',
+  },
+  [LlmProviderType.WRITER]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Writer (Palmyra)',
+    note: 'No documented usage or cost API. Not ingested.',
+  },
   [LlmProviderType.VERTEX_AI]: {
     supported: false,
     requiresAdminKey: false,

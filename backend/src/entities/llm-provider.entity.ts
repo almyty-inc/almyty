@@ -50,6 +50,12 @@ export enum LlmProviderType {
   // the international one and the other is reachable via apiUrl.
   MOONSHOT = 'moonshot',
   QWEN = 'qwen',
+  MINIMAX = 'minimax',
+  UPSTAGE = 'upstage',
+  // Writer is OpenAI-shaped in body but not in path: chat is POST /v1/chat,
+  // and its model list is {models:[{id,name}]} where name is a display
+  // label. It gets its own dispatch for both reasons.
+  WRITER = 'writer',
   // The customer's own cloud, as a CALL target rather than a deployment
   // target. Each is a distinct product from the neighbouring type it is
   // easily confused with: vertex_ai is not the Gemini Developer API
@@ -446,6 +452,22 @@ export class LlmProvider {
         // both are apiUrl overrides. Keys are bound to the region they were
         // minted in. Verified 2026-09-09.
         return this.configuration.apiUrl || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+      case LlmProviderType.MINIMAX:
+        // The international platform. The mainland China platform is a
+        // separate account namespace at https://api.minimax.cn;
+        // api.minimaxi.com is a legacy alias that still answers but appears
+        // in neither platform's current docs. Verified 2026-09-10.
+        return this.configuration.apiUrl || 'https://api.minimax.io/v1';
+      case LlmProviderType.UPSTAGE:
+        // Solar. kr.api.upstage.ai is a closed-beta Korea residency host
+        // that serves document models only, not chat, so there is no region
+        // to choose here. Verified 2026-09-10.
+        return this.configuration.apiUrl || 'https://api.upstage.ai/v1';
+      case LlmProviderType.WRITER:
+        // Chat is POST <base>/chat, NOT <base>/chat/completions, so this
+        // base is only correct together with the Writer dispatch case.
+        // Verified 2026-09-10.
+        return this.configuration.apiUrl || 'https://api.writer.com/v1';
       case LlmProviderType.VERTEX_AI: {
         // Vertex's OpenAI-compatible surface. `global` uses the unprefixed
         // host; a region uses the {region}-aiplatform host. This surface
@@ -690,6 +712,9 @@ export class LlmProvider {
       // First-party model families, plain Bearer.
       case LlmProviderType.MOONSHOT:
       case LlmProviderType.QWEN:
+      case LlmProviderType.MINIMAX:
+      case LlmProviderType.UPSTAGE:
+      case LlmProviderType.WRITER:
       // Cloud and vendor serverless surfaces that take a static token as a
       // bearer: Foundry accepts the resource key in Authorization (which is
       // what makes it drop-in OpenAI-compatible), DigitalOcean a model

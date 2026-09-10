@@ -325,6 +325,9 @@ export class LlmChatHelper {
         LlmProviderType.SAMBANOVA,
         LlmProviderType.MOONSHOT,
         LlmProviderType.QWEN,
+        LlmProviderType.MINIMAX,
+        LlmProviderType.UPSTAGE,
+        LlmProviderType.WRITER,
         LlmProviderType.AZURE_AI_FOUNDRY,
         LlmProviderType.DIGITALOCEAN,
         LlmProviderType.RUNPOD,
@@ -433,6 +436,9 @@ export class LlmChatHelper {
         case LlmProviderType.HUGGINGFACE:
         case LlmProviderType.MOONSHOT:
         case LlmProviderType.QWEN:
+        case LlmProviderType.MINIMAX:
+        case LlmProviderType.UPSTAGE:
+        case LlmProviderType.WRITER:
         case LlmProviderType.AZURE_AI_FOUNDRY:
         case LlmProviderType.DIGITALOCEAN:
         case LlmProviderType.RUNPOD:

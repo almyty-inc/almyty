@@ -125,4 +125,36 @@ describe('fetchOpenAIModels vendor URL resolution', () => {
     await expect(helper.fetchModelsFromProvider(provider)).rejects.toThrow('status code 404');
     expect((callLlmProviderHttp as jest.Mock).mock.calls[0][0].url).toBe('https://api.z.ai/api/paas/v4/models');
   });
+
+  it('reads a Writer model list by id, because its name field is a display label', async () => {
+    // Writer answers {models:[{id,name}]} where name is "Palmyra X5".
+    // Cohere and Google use the same envelope but put the identifier in
+    // name, so the parser prefers id and falls back to name. Taking name
+    // first would fill the catalog with labels that 404 on every call.
+    (callLlmProviderHttp as jest.Mock).mockResolvedValue({
+      data: { models: [{ id: 'palmyra-x5', name: 'Palmyra X5' }, { id: 'palmyra-x6', name: 'Palmyra X6' }] },
+    });
+    const models = await helper.fetchModelsFromProvider(makeProvider(LlmProviderType.WRITER));
+    expect(models.map((m: any) => m.id)).toEqual(expect.arrayContaining(['palmyra-x5', 'palmyra-x6']));
+    expect(JSON.stringify(models)).not.toContain('Palmyra X5');
+  });
+
+  it('still reads a Cohere-style list, where the identifier is the name', async () => {
+    (callLlmProviderHttp as jest.Mock).mockResolvedValue({ data: { models: [{ name: 'command-r-plus' }] } });
+    const models = await helper.fetchModelsFromProvider(makeProvider(LlmProviderType.COHERE));
+    expect(models.map((m: any) => m.id)).toEqual(['command-r-plus']);
+  });
+
+  it('sends the models call to each new vendor, not to OpenAI', async () => {
+    for (const [type, url] of [
+      [LlmProviderType.MINIMAX, 'https://api.minimax.io/v1/models'],
+      [LlmProviderType.UPSTAGE, 'https://api.upstage.ai/v1/models'],
+      [LlmProviderType.WRITER, 'https://api.writer.com/v1/models'],
+    ] as const) {
+      (callLlmProviderHttp as jest.Mock).mockClear();
+      (callLlmProviderHttp as jest.Mock).mockResolvedValue({ data: { data: [{ id: 'x' }] } });
+      await helper.fetchModelsFromProvider(makeProvider(type));
+      expect((callLlmProviderHttp as jest.Mock).mock.calls[0][0].url).toBe(url);
+    }
+  });
 });

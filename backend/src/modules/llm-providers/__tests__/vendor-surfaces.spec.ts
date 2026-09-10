@@ -3,6 +3,7 @@ import { LlmChatRunnerHelper } from '../llm-chat-runner.helper';
 import { LlmModelsHelper } from '../llm-models.helper';
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { readVertexCredential, VertexCredentialError } from '../providers/vertex.provider';
+import { chatCompletionsUrl } from '../providers/openai.provider';
 
 /**
  * Base URL, auth header and capability facts for every surface corrected or
@@ -42,6 +43,9 @@ describe('corrected vendor surfaces (verified 2026-09-09)', () => {
     [LlmProviderType.RUNPOD, { runpod: { endpointId: 'gpt-oss-120b' } }, 'https://api.runpod.ai/v2/gpt-oss-120b/openai/v1'],
     [LlmProviderType.MODAL, {}, 'https://inference.us-west.modal.direct/v1'],
     [LlmProviderType.VERTEX_AI, { vertex: { projectId: 'proj' } }, 'https://aiplatform.googleapis.com/v1/projects/proj/locations/global/endpoints/openapi'],
+    [LlmProviderType.MINIMAX, {}, 'https://api.minimax.io/v1'],
+    [LlmProviderType.UPSTAGE, {}, 'https://api.upstage.ai/v1'],
+    [LlmProviderType.WRITER, {}, 'https://api.writer.com/v1'],
   ])('%s resolves its documented chat base', (type, config, expected) => {
     expect(makeProvider(type, config).getApiUrl()).toBe(expected);
   });
@@ -166,5 +170,29 @@ describe('RunPod always names an endpoint', () => {
     );
     expect(() => runner.validateProviderConfiguration(LlmProviderType.RUNPOD, { apiKey: 'rpa_x' }))
       .toThrow(/requires an endpoint/);
+  });
+});
+
+/**
+ * Vendors added 2026-09-10, verified in docs/design/call-only-vendors.md.
+ */
+describe('MiniMax, Upstage and Writer', () => {
+  it('sends all three keys as a plain bearer token', () => {
+    for (const type of [LlmProviderType.MINIMAX, LlmProviderType.UPSTAGE, LlmProviderType.WRITER]) {
+      expect(makeProvider(type).getAuthHeaders()).toMatchObject({ Authorization: 'Bearer test-key' });
+    }
+  });
+
+  it('posts Writer chat to <base>/chat, not <base>/chat/completions', () => {
+    // Writer's body and response are verbatim OpenAI; only the path
+    // differs. Appending /chat/completions gives a 404 on every call, so
+    // this single assertion is the whole of Writer working or not.
+    expect(chatCompletionsUrl(makeProvider(LlmProviderType.WRITER))).toBe('https://api.writer.com/v1/chat');
+  });
+
+  it('leaves every other vendor on /chat/completions', () => {
+    expect(chatCompletionsUrl(makeProvider(LlmProviderType.MINIMAX))).toBe('https://api.minimax.io/v1/chat/completions');
+    expect(chatCompletionsUrl(makeProvider(LlmProviderType.UPSTAGE))).toBe('https://api.upstage.ai/v1/chat/completions');
+    expect(chatCompletionsUrl(makeProvider(LlmProviderType.OPENAI))).toBe('https://api.openai.com/v1/chat/completions');
   });
 });

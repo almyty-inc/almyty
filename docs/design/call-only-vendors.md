@@ -246,14 +246,86 @@ Recorded here rather than papered over in the capability map.
 - **Amazon Nova, Microsoft Phi** - first-party families with no standalone
   base URL; reachable through `aws_bedrock` and `azure_ai_foundry`.
 
-Candidates a customer might reasonably name that we still cannot reach
-directly, listed rather than added unasked: MiniMax
-(`https://api.minimax.io/v1`), Upstage Solar (`https://api.upstage.ai/v1`),
-ByteDance Doubao / Volcengine Ark, Baidu ERNIE Qianfan
-(`https://qianfan.baidubce.com/v2`), Tencent Hunyuan, iFlytek Spark, AI21,
-Writer, Naver HyperCLOVA X, IBM watsonx (IAM token, not a plain key),
-Nvidia NIM and Snowflake Cortex. MiniMax and Upstage are the cleanest
-additions: plain OpenAI-compatible bases with Bearer keys.
+## Added 2026-09-10
+
+Three of the candidates listed above were verified and built. Each row
+below is traceable to the vendor's own current documentation.
+
+**MiniMax** (`https://api.minimax.io/v1`, plain Bearer). OpenAI-compatible
+chat and `GET /v1/models` returning `{data:[{id}]}`. Tools and SSE both
+documented. `api.minimax.cn` is the mainland platform, a separate account
+namespace; `api.minimaxi.com` is a legacy alias that still answers but
+appears in neither platform's current docs, so it is an `apiUrl` override
+and not a fallback. Priced from the `minimax` LiteLLM namespace (six chat
+entries; `MiniMax-M2.7` and the `-highspeed` variants are not in the feed
+and stay unpriced). Note ids are capitalised (`MiniMax-M3`).
+https://platform.minimax.io/docs/api-reference/text-chat-openai
+
+**Upstage Solar** (`https://api.upstage.ai/v1`, plain Bearer). Chat and
+tools documented, with the OpenAI SDK as the documented client.
+`kr.api.upstage.ai` is a closed-beta Korea residency host serving document
+models only, not chat, so there is no region to choose. No model listing
+is documented; the route answers, so it is attempted and a failure becomes
+`NO_MODEL_CONFIGURED` rather than a guessed id. Absent from the LiteLLM
+map entirely, so Solar models stay unpriced rather than borrowing a number
+from somebody else's hosting.
+https://console.upstage.ai/docs/capabilities/generate/chat
+
+**Writer** (`https://api.writer.com/v1`, plain Bearer). **Not drop-in**:
+chat is `POST <base>/chat`, not `/chat/completions`, though the body and
+response are verbatim OpenAI. That one difference is handled by
+`chatCompletionsUrl()` in `openai.provider.ts` rather than a duplicate
+provider module. Its listing is `{models:[{id, name}]}` where `name` is a
+display label ("Palmyra X5") and `id` is the real identifier, the inverse
+of Cohere's use of the same envelope; the shared parser prefers `id` and
+falls back to `name`, which handles both. No `[DONE]` sentinel is
+documented, so the stream terminates on close. Absent from the LiteLLM map
+as a first-party vendor (the `writer.palmyra-*` keys there are Bedrock's
+hosting and Bedrock's prices), so unpriced.
+https://dev.writer.com/api-reference/completion-api/chat-completion
+
+## Verified and NOT added, with the reason
+
+Kept here so nobody re-researches them, and so the reason is auditable.
+
+**AI21 (Jamba).** AI21 published a sunset date for the Jamba API of
+**2026-08-09**, which has passed. `GET /studio/v1/models` now answers
+**410 Gone** pointing at an "AI21 Gateway" that has no published API
+documentation, no documented base URL, and no DNS-resolving gateway host.
+The docs describing the Jamba API as current were last updated 2025-12-01.
+Separately, `stream` and `tools` are documented as mutually exclusive,
+which breaks agentic use anyway. Revisit when the Gateway is documented.
+https://docs.ai21.com/august-deprecation-notice
+
+**iFlytek Spark.** The auth is a clean static bearer and the wire format
+is OpenAI-shaped, so the adapter would be trivial. The blocker is that
+**no base URL can be defaulted correctly**: X2 is `/x2/`, X1.5 is `/v2/`,
+the legacy line is `/v1/`, and X2 and X1.5 share the model id `spark-x`,
+so the model field cannot disambiguate them. Whatever we defaulted to
+would put most users on the wrong model generation with no error saying
+so. No model listing and no LiteLLM pricing to help them notice. Add it
+only with a required generation field driving the base, the way RunPod
+takes an endpoint id, and only once it is confirmed a non-China customer
+can obtain an APIPassword.
+https://www.xfyun.cn/doc/spark/X1http.html
+
+**Still open, researched but not built:** ByteDance Doubao on Volcengine
+Ark (needs an international/mainland edition field, has no model listing,
+and its LiteLLM entries carry tiered pricing only with the flat fields
+null), Baidu ERNIE on Qianfan (technically the cleanest of the four, a
+plain `bce-v3/...` bearer with an OpenAI-shaped `GET /v2/models`; the open
+question is commercial, whether a non-China customer can complete signup),
+and Tencent Hunyuan (whose own docs say the platform is migrating to
+TokenHub, so it should be added on `tokenhub-intl.tencentcloudmaas.com`
+rather than the Hunyuan host, and requires real-name verification).
+Naver HyperCLOVA X, Nvidia NIM, Snowflake Cortex and IBM watsonx were
+researched separately.
+
+None of the four Chinese vendors requires a request signature on the
+surface we would call: Volcengine and Tencent both now publish a
+plain-bearer OpenAI-compatible surface alongside the signed legacy one,
+and Baidu's AK/SK-to-access-token exchange is superseded on `/v2` by a
+single opaque key. That was the main fear going in and it is unfounded.
 
 ## Pricing
 

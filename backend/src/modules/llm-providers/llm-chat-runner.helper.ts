@@ -295,6 +295,9 @@ export class LlmChatRunnerHelper {
       // First-party model families with OpenAI-compatible APIs.
       case LlmProviderType.MOONSHOT:
       case LlmProviderType.QWEN:
+      case LlmProviderType.MINIMAX:
+      case LlmProviderType.UPSTAGE:
+      case LlmProviderType.WRITER:
       // The customer's own cloud, and vendor serverless we can call
       // without deploying: all OpenAI-compatible with a static token.
       case LlmProviderType.AZURE_AI_FOUNDRY:
@@ -453,6 +456,9 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.SAMBANOVA:
       case LlmProviderType.MOONSHOT:
       case LlmProviderType.QWEN:
+      case LlmProviderType.MINIMAX:
+      case LlmProviderType.UPSTAGE:
+      case LlmProviderType.WRITER:
       case LlmProviderType.DIGITALOCEAN:
       case LlmProviderType.MODAL:
         if (!config.apiKey) {
