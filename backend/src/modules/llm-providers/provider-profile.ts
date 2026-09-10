@@ -1,4 +1,4 @@
-import { LlmProviderType } from '../../entities/llm-provider.entity';
+import { LlmProviderType } from '../../entities/llm-provider-type';
 
 /**
  * A vendor as data.
@@ -754,7 +754,7 @@ export const PROVIDER_PROFILES: ProviderProfile[] = [
         baseUrl: 'https://api.anthropic.com/v1',
         // Not a bearer: Anthropic takes the key in x-api-key alongside a
         // required API version header.
-        auth: { scheme: 'header', header: 'x-api-key', extraHeaders: { 'anthropic-version': '2023-06-01' } },
+        auth: { scheme: 'header', header: 'x-api-key', extraHeaders: { 'anthropic-version': '{apiVersion||2023-06-01}' } },
         path: '/messages',
         listingPath: '/models',
       },
@@ -810,6 +810,14 @@ function at(configuration: Record<string, any> | undefined, path: string): strin
   return typeof value === 'string' ? value : undefined;
 }
 
+/** Fill `{dotted.path||default}` placeholders from the configuration. */
+function fill(template: string, configuration: Record<string, any>): string {
+  return template.replace(/\{([^}]+)\}/g, (_match, path: string) => {
+    const [dotted, fallback = ''] = path.split('||');
+    return at(configuration, dotted.trim()) ?? fallback.trim();
+  });
+}
+
 /**
  * The base URL a binding resolves to for a given configuration.
  *
@@ -826,10 +834,7 @@ export function bindingBaseUrl(binding: ProtocolBinding, configuration: Record<s
     const selected = at(configuration, binding.basesField);
     if (selected && binding.bases[selected]) template = binding.bases[selected];
   }
-  return template.replace(/\{([^}]+)\}/g, (_match, path: string) => {
-    const [dotted, fallback = ''] = path.split('||');
-    return at(configuration, dotted.trim()) ?? fallback.trim();
-  });
+  return fill(template, configuration);
 }
 
 /** The base URL this profile resolves to on its preferred protocol. */
@@ -847,16 +852,32 @@ export const COMMON_HEADERS: Record<string, string> = {
 };
 
 /** The headers a binding sends for a key, matching the entity's switch exactly. */
-export function bindingAuthHeaders(binding: ProtocolBinding, apiKey: string | undefined): Record<string, string> {
+export function bindingAuthHeaders(
+  binding: ProtocolBinding,
+  apiKey: string | undefined,
+  configuration: Record<string, any> = {},
+): Record<string, string> {
   if (binding.auth.scheme === 'none' || !apiKey) return { ...COMMON_HEADERS };
   const keyed: Record<string, string> =
     binding.auth.scheme === 'bearer'
       ? { Authorization: `Bearer ${apiKey}` }
       : { [binding.auth.header]: apiKey };
-  return { ...keyed, ...(binding.auth.extraHeaders ?? {}), ...COMMON_HEADERS };
+  // Extra header VALUES take the same {dotted.path||default} substitution
+  // as a base URL, so a vendor header the customer can pin stays data.
+  // Anthropic's version header is the case that proves it: the switch
+  // honoured configuration.apiVersion and a hardcoded profile silently
+  // dropped that override.
+  const extra = Object.fromEntries(
+    Object.entries(binding.auth.extraHeaders ?? {}).map(([k, v]) => [k, fill(v, configuration)]),
+  );
+  return { ...keyed, ...extra, ...COMMON_HEADERS };
 }
 
 /** The headers this profile sends on its preferred protocol. */
-export function profileAuthHeaders(profile: ProviderProfile, apiKey: string | undefined): Record<string, string> {
-  return bindingAuthHeaders(preferredBinding(profile), apiKey);
+export function profileAuthHeaders(
+  profile: ProviderProfile,
+  apiKey: string | undefined,
+  configuration: Record<string, any> = {},
+): Record<string, string> {
+  return bindingAuthHeaders(preferredBinding(profile), apiKey, configuration);
 }

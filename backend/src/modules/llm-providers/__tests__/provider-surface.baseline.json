@@ -1,0 +1,3128 @@
+{
+  "openai": {
+    "plain": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.openai.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "anthropic": {
+    "plain": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2023-06-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.anthropic.com/v1",
+      "headers": {
+        "x-api-key": "test-key",
+        "anthropic-version": "2024-01-01",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "google": {
+    "plain": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://generativelanguage.googleapis.com/v1beta",
+      "headers": {
+        "x-goog-api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "mistral": {
+    "plain": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.mistral.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "xai": {
+    "plain": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.x.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "deepseek": {
+    "plain": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.deepseek.com",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "groq": {
+    "plain": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.groq.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "together": {
+    "plain": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.together.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "openrouter": {
+    "plain": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://openrouter.ai/api/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "HTTP-Referer": "https://almyty.com",
+        "X-OpenRouter-Title": "almyty",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "azure_openai": {
+    "plain": {
+      "url": "https://undefined.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://undefined.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://my-res.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://undefined.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://undefined.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://undefined.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://undefined.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://undefined.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://undefined.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://undefined.openai.azure.com/openai/v1",
+      "headers": {
+        "api-key": "test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "aws_bedrock": {
+    "plain": {
+      "url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "cohere": {
+    "plain": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.cohere.ai/compatibility/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "huggingface": {
+    "plain": {
+      "url": "https://router.huggingface.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://router.huggingface.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://router.huggingface.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://router.huggingface.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://router.huggingface.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://router.huggingface.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://router.huggingface.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://router.huggingface.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://x.endpoints.huggingface.cloud",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://router.huggingface.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "ollama": {
+    "plain": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "http://localhost:11434/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "fireworks": {
+    "plain": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.fireworks.ai/inference/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "cerebras": {
+    "plain": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.cerebras.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "deepinfra": {
+    "plain": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.deepinfra.com/v1/openai",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "novita": {
+    "plain": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.novita.ai/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "perplexity": {
+    "plain": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.perplexity.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "zai": {
+    "plain": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.z.ai/api/paas/v4",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "baseten": {
+    "plain": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://inference.baseten.co/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "nebius": {
+    "plain": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.tokenfactory.nebius.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "sambanova": {
+    "plain": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.sambanova.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "moonshot": {
+    "plain": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.moonshot.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "qwen": {
+    "plain": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "minimax": {
+    "plain": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.minimax.io/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "upstage": {
+    "plain": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.upstage.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "writer": {
+    "plain": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.writer.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "qianfan": {
+    "plain": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://qianfan.baidubce.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "hunyuan": {
+    "plain": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://tokenhub-intl.tencentcloudmaas.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "volcengine": {
+    "plain": {
+      "url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://ark.cn-beijing.volces.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://ark.ap-southeast.bytepluses.com/api/v3",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "spark": {
+    "plain": {
+      "url": "https://spark-api-open.xf-yun.com/x2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://spark-api-open.xf-yun.com/x2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://spark-api-open.xf-yun.com/x2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://spark-api-open.xf-yun.com/x2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://spark-api-open.xf-yun.com/x2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://spark-api-open.xf-yun.com/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://spark-api-open.xf-yun.com/v2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://spark-api-open.xf-yun.com/x2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://spark-api-open.xf-yun.com/x2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://spark-api-open.xf-yun.com/x2",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "vertex_ai": {
+    "plain": {
+      "url": "https://aiplatform.googleapis.com/v1/projects//locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://aiplatform.googleapis.com/v1/projects//locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://aiplatform.googleapis.com/v1/projects//locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://aiplatform.googleapis.com/v1/projects//locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://aiplatform.googleapis.com/v1/projects/proj/locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://aiplatform.googleapis.com/v1/projects//locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://aiplatform.googleapis.com/v1/projects//locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://aiplatform.googleapis.com/v1/projects//locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://aiplatform.googleapis.com/v1/projects//locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://aiplatform.googleapis.com/v1/projects//locations/global/endpoints/openapi",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "azure_ai_foundry": {
+    "plain": {
+      "url": "https://.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://my-res.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://.services.ai.azure.com/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "digitalocean": {
+    "plain": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://inference.do-ai.run/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "runpod": {
+    "plain": {
+      "url": "https://api.runpod.ai/v2//openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.runpod.ai/v2//openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.runpod.ai/v2//openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.runpod.ai/v2/ep1/openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.runpod.ai/v2//openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.runpod.ai/v2//openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.runpod.ai/v2//openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.runpod.ai/v2//openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.runpod.ai/v2//openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.runpod.ai/v2//openai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "modal": {
+    "plain": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  },
+  "custom": {
+    "plain": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "",
+      "headers": {
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
+  }
+}
