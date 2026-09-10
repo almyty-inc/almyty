@@ -76,6 +76,14 @@ export class LlmModelsHelper {
         case LlmProviderType.DIGITALOCEAN:
         case LlmProviderType.RUNPOD:
         case LlmProviderType.MODAL:
+        // Added 2026-09-10. MiniMax's /v1/models is OpenAI-shaped. Writer
+        // answers {models:[{id,name}]} where name is a display label, which
+        // the parser handles by preferring id. Upstage documents no listing
+        // at all, but the route answers, so it is attempted and a failure
+        // becomes NO_MODEL_CONFIGURED rather than a guessed id.
+        case LlmProviderType.MINIMAX:
+        case LlmProviderType.UPSTAGE:
+        case LlmProviderType.WRITER:
           return this.fetchOpenAIModels(provider);
         case LlmProviderType.OLLAMA:
           // Native /api/tags — lists locally pulled models. Works
@@ -143,9 +151,13 @@ export class LlmModelsHelper {
     });
 
     // Response shapes in the wild: OpenAI's `{data:[...]}` (most vendors),
-    // a bare array (Together's /v1/models), and Cohere's `{models:[...]}`
-    // where the id lives in `name`. Anything else yields an empty list,
-    // which the resolver reports as NO_MODEL_CONFIGURED.
+    // a bare array (Together's /v1/models), and `{models:[...]}` for Cohere,
+    // Google and Writer. The id is read from `id` first and `name` second,
+    // which matters: Cohere puts the identifier in `name`, while Writer puts
+    // a display label there ("Palmyra X5") and the real id in `id`, so
+    // reading `name` first would fill the catalog with unusable strings.
+    // Anything else yields an empty list, which the resolver reports as
+    // NO_MODEL_CONFIGURED.
     const body = response.data;
     const models: any[] = Array.isArray(body)
       ? body
@@ -749,6 +761,9 @@ export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[
   // have no feed namespace. An unpriced model is surfaced as unpriced
   // rather than billed at some other vendor's list price.
   [LlmProviderType.MOONSHOT]: [],
+  [LlmProviderType.MINIMAX]: [],
+  [LlmProviderType.UPSTAGE]: [],
+  [LlmProviderType.WRITER]: [],
   [LlmProviderType.QWEN]: [],
   [LlmProviderType.VERTEX_AI]: [],
   [LlmProviderType.AZURE_AI_FOUNDRY]: [],

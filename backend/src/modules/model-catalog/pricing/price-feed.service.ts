@@ -123,6 +123,13 @@ export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping 
   // `qwencloud` / `qwen_ai_platform` (45 each, byte-identical mirrors of one
   // catalog). `moonshot_ai` and `qwen` do not exist as feed keys.
   [LlmProviderType.MOONSHOT]: { litellm: ['moonshot'], openrouterPrefix: 'moonshotai/' },
+  // Verified against the live cost map 2026-09-10: `minimax` carries six
+  // chat entries under a `minimax/` prefix. Upstage and Writer are absent
+  // from it entirely, so their models stay unpriced rather than borrowing
+  // a number from somebody else's hosting of the same weights.
+  [LlmProviderType.MINIMAX]: { litellm: ['minimax'], openrouterPrefix: 'minimax/' },
+  [LlmProviderType.UPSTAGE]: null,
+  [LlmProviderType.WRITER]: null,
   [LlmProviderType.QWEN]: { litellm: ['dashscope', 'qwencloud', 'qwen_ai_platform'], openrouterPrefix: 'qwen/' },
   // Cloud and serverless call targets. Vertex prices under its own
   // namespaces (the partner ones cover Model Garden). Foundry serves the

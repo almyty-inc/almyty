@@ -1,5 +1,5 @@
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { LlmProvider } from '../../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { Conversation } from '../../../entities/conversation.entity';
 import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
@@ -26,6 +26,22 @@ export interface OpenAiAuthOverride {
  * DeepSeek, Groq, Together, OpenRouter, and every OpenAI-compatible host in
  * docs/design/call-only-vendors.md).
  */
+
+/**
+ * The chat path under a provider's base.
+ *
+ * Almost every OpenAI-compatible vendor serves `/chat/completions`.
+ * Writer does not: its documented endpoint is `POST <base>/chat`, with an
+ * otherwise verbatim OpenAI body and response. That one difference is the
+ * whole of its incompatibility, so it rides this path rather than a
+ * duplicate provider module. Verified 2026-09-10, see
+ * docs/design/call-only-vendors.md.
+ */
+export function chatCompletionsUrl(provider: LlmProvider): string {
+  const base = provider.getApiUrl();
+  return provider.type === LlmProviderType.WRITER ? `${base}/chat` : `${base}/chat/completions`;
+}
+
 export async function callOpenAI(
   provider: LlmProvider,
   request: ChatRequest,
@@ -87,7 +103,7 @@ export async function callOpenAI(
 
   const config: AxiosRequestConfig = {
     method: 'POST',
-    url: `${apiUrl}/chat/completions`,
+    url: chatCompletionsUrl(provider),
     headers,
     data: openaiRequest,
     timeout: provider.configuration.timeout || 30000,
@@ -239,7 +255,7 @@ export async function callOpenAIStream(
 
   const config: AxiosRequestConfig = {
     method: 'POST',
-    url: `${apiUrl}/chat/completions`,
+    url: chatCompletionsUrl(provider),
     headers,
     data: openaiRequest,
     timeout: provider.configuration.timeout || 30000,
