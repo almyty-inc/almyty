@@ -75,9 +75,9 @@ function matches(card: Model, key: string): boolean {
 
 /** The hard filters: a card either qualifies for this request or it does not. */
 export function eligible(card: Model, policy: RoutingPolicy): { ok: true } | { ok: false; reason: string } {
-  if (!card.isSelectable()) return { ok: false, reason: 'not selectable' };
+  if (!card.isSelectable()) return { ok: false, reason: 'not usable yet' };
   if (policy.privacyTier && TIER_RANK[card.privacyTier] > TIER_RANK[policy.privacyTier]) {
-    return { ok: false, reason: `privacy tier ${card.privacyTier} above ceiling ${policy.privacyTier}` };
+    return { ok: false, reason: `privacy ${card.privacyTier} is not allowed here; this policy allows ${policy.privacyTier} or stricter` };
   }
   if (policy.regions && policy.regions.length > 0) {
     // An explicit allowlist is a data-residency statement: a card with no
@@ -91,7 +91,7 @@ export function eligible(card: Model, policy: RoutingPolicy): { ok: true } | { o
   if (policy.budgetHeadroomCents != null) {
     const score = priceScore(card);
     // A million tokens at this price must fit in what is left; unpriced cards are allowed (flagged elsewhere).
-    if (score != null && score * 100 > policy.budgetHeadroomCents) return { ok: false, reason: 'over budget headroom' };
+    if (score != null && score * 100 > policy.budgetHeadroomCents) return { ok: false, reason: 'over the spend limit' };
   }
   return { ok: true };
 }
@@ -149,7 +149,7 @@ export function selectCandidates(cards: Model[], policy: RoutingPolicy = {}): { 
     policy.fallbackChain.forEach((key, i) => {
       const card = pool.find((c) => matches(c, key));
       if (card) ordered.push(toCandidate(card, `fallback chain position ${i + 1}`));
-      else rejected.push({ modelId: key, reason: 'chain entry not eligible or unknown' });
+      else rejected.push({ modelId: key, reason: 'fallback entry not usable or unknown' });
     });
     return applySkip(ordered, rejected, policy);
   }

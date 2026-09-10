@@ -26,7 +26,7 @@ export class AdapterRegistry {
 
   require(key: string): ModelProviderAdapter {
     const adapter = this.adapters.get(key);
-    if (!adapter) throw Object.assign(new Error(`unknown deployment adapter: ${key}`), { code: 'ADAPTER_UNKNOWN' });
+    if (!adapter) throw Object.assign(new Error(`unknown deployment provider: ${key}`), { code: 'ADAPTER_UNKNOWN' });
     return adapter;
   }
 

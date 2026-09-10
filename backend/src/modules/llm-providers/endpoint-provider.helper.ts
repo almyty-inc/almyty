@@ -74,7 +74,7 @@ export class EndpointProviderHelper {
       provider = this.providers.create({
         organizationId: input.organizationId,
         name: input.name,
-        description: 'Created for a model card served by an endpoint',
+        description: 'Created for a model served by an endpoint',
         type: LlmProviderType.OPENAI,
         capabilities: {},
       } as Partial<LlmProvider>) as LlmProvider;

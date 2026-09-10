@@ -211,7 +211,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
         heading: `Approval ${outcome}`,
         bodyHtml:
           para(
-            `The approval gate on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ', the run is resuming' : ', the run was terminated'}.`,
+            `The approval on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ', the run is resuming' : ', the run was terminated'}.`,
           ) + (p.decisionReason ? para(`Note from the approver: <em>${esc(p.decisionReason)}</em>`) : ''),
         button: p.runUrl ? { label: 'View run', url: p.runUrl } : undefined,
         orgName: p.organizationName,

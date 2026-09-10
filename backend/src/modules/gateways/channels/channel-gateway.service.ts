@@ -113,7 +113,7 @@ export class ChannelGatewayService {
   getAdapter(type: string): BaseAdapter {
     const adapter = this.adapters.get(type);
     if (!adapter) {
-      throw new BadRequestException(`No adapter found for channel type: ${type}`);
+      throw new BadRequestException(`No handler found for channel type: ${type}`);
     }
     return adapter;
   }

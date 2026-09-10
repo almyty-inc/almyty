@@ -20,7 +20,7 @@ const card = (over: Partial<Model>): Model =>
   });
 
 describe('eligible', () => {
-  it('rejects cards that are not selectable, above the privacy ceiling, outside the regions, or lacking a capability', () => {
+  it('rejects models that are not usable, above the privacy limit, outside the regions, or lacking a capability', () => {
     expect(eligible(card({ validationStatus: 'never' }), {}).ok).toBe(false);
     expect(eligible(card({ privacyTier: 'public' }), { privacyTier: 'private_cloud' }).ok).toBe(false);
     expect(eligible(card({ privacyTier: 'local' }), { privacyTier: 'private_cloud' }).ok).toBe(true);
@@ -63,7 +63,7 @@ describe('selectCandidates', () => {
     const { candidates, rejected } = selectCandidates([cheap, fast], { fallbackChain: ['fast', 'missing', 'cheap'] });
     expect(candidates.map((c) => c.modelId)).toEqual(['fast', 'cheap']);
     expect(candidates[0].rationale).toBe('fallback chain position 1');
-    expect(rejected).toContainEqual({ modelId: 'missing', reason: 'chain entry not eligible or unknown' });
+    expect(rejected).toContainEqual({ modelId: 'missing', reason: 'fallback entry not usable or unknown' });
   });
 
   it('applies the hard filters before any ranking and lists the rejections', () => {

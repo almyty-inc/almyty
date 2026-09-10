@@ -127,8 +127,28 @@ describe('it refuses to report a number it cannot stand behind', () => {
     const stats = computeCoFailure(attempts)[0];
     expect(isReportable(stats)).toBe(true);
     const line = describeHeadroom(stats);
-    expect(line).toContain('routing headroom');
+    expect(line).toContain('all-model failure rate');
     expect(line).toContain('no policy recovers those');
     expect(line).toContain(`${MIN_COMPARABLE_REQUESTS} comparable requests`);
+  });
+
+  it('pairs each percentage with the right label, since the two are easy to swap', () => {
+    // Deliberately asymmetric: co-failure and headroom are different
+    // numbers here, so a line that binds "all-model failure rate" to
+    // routingHeadroomRate reads plausibly and is wrong. Nobody would catch
+    // that by looking at the screen, so it is caught here.
+    const attempts: AttemptRecord[] = [];
+    let n = 0;
+    for (let i = 0; i < 10; i++, n++) attempts.push(attempt('t', `r${n}`, 'a', false), attempt('t', `r${n}`, 'b', false));
+    for (let i = 0; i < 15; i++, n++) attempts.push(attempt('t', `r${n}`, 'a', true), attempt('t', `r${n}`, 'b', false));
+    for (let i = 0; i < 5; i++, n++) attempts.push(attempt('t', `r${n}`, 'a', true), attempt('t', `r${n}`, 'b', true));
+
+    const stats = computeCoFailure(attempts)[0];
+    expect(stats.coFailureRate).toBeCloseTo(10 / 30, 5);
+    expect(stats.routingHeadroomRate).toBeCloseTo(15 / 30, 5);
+
+    const line = describeHeadroom(stats);
+    expect(line).toContain('33.3% all-model failure rate');
+    expect(line).toContain('50.0% that a better policy could have won');
   });
 });

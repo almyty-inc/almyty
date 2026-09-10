@@ -103,7 +103,7 @@ export class ConsolidationService {
       return {
         scope, scanned: shortRows.length, consolidated_facts: 0, superseded: 0,
         skipped: true,
-        reason: `${shortRows.length} short-tier rows < min_short_count=${config.min_short_count}`,
+        reason: `${shortRows.length} short-scope rows < min_short_count=${config.min_short_count}`,
       };
     }
 

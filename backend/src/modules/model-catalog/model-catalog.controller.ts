@@ -48,7 +48,7 @@ export class ModelCatalogController {
 
   @Get()
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'List model cards' })
+  @ApiOperation({ summary: 'List models' })
   async list(@Request() req: any, @Query(new ValidationPipe({ transform: true })) query: ListModelsQueryDto) {
     const rows = await this.catalog.list(this.orgId(req), query);
     return { success: true, data: rows.map(view) };
@@ -56,7 +56,7 @@ export class ModelCatalogController {
 
   @Post()
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Register a model card against a stored provider or an endpoint' })
+  @ApiOperation({ summary: 'Register a model against a stored provider or an endpoint' })
   async register(@Request() req: any, @Body(ValidationPipe) body: RegisterModelBodyDto) {
     const card = await this.catalog.register(this.orgId(req), body, req.user?.id);
     return { success: true, data: view(card) };
@@ -64,7 +64,7 @@ export class ModelCatalogController {
 
   @Post('register-endpoint')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Register a hand-run OpenAI-compatible endpoint as a model card' })
+  @ApiOperation({ summary: 'Register a hand-run OpenAI-compatible endpoint as a model' })
   async registerEndpoint(@Request() req: any, @Body(ValidationPipe) body: RegisterEndpointBodyDto) {
     const card = await this.catalog.registerEndpoint(this.orgId(req), body, req.user?.id);
     return { success: true, data: view(card) };
@@ -84,21 +84,21 @@ export class ModelCatalogController {
 
   @Get(':id')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Model card detail' })
+  @ApiOperation({ summary: 'Model detail' })
   async get(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     return { success: true, data: view(await this.catalog.get(this.orgId(req), id)) };
   }
 
   @Patch(':id')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Update a card: privacy tier, region, capabilities, price override, status' })
+  @ApiOperation({ summary: 'Update a model: privacy, region, capabilities, price override, status' })
   async update(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Body(ValidationPipe) body: UpdateModelBodyDto) {
     return { success: true, data: view(await this.catalog.update(this.orgId(req), id, body, req.user?.id)) };
   }
 
   @Post(':id/validate')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Run one real call through the card; passing makes it selectable' })
+  @ApiOperation({ summary: 'Run one real call through the model; passing makes it usable' })
   async validate(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     const outcome = await this.catalog.validate(this.orgId(req), id, req.user?.id);
     return { success: outcome.passed, data: { ...outcome, model: view(outcome.model) } };
@@ -106,7 +106,7 @@ export class ModelCatalogController {
 
   @Delete(':id')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Remove a card' })
+  @ApiOperation({ summary: 'Remove a model' })
   async remove(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     await this.catalog.remove(this.orgId(req), id, req.user?.id);
     return { success: true };
