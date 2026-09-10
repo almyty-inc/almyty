@@ -89,8 +89,12 @@ real wire protocols, each spoken by multiple vendors. Each protocol is
 **one implementation in code that many vendors share**: implement it once,
 and every vendor speaking it becomes a row.
 
-**The protocol registry. This vocabulary is closed; extending it is a
-code change, deliberately.**
+**The protocol registry.** "Closed" means adding a protocol is a
+**deliberate code change with an implementation, a test and
+documentation**, not that the list is frozen. It was never a ban. Vendor
+natives keep appearing and several expose features their OpenAI-compatible
+mode hides, which is exactly why they earn an entry rather than a quirk
+field.
 
 | Protocol | Notes |
 |----------|-------|
@@ -100,6 +104,7 @@ code change, deliberately.**
 | `gemini_generate_content` | Google direct and Vertex |
 | `bedrock_converse` | |
 | `cohere_v2` | |
+| `dashscope_native` | Qwen. Its OpenAI-compatible mode hides DashScope features |
 | `embeddings` | |
 | `rerank` | Cohere's shape is the de facto one others copy |
 
@@ -168,6 +173,16 @@ the pitch.
 Calls go native unless (a) a role or strategy needs a capability only
 another path provides, or (b) the user overrides.
 
+**Native-first is a default and a tie-break, not an invariant.** Once L3
+filters on `(model, protocol)` pairs, a requirement asking for a
+capability the native path lacks **must** be able to select a compat path.
+That is the router working, not a violation.
+
+The invariant is narrower: **when two paths both satisfy a requirement,
+prefer native; and any downgrade from a preferred path is recorded in the
+route trace with the capabilities dropped.** Silence is the thing
+forbidden, not the downgrade.
+
 ### Capabilities are protocol-scoped
 
 **Not vendor-scoped.** "Z.ai supports extended thinking" is meaningless
@@ -179,6 +194,33 @@ So the model carries capabilities **per protocol**, and L3 filters on
 compat is a deliberate, **recorded** loss: the route trace names which
 capabilities were dropped and why. Silent degradation is the exact bug
 class that has been biting all week.
+
+### Inbound model-id resolution
+
+A client calling us with `anthropic_messages` names a model in Anthropic's
+namespace. That has to resolve onto a catalog entry which may be served by
+an entirely different vendor. This is small in the spec and large in
+practice: it is the difference between pointing Claude Code at almyty and
+having it work, and a not-found the user cannot diagnose.
+
+**Resolution order, per connection, first match wins:**
+
+1. **Exact match** on a catalog model id.
+2. **Vendor-namespace alias.** The id as that protocol's vendor would name
+   it (`claude-opus-4-6` arriving on `anthropic_messages`), matched
+   against the catalog entry's vendor model id for **any** provider
+   serving that model. This is what makes an unmodified Anthropic-SDK
+   client work when the model is actually served by Baseten or Z.ai.
+3. **Explicit alias map**, per connection or per org, user-configured.
+   This also covers "route anything Anthropic-shaped to my own fine-tune".
+4. **Role or strategy default**, when the request names no model we can
+   resolve but the caller is hitting an agent endpoint that has bindings.
+
+**Failure is a typed error** naming the id, the protocol namespace it was
+interpreted in, and the closest catalog candidates. Never a bare
+not-found.
+
+The alias map belongs to L2 and is editable in the UI.
 
 ### A generic provider per protocol
 
@@ -439,6 +481,11 @@ Status headers everywhere. Dated Verified sections for any provider claim.
    change only. A model typed by id with no listing works. Per-model
    overrides take effect. A vendor speaking two protocols is callable on
    both, and the preferred one is used by default.
+2b. **Inbound resolution.** A stock Anthropic-SDK client with an
+   **unmodified** model id reaches a model served by a non-Anthropic
+   provider, and the route trace shows the resolution step that got it
+   there. An unresolvable id returns a typed error naming the namespace it
+   was read in and the nearest candidates, never a bare not-found.
 3. **Routing.** `plan()` is callable with no agent. `connectionPreference`
    beats cost ranking. Preview shows chosen and rejected with reasons.
 4. **Roles.** An agent with every role pinned runs with routing disabled
@@ -624,37 +671,29 @@ improvising silently.
 
 ---
 
-## Open questions
+## Questions raised and resolved
 
-Three, recorded rather than silently decided, because the answers change a
-schema and the vocabulary is declared closed.
+Recorded rather than deleted, because each answer changed the spec and the
+reasoning is worth keeping.
 
-**1. Is `dashscope_native` in the registry?** The worked example above
-gives `qwen { dashscope_native (preferred), chat_completions }`, but
-`dashscope_native` is not one of the eight protocols listed. Either the
-registry has nine entries or the example should say `chat_completions`
-only. This matters precisely because the vocabulary is closed: a ninth
-entry is a code change and an implementation, not a row. The same question
-applies to any other vendor-native shape we might want to prefer.
+**1. Is `dashscope_native` in the registry?** Yes. Nine, not eight. The
+worked example preferring it for Qwen was right and the eight-entry list
+was wrong. This also clarified what "closed" means: adding a protocol is a
+deliberate code change with an implementation, a test and documentation,
+not a frozen list. Refusing to pick rather than quietly adding a ninth
+entry was the rule working as intended.
 
-**2. What is the preferred protocol when a vendor speaks several and the
-capabilities differ?** "Native first" answers it for a single call. It
-does not answer what a router should do when the native path lacks a
-capability the requirement asks for and the compat path has it, or the
-reverse. The current answer is that L3 filters on `(model, protocol)`
-pairs, which means a requirement can select a compat path over a native
-one. That is correct, but it means "native first" is a tie-break rather
-than a rule, and the documentation should say so plainly.
+**2. Is native-first a rule or a tie-break?** A default and a tie-break.
+Once L3 filters on `(model, protocol)` pairs, a requirement asking for a
+capability the native path lacks must be able to select a compat path. The
+narrower invariant now stated in L2: when two paths both satisfy a
+requirement, prefer native, and record any downgrade with the capabilities
+dropped. Silence is forbidden, not the downgrade.
 
-**3. Where does an inbound protocol's model id resolve?** A client calling
-us with `anthropic_messages` names a model in Anthropic's namespace. That
-name has to map onto a catalog entry that might be served by a different
-vendor entirely. That mapping is L2's, but it is not specified above, and
-it is the difference between "point Claude Code at almyty" working and
-returning a confusing not-found.
-
-None of the three blocks starting L1, which is why they are recorded here
-rather than held as a gate.
+**3. Where does an inbound protocol's model id resolve?** Specified in L2
+under "Inbound model-id resolution": a four-step order per connection with
+a typed error on failure, and a gate proving an unmodified Anthropic-SDK
+client reaches a model served by someone else.
 
 ## Non-goals
 
