@@ -119,13 +119,14 @@ export function compileStrategy(
  * cost depends on which models fill the slots, and this layer does not
  * know that.
  */
-export function describeStrategy(strategy: Pick<Strategy, 'key' | 'displayName' | 'roleSlots' | 'shape'>): {
+export function describeStrategy(strategy: Pick<Strategy, 'key' | 'displayName' | 'roleSlots' | 'shape'> & { experimental?: boolean }): {
   key: string;
   displayName: string;
   roleSlots: string[];
   steps: number;
   costBand: 'low' | 'medium' | 'high';
   latencyBand: 'low' | 'medium' | 'high';
+  experimental: boolean;
 } {
   const steps = strategy.shape?.steps ?? [];
   const calls = steps.filter((s) => s.kind === 'call' || s.kind === 'extract_context').length;
@@ -138,6 +139,7 @@ export function describeStrategy(strategy: Pick<Strategy, 'key' | 'displayName' 
     key: strategy.key,
     displayName: strategy.displayName,
     roleSlots: strategy.roleSlots ?? [],
+    experimental: Boolean(strategy.experimental),
     steps: steps.length,
     costBand: band(weight),
     // Work that fans out runs together, so latency tracks depth rather

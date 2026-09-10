@@ -23,6 +23,12 @@ export interface StrategyView {
   costBand: 'low' | 'medium' | 'high'
   latencyBand: 'low' | 'medium' | 'high'
   builtIn: boolean
+  /**
+   * Offered without a claim that it pays off. See docs/strategies.md: the
+   * saving is workload-dependent, so the picker says so rather than
+   * letting the cost band imply a promise.
+   */
+  experimental?: boolean
 }
 
 export interface StrategyPickerProps {
@@ -100,6 +106,15 @@ export function StrategyPicker({
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-foreground">{s.displayName}</span>
               <span className="flex shrink-0 items-center gap-1">
+                {s.experimental && (
+                  <Badge
+                    variant="outline"
+                    data-testid={`strategy-experimental-${s.key}`}
+                    className="border-violet-500/40 text-violet-600 dark:text-violet-400"
+                  >
+                    experimental
+                  </Badge>
+                )}
                 <Badge variant="outline" className={BAND_CLASS[s.costBand]}>
                   cost {s.costBand}
                 </Badge>
@@ -111,6 +126,15 @@ export function StrategyPicker({
             </div>
 
             <p className="mt-1 text-xs text-muted-foreground">{s.description}</p>
+
+            {s.experimental && (
+              // The cost band alone would read as a promise. It is not one:
+              // whether this shape saves anything depends on the price gap
+              // between the slots and on your own traffic.
+              <p data-testid={`strategy-caveat-${s.key}`} className="mt-1 text-[11px] text-violet-600 dark:text-violet-400">
+                Not claimed to be cheaper. Run it against your own traffic and read the routing headroom before adopting it.
+              </p>
+            )}
 
             <div className="mt-2 flex flex-wrap gap-1">
               {s.roleSlots.map((slot) => (
