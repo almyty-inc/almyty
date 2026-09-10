@@ -224,6 +224,12 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     label: 'ByteDance Doubao (Ark)',
     note: 'No documented usage or cost API on the Ark bearer surface. Not ingested.',
   },
+  [LlmProviderType.SPARK]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'iFlytek Spark',
+    note: 'No documented usage or cost API on the HTTP surface. Not ingested.',
+  },
   [LlmProviderType.VERTEX_AI]: {
     supported: false,
     requiresAdminKey: false,

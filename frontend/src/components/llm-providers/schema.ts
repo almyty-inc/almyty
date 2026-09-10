@@ -263,6 +263,7 @@ export type LlmProviderType =
   | 'qianfan'
   | 'hunyuan'
   | 'volcengine'
+  | 'spark'
   | 'vertex_ai'
   | 'azure_ai_foundry'
   | 'digitalocean'

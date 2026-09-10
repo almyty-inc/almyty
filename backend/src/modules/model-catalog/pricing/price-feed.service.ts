@@ -138,6 +138,8 @@ export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping 
   [LlmProviderType.QIANFAN]: null,
   [LlmProviderType.HUNYUAN]: { litellm: ['tencent'], openrouterPrefix: null },
   [LlmProviderType.VOLCENGINE]: null,
+  // Absent from the cost map; the spark* keys there are unrelated products.
+  [LlmProviderType.SPARK]: null,
   [LlmProviderType.QWEN]: { litellm: ['dashscope', 'qwencloud', 'qwen_ai_platform'], openrouterPrefix: 'qwen/' },
   // Cloud and serverless call targets. Vertex prices under its own
   // namespaces (the partner ones cover Model Garden). Foundry serves the

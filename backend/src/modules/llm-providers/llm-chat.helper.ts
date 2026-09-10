@@ -331,6 +331,7 @@ export class LlmChatHelper {
         LlmProviderType.QIANFAN,
         LlmProviderType.HUNYUAN,
         LlmProviderType.VOLCENGINE,
+        LlmProviderType.SPARK,
         LlmProviderType.AZURE_AI_FOUNDRY,
         LlmProviderType.DIGITALOCEAN,
         LlmProviderType.RUNPOD,
@@ -445,6 +446,7 @@ export class LlmChatHelper {
         case LlmProviderType.QIANFAN:
         case LlmProviderType.HUNYUAN:
         case LlmProviderType.VOLCENGINE:
+        case LlmProviderType.SPARK:
         case LlmProviderType.AZURE_AI_FOUNDRY:
         case LlmProviderType.DIGITALOCEAN:
         case LlmProviderType.RUNPOD:

@@ -284,48 +284,72 @@ as a first-party vendor (the `writer.palmyra-*` keys there are Bedrock's
 hosting and Bedrock's prices), so unpriced.
 https://dev.writer.com/api-reference/completion-api/chat-completion
 
-## Verified and NOT added, with the reason
+## The rule for whether a vendor goes in
 
-Kept here so nobody re-researches them, and so the reason is auditable.
+Settled 2026-09-10, replacing three criteria that were used before it and
+were all wrong.
+
+**A vendor with bearer auth and an OpenAI-shaped surface is a card, and a
+card is a data row.** Geography is not a criterion. How well known the
+vendor is, is not a criterion. Vendor quirks are card FIELDS, not
+exclusion reasons: Writer's `POST <base>/chat`, Spark's per-generation
+base, Ark's international-or-mainland edition, a missing model listing, no
+pricing in the feed.
+
+The three withdrawn criteria, recorded because each looked reasonable:
+
+1. *"Signup may be closed to foreign customers."* Nobody verified it. It
+   entered as an open question in a research note and was repeated as
+   fact. Both Baidu and Volcengine run international editions.
+2. *"No listing endpoint documented."* Used against Spark while Upstage
+   shipped with the same gap, as do Qwen, Z.ai, SambaNova and Fireworks. A
+   missing `/models` degrades to `NO_MODEL_CONFIGURED` and the user names
+   the model. Never a reason to exclude.
+3. *Market position.* A ranking exercise with no end, and not ours to
+   decide for a customer who already has an account somewhere.
+
+Excluding ERNIE, Doubao and Hunyuan while shipping DeepSeek, Qwen and
+Moonshot was incoherent on its face: those three are Chinese too. The real
+reason was familiarity, not a criterion.
+
+## Not added, and why
+
+One entry, and the reason is a fact about the API rather than a judgement
+about the vendor.
 
 **AI21 (Jamba).** AI21 published a sunset date for the Jamba API of
 **2026-08-09**, which has passed. `GET /studio/v1/models` now answers
-**410 Gone** pointing at an "AI21 Gateway" that has no published API
-documentation, no documented base URL, and no DNS-resolving gateway host.
-The docs describing the Jamba API as current were last updated 2025-12-01.
-Separately, `stream` and `tools` are documented as mutually exclusive,
-which breaks agentic use anyway. Revisit when the Gateway is documented.
+**410 Gone**, pointing at an "AI21 Gateway" that has no published API
+documentation, no documented base URL, and no DNS-resolving host. The docs
+describing the Jamba API as current were last updated 2025-12-01.
+Separately, `stream` and `tools` are documented as mutually exclusive.
+Revisit when the Gateway is documented.
 https://docs.ai21.com/august-deprecation-notice
 
-**iFlytek Spark.** The auth is a clean static bearer and the wire format
-is OpenAI-shaped, so the adapter would be trivial. The blocker is that
-**no base URL can be defaulted correctly**: X2 is `/x2/`, X1.5 is `/v2/`,
-the legacy line is `/v1/`, and X2 and X1.5 share the model id `spark-x`,
-so the model field cannot disambiguate them. Whatever we defaulted to
-would put most users on the wrong model generation with no error saying
-so. No model listing and no LiteLLM pricing to help them notice. Add it
-only with a required generation field driving the base, the way RunPod
-takes an endpoint id, and only once it is confirmed a non-China customer
-can obtain an APIPassword.
+## Added 2026-09-10, second pass
+
+**Baidu ERNIE** (`https://qianfan.baidubce.com/v2`), **Tencent Hunyuan**
+(`https://tokenhub-intl.tencentcloudmaas.com/v1`), **ByteDance Doubao**
+(`https://ark.ap-southeast.bytepluses.com/api/v3`, edition field) and
+**iFlytek Spark** (`https://spark-api-open.xf-yun.com/{x2|v2|v1}`,
+generation field).
+
+None of the four needs a request signature on the surface we call.
+Volcengine and Tencent both publish a plain-bearer OpenAI-compatible
+surface alongside their signed legacy APIs, and Baidu's
+AK/SK-to-access-token exchange is superseded on `/v2` by a single opaque
+`bce-v3/...` key. That was the main fear going in and it was unfounded.
+
+Spark's generation is a required field because X2 (`/x2`) and X1.5
+(`/v2`) both answer to the model id `spark-x`, so the model field cannot
+tell them apart and any default silently serves the wrong generation. The
+legacy line (`/v1`) carries 4.0Ultra and the generalv3 models; its Max
+package retired 2026-03-10 into Ultra.
 https://www.xfyun.cn/doc/spark/X1http.html
 
-**Still open, researched but not built:** ByteDance Doubao on Volcengine
-Ark (needs an international/mainland edition field, has no model listing,
-and its LiteLLM entries carry tiered pricing only with the flat fields
-null), Baidu ERNIE on Qianfan (technically the cleanest of the four, a
-plain `bce-v3/...` bearer with an OpenAI-shaped `GET /v2/models`; the open
-question is commercial, whether a non-China customer can complete signup),
-and Tencent Hunyuan (whose own docs say the platform is migrating to
-TokenHub, so it should be added on `tokenhub-intl.tencentcloudmaas.com`
-rather than the Hunyuan host, and requires real-name verification).
 Naver HyperCLOVA X, Nvidia NIM, Snowflake Cortex and IBM watsonx were
-researched separately.
-
-None of the four Chinese vendors requires a request signature on the
-surface we would call: Volcengine and Tencent both now publish a
-plain-bearer OpenAI-compatible surface alongside the signed legacy one,
-and Baidu's AK/SK-to-access-token exchange is superseded on `/v2` by a
-single opaque key. That was the main fear going in and it is unfounded.
+researched separately; self-hosted NIM is already served by the generic
+OpenAI-compatible endpoint type and needs nothing of its own.
 
 ## Pricing
 

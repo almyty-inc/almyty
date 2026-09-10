@@ -479,6 +479,7 @@ export enum LlmProviderType {
   QIANFAN = 'qianfan',
   HUNYUAN = 'hunyuan',
   VOLCENGINE = 'volcengine',
+  SPARK = 'spark',
   VERTEX_AI = 'vertex_ai',
   AZURE_AI_FOUNDRY = 'azure_ai_foundry',
   DIGITALOCEAN = 'digitalocean',
