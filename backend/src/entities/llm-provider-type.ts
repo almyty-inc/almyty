@@ -19,6 +19,7 @@ export enum LlmProviderType {
   GROQ = 'groq',
   TOGETHER = 'together',
   OPENROUTER = 'openrouter',
+  STRAITLY = 'straitly',
   AZURE_OPENAI = 'azure_openai',
   AWS_BEDROCK = 'aws_bedrock',
   COHERE = 'cohere',

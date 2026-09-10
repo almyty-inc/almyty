@@ -1,3 +1,4 @@
+import { providerProfile } from './provider-profile';
 import { LlmProviderType } from '../../entities/llm-provider.entity';
 
 /**
@@ -7,6 +8,12 @@ import { LlmProviderType } from '../../entities/llm-provider.entity';
  * the HTTP surface rather than hard-coded copy.
  */
 
+/**
+ * These maps carry the hand-written copy. Anything not in them falls back
+ * to the vendor's provider profile, which already records the same facts,
+ * so adding a vendor is a profile row rather than five map entries that
+ * can drift out of step with each other.
+ */
 export function getProviderDisplayName(type: LlmProviderType): string {
   const names: Record<string, string> = {
     [LlmProviderType.OPENAI]: 'OpenAI',
@@ -48,7 +55,7 @@ export function getProviderDisplayName(type: LlmProviderType): string {
     [LlmProviderType.MODAL]: 'Modal',
     [LlmProviderType.CUSTOM]: 'Custom',
   };
-  return names[type] || type;
+  return names[type] ?? providerProfile(type)?.displayName ?? type;
 }
 
 export function getProviderDescription(type: LlmProviderType): string {
@@ -92,7 +99,7 @@ export function getProviderDescription(type: LlmProviderType): string {
     [LlmProviderType.MODAL]: 'Shared and dedicated endpoints on Modal',
     [LlmProviderType.CUSTOM]: 'Any OpenAI-compatible API endpoint',
   };
-  return descriptions[type] || 'Custom AI model provider';
+  return descriptions[type] ?? providerProfile(type)?.blurb ?? 'Custom AI model provider';
 }
 
 export function getProviderFeatures(type: LlmProviderType): string[] {
@@ -136,7 +143,7 @@ export function getProviderFeatures(type: LlmProviderType): string[] {
     [LlmProviderType.MODAL]: ['Streaming', 'Shared Endpoints', 'Your Own Weights'],
     [LlmProviderType.CUSTOM]: ['Flexible', 'Any OpenAI-Compatible API'],
   };
-  return features[type] || [];
+  return features[type] ?? providerProfile(type)?.capabilities ?? [];
 }
 
 /**
@@ -207,7 +214,7 @@ export function getProviderKeyUrl(type: LlmProviderType): string | null | undefi
     [LlmProviderType.MODAL]: 'https://modal.com/docs/guide/endpoint-integrations',
     [LlmProviderType.CUSTOM]: null,
   };
-  return urls[type];
+  return urls[type] ?? providerProfile(type)?.keyUrl ?? null;
 }
 
 /**
@@ -255,5 +262,5 @@ export function getProviderDocsUrl(type: LlmProviderType): string | null | undef
     [LlmProviderType.MODAL]: 'https://modal.com/docs/guide/endpoints',
     [LlmProviderType.CUSTOM]: null,
   };
-  return urls[type];
+  return urls[type] ?? providerProfile(type)?.docsUrl ?? null;
 }

@@ -1,3 +1,4 @@
+import { providerProfile } from '../llm-providers/provider-profile';
 import { LlmProviderType } from '../../entities/llm-provider.entity';
 
 /**
@@ -31,7 +32,7 @@ export interface ProviderUsageCapability {
   note?: string;
 }
 
-const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
+const CAPABILITY_OVERRIDES: Partial<Record<LlmProviderType, ProviderUsageCapability>> = {
   [LlmProviderType.OPENAI]: {
     supported: true,
     requiresAdminKey: true,
@@ -267,6 +268,30 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     note: 'Custom endpoints have no standard usage/cost API. Not ingested.',
   },
 };
+
+/**
+ * One entry per provider type.
+ *
+ * A vendor with a usage or cost API needs an entry above saying so.
+ * Everything else defaults to unsupported, named from its provider
+ * profile, which is the honest default: most vendors publish no usage
+ * API, and claiming otherwise by omission is worse than saying nothing.
+ */
+const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = Object.fromEntries(
+  Object.values(LlmProviderType).map((type) => {
+    const override = CAPABILITY_OVERRIDES[type];
+    if (override) return [type, override];
+    return [
+      type,
+      {
+        supported: false,
+        requiresAdminKey: false,
+        label: providerProfile(type)?.displayName ?? type,
+        note: 'No documented usage or cost API. Not ingested.',
+      } satisfies ProviderUsageCapability,
+    ];
+  }),
+) as Record<LlmProviderType, ProviderUsageCapability>;
 
 export function providerUsageCapability(
   type: LlmProviderType | string,

@@ -94,6 +94,14 @@ export interface ProviderProfile {
   /** Where live prices come from, or null when absent from the feed. */
   pricing: { litellm: string[]; openrouterPrefix: string | null } | null;
   capabilities: string[];
+  /**
+   * A gateway reaching many vendors behind one key. The routing decision
+   * continues below us and which provider actually served a request is
+   * not ours to know, so the route trace attributes it as a provider-side
+   * hop with opaque cost. Where the response names the underlying
+   * provider, record it and flag divergence.
+   */
+  aggregator?: boolean;
   keyUrl: string;
   docsUrl: string;
   /** The date this vendor's surface was last checked against its docs. */
@@ -719,6 +727,30 @@ export const PROVIDER_PROFILES: ProviderProfile[] = [
     verified: '2026-09-10',
   },
   {
+    key: LlmProviderType.STRAITLY,
+    displayName: 'Straitly',
+    blurb: 'One key across 177 models, with cashback instead of a markup',
+    protocols: [
+      {
+        protocol: 'chat_completions',
+        preferred: true,
+        baseUrl: 'https://api.straitly.ai/v1',
+        auth: BEARER,
+        path: '/chat/completions',
+        listingPath: '/models',
+      },
+    ],
+    // Absent from the cost map. It bills at provider list price and
+    // returns cashback, so a feed number would misstate what a customer
+    // actually pays in either direction.
+    pricing: null,
+    capabilities: ['Tool Use', 'Streaming'],
+    aggregator: true,
+    keyUrl: 'https://straitly.ai',
+    docsUrl: 'https://straitly.ai',
+    verified: '2026-09-10',
+  },
+  {
     key: LlmProviderType.OPENROUTER,
     displayName: 'OpenRouter',
     blurb: 'One key across hundreds of models and providers',
@@ -739,6 +771,7 @@ export const PROVIDER_PROFILES: ProviderProfile[] = [
     ],
     pricing: { litellm: ['openrouter'], openrouterPrefix: '' },
     capabilities: ['Tool Use', 'Streaming', 'Vision'],
+    aggregator: true,
     keyUrl: 'https://openrouter.ai/keys',
     docsUrl: 'https://openrouter.ai/docs',
     verified: '2026-09-09',
