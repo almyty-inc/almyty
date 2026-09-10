@@ -166,7 +166,7 @@ export function JsonSchemaForm({ schema, value, onChange, errors = {}, mode = 'c
   const required = new Set(schema?.required ?? [])
 
   if (entries.length === 0) {
-    return <p className={cn('text-sm text-muted-foreground', className)}>{hideSecrets && Object.keys(schema?.properties ?? {}).length > 0 ? 'The connection covers every setting of this adapter.' : 'This adapter needs no configuration.'}</p>
+    return <p className={cn('text-sm text-muted-foreground', className)}>{hideSecrets && Object.keys(schema?.properties ?? {}).length > 0 ? 'The connection covers every setting of this provider.' : 'This provider needs no configuration.'}</p>
   }
 
   const set = (key: string, next: unknown) => onChange({ ...value, [key]: next })

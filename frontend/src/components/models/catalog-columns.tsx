@@ -59,7 +59,7 @@ export function buildCatalogColumns({ providerNames, onValidate, onEdit, onDelet
     },
     {
       id: 'tier',
-      header: 'Tier / region',
+      header: 'Privacy / region',
       accessorFn: (card) => `${card.privacyTier} ${card.region || ''}`,
       cell: ({ row }) => (
         <div className="flex flex-col gap-1 items-start">

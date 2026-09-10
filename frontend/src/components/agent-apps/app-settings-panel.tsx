@@ -282,7 +282,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
         )}
 
         <div className="space-y-1.5">
-          <Label htmlFor="app-cost-cap">Cost ceiling per run</Label>
+          <Label htmlFor="app-cost-cap">Spend limit per run</Label>
           <Input
             id="app-cost-cap"
             inputMode="decimal"

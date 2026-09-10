@@ -187,7 +187,7 @@ describe('CatalogTab', () => {
     render(<CatalogTab />, { queryClient })
     expect(await screen.findByText('Unvalidated')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Selectable only' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Usable only' }))
 
     await waitFor(() => expect(screen.queryByText('Unvalidated')).not.toBeInTheDocument())
     expect(screen.getByText('Sonnet')).toBeInTheDocument()
@@ -234,6 +234,6 @@ describe('CatalogTab', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'All providers' }))
 
     await waitFor(() => expect(modelsApi.sync).toHaveBeenCalledWith(undefined))
-    await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Sync complete', expect.stringContaining('1 new card from all providers')))
+    await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Sync complete', expect.stringContaining('1 new model from all providers')))
   })
 })

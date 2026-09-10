@@ -69,7 +69,7 @@ export function RunLimitsSection({ value, onChange, inherited }: RunLimitsSectio
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Ceilings for a single run. Leave a field empty to inherit it. An agent can only tighten
+          Limits for a single run. Leave a field empty to inherit it. An agent can only tighten
           what your organization and your deployment already allow, never raise it.
         </p>
 
