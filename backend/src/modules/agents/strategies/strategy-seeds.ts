@@ -69,7 +69,7 @@ const panel: StrategyShape = {
  * the input, or the frontier model runs its own loop anyway, you have
  * paid for the rollouts and saved nothing. The product here is the
  * machinery and the measurement, not a promise: run it against your own
- * traffic and read the routing headroom.
+ * traffic and read the all-model failure rate.
  */
 const exploreExtractPatch: StrategyShape = {
   entry: 'explore',
