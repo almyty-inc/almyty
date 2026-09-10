@@ -58,7 +58,7 @@ export function RolesPanel({
     return (
       <div data-testid="roles-loading" className="space-y-2 p-4">
         {[0, 1].map((i) => (
-          <div key={i} className="h-16 animate-pulse rounded-lg border border-zinc-800 bg-zinc-900" />
+          <div key={i} className="h-16 animate-pulse rounded-lg border border-border bg-card" />
         ))}
       </div>
     )
@@ -66,7 +66,7 @@ export function RolesPanel({
 
   if (error) {
     return (
-      <div data-testid="roles-error" className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
+      <div data-testid="roles-error" className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-600 dark:text-red-400">
         {error}
       </div>
     )
@@ -96,7 +96,7 @@ export function RolesPanel({
           <div
             key={role.key}
             data-testid={`role-${role.key}`}
-            className="rounded-lg border border-zinc-800 bg-zinc-900 p-3"
+            className="rounded-lg border border-border bg-card p-3"
           >
             <div className="flex items-center justify-between gap-2">
               <div className="min-w-0">
@@ -107,7 +107,7 @@ export function RolesPanel({
                 variant="outline"
                 className={cn(
                   'shrink-0 gap-1',
-                  pinned ? 'border-violet-500/40 text-violet-400' : 'border-cyan-500/40 text-cyan-400',
+                  pinned ? 'border-violet-500/40 text-violet-600 dark:text-violet-400' : 'border-cyan-500/40 text-cyan-600 dark:text-cyan-400',
                 )}
               >
                 {pinned ? <Pin className="h-3 w-3" aria-hidden="true" /> : <Route className="h-3 w-3" aria-hidden="true" />}
