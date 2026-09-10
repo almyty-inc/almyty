@@ -111,5 +111,5 @@ much any multi-model shape can add, and `docs/routing.md` describes how
 we measure that rather than assuming it away.
 
 So what almyty ships here is the machinery and the measurement, not a
-promise. Run it against your own traffic, read the routing headroom, and
+promise. Run it against your own traffic, read the all-model failure rate, and
 keep it only if your numbers say so.
