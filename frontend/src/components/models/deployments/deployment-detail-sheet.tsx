@@ -106,7 +106,7 @@ export function DeploymentDetailSheet({ deployment, adapters, versions, open, on
                   </Button>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No URL yet. The adapter reports one once the endpoint is ready.</p>
+                <p className="text-sm text-muted-foreground">No URL yet. The provider reports one once the endpoint is ready.</p>
               )}
             </section>
 
@@ -122,7 +122,7 @@ export function DeploymentDetailSheet({ deployment, adapters, versions, open, on
                     ['Hardware', d.desired?.hardware],
                     ['Region', d.desired?.region],
                     ['Quantization', d.desired?.quantization],
-                    ['Privacy tier', d.desired?.privacyTier],
+                    ['Privacy', d.desired?.privacyTier],
                   ]}
                 />
                 <StateColumn

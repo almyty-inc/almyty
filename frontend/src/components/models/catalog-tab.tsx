@@ -121,7 +121,7 @@ export function CatalogTab() {
       invalidate()
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
       setEndpointDialogOpen(false)
-      notifications.success('Endpoint registered', `${card?.name || 'The card'} is in the catalog. Validate it to make it usable.`)
+      notifications.success('Endpoint registered', `${card?.name || 'The model'} is in the catalog. Validate it to make it usable.`)
     },
     onError: (error: any) => notifications.error('Could not register endpoint', errorMessage(error, 'The endpoint was not saved')),
   })
@@ -131,9 +131,9 @@ export function CatalogTab() {
     onSuccess: (card) => {
       invalidate()
       setModelDialogOpen(false)
-      notifications.success('Model registered', `${card?.name || 'The card'} is in the catalog. Validate it to make it usable.`)
+      notifications.success('Model registered', `${card?.name || 'The model'} is in the catalog. Validate it to make it usable.`)
     },
-    onError: (error: any) => notifications.error('Could not register model', errorMessage(error, 'The card was not saved')),
+    onError: (error: any) => notifications.error('Could not register model', errorMessage(error, 'The model was not saved')),
   })
 
   const updateCard = useMutation({
@@ -141,18 +141,18 @@ export function CatalogTab() {
     onSuccess: () => {
       invalidate()
       setCardToEdit(null)
-      notifications.success('Card updated', 'Changes saved')
+      notifications.success('Model updated', 'Changes saved')
     },
-    onError: (error: any) => notifications.error('Could not update card', errorMessage(error, 'Changes were not saved')),
+    onError: (error: any) => notifications.error('Could not update model', errorMessage(error, 'Changes were not saved')),
   })
 
   const deleteCard = useMutation({
     mutationFn: (id: string) => modelsApi.remove(id),
     onSuccess: () => {
       invalidate()
-      notifications.success('Card removed', 'The model is no longer in the catalog')
+      notifications.success('Model removed', 'The model is no longer in the catalog')
     },
-    onError: (error: any) => notifications.error('Could not remove card', errorMessage(error, 'The card was not removed')),
+    onError: (error: any) => notifications.error('Could not remove model', errorMessage(error, 'The model was not removed')),
   })
 
   const validateCard = useMutation({
@@ -170,7 +170,7 @@ export function CatalogTab() {
     },
     onSuccess: (result, card) => {
       if (result?.passed) {
-        notifications.success('Validation passed', `${card.name} answered in ${result.latencyMs} ms and is now selectable.`)
+        notifications.success('Validation passed', `${card.name} answered in ${result.latencyMs} ms and is now usable.`)
       } else {
         notifications.error('Validation failed', result?.error || `${card.name} did not answer the validation call.`)
       }
@@ -185,7 +185,7 @@ export function CatalogTab() {
       const created = Array.isArray(result?.created) ? result.created.length : 0
       const skippedCount = Array.isArray(result?.skipped) ? result.skipped.length : typeof result?.skipped === 'number' ? result.skipped : 0
       const scope = providerId ? providerNames[providerId] || 'the provider' : 'all providers'
-      notifications.success('Sync complete', `${created} new card${created === 1 ? '' : 's'} from ${scope}${skippedCount ? `, ${skippedCount} already present` : ''}.`)
+      notifications.success('Sync complete', `${created} new model${created === 1 ? '' : 's'} from ${scope}${skippedCount ? `, ${skippedCount} already present` : ''}.`)
     },
     onError: (error: any) => notifications.error('Sync failed', errorMessage(error, 'The provider did not list its models')),
   })
@@ -270,7 +270,7 @@ export function CatalogTab() {
           {cardsQuery.isLoading ? (
             <Skeleton className="h-4 w-56" />
           ) : (
-            <>Every model an agent may call, wherever it runs. A card is usable once its status is active, it has a provider or endpoint, and a validation run has passed.</>
+            <>Every model an agent may call, wherever it runs. A model is usable once its status is active, it has a provider or endpoint, and a validation run has passed.</>
           )}
         </p>
         {toolbar}
@@ -317,15 +317,15 @@ export function CatalogTab() {
           <CardContent className="pt-6 space-y-4">
             <div className="flex flex-wrap items-center gap-4">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox checked={selectableOnly} onCheckedChange={(v) => setSelectableOnly(v === true)} aria-label="Selectable only" />
-                Selectable only
+                <Checkbox checked={selectableOnly} onCheckedChange={(v) => setSelectableOnly(v === true)} aria-label="Usable only" />
+                Usable only
               </label>
               <Select value={tierFilter} onValueChange={(v) => setTierFilter(v as 'all' | ModelPrivacyTier)}>
-                <SelectTrigger className="w-44" aria-label="Filter by privacy tier">
+                <SelectTrigger className="w-44" aria-label="Filter by privacy">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All tiers</SelectItem>
+                  <SelectItem value="all">Any privacy</SelectItem>
                   {MODEL_PRIVACY_TIERS.map((tier) => (
                     <SelectItem key={tier} value={tier}>{MODEL_PRIVACY_TIER_LABELS[tier]}</SelectItem>
                   ))}
@@ -359,9 +359,7 @@ export function CatalogTab() {
               )}
               <div className="ml-auto flex items-center gap-1">
                 <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="sm" className="gap-1.5" onClick={() => setView('cards')} aria-pressed={view === 'cards'}>
-                  <LayoutGrid className="h-4 w-4" />
-                  Cards
-                </Button>
+                  <LayoutGrid className="h-4 w-4" />\n                  Grid\n                </Button>
                 <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="sm" className="gap-1.5" onClick={() => setView('table')} aria-pressed={view === 'table'}>
                   <Rows3 className="h-4 w-4" />
                   Table
@@ -425,7 +423,7 @@ export function CatalogTab() {
       <AlertDialog open={!!cardToDelete} onOpenChange={(open) => { if (!open) setCardToDelete(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove card</AlertDialogTitle>
+            <AlertDialogTitle>Remove model</AlertDialogTitle>
             <AlertDialogDescription>
               Remove &quot;{cardToDelete?.name}&quot; from the catalog? Agents routed to it will pick another card; agents pinned to it will fail until repointed.
             </AlertDialogDescription>

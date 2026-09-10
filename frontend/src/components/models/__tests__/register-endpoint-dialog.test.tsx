@@ -54,7 +54,7 @@ describe('RegisterEndpointDialog', () => {
     await userEvent.type(screen.getByLabelText('Base URL'), '10.0.0.5:8000')
     await userEvent.click(screen.getByRole('button', { name: 'Register endpoint' }))
 
-    expect(await screen.findByText('Enter the base URL including the protocol')).toBeInTheDocument()
+    expect(await screen.findByText('Enter the base URL including https://')).toBeInTheDocument()
     expect(screen.getByText('Model id is required')).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
   })

@@ -29,7 +29,7 @@ export const privacyTierSchema = z.enum(MODEL_PRIVACY_TIERS as [string, ...strin
 
 export const registerEndpointSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(255),
-  url: z.string().trim().url('Enter the base URL including the protocol'),
+  url: z.string().trim().url('Enter the base URL including https://'),
   apiKey: z.string().optional(),
   connectionId: z.string().optional(),
   vendorModelId: z.string().trim().min(1, 'Model id is required').max(255),

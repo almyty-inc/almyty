@@ -271,14 +271,14 @@ test.describe('Models: catalog and providers', () => {
     // Price override through the Edit sheet.
     await openRowActions(page, 'e2e-large:latest')
     await page.getByRole('menuitem', { name: 'Edit' }).click()
-    await expect(page.getByRole('heading', { name: 'Edit card' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Edit model' })).toBeVisible()
     await page.getByRole('switch', { name: 'Override price' }).click()
     await page.locator('#edit-price-in').fill('0.25')
     await page.locator('#edit-price-out').fill('1.5')
     const patched = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes('/models/'))
     await page.getByRole('button', { name: 'Save' }).click()
     expect((await patched).status()).toBe(200)
-    await expect(page.getByText('Card updated', { exact: true })).toBeVisible()
+    await expect(page.getByText('Model updated', { exact: true })).toBeVisible()
     await expect(large.getByRole('cell', { name: '$0.25 in / $1.50 out Override' })).toBeVisible()
 
     // Sync from providers reports what is already there.
@@ -289,8 +289,8 @@ test.describe('Models: catalog and providers', () => {
     await expect(page.getByText('Sync complete', { exact: true })).toBeVisible()
     await expect(page.getByText(/0 new cards from all providers, 2 already present/).first()).toBeVisible()
 
-    // Filters: Selectable only keeps both, provider filter lists the provider.
-    await page.getByRole('checkbox', { name: 'Selectable only' }).click()
+    // Filters: Usable only keeps both, provider filter lists the provider.
+    await page.getByRole('checkbox', { name: 'Usable only' }).click()
     await expect(small).toBeVisible()
     await expect(large).toBeVisible()
   })
@@ -360,7 +360,7 @@ test.describe('Models: catalog and providers', () => {
     await expect(selection).toBeVisible()
     await selection.getByRole('radio', { name: 'Routed by policy' }).click()
     await expect(page.getByLabel('Objective')).toBeVisible()
-    await page.getByLabel('Privacy tier ceiling').click()
+    await page.getByLabel('Privacy').click()
     await page.getByRole('option', { name: 'Local or stricter' }).click()
     const saved = page.waitForResponse((r) => r.url().includes('/agents') && ['POST', 'PUT', 'PATCH'].includes(r.request().method()))
     await page.getByRole('button', { name: 'Save' }).click()

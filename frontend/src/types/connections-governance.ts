@@ -26,7 +26,7 @@ export const CONNECTION_POLICY_KINDS: ConnectionPolicyKind[] = [
 ]
 
 export const POLICY_KIND_LABELS: Record<ConnectionPolicyKind, string> = {
-  connector_allowlist: 'Allow list',
+  connector_allowlist: 'Allowed connectors',
   connector_denylist: 'Deny list',
   scope_rule: 'Scope rule',
   expiry_rule: 'Expiry rule',

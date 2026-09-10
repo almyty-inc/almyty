@@ -80,7 +80,7 @@ export function EditModelSheet({ card, onOpenChange, onSubmit, submitting }: Edi
     <Sheet open={!!card} onOpenChange={onOpenChange}>
       <SheetContent className="sm:max-w-md overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>Edit card</SheetTitle>
+          <SheetTitle>Edit model</SheetTitle>
           <SheetDescription>
             {card ? <span className="font-mono">{card.vendorModelId}</span> : null}
           </SheetDescription>

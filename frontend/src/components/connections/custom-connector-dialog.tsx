@@ -65,7 +65,7 @@ export function buildCustomConnectorBody(form: CustomConnectorForm): CustomConne
   if (!form.displayName.trim()) errors.displayName = 'Display name is required'
   const baseUrl = form.baseUrl.trim()
   if (!baseUrl) errors.baseUrl = 'URL is required'
-  else if (!/^https?:\/\//i.test(baseUrl)) errors.baseUrl = 'Enter the URL including the protocol'
+  else if (!/^https?:\/\//i.test(baseUrl)) errors.baseUrl = 'Enter the URL including https://'
   if (Object.keys(errors).length > 0) return { ok: false, errors }
 
   const meta = CUSTOM_CONNECTOR_KINDS.find((k) => k.kind === form.kind) ?? CUSTOM_CONNECTOR_KINDS[0]
@@ -162,7 +162,7 @@ export function CustomConnectorDialog({ open, onOpenChange, onCreated }: CustomC
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add custom connector</DialogTitle>
-          <DialogDescription>Anything that speaks a known protocol: an OpenAI-compatible server, an MCP server, an S3 registry. Admins only.</DialogDescription>
+          <DialogDescription>Anything with a known API format: an OpenAI-compatible server, an MCP server, an S3 registry. Admins only.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-4" noValidate>
           <div className="space-y-1.5">

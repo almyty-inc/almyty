@@ -38,7 +38,7 @@ describe('AppSettingsPanel limits', () => {
     // A ceiling in floats is a rounding argument later.
     render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
-    fireEvent.change(screen.getByLabelText(/Cost ceiling/), { target: { value: '0.50' } })
+    fireEvent.change(screen.getByLabelText(/Spend limit per run/), { target: { value: '0.50' } })
     save()
 
     await waitFor(() => expect(agentAppsApi.update).toHaveBeenCalled())
@@ -48,7 +48,7 @@ describe('AppSettingsPanel limits', () => {
   it('rounds rather than truncating a fractional cent', async () => {
     render(<AppSettingsPanel app={app()} onSaved={onSaved} />)
 
-    fireEvent.change(screen.getByLabelText(/Cost ceiling/), { target: { value: '0.005' } })
+    fireEvent.change(screen.getByLabelText(/Spend limit per run/), { target: { value: '0.005' } })
     save()
 
     await waitFor(() => expect(agentAppsApi.update).toHaveBeenCalled())
@@ -58,7 +58,7 @@ describe('AppSettingsPanel limits', () => {
   it('shows an existing ceiling back in whole currency', () => {
     render(<AppSettingsPanel app={app({ limits: { costCapCents: 250 } })} onSaved={onSaved} />)
 
-    expect(screen.getByLabelText(/Cost ceiling/)).toHaveValue('2.5')
+    expect(screen.getByLabelText(/Spend limit per run/)).toHaveValue('2.5')
   })
 
   it('sends null for a limit left empty, not a zero', async () => {
@@ -106,7 +106,7 @@ describe('AppSettingsPanel limits', () => {
 
     expect(screen.queryByText(/spends against your model keys/i)).toBeNull()
     // The fields stay: a closed product may still want a ceiling.
-    expect(screen.getByLabelText(/Cost ceiling/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Spend limit per run/)).toBeInTheDocument()
   })
 
   it('shows the safe privacy defaults for an existing app with no stored overrides', () => {

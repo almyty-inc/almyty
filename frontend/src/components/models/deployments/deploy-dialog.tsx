@@ -307,7 +307,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions = [], onSu
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="deploy-privacy-tier">Privacy tier</Label>
+                <Label htmlFor="deploy-privacy-tier">Privacy</Label>
                 <select id="deploy-privacy-tier" className={SELECT_CLASS} value={desired.privacyTier} onChange={(e) => setDesiredField('privacyTier', e.target.value as DesiredFormValues['privacyTier'])}>
                   <option value="">Not set</option>
                   <option value="local">local</option>
@@ -347,7 +347,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions = [], onSu
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-muted-foreground">Handed to the adapter per call, never stored on the deployment.</p>
+              <p className="text-xs text-muted-foreground">Handed to the provider per call, never stored on the deployment.</p>
               {connection ? (
                 <ConnectedChip connection={connection} onClear={() => setConnection(null)} />
               ) : (
