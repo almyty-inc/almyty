@@ -126,6 +126,10 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      '/strategies': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       '/model-adapters': {
         target: apiTarget,
         changeOrigin: true,
