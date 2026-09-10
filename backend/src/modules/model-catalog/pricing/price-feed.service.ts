@@ -9,6 +9,7 @@ import { LlmProviderType } from '../../../entities/llm-provider.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { callLlmProviderHttp } from '../../llm-providers/providers/safe-request';
+import { providerProfile } from '../../llm-providers/provider-profile';
 
 /**
  * Automatic model prices for the catalog.
@@ -80,12 +81,15 @@ interface ProviderFeedMapping {
 }
 
 /**
- * How each of our provider types shows up in the two feeds. Groq, Azure,
- * Bedrock, Together, Hugging Face and most of the OpenAI-compatible hosts
- * have no OpenRouter namespace, so only LiteLLM prices them. Ollama and
- * custom endpoints are not in any feed.
+ * How each provider type shows up in the two feeds.
+ *
+ * Only the vendors whose feed namespaces differ from what their provider
+ * profile already records need an entry here. Everything else is derived
+ * from the profile, so adding a vendor does not mean editing this file:
+ * that duplication is what let a vendor ship priced from one place and
+ * unpriced from another.
  */
-export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping | null> = {
+const FEED_OVERRIDES: Partial<Record<LlmProviderType, ProviderFeedMapping | null>> = {
   [LlmProviderType.OPENAI]: { litellm: ['openai'], openrouterPrefix: 'openai/' },
   [LlmProviderType.ANTHROPIC]: { litellm: ['anthropic'], openrouterPrefix: 'anthropic/' },
   [LlmProviderType.GOOGLE]: {
@@ -157,6 +161,21 @@ export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping 
   [LlmProviderType.OLLAMA]: null,
   [LlmProviderType.CUSTOM]: null,
 };
+
+/**
+ * The full mapping, one entry per provider type.
+ *
+ * Built by merging the overrides above onto what each provider profile
+ * already records, so a new vendor is a profile row and nothing else. A
+ * type with neither an override nor a profile is not in any feed, which
+ * is the correct answer for Ollama and a custom endpoint.
+ */
+export const PROVIDER_FEED_MAPPING: Record<LlmProviderType, ProviderFeedMapping | null> = Object.fromEntries(
+  Object.values(LlmProviderType).map((type) => {
+    if (type in FEED_OVERRIDES) return [type, FEED_OVERRIDES[type] ?? null];
+    return [type, providerProfile(type)?.pricing ?? null];
+  }),
+) as Record<LlmProviderType, ProviderFeedMapping | null>;
 
 interface NormalisedFeed {
   map: Map<string, FeedPrice>;

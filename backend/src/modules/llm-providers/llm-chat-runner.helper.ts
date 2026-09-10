@@ -34,6 +34,7 @@ import {
 } from '../../common/security/url-validator';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
+import { preferredBinding, providerProfile } from './provider-profile';
 
 /**
  * Provider-call mechanics extracted from LlmChatHelper:
@@ -266,50 +267,22 @@ export class LlmChatRunnerHelper {
     startTime: number,
   ): Promise<ChatResponse> {
     const costFn = this.modelsHelper.calculateProviderCost.bind(this.modelsHelper);
+    // One implementation per protocol, shared by every vendor that speaks
+    // it. This replaced a list of twenty-odd case labels that had to be
+    // edited by hand for each new vendor, which is how AWS_BEDROCK ended
+    // up in it twice and how a vendor could be added everywhere else and
+    // still fall through to the default branch.
+    const profile = providerProfile(provider.type);
+    if (profile && preferredBinding(profile).protocol === 'chat_completions') {
+      return callOpenAI(provider, request, session, tools, startTime, costFn);
+    }
     switch (provider.type) {
-      case LlmProviderType.OPENAI:
+      // The chat-completions vendors with no profile: Hugging Face gives
+      // its endpoint field precedence over apiUrl, Ollama treats apiUrl as
+      // the server root rather than the base, and Azure OpenAI builds its
+      // host from a resource name.
       case LlmProviderType.AZURE_OPENAI:
-      case LlmProviderType.MISTRAL:
-      case LlmProviderType.XAI:
-      case LlmProviderType.DEEPSEEK:
-      case LlmProviderType.GROQ:
-      case LlmProviderType.TOGETHER:
-      case LlmProviderType.OPENROUTER:
-      // OpenAI-compatible inference hosts (docs/design/call-only-vendors.md).
-      case LlmProviderType.FIREWORKS:
-      case LlmProviderType.CEREBRAS:
-      case LlmProviderType.DEEPINFRA:
-      case LlmProviderType.NOVITA:
-      case LlmProviderType.ZAI:
-      case LlmProviderType.BASETEN:
-      case LlmProviderType.NEBIUS:
-      case LlmProviderType.SAMBANOVA:
-      // Cloud and aggregator surfaces that speak OpenAI chat completions:
-      // Bedrock's /openai/v1 (bearer, no SigV4), Cohere's Compatibility
-      // API, and the Hugging Face Inference Providers router. Verified
-      // 2026-09-09.
-      case LlmProviderType.AWS_BEDROCK:
-      case LlmProviderType.AWS_BEDROCK:
-      case LlmProviderType.COHERE:
       case LlmProviderType.HUGGINGFACE:
-      // First-party model families with OpenAI-compatible APIs.
-      case LlmProviderType.MOONSHOT:
-      case LlmProviderType.QWEN:
-      case LlmProviderType.MINIMAX:
-      case LlmProviderType.UPSTAGE:
-      case LlmProviderType.WRITER:
-      case LlmProviderType.QIANFAN:
-      case LlmProviderType.HUNYUAN:
-      case LlmProviderType.VOLCENGINE:
-      case LlmProviderType.SPARK:
-      // The customer's own cloud, and vendor serverless we can call
-      // without deploying: all OpenAI-compatible with a static token.
-      case LlmProviderType.AZURE_AI_FOUNDRY:
-      case LlmProviderType.DIGITALOCEAN:
-      case LlmProviderType.RUNPOD:
-      case LlmProviderType.MODAL:
-      // getAuthHeaders() adds no Authorization header when no key is
-      // configured (Ollama needs none).
       case LlmProviderType.OLLAMA:
         return callOpenAI(provider, request, session, tools, startTime, costFn);
       case LlmProviderType.ANTHROPIC:

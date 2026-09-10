@@ -726,7 +726,7 @@ const COHERE_PRICING: DefaultModelPricing[] = [
  *    before the cross-provider fallback so a locally served
  *    'mistral-large' is never billed at Mistral's hosted list price.
  */
-export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[]> = {
+const SEED_PRICING: Partial<Record<LlmProviderType, DefaultModelPricing[]>> = {
   [LlmProviderType.OPENAI]: OPENAI_PRICING,
   // Azure OpenAI list prices track OpenAI's per-token list prices.
   [LlmProviderType.AZURE_OPENAI]: OPENAI_PRICING,
@@ -790,6 +790,18 @@ export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[
   [LlmProviderType.MODAL]: [],
   [LlmProviderType.CUSTOM]: [],
 };
+
+/**
+ * The offline seed, one entry per provider type.
+ *
+ * Only vendors with a hand-written seed table need an entry above.
+ * Everything else defaults to empty, which is correct: live prices come
+ * from the feed, and an empty seed is what a vendor the feed does not
+ * cover should report rather than someone else's numbers.
+ */
+export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[]> = Object.fromEntries(
+  Object.values(LlmProviderType).map((type) => [type, SEED_PRICING[type] ?? []]),
+) as Record<LlmProviderType, DefaultModelPricing[]>;
 
 /**
  * Cross-provider fallback scan, preserving the historical behavior where

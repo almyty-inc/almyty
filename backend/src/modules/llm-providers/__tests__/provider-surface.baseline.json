@@ -3124,5 +3124,87 @@
         "Content-Type": "application/json"
       }
     }
+  },
+  "straitly": {
+    "plain": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "bedrockRegion": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "azureRes": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "runpodEp": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "vertexProj": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkLegacy": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "sparkX15": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "arkMainland": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "hfEndpoint": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    },
+    "apiVersion": {
+      "url": "https://api.straitly.ai/v1",
+      "headers": {
+        "Authorization": "Bearer test-key",
+        "User-Agent": "almyty/1.0",
+        "Content-Type": "application/json"
+      }
+    }
   }
 }
