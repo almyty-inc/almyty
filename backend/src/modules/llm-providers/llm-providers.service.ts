@@ -85,7 +85,7 @@ export function safeErrorBody(errorBody: any): string | null {
  * overwrites the real upstream error with a circular "not healthy
  * because it is not healthy".
  */
-export const LLM_HEALTH_GATE_MESSAGE = 'LLM provider is not healthy';
+export const LLM_HEALTH_GATE_MESSAGE = 'This provider is not healthy';
 
 /**
  * Extract the human-useful upstream provider error from an axios-style
@@ -171,7 +171,7 @@ export class LlmProvidersService {
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'manage_llm_providers')) {
-        throw new ForbiddenException('User does not have permission to manage LLM providers');
+        throw new ForbiddenException('User does not have permission to manage providers');
       }
 
       // Keys never land on the provider row: a pasted key becomes a
@@ -254,7 +254,7 @@ export class LlmProvidersService {
       });
 
       if (!provider) {
-        throw new NotFoundException('LLM provider not found');
+        throw new NotFoundException('Provider not found');
       }
 
       // Authorization: org owner/admin always, team-scoped requires team lead
@@ -360,7 +360,7 @@ export class LlmProvidersService {
     });
 
     if (!provider) {
-      throw new NotFoundException('LLM provider not found');
+      throw new NotFoundException('Provider not found');
     }
 
     return includeSecrets ? provider : provider.maskSensitiveData() as LlmProvider;

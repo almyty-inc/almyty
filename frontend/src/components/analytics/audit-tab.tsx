@@ -209,8 +209,8 @@ export function AuditTab() {
             <option value="credential">Credential</option>
             <option value="user">User</option>
             <option value="organization">Organization</option>
-            <option value="llm_provider">LLM Provider</option>
-            <option value="llm_session">LLM Session</option>
+            <option value="llm_provider">Provider</option>
+            <option value="llm_session">Model call</option>
           </select>
         </div>
         <div className="flex items-center gap-1.5">

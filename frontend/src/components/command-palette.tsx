@@ -97,9 +97,9 @@ export function CommandPalette() {
   const actionEntries: Entry[] = [
     { id: 'act-new-agent', label: 'Create Agent', hint: 'Open the visual agent builder', icon: Plus, action: () => go('/agents/new') },
     { id: 'act-new-gateway', label: 'Create Gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways?new=1') },
-    { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, LLM, or SDK', icon: Plus, action: () => go('/tools?new=1') },
+    { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, Model, or SDK', icon: Plus, action: () => go('/tools?new=1') },
     { id: 'act-new-api', label: 'Import API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis?new=1') },
-    { id: 'act-new-provider', label: 'Add LLM Provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/models?tab=providers&new=1') },
+    { id: 'act-new-provider', label: 'Add provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/models?tab=providers&new=1') },
     { id: 'act-new-credential', label: 'Add Credential', hint: 'Store a vault secret', icon: Plus, action: () => go('/credentials?new=1') },
   ]
 

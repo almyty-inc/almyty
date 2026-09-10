@@ -52,7 +52,7 @@ const CAPABILITY_OVERRIDES: Partial<Record<LlmProviderType, ProviderUsageCapabil
     supported: false,
     requiresAdminKey: true,
     label: 'Google (Gemini)',
-    note: 'Usage/cost is exposed via Google Cloud Billing / Cloud Monitoring, not a first-party LLM usage endpoint. Not ingested.',
+    note: 'Usage/cost is exposed via Google Cloud Billing / Cloud Monitoring, not a first-party model usage endpoint. Not ingested.',
   },
   [LlmProviderType.MISTRAL]: {
     supported: false,

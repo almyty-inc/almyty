@@ -117,7 +117,7 @@ export class ConsolidationService {
     if (!provider) {
       return {
         scope, scanned: shortRows.length, consolidated_facts: 0, superseded: 0,
-        skipped: true, reason: 'no active LLM provider for this scope',
+        skipped: true, reason: 'no active provider for this scope',
       };
     }
 
@@ -139,7 +139,7 @@ export class ConsolidationService {
     if (facts.length === 0) {
       return {
         scope, scanned: shortRows.length, consolidated_facts: 0, superseded: 0,
-        skipped: true, reason: 'LLM extracted no facts',
+        skipped: true, reason: 'the model extracted no facts',
       };
     }
 

@@ -118,7 +118,7 @@ export class AnalyticsController {
   ) {
     const orgId = this.requireOrg(req);
     const data = await this.analyticsService.getLlmUsage(orgId, timeframe);
-    return { success: true, data, message: 'LLM usage retrieved successfully' };
+    return { success: true, data, message: 'Model usage retrieved successfully' };
   }
 
   @Get('/timeline')

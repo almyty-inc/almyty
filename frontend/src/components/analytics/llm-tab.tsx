@@ -83,7 +83,7 @@ export function LlmTab() {
       ) : (
         <div className="text-center py-12">
           <MessageSquare className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm font-medium text-muted-foreground">No LLM usage data</p>
+          <p className="text-sm font-medium text-muted-foreground">No model usage data</p>
           <p className="text-xs text-muted-foreground mt-1">
             LLM session and cost data will appear here once AI models are used.
           </p>
