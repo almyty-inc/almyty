@@ -20,6 +20,108 @@ There is no code list of supported models. A model is usable when its **card** e
 
 `Model.isSelectable()` is the only definition of "usable". A retired vendor model fails validation and drops out; a new self-hosted endpoint joins the moment its run passes. Nothing else flips the flag.
 
+## Provider profiles and protocols
+
+**Status: BUILT** (2026-09-10). Layer 2 of `docs/design/layers.md`.
+
+A vendor is a row, not code. Adding one used to mean editing eight files
+across two languages: an enum member, a base URL case, an auth case, two
+dispatch lists, a model-list case, a price-feed row, a usage-capability
+row and five catalog maps. That is why the provider list grew by whoever
+was cheapest to wire rather than by who mattered, and why the question of
+which vendors we carry kept being reopened.
+
+A profile carries the base URL, auth, the path, the listing shape, the
+pricing source, the capabilities, the key and docs URLs, and the date the
+surface was last checked against the vendor's own documentation.
+
+### Protocols
+
+There is no single generic path with exceptions. There are several real
+wire protocols, each spoken by many vendors, and each is **one
+implementation that many vendors share**: implement it once, and every
+vendor speaking it becomes a row.
+
+| Protocol | Notes |
+|----------|-------|
+| `chat_completions` | OpenAI Chat Completions |
+| `responses` | OpenAI Responses; Perplexity is this shape |
+| `anthropic_messages` | Not Anthropic-only: Baseten, Z.ai and Moonshot expose it |
+| `gemini_generate_content` | Google direct and Vertex |
+| `bedrock_converse` | |
+| `cohere_v2` | |
+| `dashscope_native` | Qwen; its OpenAI mode hides DashScope features |
+| `embeddings` | |
+| `rerank` | |
+
+"Closed" means adding one is a deliberate code change with an
+implementation, a test and documentation. It is not a frozen list: vendor
+natives keep appearing and several expose capabilities their
+OpenAI-compatible mode hides, which is why they earn a protocol rather
+than a quirk field.
+
+**Auth is a separate, orthogonal enum**: `bearer`, `x_api_key`, `sigv4`,
+`service_account`, `azure_key`, `custom_headers`. Vertex minting a
+one-hour token per call is auth, not a different wire shape.
+
+A profile holds a map of protocols with one preferred, so a vendor
+speaking two is two entries rather than a quirk override. Cohere serving
+chat on the compatibility base while its listing stays native is two
+protocol entries with different bases.
+
+### Quirks are fields
+
+Writer's chat path is `/chat`, not `/chat/completions`. Spark serves each
+model generation on its own base and the current two share the model id
+`spark-x`, so the generation is required. Ark is a different product
+inside and outside mainland China, so the edition is chosen. A base that
+embeds an account's own region, resource name or endpoint id is a
+template filled from the configuration.
+
+None of those is a reason to exclude a vendor, which is what they had
+previously been used as.
+
+### Inbound, and native first
+
+The same protocol implementation serves inbound clients and calls outbound
+vendors; writing it twice is the duplication that caused most of a week's
+bugs. Inbound protocols are translators at the edge, never branches
+through the core.
+
+`anthropic_messages` inbound is what makes an Anthropic SDK client, Claude
+Code included, work against almyty with a base URL change, carrying
+thinking blocks and real tool use instead of flattening them.
+
+Compatibility shims are a fallback, not the default: Anthropic's
+OpenAI-compatible endpoint drops thinking blocks, Gemini's shim loses
+safety settings and grounding, Vertex's loses context caching. Routing
+everything through chat completions would make every model worse than
+calling it directly.
+
+Native-first is a **default and a tie-break, not an invariant**. Once
+routing filters on `(model, protocol)` pairs, a requirement asking for a
+capability the native path lacks must be able to select a compat path.
+The invariant is narrower: when two paths both satisfy a requirement,
+prefer native, and record any downgrade in the route trace with the
+capabilities dropped. Silence is forbidden, not the downgrade.
+
+### Capabilities are protocol-scoped
+
+"Z.ai supports extended thinking" is meaningless alone: true on its
+`anthropic_messages` path, false on its `chat_completions` path. So
+capabilities live per protocol and routing filters on `(model, protocol)`
+pairs rather than on models.
+
+### A generic provider per protocol
+
+Every implemented protocol gets the same escape hatch the OpenAI path
+already had: a base URL, auth and a model id for a vendor we have never
+heard of, an internal endpoint, or a self-hosted server. No per-protocol
+work; if the protocol is implemented, its generic provider is free. Those
+take a user-supplied URL, so they pass through the L1 egress allowlist,
+and a custom endpoint has no listing and no known capabilities, so the
+user declares what it supports and validation is a real call.
+
 ## Cards
 
 `GET/POST /models`, `GET/PATCH/DELETE /models/:id`. A card carries:
