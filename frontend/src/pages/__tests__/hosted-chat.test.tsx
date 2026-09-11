@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterAll, beforeAll } from 'vitest'
-import { configure, screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 
 import { render } from '../../test/setup'
 import { HostedChatPage } from '../hosted-chat'
@@ -69,6 +69,30 @@ async function openedStream(): Promise<FakeEventSource> {
   return own[own.length - 1]
 }
 
+/**
+ * Type a message and send it.
+ *
+ * The Send button is disabled until the draft lands in state, so a click
+ * that arrives first does nothing at all -- no error, no request, and the
+ * test then waits out its whole timeout for a call that was never made.
+ * That is what made this file fail about one full run in ten while
+ * passing alone every time: under load the draft occasionally had not
+ * landed by the time the click fired.
+ *
+ * So type against the live element and retry until the UI has actually
+ * accepted the draft. This cannot hide a broken page: if the input never
+ * accepts text, the wait fails saying the button stayed disabled, which
+ * is the truth rather than a silent timeout.
+ */
+async function sendMessage(text: string) {
+  await screen.findByLabelText('Message')
+  await waitFor(() => {
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: text } })
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+}
+
 const branding = (overrides: Partial<HostedChatBranding> = {}): HostedChatBranding => ({
   appName: 'Acme Assistant',
   primaryColor: '#8b5cf6',
@@ -85,27 +109,6 @@ const branding = (overrides: Partial<HostedChatBranding> = {}): HostedChatBrandi
 })
 
 describe('HostedChatPage', () => {
-  // This file renders the heaviest page in the suite (full chat shell,
-  // sidebar, markdown) 28 times, and every assertion sits behind a
-  // mocked promise chain. The library defaults -- 5s a test, 1s an async
-  // query -- are comfortable when this file runs alone and are not when
-  // four workers share the machine, which is why it failed roughly one
-  // full run in three while passing on its own every time.
-  //
-  // Measured rather than assumed: across five instrumented full runs no
-  // test ever saw more than one EventSource, so nothing was leaking
-  // between tests, and the failing assertion moved from one test to
-  // another. That is a wall-clock budget, not a race in the page.
-  const budgets = { testTimeout: 20_000, asyncUtil: 5_000 }
-  beforeAll(() => {
-    vi.setConfig({ testTimeout: budgets.testTimeout })
-    configure({ asyncUtilTimeout: budgets.asyncUtil })
-  })
-  afterAll(() => {
-    vi.resetConfig()
-    configure({ asyncUtilTimeout: 1_000 })
-  })
-
   beforeEach(() => {
     vi.clearAllMocks()
     FakeEventSource.instances = []
@@ -235,6 +238,24 @@ describe('HostedChatPage', () => {
     expect(reloadAfterVisitorDeletion).toHaveBeenCalled()
   })
 
+
+  it('sends nothing while the draft is empty, silently, which is the trap sendMessage exists for', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+
+    render(<HostedChatPage slug="acme" />)
+    const button = await screen.findByRole('button', { name: 'Send' })
+
+    // Disabled, so the click is a no-op with no error and no request. A
+    // test that clicks before its draft has landed sees exactly this and
+    // then waits out its timeout for a call that was never made.
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(hostedChatApi.send).not.toHaveBeenCalled()
+
+    // And it becomes clickable the moment there is something to send.
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'hello' } })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled())
+  })
   it('sends a message and streams the reply into place', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
@@ -248,9 +269,7 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    const input = await screen.findByLabelText('Message')
-    fireEvent.change(input, { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
 
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalledWith('acme', 'hello', undefined))
 
@@ -274,8 +293,7 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
     ;(await openedStream()).emit('done', { reason: 'run.failed' })
@@ -295,8 +313,7 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
     ;(await openedStream()).emit('done', { reason: 'stream_ended' })
@@ -317,8 +334,7 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
     ;(await openedStream()).emit('done', { reason: 'run.completed' })
@@ -345,10 +361,7 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), {
-      target: { value: '**literal**' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('**literal**')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
     ;(await openedStream()).emit('done', { reason: 'run.completed' })
 
@@ -378,8 +391,7 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
     ;(await openedStream()).emit('done', { reason: 'run.completed' })
 
@@ -394,8 +406,7 @@ describe('HostedChatPage', () => {
     ;(hostedChatApi.send as any).mockRejectedValue({ response: { status: 429 } })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/busy right now/)
   })
@@ -407,8 +418,7 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Too many messages from you (60 per hour). Please wait 40 seconds.')
   })
@@ -418,8 +428,7 @@ describe('HostedChatPage', () => {
     ;(hostedChatApi.send as any).mockRejectedValue({ response: { status: 500 } })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
 
     await screen.findByRole('alert')
     // Leaving it on screen would imply the message was delivered.
@@ -442,8 +451,7 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
     const source = (await openedStream()) as any
@@ -464,8 +472,7 @@ describe('HostedChatPage', () => {
     ;(hostedChatApi.messages as any).mockRejectedValue(new Error('network down'))
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
     ;(await openedStream()).emit('done', { reason: 'run.completed' })
