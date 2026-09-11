@@ -53,6 +53,7 @@ import {
   computeLayers,
   markBranchAsSkipped,
 } from './agent-execution-graph.helper';
+import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolver';
 import {
   classifiedError,
   classifyNodeError,
@@ -83,6 +84,11 @@ export class AgentExecutionEngine {
     // without it resolve to undefined and skip run.failed emission.
     @Optional()
     private readonly notifications?: NotificationsService,
+    // L5. @Optional() so the existing harnesses that construct the engine
+    // without it keep working: an agent that has chosen no strategy runs
+    // its own graph either way.
+    @Optional()
+    private readonly strategyPipelines?: StrategyPipelineResolver,
   ) {}
 
   /**
@@ -131,7 +137,18 @@ export class AgentExecutionEngine {
     });
 
     try {
-      const pipeline = agent.pipeline;
+      // A chosen strategy IS the pipeline for this run. Compiled here
+      // rather than saved onto the agent, so the shape stays a choice you
+      // can change and the graph stays what the person drew.
+      const compiled = await this.strategyPipelines?.pipelineFor(agent).catch((err) => {
+        throw classifiedError(err?.message ?? 'Could not compile this strategy', ExecutionErrorType.VALIDATION_ERROR);
+      });
+      if (compiled) {
+        execution.metadata = { ...(execution.metadata ?? {}), strategyKey: compiled.strategyKey };
+        await this.agentExecutionRepository.save(execution);
+      }
+
+      const pipeline = compiled?.pipeline ?? agent.pipeline;
       if (!pipeline || !pipeline.nodes || !pipeline.edges) {
         throw classifiedError('Agent pipeline is not configured', ExecutionErrorType.VALIDATION_ERROR);
       }
