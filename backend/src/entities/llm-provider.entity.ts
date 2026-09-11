@@ -45,6 +45,14 @@ export interface LlmProviderConfig {
    */
   usageApiKey?: string;
   apiUrl?: string;
+  /**
+   * The private host this organization explicitly allowlisted for this
+   * provider, stamped by the save-time egress gate and never accepted
+   * from a request body. Read at connect time so an allowlisted NAME
+   * survives DNS pinning, which the URL-string gate cannot decide on its
+   * own. See docs/connections.md.
+   */
+  egressApprovedHost?: string;
   apiVersion?: string;
   model?: string;
   /**

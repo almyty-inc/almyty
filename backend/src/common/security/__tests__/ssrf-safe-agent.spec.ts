@@ -2,7 +2,7 @@ jest.mock('dns', () => ({ lookup: jest.fn() }));
 
 import * as dns from 'dns';
 
-import { isAddressBanned, pinnedLookup } from '../ssrf-safe-agent';
+import { agentsExempting, isAddressBanned, pinnedLookup } from '../ssrf-safe-agent';
 
 /**
  * The pinning lookup refuses any resolved address that lands in a banned
@@ -94,5 +94,51 @@ describe('pinnedLookup refuses a name that resolves somewhere private', () => {
     const { err, address } = await lookup('example.com');
     expect(err).toBeNull();
     expect(address).toBe('93.184.216.34');
+  });
+});
+
+/**
+ * The exception is for one host and no others.
+ *
+ * These agents are pooled and shared across requests, so an exemption any
+ * wider than the exact name would quietly apply to hosts nobody approved.
+ */
+describe('agentsExempting', () => {
+  const lookupOf = (agent: any) => agent.options.lookup as (h: string, o: any, cb: any) => void;
+  const run = (agent: any, host: string) =>
+    new Promise<{ err: any; address: any }>((resolve) => {
+      lookupOf(agent)(host, {}, (err: any, address: any) => resolve({ err, address }));
+    });
+
+  beforeEach(() => {
+    (dns.lookup as unknown as jest.Mock).mockImplementation((_host: any, opts: any, cb: any) => {
+      const callback = typeof opts === 'function' ? opts : cb;
+      callback(null, '10.0.0.5', 4);
+    });
+  });
+  afterEach(() => (dns.lookup as unknown as jest.Mock).mockReset());
+
+  it('lets the approved name resolve into a private range', async () => {
+    const { httpAgent } = agentsExempting('gpu-1.internal');
+    const { err, address } = await run(httpAgent, 'gpu-1.internal');
+    expect(err).toBeNull();
+    expect(address).toBe('10.0.0.5');
+  });
+
+  it('matches the name case-insensitively, since DNS does', async () => {
+    const { httpsAgent } = agentsExempting('gpu-1.internal');
+    const { err } = await run(httpsAgent, 'GPU-1.Internal');
+    expect(err).toBeNull();
+  });
+
+  it('still refuses every other name through the same agent', async () => {
+    const { httpAgent } = agentsExempting('gpu-1.internal');
+    const { err } = await run(httpAgent, 'gpu-2.internal');
+    expect(err?.code).toBe('ERR_SSRF_BLOCKED');
+  });
+
+  it('reuses one agent per host rather than leaking a pool per request', async () => {
+    expect(agentsExempting('gpu-1.internal')).toBe(agentsExempting('GPU-1.INTERNAL'));
+    expect(agentsExempting('gpu-1.internal')).not.toBe(agentsExempting('gpu-2.internal'));
   });
 });

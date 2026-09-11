@@ -6,7 +6,7 @@ import {
   ollamaPrivateUrlsAllowed,
   customLlmPrivateUrlsAllowed,
 } from '../../../common/security/url-validator';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
+import { agentsExempting, ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 
 /**
@@ -66,6 +66,13 @@ export interface LlmCallOptions {
    * and the response-size caps still apply.
    */
   allowPrivateUrls?: boolean;
+  /**
+   * The one private host this organization allowlisted for this provider,
+   * stamped on the row by the save-time gate. Lets the pinning lookup
+   * make an exception for that name and nothing else, so allowlisting a
+   * NAME works rather than only an address.
+   */
+  egressApprovedHost?: string;
 }
 
 /**
@@ -80,6 +87,7 @@ export function llmCallOptionsFor(provider: LlmProvider): LlmCallOptions {
     allowPrivateUrls:
       (provider.type === LlmProviderType.OLLAMA && ollamaPrivateUrlsAllowed()) ||
       (provider.type === LlmProviderType.CUSTOM && customLlmPrivateUrlsAllowed()),
+    egressApprovedHost: provider.configuration?.egressApprovedHost,
   };
 }
 
@@ -96,7 +104,20 @@ function assertLlmUrlAllowed(config: AxiosRequestConfig, opts?: LlmCallOptions):
     throw new BadRequestException(`Invalid provider URL: ${config.url}`);
   }
 
-  const validation = opts?.allowPrivateUrls
+  // An allowlisted host passes the string gate too: the organization has
+  // said this one is theirs, and refusing it here would make the stamp
+  // meaningless. The relaxed validator still refuses non-HTTP schemes and
+  // credentials in the URL, so this is one range, not an open door.
+  let approvedHere = false;
+  if (opts?.egressApprovedHost) {
+    try {
+      approvedHere = new URL(target).hostname.toLowerCase() === opts.egressApprovedHost.toLowerCase();
+    } catch {
+      approvedHere = false;
+    }
+  }
+
+  const validation = opts?.allowPrivateUrls || approvedHere
     ? validateUrlAllowingPrivate(target)
     : validateUrl(target);
   if (!validation.valid) {
@@ -116,6 +137,11 @@ function assertLlmUrlAllowed(config: AxiosRequestConfig, opts?: LlmCallOptions):
 function defaultsFor(opts?: LlmCallOptions): AxiosRequestConfig {
   if (opts?.allowPrivateUrls) {
     return { ...LLM_HTTP_DEFAULTS, httpAgent: undefined, httpsAgent: undefined };
+  }
+  // One allowlisted host gets an exception; every other name resolved
+  // through these agents is pinned as strictly as before.
+  if (opts?.egressApprovedHost) {
+    return { ...LLM_HTTP_DEFAULTS, ...agentsExempting(opts.egressApprovedHost) };
   }
   return LLM_HTTP_DEFAULTS;
 }
