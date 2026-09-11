@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { AddRoleDialog } from './add-role-dialog'
 import { OrchestratorSettings, type OrchestratorConfigView } from './orchestrator-settings'
 import { RolesPanel, type AgentRoleView, type ResolvedRoleView } from './roles-panel'
 import { StrategyPicker, type StrategyView } from './strategy-picker'
@@ -18,7 +20,10 @@ import { StrategyPicker, type StrategyView } from './strategy-picker'
  * them across three tabs would make the relationship harder to see, not
  * easier.
  *
- * See docs/design/layers.md, L4 to L6.
+ * Everything here persists. The first version held the strategy and the
+ * orchestrator in component state, so both were forgotten on leaving the
+ * tab while looking exactly as though they had been saved — which is
+ * worse than not offering them at all. See docs/design/layers.md, L4-L6.
  */
 const ORCHESTRATOR_DEFAULTS: OrchestratorConfigView = {
   enabled: false,
@@ -27,10 +32,14 @@ const ORCHESTRATOR_DEFAULTS: OrchestratorConfigView = {
   fallbackStrategyKey: 'single',
 }
 
+interface ExecutionSettings {
+  strategyKey?: string | null
+  orchestrator?: OrchestratorConfigView
+}
+
 export function ExecutionTab({ agentId }: { agentId: string }) {
   const queryClient = useQueryClient()
-  const [selectedStrategy, setSelectedStrategy] = useState<string>()
-  const [orchestrator, setOrchestrator] = useState<OrchestratorConfigView>(ORCHESTRATOR_DEFAULTS)
+  const [addingRole, setAddingRole] = useState(false)
 
   const rolesQuery = useQuery({
     queryKey: ['agent-roles', agentId],
@@ -42,10 +51,37 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
     queryFn: async () => (await api.get('/strategies')).data.data as StrategyView[],
   })
 
+  const executionQuery = useQuery({
+    queryKey: ['agent-execution', agentId],
+    queryFn: async () => (await api.get(`/agents/${agentId}/execution`)).data.data as ExecutionSettings,
+  })
+
   // Asked for, not assumed: resolving a role can call the router, so it
   // happens when someone wants to see the answer rather than on render.
   const resolve = useMutation({
     mutationFn: async () => (await api.post(`/agents/${agentId}/roles/resolve`, {})).data.data as ResolvedRoleView[],
+  })
+
+  const saveExecution = useMutation({
+    mutationFn: async (patch: ExecutionSettings) =>
+      (await api.put(`/agents/${agentId}/execution`, patch)).data.data as ExecutionSettings,
+    onSuccess: (data) => queryClient.setQueryData(['agent-execution', agentId], data),
+  })
+
+  const addRole = useMutation({
+    mutationFn: async (role: { key: string; displayName: string }) =>
+      (
+        await api.post(`/agents/${agentId}/roles`, {
+          ...role,
+          // A new role routes by default: pinning it needs a model id the
+          // person has not chosen yet, and cheapest is the honest default.
+          binding: { mode: 'resolved', policy: { objective: 'cheapest' } },
+        })
+      ).data.data,
+    onSuccess: () => {
+      setAddingRole(false)
+      queryClient.invalidateQueries({ queryKey: ['agent-roles', agentId] })
+    },
   })
 
   const toggleBinding = useMutation({
@@ -61,15 +97,40 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
 
   const roles = rolesQuery.data ?? []
   const strategies = strategiesQuery.data ?? []
+  const selectedStrategy = executionQuery.data?.strategyKey ?? undefined
+  const orchestrator = executionQuery.data?.orchestrator ?? ORCHESTRATOR_DEFAULTS
+  const roleKeys = roles.map((r) => r.key)
+
+  // Pinning a role needs a model id, which only a resolve produces. Ask
+  // once when there is something to resolve, so the toggle works without
+  // the person knowing to press the link first.
+  useEffect(() => {
+    if (!resolve.isPending && !resolve.data && roles.some((r) => r.binding.mode === 'resolved')) {
+      resolve.mutate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roles.length])
+
+  const neededSlots = useMemo(() => {
+    const selected = strategies.find((s) => s.key === selectedStrategy)
+    const wanted = selected ? selected.roleSlots : strategies.flatMap((s) => s.roleSlots)
+    return [...new Set(wanted)].filter((slot) => !roleKeys.includes(slot))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategies, selectedStrategy, roleKeys.join(',')])
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Roles</CardTitle>
-          <CardDescription>
-            Which model fills each job in this agent. Changing model is a binding change here, not an edit to the graph.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle>Roles</CardTitle>
+            <CardDescription>
+              Which model fills each job in this agent. Changing model is a binding change here, not an edit to the graph.
+            </CardDescription>
+          </div>
+          <Button size="sm" variant="outline" data-testid="add-role" onClick={() => setAddingRole(true)}>
+            Add role
+          </Button>
         </CardHeader>
         <CardContent>
           <RolesPanel
@@ -77,6 +138,7 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
             resolved={resolve.data}
             loading={rolesQuery.isLoading}
             error={rolesQuery.isError ? getApiErrorMessage(rolesQuery.error, 'Could not read this agent\'s roles') : undefined}
+            onAddRole={() => setAddingRole(true)}
             onToggleBinding={(key, next) => {
               const role = roles.find((r) => r.key === key)
               if (role) toggleBinding.mutate({ role, next })
@@ -97,6 +159,11 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
               {getApiErrorMessage(resolve.error, 'Could not resolve roles')}
             </p>
           )}
+          {toggleBinding.isError && (
+            <p data-testid="binding-error" className="mt-2 text-xs text-red-600 dark:text-red-400">
+              {getApiErrorMessage(toggleBinding.error, 'Could not change that binding')}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -109,11 +176,16 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
           <StrategyPicker
             strategies={strategies}
             selectedKey={selectedStrategy}
-            availableRoles={roles.map((r) => r.key)}
-            loading={strategiesQuery.isLoading}
+            availableRoles={roleKeys}
+            loading={strategiesQuery.isLoading || executionQuery.isLoading}
             error={strategiesQuery.isError ? getApiErrorMessage(strategiesQuery.error, 'Could not read the strategies') : undefined}
-            onSelect={setSelectedStrategy}
+            onSelect={(key) => saveExecution.mutate({ strategyKey: key })}
           />
+          {saveExecution.isError && (
+            <p data-testid="execution-error" className="mt-2 text-xs text-red-600 dark:text-red-400">
+              {getApiErrorMessage(saveExecution.error, 'Could not save that choice')}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -126,11 +198,22 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
           <OrchestratorSettings
             config={orchestrator}
             strategyKeys={strategies.map((s) => s.key)}
-            roleKeys={roles.map((r) => r.key)}
-            onChange={setOrchestrator}
+            roleKeys={roleKeys}
+            disabled={executionQuery.isLoading}
+            onChange={(next) => saveExecution.mutate({ orchestrator: next })}
           />
         </CardContent>
       </Card>
+
+      <AddRoleDialog
+        open={addingRole}
+        onOpenChange={setAddingRole}
+        existingKeys={roleKeys}
+        neededKeys={neededSlots}
+        saving={addRole.isPending}
+        error={addRole.isError ? getApiErrorMessage(addRole.error, 'Could not add that role') : undefined}
+        onCreate={(role) => addRole.mutate(role)}
+      />
     </div>
   )
 }

@@ -53,6 +53,7 @@ import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { AgentRolesService } from './agent-roles.service';
 import { AgentRolesController } from './agent-roles.controller';
 import { StrategiesController } from './strategies/strategies.controller';
+import { AgentExecutionSettingsController } from './agent-execution-settings.controller';
 import { Strategy } from '../../entities/strategy.entity';
 import { AgentConstraintsModule } from '../agent-constraints/agent-constraints.module';
 import { ToolsModule } from '../tools/tools.module';
@@ -95,7 +96,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
   ],
   providers: [
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper],
-  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentRolesController, StrategiesController],
+  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController],
   exports: [
     AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
