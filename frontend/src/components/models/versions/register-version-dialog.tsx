@@ -19,7 +19,18 @@ export const registerVersionSchema = z.object({
     .min(1, 'Registry URI is required')
     .superRefine((value, ctx) => {
       const parsed = parseRegistryUri(value)
-      if (!parsed.ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error })
+      if (!parsed.ok) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: parsed.error })
+        return
+      }
+      // A tracked artifact is bytes you own. A model already on a platform
+      // is named on the deployment instead; there is nothing to track.
+      if (parsed.value.kind !== 'artifact') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${parsed.value.scheme}:// names a model a platform already holds. Name it on the deployment instead; there is no artifact to track.`,
+        })
+      }
     }),
   quantizations: z.string().trim().optional(),
   parentVersionId: z.string().trim().optional(),
@@ -73,8 +84,10 @@ export function RegisterVersionDialog({ open, onOpenChange, onSubmit, submitting
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Register a version</DialogTitle>
-          <DialogDescription>Point at weights already in the registry. The URI must pin exact bytes with an @etag or @sha; the manifest next to them fills in size and digest.</DialogDescription>
+          <DialogTitle>Register an artifact</DialogTitle>
+          <DialogDescription>
+            Optional, and only for weights you want an immutable record of. To run a model you just name it on a deployment. The URI must pin exact bytes with an @etag or @sha; a manifest next to them fills in size and digest.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit((values) => onSubmit(toRegisterBody(values)))} className="space-y-4" noValidate>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -97,13 +110,14 @@ export function RegisterVersionDialog({ open, onOpenChange, onSubmit, submitting
             ) : parsedUri?.ok ? (
               <p className="text-xs text-muted-foreground" data-testid="registry-uri-parsed">
                 {parsedUri.value.scheme === 's3' && `S3 bucket ${parsedUri.value.location}${parsedUri.value.prefix ? `, prefix ${parsedUri.value.prefix}` : ''}`}
+                {parsedUri.value.scheme === 'gs' && `Cloud Storage bucket ${parsedUri.value.location}${parsedUri.value.prefix ? `, prefix ${parsedUri.value.prefix}` : ''}`}
                 {parsedUri.value.scheme === 'hf' && `Hugging Face repo ${parsedUri.value.location}`}
                 {parsedUri.value.scheme === 'file' && `Runner-local path ${parsedUri.value.location}`}
                 {`, pinned at ${parsedUri.value.pin}`}
               </p>
             ) : (
               <p id="version-registry-uri-help" className="text-xs text-muted-foreground">
-                s3://bucket/prefix@etag, hf://org/repo@sha or file:///path@sha
+                s3://bucket/prefix@etag, gs://bucket/prefix@generation, hf://org/repo@sha or file:///path@sha
               </p>
             )}
           </div>

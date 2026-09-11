@@ -17,7 +17,7 @@ export function getAgentTemplates(): AgentTemplate[] {
       {
         id: 'simple-chat',
         name: 'Simple Chat Agent',
-        description: 'Single LLM with tools — the basic conversational agent',
+        description: 'A single model with tools — the basic conversational agent',
         category: 'basic',
         pipeline: {
           nodes: [
@@ -34,7 +34,7 @@ export function getAgentTemplates(): AgentTemplate[] {
       {
         id: 'multi-llm-consensus',
         name: 'Multi-LLM Consensus',
-        description: 'Send prompt to multiple LLMs in parallel, then use a judge to pick the best answer',
+        description: 'Send the prompt to several models in parallel, then use a judge to pick the best answer',
         category: 'advanced',
         pipeline: {
           nodes: [
@@ -58,7 +58,7 @@ export function getAgentTemplates(): AgentTemplate[] {
       {
         id: 'research-agent',
         name: 'Research Agent',
-        description: 'Extract facts with one LLM, then summarize with another — sequential chain',
+        description: 'Extract facts with one model, then summarize with another — sequential chain',
         category: 'advanced',
         pipeline: {
           nodes: [
@@ -79,7 +79,7 @@ export function getAgentTemplates(): AgentTemplate[] {
       {
         id: 'tool-augmented',
         name: 'Tool-Augmented Agent',
-        description: 'LLM with access to your API tools — the standard agentic pattern',
+        description: 'A model with access to your API tools — the standard agentic pattern',
         category: 'basic',
         pipeline: {
           nodes: [

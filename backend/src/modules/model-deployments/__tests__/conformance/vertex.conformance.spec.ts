@@ -6,13 +6,14 @@ import { liveRequested, runConformance } from './conformance.suite';
 /**
  * Fixture mode: an in-memory stand-in for the Vertex AI REST API and the
  * Google OAuth2 token endpoint, faithful to the documented resource
- * paths, the long-running Operation envelope, and the google.rpc error
- * envelope ({error: {code, message, status}}). The token endpoint
+ * paths (including POST {parent}:deploy, the Model Garden one-call
+ * deployment), the long-running Operation envelope, and the google.rpc
+ * error envelope ({error: {code, message, status}}). The token endpoint
  * verifies the RS256 assertion against a key pair generated here, so the
  * service-account flow is exercised for real. Live mode
  * (CONFORMANCE_LIVE=vertex with GOOGLE_SERVICE_ACCOUNT_JSON,
- * VERTEX_PROJECT_ID, VERTEX_LOCATION, VERTEX_TEST_S3_URI and registry
- * keys) runs the same cases against a real project; never in CI.
+ * VERTEX_PROJECT_ID, VERTEX_LOCATION and VERTEX_TEST_GCS_URI) runs the
+ * same cases against a real project; never in CI.
  */
 const validKey = generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
 const strayKey = generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
@@ -51,6 +52,42 @@ function fixtureHttp() {
       const m = config.url.match(/^https:\/\/([a-z0-9-]+)-aiplatform\.googleapis\.com\/v1\/(.+)$/);
       if (!m) throw new Error(`unexpected url ${config.url}`);
       const path = m[2];
+
+      // Model Garden: one call that uploads, creates the endpoint and deploys.
+      const garden = path.match(/^(projects\/[^/]+\/locations\/[^/:]+):deploy$/);
+      if (config.method === 'POST' && garden) {
+        const parentPath = garden[1];
+        const d = config.data;
+        if (!d.huggingFaceModelId && !d.publisherModelName) throw gError(400, 'INVALID_ARGUMENT', 'One of huggingFaceModelId or publisherModelName is required.');
+        if (d.deployConfig?.dedicatedResources?.machineSpec?.acceleratorType === 'NVIDIA_H100_80GB') {
+          throw gError(429, 'RESOURCE_EXHAUSTED', 'The following quotas are exceeded: CustomModelServingH100GPUsPerProjectPerRegion');
+        }
+        const endpointName = `${parentPath}/endpoints/${d.endpointConfig?.endpointUserId ?? ++seq}`;
+        const modelName = `${parentPath}/models/${d.modelConfig?.modelUserId ?? ++seq}`;
+        const o = op(parentPath, false);
+        o.finish = () => {
+          o.done = true;
+          models.set(modelName, { name: modelName, displayName: d.modelConfig?.modelDisplayName });
+          const id = String(++seq);
+          endpoints.set(endpointName, {
+            name: endpointName,
+            displayName: d.endpointConfig?.endpointDisplayName,
+            dedicatedEndpointEnabled: d.endpointConfig?.dedicatedEndpointEnabled,
+            ...(d.endpointConfig?.dedicatedEndpointEnabled ? { dedicatedEndpointDns: `https://${seq}.${m[1]}-1.prediction.vertexai.goog` } : {}),
+            deployedModels: [{
+              id,
+              model: `${modelName}@1`,
+              displayName: d.modelConfig?.modelDisplayName,
+              // Model Garden picks the machine spec when the caller does not.
+              dedicatedResources: d.deployConfig?.dedicatedResources ?? { machineSpec: { machineType: 'g2-standard-24', acceleratorType: 'NVIDIA_L4', acceleratorCount: 2 }, minReplicaCount: 1, maxReplicaCount: 1 },
+            }],
+            trafficSplit: { [id]: 100 },
+          });
+          o.response = { publisherModel: d.publisherModelName, model: modelName, endpoint: endpointName };
+        };
+        return { status: 200, data: { name: o.name, done: false } };
+      }
+
       const parent = path.match(/^(projects\/[^/]+\/locations\/[^/]+)/)![1];
 
       if (config.method === 'GET' && /\/operations\//.test(path)) {
@@ -62,7 +99,7 @@ function fixtureHttp() {
       }
       if (config.method === 'POST' && path === `${parent}/endpoints`) {
         const name = `${parent}/endpoints/${config.params?.endpointId ?? ++seq}`;
-        endpoints.set(name, { name, displayName: config.data.displayName, deployedModels: [], dedicatedEndpointEnabled: config.data.dedicatedEndpointEnabled, ...(config.data.dedicatedEndpointEnabled ? { dedicatedEndpointDns: `${seq}.${m[1]}-1.prediction.vertexai.goog` } : {}) });
+        endpoints.set(name, { name, displayName: config.data.displayName, deployedModels: [], dedicatedEndpointEnabled: config.data.dedicatedEndpointEnabled, ...(config.data.dedicatedEndpointEnabled ? { dedicatedEndpointDns: `${++seq}.${m[1]}-1.prediction.vertexai.goog` } : {}) });
         return { status: 200, data: op(name, true, { name }) };
       }
       if (config.method === 'POST' && path === `${parent}/models:upload`) {
@@ -118,12 +155,12 @@ const live = liveRequested('vertex');
 const fixture = fixtureHttp();
 const adapter = () => (live ? new VertexAdapter() : new VertexAdapter(fixture.http, { pollIntervalMs: 0 }));
 const validCreds = live
-  ? { serviceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON, registryAccessKeyId: process.env.REGISTRY_ACCESS_KEY_ID, registrySecretAccessKey: process.env.REGISTRY_SECRET_ACCESS_KEY }
-  : { serviceAccountJson: serviceAccount(VALID_EMAIL, validKey.privateKey), registryAccessKeyId: 'AK', registrySecretAccessKey: 'SK' };
+  ? { serviceAccountJson: process.env.GOOGLE_SERVICE_ACCOUNT_JSON }
+  : { serviceAccountJson: serviceAccount(VALID_EMAIL, validKey.privateKey) };
 const tiny = {
   id: 'v1',
   name: 'qwen3-0.6b',
-  registryUri: live ? `${process.env.VERTEX_TEST_S3_URI}@live` : 's3://registry/models/qwen3-0.6b@etag1',
+  registryUri: live ? `${process.env.VERTEX_TEST_GCS_URI}@live` : 'gs://registry/models/qwen3-0.6b@etag1',
   base: 'qwen3-0.6b',
   quantizations: [],
   manifestSha: 'sha',
@@ -142,18 +179,93 @@ runConformance(live ? 'vertex (LIVE)' : 'vertex (fixture)', {
   readyTimeoutMs: live ? 30 * 60_000 : 5_000,
 });
 
-describe('vertex request shape', () => {
-  const creds = { accessToken: 'ya29.valid', registryAccessKeyId: 'AK', registrySecretAccessKey: 'SK' };
+const creds = { accessToken: 'ya29.valid' };
+
+describe('vertex Model Garden route', () => {
+  const gardenRequest = (registryUri: string, providerConfig: Record<string, any> = {}) => ({
+    deploymentId: 'abc-123',
+    organizationId: 'org-1',
+    version: { id: 'v', name: 'gemma', registryUri, base: 'gemma-2-2b', quantizations: [], manifestSha: 's' },
+    desired: { replicas: 1, minScale: 1, maxScale: 2, region: 'europe-west4' },
+    providerConfig: { projectId: 'p1', location: 'us-central1', acceptEula: true, dedicatedEndpoint: true, hourlyRateCents: 120, ...providerConfig },
+  });
+
+  it('deploys a Hugging Face repository through Model Garden in one call, with no machine spec of ours', async () => {
+    const f = fixtureHttp();
+    const a = new VertexAdapter(f.http, { pollIntervalMs: 0 });
+    const ref = await a.deploy(gardenRequest('hf://google/gemma-2-2b-it@main'), { ...creds, huggingFaceToken: 'hf_tok' });
+    expect(f.calls).toHaveLength(1);
+    expect(f.calls[0].method).toBe('POST');
+    expect(f.calls[0].url).toBe('https://europe-west4-aiplatform.googleapis.com/v1/projects/p1/locations/europe-west4:deploy');
+    expect(f.calls[0].data).toEqual({
+      huggingFaceModelId: 'google/gemma-2-2b-it',
+      modelConfig: { modelUserId: 'almyty-abc123-model', modelDisplayName: 'almyty-abc123', acceptEula: true, huggingFaceAccessToken: 'hf_tok' },
+      endpointConfig: { endpointUserId: 'almyty-abc123', endpointDisplayName: 'almyty-abc123', dedicatedEndpointEnabled: true, labels: { 'almyty-deployment': 'abc-123', 'almyty-organization': 'org-1' } },
+    });
+    // Google picks the container and the hardware; almyty supplies neither.
+    expect(JSON.stringify(f.calls[0].data)).not.toContain('imageUri');
+    expect(f.calls[0].data.deployConfig).toBeUndefined();
+    expect(ref).toMatchObject({ route: 'garden', endpointId: 'almyty-abc123', location: 'europe-west4' });
+    expect(ref.deployOperation).toMatch(/\/operations\//);
+  });
+
+  it('deploys a Model Garden publisher model, and honours a machine type when the operator names one', async () => {
+    const f = fixtureHttp();
+    const a = new VertexAdapter(f.http, { pollIntervalMs: 0 });
+    await a.deploy(gardenRequest('vertex://publishers/google/models/gemma2@gemma-2-2b-it', { machineType: 'g2-standard-12', acceleratorType: 'NVIDIA_L4', acceleratorCount: 1 }), creds);
+    expect(f.calls[0].data.publisherModelName).toBe('publishers/google/models/gemma2@gemma-2-2b-it');
+    expect(f.calls[0].data.huggingFaceModelId).toBeUndefined();
+    expect(f.calls[0].data.deployConfig).toEqual({
+      dedicatedResources: { machineSpec: { machineType: 'g2-standard-12', acceleratorType: 'NVIDIA_L4', acceleratorCount: 1 }, minReplicaCount: 1, maxReplicaCount: 2 },
+    });
+  });
+
+  it('refuses a malformed Model Garden reference', async () => {
+    const f = fixtureHttp();
+    const a = new VertexAdapter(f.http, { pollIntervalMs: 0 });
+    await expect(a.deploy(gardenRequest('vertex://gemma-2-2b-it'), creds)).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_OPERATION' });
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('reports the single operation as deploying until the endpoint appears, then ready on the hardware Google chose', async () => {
+    const f = fixtureHttp();
+    const a = new VertexAdapter(f.http, { pollIntervalMs: 0 });
+    const ref = await a.deploy(gardenRequest('hf://google/gemma-2-2b-it'), creds);
+    const first = await a.readEndpoint(ref, creds);
+    expect(first.state).toBe('deploying');
+    const ready = await a.readEndpoint(ref, creds);
+    expect(ready.state).toBe('ready');
+    expect(ready.hardware).toBe('g2-standard-24');
+    expect(ready.details).toMatchObject({ route: 'garden' });
+    expect(ready.url).toMatch(/^https:\/\/\d+\.europe-west4-1\.prediction\.vertexai\.goog\/v1\/projects\/p1\/locations\/europe-west4\/endpoints\/almyty-abc123\/chat\/completions$/);
+    expect(ready.openAiBase).toBe(ready.url!.replace('/chat/completions', ''));
+    // The machine spec Google chose is remembered, so a redeploy asks for the same.
+    expect(ref.machineType).toBe('g2-standard-24');
+    expect(ref.acceleratorCount).toBe(2);
+
+    // Once the endpoint has been seen, a deletion behind our back is an orphan.
+    f.endpoints.delete(ref.endpointName);
+    expect((await a.readEndpoint(ref, creds)).state).toBe('missing');
+  });
+
+  it('reports a Model Garden quota refusal as a typed error', async () => {
+    const f = fixtureHttp();
+    const a = new VertexAdapter(f.http, { pollIntervalMs: 0 });
+    await expect(a.deploy(gardenRequest('hf://meta-llama/Llama-3.1-70B', { machineType: 'a3-highgpu-8g', acceleratorType: 'NVIDIA_H100_80GB', acceleratorCount: 8 }), creds)).rejects.toMatchObject({ code: 'ADAPTER_QUOTA_EXCEEDED' });
+  });
+});
+
+describe('vertex Cloud Storage route', () => {
   const request = (overrides: Partial<Parameters<VertexAdapter['deploy']>[0]> = {}) => ({
     deploymentId: 'abc-123',
     organizationId: 'org-1',
-    version: { id: 'v', name: 'q', registryUri: 's3://registry/models/q@etag', base: 'qwen3-0.6b', quantizations: [], manifestSha: 's' },
+    version: { id: 'v', name: 'q', registryUri: 'gs://registry/models/q@etag', base: 'qwen3-0.6b', quantizations: [], manifestSha: 's' },
     desired: { replicas: 1, minScale: 1, maxScale: 2, hardware: 'g2-standard-24', region: 'europe-west4' },
-    providerConfig: { projectId: 'p1', location: 'us-central1', acceleratorType: 'NVIDIA_L4', acceleratorCount: 2, registryEndpoint: 'https://minio.local', dedicatedEndpoint: true, hourlyRateCents: 120 },
+    providerConfig: { projectId: 'p1', location: 'us-central1', acceleratorType: 'NVIDIA_L4', acceleratorCount: 2, dedicatedEndpoint: true, hourlyRateCents: 120 },
     ...overrides,
   });
 
-  it('creates the endpoint, uploads a vLLM model streaming the S3 registry prefix, then deploys with dedicated resources', async () => {
+  it('creates the endpoint, uploads a model whose artifactUri is the Cloud Storage prefix, then deploys', async () => {
     const f = fixtureHttp();
     const a = new VertexAdapter(f.http, { pollIntervalMs: 0 });
     const ref = await a.deploy(request(), creds);
@@ -172,18 +284,23 @@ describe('vertex request shape', () => {
 
     const model = writes[1].data.model;
     expect(model.displayName).toBe('almyty-abc123');
-    expect(model.containerSpec.imageUri).toBe('vllm/vllm-openai:latest');
-    expect(model.containerSpec.args).toEqual(['--model', 's3://registry/models/q', '--load-format', 'runai_streamer', '--served-model-name', 'q', '--port', '8080']);
+    // Vertex reads the weights out of Cloud Storage itself.
+    expect(model.artifactUri).toBe('gs://registry/models/q');
+    expect(model.containerSpec.imageUri).toBe('us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:20241001_0916_RC00');
+    expect(model.containerSpec.args).toEqual(['--model=gs://registry/models/q', '--served-model-name=q', '--port=8080']);
     expect(model.containerSpec.env).toEqual([
-      { name: 'ALMYTY_REGISTRY_URI', value: 's3://registry/models/q@etag' },
-      { name: 'AWS_ACCESS_KEY_ID', value: 'AK' },
-      { name: 'AWS_SECRET_ACCESS_KEY', value: 'SK' },
-      { name: 'AWS_ENDPOINT_URL', value: 'https://minio.local' },
+      { name: 'MODEL_ID', value: 'gs://registry/models/q' },
+      { name: 'DEPLOY_SOURCE', value: 'almyty' },
     ]);
     expect(model.containerSpec.ports).toEqual([{ containerPort: 8080 }]);
     expect(model.containerSpec.predictRoute).toBe('/v1/chat/completions');
     expect(model.containerSpec.healthRoute).toBe('/health');
     expect(model.labels).toEqual({ 'almyty-deployment': 'abc-123', 'almyty-organization': 'org-1' });
+    // No registry credentials reach Google, and no almyty URI either.
+    const wire = JSON.stringify(f.calls.map((c) => c.data));
+    for (const forbidden of ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_ENDPOINT_URL', 'ALMYTY_REGISTRY_URI', 'runai_streamer', 's3://']) {
+      expect(wire).not.toContain(forbidden);
+    }
 
     expect(writes[2].data).toEqual({
       deployedModel: {
@@ -222,10 +339,13 @@ describe('vertex request shape', () => {
     expect(f.calls).toHaveLength(0);
   });
 
-  it('refuses a non-S3 registry source before calling Google', async () => {
+  it('refuses a source Vertex cannot read, naming the three it accepts, before calling Google', async () => {
     const f = fixtureHttp();
     const a = new VertexAdapter(f.http, { pollIntervalMs: 0 });
-    await expect(a.deploy(request({ version: { id: 'v', name: 'q', registryUri: 'hf://Qwen/Qwen3-0.6B@main', base: 'q', quantizations: [], manifestSha: 's' } }), creds)).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_OPERATION' });
+    for (const registryUri of ['s3://registry/models/q@etag', 'file:///models/q', 'azureml://workspaces/ws/models/q']) {
+      await expect(a.deploy(request({ version: { id: 'v', name: 'q', registryUri, base: 'q', quantizations: [], manifestSha: 's' } }), creds)).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_OPERATION' });
+    }
+    await expect(a.deploy(request({ version: { id: 'v', name: 'q', registryUri: 's3://registry/models/q@etag', base: 'q', quantizations: [], manifestSha: 's' } }), creds)).rejects.toThrow(/gs:\/\//);
     expect(f.calls).toHaveLength(0);
   });
 

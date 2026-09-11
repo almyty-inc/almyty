@@ -14,42 +14,63 @@ import {
 import { AwsHttp, classifyAwsError, signAwsRequest } from '../aws-request';
 
 /**
- * Amazon Bedrock Custom Model Import: the customer's own AWS account,
- * serverless, on-demand.
+ * Amazon Bedrock, in the customer's own AWS account.
  *
+ * almyty does not host inference; Bedrock does. This adapter drives the
+ * two paths AWS documents, and picks between them from the version's
+ * registry URI:
+ *
+ *   bedrock://<model id or ARN>  a model from Bedrock's own catalog. The
+ *     deployment is an application inference profile
+ *     (POST /inference-profiles) whose tags carry the almyty deployment,
+ *     so AWS attributes the spend. Inference is serverless and on demand
+ *     at the OpenAI-compatible surface
+ *     https://bedrock-runtime.{region}.amazonaws.com/openai/v1.
+ *
+ *   s3://...                     the customer's own weights. Bedrock
+ *     Custom Model Import reads Hugging Face format weights straight out
+ *     of Amazon S3 through `roleArn` (POST /model-import-jobs); S3 is the
+ *     only source the API accepts, and it is AWS's own documented path,
+ *     not a workaround. Inference is
+ *     POST /model/{importedModelArn}/invoke on the runtime host.
+ *
+ * Anything else is refused with a typed error naming what Bedrock reads.
  * Control plane REST at https://bedrock.{region}.amazonaws.com, SigV4
- * service "bedrock". A deployment is one import job
- * (POST /model-import-jobs) whose S3 source is the registry version
- * itself, so there is no upload step; Bedrock reads the safetensors +
- * config.json + tokenizer files through `roleArn`. The imported model ARN
- * is the endpoint: inference goes to bedrock-runtime
- * POST /model/{arn}/invoke on demand. Bedrock runs and bills model copies
- * itself (5-minute windows from the first inference, zero when idle), so
- * scaling is implicit: `scale(0)` only marks the handle as standby.
- * Teardown is DELETE /imported-models/{name}. Deltas and verified facts:
+ * service "bedrock". Verified API facts and deltas:
  * docs/design/adapters/aws-bedrock-import.md.
  */
-const REGIONS = ['us-east-1', 'us-east-2', 'us-west-2', 'eu-central-1'];
+const REGIONS = [
+  'us-east-1', 'us-east-2', 'us-west-2', 'ap-northeast-1', 'ap-south-1', 'ap-southeast-1', 'ap-southeast-2',
+  'ca-central-1', 'eu-central-1', 'eu-west-1', 'eu-west-2', 'eu-west-3', 'eu-north-1', 'sa-east-1',
+];
 
-/** Families Bedrock accepts, as prefixes of the version's `base`. */
+/** Custom Model Import is offered in four regions only. */
+const IMPORT_REGIONS = ['us-east-1', 'us-east-2', 'us-west-2', 'eu-central-1'];
+
+/** Families Custom Model Import accepts, as prefixes of the version's `base`. */
 const ARCHITECTURES = ['mistral', 'mixtral', 'flan', 'llama', 'mllama', 'gpt_bigcode', 'gptbigcode', 'qwen2', 'qwen3', 'gpt-oss', 'gpt_oss'];
 
 const JOB_STATE: Record<string, ActualState['state']> = { InProgress: 'deploying', Completed: 'ready', Failed: 'failed' };
 
+const ACCEPTED_SOURCES = "a Bedrock catalog model (bedrock://<model id or ARN>) or Hugging Face format weights in Amazon S3 (s3://) for Custom Model Import";
+
 export class AwsBedrockImportAdapter implements ModelProviderAdapter {
   readonly key = 'aws-bedrock-import';
-  readonly displayName = 'AWS Bedrock (custom model import)';
+  readonly displayName = 'AWS Bedrock';
 
   constructor(private readonly http: AwsHttp = axios.create({ timeout: 30_000 })) {}
 
   capabilities(): AdapterCapabilities {
     return {
-      architectures: ARCHITECTURES,
+      architectures: 'any',
       lora: 'merged',
       serverless: true,
       dedicated: false,
       scaleToZero: true,
       regions: REGIONS,
+      // Bedrock reads model artifacts from Amazon S3 by design; it cannot
+      // read a Hugging Face repository, and a catalog model needs no
+      // source at all because AWS already holds the weights.
       registrySources: ['s3'],
     };
   }
@@ -62,13 +83,15 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
         secretAccessKey: { type: 'string', title: 'AWS secret access key', 'x-secret': true },
         sessionToken: { type: 'string', title: 'AWS session token', description: 'Only for temporary credentials', 'x-secret': true },
         region: { type: 'string', title: 'Region', enum: REGIONS, default: 'us-east-1' },
-        roleArn: { type: 'string', title: 'Import service role ARN', description: 'IAM role Bedrock assumes to read the registry bucket' },
-        kmsKeyId: { type: 'string', title: 'KMS key for the imported model', description: 'Optional; AWS-managed key otherwise' },
-        vpcSubnetIds: { type: 'array', items: { type: 'string' }, title: 'VPC subnet ids', description: 'Optional; run the import job inside a VPC' },
+        roleArn: { type: 'string', title: 'Import service role ARN', description: 'Custom Model Import only: the IAM role Bedrock assumes to read the weights bucket' },
+        kmsKeyId: { type: 'string', title: 'KMS key for the imported model', description: 'Custom Model Import only; AWS-managed key otherwise' },
+        vpcSubnetIds: { type: 'array', items: { type: 'string' }, title: 'VPC subnet ids', description: 'Custom Model Import only: run the import job inside a VPC' },
         vpcSecurityGroupIds: { type: 'array', items: { type: 'string' }, title: 'VPC security group ids' },
-        hourlyRateCents: { type: 'integer', title: 'Price per running model copy per hour (cents)', description: 'CMUs per copy times the per-CMU rate from the Bedrock pricing page; used to estimate spend until CloudWatch ModelCopy is wired' },
+        hourlyRateCents: { type: 'integer', title: 'Price per running model copy per hour (cents)', description: 'Custom Model Import only: CMUs per copy times the per-CMU rate from the Bedrock pricing page; used to estimate spend until CloudWatch ModelCopy is wired' },
+        inPerMTok: { type: 'number', title: 'Catalog input price (USD per million tokens)', description: 'Catalog models bill per token; from the Bedrock pricing page' },
+        outPerMTok: { type: 'number', title: 'Catalog output price (USD per million tokens)' },
       },
-      required: ['accessKeyId', 'secretAccessKey', 'region', 'roleArn'],
+      required: ['accessKeyId', 'secretAccessKey', 'region'],
     };
   }
 
@@ -102,19 +125,98 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
     return `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelArn)}/invoke`;
   }
 
+  /** The OpenAI-compatible base AWS recommends for new applications. */
+  static openAiBase(region: string): string {
+    return `https://bedrock-runtime.${region}.amazonaws.com/openai/v1`;
+  }
+
+  /** Which of the two Bedrock paths this version asks for. */
+  static route(registryUri: string): 'catalog' | 'import' {
+    if (registryUri.startsWith('bedrock://')) return 'catalog';
+    if (registryUri.startsWith('s3://')) return 'import';
+    throw new UnsupportedOperationError('aws-bedrock-import', `a ${registryUri.split(':')[0]}:// version. Bedrock reads ${ACCEPTED_SOURCES}`);
+  }
+
   /** The import source is the registry prefix itself; the @pin is the version's, not S3's. */
   static s3Uri(registryUri: string): string {
-    if (!registryUri.startsWith('s3://')) throw new UnsupportedOperationError('aws-bedrock-import', `importing from ${registryUri.split(':')[0]}:// (only the S3 registry source)`);
     return registryUri.replace(/@[^@/]+$/, '');
+  }
+
+  /**
+   * `modelSource.copyFrom` wants an ARN. A bare model id becomes the
+   * region's foundation-model ARN (no account id in that ARN, per the
+   * CreateInferenceProfile examples); a cross-region system-defined
+   * profile has to be given as a full ARN because its account id is the
+   * customer's and this adapter never guesses it.
+   */
+  static copyFrom(registryUri: string, region: string): string {
+    const id = registryUri.slice('bedrock://'.length).replace(/@[^@/]+$/, '');
+    if (!id) throw new UnsupportedOperationError('aws-bedrock-import', 'a bedrock:// version with no model id');
+    if (id.startsWith('arn:')) return id;
+    if (/^[a-z]{2}\./.test(id)) {
+      throw new UnsupportedOperationError(
+        'aws-bedrock-import',
+        `the cross-region profile id "${id}". Give the full inference profile ARN (bedrock://arn:aws:bedrock:${region}:<account>:inference-profile/${id}), because its account id cannot be inferred`,
+      );
+    }
+    return `arn:aws:bedrock:${region}::foundation-model/${id}`;
   }
 
   async deploy(request: DeployRequest, credentials: AdapterCredentials): Promise<EndpointRef> {
     this.creds(credentials);
+    const route = AwsBedrockImportAdapter.route(request.version.registryUri);
+    const cfg = request.providerConfig;
+    const region = request.desired.region ?? cfg.region ?? 'us-east-1';
+    return route === 'catalog'
+      ? this.deployCatalog(request, credentials, region)
+      : this.deployImport(request, credentials, region);
+  }
+
+  /** A listed model: an application inference profile, tagged so AWS attributes the spend. */
+  private async deployCatalog(request: DeployRequest, credentials: AdapterCredentials, region: string): Promise<EndpointRef> {
+    const cfg = request.providerConfig;
+    const copyFrom = AwsBedrockImportAdapter.copyFrom(request.version.registryUri, region);
+    const inferenceProfileName = AwsBedrockImportAdapter.modelName(request.deploymentId);
+    const body = {
+      inferenceProfileName,
+      description: `almyty deployment ${request.deploymentId}`,
+      modelSource: { copyFrom },
+      clientRequestToken: randomUUID(),
+      tags: [
+        { key: 'almyty:deployment', value: request.deploymentId },
+        { key: 'almyty:organization', value: request.organizationId },
+      ],
+    };
+    try {
+      const res = await this.call('POST', region, '/inference-profiles', credentials, body);
+      return {
+        route: 'catalog',
+        inferenceProfileName,
+        inferenceProfileArn: res?.inferenceProfileArn,
+        modelId: copyFrom,
+        region,
+        createdAt: new Date().toISOString(),
+        url: `${AwsBedrockImportAdapter.openAiBase(region)}/chat/completions`,
+        inPerMTok: cfg.inPerMTok,
+        outPerMTok: cfg.outPerMTok,
+      };
+    } catch (err) {
+      classifyAwsError(err, 'create inference profile failed');
+    }
+  }
+
+  /** The customer's own weights: one import job reading their S3 prefix. */
+  private async deployImport(request: DeployRequest, credentials: AdapterCredentials, region: string): Promise<EndpointRef> {
     if (!ARCHITECTURES.some((a) => request.version.base.toLowerCase().startsWith(a))) {
       throw Object.assign(new Error(`Bedrock custom model import does not accept the ${request.version.base} architecture`), { code: 'ADAPTER_UNSUPPORTED_ARCHITECTURE' });
     }
+    if (!IMPORT_REGIONS.includes(region)) {
+      throw Object.assign(new Error(`Bedrock custom model import is only offered in ${IMPORT_REGIONS.join(', ')}, not ${region}`), { code: 'ADAPTER_UNSUPPORTED_REGION' });
+    }
     const cfg = request.providerConfig;
-    const region = request.desired.region ?? cfg.region ?? 'us-east-1';
+    if (!cfg.roleArn) {
+      throw Object.assign(new Error('Bedrock custom model import needs roleArn: the IAM role Bedrock assumes to read the weights bucket'), { code: 'ADAPTER_CONFIG_INVALID' });
+    }
     const importedModelName = AwsBedrockImportAdapter.modelName(request.deploymentId);
     const jobName = `${importedModelName}-${Date.now().toString(36)}`;
     const body = {
@@ -132,13 +234,46 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
     };
     try {
       const res = await this.call('POST', region, '/model-import-jobs', credentials, body);
-      return { jobName, jobArn: res?.jobArn, importedModelName, region, createdAt: new Date().toISOString(), hourlyRateCents: cfg.hourlyRateCents ?? 0, maxCopies: request.desired.replicas ?? 1 };
+      return { route: 'import', jobName, jobArn: res?.jobArn, importedModelName, region, createdAt: new Date().toISOString(), hourlyRateCents: cfg.hourlyRateCents ?? 0, maxCopies: request.desired.replicas ?? 1 };
     } catch (err) {
       classifyAwsError(err, 'create model import job failed');
     }
   }
 
   async readEndpoint(ref: EndpointRef, credentials: AdapterCredentials): Promise<ActualState> {
+    return ref.route === 'catalog' ? this.readCatalog(ref, credentials) : this.readImport(ref, credentials);
+  }
+
+  private async readCatalog(ref: EndpointRef, credentials: AdapterCredentials): Promise<ActualState> {
+    let profile: any;
+    try {
+      profile = await this.call('GET', ref.region, `/inference-profiles/${encodeURIComponent(ref.inferenceProfileArn ?? ref.inferenceProfileName)}`, credentials);
+    } catch (err: any) {
+      return this.missingOrThrow(err, 'inference profile deleted', 'read inference profile failed');
+    }
+    const status = String(profile?.status ?? 'ACTIVE');
+    const url = `${AwsBedrockImportAdapter.openAiBase(ref.region)}/chat/completions`;
+    return {
+      state: status === 'ACTIVE' ? 'ready' : 'deploying',
+      url,
+      openAiBase: AwsBedrockImportAdapter.openAiBase(ref.region),
+      // On-demand: AWS runs however many copies it needs and bills tokens.
+      replicas: 1,
+      region: ref.region,
+      details: {
+        route: 'catalog',
+        rawState: status,
+        inferenceProfileArn: profile?.inferenceProfileArn ?? ref.inferenceProfileArn,
+        inferenceProfileId: profile?.inferenceProfileId,
+        profileType: profile?.type,
+        // What to put in the OpenAI request's `model` field.
+        modelId: profile?.inferenceProfileId ?? profile?.inferenceProfileArn ?? ref.inferenceProfileArn,
+        modelArns: (profile?.models ?? []).map((m: any) => m.modelArn),
+      },
+    };
+  }
+
+  private async readImport(ref: EndpointRef, credentials: AdapterCredentials): Promise<ActualState> {
     let job: any;
     try {
       job = await this.call('GET', ref.region, `/model-import-jobs/${encodeURIComponent(ref.jobName)}`, credentials);
@@ -147,7 +282,7 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
     }
     const raw = String(job?.status ?? 'InProgress');
     if (raw !== 'Completed') {
-      return { state: JOB_STATE[raw] ?? 'deploying', region: ref.region, message: job?.failureMessage, details: { rawState: raw, jobArn: job?.jobArn } };
+      return { state: JOB_STATE[raw] ?? 'deploying', region: ref.region, message: job?.failureMessage, details: { route: 'import', rawState: raw, jobArn: job?.jobArn } };
     }
 
     let model: any;
@@ -160,6 +295,7 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
     if (modelArn && !ref.importedModelArn) ref.importedModelArn = modelArn;
     const url = modelArn ? AwsBedrockImportAdapter.invokeUrl(ref.region, modelArn) : undefined;
     const details = {
+      route: 'import',
       rawState: raw,
       modelArn,
       modelArchitecture: model?.modelArchitecture,
@@ -183,20 +319,26 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
   }
 
   /**
-   * Bedrock scales imported-model copies itself and bills nothing while
-   * idle, so the only thing to record is the ceiling the operator wants:
-   * zero means standby, which the read reports as stopped.
+   * Both paths are serverless: Bedrock decides how much capacity to run
+   * and bills nothing while idle, so there is nothing to send to AWS. A
+   * catalog profile has no notion of standby at all; for an imported
+   * model zero records the operator's standby wish, which the read
+   * reports as stopped.
    */
   async scale(ref: EndpointRef, replicas: number, _credentials: AdapterCredentials): Promise<void> {
+    if (ref.route === 'catalog') return;
     ref.maxCopies = replicas;
   }
 
   async teardown(ref: EndpointRef, credentials: AdapterCredentials): Promise<void> {
+    const path = ref.route === 'catalog'
+      ? `/inference-profiles/${encodeURIComponent(ref.inferenceProfileArn ?? ref.inferenceProfileName)}`
+      : `/imported-models/${encodeURIComponent(ref.importedModelName)}`;
     try {
-      await this.call('DELETE', ref.region, `/imported-models/${encodeURIComponent(ref.importedModelName)}`, credentials);
+      await this.call('DELETE', ref.region, path, credentials);
     } catch (err: any) {
       try {
-        classifyAwsError(err, 'delete imported model failed');
+        classifyAwsError(err, ref.route === 'catalog' ? 'delete inference profile failed' : 'delete imported model failed');
       } catch (typed: any) {
         if (typed.code === 'ADAPTER_NOT_FOUND') return;
         throw typed;
@@ -205,12 +347,24 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
   }
 
   /**
-   * No billing API per model: spend is the configured per-copy rate over
-   * the time since import, an upper bound because Bedrock only bills
+   * No billing API per model. A catalog model bills per token, so the
+   * hourly rate is zero and the per-token prices the operator entered are
+   * reported as-is. An imported model is the configured per-copy rate
+   * over the time since import, an upper bound because Bedrock only bills
    * 5-minute windows in which a copy actually served inference.
    */
   async costSnapshot(ref: EndpointRef, credentials: AdapterCredentials): Promise<CostSnapshot> {
     const actual = await this.readEndpoint(ref, credentials);
+    if (ref.route === 'catalog') {
+      const inPerMTok = Number(ref.inPerMTok ?? 0);
+      const outPerMTok = Number(ref.outPerMTok ?? 0);
+      return {
+        spentCents: 0,
+        ratePerHourCents: 0,
+        ...(inPerMTok || outPerMTok ? { perToken: { inPerMTok, outPerMTok, currency: 'USD' } } : {}),
+        observedAt: new Date(),
+      };
+    }
     const rate = Number(ref.hourlyRateCents ?? 0);
     const hours = ref.createdAt ? Math.max(0, (Date.now() - new Date(ref.createdAt).getTime()) / 3_600_000) : 0;
     return {

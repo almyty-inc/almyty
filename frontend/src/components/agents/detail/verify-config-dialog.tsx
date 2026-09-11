@@ -29,7 +29,7 @@ type Trigger = 'on_final_output' | 'every_n_steps' | 'on_tool_result'
 interface Checker { name: string; providerId: string; model: string; instructions: string }
 
 const TRIGGERS: { id: Trigger; label: string }[] = [
-  { id: 'on_final_output', label: 'On final output (gate + revise)' },
+  { id: 'on_final_output', label: 'On final output (block + revise)' },
   { id: 'every_n_steps', label: 'Every N steps (advisory)' },
   { id: 'on_tool_result', label: 'On tool result (advisory)' },
 ]

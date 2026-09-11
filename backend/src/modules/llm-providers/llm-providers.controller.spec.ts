@@ -154,7 +154,7 @@ describe('LlmProvidersController', () => {
       const result = await controller.deleteProvider('provider-1', mockRequest);
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('LLM provider deleted successfully');
+      expect(result.message).toBe('Provider removed');
     });
   });
 

@@ -1,59 +1,392 @@
-# Call-only inference vendors: OpenAI-compatible hosts
+# Inference vendors: the verified matrix
 
-Status: shipped on feat/models-layer-phase-a (2026-09-08). Scope: the inference vendors that expose an OpenAI-compatible chat completions API and therefore ride the existing OpenAI dispatch path (`callOpenAI` / `callOpenAIStream`) exactly like xAI, DeepSeek, Groq and Together. Nothing vendor-specific is added beyond a base URL, a Bearer key, catalog copy and a price-feed namespace.
+Every `LlmProviderType` almyty offers, checked against the vendor's current
+documentation. Each row carries the source URL and the date it was read.
 
-"Call-only" means almyty calls the vendor; it never deploys or trains there. Deployment adapters are a separate matrix in `models-layer.md`.
+Model independence is the product: an agent routes to any model on any
+inference source, chosen per step by policy. That only holds if every
+source listed here actually answers. This document exists so a provider
+cannot be offered in the UI without someone having confirmed it works.
 
-## What every vendor gets
+**Last full verification: 2026-09-09.** The nine OpenAI-compatible hosts
+added on 2026-09-08 were re-checked on 2026-09-09; everything else was
+verified for the first time on 2026-09-09.
 
-| Layer | File | What was added per type |
+Verification is documentation-derived plus, where a doc was ambiguous,
+unauthenticated HTTP and DNS probes. Nothing was called with a live key.
+Anything a vendor's docs do not state is marked "not documented" rather
+than assumed.
+
+## What every provider gets
+
+| Layer | File | What a type needs |
 |---|---|---|
-| Enum | `backend/src/entities/llm-provider.entity.ts` | `LlmProviderType` value, `getApiUrl()` default base, `getAuthHeaders()` Bearer case |
-| Catalog | `backend/src/modules/llm-providers/llm-provider-catalog.ts` | display name, description, feature badges, key console URL, docs URL |
-| Dispatch | `llm-chat-runner.helper.ts`, `llm-chat.helper.ts` | routed to `callOpenAI` (sync) and `callOpenAIStream` (streaming); API key required at save time |
-| Models | `llm-models.helper.ts` | live list via `GET <base>/models` (`fetchOpenAIModels`), default capability flags, empty seed price table |
-| Default model | `default-model.resolver.ts` | family regexes (no literal ids); hosts fall back to the first served chat model |
-| Pricing | `model-catalog/pricing/price-feed.service.ts` | LiteLLM namespace and, where one exists, OpenRouter prefix |
-| Usage API | `provider-usage/provider-usage.capability.ts` | `supported: false` with a note (no vendor here documents a usage/cost API) |
-| Frontend | `components/llm-providers/*`, `pages/llm-providers.tsx`, `pages/llm-provider-detail.tsx` | type union, create-dialog and filter entries, logo glyph, key URL |
+| Enum | `backend/src/entities/llm-provider.entity.ts` | `LlmProviderType` value, `getApiUrl()` base, `getAuthHeaders()` case, `getModelsUrl()` override if the listing is not `<base>/models` |
+| Catalog | `llm-providers/llm-provider-catalog.ts` | display name, description, feature badges, key console URL, docs URL |
+| Dispatch | `llm-chat-runner.helper.ts`, `llm-chat.helper.ts` | a `case` in both the sync and streaming switches; structural config required at save time |
+| Models | `llm-models.helper.ts` | live list where one exists, default capability flags, seed price table entry |
+| Default model | `default-model.resolver.ts` | family regexes, never literal ids |
+| Pricing | `model-catalog/pricing/price-feed.service.ts` | LiteLLM namespace and OpenRouter prefix, or an explicit `null` |
+| Usage API | `provider-usage/provider-usage.capability.ts` | `supported` plus a note when false |
+| Frontend | `components/llm-providers/*` | type union, select entry, structural form fields, glyph, key URL |
 
-DTO validation (`@IsEnum(LlmProviderType)`) and the Swagger enum derive from the enum, so they picked the new values up without edits. The health check (`performHealthCheck`) resolves a model through `DefaultModelResolver` and calls the same dispatch path, and `assertModelIsServed` checks a configured model against the live `/models` list whenever the vendor has one.
+`__tests__/dispatch-completeness.spec.ts` iterates `Object.values(LlmProviderType)`
+and asserts every value reaches a real implementation. Adding an enum value
+without a dispatch path fails CI. That test exists because AWS Bedrock
+shipped without one (see "Defects found and fixed").
 
-## Verified facts (2026-09-08)
+## The matrix
 
-Verified by probing each base with an invalid key (an auth error proves the route exists; a 404 proves it does not) and by reading the vendor's current docs. Public `/models` means the list is served without a key.
+Streaming and tools describe what the vendor documents on the surface we
+call, not what every model behind it supports.
 
-| Type | Base URL (default) | `GET /models` | Tools | Streaming | Key console | Docs |
+### First-party model vendors
+
+| Type | Chat base (default) | Auth | Model list | Tools | Stream | Source (read 2026-09-09) |
 |---|---|---|---|---|---|---|
-| `fireworks` | `https://api.fireworks.ai/inference/v1` | yes (auth-gated) | yes, OpenAI tool spec | yes | https://app.fireworks.ai/settings/users/api-keys | https://docs.fireworks.ai |
-| `cerebras` | `https://api.cerebras.ai/v1` | yes (documented) | yes | yes | https://cloud.cerebras.ai | https://inference-docs.cerebras.ai |
-| `deepinfra` | `https://api.deepinfra.com/v1/openai` | yes (auth-gated) | yes (`tools`, `tool_choice` documented) | yes | https://deepinfra.com/dash/api_keys | https://docs.deepinfra.com |
-| `novita` | `https://api.novita.ai/openai` | yes (public; entries carry a `features` list incl. `function-calling`) | yes | yes | https://novita.ai/settings/key-management | https://docs.novita.ai |
-| `perplexity` | `https://api.perplexity.ai/router/v1` | yes (documented, auth-gated) | not documented on the chat surface | yes | https://console.perplexity.ai | https://docs.perplexity.ai |
-| `zai` | `https://api.z.ai/api/paas/v4` | not documented (route answers 401 like every other path) | yes (documented) | yes (documented) | https://z.ai/manage-apikey/apikey-list | https://docs.z.ai |
-| `baseten` | `https://inference.baseten.co/v1` | yes (documented, returns pricing and context) | yes (all Model API models) | yes | https://app.baseten.co/settings/api_keys | https://docs.baseten.co |
-| `nebius` | `https://api.tokenfactory.nebius.com/v1` | yes (auth-gated) | yes (LiteLLM flags) | yes | https://tokenfactory.nebius.com/settings/api-keys | https://docs.tokenfactory.nebius.com |
-| `sambanova` | `https://api.sambanova.ai/v1` | yes (public) | yes (LiteLLM flags) | yes | https://cloud.sambanova.ai/apis | https://docs.sambanova.ai |
+| `openai` | `https://api.openai.com/v1` | `Authorization: Bearer` | `GET /v1/models` | yes | yes | https://developers.openai.com/api/reference/overview |
+| `anthropic` | `https://api.anthropic.com/v1` | `x-api-key` + `anthropic-version: 2023-06-01` | `GET /v1/models?limit=1000` (cursor-paginated) | yes | yes | https://platform.claude.com/docs/en/api/models-list |
+| `google` | `https://generativelanguage.googleapis.com/v1beta` | `x-goog-api-key` | `GET /v1beta/models` (`{models:[{name}]}`) | yes | yes | https://ai.google.dev/gemini-api/docs/api-key |
+| `mistral` | `https://api.mistral.ai/v1` | `Authorization: Bearer` | `GET /v1/models` | yes | yes | https://docs.mistral.ai/api/ |
+| `xai` | `https://api.x.ai/v1` | `Authorization: Bearer` | `GET /v1/models` | yes | yes | https://docs.x.ai/developers/rest-api-reference/inference |
+| `deepseek` | `https://api.deepseek.com` | `Authorization: Bearer` | `GET /models` | yes | yes | https://api-docs.deepseek.com/api/create-chat-completion/ |
+| `cohere` | `https://api.cohere.ai/compatibility/v1` | `Authorization: Bearer` | `GET https://api.cohere.com/v1/models` (`{models:[{name}]}`) | yes | yes | https://docs.cohere.com/docs/compatibility-api |
+| `perplexity` | `https://api.perplexity.ai/v1` (Responses-shaped) | `Authorization: Bearer` | `GET /v1/models` (unauthenticated) | yes, flat Responses shape | yes | https://docs.perplexity.ai/docs/agent-api/quickstart |
+| `moonshot` | `https://api.moonshot.ai/v1` | `Authorization: Bearer` | `GET /v1/models` | yes | yes | https://platform.kimi.ai/docs/api/list-models |
+| `qwen` | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `Authorization: Bearer` | **none documented** | yes | yes | https://docs.qwencloud.com/api-reference/toolkitframework/openai-compatible/overview.md |
+| `zai` | `https://api.z.ai/api/paas/v4` | `Authorization: Bearer` | **none documented** | yes | yes | https://docs.z.ai/api-reference/introduction |
 
-Notes:
+### Aggregators and OpenAI-compatible hosts
 
-- Novita documents `api.novita.ai/openai` as the base; the older `api.novita.ai/v3/openai` still answers. Both serve `/models` publicly.
-- Perplexity is mid-migration. The legacy Sonar endpoint `https://api.perplexity.ai/chat/completions` works until 2026-09-27 and has no `/models`; its successor, the Agent API (`/v1/agent`), is not chat-completions shaped. The Router API (`/router/v1`, OpenAI-compatible, lists models with prices) is the default base here; it is in private preview (api@perplexity.ai). A user on the legacy endpoint sets `apiUrl` to `https://api.perplexity.ai` and an explicit model; with no model the resolver reports `NO_MODEL_CONFIGURED` because the listing 404s.
-- Z.ai: `/models` is not in the docs. The list is attempted; if it fails, `DefaultModelResolver` catches the listing error and reports `NO_MODEL_CONFIGURED` with the vendor's reason (added in this change), and the user sets a model. `/test-connection` and the models endpoint keep surfacing the raw listing error, the contract every other type has. `assertModelIsServed` passes through when nothing is listed.
-- Nebius AI Studio was renamed Nebius Token Factory; `api.studio.nebius.com` still answers but the docs only name the new host.
-- Cerebras keys are minted on the platform page under https://cloud.cerebras.ai (no stable deep link).
+| Type | Chat base (default) | Auth | Model list | Tools | Stream | Source (read 2026-09-09) |
+|---|---|---|---|---|---|---|
+| `openrouter` | `https://openrouter.ai/api/v1` | Bearer + `HTTP-Referer` + `X-OpenRouter-Title` | `GET /api/v1/models` (unauthenticated) | yes | yes | https://openrouter.ai/docs/app-attribution |
+| `groq` | `https://api.groq.com/openai/v1` | `Authorization: Bearer` | `GET /openai/v1/models` | yes | yes | https://console.groq.com/docs/api-reference |
+| `together` | `https://api.together.ai/v1` | `Authorization: Bearer` | `GET /v1/models` (bare array) | yes | yes | https://docs.together.ai/docs/quickstart |
+| `fireworks` | `https://api.fireworks.ai/inference/v1` | `Authorization: Bearer` | not documented on the OpenAI surface | yes | yes | https://docs.fireworks.ai/tools-sdks/openai-compatibility |
+| `cerebras` | `https://api.cerebras.ai/v1` | `Authorization: Bearer` | `GET /v1/models` | yes | yes | https://inference-docs.cerebras.ai/api-reference/models |
+| `deepinfra` | `https://api.deepinfra.com/v1/openai` | `Authorization: Bearer` | `GET https://api.deepinfra.com/v1/models` (one segment above the chat base) | yes | yes | https://docs.deepinfra.com/api-reference/models/openai-models.md |
+| `novita` | `https://api.novita.ai/openai/v1` | `Authorization: Bearer` | `GET /openai/v1/models` | yes | yes | https://docs.novita.ai/api-reference/model-apis-llm-list-models |
+| `baseten` | `https://inference.baseten.co/v1` | `Authorization: Bearer` | `GET /v1/models` | yes | yes | https://docs.baseten.co/development/model-apis/overview |
+| `nebius` | `https://api.tokenfactory.nebius.com/v1` | `Authorization: Bearer` | `GET /v1/models` | yes | not documented | https://docs.tokenfactory.nebius.com/api-reference/models/list-models.md |
+| `sambanova` | `https://api.sambanova.ai/v1` | `Authorization: Bearer` | **none documented** | yes | yes | https://docs.sambanova.ai/cloud/docs/get-started/api-keys-urls |
+| `huggingface` | `https://router.huggingface.co/v1` | `Authorization: Bearer hf_` | `GET /v1/models` (carries per-provider `supports_tools` and pricing) | yes | yes | https://huggingface.co/docs/inference-providers/index |
+
+### The customer's own cloud
+
+| Type | Chat base (default) | Auth | Model list | Tools | Stream | Source (read 2026-09-09) |
+|---|---|---|---|---|---|---|
+| `azure_openai` | `https://{resource}.openai.azure.com/openai/v1` | `api-key` header | `GET /openai/v1/models` (catalog, not deployments) | yes | yes | https://learn.microsoft.com/en-us/azure/ai-foundry/openai/api-version-lifecycle |
+| `azure_ai_foundry` | `https://{resource}.services.ai.azure.com/openai/v1` | `Authorization: Bearer` (or `api-key`) | `GET /openai/v1/models` | yes | yes | https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-models/how-to/inference |
+| `aws_bedrock` | `https://bedrock-runtime.{region}.amazonaws.com/openai/v1` | `Authorization: Bearer` (Bedrock API key, no SigV4) | `GET /openai/v1/models` | client-side yes | yes | https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions-mantle.html |
+| `vertex_ai` | `https://aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/endpoints/openapi` | `Authorization: Bearer <1h OAuth token>` | **none on this surface** | yes | yes | https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/openai |
+
+### Vendor serverless we can call without deploying
+
+| Type | Chat base (default) | Auth | Model list | Tools | Stream | Source (read 2026-09-09) |
+|---|---|---|---|---|---|---|
+| `digitalocean` | `https://inference.do-ai.run/v1` | `Authorization: Bearer` (model access key) | `GET /v1/models` | not documented | implied, not shown | https://docs.digitalocean.com/products/inference/how-to/si-endpoints/index.html.md |
+| `runpod` | `https://api.runpod.ai/v2/{endpoint}/openai/v1` | `Authorization: Bearer rpa_` | `GET /models`, scoped to that endpoint | per-model | yes | https://docs.runpod.io/public-endpoints/overview |
+| `modal` | `https://inference.us-west.modal.direct/v1` | `Authorization: Bearer wk-<id>.ws-<secret>` | `GET /v1/models`, scoped to the token | implied, not shown | implied, not shown | https://modal.com/docs/guide/endpoint-integrations |
+
+### Local and generic
+
+| Type | Chat base (default) | Auth | Model list | Tools | Stream | Source (read 2026-09-09) |
+|---|---|---|---|---|---|---|
+| `ollama` | `http://localhost:11434/v1` | none (optional Bearer for an auth proxy) | native `GET /api/tags` | yes | yes | https://docs.ollama.com/api/openai-compatibility |
+| `custom` | operator-supplied | per `custom.authMethod` | `<base>/models` | operator's | operator's | n/a |
+
+## Defects found and fixed
+
+Each of these was live in the product before 2026-09-09.
+
+1. **AWS Bedrock was offered but could not answer.** Validated, priced,
+   catalogued, selectable in the create dialog - and with no `case` in
+   `dispatchProviderCall`. Every chat fell to the default branch and threw
+   "Unsupported LLM provider type". It also had no region field in the
+   create form, so it could not be saved from the UI in the first place.
+   Fixed: routed onto the OpenAI-compatible `bedrock-runtime` surface with a
+   Bedrock API key as a bearer token, region field added, key now required
+   at save time. `dispatch-completeness.spec.ts` is the guard.
+2. **Azure OpenAI could never have worked.** `getApiUrl()` returned
+   `.../deployments/{name}?api-version={v}` - a base with a query string -
+   and the shared OpenAI client appended `/chat/completions` after it,
+   producing `...?api-version=2024-10-21/chat/completions`. The API key was
+   also sent as `Authorization: Bearer`, which on that surface means an
+   Entra ID token and 401s. Fixed: the `/openai/v1` surface, no
+   `api-version`, `api-key` header. The deployment name is the model, so
+   `DefaultModelResolver` returns it rather than picking from the catalog
+   listing (which lists models, not the resource's deployments).
+3. **Hugging Face pointed at a host that no longer resolves.**
+   `api-inference.huggingface.co` has no DNS record; the adapter also sent
+   a text-generation body (`inputs` / `generated_text`). Fixed: the
+   OpenAI-compatible Inference Providers router, which brings streaming,
+   tool calling and a model listing with it.
+4. **Cohere sent a v1 body to a v2 path.** `callCohere` built
+   `{message, chat_history}` (the v1 shape) and posted it to `/v2/chat`,
+   which takes `messages`. Fixed: Cohere's OpenAI-compatible Compatibility
+   API, with the model list still on the documented native `/v1/models`.
+5. **Perplexity's default base is retiring.** It was `/router/v1`, private
+   preview. The chat-completions alias on the bare host retires
+   2026-09-27, and the Agent API that replaces it is Responses-shaped, so
+   no `<base>/chat/completions` client survives. Fixed: a Responses-shaped
+   dispatch against `https://api.perplexity.ai/v1`, which a paying customer
+   can use today; the Router stays reachable via `apiUrl`.
+6. **Gemini keys travelled in the URL.** `?key=` still works, but Google's
+   own guidance calls it out as leaking keys through URL scans and logs.
+   Fixed: `x-goog-api-key`.
+7. **DeepSeek and Together were on undocumented bases.** DeepSeek's current
+   docs carry no `/v1` segment; Together documents `api.together.ai`, not
+   the `.xyz` alias we used. Both corrected.
+8. **Together's model list always came back empty.** Its `/v1/models`
+   returns a bare JSON array and the parser only read `{data:[...]}`. The
+   parser now accepts a bare array and Cohere's `{models:[...]}` too.
+9. **DeepInfra's model list hit an undocumented path.** Its listing is one
+   segment above its chat base. `getModelsUrl()` now carries per-vendor
+   overrides for DeepInfra and Cohere.
+10. **Anthropic's model list was silently truncated.** The listing is
+    cursor-paginated and defaults to 20 items, so the "newest" pick was made
+    from a partial page. Now requests the documented maximum.
+11. **Novita's base only matched the SDK form.** `api.novita.ai/openai` is
+    the SDK `base_url`; the documented chat and models curls both use
+    `/openai/v1`. Corrected.
+12. **OpenRouter's attribution header was the superseded one.** `X-Title`
+    still works; `X-OpenRouter-Title` is current.
+13. **The frontend enum listed 8 of 24 types.** `frontend/src/types/index.ts`
+    had drifted badly. Completed, and the key-URL test now derives its list
+    from the enum so it cannot drift again.
+
+## What a provider genuinely cannot do
+
+Recorded here rather than papered over in the capability map.
+
+- **Vertex AI cannot use a static API key.** Google's docs state that only
+  Google Cloud Auth works on the OpenAI-compatible surface; Vertex API keys
+  exist but express mode covers only `generateContent`, not
+  `endpoints/openapi`. The credential is a service-account JSON key and the
+  adapter mints a one-hour OAuth token per call (cached by
+  google-auth-library). A pasted access token is also accepted.
+- **Vertex AI serves no model list on that surface**, so a model must be
+  named at save time. Validation enforces it.
+- **Vertex Model Garden partner models are not on the OpenAI surface.**
+  Claude, Mistral, Grok and Jamba on Vertex use `:rawPredict` with each
+  vendor's native body. `vertex_ai` therefore serves Gemini on Vertex plus
+  self-deployed endpoints. Llama MaaS on Vertex is retired.
+- **Anthropic Claude is not served on Bedrock's OpenAI surface.** The API
+  compatibility matrix lists ChatCompletions as "no" for every Claude row;
+  Claude on Bedrock is Converse/Invoke or the native Messages API. Models
+  that do work there include the OpenAI, xAI, Qwen, Z.AI and Writer
+  families. Server-side tools (web search) are a `bedrock-mantle` feature,
+  not available on `bedrock-runtime`.
+- **Bedrock model ids are often inference profile ids** (`us.`, `global.`
+  prefixed), not bare foundation-model ids. Driven from
+  `GET /openai/v1/models` rather than hardcoded.
+- **Qwen documents no model listing.** Its compatible-mode reference
+  enumerates exactly six OpenAI APIs and `/models` is not among them, and
+  Alibaba documents listing absence elsewhere when it applies. A model must
+  be configured; the resolver reports `NO_MODEL_CONFIGURED` rather than
+  guessing.
+- **Z.ai, SambaNova and Fireworks' OpenAI surface document no listing
+  either.** Same contract: the request is attempted, and a failure becomes
+  `NO_MODEL_CONFIGURED` with the vendor's own reason.
+- **Azure and Foundry cannot be validated by key alone.** `model` is the
+  customer's deployment name, so a valid key with nothing deployed still
+  cannot answer. Both require a deployment name at save time.
+- **Modal requires a Shared Endpoint to exist first** (a dashboard action,
+  not a container deploy), and `model` is the endpoint's hostname.
+- **RunPod always carries an endpoint in the URL.** For the public catalog
+  that is a shared model slug and nothing needs deploying; for a private
+  worker it is the customer's endpoint id. There is no shared base without
+  one, so it is a required field.
+- **DigitalOcean's tool calling is not documented** on the plain chat
+  surface, and streaming is only implied by "OpenAI-compatible" rather than
+  shown in an example. Both are flagged here rather than asserted.
+- **Nebius streaming is not documented** on any page found, though the
+  surface is otherwise OpenAI-compatible.
+- **No vendor here documents a usage/cost API** except OpenAI and
+  Anthropic. Everything else is `supported: false` with a note.
+
+## Time-sensitive, with dates
+
+- **Perplexity Sonar chat completions retire 2026-09-27** (announced
+  2026-08-13). The Router API is still private preview.
+- **Azure AI Inference beta SDK retired 2026-08-26**; the
+  `{resource}.services.ai.azure.com/models` route rides it. We use
+  `/openai/v1`.
+- **Anthropic deprecated `temperature` / `top_p` / `top_k`** for models
+  after Claude Opus 4.6. Already handled by `callWithDeprecatedParamRetry`,
+  which strips the param the vendor names and retries once.
+- **DeepSeek's `deepseek-chat` and `deepseek-reasoner` aliases are being
+  discontinued.** No literal ids are stored anywhere, so this only affects
+  users who typed one.
+- **Groq retired `llama-3.1-8b-instant` and `llama-3.3-70b-versatile` on
+  2026-08-16**; Gemini retired `gemini-2.0-flash*` on 2026-06-01; Mistral
+  retired Large 2.1, Small 3.2 and Nemo through 2026. `DefaultModelResolver`
+  holds no literal ids by design, so all of these resolve from the vendor's
+  live list.
+- **Moonshot retired the entire `moonshot-v1` series and `kimi-latest`**
+  (2026-08-31 and 2026-01-28). Current flagship is `kimi-k3`.
+- **Nebius AI Studio keys stopped working 2026-01-31** after the Token
+  Factory rename.
+- **xAI and OpenAI both describe Chat Completions as legacy** in favour of
+  Responses. Neither has published a sunset date; both still work.
+
+## Not added, with evidence
+
+- **Replicate** - predictions-based HTTP API
+  (`POST /v1/models/{owner}/{name}/predictions`); no chat-completions path
+  exists to ride.
+- **Databricks Foundation Model APIs** - DBRX was retired from
+  pay-per-token on 2025-04-30; FMAPIs now serve third-party open weights
+  only, so there is no first-party Databricks model to name.
+- **Aleph Alpha** - Luminous API deprecated; company acquired by Cohere
+  (announced 2026-04-24).
+- **LG EXAONE, TII Falcon, 01.AI Yi** - open weights only, no vendor-run
+  developer API.
+- **Amazon Nova, Microsoft Phi** - first-party families with no standalone
+  base URL; reachable through `aws_bedrock` and `azure_ai_foundry`.
+
+## Added 2026-09-10
+
+Three of the candidates listed above were verified and built. Each row
+below is traceable to the vendor's own current documentation.
+
+**MiniMax** (`https://api.minimax.io/v1`, plain Bearer). OpenAI-compatible
+chat and `GET /v1/models` returning `{data:[{id}]}`. Tools and SSE both
+documented. `api.minimax.cn` is the mainland platform, a separate account
+namespace; `api.minimaxi.com` is a legacy alias that still answers but
+appears in neither platform's current docs, so it is an `apiUrl` override
+and not a fallback. Priced from the `minimax` LiteLLM namespace (six chat
+entries; `MiniMax-M2.7` and the `-highspeed` variants are not in the feed
+and stay unpriced). Note ids are capitalised (`MiniMax-M3`).
+https://platform.minimax.io/docs/api-reference/text-chat-openai
+
+**Upstage Solar** (`https://api.upstage.ai/v1`, plain Bearer). Chat and
+tools documented, with the OpenAI SDK as the documented client.
+`kr.api.upstage.ai` is a closed-beta Korea residency host serving document
+models only, not chat, so there is no region to choose. No model listing
+is documented; the route answers, so it is attempted and a failure becomes
+`NO_MODEL_CONFIGURED` rather than a guessed id. Absent from the LiteLLM
+map entirely, so Solar models stay unpriced rather than borrowing a number
+from somebody else's hosting.
+https://console.upstage.ai/docs/capabilities/generate/chat
+
+**Writer** (`https://api.writer.com/v1`, plain Bearer). **Not drop-in**:
+chat is `POST <base>/chat`, not `/chat/completions`, though the body and
+response are verbatim OpenAI. That one difference is handled by
+`chatCompletionsUrl()` in `openai.provider.ts` rather than a duplicate
+provider module. Its listing is `{models:[{id, name}]}` where `name` is a
+display label ("Palmyra X5") and `id` is the real identifier, the inverse
+of Cohere's use of the same envelope; the shared parser prefers `id` and
+falls back to `name`, which handles both. No `[DONE]` sentinel is
+documented, so the stream terminates on close. Absent from the LiteLLM map
+as a first-party vendor (the `writer.palmyra-*` keys there are Bedrock's
+hosting and Bedrock's prices), so unpriced.
+https://dev.writer.com/api-reference/completion-api/chat-completion
+
+## The rule for whether a vendor goes in
+
+Settled 2026-09-10, replacing three criteria that were used before it and
+were all wrong.
+
+**A vendor with bearer auth and an OpenAI-shaped surface is a card, and a
+card is a data row.** Geography is not a criterion. How well known the
+vendor is, is not a criterion. Vendor quirks are card FIELDS, not
+exclusion reasons: Writer's `POST <base>/chat`, Spark's per-generation
+base, Ark's international-or-mainland edition, a missing model listing, no
+pricing in the feed.
+
+The three withdrawn criteria, recorded because each looked reasonable:
+
+1. *"Signup may be closed to foreign customers."* Nobody verified it. It
+   entered as an open question in a research note and was repeated as
+   fact. Both Baidu and Volcengine run international editions.
+2. *"No listing endpoint documented."* Used against Spark while Upstage
+   shipped with the same gap, as do Qwen, Z.ai, SambaNova and Fireworks. A
+   missing `/models` degrades to `NO_MODEL_CONFIGURED` and the user names
+   the model. Never a reason to exclude.
+3. *Market position.* A ranking exercise with no end, and not ours to
+   decide for a customer who already has an account somewhere.
+
+Excluding ERNIE, Doubao and Hunyuan while shipping DeepSeek, Qwen and
+Moonshot was incoherent on its face: those three are Chinese too. The real
+reason was familiarity, not a criterion.
+
+## Not added, and why
+
+One entry, and the reason is a fact about the API rather than a judgement
+about the vendor.
+
+**AI21 (Jamba).** AI21 published a sunset date for the Jamba API of
+**2026-08-09**, which has passed. `GET /studio/v1/models` now answers
+**410 Gone**, pointing at an "AI21 Gateway" that has no published API
+documentation, no documented base URL, and no DNS-resolving host. The docs
+describing the Jamba API as current were last updated 2025-12-01.
+Separately, `stream` and `tools` are documented as mutually exclusive.
+Revisit when the Gateway is documented.
+https://docs.ai21.com/august-deprecation-notice
+
+## Added 2026-09-10, second pass
+
+**Baidu ERNIE** (`https://qianfan.baidubce.com/v2`), **Tencent Hunyuan**
+(`https://tokenhub-intl.tencentcloudmaas.com/v1`), **ByteDance Doubao**
+(`https://ark.ap-southeast.bytepluses.com/api/v3`, edition field) and
+**iFlytek Spark** (`https://spark-api-open.xf-yun.com/{x2|v2|v1}`,
+generation field).
+
+None of the four needs a request signature on the surface we call.
+Volcengine and Tencent both publish a plain-bearer OpenAI-compatible
+surface alongside their signed legacy APIs, and Baidu's
+AK/SK-to-access-token exchange is superseded on `/v2` by a single opaque
+`bce-v3/...` key. That was the main fear going in and it was unfounded.
+
+Spark's generation is a required field because X2 (`/x2`) and X1.5
+(`/v2`) both answer to the model id `spark-x`, so the model field cannot
+tell them apart and any default silently serves the wrong generation. The
+legacy line (`/v1`) carries 4.0Ultra and the generalv3 models; its Max
+package retired 2026-03-10 into Ultra.
+https://www.xfyun.cn/doc/spark/X1http.html
+
+Naver HyperCLOVA X, Nvidia NIM, Snowflake Cortex and IBM watsonx were
+researched separately; self-hosted NIM is already served by the generic
+OpenAI-compatible endpoint type and needs nothing of its own.
 
 ## Pricing
 
-No seed prices were added. The LiteLLM cost map carries every one of these vendors under `litellm_provider` values `fireworks_ai`, `cerebras`, `deepinfra`, `novita`, `perplexity`, `zai`, `baseten`, `nebius`, `sambanova` (checked against the live JSON on 2026-09-08: 320, 8, 135, 135, 76, 16, 12, 57 and 19 chat entries). The feed strips the first path segment, which yields exactly the id each host's `/models` returns (Fireworks: `accounts/fireworks/models/<name>`). OpenRouter cross-checks only Perplexity (`perplexity/`) and Z.ai (`z-ai/`); the other hosts have no OpenRouter namespace.
+Live prices come from the LiteLLM cost map. Namespaces checked against the
+live JSON on 2026-09-09: `moonshot` (24 chat entries), and `dashscope` /
+`qwencloud` / `qwen_ai_platform` (45 each, byte-identical mirrors of one
+catalog). `moonshot_ai` and `qwen` do not exist as feed keys. OpenRouter
+prefixes are `moonshotai/` and `qwen/`.
 
-Hosts that serve other authors' open models (`HOSTED_OPEN_MODEL_TYPES` in `llm-models.helper.ts`) skip the cross-provider seed fallback: `deepseek-v3` on Novita is never billed at DeepSeek's list price. Without a feed quote such a model is unpriced, which the catalog surfaces, rather than silently wrong.
+DigitalOcean, RunPod and Modal have no LiteLLM namespace, so models there
+stay unpriced rather than borrowing another vendor's list price. Hosts that
+serve other authors' models (`HOSTED_OPEN_MODEL_TYPES`) skip the
+cross-provider seed fallback for the same reason: `deepseek-v4` on RunPod is
+never billed at DeepSeek's list price.
 
-## Default model selection
+## Known gaps in this verification
 
-`default-model.resolver.ts` gained family regexes, not ids: Perplexity prefers `sonar-pro`, then `sonar`, then any `sonar-*`; Z.ai prefers plain `glm-N`, then `glm-N-flash`, then any `glm-*`. The seven hosts share one preference (instruct Llama, instruct Qwen, DeepSeek-V, then those families loosely) and, unlike first-party vendors, fall back to the first served chat model when none of those is listed, because a host's catalog is a moving mix of authors.
+Stated so the next pass knows where to look.
 
-## Left out
-
-- Replicate. Its HTTP API is predictions-based (`POST /v1/models/{owner}/{name}/predictions`, `POST /v1/predictions`); the reference documents no path containing `chat` or `openai`, and `https://api.replicate.com/openai/v1/chat/completions` is a 404. There is no OpenAI-compatible chat completions endpoint to ride, so it is not a provider type. If Replicate ships one, it is a nine-line addition per the table above.
-- Usage/cost ingestion: none of the nine vendors documents a programmatic usage or billing API, so all are `supported: false` in the provider-usage capability map.
+- Nothing was called with a live key. Every "yes" is what the vendor
+  documents, not an observed response.
+- AWS's own pages disagree on the `bedrock-mantle` base
+  (`/v1` vs `/openai/v1`). `bedrock-runtime`, which we default to, is
+  consistent everywhere.
+- Perplexity's SSE event enumeration is not published; the parser handles
+  the two documented events and ignores unknown types.
+- `https://api.perplexity.ai/v1/chat/completions` is undocumented in either
+  direction; the OpenAI-compat alias is at the bare host. Not relied on.
+- Whether `api.deepseek.com/v1` still answers is unconfirmed. The
+  documented base is used.
+- Cohere's `/compatibility/v1/models` could not be distinguished from
+  absent without a key (it 401s), which is why the listing stays on the
+  documented native `/v1/models`.
+- Closed on 2026-09-09: the type filter on `frontend/src/pages/llm-providers.tsx`
+  and the third logo map in `frontend/src/pages/llm-provider-detail.tsx` were
+  stale hand-written lists. Not cosmetic after all: the filter was eight
+  entries behind the create form, so a provider a user could create could
+  never be filtered for. Both now render from `providerTypeLabels` in
+  `frontend/src/components/llm-providers/provider-type-config.ts`, and
+  `provider-types.test.ts` fails when an enum value has no label or logo.

@@ -51,13 +51,13 @@ const CORE_STEPS: {
 
 /**
  * Contextual on-ramp, shown outside the ring once a model is missing. It
- * targets the second family of journeys (agents, LLM-backed tools, memory)
+ * targets the second family of journeys (agents, model-backed tools, memory)
  * that genuinely need an almyty-configured model — without forcing it on
  * the tool/gateway hero path that doesn't.
  */
 const MODEL_STEP = {
   label: 'Building agents on almyty?',
-  description: 'Connect a model to power agents, LLM-backed tools, and memory.',
+  description: 'Connect a model to power agents, model-backed tools, and memory.',
   cta: 'Connect a model',
   to: '/llm-providers?new=1',
 }

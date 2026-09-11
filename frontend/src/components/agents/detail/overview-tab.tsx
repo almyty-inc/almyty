@@ -433,7 +433,7 @@ export function OverviewTab({
                 <span className="font-medium">{agent.pipeline?.edges?.length || 0}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">LLM calls</span>
+                <span className="text-muted-foreground">Model calls</span>
                 <span className="font-medium">{(agent.pipeline?.nodes || []).filter((n: any) => n.type === 'llm_call').length}</span>
               </div>
               <div className="flex justify-between">

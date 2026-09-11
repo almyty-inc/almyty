@@ -181,7 +181,7 @@ export function CreateToolDialog({
                 <SelectItem value="soap">SOAP</SelectItem>
                 <SelectItem value="grpc">gRPC</SelectItem>
                 <SelectItem value="custom">Custom JavaScript</SelectItem>
-                <SelectItem value="llm">LLM Prompt</SelectItem>
+                <SelectItem value="llm">Model Prompt</SelectItem>
                 <SelectItem value="sdk">SDK / npm Package</SelectItem>
               </SelectContent>
             </Select>
@@ -191,7 +191,7 @@ export function CreateToolDialog({
               {executionMethod === 'soap' && 'Call SOAP web services'}
               {executionMethod === 'grpc' && 'Invoke gRPC service methods'}
               {executionMethod === 'custom' && 'Write custom JavaScript code for transformations and logic'}
-              {executionMethod === 'llm' && 'Prompt an LLM provider and return the response'}
+              {executionMethod === 'llm' && 'Prompt a model and return the response'}
               {executionMethod === 'sdk' && 'Call methods on an npm package class (from an SDK API)'}
             </p>
           </div>
@@ -634,12 +634,12 @@ export function CreateToolDialog({
 
           {executionMethod === 'llm' && (
             <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
-              <Label className="text-base font-semibold">LLM Configuration</Label>
+              <Label className="text-base font-semibold">Model Configuration</Label>
 
               <div>
                 <Label>Provider</Label>
                 <Select value={llmConfig.providerId} onValueChange={(v) => onLlmConfigChange({ ...llmConfig, providerId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select LLM provider..." /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select provider..." /></SelectTrigger>
                   <SelectContent>
                     {activeProviders.map((p: any) => (
                       <SelectItem key={p.id} value={p.id}>{p.name} ({p.provider})</SelectItem>

@@ -96,6 +96,8 @@ curl -X PATCH https://api.almyty.com/organizations/$ORG \
 
 ## Versions
 
+Registering a version is optional: lineage, a manifest digest and evaluation history for weights you track yourself. A deployment never needs one; see [Deployments](/models/deployments) below.
+
 | Method | Endpoint | Role | Description |
 |--------|----------|------|-------------|
 | `GET` | `/model-versions` | member | List registered versions |
@@ -113,32 +115,38 @@ curl -X POST https://api.almyty.com/model-versions \
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Version name |
-| `registryUri` | string | Yes | `s3://bucket/prefix@etag`, `hf://org/repo@sha` or `file:///path@sha`; the pin is required |
-| `base` | string | For `hf://` and `file://` without a manifest | Base architecture |
+| `registryUri` | string | Yes | `hf://org/repo@sha`, `s3://bucket/prefix@etag`, `gs://bucket/prefix@generation` or `file:///path@sha`; the pin is required |
+| `base` | string | For a URI without a manifest | Base architecture |
 | `quantizations` | string[] | No | For example `["bf16", "awq-int4"]` |
 | `lineage` | object | No | `{ trainingJobId?, datasetRef?, parentVersionId? }` |
 | `metadata` | object | No | Free-form |
 
-Errors: `REGISTRY_NOT_CONNECTED` (no registry connection for the organization on an `s3://` URI), `VERSION_IN_USE` on delete.
+Errors: `REGISTRY_NOT_CONNECTED` (no registry connection for the organization, on an `s3://` URI), `VERSION_IN_USE` on delete.
 
 ## Deployments
 
+Naming the model is configuration, not a registration step. `POST /model-deployments` takes the model as a string; a registered version is one of two ways in, not the only one.
+
 | Method | Endpoint | Role | Description |
 |--------|----------|------|-------------|
-| `GET` | `/model-adapters` | member | Registered adapters: `key`, `displayName`, `capabilities`, `configSchema` |
+| `GET` | `/model-adapters` | member | Registered adapters: `key`, `displayName`, `capabilities`, `modelSchemes`, `configSchema` |
 | `GET` | `/model-deployments` | member | List deployments |
 | `POST` | `/model-deployments` | admin | Create a deployment (desired state); reconcile does the rest |
 | `GET` | `/model-deployments/:id` | member | Desired vs actual, state, cost |
 | `POST` | `/model-deployments/:id/scale` | admin | `{ replicas }`; 0 scales to zero |
-| `POST` | `/model-deployments/:id/teardown` | admin | Tear the endpoint down; weights stay |
+| `POST` | `/model-deployments/:id/teardown` | admin | Tear the endpoint down |
 | `DELETE` | `/model-deployments/:id` | admin | Same as teardown |
+
+`GET /model-adapters` carries `modelSchemes` per adapter: every reference it accepts, artifact and provider reference alike, as literal prefixes (`hf://`, `s3://`, `bedrock://`, ...). A form filters both ways with it: the providers that can run the model you have, or the sources the provider you picked will take.
+
+Deploy straight from a Hugging Face repository, no version registered:
 
 ```bash
 curl -X POST https://api.almyty.com/model-deployments \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "modelVersionId": "a91c...",
+    "model": "hf://Qwen/Qwen3-0.6B@main",
     "providerType": "huggingface-endpoints",
     "desired": { "replicas": 1, "region": "eu-west-1", "privacyTier": "private_cloud" },
     "providerConfig": { "token": "hf_...", "namespace": "acme", "region": "eu-west-1", "instanceType": "nvidia-a10g" },
@@ -146,19 +154,37 @@ curl -X POST https://api.almyty.com/model-deployments \
   }'
 ```
 
+Or a model that already exists on a platform:
+
+```json
+{ "model": "fireworks://accounts/acme/models/qwen3-tuned", "providerType": "fireworks" }
+```
+
+Or, for lineage tracked through a registered version, `modelVersionId` instead of `model`:
+
+```json
+{ "modelVersionId": "a91c...", "providerType": "huggingface-endpoints" }
+```
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `modelVersionId` | uuid | Yes | The version to run |
+| `model` | string | One of | The model to run: an artifact (`hf://org/repo@sha`, `s3://bucket/prefix@etag`, `gs://bucket/prefix@generation`, `file:///path@sha`) or a provider reference (`bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`) |
+| `modelVersionId` | uuid | One of | A registered version instead of `model`, for lineage |
+| `base` | string | No | Architecture family, when the adapter checks it and the reference itself doesn't carry one |
 | `providerType` | string | Yes | Adapter key from `GET /model-adapters` |
 | `desired` | object | No | `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
 | `providerConfig` | object | No | Validated against the adapter's `configSchema`; `x-secret` fields encrypted |
 | `credentialId` | uuid | No | A stored credential whose fields the adapter reads |
 | `budgetId` | uuid | No | Spend budget; reaching it scales to zero |
-| `modelId` | uuid | No | A card that already exists for this version; filled with the endpoint once ready |
+| `modelId` | uuid | No | A card that already exists for this model; filled with the endpoint once ready |
 
-A deployment in a response carries `state` (`pending`, `deploying`, `ready`, `degraded`, `scaling`, `tearing_down`, `torn_down`, `orphaned`, `failed`), `desired`, `actual` (`state`, `url`, `replicas`, `hardware`, `region`, `message`, `spentCents`, `ratePerHourCents`), `externalRef`, `lastReconcileAt`, `lastError`, `budgetId`, and `providerConfig` with every secret shown as `********`.
+Exactly one of `model` or `modelVersionId` is required; naming neither is `MODEL_REQUIRED`. A `model` or version whose scheme the adapter can't read is refused with `ADAPTER_UNSUPPORTED_SOURCE` and an `accepts` array of the schemes it does take.
 
-Adapter errors carry `ADAPTER_UNKNOWN`, `ADAPTER_UNSUPPORTED_OPERATION` (the adapter cannot do this, for example deploy through `custom-endpoint`), `ADAPTER_AUTH`, `ADAPTER_ERROR`.
+A deployment in a response carries `state` (`pending`, `deploying`, `ready`, `degraded`, `scaling`, `tearing_down`, `torn_down`, `orphaned`, `failed`), `modelRef` or `modelVersionId`, `desired`, `actual` (`state`, `url`, `replicas`, `hardware`, `region`, `message`, `spentCents`, `ratePerHourCents`), `externalRef`, `lastReconcileAt`, `lastError`, `budgetId`, and `providerConfig` with every secret shown as `********`.
+
+Adapter errors carry `ADAPTER_UNKNOWN`, `ADAPTER_UNSUPPORTED_SOURCE` (the model's scheme is not one this adapter reads), `ADAPTER_UNSUPPORTED_OPERATION` (the adapter cannot do this at all, for example deploy through `custom-endpoint`), `ADAPTER_UNSUPPORTED_ARCHITECTURE`, `ADAPTER_AUTH`, `ADAPTER_ERROR`.
+
+Every adapter is fixture-only: none has been run against a real provider account. See [Deployments](/models/deployments#adapters-are-data) for what each one actually accepts.
 
 ## Audit actions
 

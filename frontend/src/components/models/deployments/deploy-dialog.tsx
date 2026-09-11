@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Check } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -12,21 +12,27 @@ import { ConnectedChip } from '@/components/connections/connected-chip'
 import { ConnectionSelect } from '@/components/connections/connection-select'
 import type { Connection } from '@/types/connections'
 import { budgetsApi, credentialsApi } from '@/lib/api'
-import { formatCents } from '@/lib/deployments-api'
-import { cn } from '@/lib/utils'
+import { formatCents, matchAdapters, parseModelRef, schemeOf } from '@/lib/deployments-api'
 import { useOrganizationStore } from '@/store/organization'
 import type { VaultCredential } from '@/types/usage'
-import type { CreateModelDeploymentBody, ModelAdapter, ModelVersion, PrivacyTier, SpendBudgetSummary } from '@/types/deployments'
+import type { AdapterRefusal, CreateModelDeploymentBody, ModelAdapter, ModelVersion, PrivacyTier, SpendBudgetSummary } from '@/types/deployments'
+import { ModelSourceField } from './model-source-field'
+import { ProviderPicker } from './provider-picker'
 
 export interface DeployDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   adapters: ModelAdapter[]
-  versions: ModelVersion[]
+  /** Registered artifacts, for the operators who keep them. Never a prerequisite. */
+  versions?: ModelVersion[]
   onSubmit: (body: CreateModelDeploymentBody) => void
   submitting?: boolean
-  /** Preselect a version, e.g. from the Versions tab. */
+  /** Preselect a registered version, e.g. from the Versions tab. */
   initialVersionId?: string
+  /** Preselect a model reference, e.g. redeploying what a card already runs. */
+  initialModel?: string
+  /** What the server said when it refused the last submit. */
+  refusal?: AdapterRefusal | null
 }
 
 export interface DesiredFormValues {
@@ -46,7 +52,12 @@ const SELECT_CLASS =
 
 export interface DeployFormState {
   adapter: ModelAdapter | null
-  versionId: string
+  /** Where the model is. This is the whole model configuration. */
+  model: string
+  /** Architecture family, when the provider checks it and the reference carries none. */
+  base?: string
+  /** The operator path: a registered artifact instead of a plain reference. */
+  versionId?: string
   desired: DesiredFormValues
   config: SchemaFormValues
   credentialId: string
@@ -59,12 +70,29 @@ export type DeployBuildResult = { ok: true; body: CreateModelDeploymentBody } | 
 
 /**
  * Turn the form state into the POST /model-deployments body, or the field
- * errors that stop it. Pure so it is testable without the dialog.
+ * errors that stop it.
+ *
+ * The model is configuration: a reference goes out as `model` and nothing
+ * has to be registered first. A registered version is the other path, and
+ * then the server reads the reference off the version row. Compatibility
+ * is checked here too, with the adapter's own `modelSchemes`, so the
+ * common refusal never costs a round trip.
  */
 export function buildDeployBody(state: DeployFormState): DeployBuildResult {
   const errors: Record<string, string> = {}
-  if (!state.adapter) errors.adapter = 'Pick an adapter'
-  if (!state.versionId) errors.versionId = 'Pick a version'
+  if (!state.adapter) errors.adapter = 'Pick a provider'
+
+  const versionId = state.versionId ?? ''
+  const model = (state.model ?? '').trim()
+  const parsed = model ? parseModelRef(model) : null
+  if (!versionId && !model) {
+    errors.model = 'Say where the model is'
+  } else if (parsed && !parsed.ok) {
+    errors.model = parsed.error
+  } else if (parsed && parsed.ok && state.adapter) {
+    const match = matchAdapters([state.adapter], parsed.value.scheme)[0]
+    if (match && !match.ok && match.reason) errors.model = match.reason
+  }
 
   const desired: CreateModelDeploymentBody['desired'] = {}
   const int = (key: keyof DesiredFormValues, label: string, min: number) => {
@@ -99,9 +127,12 @@ export function buildDeployBody(state: DeployFormState): DeployBuildResult {
 
   if (Object.keys(errors).length > 0) return { ok: false, errors }
 
-  const body: CreateModelDeploymentBody = {
-    modelVersionId: state.versionId,
-    providerType: state.adapter!.key,
+  const body: CreateModelDeploymentBody = { providerType: state.adapter!.key }
+  if (versionId) {
+    body.modelVersionId = versionId
+  } else {
+    body.model = parsed && parsed.ok ? parsed.value.raw : model
+    if (state.base?.trim()) body.base = state.base.trim()
   }
   if (Object.keys(desired).length > 0) body.desired = desired
   const providerConfig = connectionId ? stripSecretValues(state.adapter?.configSchema, config.value) : config.value
@@ -121,9 +152,12 @@ export function describeBudget(b: SpendBudgetSummary): string {
   return `${formatCents(b.limitCents)} per ${b.periodType} (${scope}, ${b.behavior === 'reject' ? 'hard stop' : 'warn'})`
 }
 
-export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit, submitting, initialVersionId }: DeployDialogProps) {
+export function DeployDialog({ open, onOpenChange, adapters, versions = [], onSubmit, submitting, initialVersionId, initialModel, refusal }: DeployDialogProps) {
   const { currentOrganization } = useOrganizationStore()
+  const initialVersion = initialVersionId ? versions.find((v) => v.id === initialVersionId) : undefined
   const [adapterKey, setAdapterKey] = useState<string>('')
+  const [model, setModel] = useState<string>(initialVersion?.registryUri ?? initialModel ?? '')
+  const [base, setBase] = useState<string>('')
   const [versionId, setVersionId] = useState<string>(initialVersionId ?? '')
   const [desired, setDesired] = useState<DesiredFormValues>(EMPTY_DESIRED)
   const [config, setConfig] = useState<SchemaFormValues>({})
@@ -131,9 +165,11 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
   const [connection, setConnection] = useState<Connection | null>(null)
   const [budgetId, setBudgetId] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [trackOpen, setTrackOpen] = useState(false)
 
   const adapter = useMemo(() => adapters.find((a) => a.key === adapterKey) ?? null, [adapters, adapterKey])
   const version = useMemo(() => versions.find((v) => v.id === versionId) ?? null, [versions, versionId])
+  const scheme = schemeOf(model)
 
   const { data: credentials = [] } = useQuery<VaultCredential[]>({
     queryKey: ['credentials', currentOrganization?.id],
@@ -154,7 +190,10 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
 
   useEffect(() => {
     if (!open) return
+    const preset = initialVersionId ? versions.find((v) => v.id === initialVersionId) : undefined
     setAdapterKey('')
+    setModel(preset?.registryUri ?? initialModel ?? '')
+    setBase('')
     setVersionId(initialVersionId ?? '')
     setDesired(EMPTY_DESIRED)
     setConfig({})
@@ -162,19 +201,36 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
     setConnection(null)
     setBudgetId('')
     setErrors({})
-  }, [open, initialVersionId])
+    setTrackOpen(!!initialVersionId)
+    // versions only seeds the preset reference; re-running on every refetch would wipe typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialVersionId, initialModel])
 
   const pickAdapter = (key: string) => {
     setAdapterKey(key)
     const next = adapters.find((a) => a.key === key)
     setConfig(schemaDefaults(next?.configSchema))
     setDesired((prev) => ({ ...prev, region: next && next.capabilities.regions.length > 0 && !next.capabilities.regions.includes(prev.region) ? '' : prev.region }))
-    setErrors({})
+    setErrors((prev) => ({ ...prev, adapter: '', model: '' }))
+  }
+
+  // Typing a reference by hand means this is no longer that registered version.
+  const changeModel = (value: string) => {
+    setModel(value)
+    if (versionId && value !== version?.registryUri) setVersionId('')
+    setErrors((prev) => ({ ...prev, model: '' }))
+  }
+
+  const pickVersion = (id: string) => {
+    setVersionId(id)
+    const picked = versions.find((v) => v.id === id)
+    if (picked) setModel(picked.registryUri)
+    setErrors((prev) => ({ ...prev, model: '' }))
   }
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    const result = buildDeployBody({ adapter, versionId, desired, config, credentialId, budgetId, connectionId: connection?.id })
+    const result = buildDeployBody({ adapter, model, base, versionId, desired, config, credentialId, budgetId, connectionId: connection?.id })
     if (!result.ok) {
       setErrors(result.errors)
       return
@@ -198,37 +254,15 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Deploy a version</DialogTitle>
-          <DialogDescription>Pick where the weights run. Desired state is saved now; the reconcile loop talks to the provider.</DialogDescription>
+          <DialogTitle>Run a model</DialogTitle>
+          <DialogDescription>
+            Say where the model is and who should run it. Desired state is saved now; the reconcile loop talks to the provider.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Adapter</legend>
-            {adapters.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No deployment adapters are registered on this server.</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Adapter">
-                {adapters.map((a) => (
-                  <AdapterCard key={a.key} adapter={a} selected={a.key === adapterKey} onSelect={() => pickAdapter(a.key)} />
-                ))}
-              </div>
-            )}
-            {errors.adapter && <FieldError id="deploy-adapter-error">{errors.adapter}</FieldError>}
-          </fieldset>
+          <ModelSourceField value={model} onChange={changeModel} adapters={adapters} adapter={adapter} error={errors.model} />
 
-          <div className="space-y-1.5">
-            <Label htmlFor="deploy-version">Version</Label>
-            <select id="deploy-version" className={SELECT_CLASS} value={versionId} onChange={(e) => setVersionId(e.target.value)} aria-invalid={!!errors.versionId} aria-describedby={errors.versionId ? 'deploy-version-error' : undefined}>
-              <option value="">Select a registry version</option>
-              {versions.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name} ({v.base})
-                </option>
-              ))}
-            </select>
-            {versions.length === 0 && <p className="text-xs text-muted-foreground">Register a version on the Versions tab first.</p>}
-            {errors.versionId && <FieldError id="deploy-version-error">{errors.versionId}</FieldError>}
-          </div>
+          <ProviderPicker adapters={adapters} scheme={scheme} value={adapterKey} onSelect={pickAdapter} error={errors.adapter} refusal={refusal} />
 
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">Desired state</legend>
@@ -273,7 +307,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
                 )}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="deploy-privacy-tier">Privacy tier</Label>
+                <Label htmlFor="deploy-privacy-tier">Privacy</Label>
                 <select id="deploy-privacy-tier" className={SELECT_CLASS} value={desired.privacyTier} onChange={(e) => setDesiredField('privacyTier', e.target.value as DesiredFormValues['privacyTier'])}>
                   <option value="">Not set</option>
                   <option value="local">local</option>
@@ -285,7 +319,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
           </fieldset>
 
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">{adapter ? `${adapter.displayName} configuration` : 'Adapter configuration'}</legend>
+            <legend className="text-sm font-medium">{adapter ? `${adapter.displayName} configuration` : 'Provider configuration'}</legend>
             {adapter ? (
               <>
                 <JsonSchemaForm schema={adapter.configSchema} value={config} onChange={setConfig} errors={configErrors} mode="create" hideSecrets={usingConnection} />
@@ -298,7 +332,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
                 )}
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">Pick an adapter to see its settings.</p>
+              <p className="text-sm text-muted-foreground">Pick a provider to see its settings.</p>
             )}
           </fieldset>
 
@@ -313,7 +347,7 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-muted-foreground">Handed to the adapter per call, never stored on the deployment.</p>
+              <p className="text-xs text-muted-foreground">Handed to the provider per call, never stored on the deployment.</p>
               {connection ? (
                 <ConnectedChip connection={connection} onClear={() => setConnection(null)} />
               ) : (
@@ -355,6 +389,43 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
             </div>
           </div>
 
+          <div className="rounded-lg border border-dashed p-3">
+            <button
+              type="button"
+              className="flex w-full items-center gap-1.5 text-left text-sm font-medium"
+              onClick={() => setTrackOpen((prev) => !prev)}
+              aria-expanded={trackOpen}
+            >
+              {trackOpen ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+              Tracked artifact (optional)
+            </button>
+            {trackOpen && (
+              <div className="mt-3 space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="deploy-version">Registered version</Label>
+                  <select id="deploy-version" className={SELECT_CLASS} value={versionId} onChange={(e) => pickVersion(e.target.value)}>
+                    <option value="">None, use the reference above</option>
+                    {versions.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} ({v.base})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Only for operators who keep their own artifact records. Most deployments never use one, and picking one just fills the reference above.
+                  </p>
+                </div>
+                {!versionId && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="deploy-base">Architecture family</Label>
+                    <Input id="deploy-base" value={base} onChange={(e) => setBase(e.target.value)} placeholder="e.g. qwen3-14b" />
+                    <p className="text-xs text-muted-foreground">Only needed when the provider checks the architecture and the reference does not name one.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
               Cancel
@@ -366,43 +437,6 @@ export function DeployDialog({ open, onOpenChange, adapters, versions, onSubmit,
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function AdapterCard({ adapter, selected, onSelect }: { adapter: ModelAdapter; selected: boolean; onSelect: () => void }) {
-  const caps = adapter.capabilities
-  const tags = [
-    caps.serverless ? 'serverless' : null,
-    caps.dedicated ? 'dedicated' : null,
-    caps.scaleToZero ? 'scale to zero' : null,
-    caps.lora !== 'none' ? `lora: ${caps.lora}` : null,
-    caps.architectures === 'any' ? 'any architecture' : `${caps.architectures.length} architectures`,
-    caps.regions.length > 0 ? `${caps.regions.length} regions` : null,
-  ].filter((t): t is string => !!t)
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      className={cn(
-        'rounded-lg border p-3 text-left transition-colors hover:bg-accent',
-        selected ? 'border-primary bg-primary/5 ring-1 ring-primary/40' : 'border-border',
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-medium">{adapter.displayName}</span>
-        {selected && <Check className="h-4 w-4 text-primary" aria-hidden="true" />}
-      </div>
-      <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">{adapter.key}</div>
-      <div className="mt-2 flex flex-wrap gap-1">
-        {tags.map((t) => (
-          <span key={t} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-            {t}
-          </span>
-        ))}
-      </div>
-    </button>
   )
 }
 

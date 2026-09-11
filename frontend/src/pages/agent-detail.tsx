@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { ExecutionTab } from '@/components/agents/execution-tab'
 
 import { agentsApi, memoriesApi, filesApi, versionsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
@@ -348,15 +349,20 @@ export function AgentDetailPage() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="runs">Runs</TabsTrigger>
+          <TabsTrigger value="execution">Execution</TabsTrigger>
           <TabsTrigger value="memory">Memory</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="interfaces">Interfaces</TabsTrigger>
           <TabsTrigger value="skills">Skills</TabsTrigger>
           <TabsTrigger value="constraints">Constraints</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="execution" className="space-y-6">
+          <ExecutionTab agentId={agent.id} />
+        </TabsContent>
 
         <TabsContent value="overview" className="space-y-6">
           <OverviewTab

@@ -142,7 +142,7 @@ export class ModelCatalogService {
     let providerType: string | null = null;
     if (input.providerId) {
       const provider = await this.providers.findOne({ where: { id: input.providerId, organizationId } });
-      if (!provider) throw new NotFoundException('LLM provider not found');
+      if (!provider) throw new NotFoundException('Provider not found');
       providerType = provider.type;
     } else {
       providerType = input.endpointRef?.providerType ?? LlmProviderType.CUSTOM;
@@ -157,7 +157,7 @@ export class ModelCatalogService {
         : { organizationId, name: input.name },
     });
     if (duplicate) {
-      throw new BadRequestException({ code: 'MODEL_EXISTS', message: `A card for ${input.vendorModelId} already exists (${duplicate.id})` });
+      throw new BadRequestException({ code: 'MODEL_EXISTS', message: `A model for ${input.vendorModelId} already exists (${duplicate.id})` });
     }
 
     const card = this.models.create({
@@ -218,6 +218,12 @@ export class ModelCatalogService {
         privacyTier: input.privacyTier ?? 'private_cloud',
         region: input.region,
         pricingOverride: input.pricingOverride,
+        // The card records where it is served from, the same field a
+        // deployment fills, minus the deploymentId that marks one we run.
+        // Without this a hand-registered endpoint was indistinguishable
+        // from a vendor key, so it was badged wrong and the "your
+        // endpoint" filter matched nothing.
+        endpointRef: { url: input.url },
         metadata: { endpoint: input.url },
       },
       userId,
@@ -235,7 +241,7 @@ export class ModelCatalogService {
    */
   async syncFromProvider(organizationId: string, providerId: string, userId?: string): Promise<ProviderSyncResult> {
     const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
-    if (!provider) throw new NotFoundException('LLM provider not found');
+    if (!provider) throw new NotFoundException('Provider not found');
     const listed = await this.modelsHelper.fetchModelsFromProvider(provider);
     const existing = await this.models.find({ where: { organizationId, providerId } });
     const byVendorId = new Map(existing.map((m) => [m.vendorModelId, m]));
@@ -463,7 +469,7 @@ export class ModelCatalogService {
     const card = await this.get(organizationId, id);
     const provider = await this.router.providerFor(card);
     if (!provider) {
-      return this.recordValidation(card, false, 'Card has no callable provider', userId);
+      return this.recordValidation(card, false, 'This model has no callable provider', userId);
     }
     const session = Conversation.createConversation({
       providerId: provider.id.startsWith('endpoint:') ? undefined : provider.id,

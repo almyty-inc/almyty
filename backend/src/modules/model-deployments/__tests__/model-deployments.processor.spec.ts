@@ -49,6 +49,28 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
     expect(transitions).toEqual(['deploying', 'ready']);
   });
 
+  it('deploys a row that names its model inline, without ever reading a version', async () => {
+    row.modelVersionId = null;
+    row.modelRef = 'hf://Qwen/Qwen3-0.6B@main';
+    row.modelBase = 'qwen3-0.6b';
+    const deploySpy = jest.spyOn(stub, 'deploy');
+    const out = await processor.reconcile('d-1');
+    expect(versions.findOne).not.toHaveBeenCalled();
+    expect(out?.state).toBe('ready');
+    expect(deploySpy).toHaveBeenCalledWith(
+      expect.objectContaining({ version: expect.objectContaining({ registryUri: 'hf://Qwen/Qwen3-0.6B@main', base: 'qwen3-0.6b' }) }),
+      expect.anything(),
+    );
+  });
+
+  it('fails a row that names no model at all rather than deploying nothing', async () => {
+    row.modelVersionId = null;
+    row.modelRef = null;
+    versions.findOne.mockResolvedValue(null);
+    const out = await processor.reconcile('d-1');
+    expect(out?.state).toBe('failed');
+    expect(out?.lastError).toMatch(/names no model/i);
+  });
   it('scales when desired replicas differ from actual', async () => {
     await processor.reconcile('d-1');
     row.desired = { ...row.desired, replicas: 0 };

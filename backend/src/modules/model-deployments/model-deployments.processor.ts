@@ -190,14 +190,20 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
 
       if (!d.externalRef) {
         // Nothing exists yet: deploy.
-        const version = await this.versions.findOne({ where: { id: d.modelVersionId } });
-        if (!version) return this.fail(d, 'model version missing');
+        // Either a registered version, or the model named as config on
+        // the deployment itself. Most deployments are the latter.
+        const version = d.modelVersionId ? await this.versions.findOne({ where: { id: d.modelVersionId } }) : null;
+        if (d.modelVersionId && !version) return this.fail(d, 'model version missing');
+        if (!version && !d.modelRef) return this.fail(d, 'deployment names no model');
+        const model = version
+          ? { id: version.id, name: version.name, registryUri: version.registryUri, base: version.base, quantizations: version.quantizations, manifestSha: version.manifestSha }
+          : { id: d.id, name: d.modelRef as string, registryUri: d.modelRef as string, base: d.modelBase ?? '', quantizations: [] as string[], manifestSha: null };
         await this.transition(d, d.state, 'deploying');
         const ref = await adapter.deploy(
           {
             deploymentId: d.id,
             organizationId: d.organizationId,
-            version: { id: version.id, name: version.name, registryUri: version.registryUri, base: version.base, quantizations: version.quantizations, manifestSha: version.manifestSha },
+            version: model,
             desired: d.desired,
             providerConfig: stripSecrets(d.getDecryptedProviderConfig()),
           },

@@ -1,28 +1,167 @@
 # Fireworks AI adapter (`fireworks`)
 
-Verified 2026-09-08 against docs.fireworks.ai (API reference pages `create-model`, `get-model-upload-endpoint`, `validate-model-upload`, `delete-model`, `create-deployment`, `get-deployment`, `update-deployment`, `scale-deployment`, `delete-deployment`, the guides `models/uploading-custom-models`, `models/uploading-custom-models-api`, `guides/ondemand-deployments`, `deployments/regions`, `deployments/autoscaling`) and fireworks.ai/pricing. Source: `backend/src/modules/model-deployments/adapters/fireworks.adapter.ts`.
+Fireworks **on-demand deployments**: dedicated GPUs running a model that
+already lives in your Fireworks account, called through their
+OpenAI-compatible inference API. Implementation:
+`backend/src/modules/model-deployments/adapters/fireworks.adapter.ts`.
 
-## What was verified
+## Verified (2026-09-09)
 
-- Base `https://api.fireworks.ai/v1/accounts/{account_id}`, `Authorization: Bearer <key>`. Errors use the gRPC-style body `{code, message, status}` (`UNAUTHENTICATED`, `PERMISSION_DENIED`, `NOT_FOUND`, `ALREADY_EXISTS`, `RESOURCE_EXHAUSTED`, `FAILED_PRECONDITION`, ...).
-- Models: `POST .../models` with `{modelId, model: {kind, displayName, description, huggingFaceUrl, baseModelDetails: {checkpointFormat: NATIVE | HUGGINGFACE | UNINITIALIZED, worldSize, huggingfaceFiles[], parameterCount, moe, ...}, peftDetails, ...}}`; `kind` in `HF_BASE_MODEL | HF_PEFT_ADDON | HF_TEFT_ADDON | FLUMINA_BASE_MODEL | FLUMINA_ADDON | DRAFT_ADDON | LIVE_MERGE | CUSTOM_MODEL | EMBEDDING_MODEL | SNAPSHOT_MODEL`. Response `state` in `UPLOADING | READY`. `POST .../models/{id}:getUploadEndpoint {filenameToSize, enableResumableUpload}` returns `filenameToSignedUrls` (and `filenameToUnsignedUris` for callers with storage access). Files are `PUT` to the signed URLs with `Content-Type: application/octet-stream` and `x-goog-content-length-range: {size},{size}`. `GET .../models/{id}:validateUpload` returns 200 once the model is READY and `FAILED_PRECONDITION` while files are still landing; until then the model cannot be deployed. `DELETE .../models/{id}` returns `{}`. Resource names are `accounts/{account}/models/{id}`.
-- Required checkpoint layout: `config.json`, `.safetensors` or `.bin` weights with `*.index.json` when sharded, tokenizer files; vision models add `preprocessor_config.json`.
-- Deployments: `POST .../deployments?deploymentId=` with `baseModel` (required), `displayName` (< 64 chars), `minReplicaCount` (default 0), `maxReplicaCount` (default max(min, 1)), `acceleratorType` (`NVIDIA_H100_80GB`, `NVIDIA_H200_141GB`, `NVIDIA_B200_180GB`, `NVIDIA_B300_288GB`, `NVIDIA_GB200`, `NVIDIA_GB300`, `NVIDIA_A100_80GB`, `NVIDIA_A100_40GB`, `NVIDIA_A10G_24GB`, `NVIDIA_L4_24GB`, `AMD_MI300X_192GB`, `AMD_MI325X_256GB`, `AMD_MI350X_288GB`), `acceleratorCount`, `precision` (`FP16`, `BF16`, `FP8`, `FP8_MM`, `NF4`, `FP4`, ...), `autoscalingPolicy {scaleUpWindow, scaleDownWindow, scaleToZeroWindow, loadTargets, scalingSchedules}` (durations like `300s`, `10m`, `1h`; scale-to-zero window default 1h, minimum 5m), `placement {region | regions[] | multiRegion}`. Response `state` in `STATE_UNSPECIFIED | CREATING | READY | UPDATING | DELETING | FAILED | DELETED`, `status {code, message}`, `replicaCount`, `desiredReplicaCount`, `replicaStats {readyReplicaCount, initializingReplicaCount, downloadingModelReplicaCount, ...}`, `region`. `GET .../deployments/{id}`; `PATCH .../deployments/{id}` (query `skipShapeValidation`; body must include `baseModel`, no `updateMask`); `PATCH .../deployments/{id}:scale {replicaCount}`; `DELETE .../deployments/{id}?hard&ignoreChecks`.
-- Regions: multi-regions `GLOBAL | US | EUROPE | APAC` (default multi-region), 26 generally available single regions (listed in `capabilities().regions`); new accounts have quota in `GLOBAL` only, every other placement starts at zero quota.
-- Scale to zero: `minReplicaCount: 0` plus `scaleToZeroWindow`; requests to a scaled-to-zero deployment get 503 `DEPLOYMENT_SCALING_UP` and are not queued; deployments with a zero floor and no traffic for seven days are deleted by Fireworks.
-- Addressing: the chat `model` is `accounts/{account}/deployments/{id}` (or `accounts/x/models/y#accounts/{account}/deployments/{id}`) at `https://api.fireworks.ai/inference/v1`.
-- Pricing (fireworks.ai/pricing, per GPU hour, rates from 2026-09-01): H100 80GB $8, H200 141GB $8, B200 180GB $13, B300 288GB $15, GB300 $20; region-restricted deployments cost 1.5x; billed per GPU-second while replicas run. No billing or spend API is documented.
+**1. The managed product, and whether there is a serverless option.** Both
+exist. **Serverless inference** is per-token over Fireworks' own catalog
+and cannot serve an uploaded model. **On-demand deployments** give you
+"dedicated GPUs for your models", billed by GPU-second, with "broader
+model selection" and custom models; that is this adapter. Fireworks now
+pushes **deployment shapes** as the way to configure one: "Do not create
+deployments without a shape ... Most failed deployment creations on
+Fireworks are deployments without a shape, and the unshaped path may be
+deprecated in the future."
+https://docs.fireworks.ai/serverless/overview
+https://docs.fireworks.ai/guides/ondemand-deployments
+
+**2. What model sources the product accepts.** A model that is already a
+Fireworks resource: their **catalog**
+(`accounts/fireworks/models/<model>`), a **fine-tune trained on
+Fireworks**, or a **custom checkpoint uploaded into the account**. The
+upload has three documented routes, and none of them is a Hugging Face
+import:
+
+- **local files**, `firectl model create <MODEL_ID> /path/to/files/`;
+- **object storage, read by Fireworks itself** --
+  `firectl model create <MODEL_ID> s3://<BUCKET>/<PATH>/ --role-arn ...`
+  (or `--aws-access-key-id` / `--aws-secret-access-key`), and the Azure
+  Blob equivalent with a SAS-token secret or federated identity. "For
+  larger models, you can upload directly from cloud storage (S3 or Azure
+  Blob Storage) for faster transfer instead of uploading from your local
+  machine", and the CLI's `--poll-duration` is "the duration to poll for
+  model **import operation** completion";
+- **the REST API**, a four-step signed-URL pipeline: create the model,
+  `:getUploadEndpoint` for a signed URL per file, `PUT` every file, then
+  poll `:validateUpload` until the model is `READY`.
+
+The Hugging Face URL field exists but is **not an import**: "Set
+`huggingFaceUrl` if this uploaded custom base model should be considered
+for Fireworks managed training. Fireworks uses the Hugging Face URL to
+infer the training renderer and locate compatible training shapes."
+Confirmed against the create-model schema, whose `gatewayModel` has
+`githubUrl`, `huggingFaceUrl`, `baseModelDetails`, `peftDetails` and no
+source, bucket, credential or import field of any kind. The documented
+default for a large checkpoint is therefore the object-storage import,
+driven by `firectl`.
+https://docs.fireworks.ai/models/uploading-custom-models
+https://docs.fireworks.ai/models/uploading-custom-models-api
+https://docs.fireworks.ai/api-reference/create-model
+https://docs.fireworks.ai/tools-sdks/firectl/commands/model-create
+
+**3. REST surface** (`https://api.fireworks.ai`, bearer token; errors use
+the gRPC-style `{code, message, status}` with `UNAUTHENTICATED`,
+`PERMISSION_DENIED`, `NOT_FOUND`, `ALREADY_EXISTS`, `RESOURCE_EXHAUSTED`,
+`FAILED_PRECONDITION`):
+
+| Operation | Method | Path |
+|-----------|--------|------|
+| read a model | GET | `/v1/accounts/{account_id}/models/{model_id}` |
+| create a deployment | POST | `/v1/accounts/{account_id}/deployments?deploymentId=` |
+| read | GET | `/v1/accounts/{account_id}/deployments/{deployment_id}` |
+| update bounds | PATCH | `/v1/accounts/{account_id}/deployments/{deployment_id}` |
+| scale | PATCH | `/v1/accounts/{account_id}/deployments/{deployment_id}:scale` |
+| delete | DELETE | `/v1/accounts/{account_id}/deployments/{deployment_id}?hard&ignoreChecks` |
+| metered usage | GET/POST | `/v1/accounts/{account_id}/billingUsage` and `:query` |
+| account cost totals | GET | `/v1/accounts/{account_id}/billing/summary` |
+
+A deployment takes `baseModel` (required), `displayName`,
+`minReplicaCount`, `maxReplicaCount`, `deploymentShape`, and, when no
+shape fits, `acceleratorType` and `acceleratorCount`, plus `precision`,
+`autoscalingPolicy {scaleUpWindow, scaleDownWindow, scaleToZeroWindow,
+loadTargets, scalingSchedules}` and `placement`. `state` is
+`CREATING | READY | UPDATING | DELETING | DELETED | FAILED`; scaled-to-zero
+is not a state but a UI label derived from the fields ("`Scaled to 0`:
+`state == READY && min_replica_count == 0 && ... ready_replica_count == 0`").
+`:scale` takes only `{replicaCount}`. `PATCH` requires `baseModel` even
+when only the counts change. Accelerators are `NVIDIA_A100_80GB`,
+`NVIDIA_H100_80GB`, `NVIDIA_H200_141GB`, `NVIDIA_B200_180GB`,
+`NVIDIA_B300_288GB`, `AMD_MI325X_256GB`, `AMD_MI350X_288GB`. Placement is
+a multi-region (`GLOBAL`, `US`, `EUROPE`, `APAC`) or one of 26 single
+regions, cannot be changed in place, and every placement except `GLOBAL`
+starts at zero quota.
+
+The OpenAI-compatible chat URL is the shared inference host
+`https://api.fireworks.ai/inference/v1`, with
+`accounts/{account_id}/deployments/{deployment_id}` as the `model`.
+https://docs.fireworks.ai/api-reference/create-deployment
+https://docs.fireworks.ai/api-reference/scale-deployment
+https://docs.fireworks.ai/deployments/regions
+
+**4. Cost signals.** A **usage API plus a price list**. `billingUsage`
+meters quantities per deployment: "Dedicated-deployment rows also include
+the deployment's region (`placement` ...) and metered
+`accelerator_seconds`", grouped by `deployment_name` and
+`accelerator_type`, filtered over `POST /billingUsage:query` with
+`filter: {deployment_name: {values: [...]}}`, capped at a 31-day window
+and aggregated daily. It reports no dollars at that grain: "Costs are
+reported at the account level ... They aren't broken down by the same
+dimensions as usage, so per-API-key or per-deployment dollar figures
+aren't returned today". `GET /billing/summary` gives rated dollars by
+billing category (serverless, dedicated, training) for the account, not
+per deployment. List prices per GPU hour from 2026-09-01: H100 80GB $8,
+H200 141GB $8, B200 180GB $13, B300 288GB $15, GB300 $20, and
+"Region-restricted deployments are priced at a 1.5x premium".
+https://docs.fireworks.ai/accounts/exporting-usage-and-costs
+https://fireworks.ai/pricing
+
+## What the adapter does
+
+- `deploy` resolves the model resource for the version, checks an
+  imported model is `READY`, and POSTs the deployment on the configured
+  shape or accelerator.
+- `readEndpoint` maps the deployment state and reports `READY` with zero
+  ready replicas as `stopped`, which is the documented scaled-to-zero
+  shape.
+- `scale` PATCHes the bounds (resending `baseModel`) and then `:scale`,
+  so the live count moves at once instead of waiting for the autoscaler.
+- `teardown` DELETEs the deployment with `ignoreChecks`; the model stays.
+- `costSnapshot` reads metered `accelerator_seconds` for this deployment
+  from `billingUsage:query` and prices them at the list rate (times 1.5
+  for a single-region placement), falling back to rate times uptime when
+  the key cannot read billing.
 
 ## Deltas from the spec
 
-- Fireworks has no server-side import from S3 or the Hub through the REST API (`firectl model create s3://...` does it client-side). The adapter therefore streams the bytes itself: it lists and reads the version through an injectable `ModelFileSource` whose default reads S3 with `@aws-sdk/client-s3` (required lazily, the same way the registry service does, so the SDK is only needed when a version is pushed) or the Hub through `huggingface.co/api/models/{repo}/tree/{rev}` and `resolve/{rev}/{file}`. The registry's `almyty-manifest.json` is filtered out of the checkpoint.
-- One model per version (`almyty-v-<version id>`), one deployment per almyty deployment (`almyty-d-<deployment id>`). `upload()` is idempotent: an existing READY model is reused, an UPLOADING one is completed. `upload()` returns `fireworks://accounts/{account}/models/{id}@{manifestSha}`; a version registered with that URI deploys without uploading again. Like Together, the upload runs synchronously inside `deploy()` because refs are persisted opaquely.
-- Teardown deletes the deployment only (with `ignoreChecks`), leaving the model for reuse by the same version.
-- `PATCH` on a deployment requires `baseModel` even when only the replica bounds change; the adapter always resends it from the ref and follows with `:scale` so the replica count moves at once instead of waiting for the autoscaler.
-- A `READY` deployment with zero ready replicas is reported as `stopped` (scaled to zero); the Fireworks state alone does not distinguish it. `DELETING` maps to `stopped`, `DELETED` to `missing`.
-- Cost is a list-price estimate: the built-in per-GPU table (or `hourlyRateCents`) times `acceleratorCount`, times 1.5 for a single-region placement, times running replicas; spend is that rate times uptime since creation.
-- `architectures` is `any` at the contract level; Fireworks validates the checkpoint architecture on upload and reports a typed `ADAPTER_ERROR` from `validateUpload` when it refuses one.
+- **`registrySources` is `['s3']`, and the import is the operator's
+  step.** Fireworks reads a bucket itself, with a role ARN or keys the
+  operator gives it. There is no REST field for that import, so the
+  adapter does not perform it: for an `s3://` version it looks up
+  `almyty-v-<version id>` in the account and, when it is missing, refuses
+  with `ADAPTER_UNSUPPORTED_SOURCE` and the exact `firectl model create`
+  command to run.
+- **A hub version cannot be served at all** and is refused up front.
+  `huggingFaceUrl` is training metadata, not a source.
+- **Spend is metered, the rate is a list price.** GPU-seconds come from
+  Fireworks; the dollars per second do not.
+- **`architectures` is `any`** at the contract level; Fireworks validates
+  the checkpoint on import, before this adapter is involved.
 
-## Live mode
+## Removed in this pass
 
-`CONFORMANCE_LIVE=fireworks FIREWORKS_API_KEY=... FIREWORKS_ACCOUNT=... npx jest src/modules/model-deployments/__tests__/conformance/fireworks.conformance.spec.ts`. Pushes `hf://Qwen/Qwen3-0.6B@main` from the Hub and deploys it on one `NVIDIA_H100_80GB` in `GLOBAL`. Never runs in CI.
+The **byte-streaming upload**. The adapter used to create an
+`HF_BASE_MODEL` record, call `:getUploadEndpoint` for a signed URL per
+file, and then stream every weight file through this backend to Fireworks'
+storage -- reading them either from our object storage through a lazily
+required `@aws-sdk/client-s3`, or from `huggingface.co` -- before polling
+`:validateUpload`. That made the API container the data path for
+multi-gigabyte checkpoints, on a route Fireworks documents for a CLI on
+an operator's machine. Gone with it: `upload()`, the `ModelFileSource` /
+`ModelFileSourceFactory` injection points, the AWS SDK dependency, the
+`almyty-manifest.json` filter, and the `registryAccessKeyId`,
+`registrySecretAccessKey`, `registryEndpoint`, `registryRegion`,
+`hfToken` and `uploadTimeoutMinutes` config fields.
+
+`deploymentShape` was added in the same pass, because Fireworks now says
+plainly that an unshaped deployment is the usual cause of a failed create.
+
+## Live suite
+
+`CONFORMANCE_LIVE=fireworks` with `FIREWORKS_API_KEY`,
+`FIREWORKS_ACCOUNT` and `FIREWORKS_TEST_MODEL` (a
+`fireworks://accounts/.../models/...` the account can already deploy).
+Never in CI.
