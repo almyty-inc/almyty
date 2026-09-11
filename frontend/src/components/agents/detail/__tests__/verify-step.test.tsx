@@ -13,7 +13,7 @@ describe('VerifyStepCard', () => {
   it('renders a passing gate verdict', () => {
     render(<VerifyStepCard step={step({ output: { verdict: 'pass', failures: [] } })} index={0} />)
     expect(screen.getByText('Passed verification')).toBeInTheDocument()
-    expect(screen.getByText('gate')).toBeInTheDocument()
+    expect(screen.getByText('blocking')).toBeInTheDocument()
   })
 
   it('renders a failed gate revision with its failures', () => {

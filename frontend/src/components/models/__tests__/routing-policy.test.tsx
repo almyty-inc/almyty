@@ -61,22 +61,22 @@ describe('RoutingPolicyEditor', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Move qwen3-14b up' }))
     expect(onChange).toHaveBeenLastCalledWith({ fallbackChain: ['c2', 'c1'] })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove Sonnet (claude-sonnet-5) from chain' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Sonnet (claude-sonnet-5) from fallbacks' }))
     expect(onChange).toHaveBeenLastCalledWith({ fallbackChain: ['c2'] })
   })
 
   it('stores budget headroom as a number and clears it when emptied', async () => {
     const onChange = vi.fn()
     render(<RoutingPolicyEditor value={{ objective: 'cheapest' }} onChange={onChange} cards={cards} />)
-    await userEvent.type(screen.getByLabelText('Budget headroom, cents'), '5')
+    await userEvent.type(screen.getByLabelText('Spend limit, cents'), '5')
     expect(onChange).toHaveBeenLastCalledWith({ objective: 'cheapest', budgetHeadroomCents: 5 })
   })
 
   it('shows the pinned card picker only for the pinned objective', () => {
     const { rerender } = render(<RoutingPolicyEditor value={{ objective: 'cheapest' }} onChange={() => {}} cards={cards} />)
-    expect(screen.queryByLabelText('Pinned card')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Pinned model')).not.toBeInTheDocument()
     rerender(<RoutingPolicyEditor value={{ objective: 'pinned', pinnedModel: 'c1' }} onChange={() => {}} cards={cards} />)
-    expect(screen.getByLabelText('Pinned card')).toBeInTheDocument()
+    expect(screen.getByLabelText('Pinned model')).toBeInTheDocument()
   })
 })
 

@@ -32,7 +32,9 @@ export class CustomEndpointAdapter implements ModelProviderAdapter {
       dedicated: false,
       scaleToZero: false,
       regions: [],
-      registrySources: ['s3', 'hub', 'local'],
+      // Someone else runs this server and put the weights there; the
+      // source is whatever they used, and never our concern.
+      registrySources: ['hub', 'local'],
     };
   }
 

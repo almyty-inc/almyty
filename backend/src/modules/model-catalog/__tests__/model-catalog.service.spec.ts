@@ -98,6 +98,12 @@ describe('ModelCatalogService', () => {
     expect(card.privacyTier).toBe('private_cloud');
     expect(card.region).toBe('eu-central');
     expect(card.validationStatus).toBe('never');
+    // The card records where it is served from. Without this it is
+    // indistinguishable from a card backed by a vendor key, so it was
+    // badged wrong and the "your endpoint" filter matched nothing. No
+    // deploymentId, because nobody deployed it.
+    expect(card.endpointRef).toEqual({ url: 'https://vllm.internal/v1' });
+    expect(card.endpointRef?.deploymentId).toBeUndefined();
   });
 
   it('validate: a passing call makes the card selectable and records latency', async () => {

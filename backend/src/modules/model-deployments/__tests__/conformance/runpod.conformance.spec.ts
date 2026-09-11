@@ -97,19 +97,19 @@ runConformance(live ? 'runpod (LIVE)' : 'runpod (fixture)', {
 });
 
 describe('runpod request shape', () => {
-  const s3Request = {
+  const request = {
     deploymentId: 'abc-123',
     organizationId: 'org',
-    version: { id: 'v', name: 'q', registryUri: 's3://registry/models/q@etag', base: 'qwen3-0.6b', quantizations: [], manifestSha: 's' },
+    version: { id: 'v', name: 'q', registryUri: 'hf://Qwen/Qwen3-0.6B@abc123', base: 'qwen3-0.6b', quantizations: [], manifestSha: 's' },
     desired: { replicas: 1, minScale: 1, maxScale: 3, region: 'EU-RO-1', hardware: 'NVIDIA A40', quantization: 'awq' },
-    providerConfig: { registryEndpoint: 'https://minio.local', containerDiskInGb: 80, maxModelLen: 4096, idleTimeout: 30 },
+    providerConfig: { containerDiskInGb: 80, maxModelLen: 4096, idleTimeout: 30 },
   };
-  const creds = { apiKey: 'rp_valid', registryAccessKeyId: 'AK', registrySecretAccessKey: 'SK' };
+  const creds = { apiKey: 'rp_valid', hfToken: 'hf_x' };
 
-  it('creates a serverless template with the registry in env and an endpoint with GPU type and worker bounds', async () => {
+  it('creates a serverless template that names a Hub repository and an endpoint with GPU type and worker bounds', async () => {
     const f = fixtureHttp();
     const a = new RunPodAdapter(f.http);
-    const ref = await a.deploy(s3Request, creds);
+    const ref = await a.deploy(request, creds);
     const [templateCall, endpointCall] = f.http.post.mock.calls;
     expect(templateCall[0]).toBe('https://rest.runpod.io/v1/templates');
     expect(templateCall[1]).toEqual({
@@ -120,15 +120,16 @@ describe('runpod request shape', () => {
         OPENAI_SERVED_MODEL_NAME_OVERRIDE: 'q',
         QUANTIZATION: 'awq',
         MAX_MODEL_LEN: '4096',
-        ALMYTY_REGISTRY_URI: 's3://registry/models/q@etag',
-        MODEL_NAME: '/runpod-volume/almyty/model',
-        AWS_ENDPOINT_URL: 'https://minio.local',
-        AWS_ACCESS_KEY_ID: 'AK',
-        AWS_SECRET_ACCESS_KEY: 'SK',
+        MODEL_NAME: 'Qwen/Qwen3-0.6B',
+        MODEL_REVISION: 'abc123',
+        HF_TOKEN: 'hf_x',
       },
       containerDiskInGb: 80,
       ports: [],
     });
+    // RunPod pulls the weights from the Hub; nothing of ours goes with it.
+    expect(JSON.stringify(templateCall[1])).not.toContain('AWS_');
+    expect(JSON.stringify(templateCall[1])).not.toContain('ALMYTY_REGISTRY');
     expect(endpointCall[0]).toBe('https://rest.runpod.io/v1/endpoints');
     expect(endpointCall[1]).toEqual({
       name: 'almyty-abc123',
@@ -145,24 +146,32 @@ describe('runpod request shape', () => {
       dataCenterIds: ['EU-RO-1'],
     });
     expect(ref.url).toBe(`https://api.runpod.ai/v2/${ref.endpointId}/openai/v1`);
-    // The ref holds ids only; the registry keys live in the template on RunPod's side.
-    expect(JSON.stringify(ref)).not.toContain('SK');
+    expect(JSON.stringify(ref)).not.toContain('hf_x');
   });
 
-  it('loads a hub version through MODEL_NAME and MODEL_REVISION with no registry keys', async () => {
+  it('defaults the revision to main and leaves the token out when there is none', async () => {
     const f = fixtureHttp();
     const a = new RunPodAdapter(f.http);
-    await a.deploy({ ...s3Request, version: tiny, desired: {}, providerConfig: {} }, { apiKey: 'rp_valid', hfToken: 'hf_x' });
-    const env = f.http.post.mock.calls[0][1].env;
-    expect(env).toEqual({ OPENAI_SERVED_MODEL_NAME_OVERRIDE: 'qwen3-0.6b', MODEL_NAME: 'Qwen/Qwen3-0.6B', MODEL_REVISION: 'main', HF_TOKEN: 'hf_x' });
+    await a.deploy({ ...request, version: { ...request.version, registryUri: 'hf://Qwen/Qwen3-0.6B' }, desired: {}, providerConfig: {} }, { apiKey: 'rp_valid' });
+    expect(f.http.post.mock.calls[0][1].env).toEqual({ OPENAI_SERVED_MODEL_NAME_OVERRIDE: 'q', MODEL_NAME: 'Qwen/Qwen3-0.6B', MODEL_REVISION: 'main' });
     expect(f.http.post.mock.calls[1][1]).toMatchObject({ workersMin: 0, workersMax: 1 });
+  });
+
+  it('refuses a registry source the worker cannot read, before creating anything', async () => {
+    const f = fixtureHttp();
+    const a = new RunPodAdapter(f.http);
+    await expect(
+      a.deploy({ ...request, version: { ...request.version, registryUri: 's3://registry/models/q@etag' } }, creds),
+    ).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_SOURCE', message: expect.stringContaining('hf://org/repo') });
+    expect(f.http.post).not.toHaveBeenCalled();
+    expect(f.templates.size).toBe(0);
   });
 
   it('scales by patching worker bounds and tears down endpoint then template', async () => {
     const f = fixtureHttp();
     const a = new RunPodAdapter(f.http);
-    const ref = await a.deploy(s3Request, creds);
-    expect((await a.readEndpoint(ref, creds))).toMatchObject({ state: 'ready', replicas: 1, hardware: 'NVIDIA A40', region: 'EU-RO-1' });
+    const ref = await a.deploy(request, creds);
+    expect(await a.readEndpoint(ref, creds)).toMatchObject({ state: 'ready', replicas: 1, hardware: 'NVIDIA A40', region: 'EU-RO-1' });
     expect((await a.costSnapshot(ref, creds)).ratePerHourCents).toBe(0);
 
     await a.scale(ref, 2, creds);
@@ -180,7 +189,7 @@ describe('runpod request shape', () => {
   it('removes the template when endpoint creation fails', async () => {
     const f = fixtureHttp();
     const a = new RunPodAdapter(f.http);
-    await expect(a.deploy({ ...s3Request, providerConfig: { gpuTypeId: 'NVIDIA H200' }, desired: {} }, creds)).rejects.toMatchObject({ code: 'ADAPTER_QUOTA_EXCEEDED' });
+    await expect(a.deploy({ ...request, providerConfig: { gpuTypeId: 'NVIDIA H200' }, desired: {} }, creds)).rejects.toMatchObject({ code: 'ADAPTER_QUOTA_EXCEEDED' });
     expect(f.templates.size).toBe(0);
   });
 });

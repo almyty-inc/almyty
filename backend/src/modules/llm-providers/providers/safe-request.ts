@@ -86,14 +86,14 @@ export function llmCallOptionsFor(provider: LlmProvider): LlmCallOptions {
 /** Resolve baseURL+url the way axios does and run the SSRF gate. */
 function assertLlmUrlAllowed(config: AxiosRequestConfig, opts?: LlmCallOptions): void {
   if (!config.url) {
-    throw new BadRequestException('LLM provider URL is missing');
+    throw new BadRequestException('The provider URL is missing');
   }
 
   let target: string;
   try {
     target = new URL(config.url, config.baseURL || undefined).toString();
   } catch {
-    throw new BadRequestException(`Invalid LLM provider URL: ${config.url}`);
+    throw new BadRequestException(`Invalid provider URL: ${config.url}`);
   }
 
   const validation = opts?.allowPrivateUrls
@@ -101,7 +101,7 @@ function assertLlmUrlAllowed(config: AxiosRequestConfig, opts?: LlmCallOptions):
     : validateUrl(target);
   if (!validation.valid) {
     throw new BadRequestException(
-      `Refused to reach LLM provider URL: ${validation.error}`,
+      `Refused to reach the provider URL: ${validation.error}`,
     );
   }
 }

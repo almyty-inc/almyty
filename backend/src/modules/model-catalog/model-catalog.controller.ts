@@ -5,7 +5,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ModelCatalogService } from './model-catalog.service';
-import { ListModelsQueryDto, RegisterEndpointBodyDto, RegisterModelBodyDto, SyncModelsBodyDto, UpdateModelBodyDto } from './dto/model-catalog-controller.dto';
+import { ListModelsQueryDto, RegisterEndpointBodyDto, RegisterModelBodyDto, RoutePreviewBodyDto, SyncModelsBodyDto, UpdateModelBodyDto } from './dto/model-catalog-controller.dto';
+import { ModelRouterService } from './routing/model-router.service';
 
 /** Cards in, cards out. Nothing here calls a provider except the validation run, which is the point of it. */
 @ApiTags('Models')
@@ -13,7 +14,10 @@ import { ListModelsQueryDto, RegisterEndpointBodyDto, RegisterModelBodyDto, Sync
 @Controller('models')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ModelCatalogController {
-  constructor(private readonly catalog: ModelCatalogService) {}
+  constructor(
+    private readonly catalog: ModelCatalogService,
+    private readonly router: ModelRouterService,
+  ) {}
 
   private orgId(req: any): string {
     const organizationId = req.user?.currentOrganizationId;
@@ -23,9 +27,28 @@ export class ModelCatalogController {
     return organizationId;
   }
 
+  /**
+   * What a policy would choose right now, and what it would reject.
+   *
+   * L3 is usable with no agent: this takes a policy directly and answers
+   * with the ordered candidates and every rejection with its reason. It
+   * is what the policy editor previews against, and it is the honest way
+   * to answer "why did it not pick that model", which was previously only
+   * discoverable by running something. See docs/design/layers.md, L3.
+   *
+   * Nothing is called: this plans, it does not route a request.
+   */
+  @Post('route-preview')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Preview which models a routing policy would choose, and why the rest were rejected' })
+  async routePreview(@Request() req: any, @Body(new ValidationPipe({ transform: true })) body: RoutePreviewBodyDto) {
+    const plan = await this.router.preview(this.orgId(req), body ?? {}, req.user?.id ? { id: req.user.id } : undefined);
+    return { success: true, data: plan };
+  }
+
   @Get()
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'List model cards' })
+  @ApiOperation({ summary: 'List models' })
   async list(@Request() req: any, @Query(new ValidationPipe({ transform: true })) query: ListModelsQueryDto) {
     const rows = await this.catalog.list(this.orgId(req), query);
     return { success: true, data: rows.map(view) };
@@ -33,7 +56,7 @@ export class ModelCatalogController {
 
   @Post()
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Register a model card against a stored provider or an endpoint' })
+  @ApiOperation({ summary: 'Register a model against a stored provider or an endpoint' })
   async register(@Request() req: any, @Body(ValidationPipe) body: RegisterModelBodyDto) {
     const card = await this.catalog.register(this.orgId(req), body, req.user?.id);
     return { success: true, data: view(card) };
@@ -41,7 +64,7 @@ export class ModelCatalogController {
 
   @Post('register-endpoint')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Register a hand-run OpenAI-compatible endpoint as a model card' })
+  @ApiOperation({ summary: 'Register a hand-run OpenAI-compatible endpoint as a model' })
   async registerEndpoint(@Request() req: any, @Body(ValidationPipe) body: RegisterEndpointBodyDto) {
     const card = await this.catalog.registerEndpoint(this.orgId(req), body, req.user?.id);
     return { success: true, data: view(card) };
@@ -61,21 +84,21 @@ export class ModelCatalogController {
 
   @Get(':id')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Model card detail' })
+  @ApiOperation({ summary: 'Model detail' })
   async get(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     return { success: true, data: view(await this.catalog.get(this.orgId(req), id)) };
   }
 
   @Patch(':id')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Update a card: privacy tier, region, capabilities, price override, status' })
+  @ApiOperation({ summary: 'Update a model: privacy, region, capabilities, price override, status' })
   async update(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Body(ValidationPipe) body: UpdateModelBodyDto) {
     return { success: true, data: view(await this.catalog.update(this.orgId(req), id, body, req.user?.id)) };
   }
 
   @Post(':id/validate')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Run one real call through the card; passing makes it selectable' })
+  @ApiOperation({ summary: 'Run one real call through the model; passing makes it usable' })
   async validate(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     const outcome = await this.catalog.validate(this.orgId(req), id, req.user?.id);
     return { success: outcome.passed, data: { ...outcome, model: view(outcome.model) } };
@@ -83,7 +106,7 @@ export class ModelCatalogController {
 
   @Delete(':id')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Remove a card' })
+  @ApiOperation({ summary: 'Remove a model' })
   async remove(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     await this.catalog.remove(this.orgId(req), id, req.user?.id);
     return { success: true };

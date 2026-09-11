@@ -55,7 +55,9 @@ export function runConformance(name: string, harness: ConformanceHarness): void 
     it('honours the adapter contract (s3 source, key shape, config schema)', () => {
       expect(() => assertAdapterContract(harness.adapter())).not.toThrow();
       const caps = harness.adapter().capabilities();
-      expect(caps.registrySources).toContain('s3');
+      // No source is mandatory: an adapter names what its provider can
+      // really read, native default first.
+      expect(caps.registrySources.length).toBeGreaterThan(0);
       expect(typeof caps.scaleToZero).toBe('boolean');
     });
 

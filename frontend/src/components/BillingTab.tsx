@@ -166,7 +166,7 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
               <p className="text-sm text-muted-foreground">
                 {isPaid
                   ? PLANS[toPlanKey(plan)].blurb
-                  : "You're on the Free plan. Compare plans below to see what each tier unlocks."}
+                  : "You're on the Free plan. Compare plans below to see what each plan unlocks."}
               </p>
 
               {status?.dunning && (

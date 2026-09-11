@@ -4,18 +4,22 @@ import { liveRequested, runConformance } from './conformance.suite';
 
 /**
  * Fixture mode: an in-memory stand-in for the Bedrock control plane,
- * faithful to the documented paths (POST /model-import-jobs,
- * GET /model-import-jobs/{id}, GET|DELETE /imported-models/{id}), job
- * states (InProgress|Completed|Failed), the REST-JSON error envelope
- * (x-amzn-ErrorType header + {message}) and status codes. Live mode
- * (CONFORMANCE_LIVE=aws-bedrock-import with AWS_ACCESS_KEY_ID,
- * AWS_SECRET_ACCESS_KEY, AWS_REGION, BEDROCK_IMPORT_ROLE_ARN and
- * BEDROCK_TEST_S3_URI pointing at HF-format weights) runs the same cases
- * against a real account; never in CI.
+ * faithful to the documented paths for both routes the adapter drives -
+ * the catalog route (POST /inference-profiles,
+ * GET|DELETE /inference-profiles/{id}) and Custom Model Import
+ * (POST /model-import-jobs, GET /model-import-jobs/{id},
+ * GET|DELETE /imported-models/{id}) - to the job states
+ * (InProgress|Completed|Failed), the inference profile status (ACTIVE),
+ * the REST-JSON error envelope (x-amzn-ErrorType header + {message}) and
+ * the status codes. Live mode (CONFORMANCE_LIVE=aws-bedrock-import with
+ * AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION,
+ * BEDROCK_IMPORT_ROLE_ARN and BEDROCK_TEST_S3_URI pointing at HF-format
+ * weights) runs the same cases against a real account; never in CI.
  */
 function fixtureHttp() {
   const jobs = new Map<string, any>();
   const models = new Map<string, any>();
+  const profiles = new Map<string, any>();
   const calls: Array<{ method: string; url: string; headers: Record<string, string>; body?: any }> = [];
   const awsError = (status: number, type: string, message: string) =>
     Object.assign(new Error(`${status}`), { response: { status, data: { message }, headers: { 'x-amzn-errortype': `${type}:http://internal.amazon.com/coral/com.amazon.bedrock/` } } });
@@ -28,8 +32,40 @@ function fixtureHttp() {
       }
       const url = new URL(config.url);
       const region = url.hostname.split('.')[1];
-      const m = url.pathname.match(/^\/(model-import-jobs|imported-models)(?:\/([^/]+))?$/);
+      const m = url.pathname.match(/^\/(model-import-jobs|imported-models|inference-profiles)(?:\/([^/]+))?$/);
       const [, collection, id] = m ?? [];
+
+      if (config.method === 'POST' && collection === 'inference-profiles' && !id) {
+        if (String(body.modelSource?.copyFrom ?? '').includes('quota')) throw awsError(400, 'ServiceQuotaExceededException', 'The number of application inference profiles exceeds the service quota.');
+        if (!String(body.modelSource?.copyFrom ?? '').startsWith('arn:')) throw awsError(400, 'ValidationException', 'modelSource.copyFrom must be an ARN.');
+        const profileId = Math.random().toString(36).slice(2, 14);
+        const arn = `arn:aws:bedrock:${region}:111122223333:application-inference-profile/${profileId}`;
+        const profile = {
+          inferenceProfileArn: arn,
+          inferenceProfileId: profileId,
+          inferenceProfileName: body.inferenceProfileName,
+          description: body.description,
+          status: 'ACTIVE',
+          type: 'APPLICATION',
+          models: [{ modelArn: body.modelSource.copyFrom }],
+          createdAt: new Date().toISOString(),
+        };
+        profiles.set(arn, profile);
+        profiles.set(body.inferenceProfileName, profile);
+        return { status: 201, data: { inferenceProfileArn: arn, status: 'ACTIVE' } };
+      }
+      if (config.method === 'GET' && collection === 'inference-profiles' && id) {
+        const profile = profiles.get(decodeURIComponent(id));
+        if (!profile) throw awsError(404, 'ResourceNotFoundException', 'Could not find inference profile');
+        return { status: 200, data: { ...profile } };
+      }
+      if (config.method === 'DELETE' && collection === 'inference-profiles' && id) {
+        const profile = profiles.get(decodeURIComponent(id));
+        if (!profile) throw awsError(404, 'ResourceNotFoundException', 'Could not find inference profile');
+        profiles.delete(profile.inferenceProfileArn);
+        profiles.delete(profile.inferenceProfileName);
+        return { status: 200, data: '' };
+      }
 
       if (config.method === 'POST' && collection === 'model-import-jobs' && !id) {
         if (body.roleArn.endsWith('role/quota')) throw awsError(400, 'ServiceQuotaExceededException', 'The number of imported models exceeds the service quota.');
@@ -61,7 +97,7 @@ function fixtureHttp() {
       throw new Error(`unexpected request ${config.method} ${config.url}`);
     }),
   };
-  return { jobs, models, calls, http };
+  return { jobs, models, profiles, calls, http };
 }
 
 const live = liveRequested('aws-bedrock-import');
@@ -92,8 +128,99 @@ runConformance(live ? 'aws-bedrock-import (LIVE)' : 'aws-bedrock-import (fixture
   readyTimeoutMs: live ? 45 * 60_000 : 5_000,
 });
 
+const creds = { accessKeyId: 'AKIAVALID', secretAccessKey: 'secret', sessionToken: 'tok' };
+
+describe('aws-bedrock-import catalog route (application inference profile)', () => {
+  const catalogRequest = (registryUri = 'bedrock://anthropic.claude-3-sonnet-20240229-v1:0', overrides: Record<string, any> = {}) => ({
+    deploymentId: 'abc-123',
+    organizationId: 'org-1',
+    version: { id: 'v', name: 'claude', registryUri, base: 'claude-3-sonnet', quantizations: [], manifestSha: 's' },
+    desired: { replicas: 1, region: 'eu-west-1' },
+    providerConfig: { region: 'us-east-1', inPerMTok: 3, outPerMTok: 15 },
+    ...overrides,
+  });
+
+  it('creates one tagged application inference profile from the foundation model ARN, with no import job', async () => {
+    const f = fixtureHttp();
+    const a = new AwsBedrockImportAdapter(f.http);
+    const ref = await a.deploy(catalogRequest(), creds);
+    expect(f.calls).toHaveLength(1);
+    const call = f.calls[0];
+    expect(call.method).toBe('POST');
+    expect(call.url).toBe('https://bedrock.eu-west-1.amazonaws.com/inference-profiles');
+    expect(call.headers.authorization).toMatch(/Credential=AKIAVALID\/\d{8}\/eu-west-1\/bedrock\/aws4_request/);
+    expect(call.body.inferenceProfileName).toBe('almyty-abc123');
+    expect(call.body.modelSource).toEqual({ copyFrom: 'arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0' });
+    expect(call.body.tags).toEqual([{ key: 'almyty:deployment', value: 'abc-123' }, { key: 'almyty:organization', value: 'org-1' }]);
+    expect(call.body.clientRequestToken).toMatch(/^[a-zA-Z0-9][-a-zA-Z0-9]*[a-zA-Z0-9]$/);
+    // Nothing about weights: AWS already holds the model.
+    expect(JSON.stringify(call.body)).not.toContain('s3://');
+    expect(ref).toMatchObject({ route: 'catalog', inferenceProfileName: 'almyty-abc123', region: 'eu-west-1' });
+    expect(ref.inferenceProfileArn).toMatch(/^arn:aws:bedrock:eu-west-1:111122223333:application-inference-profile\//);
+    expect(ref.url).toBe('https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1/chat/completions');
+  });
+
+  it('passes a full ARN through untouched, so a cross-region system-defined profile can be copied', async () => {
+    const f = fixtureHttp();
+    const a = new AwsBedrockImportAdapter(f.http);
+    const arn = 'arn:aws:bedrock:us-west-2:111122223333:inference-profile/us.anthropic.claude-3-sonnet-20240229-v1:0';
+    await a.deploy(catalogRequest(`bedrock://${arn}`), creds);
+    expect(f.calls[0].body.modelSource).toEqual({ copyFrom: arn });
+  });
+
+  it('refuses a bare cross-region profile id, naming the ARN form it needs', async () => {
+    const f = fixtureHttp();
+    const a = new AwsBedrockImportAdapter(f.http);
+    await expect(a.deploy(catalogRequest('bedrock://us.anthropic.claude-3-sonnet-20240229-v1:0'), creds)).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_OPERATION' });
+    await expect(a.deploy(catalogRequest('bedrock://us.anthropic.claude-3-sonnet-20240229-v1:0'), creds)).rejects.toThrow(/inference profile ARN/);
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('reports the profile as ready with the OpenAI-compatible base and the model id to send', async () => {
+    const f = fixtureHttp();
+    const a = new AwsBedrockImportAdapter(f.http);
+    const ref = await a.deploy(catalogRequest(), creds);
+    const actual = await a.readEndpoint(ref, creds);
+    expect(f.calls[1].url).toBe(`https://bedrock.eu-west-1.amazonaws.com/inference-profiles/${encodeURIComponent(ref.inferenceProfileArn)}`);
+    expect(actual.state).toBe('ready');
+    expect(actual.openAiBase).toBe('https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1');
+    expect(actual.url).toBe('https://bedrock-runtime.eu-west-1.amazonaws.com/openai/v1/chat/completions');
+    expect(actual.details).toMatchObject({ route: 'catalog', profileType: 'APPLICATION', rawState: 'ACTIVE' });
+    expect(actual.details!.modelId).toBe(ref.inferenceProfileArn.split('/').pop());
+    expect(actual.details!.modelArns).toEqual(['arn:aws:bedrock:eu-west-1::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0']);
+  });
+
+  it('does not send scaling to AWS, prices per token, and tears down by deleting the profile', async () => {
+    const f = fixtureHttp();
+    const a = new AwsBedrockImportAdapter(f.http);
+    const ref = await a.deploy(catalogRequest(), creds);
+    await a.readEndpoint(ref, creds);
+    const before = f.calls.length;
+    await a.scale(ref, 0, creds);
+    await a.scale(ref, 4, creds);
+    expect(f.calls).toHaveLength(before);
+
+    const cost = await a.costSnapshot(ref, creds);
+    expect(cost.spentCents).toBe(0);
+    expect(cost.ratePerHourCents).toBe(0);
+    expect(cost.perToken).toEqual({ inPerMTok: 3, outPerMTok: 15, currency: 'USD' });
+
+    await a.teardown(ref, creds);
+    const del = f.calls[f.calls.length - 1];
+    expect(del.method).toBe('DELETE');
+    expect(del.url).toBe(`https://bedrock.eu-west-1.amazonaws.com/inference-profiles/${encodeURIComponent(ref.inferenceProfileArn)}`);
+    expect((await a.readEndpoint(ref, creds)).state).toBe('missing');
+    await expect(a.teardown(ref, creds)).resolves.toBeUndefined();
+  });
+
+  it('reports a profile quota as a typed error', async () => {
+    const f = fixtureHttp();
+    const a = new AwsBedrockImportAdapter(f.http);
+    await expect(a.deploy(catalogRequest('bedrock://arn:aws:bedrock:us-east-1::foundation-model/quota.model-v1'), creds)).rejects.toMatchObject({ code: 'ADAPTER_QUOTA_EXCEEDED' });
+  });
+});
+
 describe('aws-bedrock-import request shape', () => {
-  const creds = { accessKeyId: 'AKIAVALID', secretAccessKey: 'secret', sessionToken: 'tok' };
   const request = (overrides: Partial<Parameters<AwsBedrockImportAdapter['deploy']>[0]> = {}) => ({
     deploymentId: 'abc-123',
     organizationId: 'org-1',
@@ -122,7 +249,7 @@ describe('aws-bedrock-import request shape', () => {
     expect(call.body.importedModelTags).toEqual([{ key: 'almyty:deployment', value: 'abc-123' }, { key: 'almyty:organization', value: 'org-1' }]);
     expect(call.body.vpcConfig).toBeUndefined();
     expect(JSON.stringify(call.body)).not.toContain('secret');
-    expect(ref).toMatchObject({ importedModelName: 'almyty-abc123', region: 'eu-central-1', hourlyRateCents: 240, maxCopies: 1 });
+    expect(ref).toMatchObject({ route: 'import', importedModelName: 'almyty-abc123', region: 'eu-central-1', hourlyRateCents: 240, maxCopies: 1 });
     expect(ref.jobArn).toMatch(/^arn:aws:bedrock:eu-central-1:/);
   });
 
@@ -133,10 +260,22 @@ describe('aws-bedrock-import request shape', () => {
     expect(f.calls[0].body.vpcConfig).toEqual({ subnetIds: ['subnet-1'], securityGroupIds: ['sg-1'] });
   });
 
-  it('refuses a non-S3 registry source before calling AWS', async () => {
+  it('refuses a source Bedrock cannot read, naming the two it accepts, before calling AWS', async () => {
     const f = fixtureHttp();
     const a = new AwsBedrockImportAdapter(f.http);
-    await expect(a.deploy(request({ version: { id: 'v', name: 'q', registryUri: 'hf://Qwen/Qwen3-0.6B@main', base: 'qwen3-0.6b', quantizations: [], manifestSha: 's' } }), creds)).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_OPERATION' });
+    for (const registryUri of ['hf://Qwen/Qwen3-0.6B@main', 'gs://bucket/models/q@etag', 'file:///models/q']) {
+      const promise = a.deploy(request({ version: { id: 'v', name: 'q', registryUri, base: 'qwen3-0.6b', quantizations: [], manifestSha: 's' } }), creds);
+      await expect(promise).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_OPERATION' });
+    }
+    await expect(a.deploy(request({ version: { id: 'v', name: 'q', registryUri: 'hf://Qwen/Qwen3-0.6B@main', base: 'qwen3-0.6b', quantizations: [], manifestSha: 's' } }), creds)).rejects.toThrow(/bedrock:\/\/.*s3:\/\//s);
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it('refuses an import outside the four regions AWS offers it in, and one with no import role', async () => {
+    const f = fixtureHttp();
+    const a = new AwsBedrockImportAdapter(f.http);
+    await expect(a.deploy(request({ desired: { replicas: 1, region: 'ap-south-1' } }), creds)).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_REGION' });
+    await expect(a.deploy(request({ providerConfig: { region: 'us-east-1' } }), creds)).rejects.toMatchObject({ code: 'ADAPTER_CONFIG_INVALID' });
     expect(f.calls).toHaveLength(0);
   });
 
@@ -149,7 +288,7 @@ describe('aws-bedrock-import request shape', () => {
     expect(f.calls[2].url).toBe('https://bedrock.eu-central-1.amazonaws.com/imported-models/almyty-abc123');
     expect(actual.state).toBe('ready');
     expect(actual.url).toBe(`https://bedrock-runtime.eu-central-1.amazonaws.com/model/${encodeURIComponent(actual.details!.modelArn)}/invoke`);
-    expect(actual.details).toMatchObject({ modelArchitecture: 'qwen3', customModelUnitsPerCopy: 1, customModelUnitsVersion: 'v2.0' });
+    expect(actual.details).toMatchObject({ route: 'import', modelArchitecture: 'qwen3', customModelUnitsPerCopy: 1, customModelUnitsVersion: 'v2.0' });
     expect(ref.importedModelArn).toBe(actual.details!.modelArn);
   });
 

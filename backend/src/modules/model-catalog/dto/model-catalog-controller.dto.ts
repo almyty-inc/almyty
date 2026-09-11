@@ -61,3 +61,21 @@ export class ListModelsQueryDto {
   @IsOptional() @IsUUID() providerId?: string;
   @IsOptional() @IsBoolean() @Type(() => Boolean) selectable?: boolean;
 }
+
+/**
+ * A routing policy, submitted directly with no agent involved.
+ *
+ * L3 is usable on its own, so this is the whole input: what the caller
+ * wants, not who is asking for it. See docs/design/layers.md, L3.
+ */
+export class RoutePreviewBodyDto {
+  @IsOptional() @IsIn(['cheapest', 'fastest', 'pinned']) objective?: 'cheapest' | 'fastest' | 'pinned';
+  @IsOptional() @IsIn(PRIVACY_TIERS) privacyTier?: (typeof PRIVACY_TIERS)[number];
+  @IsOptional() @IsString({ each: true }) regions?: string[];
+  @IsOptional() @IsObject() capabilities?: Record<string, boolean>;
+  @IsOptional() @IsString({ each: true }) fallbackChain?: string[];
+  @IsOptional() @IsString() pinnedModel?: string;
+  @IsOptional() @IsInt() @Min(0) budgetHeadroomCents?: number | null;
+  /** Provider ids or provider types to prefer, best first, applied before cost. */
+  @IsOptional() @IsString({ each: true }) connectionPreference?: string[];
+}

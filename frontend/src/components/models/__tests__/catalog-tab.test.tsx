@@ -80,7 +80,7 @@ describe('CatalogTab', () => {
     vi.mocked(llmProvidersApi.getAll).mockResolvedValue([{ id: 'p1', name: 'Anthropic prod', type: 'anthropic' }] as any)
   })
 
-  it('renders cards with provider, price source, capabilities and validation states', async () => {
+  it('renders every card the same way, whatever it came from, with where it runs and what it costs', async () => {
     vi.mocked(modelsApi.list).mockResolvedValue([
       card(),
       card({
@@ -88,7 +88,7 @@ describe('CatalogTab', () => {
         name: 'Local Qwen',
         vendorModelId: 'qwen3-14b',
         providerId: null,
-        providerType: 'custom',
+        providerType: null,
         endpointRef: { url: 'http://10.0.0.5:8000/v1' },
         privacyTier: 'local',
         region: null,
@@ -117,8 +117,10 @@ describe('CatalogTab', () => {
 
     expect(await screen.findByText('Sonnet')).toBeInTheDocument()
     expect(screen.getByText('claude-sonnet-5')).toBeInTheDocument()
-    expect(screen.getAllByText('Anthropic prod')).toHaveLength(2)
-    expect(screen.getByText('http://10.0.0.5:8000/v1')).toBeInTheDocument()
+
+    // Every card says where it runs, whether that is a vendor key or an endpoint.
+    expect(screen.getAllByText('Anthropic prod, us-east')).toHaveLength(2)
+    expect(screen.getByText('10.0.0.5:8000')).toBeInTheDocument()
 
     // Effective price with its source; an override shows as Override.
     expect(screen.getByText('$3.00 in / $15.00 out')).toBeInTheDocument()
@@ -143,8 +145,38 @@ describe('CatalogTab', () => {
     expect(screen.getAllByText('Selectable')).toHaveLength(1)
     expect(screen.getAllByText('Not selectable')).toHaveLength(2)
 
-    // Summary line counts usable cards.
-    expect(screen.getByText(/3 cards, 1 usable by agents/)).toBeInTheDocument()
+    // Origin is a badge, not a different layout.
+    expect(screen.getAllByText('Vendor key')).toHaveLength(2)
+    expect(screen.getByText('Your endpoint')).toBeInTheDocument()
+  })
+
+  it('says what the agents can use right now and across how many vendors', async () => {
+    vi.mocked(modelsApi.list).mockResolvedValue([
+      card(),
+      card({ id: 'c2', name: 'Kimi', vendorModelId: 'kimi-k2', providerId: 'p2', providerType: 'moonshot' }),
+      card({ id: 'c3', name: 'Unvalidated', vendorModelId: 'x', validationStatus: 'never', selectable: false }),
+    ])
+    render(<CatalogTab />, { queryClient })
+    const summary = await screen.findByTestId('catalog-summary')
+    expect(summary).toHaveTextContent('2 of 3 models')
+    expect(summary).toHaveTextContent('across 2 vendors')
+    expect(screen.getByTestId('catalog-vendors')).toHaveTextContent('moonshot')
+  })
+
+  it('picks several cards across vendors into one routing policy', async () => {
+    vi.mocked(modelsApi.list).mockResolvedValue([
+      card(),
+      card({ id: 'c2', name: 'Kimi', vendorModelId: 'kimi-k2', providerId: 'p2', providerType: 'moonshot' }),
+    ])
+    render(<CatalogTab />, { queryClient })
+    expect(await screen.findByText('Sonnet')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Add Sonnet to the routing set' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Add Kimi to the routing set' }))
+
+    const bar = await screen.findByTestId('routing-set-bar')
+    expect(bar).toHaveTextContent('2 models across 2 vendors, run together')
+    expect(screen.getByRole('button', { name: /Copy routing policy/ })).toBeInTheDocument()
   })
 
   it('filters to selectable cards only', async () => {
@@ -155,7 +187,7 @@ describe('CatalogTab', () => {
     render(<CatalogTab />, { queryClient })
     expect(await screen.findByText('Unvalidated')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Selectable only' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Usable only' }))
 
     await waitFor(() => expect(screen.queryByText('Unvalidated')).not.toBeInTheDocument())
     expect(screen.getByText('Sonnet')).toBeInTheDocument()
@@ -165,8 +197,8 @@ describe('CatalogTab', () => {
   it('shows the empty state that explains sync and validation', async () => {
     vi.mocked(modelsApi.list).mockResolvedValue([])
     render(<CatalogTab />, { queryClient })
-    expect(await screen.findByText('No model cards yet')).toBeInTheDocument()
-    expect(screen.getByText(/appear automatically when you sync a configured provider/)).toBeInTheDocument()
+    expect(await screen.findByText('No models yet')).toBeInTheDocument()
+    expect(screen.getByText(/appear automatically when you sync a configured vendor/)).toBeInTheDocument()
     expect(screen.getByText(/become usable after a validation run passes/)).toBeInTheDocument()
   })
 
@@ -202,6 +234,6 @@ describe('CatalogTab', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'All providers' }))
 
     await waitFor(() => expect(modelsApi.sync).toHaveBeenCalledWith(undefined))
-    await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Sync complete', expect.stringContaining('1 new card from all providers')))
+    await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Sync complete', expect.stringContaining('1 new model from all providers')))
   })
 })

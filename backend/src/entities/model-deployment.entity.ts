@@ -65,12 +65,25 @@ export class ModelDeployment {
   @JoinColumn({ name: 'organizationId' })
   organization: Organization;
 
-  @Column({ type: 'uuid' })
-  modelVersionId: string;
+  /**
+   * A registered version, when the operator keeps one. Most deployments
+   * do not: pointing at a model that already lives on a platform, or at a
+   * Hugging Face repository, is configuration, not an artifact we track.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  modelVersionId: string | null;
 
-  @ManyToOne(() => ModelVersion, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ModelVersion, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'modelVersionId' })
-  modelVersion: ModelVersion;
+  modelVersion: ModelVersion | null;
+
+  /** The model this deployment serves when there is no version row: hf://org/repo, bedrock://..., fireworks://... */
+  @Column({ type: 'varchar', nullable: true })
+  modelRef: string | null;
+
+  /** Architecture family for a modelRef, when the adapter needs to check it. */
+  @Column({ type: 'varchar', nullable: true })
+  modelBase: string | null;
 
   /** The catalog card this deployment fills once it is ready. */
   @Column({ type: 'uuid', nullable: true })

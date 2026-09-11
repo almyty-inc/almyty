@@ -55,37 +55,17 @@ describe('ProviderUsageService', () => {
     expect(providerUsageCapability(LlmProviderType.ANTHROPIC).supported).toBe(true);
   });
 
-  it('flags the other 22 provider types as unsupported', () => {
+  it('flags every provider type other than OpenAI and Anthropic as unsupported, with a reason', () => {
+    // Derived from the enum rather than a hand-written list: a hardcoded
+    // list silently stops covering new provider types, and this map has to
+    // stay exhaustive (it is typed Record<LlmProviderType, ...>).
+    const supported = [LlmProviderType.OPENAI, LlmProviderType.ANTHROPIC];
     const unsupported = listProviderUsageCapabilities().filter((c) => !c.supported);
-    expect(unsupported.map((c) => c.type).sort()).toEqual(
-      [
-        LlmProviderType.AWS_BEDROCK,
-        LlmProviderType.AZURE_OPENAI,
-        LlmProviderType.BASETEN,
-        LlmProviderType.CEREBRAS,
-        LlmProviderType.COHERE,
-        LlmProviderType.CUSTOM,
-        LlmProviderType.DEEPINFRA,
-        LlmProviderType.DEEPSEEK,
-        LlmProviderType.FIREWORKS,
-        LlmProviderType.GOOGLE,
-        LlmProviderType.GROQ,
-        LlmProviderType.HUGGINGFACE,
-        LlmProviderType.MISTRAL,
-        LlmProviderType.NEBIUS,
-        LlmProviderType.NOVITA,
-        // Ollama is local inference — nothing is billed, so there is no
-        // usage/cost API to ingest.
-        LlmProviderType.OLLAMA,
-        LlmProviderType.OPENROUTER,
-        LlmProviderType.PERPLEXITY,
-        LlmProviderType.SAMBANOVA,
-        LlmProviderType.TOGETHER,
-        LlmProviderType.XAI,
-        LlmProviderType.ZAI,
-      ].sort(),
-    );
-    // every unsupported entry must carry an explanatory note
+    const expected = Object.values(LlmProviderType).filter((t) => !supported.includes(t));
+
+    expect(unsupported.map((c) => c.type).sort()).toEqual(expected.sort());
+    // Every unsupported entry must carry an explanatory note - "not
+    // supported" with no reason is what lets a real gap hide.
     expect(unsupported.every((c) => !!c.note)).toBe(true);
   });
 

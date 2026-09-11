@@ -51,6 +51,13 @@ export interface RoutePlan {
   rejected: Array<{ modelId: string; reason: string }>;
 }
 
+/** The same blended figure the cheapest objective ranks on, or null when unpriced. */
+function blendedPrice(card: Model): number | null {
+  const p = card.effectivePricing();
+  if (!p) return null;
+  return p.inPerMTok * 0.75 + p.outPerMTok * 0.25;
+}
+
 export class NoRouteError extends Error {
   readonly code = 'NO_ROUTE';
   constructor(readonly rejected: Array<{ modelId: string; reason: string }>) {
@@ -101,6 +108,59 @@ export class ModelRouterService {
     }
     return { candidates: resolved, rejected };
   }
+  /**
+   * The same plan, shaped for a human and carrying no secrets.
+   *
+   * `plan()` returns resolved providers because the runner needs them to
+   * make a call. A preview must never hand a provider row to an HTTP
+   * response: those carry credentials. This returns only what a person
+   * needs to understand the decision, which is also all the policy editor
+   * renders.
+   */
+  async preview(
+    organizationId: string,
+    policy: RoutingPolicy = {},
+    principal?: { id: string },
+  ): Promise<{
+    candidates: Array<{ modelId: string; name: string; vendorModelId: string; providerType: string | null; rationale: string; blendedPricePerMTok: number | null; privacyTier: string; region: string | null }>;
+    rejected: Array<{ modelId: string; reason: string }>;
+  }> {
+    const plan = await this.plan(organizationId, policy, principal);
+    return {
+      candidates: plan.candidates.map((c) => ({
+        modelId: c.modelId,
+        name: c.card.name,
+        vendorModelId: c.vendorModelId,
+        providerType: c.card.providerType ?? null,
+        rationale: c.rationale,
+        blendedPricePerMTok: blendedPrice(c.card),
+        privacyTier: c.card.privacyTier,
+        region: c.card.region ?? null,
+      })),
+      rejected: plan.rejected,
+    };
+  }
+
+  /**
+   * The provider for one named model. A lookup, deliberately not a plan.
+   *
+   * A filled role names a concrete model, so asking the router to "choose"
+   * between one candidate would still be routing, and a pinned role must
+   * never route. This resolves the card to something callable and nothing
+   * more. See docs/design/layers.md, L4.
+   */
+  async providerForModelId(
+    organizationId: string,
+    modelId: string,
+    principal?: { id: string },
+  ): Promise<{ card: Model; provider: LlmProvider }> {
+    const card = await this.models.findOne({ where: { id: modelId, organizationId } });
+    if (!card) throw new Error(`Model ${modelId} is not in this organization's catalog`);
+    const provider = await this.providerFor(card, principal);
+    if (!provider) throw new Error(`Model ${card.name} has no callable provider`);
+    return { card, provider };
+  }
+
   /**
    * The stored provider a card is called through. Endpoint-backed cards
    * carry one too (written when the deployment reached ready, or when the

@@ -1,6 +1,6 @@
 # Models CLI
 
-`@almyty/models` manages the model catalog from the terminal: list and register cards, validate them, register versions of your own weights, deploy them through an adapter, and watch what each deployment costs. It shares the login of every other almyty CLI.
+`@almyty/models` manages the model catalog from the terminal: list and register cards, validate them, register versions of your own weights, deploy a model through an adapter, and watch what each deployment costs. It shares the login of every other almyty CLI.
 
 ```bash
 $ npx @almyty/auth login
@@ -91,9 +91,11 @@ Deleted.
 | `--api-key` | register-endpoint | Bearer token the server expects |
 | `--selectable` | list | Only cards the router may pick |
 
+Note `--model` here names the **vendor model id** on `register` and `register-endpoint`; it is not the deploy command's model reference below.
+
 ## Versions
 
-A version is a pinned registry URI for weights you own. See [Deployments](/models/deployments#the-registry) for the URI shapes and the manifest.
+Registering a version is optional: do it when you want lineage, a manifest digest and evaluation history tied to your own artifact. See [Deployments](/models/deployments#the-registry) for the URI shapes and the manifest.
 
 ```bash
 $ npx @almyty/models versions
@@ -108,7 +110,7 @@ qwen3-14b-support-ft  qwen3-14b  29.00 GB  [bf16, awq-int4]
     a91c...  s3://acme-models/qwen3-14b-support@e3b0c442
 ```
 
-An `s3://` version reads its base, size and quantizations from `almyty-manifest.json` at the URI. For `hf://` and `file://` the manifest is optional; pass `--base` when it is absent, and `--quantizations q1,q2` to record them.
+An `s3://` version reads its base, size and quantizations from `almyty-manifest.json` at the URI. For every other scheme the manifest is optional; pass `--base` when it is absent, and `--quantizations q1,q2` to record them.
 
 ## Deployments
 
@@ -117,42 +119,57 @@ List the adapters and what each can do:
 ```bash
 $ npx @almyty/models adapters
 modal  Modal
-    architectures="any" lora="merged" serverless=true dedicated=false scaleToZero=true regions=[] registrySources=["s3"]
+    architectures="any" lora="merged" serverless=true dedicated=false scaleToZero=true regions=[] registrySources=["hub"]
 huggingface-endpoints  Hugging Face Inference Endpoints
-    architectures="any" lora="merged" serverless=false dedicated=true scaleToZero=true regions=["us-east-1","us-west-2","eu-west-1","eu-central-1","ap-southeast-1"] registrySources=["s3","hub"]
+    architectures="any" lora="merged" serverless=false dedicated=true scaleToZero=true regions=["us-east-1","us-west-2","eu-west-1","eu-central-1","ap-southeast-1"] registrySources=["hub"]
 ...
 ```
 
-`--json` includes each adapter's config schema, the same data the deploy form renders from.
+`--json` includes each adapter's `modelSchemes` (every reference it accepts, as literal prefixes) and its config schema, the same data the deploy form renders from.
 
-Deploy a version. `--config` is the adapter's provider config (validated against its schema, secret fields encrypted), `--desired` the hardware and scale you want:
+Naming the model is configuration, so the model reference is the **positional argument**. Deploy straight from a Hugging Face repository:
 
 ```bash
-$ npx @almyty/models deploy \
-    --model-version a91c... \
-    --adapter modal \
-    --config '{"tokenId":"ak-...","tokenSecret":"as-...","workspace":"acme","gpu":"A100-80GB"}' \
+$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B@main \
+    --adapter huggingface-endpoints \
+    --config '{"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}' \
     --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}' \
     --budget 5d3f...
 Queued.
-c07b...  modal  pending  replicas ?/1
+c07b...  huggingface-endpoints  pending  replicas ?/1
+```
+
+Or from a model already on a platform:
+
+```bash
+$ npx @almyty/models deploy bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --adapter aws-bedrock-import
+```
+
+Or, for lineage tracked through a registered version, point at it instead of naming the model:
+
+```bash
+$ npx @almyty/models deploy --model-version a91c... --adapter modal \
+    --config '{"tokenId":"ak-...","tokenSecret":"as-...","workspace":"acme","gpu":"A100-80GB"}'
 ```
 
 | Flag | Meaning |
 |---|---|
-| `--model-version` | The version to deploy (required) |
+| `<model>` (positional) | The model to run: `hf://org/repo@sha`, `s3://bucket/prefix@etag`, `gs://bucket/prefix@gen`, `file:///path@sha`, or a provider reference such as `bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`. Required unless `--model-version` is given |
+| `--model-version` | A registered version instead of the positional model reference |
 | `--adapter` | Adapter key from `adapters` (required) |
 | `--config` | JSON provider config for the adapter |
 | `--desired` | JSON desired state: `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
 | `--credential` | A stored credential the adapter reads secrets from instead of `--config` |
 | `--budget` | A spend budget; reaching it scales the deployment to zero |
-| `--model` | A card that already exists for this version; the deployment fills its endpoint once ready and keeps pricing it. Without it, register the ready URL with `register-endpoint` |
+| `--card` | A model card that already exists for this model; the deployment fills its endpoint once ready and keeps pricing it. Without it, register the ready URL with `register-endpoint` |
+
+`adapters` lists what each provider accepts; naming a reference the chosen adapter can't read is refused before anything runs.
 
 Watch desired against actual state and spend:
 
 ```bash
 $ npx @almyty/models deployments
-c07b...  modal  ready  replicas 1/1  spent 2.40 USD
+c07b...  huggingface-endpoints  ready  replicas 1/1  spent 2.40 USD
 e18a...  huggingface-endpoints  failed  replicas 0/1  spent 0.00 USD
     quota exceeded for nvidia-a10g in eu-west-1
 ```
@@ -161,13 +178,13 @@ Scale (0 scales to zero) and tear down. Both change desired state; the reconcile
 
 ```bash
 $ npx @almyty/models scale c07b... 0
-c07b...  modal  scaling  replicas 1/0  spent 2.40 USD
+c07b...  huggingface-endpoints  scaling  replicas 1/0  spent 2.40 USD
 
 $ npx @almyty/models teardown c07b...
-c07b...  modal  tearing_down  replicas 1/0  spent 2.40 USD
+c07b...  huggingface-endpoints  tearing_down  replicas 1/0  spent 2.40 USD
 ```
 
-Teardown removes the endpoint. The weights stay in your registry.
+Teardown removes the endpoint. Weights you registered a version for stay in your registry; a model that lives on the provider is untouched either way.
 
 ## Related
 

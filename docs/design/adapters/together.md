@@ -1,29 +1,166 @@
 # Together AI adapter (`together`)
 
-Verified 2026-09-08 against docs.together.ai (reference pages `createendpoint`, `getendpoint`, `updateendpoint`, `deleteendpoint`, `listhardware`, `upload-model`, `getjob`, and the dedicated-endpoints guides). Source: `backend/src/modules/model-deployments/adapters/together.adapter.ts`. Scope: dedicated endpoints for a registry version only; Together-hosted serverless models are call-only and not handled here.
+Together **dedicated model inference** (DMI): a model of yours running on
+reserved GPUs behind a stable endpoint string, called through Together's
+shared OpenAI-compatible inference API. Implementation:
+`backend/src/modules/model-deployments/adapters/together.adapter.ts`.
 
-## What was verified
+## Verified (2026-09-09)
 
-- v1 base `https://api.together.xyz/v1` (docs also list `https://api.together.ai/v1`), `Authorization: Bearer <key>`. Errors come back as `{error: {type, message}}`; the endpoint pages document 403 Unauthorized, 404 Not Found, 500.
-- `POST /v1/endpoints`: `model` (required), `hardware` (required, an id from `/v1/hardware` such as `1x_nvidia_a100_80gb_sxm` or `8x_nvidia_h200_140gb_sxm`), `autoscaling {min_replicas, max_replicas}` (required), `display_name`, `disable_speculative_decoding` (default false), `disable_prompt_cache` (deprecated, no effect), `state` (`STARTED` | `STOPPED`, default STARTED), `inactive_timeout` (minutes, null or 0 disables), `availability_zone` (e.g. `us-central-4b`). Response `DedicatedEndpoint`: `object: endpoint`, `id` (`endpoint-<uuid>`), `name`, `display_name`, `model`, `hardware`, `type: dedicated`, `owner`, `state` in `PENDING | STARTING | STARTED | STOPPING | STOPPED | ERROR`, `autoscaling`, `created_at`.
-- `GET /v1/endpoints/{id}` returns the same object; `PATCH /v1/endpoints/{id}` takes `display_name`, `state`, `autoscaling`, `inactive_timeout`; `DELETE /v1/endpoints/{id}` returns 204.
-- `GET /v1/hardware[?model=]`: `data[] {id, pricing {cents_per_minute}, specs {gpu_type, gpu_link, gpu_memory, gpu_count}, availability {status: available | unavailable | insufficient}}`.
-- `POST /v1/models` (custom model upload): `model_name` (required), `model_source` (required: a Hugging Face repo id such as `unsloth/Qwen2.5-72B-Instruct`, or an HTTPS archive URL such as a presigned S3 `.tar.gz`), `model_type` (`model` | `adapter`), `hf_token`, `description`, `base_model`, `lora_model`. Response `{job_id, model_name, model_id, model_source}`; the returned `model_name` is owner-prefixed (`owner/model_name`). `GET /v1/jobs/{jobId}` reports the upload; the docs say the model is deployable once `status` is `Complete`.
-- Billing (dedicated-endpoints/pricing): per minute of hardware uptime; "a deployment scaled to zero replicas, or stopped, costs nothing"; `min_replicas` is the cost floor. Published rates: H100 80GB $3.99/h, B200 180GB $8.99/h; H200, B300, GB300 on request.
-- The archive for a custom upload must contain the checkpoint files at its root (safetensors only); a valid directory holds `config.json`, `model*.safetensors`, `model.safetensors.index.json`, tokenizer files.
+**1. The managed product, and whether there is a serverless option.** Two
+separate products. **Serverless** inference is per-token over Together's
+catalog of 100+ models and provisions nothing. **Dedicated model
+inference** runs your model on dedicated GPUs; that is what this adapter
+drives. DMI is a v2 resource model (project, model, config, endpoint,
+deployment, replica) and **v1 is closed to new endpoints**: "Creating a
+new v1 endpoint and restarting a stopped or paused one are no longer
+available. These operations now return `endpoints_v1_create_access_disabled`
+(HTTP 403) through the API (`POST /v1/endpoints`), SDK, CLI, and web UI."
+https://docs.together.ai/docs/serverless/overview
+https://docs.together.ai/docs/dedicated-endpoints/concepts
+https://docs.together.ai/docs/dedicated-endpoints/migrate-from-v1
+
+**2. What model sources the product accepts.** Together's own **catalog**
+(`tg beta models public --product dedicated`, each architecture published
+as one or more deployment profiles pinning a weight to a config), a
+**fine-tune trained on Together**, and an **upload**. An upload has three
+sources -- "Your local machine, Hugging Face Hub, or an S3 presigned URL"
+-- and must be "a fine-tuned variant of a base model that Together AI
+supports for dedicated inference", registered against a `baseModelId`
+(`ml_...`) first. The documented remote path is a **server-side pull**:
+"A remote upload streams the weights server-side, so you don't download
+them locally first", with `--token` "for gated or private Hugging Face
+repos". Only safetensors are accepted, and each revision is validated
+(`REVISION_VALIDATION_STATUS_*`) before it can be deployed.
+https://docs.together.ai/docs/dedicated-endpoints/custom-models
+https://docs.together.ai/docs/dedicated-endpoints/models
+
+**3. REST surface** (`https://api.together.ai/v2`, bearer token; the key
+is scoped to one project):
+
+| Operation | Method | Path |
+|-----------|--------|------|
+| identify the project | GET | `/v1/whoami` |
+| register a model | POST | `/v2/projects/{projectId}/models` |
+| remote upload | POST | `/v2/projects/{projectId}/models/uploads` |
+| upload status | GET | `/v2/projects/{projectId}/models/uploads/{id}` |
+| list deployment profiles | GET | `/v2/projects/{projectId}/configs?referenceModel=` |
+| create endpoint | POST | `/v2/projects/{projectId}/endpoints` |
+| read endpoint | GET | `/v2/projects/{projectId}/endpoints/{id}` |
+| route traffic | PATCH | `/v2/projects/{projectId}/endpoints/{id}` |
+| delete endpoint | DELETE | `/v2/projects/{projectId}/endpoints/{id}` |
+| create deployment | POST | `/v2/projects/{projectId}/endpoints/{endpointId}/deployments` |
+| read deployment | GET | `.../deployments/{id}` |
+| scale / stop | PATCH | `.../deployments/{id}` |
+| delete deployment | DELETE | `.../deployments/{id}` |
+| instance types and prices | GET | `/v2/public/inference-instance-types` |
+
+`DE.CreateModelRequest` requires `name`, `type` (`model` or `adapter`) and
+`baseModelId`. `DE.CreateRemoteUploadSpec` requires `modelId` and
+`remoteUrl` ("Hugging Face repository URL or presigned archive URL to
+import") and takes `token` ("Optional source credential used to access a
+private remote location. The value is write-only and is not returned").
+`DE.RemoteUpload.status` is `REMOTE_UPLOAD_STATUS_{PENDING, RUNNING,
+ERROR, SUCCEEDED, FAILED}`.
+
+`DE.CreateEndpointRequest` requires only `name`; the response carries
+`id` (`ep_...`), the project-qualified `name`, an `etag` and a
+`trafficSplit`. `DE.CreateDeploymentRequest` requires `name` and
+`autoscaling`, and takes `model`
+(`projects/{projectId}/models/{modelId}[/revisions/{revisionId}]`),
+`config` (`projects/{projectId}/configs/{configRevisionId}`), `placement`
+and `enableLora`. `DE.Autoscaling` is `{minReplicas, maxReplicas,
+scaleUpWindow, scaleDownWindow, scaleToZeroWindow, scalingMetrics}` with
+the windows as duration strings; "Set both `minReplicas` and
+`maxReplicas` to `0` to stop the deployment". `DE.DeploymentStatus.state`
+is `DEPLOYMENT_STATE_{PROVISIONING, READY, SCALING, DEGRADED, FAILED,
+STOPPED, STOPPING}`, with `readyReplicas`, `scheduledReplicas` and
+`message`.
+
+Routing is a separate step and it is not optional: "Even if it's `READY`,
+a deployment receives no traffic until you route traffic to it", and the
+troubleshooting entry for `endpoint_not_configured` (HTTP 400) "though
+the deployment is READY" is exactly that. The split is set by PATCHing
+the endpoint's `trafficSplit` with `{deploymentId, weight}` entries.
+Deletion has an order: stop the deployment, drop its split weight, delete
+the deployment, then delete the endpoint.
+
+The OpenAI-compatible chat URL is Together's shared inference host, not a
+per-endpoint host: "Dedicated model inference is served at
+`https://api-inference.together.ai`", and the endpoint string
+`<project_slug>/<endpoint_name>` is passed as the `model` field. A
+deployment's own qualified name can be passed as `model` to bypass the
+split and target it directly.
+https://docs.together.ai/docs/dedicated-endpoints/manage
+https://docs.together.ai/docs/dedicated-endpoints/route-traffic
+https://docs.together.ai/docs/dedicated-endpoints/requests
+https://docs.together.ai/reference/dmi/deployments-create
+
+**4. Cost signals.** A **price list, not a usage API**. DMI "bills based
+on the hardware your deployments run on", by the minute, per replica,
+"only while it's ready", and "a deployment scaled to zero replicas, or
+stopped, costs nothing". `GET /v2/public/inference-instance-types`
+returns `DE.InferenceInstanceType` with `priceCentsPerHour` ("On-demand
+price for one running replica, in US cents per hour") alongside `gpuType`,
+`gpuCount` and per-region `headroom`. Published rates include
+`1xnvidia-h100-80gb` at $3.99/hour and `1xnvidia-b200-180gb` at $8.99.
+The only other measurement route, `GET /projects/{id}/endpoints/{id}/analytics`,
+returns "request, token, latency, throughput, error, and
+resource-utilization metrics" -- no dollars.
+https://docs.together.ai/docs/dedicated-endpoints/pricing
+https://docs.together.ai/reference/dmi/instance-types-list
+https://docs.together.ai/reference/dmi/endpoints-analytics
+
+## What the adapter does
+
+- `upload` registers the version as a project model against
+  `providerConfig.baseModelId`, then POSTs a remote upload naming the Hub
+  URL and, when the repo is private or gated, the customer's own Hub
+  token, and polls the job to `REMOTE_UPLOAD_STATUS_SUCCEEDED`. It returns
+  `together://ml_...`, which deploys without importing again.
+- `deploy` resolves the project (from `providerConfig.projectId` or
+  `/v1/whoami`), resolves the model, picks the published config, creates
+  the endpoint, creates the deployment, and PATCHes the traffic split so
+  the deployment actually serves.
+- `readEndpoint` maps `DEPLOYMENT_STATE_*` and reports `status.readyReplicas`.
+- `scale(0)` sets both replica bounds to zero; `scale(n)` raises the floor.
+- `teardown` clears the split, stops the deployment, deletes it, then
+  deletes the endpoint, tolerating a 400 while replicas drain.
+- `costSnapshot` prices a replica from the public instance-type catalog.
 
 ## Deltas from the spec
 
-- Together cannot read `s3://` with keys. An S3 registry version needs a presigned HTTPS URL of a `.tar.gz` or `.zip` of the version (`credentials.registryArchiveUrlSecret` or `providerConfig.registryArchiveUrlSecret`, named so the at-rest secret pattern encrypts it; expiry at least 100 minutes per the docs); without it the adapter refuses with `ADAPTER_ERROR` before calling Together. Producing that archive from the flat registry layout is the registry service's job, not the adapter's.
-- The upload is synchronous inside `deploy()` (and exposed as `upload()`): `deploy` cannot hand back a half-made handle because refs are persisted opaquely and reads never write them back. `upload()` returns `together://owner/name@model-id`; a version registered with that URI deploys without uploading again. `uploadTimeoutMinutes` (default 60) bounds the job poll.
-- The endpoint is addressed through the shared inference base `https://api.together.xyz/v1` with the endpoint's `name` as the chat `model`; `ActualState.details.model` carries it and `url` is the shared base.
-- v1 reports no live replica count. While `STARTED` the adapter reports `max(min_replicas, 1)` running replicas; otherwise 0.
-- Scale to zero is `PATCH {state: STOPPED}` (billed nothing); a positive count patches `autoscaling.min_replicas` (max raised to match) and `state: STARTED`. `capabilities().scaleToZero` is true on that basis plus `inactive_timeout`.
-- Cost: the rate is `cents_per_minute * 60` for the endpoint's hardware from `/v1/hardware`, falling back to `hourlyRateCents`; spend is rate times uptime since creation because Together publishes no spend endpoint.
-- `capabilities().regions` is empty: `availability_zone` is a free-form string with no documented list; `desired.region` is passed through as the zone.
-- A newer v2 "DMI" API exists (`https://api.together.ai/v2/projects/{projectId}/endpoints`, deployments with `DEPLOYMENT_STATE_*`, `/v2/public/inference-instance-types` with `priceCentsPerHour`, `/projects/{projectId}/models/uploads` with `REMOTE_UPLOAD_STATUS_*`, `tg beta` CLI). The v1 endpoints above remain documented and are what this adapter uses; the v2 shape is noted here for when v1 is retired.
-- Teardown deletes the endpoint only; the uploaded model stays (v1 documents no model delete) and is reusable for the same version.
+- **`registrySources` is `['hub']`.** The remote upload is the only import
+  Together performs on its own behalf, and the Hub is the source we can
+  hand it without becoming the transfer. An `s3://` version is refused
+  with `ADAPTER_UNSUPPORTED_SOURCE`.
+- **An upload needs a base model.** `baseModelId` is required by the API
+  and cannot be guessed from a registry version, so a version with no
+  `providerConfig.baseModelId` is refused before anything is created.
+- **We do not guess a deployment profile.** When a model publishes more
+  than one config the adapter refuses and lists them, the same way
+  Together's own CLI does; `providerConfig.configId` picks one.
+- **Placement is set once.** Together cannot change placement on a live
+  deployment, so `desired.region` (or `providerConfig.regions`) is applied
+  as inline placement at create time only.
+- **Cost is a rate, not a reading.**
 
-## Live mode
+## Removed in this pass
 
-`CONFORMANCE_LIVE=together TOGETHER_API_KEY=... npx jest src/modules/model-deployments/__tests__/conformance/together.conformance.spec.ts`. Uploads `hf://Qwen/Qwen3-0.6B@main` and deploys it on `1x_nvidia_a100_80gb_sxm`. Never runs in CI.
+The whole v1 path, which no longer creates anything: `POST /v1/endpoints`,
+`POST /v1/models` with `model_source`, `GET /v1/jobs/{id}`,
+`GET /v1/hardware`, and the `STARTED`/`STOPPED` state machine.
+
+With it went the **presigned-archive workaround**: an S3 registry version
+used to be uploaded by handing Together a presigned HTTPS URL of a
+`.tar.gz` of the version, carried in the secret
+`registryArchiveUrlSecret`. Producing and signing that archive is almyty
+standing in the middle of a weight transfer for a provider whose
+documented import is a Hub URL. Gone, along with the config field.
+
+## Live suite
+
+`CONFORMANCE_LIVE=together` with `TOGETHER_API_KEY`, and
+`TOGETHER_PROJECT_ID` / `TOGETHER_BASE_MODEL_ID` when the key's project or
+base model should be pinned. Imports `hf://Qwen/Qwen3-0.6B@main` and
+deploys it on the model's published profile. Never in CI.

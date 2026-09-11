@@ -300,7 +300,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
       ) : (
         <>
       <div>
-        <Label>LLM Provider</Label>
+        <Label>Provider</Label>
         <Select
           value={(node.data.providerId as string) || ''}
           onValueChange={(v) => {

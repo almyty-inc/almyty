@@ -12,34 +12,37 @@ import {
 } from './adapter.interface';
 
 /**
- * Together AI dedicated endpoints: the v1 REST API at
- * https://api.together.xyz/v1, bearer token.
+ * Together AI dedicated model inference (DMI), the v2 resource model:
+ * project -> model -> config -> endpoint -> deployment -> replicas.
  *
- * A registry version is first uploaded with `POST /v1/models`
- * (`model_source` is a Hugging Face repo or an HTTPS archive URL) and the
- * upload job polled at `GET /v1/jobs/{id}` until `Complete`; the owner-
- * prefixed `model_name` it returns is what `POST /v1/endpoints` deploys.
- * A `together://owner/name@model-id` registry URI skips the upload.
- * Together-hosted serverless models are not this adapter's job. Deltas
- * from the spec are recorded in docs/design/adapters/together.md.
+ * A custom checkpoint reaches Together through a **remote upload**: we
+ * register the model, then hand Together the Hugging Face repo URL and,
+ * for a private or gated repo, the customer's own Hub token. Together
+ * streams the weights server-side. almyty never carries a byte.
+ *
+ * v1 (`POST /v1/endpoints`) is closed to new endpoints: it answers
+ * `endpoints_v1_create_access_disabled` (403). See
+ * docs/design/adapters/together.md.
  */
-const BASE_URL = 'https://api.together.xyz/v1';
-const INFERENCE_URL = 'https://api.together.xyz/v1';
-const DEFAULT_HARDWARE = '1x_nvidia_h100_80gb_sxm';
-const UPLOAD_TERMINAL_FAILURES = /^(failed|error|cancelled)$/i;
+const BASE_URL = 'https://api.together.ai/v2';
+const V1_URL = 'https://api.together.ai/v1';
+const INFERENCE_URL = 'https://api-inference.together.ai/v1';
+const INSTANCE_TYPES_URL = `${BASE_URL}/public/inference-instance-types`;
+const UPLOAD_TERMINAL_FAILURES = /_(ERROR|FAILED)$/;
 
 const STATE_MAP: Record<string, ActualState['state']> = {
-  PENDING: 'deploying',
-  STARTING: 'deploying',
-  STARTED: 'ready',
-  STOPPING: 'scaling',
-  STOPPED: 'stopped',
-  ERROR: 'failed',
+  DEPLOYMENT_STATE_PROVISIONING: 'deploying',
+  DEPLOYMENT_STATE_SCALING: 'scaling',
+  DEPLOYMENT_STATE_READY: 'ready',
+  DEPLOYMENT_STATE_DEGRADED: 'degraded',
+  DEPLOYMENT_STATE_STOPPING: 'scaling',
+  DEPLOYMENT_STATE_STOPPED: 'stopped',
+  DEPLOYMENT_STATE_FAILED: 'failed',
 };
 
 export class TogetherAdapter implements ModelProviderAdapter {
   readonly key = 'together';
-  readonly displayName = 'Together AI (dedicated endpoints)';
+  readonly displayName = 'Together AI (dedicated model inference)';
 
   constructor(
     private readonly http: AxiosInstance = axios.create({ timeout: 60_000 }),
@@ -48,15 +51,17 @@ export class TogetherAdapter implements ModelProviderAdapter {
 
   capabilities(): AdapterCapabilities {
     return {
+      // An upload must be a fine-tuned variant of an architecture Together already serves.
       architectures: 'any',
-      lora: 'merged',
+      lora: 'multi',
       serverless: false,
       dedicated: true,
-      // A STOPPED endpoint costs nothing and inactive_timeout stops it on its own.
+      // Both replica bounds at zero stops a deployment and it bills nothing.
       scaleToZero: true,
-      // v1 takes a free-form availability_zone (e.g. us-central-4b); no public list to enumerate.
+      // Regions come from a placement profile or a config's instance-type headroom; no static list.
       regions: [],
-      registrySources: ['s3', 'hub'],
+      // Together's remote upload reads a Hugging Face repository itself.
+      registrySources: ['hub'],
     };
   }
 
@@ -65,14 +70,17 @@ export class TogetherAdapter implements ModelProviderAdapter {
       type: 'object',
       properties: {
         apiKey: { type: 'string', title: 'Together API key', 'x-secret': true },
-        hardware: { type: 'string', title: 'Hardware', description: 'An id from GET /v1/hardware, e.g. 1x_nvidia_h100_80gb_sxm', default: DEFAULT_HARDWARE },
-        availabilityZone: { type: 'string', title: 'Availability zone', description: 'Optional, e.g. us-central-4b' },
-        inactiveTimeoutMinutes: { type: 'integer', minimum: 0, title: 'Stop after idle minutes', description: '0 disables the automatic stop' },
-        disableSpeculativeDecoding: { type: 'boolean', default: false },
-        hfToken: { type: 'string', title: 'Hugging Face token (gated hub source)', 'x-secret': true },
-        registryArchiveUrlSecret: { type: 'string', title: 'Registry archive URL (S3 source)', description: 'Presigned HTTPS URL of a .tar.gz or .zip of the version with the files at the archive root; Together cannot read s3:// directly. Named as a secret so it is encrypted at rest', 'x-secret': true },
+        projectId: { type: 'string', title: 'Project id', description: 'proj_...; read from GET /v1/whoami when omitted' },
+        baseModelId: { type: 'string', title: 'Base model id', description: 'ml_... of the supported architecture an uploaded fine-tune derives from; required to upload' },
+        configId: { type: 'string', title: 'Deployment profile', description: 'cr_... config revision; the first published config for the model is used when omitted' },
+        hfToken: { type: 'string', title: 'Hugging Face token (private or gated repo)', description: 'Passed to Together for the remote upload only; write-only on their side', 'x-secret': true },
+        regions: { type: 'array', items: { type: 'string' }, title: 'Placement regions', description: 'Inline placement; placement cannot be changed after the deployment is created' },
+        placementConstraint: { type: 'string', enum: ['ENFORCEMENT_PREFERRED', 'ENFORCEMENT_REQUIRED'], default: 'ENFORCEMENT_PREFERRED' },
+        scaleUpWindowSeconds: { type: 'integer', minimum: 0, title: 'Scale-up stabilization window (s)' },
+        scaleDownWindowSeconds: { type: 'integer', minimum: 0, title: 'Scale-down stabilization window (s)' },
+        scaleToZeroWindowSeconds: { type: 'integer', minimum: 0, title: 'Idle seconds before the deployment stops' },
         uploadTimeoutMinutes: { type: 'integer', minimum: 1, default: 60 },
-        hourlyRateCents: { type: 'integer', title: 'Hardware price per hour (cents)', description: 'Fallback when GET /v1/hardware has no price for the hardware' },
+        hourlyRateCents: { type: 'integer', title: 'Replica price per hour (cents)', description: 'Fallback when the public instance-type catalog has no price for the hardware' },
       },
       required: ['apiKey'],
     };
@@ -84,7 +92,7 @@ export class TogetherAdapter implements ModelProviderAdapter {
   }
 
   private classify(err: any, fallback: string): never {
-    if (err?.code === 'ADAPTER_AUTH' || err?.code === 'ADAPTER_ERROR' || err?.code === 'ADAPTER_QUOTA_EXCEEDED') throw err;
+    if (typeof err?.code === 'string' && err.code.startsWith('ADAPTER_')) throw err;
     const status = err?.response?.status;
     const body = err?.response?.data;
     const message = body?.error?.message ?? body?.error ?? body?.message ?? err?.message ?? fallback;
@@ -100,152 +108,247 @@ export class TogetherAdapter implements ModelProviderAdapter {
     return `almyty-${deploymentId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20)}`;
   }
 
-  /** The `model_source` Together accepts for a version: a Hub repo id, or an HTTPS archive URL for the S3 registry. */
-  private modelSource(version: DeployRequest['version'], credentials: AdapterCredentials, cfg: Record<string, any>): string {
-    const uri = version.registryUri;
-    if (uri.startsWith('hf://')) return uri.slice('hf://'.length).split('@')[0];
-    const archive = credentials.registryArchiveUrlSecret ?? cfg.registryArchiveUrlSecret;
-    if (!archive) {
+  /** The Hugging Face repo URL Together's remote upload reads. Nothing else can be imported. */
+  static remoteUrl(registryUri: string): string {
+    if (!registryUri.startsWith('hf://')) {
       throw Object.assign(
-        new Error('Together reads custom weights from a Hugging Face repo or a presigned HTTPS archive URL; set registryArchiveUrlSecret for an S3 registry version'),
+        new Error(
+          `Together imports custom weights from a Hugging Face repository, or serves a model already in the project: point the version at hf://owner/repo or together://ml_..., not ${registryUri.split(':')[0]}://`,
+        ),
+        { code: 'ADAPTER_UNSUPPORTED_SOURCE' },
+      );
+    }
+    return `https://huggingface.co/${registryUri.slice('hf://'.length).split('@')[0]}`;
+  }
+
+  /** proj_... from providerConfig, else from the key itself. */
+  private async project(cfg: Record<string, any>, credentials: AdapterCredentials): Promise<{ id: string; slug?: string }> {
+    if (cfg.projectId) return { id: cfg.projectId, slug: cfg.projectSlug };
+    const res = await this.http.get(`${V1_URL}/whoami`, { headers: this.headers(credentials) });
+    return { id: res.data?.project_id, slug: res.data?.project_slug };
+  }
+
+  /**
+   * Register the version as a project model and have Together pull the
+   * weights from the Hub. Returns a `together://ml_...` URI deploy() uses
+   * directly on a later attempt.
+   */
+  async upload(version: DeployRequest['version'], credentials: AdapterCredentials, cfg: Record<string, any> = {}): Promise<UploadResult> {
+    const headers = this.headers(credentials);
+    const remoteUrl = TogetherAdapter.remoteUrl(version.registryUri);
+    const baseModelId = cfg.baseModelId;
+    if (!baseModelId) {
+      throw Object.assign(
+        new Error('Together requires providerConfig.baseModelId (ml_... of a supported base model) before it will accept an uploaded fine-tune'),
+        { code: 'ADAPTER_UNSUPPORTED_SOURCE' },
+      );
+    }
+    try {
+      const project = await this.project(cfg, credentials);
+      const created = await this.http.post(
+        `${BASE_URL}/projects/${encodeURIComponent(project.id)}/models`,
+        {
+          name: `almyty-${version.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${version.id.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 8)}`,
+          type: 'model',
+          baseModelId,
+          description: `almyty version ${version.id} (${version.manifestSha ?? 'no manifest'})`,
+        },
+        { headers },
+      );
+      const modelId = created.data?.id;
+      const job = await this.http.post(
+        `${BASE_URL}/projects/${encodeURIComponent(project.id)}/models/uploads`,
+        { modelId, remoteUrl, ...(credentials.hfToken ? { token: credentials.hfToken } : {}) },
+        { headers },
+      );
+      const jobId = job.data?.id;
+      const deadline = Date.now() + (cfg.uploadTimeoutMinutes ?? 60) * 60_000;
+      for (;;) {
+        const poll = await this.http.get(`${BASE_URL}/projects/${encodeURIComponent(project.id)}/models/uploads/${encodeURIComponent(jobId)}`, { headers });
+        const status = String(poll.data?.status ?? '');
+        if (status === 'REMOTE_UPLOAD_STATUS_SUCCEEDED') break;
+        if (UPLOAD_TERMINAL_FAILURES.test(status)) {
+          throw Object.assign(new Error(`remote upload ${jobId} ${status}: ${poll.data?.statusMessage ?? ''}`), { code: 'ADAPTER_ERROR' });
+        }
+        if (Date.now() > deadline) throw Object.assign(new Error(`remote upload ${jobId} still ${status} after ${cfg.uploadTimeoutMinutes ?? 60} minutes`), { code: 'ADAPTER_ERROR' });
+        await this.sleep(5_000);
+      }
+      return { registryUri: `together://${modelId}` };
+    } catch (err) {
+      this.classify(err, 'remote upload failed');
+    }
+  }
+
+  /** A published config revision for the model: the operator's choice, or the model's only profile. */
+  private async configRevision(projectId: string, modelId: string, cfg: Record<string, any>, headers: Record<string, string>): Promise<string> {
+    if (cfg.configId) return `projects/${projectId}/configs/${cfg.configId}`;
+    const res = await this.http.get(`${BASE_URL}/projects/${encodeURIComponent(projectId)}/configs`, {
+      headers,
+      params: { referenceModel: `projects/${projectId}/models/${modelId}` },
+    });
+    const configs: any[] = res.data?.data ?? [];
+    if (!configs.length) {
+      throw Object.assign(new Error(`Together publishes no deployment profile for model ${modelId}`), { code: 'ADAPTER_UNSUPPORTED_ARCHITECTURE' });
+    }
+    if (configs.length > 1 && !cfg.configId) {
+      // More than one profile means quantization and hardware are ambiguous; Together's own CLI refuses here too.
+      throw Object.assign(
+        new Error(`model ${modelId} has ${configs.length} deployment profiles; set providerConfig.configId to one of ${configs.map((c) => c.id ?? c.name).join(', ')}`),
         { code: 'ADAPTER_ERROR' },
       );
     }
-    return archive;
+    return configs[0].name ?? `projects/${projectId}/configs/${configs[0].id}`;
   }
 
-  /** Push the version to Together's model store and wait for the upload job; returns a together:// URI deploy() uses directly. */
-  async upload(version: DeployRequest['version'], credentials: AdapterCredentials, cfg: Record<string, any> = {}): Promise<UploadResult> {
-    const headers = this.headers(credentials);
-    const source = this.modelSource(version, credentials, cfg);
-    const fromHub = version.registryUri.startsWith('hf://');
-    const body = {
-      model_name: `almyty-${version.name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${version.id.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 8)}`,
-      model_source: source,
-      model_type: 'model',
-      description: `almyty version ${version.id} (${version.manifestSha ?? 'no manifest'})`,
-      ...(fromHub && credentials.hfToken ? { hf_token: credentials.hfToken } : {}),
+  private autoscaling(request: DeployRequest, cfg: Record<string, any>): Record<string, any> {
+    const seconds = (v: any) => (Number.isFinite(Number(v)) ? `${Number(v)}s` : undefined);
+    return {
+      minReplicas: request.desired.minScale ?? 0,
+      maxReplicas: Math.max(request.desired.maxScale ?? request.desired.replicas ?? 1, 1),
+      ...(seconds(cfg.scaleUpWindowSeconds) ? { scaleUpWindow: seconds(cfg.scaleUpWindowSeconds) } : {}),
+      ...(seconds(cfg.scaleDownWindowSeconds) ? { scaleDownWindow: seconds(cfg.scaleDownWindowSeconds) } : {}),
+      ...(seconds(cfg.scaleToZeroWindowSeconds) ? { scaleToZeroWindow: seconds(cfg.scaleToZeroWindowSeconds) } : {}),
     };
-    try {
-      const res = await this.http.post(`${BASE_URL}/models`, body, { headers });
-      const { job_id: jobId, model_name: modelName, model_id: modelId } = res.data ?? {};
-      const deadline = Date.now() + (cfg.uploadTimeoutMinutes ?? 60) * 60_000;
-      for (;;) {
-        const job = await this.http.get(`${BASE_URL}/jobs/${encodeURIComponent(jobId)}`, { headers });
-        const status = String(job.data?.status ?? '');
-        if (/^complete/i.test(status)) break;
-        if (UPLOAD_TERMINAL_FAILURES.test(status)) {
-          throw Object.assign(new Error(`upload job ${jobId} ${status}: ${job.data?.status_message ?? job.data?.message ?? ''}`), { code: 'ADAPTER_ERROR' });
-        }
-        if (Date.now() > deadline) throw Object.assign(new Error(`upload job ${jobId} still ${status} after ${cfg.uploadTimeoutMinutes ?? 60} minutes`), { code: 'ADAPTER_ERROR' });
-        await this.sleep(5_000);
-      }
-      return { registryUri: `together://${modelName}@${modelId}` };
-    } catch (err) {
-      this.classify(err, 'model upload failed');
-    }
   }
 
   async deploy(request: DeployRequest, credentials: AdapterCredentials): Promise<EndpointRef> {
     const cfg = request.providerConfig;
     const headers = this.headers(credentials);
     const uri = request.version.registryUri;
-    const model = uri.startsWith('together://')
-      ? uri.slice('together://'.length).split('@')[0]
-      : (await this.upload(request.version, credentials, cfg)).registryUri.slice('together://'.length).split('@')[0];
-    const minReplicas = request.desired.minScale ?? 0;
-    const maxReplicas = Math.max(request.desired.maxScale ?? request.desired.replicas ?? 1, 1);
-    const hardware = request.desired.hardware ?? cfg.hardware ?? DEFAULT_HARDWARE;
-
-    const body = {
-      model,
-      hardware,
-      display_name: TogetherAdapter.endpointName(request.deploymentId),
-      autoscaling: { min_replicas: minReplicas, max_replicas: maxReplicas },
-      state: 'STARTED',
-      disable_speculative_decoding: cfg.disableSpeculativeDecoding ?? false,
-      ...(cfg.inactiveTimeoutMinutes !== undefined ? { inactive_timeout: cfg.inactiveTimeoutMinutes } : {}),
-      ...(request.desired.region ?? cfg.availabilityZone ? { availability_zone: request.desired.region ?? cfg.availabilityZone } : {}),
-    };
+    // Refuse a source Together cannot read before anything is created.
+    if (!uri.startsWith('together://')) TogetherAdapter.remoteUrl(uri);
     try {
-      const res = await this.http.post(`${BASE_URL}/endpoints`, body, { headers });
-      const ep = res.data ?? {};
+      const project = await this.project(cfg, credentials);
+      const modelId = uri.startsWith('together://')
+        ? uri.slice('together://'.length).split('@')[0]
+        : (await this.upload(request.version, credentials, { ...cfg, projectId: project.id })).registryUri.slice('together://'.length);
+      const config = await this.configRevision(project.id, modelId, cfg, headers);
+      const name = TogetherAdapter.endpointName(request.deploymentId);
+      const regions: string[] = request.desired.region ? [request.desired.region] : cfg.regions ?? [];
+
+      const endpoint = await this.http.post(`${BASE_URL}/projects/${encodeURIComponent(project.id)}/endpoints`, { name }, { headers });
+      const endpointId = endpoint.data?.id;
+      const endpointName = endpoint.data?.name ?? (project.slug ? `${project.slug}/${name}` : name);
+
+      const deployment = await this.http.post(
+        `${BASE_URL}/projects/${encodeURIComponent(project.id)}/endpoints/${encodeURIComponent(endpointId)}/deployments`,
+        {
+          name,
+          model: `projects/${project.id}/models/${modelId}`,
+          config,
+          autoscaling: this.autoscaling(request, cfg),
+          ...(regions.length ? { placement: { inline: { regions, constraint: cfg.placementConstraint ?? 'ENFORCEMENT_PREFERRED' } } } : {}),
+        },
+        { headers },
+      );
+      const deploymentId = deployment.data?.id;
+
+      // A READY deployment serves nothing until it holds weight in the endpoint's traffic split.
+      await this.http.patch(
+        `${BASE_URL}/projects/${encodeURIComponent(project.id)}/endpoints/${encodeURIComponent(endpointId)}`,
+        { trafficSplit: [{ deploymentId, weight: 1 }], ...(endpoint.data?.etag ? { etag: endpoint.data.etag } : {}) },
+        { headers, params: { updateMask: 'trafficSplit' } },
+      );
+
       return {
-        endpointId: ep.id,
-        name: ep.name,
-        model,
-        hardware,
-        maxReplicas,
+        projectId: project.id,
+        endpointId,
+        deploymentId,
+        // The endpoint string is what callers pass as `model` on an inference request.
+        endpointName,
+        modelId,
+        hardware: deployment.data?.hardware,
+        maxReplicas: this.autoscaling(request, cfg).maxReplicas,
         url: INFERENCE_URL,
         createdAt: new Date().toISOString(),
         hourlyRateCents: cfg.hourlyRateCents ?? 0,
       };
     } catch (err) {
-      this.classify(err, 'create endpoint failed');
+      this.classify(err, 'create deployment failed');
     }
+  }
+
+  private deploymentUrl(ref: EndpointRef): string {
+    return `${BASE_URL}/projects/${encodeURIComponent(ref.projectId)}/endpoints/${encodeURIComponent(ref.endpointId)}/deployments/${encodeURIComponent(ref.deploymentId)}`;
   }
 
   async readEndpoint(ref: EndpointRef, credentials: AdapterCredentials): Promise<ActualState> {
     try {
-      const res = await this.http.get(`${BASE_URL}/endpoints/${encodeURIComponent(ref.endpointId)}`, { headers: this.headers(credentials) });
-      const ep = res.data ?? {};
-      const raw = String(ep.state ?? 'PENDING');
-      const state = STATE_MAP[raw] ?? 'deploying';
-      const min = Number(ep.autoscaling?.min_replicas ?? 0);
+      const res = await this.http.get(this.deploymentUrl(ref), { headers: this.headers(credentials) });
+      const d = res.data ?? {};
+      const raw = String(d.status?.state ?? 'DEPLOYMENT_STATE_PROVISIONING');
       return {
-        state,
+        state: STATE_MAP[raw] ?? 'deploying',
         url: INFERENCE_URL,
-        // v1 reports no live replica count; while STARTED at least the floor runs.
-        replicas: state === 'ready' ? Math.max(min, 1) : 0,
-        hardware: ep.hardware ?? ref.hardware,
-        region: ep.availability_zone,
-        details: { rawState: raw, model: ep.name ?? ref.name, minReplicas: min, maxReplicas: ep.autoscaling?.max_replicas },
+        openAiBase: INFERENCE_URL,
+        replicas: Number(d.status?.readyReplicas ?? 0),
+        hardware: d.hardware ?? ref.hardware,
+        message: d.status?.message,
+        details: {
+          rawState: raw,
+          model: ref.endpointName,
+          desiredReplicas: d.desiredReplicas,
+          scheduledReplicas: d.status?.scheduledReplicas,
+          minReplicas: d.autoscaling?.minReplicas,
+          maxReplicas: d.autoscaling?.maxReplicas,
+        },
       };
     } catch (err: any) {
-      if (err?.response?.status === 404) return { state: 'missing', message: 'endpoint not found' };
-      this.classify(err, 'read endpoint failed');
+      if (err?.response?.status === 404) return { state: 'missing', message: 'deployment not found' };
+      this.classify(err, 'read deployment failed');
     }
   }
 
-  /** Zero stops the endpoint (billed nothing); a positive count raises the floor and starts it. */
+  /** Both bounds at zero stops the deployment; a positive count raises the floor and restarts it. */
   async scale(ref: EndpointRef, replicas: number, credentials: AdapterCredentials): Promise<void> {
     const headers = this.headers(credentials);
-    const url = `${BASE_URL}/endpoints/${encodeURIComponent(ref.endpointId)}`;
     try {
-      if (replicas === 0) {
-        await this.http.patch(url, { state: 'STOPPED' }, { headers });
-        return;
-      }
-      await this.http.patch(url, { autoscaling: { min_replicas: replicas, max_replicas: Math.max(replicas, Number(ref.maxReplicas ?? 1)) }, state: 'STARTED' }, { headers });
+      await this.http.patch(
+        this.deploymentUrl(ref),
+        { autoscaling: { minReplicas: replicas, maxReplicas: replicas === 0 ? 0 : Math.max(replicas, Number(ref.maxReplicas ?? 1)) } },
+        { headers, params: { updateMask: 'autoscaling' } },
+      );
     } catch (err) {
       this.classify(err, 'scale failed');
     }
   }
 
-  /** Removes the endpoint only; the uploaded model stays reusable for the version. */
+  /** Clear the traffic split, stop the deployment, delete it, then the endpoint. The uploaded model stays. */
   async teardown(ref: EndpointRef, credentials: AdapterCredentials): Promise<void> {
-    try {
-      await this.http.delete(`${BASE_URL}/endpoints/${encodeURIComponent(ref.endpointId)}`, { headers: this.headers(credentials) });
-    } catch (err: any) {
-      if (err?.response?.status === 404) return;
+    const headers = this.headers(credentials);
+    const endpointUrl = `${BASE_URL}/projects/${encodeURIComponent(ref.projectId)}/endpoints/${encodeURIComponent(ref.endpointId)}`;
+    const tolerate = (err: any) => {
+      if (err?.response?.status === 404) return undefined;
+      // A deployment still draining rejects the delete; the reconcile loop comes back.
+      if (err?.response?.status === 400) return undefined;
       this.classify(err, 'delete failed');
-    }
+    };
+    await this.http.patch(endpointUrl, { trafficSplit: [] }, { headers, params: { updateMask: 'trafficSplit' } }).catch(tolerate);
+    await this.scale(ref, 0, credentials).catch(tolerate);
+    await this.http.delete(this.deploymentUrl(ref), { headers }).catch(tolerate);
+    await this.http.delete(endpointUrl, { headers }).catch(tolerate);
   }
 
-  /** Together bills per minute of hardware uptime and publishes no spend API: rate from /v1/hardware, spend from uptime. */
+  /**
+   * Together bills per minute per ready replica by hardware and publishes
+   * no spend API (endpoint analytics reports requests, tokens and latency,
+   * not dollars). Rate comes from the public instance-type catalog; spend
+   * is that rate over observed uptime.
+   */
   async costSnapshot(ref: EndpointRef, credentials: AdapterCredentials): Promise<CostSnapshot> {
     const headers = this.headers(credentials);
     const actual = await this.readEndpoint(ref, credentials);
+    const hardware = actual.hardware ?? ref.hardware;
     let rate = Number(ref.hourlyRateCents ?? 0);
     try {
-      const res = await this.http.get(`${BASE_URL}/hardware`, { headers });
-      const match = (res.data?.data ?? []).find((h: any) => h?.id === (actual.hardware ?? ref.hardware));
-      const perMinute = Number(match?.pricing?.cents_per_minute);
-      if (Number.isFinite(perMinute) && perMinute > 0) rate = Math.round(perMinute * 60);
+      const res = await this.http.get(INSTANCE_TYPES_URL, { headers });
+      const match = (res.data?.data ?? []).find((h: any) => h?.id === hardware || h?.name === hardware);
+      const cents = Number(match?.priceCentsPerHour);
+      if (Number.isFinite(cents) && cents > 0) rate = cents;
     } catch {
-      // Price list unavailable: the configured rate stands.
+      // Catalog unavailable: the configured rate stands.
     }
-    const running = actual.state === 'ready' ? actual.replicas ?? 1 : 0;
+    const running = actual.state === 'ready' || actual.state === 'degraded' ? actual.replicas ?? 0 : 0;
     const hours = ref.createdAt ? Math.max(0, (Date.now() - new Date(ref.createdAt).getTime()) / 3_600_000) : 0;
     return { spentCents: Math.round(rate * hours), ratePerHourCents: rate * running, observedAt: new Date() };
   }

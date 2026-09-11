@@ -5,7 +5,7 @@ import { Rocket } from 'lucide-react'
 import { DataTable, createSortableColumn } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
-import { BLANK, formatCents } from '@/lib/deployments-api'
+import { BLANK, deploymentModelRef, formatCents } from '@/lib/deployments-api'
 import { formatRelativeTime } from '@/lib/utils'
 import type { ModelAdapter, ModelDeployment, ModelVersion } from '@/types/deployments'
 import { DeploymentStateBadge } from './deployment-state-badge'
@@ -23,25 +23,33 @@ export function adapterName(adapters: ModelAdapter[], key: string): string {
   return adapters.find((a) => a.key === key)?.displayName ?? key
 }
 
-export function versionName(versions: ModelVersion[], id: string): string {
-  return versions.find((v) => v.id === id)?.name ?? id.slice(0, 8)
+/** What the row shows under the provider: the model, however it was named. */
+export function modelLabel(deployment: ModelDeployment, versions: ModelVersion[]): string {
+  if (deployment.modelVersionId) {
+    const version = versions.find((v) => v.id === deployment.modelVersionId)
+    if (version) return version.name
+  }
+  return deploymentModelRef(deployment, versions)
 }
 
 export function DeploymentsList({ deployments, adapters, versions, loading, onSelect, onDeploy }: DeploymentsListProps) {
   const columns = useMemo<ColumnDef<ModelDeployment>[]>(
     () => [
       {
-        ...createSortableColumn<ModelDeployment>('providerType', 'Adapter'),
+        ...createSortableColumn<ModelDeployment>('providerType', 'Provider'),
         cell: ({ row }) => {
           const d = row.original
+          const model = modelLabel(d, versions)
           return (
             <div className="flex items-center gap-3">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
                 <Rocket className="h-4 w-4 text-primary" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <div className="font-medium">{adapterName(adapters, d.providerType)}</div>
-                <div className="text-xs text-muted-foreground">{versionName(versions, d.modelVersionId)}</div>
+                <div className="max-w-[260px] truncate font-mono text-xs text-muted-foreground" title={model}>
+                  {model}
+                </div>
               </div>
             </div>
           )
@@ -130,8 +138,8 @@ export function DeploymentsList({ deployments, adapters, versions, loading, onSe
         <EmptyState
           icon={Rocket}
           title="No deployments yet"
-          description="Deploy a registry version to a provider. The reconcile loop brings the endpoint up and reports state and spend here."
-          action={onDeploy ? <Button onClick={onDeploy}>Deploy a version</Button> : undefined}
+          description="Name a model - a Hugging Face repository, or one you already put on a platform - and pick a provider that can run it. The reconcile loop brings the endpoint up and reports state and spend here."
+          action={onDeploy ? <Button onClick={onDeploy}>Run a model</Button> : undefined}
         />
       }
     />

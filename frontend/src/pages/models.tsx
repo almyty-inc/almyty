@@ -12,7 +12,7 @@ import { LlmProvidersPage } from '@/pages/llm-providers'
 const DeploymentsTab = lazy(() => import('@/components/models/deployments-tab').then((m) => ({ default: m.DeploymentsTab })))
 const VersionsTab = lazy(() => import('@/components/models/versions-tab').then((m) => ({ default: m.VersionsTab })))
 
-export const MODELS_TABS = ['catalog', 'deployments', 'versions', 'providers'] as const
+export const MODELS_TABS = ['catalog', 'deployments', 'providers', 'versions'] as const
 export type ModelsTab = (typeof MODELS_TABS)[number]
 
 function TabFallback() {
@@ -25,9 +25,11 @@ function TabFallback() {
 }
 
 /**
- * The Models page: the catalog of cards the router picks from, the
- * deployments that serve self-hosted ones, the versions those come from,
- * and the provider connections everything dispatches through.
+ * The Models page. The catalog is the centre of it: which models this
+ * organization can run right now, wherever they run. Deployments put a
+ * model on a provider, Providers holds the vendor keys everything
+ * dispatches through, and Tracked artifacts is the operator's optional
+ * record of their own weights.
  */
 export function ModelsPage() {
   useEffect(() => {
@@ -51,7 +53,7 @@ export function ModelsPage() {
       <div>
         <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Models</h1>
         <p className="text-muted-foreground">
-          Every model an agent may call, what it costs, and where it runs. Support is data: a card is usable once it validates.
+          Every model your agents can call, wherever it runs, and what it costs. Run one vendor or several together. almyty does not host models; it runs them through the providers.
         </p>
       </div>
 
@@ -59,8 +61,8 @@ export function ModelsPage() {
         <TabsList>
           <TabsTrigger value="catalog">Catalog</TabsTrigger>
           <TabsTrigger value="deployments">Deployments</TabsTrigger>
-          <TabsTrigger value="versions">Versions</TabsTrigger>
           <TabsTrigger value="providers">Providers</TabsTrigger>
+          <TabsTrigger value="versions">Tracked artifacts</TabsTrigger>
         </TabsList>
         <TabsContent value="catalog" className="mt-4">
           <CatalogTab />

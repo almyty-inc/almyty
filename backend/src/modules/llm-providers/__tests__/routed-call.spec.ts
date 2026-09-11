@@ -78,7 +78,7 @@ describe('LlmChatRunnerHelper.callRouted', () => {
   });
 
   it('fails with NO_ROUTE when nothing is eligible', async () => {
-    const { runner } = build({ candidates: [], rejected: [{ modelId: 'a', reason: 'not selectable' }] }, jest.fn());
+    const { runner } = build({ candidates: [], rejected: [{ modelId: 'a', reason: 'not usable yet' }] }, jest.fn());
     await expect(runner.callLlmProvider(provider('x'), { messages: [], routing: {} }, session, [])).rejects.toMatchObject({ code: 'NO_ROUTE' });
   });
 

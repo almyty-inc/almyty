@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { AgentTemplateResolver, ExecutionContext } from './agent-template-resolver';
 import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import type { RouteAttribution } from '../model-catalog/routing/model-router.service';
+import { ModelRouterService } from '../model-catalog/routing/model-router.service';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { Organization } from '../../entities/organization.entity';
 
@@ -41,6 +42,13 @@ export interface NodeExecutionOptions {
    * layer so a cancel doesn't wait out a 30s upstream timeout.
    */
   signal?: AbortSignal;
+  /**
+   * The agent's roles, filled once for this run (L4). A node naming a
+   * roleKey reads its model from here rather than deciding again, which
+   * is what keeps a pinned role away from the router and lets a run
+   * always name the concrete model behind each role.
+   */
+  resolvedRoles?: Array<{ key: string; modelId: string; via: 'pinned' | 'resolved'; rationale?: string }>;
 }
 /** How long an organization's default routing policy is reused before it is read again. */
 const DEFAULT_ROUTING_TTL_MS = 30_000;
@@ -66,6 +74,9 @@ export class AgentNodeExecutor {
     private readonly verifier: AgentVerifierHelper,
     // Optional so the many specs that build the executor without it keep
     // working; without it there is simply no organization default.
+    // Optional: an install with no catalog still runs agents whose nodes
+    // name a providerId directly. Only a node naming a role needs it.
+    @Optional() private readonly modelRouter?: ModelRouterService,
     @Optional() @InjectRepository(Organization)
     private readonly organizationRepository?: Repository<Organization>,
   ) {}
@@ -211,20 +222,34 @@ export class AgentNodeExecutor {
     const config = node.data || node.config || {};
     const startTime = Date.now();
 
+    // A node may name a role instead of a provider or a policy. The role
+    // was filled once for the whole run (L4), so this is a lookup, not a
+    // second routing decision: a pinned role must never reach the router,
+    // and calling plan() here would be exactly that. The per-node model
+    // field stays valid and is used when no role is named.
+    const roleKey = typeof config.roleKey === 'string' ? config.roleKey : undefined;
+    const filledRole = roleKey ? options?.resolvedRoles?.find((r) => r.key === roleKey) : undefined;
+    if (roleKey && !filledRole) {
+      throw new Error(
+        `LLM call node '${node.id}' names role '${roleKey}', which this agent does not define. ` +
+          'Add the role, or give the node a providerId or routing policy.',
+      );
+    }
+
     // Resolve provider ID. A node may instead carry a routing policy and
     // let the catalog pick the model per call; a node with neither uses
     // the organization's default policy when one is set.
     const providerId = config.providerId;
     let routing: RoutingPolicy | undefined = config.routing && typeof config.routing === 'object' ? config.routing : undefined;
     let routingSource = routing ? 'node' : undefined;
-    if (!providerId && !routing) {
+    if (!filledRole && !providerId && !routing) {
       const orgDefault = await this.defaultRoutingFor(organizationId);
       if (orgDefault) {
         routing = orgDefault;
         routingSource = 'organization default';
       }
     }
-    if (!providerId && !routing) {
+    if (!filledRole && !providerId && !routing) {
       throw new Error(`LLM call node '${node.id}' is missing 'providerId' or 'routing' in config, and the organization has no default routing policy`);
     }
 
@@ -253,9 +278,24 @@ export class AgentNodeExecutor {
     // Build chat request — thread the agent-execution signal in
     // so the LLM HTTP call and its embedded tool-call loop both
     // abort on client disconnect.
+    // A filled role names the model. Looked up, never planned: see the
+    // comment on roleKey above.
+    let roleProviderId: string | undefined;
+    let roleModel: string | undefined;
+    if (filledRole) {
+      if (!this.modelRouter) {
+        throw new Error(
+          `LLM call node '${node.id}' names role '${filledRole.key}', but the model catalog is not available on this install`,
+        );
+      }
+      const { card, provider } = await this.modelRouter.providerForModelId(organizationId, filledRole.modelId, userId ? { id: userId } : undefined);
+      roleProviderId = provider.id;
+      roleModel = card.vendorModelId;
+    }
+
     const chatRequest: ChatRequest = {
       messages,
-      model: config.model,
+      model: roleModel ?? config.model,
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       toolIds: config.toolIds,
@@ -264,13 +304,13 @@ export class AgentNodeExecutor {
     };
 
 
-    this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId ?? `routed (${routingSource})`}, model=${config.model ?? (routing ? 'routed' : 'default')}`);
+    this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${roleProviderId ? `role ${filledRole!.key} (${filledRole!.via})` : providerId ?? `routed (${routingSource})`}, model=${config.model ?? (routing ? 'routed' : 'default')}`);
 
     let response: ChatResponse;
     try {
       // The chat() method handles the full agentic tool call loop internally
       response = await this.llmProvidersService.chat(
-        providerId,
+        roleProviderId ?? providerId,
         chatRequest,
         organizationId,
         userId,
