@@ -262,7 +262,7 @@ export function MemoriesPage() {
             <Select value={tierFilter} onValueChange={(v) => setTierFilter(v as any)}>
               <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All tiers</SelectItem>
+                <SelectItem value="all">All scopes</SelectItem>
                 {TIERS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -411,7 +411,7 @@ export function MemoriesPage() {
         {/* ── Audit ──────────────────────────────────────────────── */}
         <TabsContent value="audit" className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Per-tier soft-cap warnings logged when an agent wrote past the configured byte ceiling.
+            Per-scope soft-cap warnings logged when an agent wrote past the configured byte limit.
             Behavior is set per scope under Backends → Soft-cap behavior.
           </p>
           <ConsolidationCard orgId={orgId} />
@@ -442,7 +442,7 @@ export function MemoriesPage() {
               </div>
               {draft.mode === 'memory' ? (
                 <div>
-                  <Label>Tier</Label>
+                  <Label>Scope</Label>
                   <Select value={draft.tier} onValueChange={(v) => setDraft({ ...draft, tier: v as MemoryTier })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -748,7 +748,7 @@ function ConsolidationCard({ orgId }: { orgId: string }) {
       } else {
         notify.success(
           'Consolidation done',
-          `${r.consolidated_facts} fact(s) written, ${r.superseded} short-tier row(s) superseded`,
+          `${r.consolidated_facts} fact(s) written, ${r.superseded} row(s) in short scope superseded`,
         )
       }
     },
@@ -762,7 +762,7 @@ function ConsolidationCard({ orgId }: { orgId: string }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Distills short-tier memories into durable long-tier facts via the org's LLM provider.
+          Distills short-scope memories into durable long-scope facts via the org's LLM provider.
           Runs hourly when enabled in Backends config; you can also trigger it now.
         </p>
         <div className="flex gap-2">

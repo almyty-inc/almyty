@@ -59,7 +59,7 @@ export class ConnectorsController {
   @Get()
   @Roles('viewer', 'member', 'admin', 'owner')
   @RequirePermissions(CONNECTIONS_READ)
-  @ApiOperation({ summary: 'Connector catalog: built-in, adapter-derived and this organization\'s custom connectors' })
+  @ApiOperation({ summary: 'Connector catalog: built-in, provider-derived and this organization\'s custom connectors' })
   @UsePipes(validation)
   async list(@Request() req: any, @Query() query: ListConnectorsQueryDto) {
     const organizationId = requireOrg(req);

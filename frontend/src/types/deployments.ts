@@ -4,7 +4,17 @@
  * model-version.entity.ts and the adapter contract.
  */
 
-export type RegistrySource = 's3' | 'hub' | 'local'
+export type RegistrySource = 'hub' | 's3' | 'gcs' | 'local'
+
+/**
+ * Where a model can live, as the backend's registry grammar names it.
+ * Artifact schemes point at bytes and carry an `@pin`; provider schemes
+ * name a model a platform already holds and version themselves.
+ * Mirrors backend/src/modules/model-registry/registry-uri.ts.
+ */
+export type ArtifactScheme = 'hf' | 's3' | 'gs' | 'file'
+export type ProviderScheme = 'bedrock' | 'sagemaker' | 'vertex' | 'foundry' | 'azureml' | 'fireworks' | 'together' | 'baseten'
+export type ModelScheme = ArtifactScheme | ProviderScheme
 
 export interface AdapterCapabilities {
   architectures: string[] | 'any'
@@ -15,6 +25,9 @@ export interface AdapterCapabilities {
   /** Empty means the provider chooses. */
   regions: string[]
   registrySources: RegistrySource[]
+  /** Absent means generally available. A preview needs the customer to opt in with the provider first. */
+  availability?: 'public_preview' | 'private_preview'
+  availabilityNote?: string
 }
 
 /** The subset of JSON Schema adapters use for providerConfig. */
@@ -41,6 +54,13 @@ export interface ModelAdapter {
   displayName: string
   capabilities: AdapterCapabilities
   configSchema: JsonSchemaObject
+  /**
+   * Every kind of model this provider can actually run, as scheme prefixes
+   * (`hf://`, `s3://`, `bedrock://`). The form filters both ways with it:
+   * the providers that can run the model you have, and the sources a
+   * provider you already picked will accept.
+   */
+  modelSchemes?: string[]
 }
 
 export type ModelDeploymentState =
@@ -82,7 +102,12 @@ export interface ModelDeploymentActual {
 export interface ModelDeployment {
   id: string
   organizationId?: string
-  modelVersionId: string
+  /** Set only when an operator deployed a registered version. */
+  modelVersionId: string | null
+  /** The model as configuration, when there is no version row: hf://org/repo@sha, bedrock://..., fireworks://... */
+  modelRef: string | null
+  /** Architecture family the operator named alongside a modelRef. */
+  modelBase: string | null
   modelId: string | null
   providerType: string
   desired: ModelDeploymentDesired
@@ -100,7 +125,15 @@ export interface ModelDeployment {
 }
 
 export interface CreateModelDeploymentBody {
-  modelVersionId: string
+  /**
+   * Where the model is, as configuration. The normal path: a Hugging Face
+   * repository, or a model that already lives on a platform.
+   */
+  model?: string
+  /** Architecture family, when the provider checks it and the reference carries none. */
+  base?: string
+  /** The operator path instead: a registered artifact this org tracks. */
+  modelVersionId?: string
   providerType: string
   desired?: ModelDeploymentDesired
   providerConfig?: Record<string, unknown>
@@ -108,6 +141,16 @@ export interface CreateModelDeploymentBody {
   connectionId?: string
   budgetId?: string
   modelId?: string
+}
+
+/**
+ * What the backend sends back when the provider cannot run the model:
+ * `ADAPTER_UNSUPPORTED_SOURCE` with the schemes it does accept.
+ */
+export interface AdapterRefusal {
+  code?: string
+  message: string
+  accepts: string[]
 }
 
 export interface ModelLineage {
@@ -127,7 +170,7 @@ export interface ModelManifestSummary {
 
 export interface ModelVersionMetadata {
   /** Registry scheme the URI was parsed as. */
-  scheme?: 's3' | 'hf' | 'file'
+  scheme?: ModelScheme
   /** Null when the URI carried no manifest (most hf:// repos). */
   manifest?: ModelManifestSummary | null
   [key: string]: unknown

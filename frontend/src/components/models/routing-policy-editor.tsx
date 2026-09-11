@@ -102,18 +102,18 @@ export function RoutingPolicyEditor({ value, onChange, cards, cardsLoading }: Ro
           </SelectContent>
         </Select>
         <p className="text-[11px] text-muted-foreground mt-1">
-          {objective === 'cheapest' && 'Lowest blended feed price among the cards that pass the filters.'}
-          {objective === 'fastest' && 'Lowest measured p50 latency among the cards that pass the filters.'}
-          {objective === 'pinned' && 'Always the pinned card; the fallback chain takes over when it fails.'}
+          {objective === 'cheapest' && 'Lowest blended feed price among the models that pass the filters.'}
+          {objective === 'fastest' && 'Lowest measured p50 latency among the models that pass the filters.'}
+          {objective === 'pinned' && 'Always the pinned model; the fallbacks take over when it fails.'}
         </p>
       </div>
 
       {objective === 'pinned' && (
         <div>
-          <Label htmlFor="routing-pinned">Pinned card</Label>
+          <Label htmlFor="routing-pinned">Pinned model</Label>
           <Select value={policy.pinnedModel || ''} onValueChange={(v) => patch({ pinnedModel: v })}>
-            <SelectTrigger id="routing-pinned" className="mt-1" aria-label="Pinned card">
-              <SelectValue placeholder={cardsLoading ? 'Loading cards...' : cards.length ? 'Select card' : 'No selectable cards'} />
+            <SelectTrigger id="routing-pinned" className="mt-1" aria-label="Pinned model">
+              <SelectValue placeholder={cardsLoading ? 'Loading models...' : cards.length ? 'Select model' : 'No usable models'} />
             </SelectTrigger>
             <SelectContent>
               {cards.map((c) => (
@@ -125,13 +125,13 @@ export function RoutingPolicyEditor({ value, onChange, cards, cardsLoading }: Ro
       )}
 
       <div>
-        <Label htmlFor="routing-tier">Privacy tier ceiling</Label>
+        <Label htmlFor="routing-tier">Privacy</Label>
         <Select value={policy.privacyTier || ANY} onValueChange={(v) => patch({ privacyTier: v === ANY ? undefined : (v as ModelPrivacyTier) })}>
-          <SelectTrigger id="routing-tier" className="mt-1" aria-label="Privacy tier ceiling">
+          <SelectTrigger id="routing-tier" className="mt-1" aria-label="Privacy">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>Any tier</SelectItem>
+            <SelectItem value={ANY}>Any</SelectItem>
             {MODEL_PRIVACY_TIERS.map((tier) => (
               <SelectItem key={tier} value={tier}>{MODEL_PRIVACY_TIER_LABELS[tier]} or stricter</SelectItem>
             ))}
@@ -196,7 +196,7 @@ export function RoutingPolicyEditor({ value, onChange, cards, cardsLoading }: Ro
       </div>
 
       <div>
-        <Label htmlFor="routing-chain-add">Fallback chain</Label>
+        <Label htmlFor="routing-chain-add">Fallbacks</Label>
         {chain.length > 0 && (
           <ol className="mt-1 space-y-1">
             {chain.map((id, index) => (
@@ -209,7 +209,7 @@ export function RoutingPolicyEditor({ value, onChange, cards, cardsLoading }: Ro
                 <button type="button" aria-label={`Move ${cardLabel(byId.get(id), id)} down`} className="text-muted-foreground hover:text-foreground disabled:opacity-30" disabled={index === chain.length - 1} onClick={() => moveChain(index, 1)}>
                   <ArrowDown className="h-3 w-3" />
                 </button>
-                <button type="button" aria-label={`Remove ${cardLabel(byId.get(id), id)} from chain`} className="text-muted-foreground hover:text-foreground" onClick={() => patch({ fallbackChain: chain.filter((c) => c !== id) })}>
+                <button type="button" aria-label={`Remove ${cardLabel(byId.get(id), id)} from fallbacks`} className="text-muted-foreground hover:text-foreground" onClick={() => patch({ fallbackChain: chain.filter((c) => c !== id) })}>
                   <X className="h-3 w-3" />
                 </button>
               </li>
@@ -217,8 +217,8 @@ export function RoutingPolicyEditor({ value, onChange, cards, cardsLoading }: Ro
           </ol>
         )}
         <Select value="" onValueChange={(v) => { if (v) patch({ fallbackChain: [...chain, v] }) }}>
-          <SelectTrigger id="routing-chain-add" className="mt-1 h-8 text-xs" aria-label="Add card to fallback chain">
-            <SelectValue placeholder={cardsLoading ? 'Loading cards...' : chainCandidates.length ? 'Add card...' : cards.length ? 'All cards in chain' : 'No selectable cards'} />
+          <SelectTrigger id="routing-chain-add" className="mt-1 h-8 text-xs" aria-label="Add model to fallbacks">
+            <SelectValue placeholder={cardsLoading ? 'Loading models...' : chainCandidates.length ? 'Add model...' : cards.length ? 'Every model already added' : 'No usable models'} />
           </SelectTrigger>
           <SelectContent>
             {chainCandidates.map((c) => (
@@ -230,7 +230,7 @@ export function RoutingPolicyEditor({ value, onChange, cards, cardsLoading }: Ro
       </div>
 
       <div>
-        <Label htmlFor="routing-budget">Budget headroom, cents</Label>
+        <Label htmlFor="routing-budget">Spend limit, cents</Label>
         <Input
           id="routing-budget"
           type="number"
@@ -240,7 +240,7 @@ export function RoutingPolicyEditor({ value, onChange, cards, cardsLoading }: Ro
           value={policy.budgetHeadroomCents ?? ''}
           onChange={(e) => patch({ budgetHeadroomCents: e.target.value === '' ? undefined : Number(e.target.value) })}
         />
-        <p className="text-[11px] text-muted-foreground mt-1">Skip cards whose estimated cost would exceed what is left of the budget.</p>
+        <p className="text-[11px] text-muted-foreground mt-1">Skip models whose estimated cost would exceed what is left of the budget.</p>
       </div>
     </div>
   )

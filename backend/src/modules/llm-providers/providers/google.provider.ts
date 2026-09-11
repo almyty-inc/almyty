@@ -36,17 +36,17 @@ export async function callGoogle(
     },
   };
 
-  // URL-encode the apiKey and the model id. Previously both were
-  // interpolated raw, so a model id like `../../v1beta/chat` or a key
-  // containing `&` / `#` would break URL parsing or inject extra
-  // query params.
+  // URL-encode the model id: a value like `../../v1beta/chat` would
+  // otherwise escape the intended path. The API key travels in the
+  // x-goog-api-key header (Google's documented scheme) rather than a
+  // ?key= query parameter, which leaks the key into URLs and logs.
   const safeModel = encodeURIComponent(requireModel(request, provider));
-  const safeKey = encodeURIComponent(apiKey || '');
   const config: AxiosRequestConfig = {
     method: 'POST',
-    url: `${apiUrl}/models/${safeModel}:generateContent?key=${safeKey}`,
+    url: `${apiUrl}/models/${safeModel}:generateContent`,
     headers: {
       'Content-Type': 'application/json',
+      ...(apiKey ? { 'x-goog-api-key': apiKey } : {}),
     },
     data: googleRequest,
     timeout: provider.configuration.timeout || 30000,
@@ -81,145 +81,22 @@ export async function callGoogle(
   };
 }
 
-/**
- * Handles Cohere API calls.
+/*
+ * Cohere and Hugging Face used to have bespoke implementations here and no
+ * longer do:
+ *
+ *  - Cohere's native /v2/chat is not OpenAI-shaped, and the code that
+ *    targeted it still sent the v1 body (`message` + `chat_history`), so it
+ *    could not have worked against the v2 path it was pointed at. Cohere
+ *    now rides its OpenAI-compatible Compatibility API through callOpenAI.
+ *  - Hugging Face's text-generation body (`inputs` / `generated_text`)
+ *    targeted api-inference.huggingface.co, a host that no longer resolves
+ *    in DNS. Hugging Face now rides the OpenAI-compatible Inference
+ *    Providers router through callOpenAI.
+ *
+ * Both get streaming and tool calling for free as a result. See
+ * docs/design/call-only-vendors.md (verified 2026-09-09).
  */
-export async function callCohere(
-  provider: LlmProvider,
-  request: ChatRequest,
-  conversation: Conversation,
-  tools: Tool[],
-  startTime: number,
-  calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
-): Promise<ChatResponse> {
-  // Cohere API implementation - simplified
-  const apiUrl = provider.getApiUrl();
-  const headers = provider.getAuthHeaders();
-
-  const lastMessage = request.messages[request.messages.length - 1];
-  const chatHistory = request.messages.slice(0, -1).map(msg => ({
-    role: msg.role === MessageRole.USER ? 'USER' : 'CHATBOT',
-    message: msg.content,
-  }));
-
-  const cohereRequest: Record<string, unknown> = {
-    model: requireModel(request, provider),
-    message: lastMessage.content,
-    chat_history: chatHistory,
-    max_tokens: request.maxTokens || conversation.context?.maxTokens,
-    temperature: request.temperature ?? conversation.context?.temperature,
-    p: request.topP ?? conversation.context?.topP,
-    k: request.topK ?? conversation.context?.topK,
-    frequency_penalty: request.frequencyPenalty ?? conversation.context?.frequencyPenalty,
-    presence_penalty: request.presencePenalty ?? conversation.context?.presencePenalty,
-    stop_sequences: request.stopSequences || conversation.context?.stopSequences,
-  };
-
-  const config: AxiosRequestConfig = {
-    method: 'POST',
-    url: `${apiUrl}/chat`,
-    headers,
-    data: cohereRequest,
-    timeout: provider.configuration.timeout || 30000,
-    signal: request.signal,
-  };
-
-  const response: AxiosResponse = await callLlmProviderHttp(config);
-  const responseTime = Date.now() - startTime;
-
-  const inputTokens = JSON.stringify(cohereRequest).length / 4;
-  const outputTokens = response.data.text?.length / 4 || 0;
-  const cost = calculateProviderCost(provider, inputTokens, outputTokens);
-
-  return {
-    message: {
-      role: MessageRole.ASSISTANT,
-      content: response.data.text,
-      finishReason: response.data.finish_reason,
-    },
-    usage: {
-      inputTokens: Math.round(inputTokens),
-      outputTokens: Math.round(outputTokens),
-      totalTokens: Math.round(inputTokens + outputTokens),
-    },
-    cost,
-    model: cohereRequest.model as string,
-    conversationId: conversation.id,
-    messageId: '',
-    responseTime,
-  };
-}
-
-/**
- * Handles HuggingFace Inference API calls.
- */
-export async function callHuggingFace(
-  provider: LlmProvider,
-  request: ChatRequest,
-  conversation: Conversation,
-  tools: Tool[],
-  startTime: number,
-): Promise<ChatResponse> {
-  // HuggingFace Inference API implementation
-  const apiUrl = provider.getApiUrl();
-  const headers = provider.getAuthHeaders();
-
-  const prompt = request.messages.map(msg => `${msg.role}: ${msg.content}`).join('\n') + '\nassistant:';
-
-  const hfRequest: Record<string, unknown> = {
-    inputs: prompt,
-    parameters: {
-      max_new_tokens: request.maxTokens || conversation.context?.maxTokens || 100,
-      temperature: request.temperature ?? conversation.context?.temperature ?? 0.7,
-      top_p: request.topP ?? conversation.context?.topP,
-      top_k: request.topK ?? conversation.context?.topK,
-      repetition_penalty: (request.frequencyPenalty || 0) + 1,
-      stop_sequences: request.stopSequences || conversation.context?.stopSequences,
-    },
-  };
-
-  const config: AxiosRequestConfig = {
-    method: 'POST',
-    url: `${apiUrl}/${request.model || provider.configuration.model}`,
-    headers,
-    data: hfRequest,
-    timeout: provider.configuration.timeout || 30000,
-    signal: request.signal,
-  };
-
-  const response: AxiosResponse = await callLlmProviderHttp(config);
-  const responseTime = Date.now() - startTime;
-
-  let content = '';
-  if (Array.isArray(response.data) && response.data.length > 0) {
-    content = response.data[0].generated_text || '';
-    // Remove the original prompt from the response
-    content = content.replace(prompt, '').trim();
-  }
-
-  // Approximate token counting (no usage info from HF)
-  const inputTokens = prompt.length / 4;
-  const outputTokens = content.length / 4;
-  const cost = 0; // HuggingFace Inference API is often free
-
-  return {
-    message: {
-      role: MessageRole.ASSISTANT,
-      content,
-      finishReason: 'stop',
-    },
-    usage: {
-      inputTokens: Math.round(inputTokens),
-      outputTokens: Math.round(outputTokens),
-      totalTokens: Math.round(inputTokens + outputTokens),
-    },
-    cost,
-    model: requireModel(request, provider),
-    conversationId: conversation.id,
-    messageId: '',
-    responseTime,
-  };
-}
 
 /**
  * Handles custom/generic provider calls.

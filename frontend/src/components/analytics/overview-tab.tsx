@@ -101,7 +101,7 @@ export function OverviewTab() {
           />
           <StatCard
             icon={MessageSquare}
-            label="LLM Sessions (24h)"
+            label="Model calls (24h)"
             value={formatNumber(overview.last24h?.llmSessions || 0)}
           />
           <StatCard icon={Globe} label="Requests (7d)" value={formatNumber(overview.last7d?.requests || 0)} />
@@ -112,7 +112,7 @@ export function OverviewTab() {
           />
           <StatCard
             icon={DollarSign}
-            label="LLM Cost (7d)"
+            label="Model cost (7d)"
             value={`$${((overview.last7d?.llmCostCents || 0) / 100).toFixed(4)}`}
           />
         </div>

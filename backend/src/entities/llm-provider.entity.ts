@@ -17,35 +17,9 @@ import { encryptField, decryptField, isEncrypted } from '../common/security/fiel
 import { Conversation } from './conversation.entity';
 import { UsageMetric } from './usage-metric.entity';
 
-export enum LlmProviderType {
-  OPENAI = 'openai',
-  ANTHROPIC = 'anthropic',
-  GOOGLE = 'google',
-  MISTRAL = 'mistral',
-  XAI = 'xai',
-  DEEPSEEK = 'deepseek',
-  GROQ = 'groq',
-  TOGETHER = 'together',
-  OPENROUTER = 'openrouter',
-  AZURE_OPENAI = 'azure_openai',
-  AWS_BEDROCK = 'aws_bedrock',
-  COHERE = 'cohere',
-  HUGGINGFACE = 'huggingface',
-  OLLAMA = 'ollama',
-  // OpenAI-compatible inference hosts (chat, streaming and tool calling
-  // ride the OpenAI dispatch path). Details per vendor in
-  // docs/design/call-only-vendors.md.
-  FIREWORKS = 'fireworks',
-  CEREBRAS = 'cerebras',
-  DEEPINFRA = 'deepinfra',
-  NOVITA = 'novita',
-  PERPLEXITY = 'perplexity',
-  ZAI = 'zai',
-  BASETEN = 'baseten',
-  NEBIUS = 'nebius',
-  SAMBANOVA = 'sambanova',
-  CUSTOM = 'custom',
-}
+export { LlmProviderType } from './llm-provider-type';
+import { LlmProviderType } from './llm-provider-type';
+import { PROVIDER_PROFILES, profileAuthHeaders, profileBaseUrl, providerProfile } from '../modules/llm-providers/provider-profile';
 
 export enum LlmProviderStatus {
   ACTIVE = 'active',
@@ -101,7 +75,13 @@ export interface LlmProviderConfig {
     apiVersion?: string;
   };
   bedrock?: {
+    /** Selects the bedrock-runtime host and the model set available there. */
     region?: string;
+    /**
+     * SigV4 material. Unused on the OpenAI-compatible surface, which takes
+     * a Bedrock API key as a bearer token; kept because existing rows carry
+     * it and it is still masked in the API view.
+     */
     accessKeyId?: string;
     secretAccessKey?: string;
     sessionToken?: string;
@@ -109,6 +89,40 @@ export interface LlmProviderConfig {
   huggingface?: {
     endpoint?: string;
     taskType?: string;
+  };
+  /** Google Vertex AI: the customer's own GCP project and region. */
+  vertex?: {
+    projectId?: string;
+    /** `global` (the default) or a region such as `us-central1`. */
+    location?: string;
+  };
+  /**
+   * RunPod always names an endpoint in the URL. For the public catalog
+   * that is a shared model slug (`gpt-oss-120b`); for a customer's own
+   * serverless worker it is their endpoint id.
+   */
+  runpod?: {
+    endpointId?: string;
+  };
+  /**
+   * Volcengine Ark ships as two products with separate accounts, separate
+   * key namespaces and different model naming: BytePlus ModelArk for
+   * everyone outside mainland China, and Volcengine for inside it. A key
+   * from one does not work against the other, and `seed-2-0-lite-260228`
+   * on BytePlus is `doubao-seed-2-0-lite-260215` on Volcengine, so this is
+   * a choice the customer has to make rather than a host we can guess.
+   */
+  ark?: {
+    edition?: 'international' | 'mainland';
+  };
+  /**
+   * iFlytek Spark serves each model generation on its own base, and the
+   * current two both answer to the model id `spark-x`, so the model field
+   * cannot tell them apart. Defaulting would put most users on the wrong
+   * generation with no error saying so.
+   */
+  spark?: {
+    generation?: 'x2' | 'x1.5' | 'legacy';
   };
   custom?: {
     headers?: Record<string, string>;
@@ -336,7 +350,17 @@ export class LlmProvider {
     return this.capabilities?.supportedModels || [this.configuration.model || 'default'];
   }
 
+  /**
+   * The base URL for an outbound call.
+   *
+   * Most vendors are a row in the provider profile registry: base, auth,
+   * path and listing as data. The switch below is what remains, and each
+   * case is there for a reason rather than for lack of a row. See
+   * docs/design/layers.md, L2.
+   */
   getApiUrl(): string {
+    const profile = providerProfile(this.type);
+    if (profile) return profileBaseUrl(profile, this.configuration);
     switch (this.type) {
       case LlmProviderType.OPENAI:
         return this.configuration.apiUrl || 'https://api.openai.com/v1';
@@ -349,11 +373,16 @@ export class LlmProvider {
       case LlmProviderType.XAI:
         return this.configuration.apiUrl || 'https://api.x.ai/v1';
       case LlmProviderType.DEEPSEEK:
-        return this.configuration.apiUrl || 'https://api.deepseek.com/v1';
+        // Current docs document the base with no /v1 segment: chat at
+        // <base>/chat/completions, models at <base>/models. Verified
+        // 2026-09-09.
+        return this.configuration.apiUrl || 'https://api.deepseek.com';
       case LlmProviderType.GROQ:
         return this.configuration.apiUrl || 'https://api.groq.com/openai/v1';
       case LlmProviderType.TOGETHER:
-        return this.configuration.apiUrl || 'https://api.together.xyz/v1';
+        // api.together.ai is the documented host; api.together.xyz is an
+        // undocumented legacy alias that still answers. Verified 2026-09-09.
+        return this.configuration.apiUrl || 'https://api.together.ai/v1';
       case LlmProviderType.OPENROUTER:
         return this.configuration.apiUrl || 'https://openrouter.ai/api/v1';
       // OpenAI-compatible inference hosts. Each default is the vendor's
@@ -367,13 +396,19 @@ export class LlmProvider {
       case LlmProviderType.DEEPINFRA:
         return this.configuration.apiUrl || 'https://api.deepinfra.com/v1/openai';
       case LlmProviderType.NOVITA:
-        return this.configuration.apiUrl || 'https://api.novita.ai/openai';
+        // /openai/v1 satisfies both the documented chat curl and the
+        // documented model-list curl; the bare /openai form is only the
+        // SDK base_url. Re-verified 2026-09-09.
+        return this.configuration.apiUrl || 'https://api.novita.ai/openai/v1';
       case LlmProviderType.PERPLEXITY:
-        // Router API (OpenAI-compatible, lists models). The legacy Sonar
-        // endpoint is https://api.perplexity.ai (no /models; retired
-        // 2026-09-27 in favour of the non-OpenAI-shaped Agent API) and
-        // can still be set as apiUrl with an explicit model.
-        return this.configuration.apiUrl || 'https://api.perplexity.ai/router/v1';
+        // The Agent API base. Chat is Responses-shaped at <base>/responses
+        // (alias of <base>/agent), NOT chat-completions shaped, so
+        // Perplexity has its own dispatch. The legacy Sonar
+        // chat-completions alias on the bare host retires 2026-09-27 and is
+        // not reachable through this type; the Router API
+        // (https://api.perplexity.ai/router/v1, private preview) serves
+        // /responses too and can be set as apiUrl. Verified 2026-09-09.
+        return this.configuration.apiUrl || 'https://api.perplexity.ai/v1';
       case LlmProviderType.ZAI:
         return this.configuration.apiUrl || 'https://api.z.ai/api/paas/v4';
       case LlmProviderType.BASETEN:
@@ -384,17 +419,156 @@ export class LlmProvider {
         return this.configuration.apiUrl || 'https://api.tokenfactory.nebius.com/v1';
       case LlmProviderType.SAMBANOVA:
         return this.configuration.apiUrl || 'https://api.sambanova.ai/v1';
+      case LlmProviderType.MOONSHOT:
+        // The international Kimi platform. api.moonshot.cn is the mainland
+        // China platform: a SEPARATE account namespace, not a mirror - a
+        // key from one 401s against the other - so it is an apiUrl override
+        // rather than a fallback. Verified 2026-09-09.
+        return this.configuration.apiUrl || 'https://api.moonshot.ai/v1';
+      case LlmProviderType.QWEN:
+        // QwenCloud (formerly DashScope, then Alibaba Cloud Model Studio),
+        // international endpoint. Mainland China is
+        // https://dashscope.aliyuncs.com/compatible-mode/v1 and a Model
+        // Studio workspace is
+        // https://{workspaceId}.{region}.maas.aliyuncs.com/compatible-mode/v1;
+        // both are apiUrl overrides. Keys are bound to the region they were
+        // minted in. Verified 2026-09-09.
+        return this.configuration.apiUrl || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1';
+      case LlmProviderType.MINIMAX:
+        // The international platform. The mainland China platform is a
+        // separate account namespace at https://api.minimax.cn;
+        // api.minimaxi.com is a legacy alias that still answers but appears
+        // in neither platform's current docs. Verified 2026-09-10.
+        return this.configuration.apiUrl || 'https://api.minimax.io/v1';
+      case LlmProviderType.UPSTAGE:
+        // Solar. kr.api.upstage.ai is a closed-beta Korea residency host
+        // that serves document models only, not chat, so there is no region
+        // to choose here. Verified 2026-09-10.
+        return this.configuration.apiUrl || 'https://api.upstage.ai/v1';
+      case LlmProviderType.WRITER:
+        // Chat is POST <base>/chat, NOT <base>/chat/completions, so this
+        // base is only correct together with the Writer dispatch case.
+        // Verified 2026-09-10.
+        return this.configuration.apiUrl || 'https://api.writer.com/v1';
+      case LlmProviderType.QIANFAN:
+        // Baidu ERNIE on Qianfan v2. The AK/SK-to-access-token exchange the
+        // v1 API needed is gone here: the key is one opaque
+        // `bce-v3/ALTAK-.../...` string used as a plain bearer. Verified
+        // 2026-09-10.
+        return this.configuration.apiUrl || 'https://qianfan.baidubce.com/v2';
+      case LlmProviderType.HUNYUAN:
+        // TokenHub, Tencent's model gateway, international host. Tencent's
+        // own docs say the original Hunyuan platform is migrating here and
+        // has stopped taking new model services, so the direct host
+        // (https://api.hunyuan.cloud.tencent.com/v1) is an apiUrl override
+        // rather than the default, as is the mainland TokenHub host
+        // (https://tokenhub.tencentcloudmaas.com/v1). No TC3 request
+        // signature is involved on this surface. Verified 2026-09-10.
+        return this.configuration.apiUrl || 'https://tokenhub-intl.tencentcloudmaas.com/v1';
+      case LlmProviderType.VOLCENGINE:
+        // ByteDance Doubao. Two products, not two hosts for one product:
+        // BytePlus ModelArk outside mainland China, Volcengine inside it,
+        // with separate accounts, keys and model names. International is
+        // the default because it is the one a non-China customer can sign
+        // up for. Verified 2026-09-10.
+        return (
+          this.configuration.apiUrl ||
+          (this.configuration.ark?.edition === 'mainland'
+            ? 'https://ark.cn-beijing.volces.com/api/v3'
+            : 'https://ark.ap-southeast.bytepluses.com/api/v3')
+        );
+      case LlmProviderType.SPARK: {
+        // Each generation is its own base and the current two share the
+        // model id `spark-x`, so this is chosen, never inferred. X2 is the
+        // current flagship; legacy carries 4.0Ultra and the generalv3
+        // line, whose Max package retired 2026-03-10 into Ultra.
+        // Verified 2026-09-10.
+        const path = { x2: 'x2', 'x1.5': 'v2', legacy: 'v1' }[this.configuration.spark?.generation ?? 'x2'];
+        return this.configuration.apiUrl || `https://spark-api-open.xf-yun.com/${path}`;
+      }
+      case LlmProviderType.VERTEX_AI: {
+        // Vertex's OpenAI-compatible surface. `global` uses the unprefixed
+        // host; a region uses the {region}-aiplatform host. This surface
+        // serves Gemini on Vertex and self-deployed Model Garden endpoints.
+        // Partner models (Claude, Mistral, Grok) are NOT here - they are
+        // :rawPredict with each vendor's native body. Verified 2026-09-09.
+        const project = this.configuration.vertex?.projectId ?? '';
+        const location = this.configuration.vertex?.location || 'global';
+        const host = location === 'global'
+          ? 'https://aiplatform.googleapis.com'
+          : `https://${location}-aiplatform.googleapis.com`;
+        return this.configuration.apiUrl
+          || `${host}/v1/projects/${project}/locations/${location}/endpoints/openapi`;
+      }
+      case LlmProviderType.AZURE_AI_FOUNDRY: {
+        // Microsoft Foundry (formerly Azure AI Studio / Azure AI Foundry).
+        // The /openai/v1 route is the current one and needs no api-version;
+        // the older {resource}.services.ai.azure.com/models route rides the
+        // Azure AI Inference beta SDK, retired 2026-08-26. `model` is the
+        // customer's deployment name. Verified 2026-09-09.
+        const resourceName = this.configuration.azure?.resourceName ?? '';
+        return this.configuration.apiUrl || `https://${resourceName}.services.ai.azure.com/openai/v1`;
+      }
+      case LlmProviderType.DIGITALOCEAN:
+        // DigitalOcean Gradient serverless inference. Nothing to deploy and
+        // no project or region in the URL - a model access key is the whole
+        // configuration. Verified 2026-09-09.
+        return this.configuration.apiUrl || 'https://inference.do-ai.run/v1';
+      case LlmProviderType.RUNPOD: {
+        // RunPod always carries an endpoint in the path. For the public
+        // catalog that is a shared model slug and no deployment is needed;
+        // for a private serverless worker it is the customer's endpoint id.
+        // There is no shared base without one. Verified 2026-09-09.
+        const endpointId = this.configuration.runpod?.endpointId ?? '';
+        return this.configuration.apiUrl || `https://api.runpod.ai/v2/${endpointId}/openai/v1`;
+      }
+      case LlmProviderType.MODAL:
+        // Modal Endpoints. One shared base for the whole workspace; the
+        // `model` field is the endpoint's hostname, and the model list is
+        // scoped to what the proxy token can reach, so a Shared Endpoint
+        // must exist before a call succeeds. Verified 2026-09-09.
+        return this.configuration.apiUrl || 'https://inference.us-west.modal.direct/v1';
       case LlmProviderType.COHERE:
-        return this.configuration.apiUrl || 'https://api.cohere.ai/v2';
-      case LlmProviderType.AZURE_OPENAI:
+        // Cohere's OpenAI-compatible Compatibility API. The native /v2/chat
+        // surface is NOT OpenAI-shaped (its own SSE event types, a
+        // structured content array instead of a message string), so chat
+        // rides /compatibility/v1 instead; the model list stays on the
+        // documented native /v1/models (see getModelsUrl). Verified
+        // 2026-09-09.
+        return this.configuration.apiUrl || 'https://api.cohere.ai/compatibility/v1';
+      case LlmProviderType.AZURE_OPENAI: {
+        // The v1 data-plane surface: chat at <base>/chat/completions, model
+        // list at <base>/models, no api-version query parameter, and an API
+        // key accepted in either the `api-key` or the `Authorization`
+        // header. The older dated surface put the deployment in the path
+        // AND a query string on the base, so the shared OpenAI client built
+        // ".../deployments/<name>?api-version=<v>/chat/completions" - a
+        // malformed URL that could never have answered. The deployment name
+        // is the `model` on this surface (see DefaultModelResolver).
+        // Verified 2026-09-09. A configured apiUrl wins.
         const resourceName = this.configuration.azure?.resourceName;
-        const apiVersion = this.configuration.azure?.apiVersion || '2024-10-21';
-        return `https://${resourceName}.openai.azure.com/openai/deployments/${this.configuration.azure?.deploymentName}?api-version=${apiVersion}`;
-      case LlmProviderType.AWS_BEDROCK:
+        return this.configuration.apiUrl || `https://${resourceName}.openai.azure.com/openai/v1`;
+      }
+      case LlmProviderType.AWS_BEDROCK: {
+        // Bedrock's OpenAI-compatible surface on the runtime host: chat at
+        // <base>/chat/completions, model list at <base>/models, both
+        // authenticated with a Bedrock API key as a plain bearer token (no
+        // SigV4). Verified 2026-09-09, see docs/design/call-only-vendors.md.
+        // A configured apiUrl wins, e.g. to target bedrock-mantle.
         const region = this.configuration.bedrock?.region || 'us-east-1';
-        return `https://bedrock-runtime.${region}.amazonaws.com`;
+        return this.configuration.apiUrl || `https://bedrock-runtime.${region}.amazonaws.com/openai/v1`;
+      }
       case LlmProviderType.HUGGINGFACE:
-        return this.configuration.huggingface?.endpoint || 'https://api-inference.huggingface.co/models';
+        // Inference Providers router: OpenAI-compatible chat at
+        // <base>/chat/completions and a model list at <base>/models,
+        // authenticated with a fine-grained hf_ token. The old
+        // api-inference.huggingface.co host no longer resolves in DNS
+        // (checked 2026-09-09), so it is not kept as a fallback.
+        // `huggingface.endpoint` still points a provider at a dedicated
+        // Inference Endpoint; apiUrl overrides anything else.
+        return this.configuration.huggingface?.endpoint
+          || this.configuration.apiUrl
+          || 'https://router.huggingface.co/v1';
       case LlmProviderType.OLLAMA: {
         // OpenAI-compatible surface lives under /v1 on the Ollama server
         // root; `apiUrl` is the root (default: a local install). On
@@ -409,6 +583,33 @@ export class LlmProvider {
       default:
         return this.configuration.apiUrl || '';
     }
+  }
+
+  /**
+   * Where the OpenAI-shaped model list lives. Almost every vendor serves it
+   * at `<chat base>/models`, but two do not, and deriving the URL from the
+   * chat base silently 404s there:
+   *
+   *  - DeepInfra documents the OpenAI-shaped listing at
+   *    `https://api.deepinfra.com/v1/models`, one segment above its chat
+   *    base `https://api.deepinfra.com/v1/openai`.
+   *  - Cohere chats on `/compatibility/v1` but documents the listing only
+   *    on the native `https://api.cohere.com/v1/models`.
+   *
+   * A configured apiUrl means the operator is pointing at their own proxy,
+   * so the override steps aside and `<base>/models` applies again.
+   *
+   * Vendors with NO documented listing at all (Z.ai, SambaNova, Fireworks'
+   * OpenAI surface) are not special-cased: the request is attempted, and a
+   * failure surfaces as NO_MODEL_CONFIGURED rather than a guessed model id.
+   */
+  getModelsUrl(): string {
+    const base = this.getApiUrl().replace(/\/+$/, '');
+    if (!this.configuration?.apiUrl) {
+      if (this.type === LlmProviderType.DEEPINFRA) return 'https://api.deepinfra.com/v1/models';
+      if (this.type === LlmProviderType.COHERE) return 'https://api.cohere.com/v1/models';
+    }
+    return `${base}/models`;
   }
 
   /**
@@ -504,12 +705,13 @@ export class LlmProvider {
   }
 
   getAuthHeaders(): Record<string, string> {
+    const profile = providerProfile(this.type);
+    if (profile) return profileAuthHeaders(profile, this.getDecryptedApiKey(), this.configuration);
     const headers: Record<string, string> = {};
     const apiKey = this.getDecryptedApiKey();
 
     switch (this.type) {
       case LlmProviderType.OPENAI:
-      case LlmProviderType.AZURE_OPENAI:
       case LlmProviderType.MISTRAL:
       case LlmProviderType.XAI:
       case LlmProviderType.DEEPSEEK:
@@ -527,16 +729,59 @@ export class LlmProvider {
       case LlmProviderType.BASETEN:
       case LlmProviderType.NEBIUS:
       case LlmProviderType.SAMBANOVA:
+      // First-party model families, plain Bearer.
+      case LlmProviderType.MOONSHOT:
+      case LlmProviderType.QWEN:
+      case LlmProviderType.MINIMAX:
+      case LlmProviderType.UPSTAGE:
+      case LlmProviderType.WRITER:
+      case LlmProviderType.QIANFAN:
+      case LlmProviderType.HUNYUAN:
+      case LlmProviderType.VOLCENGINE:
+      case LlmProviderType.SPARK:
+      // Cloud and vendor serverless surfaces that take a static token as a
+      // bearer: Foundry accepts the resource key in Authorization (which is
+      // what makes it drop-in OpenAI-compatible), DigitalOcean a model
+      // access key, RunPod an rpa_ key, Modal a workspace proxy token.
+      case LlmProviderType.AZURE_AI_FOUNDRY:
+      case LlmProviderType.DIGITALOCEAN:
+      case LlmProviderType.RUNPOD:
+      case LlmProviderType.MODAL:
+      // Bedrock's OpenAI-compatible surface takes a Bedrock API key as a
+      // plain bearer token; SigV4 signing is not needed on this path.
+      case LlmProviderType.AWS_BEDROCK:
         if (apiKey) {
           headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+        break;
+
+      case LlmProviderType.VERTEX_AI:
+        // Deliberately empty. Vertex authenticates with a one-hour OAuth
+        // access token minted from a service-account key, which cannot be
+        // produced synchronously; vertex.provider.ts mints it and supplies
+        // the headers. Emitting the stored credential as a bearer here
+        // would put a private key on the wire.
+        break;
+
+      case LlmProviderType.AZURE_OPENAI:
+        // An Azure OpenAI API key goes in the `api-key` header. Sending it
+        // as `Authorization: Bearer` is wrong on the dated deployments
+        // surface (Bearer there means a Microsoft Entra ID token, so a key
+        // sent that way 401s) and merely one of several accepted schemes on
+        // the /openai/v1 surface. `api-key` is correct on both. Verified
+        // 2026-09-09.
+        if (apiKey) {
+          headers['api-key'] = apiKey;
         }
         break;
 
       case LlmProviderType.OPENROUTER:
         if (apiKey) {
           headers['Authorization'] = `Bearer ${apiKey}`;
+          // App attribution. X-OpenRouter-Title superseded X-Title, which
+          // is still accepted for backwards compatibility (2026-09-09).
           headers['HTTP-Referer'] = 'https://almyty.com';
-          headers['X-Title'] = 'almyty';
+          headers['X-OpenRouter-Title'] = 'almyty';
         }
         break;
 
@@ -558,9 +803,13 @@ export class LlmProvider {
         break;
 
       case LlmProviderType.GOOGLE:
+        // The documented way to authenticate the Gemini API is the
+        // x-goog-api-key header. The ?key= query parameter still works but
+        // Google's own guidance calls it out as leaking the key through URL
+        // scans and logs, so the header is what we send. Verified
+        // 2026-09-09.
         if (apiKey) {
-          // Google uses query parameter for API key
-          // headers will be handled differently in the service
+          headers['x-goog-api-key'] = apiKey;
         }
         break;
 

@@ -211,7 +211,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
         heading: `Approval ${outcome}`,
         bodyHtml:
           para(
-            `The approval gate on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ', the run is resuming' : ', the run was terminated'}.`,
+            `The approval on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ', the run is resuming' : ', the run was terminated'}.`,
           ) + (p.decisionReason ? para(`Note from the approver: <em>${esc(p.decisionReason)}</em>`) : ''),
         button: p.runUrl ? { label: 'View run', url: p.runUrl } : undefined,
         orgName: p.organizationName,
@@ -551,7 +551,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
       heading: 'A few things people build on almyty',
       bodyHtml:
         para(
-          'Teams use almyty to turn internal APIs into MCP tools their coding agents can call, to wire multi-LLM agent pipelines with the visual builder, and to run those agents on their own machines with the runner.',
+          'Teams use almyty to turn internal APIs into MCP tools their coding agents can call, to wire multi-model agent pipelines with the visual builder, and to run those agents on their own machines with the runner.',
         ) +
         para(
           'This is the last setup email we will send. If almyty is not the right fit right now, no worries: everything is here when you come back.',
@@ -560,7 +560,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
       footerNote: `This is the final almyty setup email. Prefer none at all? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `What people build on almyty: internal APIs as MCP tools, multi-LLM agent pipelines, agents running on their own machines via the runner. This is the last setup email we will send: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `What people build on almyty: internal APIs as MCP tools, multi-model agent pipelines, agents running on their own machines via the runner. This is the last setup email we will send: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 

@@ -1,3 +1,4 @@
+import { providerProfile } from '../llm-providers/provider-profile';
 import { LlmProviderType } from '../../entities/llm-provider.entity';
 
 /**
@@ -31,7 +32,7 @@ export interface ProviderUsageCapability {
   note?: string;
 }
 
-const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
+const CAPABILITY_OVERRIDES: Partial<Record<LlmProviderType, ProviderUsageCapability>> = {
   [LlmProviderType.OPENAI]: {
     supported: true,
     requiresAdminKey: true,
@@ -51,7 +52,7 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     supported: false,
     requiresAdminKey: true,
     label: 'Google (Gemini)',
-    note: 'Usage/cost is exposed via Google Cloud Billing / Cloud Monitoring, not a first-party LLM usage endpoint. Not ingested.',
+    note: 'Usage/cost is exposed via Google Cloud Billing / Cloud Monitoring, not a first-party model usage endpoint. Not ingested.',
   },
   [LlmProviderType.MISTRAL]: {
     supported: false,
@@ -176,6 +177,90 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     label: 'SambaNova',
     note: 'No documented programmatic usage/cost API. Not ingested.',
   },
+  [LlmProviderType.MOONSHOT]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Moonshot (Kimi)',
+    note: 'GET /v1/users/me/balance reports remaining balance only, not per-model usage or cost. Not ingested.',
+  },
+  [LlmProviderType.QWEN]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Qwen (QwenCloud)',
+    note: 'No documented programmatic usage/cost API on compatible-mode. Not ingested.',
+  },
+  [LlmProviderType.MINIMAX]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'MiniMax',
+    note: 'No documented programmatic usage or cost API on the OpenAI-compatible surface. Not ingested.',
+  },
+  [LlmProviderType.UPSTAGE]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Upstage Solar',
+    note: 'No usage API. Rate-limit headers (X-Upstage-RateLimit-*) report remaining quota per request, not spend. Not ingested.',
+  },
+  [LlmProviderType.WRITER]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Writer (Palmyra)',
+    note: 'No documented usage or cost API. Not ingested.',
+  },
+  [LlmProviderType.QIANFAN]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Baidu ERNIE (Qianfan)',
+    note: 'No usage API on v2. GET /v2/models embeds per-model pricing, which is a price source rather than a spend source. Not ingested.',
+  },
+  [LlmProviderType.HUNYUAN]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Tencent Hunyuan (TokenHub)',
+    note: 'No documented usage or cost API on the TokenHub gateway. Not ingested.',
+  },
+  [LlmProviderType.VOLCENGINE]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'ByteDance Doubao (Ark)',
+    note: 'No documented usage or cost API on the Ark bearer surface. Not ingested.',
+  },
+  [LlmProviderType.SPARK]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'iFlytek Spark',
+    note: 'No documented usage or cost API on the HTTP surface. Not ingested.',
+  },
+  [LlmProviderType.VERTEX_AI]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Google Vertex AI',
+    note: 'Usage and cost live in Cloud Billing export, not on the inference API. Not ingested.',
+  },
+  [LlmProviderType.AZURE_AI_FOUNDRY]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Azure AI Foundry',
+    note: 'Usage and cost live in Azure Cost Management, not on the data plane. Not ingested.',
+  },
+  [LlmProviderType.DIGITALOCEAN]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'DigitalOcean Gradient',
+    note: 'No documented programmatic usage/cost API for serverless inference. Not ingested.',
+  },
+  [LlmProviderType.RUNPOD]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'RunPod',
+    note: 'No documented programmatic usage/cost API for public endpoints. Not ingested.',
+  },
+  [LlmProviderType.MODAL]: {
+    supported: false,
+    requiresAdminKey: false,
+    label: 'Modal',
+    note: 'No documented programmatic usage/cost API for endpoints. Not ingested.',
+  },
   [LlmProviderType.CUSTOM]: {
     supported: false,
     requiresAdminKey: false,
@@ -183,6 +268,30 @@ const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = {
     note: 'Custom endpoints have no standard usage/cost API. Not ingested.',
   },
 };
+
+/**
+ * One entry per provider type.
+ *
+ * A vendor with a usage or cost API needs an entry above saying so.
+ * Everything else defaults to unsupported, named from its provider
+ * profile, which is the honest default: most vendors publish no usage
+ * API, and claiming otherwise by omission is worse than saying nothing.
+ */
+const CAPABILITIES: Record<LlmProviderType, ProviderUsageCapability> = Object.fromEntries(
+  Object.values(LlmProviderType).map((type) => {
+    const override = CAPABILITY_OVERRIDES[type];
+    if (override) return [type, override];
+    return [
+      type,
+      {
+        supported: false,
+        requiresAdminKey: false,
+        label: providerProfile(type)?.displayName ?? type,
+        note: 'No documented usage or cost API. Not ingested.',
+      } satisfies ProviderUsageCapability,
+    ];
+  }),
+) as Record<LlmProviderType, ProviderUsageCapability>;
 
 export function providerUsageCapability(
   type: LlmProviderType | string,

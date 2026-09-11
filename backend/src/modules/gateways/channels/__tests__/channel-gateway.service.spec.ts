@@ -84,7 +84,7 @@ describe('ChannelGatewayService.testConnection', () => {
     });
 
     it('throws for an unknown channel type', () => {
-      expect(() => service.getAdapter('carrier_pigeon')).toThrow(/No adapter found/);
+      expect(() => service.getAdapter('carrier_pigeon')).toThrow(/No handler found/);
     });
   });
 

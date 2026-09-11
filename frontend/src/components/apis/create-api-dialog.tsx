@@ -300,7 +300,7 @@ export function CreateApiDialog({
               ? 'Import a schema to auto-generate operations and tools, or skip this step.'
               : editingApi
                 ? 'Update your API configuration and settings.'
-                : 'Connect an existing API to automatically generate tools for LLM usage.'}
+                : 'Connect an existing API to automatically generate tools your agents can call.'}
           </DialogDescription>
         </DialogHeader>
         {createStep === 'schema' && createdApiForSchema ? (

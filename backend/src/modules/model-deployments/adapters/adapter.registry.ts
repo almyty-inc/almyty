@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ModelProviderAdapter, assertAdapterContract } from './adapter.interface';
+import { schemesFor } from '../model-source';
 
 /**
  * The adapters this deployment knows, as data. Forms, the reconcile loop
@@ -25,7 +26,7 @@ export class AdapterRegistry {
 
   require(key: string): ModelProviderAdapter {
     const adapter = this.adapters.get(key);
-    if (!adapter) throw Object.assign(new Error(`unknown deployment adapter: ${key}`), { code: 'ADAPTER_UNKNOWN' });
+    if (!adapter) throw Object.assign(new Error(`unknown deployment provider: ${key}`), { code: 'ADAPTER_UNKNOWN' });
     return adapter;
   }
 
@@ -34,7 +35,25 @@ export class AdapterRegistry {
   }
 
   /** What GET /model-adapters serves: everything a form needs and nothing else. */
-  describe(): Array<{ key: string; displayName: string; capabilities: ReturnType<ModelProviderAdapter['capabilities']>; configSchema: Record<string, any> }> {
-    return this.list().map((a) => ({ key: a.key, displayName: a.displayName, capabilities: a.capabilities(), configSchema: a.configSchema() }));
+  /**
+   * Everything a form needs. `modelSchemes` says which kinds of model
+   * this provider can actually run, so the UI can filter both ways: the
+   * providers that can run the model you have, and the model sources a
+   * provider you picked will accept.
+   */
+  describe(): Array<{
+    key: string;
+    displayName: string;
+    capabilities: ReturnType<ModelProviderAdapter['capabilities']>;
+    configSchema: Record<string, any>;
+    modelSchemes: string[];
+  }> {
+    return this.list().map((a) => ({
+      key: a.key,
+      displayName: a.displayName,
+      capabilities: a.capabilities(),
+      configSchema: a.configSchema(),
+      modelSchemes: schemesFor(a.key, a.capabilities()).map((s) => `${s}://`),
+    }));
   }
 }

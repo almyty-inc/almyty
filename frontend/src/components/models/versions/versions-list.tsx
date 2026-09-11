@@ -87,16 +87,16 @@ export function VersionsList({ versions, loading, onSelect, onRegister }: Versio
       data={versions}
       loading={loading}
       searchKey="name"
-      searchPlaceholder="Search versions..."
+      searchPlaceholder="Search artifacts..."
       onRowClick={onSelect}
       hideSelectionCount
       hideColumnsButton
       emptyState={
         <EmptyState
           icon={Package}
-          title="No versions registered"
-          description="A version is an immutable set of weights in the registry, pinned by etag or sha. Register one to deploy it anywhere."
-          action={onRegister ? <Button onClick={onRegister}>Register a version</Button> : undefined}
+          title="Nothing tracked here, and most people never need this"
+          description="To run a model you only have to name it on a deployment: hf://org/repo@sha, or a model already on Bedrock, Fireworks, Together or Baseten. Register an artifact here only when you want an immutable record of your own weights, pinned by etag or sha."
+          action={onRegister ? <Button variant="outline" onClick={onRegister}>Register an artifact</Button> : undefined}
         />
       }
     />

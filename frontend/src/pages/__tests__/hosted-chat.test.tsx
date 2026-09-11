@@ -33,10 +33,18 @@ vi.mock('@/lib/hosted-chat', async () => {
 })
 
 // jsdom has no EventSource; the streaming path only needs to not explode.
+//
+// Each instance records the test it was opened during. A component whose
+// send() is still in flight when a test ends goes on to open its stream
+// during the NEXT test, and `instances[0]` then points at a stream nobody
+// is watching: emitting on it does nothing and the test times out five
+// seconds later with no clue why. So a test asks for the stream IT
+// opened, and waits for it, rather than taking whatever is first.
 class FakeEventSource {
   static instances: FakeEventSource[] = []
   listeners: Record<string, (event: any) => void> = {}
   onerror: ((event: any) => void) | null = null
+  readonly bornIn = currentTest()
   constructor(public url: string) {
     FakeEventSource.instances.push(this)
   }
@@ -47,6 +55,42 @@ class FakeEventSource {
     this.listeners[type]?.({ data: JSON.stringify(data) })
   }
   close() {}
+}
+
+function currentTest(): string {
+  return (expect as any).getState?.()?.currentTestName ?? 'unknown'
+}
+
+/** The stream this test opened, once the page has opened it. */
+async function openedStream(): Promise<FakeEventSource> {
+  const mine = () => FakeEventSource.instances.filter((s) => s.bornIn === currentTest())
+  await waitFor(() => expect(mine().length).toBeGreaterThan(0))
+  const own = mine()
+  return own[own.length - 1]
+}
+
+/**
+ * Type a message and send it.
+ *
+ * The Send button is disabled until the draft lands in state, so a click
+ * that arrives first does nothing at all -- no error, no request, and the
+ * test then waits out its whole timeout for a call that was never made.
+ * That is what made this file fail about one full run in ten while
+ * passing alone every time: under load the draft occasionally had not
+ * landed by the time the click fired.
+ *
+ * So type against the live element and retry until the UI has actually
+ * accepted the draft. This cannot hide a broken page: if the input never
+ * accepts text, the wait fails saying the button stayed disabled, which
+ * is the truth rather than a silent timeout.
+ */
+async function sendMessage(text: string) {
+  await screen.findByLabelText('Message')
+  await waitFor(() => {
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: text } })
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled()
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 }
 
 const branding = (overrides: Partial<HostedChatBranding> = {}): HostedChatBranding => ({
@@ -194,6 +238,24 @@ describe('HostedChatPage', () => {
     expect(reloadAfterVisitorDeletion).toHaveBeenCalled()
   })
 
+
+  it('sends nothing while the draft is empty, silently, which is the trap sendMessage exists for', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+
+    render(<HostedChatPage slug="acme" />)
+    const button = await screen.findByRole('button', { name: 'Send' })
+
+    // Disabled, so the click is a no-op with no error and no request. A
+    // test that clicks before its draft has landed sees exactly this and
+    // then waits out its timeout for a call that was never made.
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(hostedChatApi.send).not.toHaveBeenCalled()
+
+    // And it becomes clickable the moment there is something to send.
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'hello' } })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled())
+  })
   it('sends a message and streams the reply into place', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
@@ -207,13 +269,11 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    const input = await screen.findByLabelText('Message')
-    fireEvent.change(input, { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
 
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalledWith('acme', 'hello', undefined))
 
-    const source = FakeEventSource.instances[0]
+    const source = await openedStream()
     source.emit('token', { token: 'hi ' })
     source.emit('done', { reason: 'run.completed' })
 
@@ -233,11 +293,10 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
-    FakeEventSource.instances[0].emit('done', { reason: 'run.failed' })
+    ;(await openedStream()).emit('done', { reason: 'run.failed' })
 
     expect(await screen.findByRole('alert')).toHaveTextContent("The assistant couldn't reply just now")
     // The visitor's own turn stays: it was delivered, the reply is what failed.
@@ -254,11 +313,10 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
-    FakeEventSource.instances[0].emit('done', { reason: 'stream_ended' })
+    ;(await openedStream()).emit('done', { reason: 'stream_ended' })
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
   })
@@ -276,11 +334,10 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
-    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+    ;(await openedStream()).emit('done', { reason: 'run.completed' })
 
     expect(await screen.findByText('hi there')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
@@ -304,12 +361,9 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), {
-      target: { value: '**literal**' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('**literal**')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
-    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+    ;(await openedStream()).emit('done', { reason: 'run.completed' })
 
     expect(await screen.findByText('Documentation')).toHaveProperty('tagName', 'STRONG')
     expect(screen.getByText('**literal**')).toBeInTheDocument()
@@ -337,10 +391,9 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
-    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+    ;(await openedStream()).emit('done', { reason: 'run.completed' })
 
     expect(await screen.findByText(/Safe/)).toBeInTheDocument()
     expect(document.querySelector('img')).toBeNull()
@@ -353,8 +406,7 @@ describe('HostedChatPage', () => {
     ;(hostedChatApi.send as any).mockRejectedValue({ response: { status: 429 } })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/busy right now/)
   })
@@ -366,8 +418,7 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Too many messages from you (60 per hour). Please wait 40 seconds.')
   })
@@ -377,8 +428,7 @@ describe('HostedChatPage', () => {
     ;(hostedChatApi.send as any).mockRejectedValue({ response: { status: 500 } })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
 
     await screen.findByRole('alert')
     // Leaving it on screen would imply the message was delivered.
@@ -401,11 +451,10 @@ describe('HostedChatPage', () => {
     })
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
-    const source = FakeEventSource.instances[0] as any
+    const source = (await openedStream()) as any
     source.emit('done', { reason: 'run.failed' })
     source.onerror?.()
     source.emit('done', { reason: 'run.failed' })
@@ -423,11 +472,10 @@ describe('HostedChatPage', () => {
     ;(hostedChatApi.messages as any).mockRejectedValue(new Error('network down'))
 
     render(<HostedChatPage slug="acme" />)
-    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'hello' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
-    FakeEventSource.instances[0].emit('done', { reason: 'run.completed' })
+    ;(await openedStream()).emit('done', { reason: 'run.completed' })
 
     expect(await screen.findByRole('alert')).toHaveTextContent("couldn't reply")
     // The visitor's turn survives; only the empty streaming placeholder goes.

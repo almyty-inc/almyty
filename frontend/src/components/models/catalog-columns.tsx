@@ -14,6 +14,7 @@ import {
 import { formatModelPrice, PRICING_SOURCE_LABELS } from '@/lib/models-api'
 import type { ModelCard } from '@/types/models'
 import { CapabilityBadges, PrivacyTierBadge, SelectableIndicator, ValidationBadge } from './model-badges'
+import { ModelOriginBadge, modelOrigin, modelVendor, whereItRuns } from './model-origin'
 
 export interface CatalogColumnActions {
   providerNames: Record<string, string>
@@ -45,28 +46,20 @@ export function buildCatalogColumns({ providerNames, onValidate, onEdit, onDelet
     },
     {
       id: 'provider',
-      header: 'Provider',
-      accessorFn: (card) => (card.providerId && providerNames[card.providerId]) || card.providerType || '',
-      cell: ({ row }) => {
-        const card = row.original
-        const name = card.providerId ? providerNames[card.providerId] : undefined
-        if (name) {
-          return (
-            <div className="min-w-0">
-              <div className="text-sm truncate">{name}</div>
-              {card.providerType && <div className="text-xs text-muted-foreground">{card.providerType}</div>}
-            </div>
-          )
-        }
-        if (card.endpointRef?.url) {
-          return <span className="text-xs font-mono text-muted-foreground truncate block max-w-[180px]" title={String(card.endpointRef.url)}>{String(card.endpointRef.url)}</span>
-        }
-        return <span className="text-sm text-muted-foreground">{card.providerType || 'No provider'}</span>
-      },
+      header: 'Runs on',
+      accessorFn: (card) => modelVendor(card, providerNames),
+      cell: ({ row }) => (
+        <div className="min-w-0 space-y-1">
+          <div className="truncate text-sm" title={whereItRuns(row.original, providerNames)}>
+            {whereItRuns(row.original, providerNames)}
+          </div>
+          <ModelOriginBadge origin={modelOrigin(row.original)} />
+        </div>
+      ),
     },
     {
       id: 'tier',
-      header: 'Tier / region',
+      header: 'Privacy / region',
       accessorFn: (card) => `${card.privacyTier} ${card.region || ''}`,
       cell: ({ row }) => (
         <div className="flex flex-col gap-1 items-start">

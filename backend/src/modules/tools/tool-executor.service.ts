@@ -380,7 +380,7 @@ export class ToolExecutorService {
     if (!operation || !operation.api) {
       throw new BadRequestException(
         `Tool '${tool.name}' has no executable configuration ` +
-          `(no HTTP/JS/GraphQL/SOAP/gRPC/LLM/SDK/runner config and no imported API operation). ` +
+          `(no HTTP/JS/GraphQL/SOAP/gRPC/model/SDK/runner config and no imported API operation). ` +
           `Re-import its API or set a tool configuration.`,
       );
     }

@@ -28,7 +28,7 @@ describe('ModelIssueBanner', () => {
     const alert = screen.getByRole('alert')
     expect(alert).toHaveTextContent('claude-sonnet-4-20250514')
     expect(alert).toHaveTextContent('no longer available')
-    expect(alert).toHaveTextContent('LLM node')
+    expect(alert).toHaveTextContent('model call node')
     expect(screen.getByRole('link', { name: 'provider' })).toHaveAttribute('href', '/llm-providers/p1')
     expect(alert).not.toHaveTextContent('schedule')
   })

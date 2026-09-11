@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenEx
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
+import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callPerplexity, callPerplexityStream, callVertex, callVertexStream, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
 import { Message, MessageRole, MessageType, MessageStatus, ToolCall, MessageContent } from '../../entities/message.entity';
@@ -22,6 +22,7 @@ import { callLlmProviderHttp } from './providers/safe-request';
 import { safeErrorBody, safeErrorMessage, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { ToolExecutionOptions } from '../tools/tool-executor.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { preferredBinding, providerProfile } from './provider-profile';
 
 @Injectable()
 export class LlmChatHelper {
@@ -302,26 +303,25 @@ export class LlmChatHelper {
       }
 
       // Determine if the provider supports streaming
-      const supportsStreaming = [
-        LlmProviderType.OPENAI,
-        LlmProviderType.AZURE_OPENAI,
-        LlmProviderType.MISTRAL,
-        LlmProviderType.XAI,
-        LlmProviderType.DEEPSEEK,
-        LlmProviderType.GROQ,
-        LlmProviderType.TOGETHER,
-        LlmProviderType.OPENROUTER,
-        LlmProviderType.FIREWORKS,
-        LlmProviderType.CEREBRAS,
-        LlmProviderType.DEEPINFRA,
-        LlmProviderType.NOVITA,
-        LlmProviderType.PERPLEXITY,
-        LlmProviderType.ZAI,
-        LlmProviderType.BASETEN,
-        LlmProviderType.NEBIUS,
-        LlmProviderType.SAMBANOVA,
-        LlmProviderType.ANTHROPIC,
-      ].includes(provider.type);
+      // Every type whose dispatch has a streaming implementation. A type
+      // absent here falls back to a non-streaming call rather than
+      // failing, but it must then also be absent from the switch below.
+      //
+      // Every chat-completions vendor streams through callOpenAIStream, so
+      // membership is derived from the protocol rather than listed by
+      // hand. The names below are the ones with no profile or a protocol
+      // of their own.
+      const profile = providerProfile(provider.type);
+      const supportsStreaming =
+        (profile && preferredBinding(profile).protocol === 'chat_completions') ||
+        [
+          LlmProviderType.AZURE_OPENAI,
+          LlmProviderType.HUGGINGFACE,
+          LlmProviderType.OLLAMA,
+          LlmProviderType.ANTHROPIC,
+          LlmProviderType.PERPLEXITY,
+          LlmProviderType.VERTEX_AI,
+        ].includes(provider.type);
 
       if (!supportsStreaming) {
         // Fall back to non-streaming for unsupported providers
@@ -397,33 +397,29 @@ export class LlmChatHelper {
       // before the sync getAuthHeaders read. No-op for non-KMS orgs.
       await this.envelopeCrypto.warmOrg(provider.organizationId);
 
+      if (profile && preferredBinding(profile).protocol === 'chat_completions') {
+        response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
+      } else {
       switch (provider.type) {
-        case LlmProviderType.OPENAI:
+        // The chat-completions vendors with no profile of their own.
         case LlmProviderType.AZURE_OPENAI:
-        case LlmProviderType.MISTRAL:
-        case LlmProviderType.XAI:
-        case LlmProviderType.DEEPSEEK:
-        case LlmProviderType.GROQ:
-        case LlmProviderType.TOGETHER:
-        case LlmProviderType.OPENROUTER:
-        case LlmProviderType.FIREWORKS:
-        case LlmProviderType.CEREBRAS:
-        case LlmProviderType.DEEPINFRA:
-        case LlmProviderType.NOVITA:
-        case LlmProviderType.PERPLEXITY:
-        case LlmProviderType.ZAI:
-        case LlmProviderType.BASETEN:
-        case LlmProviderType.NEBIUS:
-        case LlmProviderType.SAMBANOVA:
+        case LlmProviderType.HUGGINGFACE:
         case LlmProviderType.OLLAMA:
           response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
           break;
         case LlmProviderType.ANTHROPIC:
           response = await callAnthropicStream(provider, request, session, tools, startTime, costFn, onChunk);
           break;
+        case LlmProviderType.PERPLEXITY:
+          response = await callPerplexityStream(provider, request, session, tools, startTime, costFn, onChunk);
+          break;
+        case LlmProviderType.VERTEX_AI:
+          response = await callVertexStream(provider, request, session, tools, startTime, costFn, onChunk);
+          break;
         default:
           // Should not reach here due to supportsStreaming check, but safety net
         return this.chat(providerId, originalRequest, organizationId, userId);
+      }
       }
 
       // Save final message to database

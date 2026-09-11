@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
-import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
+import { callOpenAI, callAnthropic, callGoogle, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { makeEnvelopeCryptoMock } from '../../test/envelope-crypto.mock';
@@ -1700,6 +1700,7 @@ describe('LlmProvidersService', () => {
       it('should validate AWS Bedrock configuration', () => {
         expect(() => {
           service['validateProviderConfiguration'](LlmProviderType.AWS_BEDROCK, {
+            apiKey: 'bedrock-api-key',
             bedrock: { region: 'us-east-1' },
           });
         }).not.toThrow();
@@ -1709,6 +1710,17 @@ describe('LlmProvidersService', () => {
         expect(() => {
           service['validateProviderConfiguration'](LlmProviderType.AWS_BEDROCK, {});
         }).toThrow(BadRequestException);
+      });
+
+      it('rejects a Bedrock provider with a region but no API key', () => {
+        // The OpenAI-compatible surface authenticates with a Bedrock API
+        // key as a bearer token. Accepting a region alone is how a provider
+        // that could never answer used to save cleanly.
+        expect(() => {
+          service['validateProviderConfiguration'](LlmProviderType.AWS_BEDROCK, {
+            bedrock: { region: 'us-east-1' },
+          });
+        }).toThrow(/requires a Bedrock API key/);
       });
 
       it('should validate Custom provider configuration', () => {
@@ -2423,74 +2435,6 @@ describe('LlmProvidersService', () => {
 
       expect(result.usage.inputTokens).toBe(0);
       expect(result.usage.outputTokens).toBe(0);
-    });
-  });
-
-  describe('callCohere', () => {
-    it('should call Cohere API successfully', async () => {
-      const mockProvider = {
-        id: 'provider-1',
-        type: LlmProviderType.COHERE,
-        configuration: { apiKey: 'test-key', model: 'command', timeout: 30000 },
-        getApiUrl: jest.fn().mockReturnValue('https://api.cohere.ai/v1'),
-        getAuthHeaders: jest.fn().mockReturnValue({ 'Authorization': 'Bearer test-key' }),
-      };
-
-      const mockAxios = require('axios');
-      mockAxios.default = jest.fn().mockResolvedValue({
-        data: {
-          text: 'Response from Cohere',
-          finish_reason: 'COMPLETE',
-        },
-      });
-
-      const chatRequest: ChatRequest = {
-        messages: [
-          { role: MessageRole.USER, content: 'Previous message' },
-          { role: MessageRole.ASSISTANT, content: 'Previous response' },
-          { role: MessageRole.USER, content: 'Current message' },
-        ],
-      };
-
-      const mockSession = { id: 'session-1', context: {} };
-
-      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
-
-      const result = await callCohere(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
-
-      expect(result.message.content).toBe('Response from Cohere');
-    });
-  });
-
-  describe('callHuggingFace', () => {
-    it('should call HuggingFace API successfully', async () => {
-      const mockProvider = {
-        id: 'provider-1',
-        type: LlmProviderType.HUGGINGFACE,
-        configuration: { apiKey: 'test-key', model: 'gpt2', timeout: 30000 },
-        getApiUrl: jest.fn().mockReturnValue('https://api-inference.huggingface.co/models'),
-        getAuthHeaders: jest.fn().mockReturnValue({ 'Authorization': 'Bearer test-key' }),
-      };
-
-      const mockAxios = require('axios');
-      mockAxios.default = jest.fn().mockResolvedValue({
-        data: [
-          {
-            generated_text: 'user: Hello\nassistant: Hello! How can I help you?',
-          },
-        ],
-      });
-
-      const chatRequest: ChatRequest = {
-        messages: [{ role: MessageRole.USER, content: 'Hello' }],
-      };
-
-      const mockSession = { id: 'session-1', context: {} };
-
-      const result = await callHuggingFace(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
-
-      expect(result.message.content).toBeDefined();
-      expect(result.cost).toBe(0); // HuggingFace is free
     });
   });
 

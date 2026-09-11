@@ -17,11 +17,11 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useCopy } from '@/lib/clipboard'
-import { BLANK, canScale, canTeardown, formatCents, isTerminalState } from '@/lib/deployments-api'
+import { BLANK, canScale, canTeardown, deploymentModelRef, formatCents, isTerminalState } from '@/lib/deployments-api'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 import type { ModelAdapter, ModelDeployment, ModelVersion } from '@/types/deployments'
 import { DeploymentStateBadge, deploymentStateLabel } from './deployment-state-badge'
-import { adapterName, versionName } from './deployments-list'
+import { adapterName, modelLabel } from './deployments-list'
 
 export interface DeploymentDetailSheetProps {
   deployment: ModelDeployment | null
@@ -72,11 +72,23 @@ export function DeploymentDetailSheet({ deployment, adapters, versions, open, on
               <DeploymentStateBadge state={d.state} />
             </SheetTitle>
             <SheetDescription>
-              {versionName(versions, d.modelVersionId)} on {d.providerType}. Created {formatRelativeTime(d.createdAt)}.
+              {modelLabel(d, versions)} on {d.providerType}. Created {formatRelativeTime(d.createdAt)}.
             </SheetDescription>
           </SheetHeader>
 
           <div className="mt-6 space-y-6">
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold">Model</h3>
+              <code className="block truncate rounded-md border bg-muted/40 px-2 py-1.5 font-mono text-xs" title={deploymentModelRef(d, versions)}>
+                {deploymentModelRef(d, versions)}
+              </code>
+              <p className="text-xs text-muted-foreground">
+                {d.modelVersionId
+                  ? 'Named by a registered version this organization tracks.'
+                  : 'Named as configuration on the deployment. Nothing had to be registered.'}
+              </p>
+            </section>
+
             <section className="space-y-2">
               <h3 className="text-sm font-semibold">Endpoint</h3>
               {url ? (
@@ -94,7 +106,7 @@ export function DeploymentDetailSheet({ deployment, adapters, versions, open, on
                   </Button>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No URL yet. The adapter reports one once the endpoint is ready.</p>
+                <p className="text-sm text-muted-foreground">No URL yet. The provider reports one once the endpoint is ready.</p>
               )}
             </section>
 
@@ -110,7 +122,7 @@ export function DeploymentDetailSheet({ deployment, adapters, versions, open, on
                     ['Hardware', d.desired?.hardware],
                     ['Region', d.desired?.region],
                     ['Quantization', d.desired?.quantization],
-                    ['Privacy tier', d.desired?.privacyTier],
+                    ['Privacy', d.desired?.privacyTier],
                   ]}
                 />
                 <StateColumn

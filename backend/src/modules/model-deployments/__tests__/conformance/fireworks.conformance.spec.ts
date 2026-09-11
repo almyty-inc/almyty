@@ -1,270 +1,232 @@
-import { FireworksAdapter, ModelFileSource } from '../../adapters/fireworks.adapter';
+import { FireworksAdapter } from '../../adapters/fireworks.adapter';
 import { liveRequested, runConformance } from './conformance.suite';
 
 /**
- * Fixture mode: an in-memory stand-in for the Fireworks control plane
- * (api.fireworks.ai/v1/accounts/{account}: models with signed-URL upload
- * and validateUpload, deployments with :scale), faithful to the documented
- * paths, states and gRPC-style error codes, plus a fake byte source so no
- * registry is needed. Live mode (CONFORMANCE_LIVE=fireworks,
- * FIREWORKS_API_KEY + FIREWORKS_ACCOUNT in the local environment) runs
- * the same cases against a real account and never runs in CI.
+ * Fixture mode: an in-memory stand-in for the Fireworks Gateway REST API
+ * (api.fireworks.ai/v1/accounts/{account}: models, deployments, :scale,
+ * billingUsage:query), faithful to the documented paths, states, gRPC
+ * status names and error codes. Live mode (CONFORMANCE_LIVE=fireworks,
+ * FIREWORKS_API_KEY + FIREWORKS_ACCOUNT in the local environment) runs the
+ * same cases against a real account and never runs in CI.
  */
+const ACCOUNT = 'almyty-test';
+
 function fixtureHttp() {
   const models = new Map<string, any>();
   const deployments = new Map<string, any>();
-  const puts: { url: string; headers: any; size: number }[] = [];
   const authed = (config: any) => {
     if ((config?.headers?.Authorization ?? '') !== 'Bearer fw_valid') {
-      throw Object.assign(new Error('401'), { response: { status: 401, data: { code: 16, message: 'Unauthenticated', status: 'UNAUTHENTICATED' } } });
+      throw Object.assign(new Error('401'), { response: { status: 401, data: { status: 'UNAUTHENTICATED', message: 'invalid API key' } } });
     }
   };
-  const notFound = () => Object.assign(new Error('404'), { response: { status: 404, data: { code: 5, message: 'not found', status: 'NOT_FOUND' } } });
-  const parse = (url: string) => {
-    const m = url.match(/\/v1\/accounts\/([^/]+)\/(models|deployments)(?:\/([^/:]+))?(?::(getUploadEndpoint|validateUpload|scale))?$/);
-    return { account: m?.[1], kind: m?.[2], id: m?.[3], verb: m?.[4] };
-  };
+  const notFound = () => Object.assign(new Error('404'), { response: { status: 404, data: { status: 'NOT_FOUND', message: 'not found' } } });
+  const modelId = (url: string) => url.match(/\/models\/([^/:?]+)$/)?.[1];
+  const deploymentId = (url: string) => url.match(/\/deployments\/([^/:?]+)(?::scale)?$/)?.[1];
   return {
     models,
     deployments,
-    puts,
     http: {
       post: jest.fn(async (url: string, body: any, config: any) => {
         authed(config);
-        const { account, kind, id, verb } = parse(url);
-        if (kind === 'models' && !id) {
-          if (models.has(body.modelId)) throw Object.assign(new Error('409'), { response: { status: 409, data: { code: 6, message: 'already exists', status: 'ALREADY_EXISTS' } } });
-          const model = { name: `accounts/${account}/models/${body.modelId}`, ...body.model, state: 'UPLOADING', uploaded: new Set<string>(), files: body.model.baseModelDetails.huggingfaceFiles, createTime: new Date().toISOString() };
-          models.set(body.modelId, model);
-          return { data: model };
+        if (url.endsWith(':query')) {
+          // Metered GPU-seconds for the filtered deployment: one GPU-hour.
+          return { data: { dedicatedCosts: [{ startTime: '2026-09-08T00:00:00Z', endTime: '2026-09-09T00:00:00Z', acceleratorSeconds: 3600, group: { deployment_name: body?.filter?.deployment_name?.values?.[0] } }] } };
         }
-        if (kind === 'models' && verb === 'getUploadEndpoint') {
-          const model = models.get(id!);
-          if (!model) throw notFound();
-          const filenameToSignedUrls = Object.fromEntries(Object.keys(body.filenameToSize).map((f) => [f, `https://storage.googleapis.com/fw-uploads/${id}/${f}?X-Goog-Signature=sig`]));
-          return { data: { filenameToSignedUrls } };
-        }
-        if (kind === 'deployments' && !id) {
-          if (body.acceleratorType === 'NVIDIA_GB300') {
-            throw Object.assign(new Error('429'), { response: { status: 429, data: { code: 8, message: 'GPU quota exceeded for NVIDIA_GB300 in GLOBAL', status: 'RESOURCE_EXHAUSTED' } } });
+        if (url.endsWith('/deployments')) {
+          if (body.acceleratorType === 'NVIDIA_B300_288GB') {
+            throw Object.assign(new Error('429'), { response: { status: 429, data: { status: 'RESOURCE_EXHAUSTED', message: 'GPU quota exceeded for B300' } } });
           }
-          const modelId = String(body.baseModel).split('/').pop()!;
-          if (models.get(modelId)?.state !== 'READY') {
-            throw Object.assign(new Error('400'), { response: { status: 400, data: { code: 9, message: 'model is not READY', status: 'FAILED_PRECONDITION' } } });
-          }
-          const deploymentId = config.params.deploymentId;
-          const d = { name: `accounts/${account}/deployments/${deploymentId}`, ...body, state: 'CREATING', replicaCount: 0, desiredReplicaCount: Math.max(body.minReplicaCount, 1), replicaStats: { readyReplicaCount: 0 }, region: body.placement?.region ?? body.placement?.multiRegion, createTime: new Date().toISOString() };
-          deployments.set(deploymentId, d);
-          return { data: d };
+          const id = config?.params?.deploymentId;
+          const dep = {
+            name: `accounts/${ACCOUNT}/deployments/${id}`,
+            baseModel: body.baseModel,
+            displayName: body.displayName,
+            state: 'CREATING',
+            acceleratorType: body.acceleratorType ?? 'NVIDIA_H100_80GB',
+            acceleratorCount: body.acceleratorCount ?? 1,
+            minReplicaCount: body.minReplicaCount,
+            maxReplicaCount: body.maxReplicaCount,
+            desiredReplicaCount: body.minReplicaCount,
+            replicaStats: { readyReplicaCount: 0 },
+            placement: body.placement,
+            request: body,
+          };
+          deployments.set(id, dep);
+          return { data: dep };
         }
         throw notFound();
       }),
       get: jest.fn(async (url: string, config: any) => {
         authed(config);
-        const { kind, id, verb } = parse(url);
-        if (kind === 'models') {
-          const model = models.get(id!);
-          if (!model) throw notFound();
-          if (verb === 'validateUpload') {
-            if (model.files.some((f: string) => !model.uploaded.has(f))) {
-              throw Object.assign(new Error('400'), { response: { status: 400, data: { code: 9, message: 'files are still landing', status: 'FAILED_PRECONDITION' } } });
-            }
-            model.state = 'READY';
-            return { data: {} };
-          }
-          return { data: model };
+        const model = modelId(url);
+        if (model && url.includes('/models/')) {
+          const m = models.get(model);
+          if (!m) throw notFound();
+          return { data: m };
         }
-        const d = deployments.get(id!);
-        if (!d) throw notFound();
-        // The fixture comes up on the first read after creation.
-        if (d.state === 'CREATING') {
-          d.state = 'READY';
-          d.replicaCount = d.desiredReplicaCount;
-          d.replicaStats = { readyReplicaCount: d.desiredReplicaCount };
+        const dep = deployments.get(deploymentId(url)!);
+        if (!dep) throw notFound();
+        // The fixture brings replicas up on the first read after creation.
+        if (dep.state === 'CREATING') {
+          dep.state = 'READY';
+          dep.replicaStats = { readyReplicaCount: Math.max(Number(dep.minReplicaCount ?? 0), 1) };
         }
-        return { data: d };
-      }),
-      put: jest.fn(async (url: string, body: any, config: any) => {
-        const m = url.match(/fw-uploads\/([^/]+)\/(.+)\?/);
-        const model = models.get(m![1]);
-        if (!model) throw notFound();
-        model.uploaded.add(m![2]);
-        puts.push({ url, headers: config.headers, size: Buffer.isBuffer(body) ? body.length : -1 });
-        return { status: 200, data: '' };
+        return { data: dep };
       }),
       patch: jest.fn(async (url: string, body: any, config: any) => {
         authed(config);
-        const { id, verb } = parse(url);
-        const d = deployments.get(id!);
-        if (!d) throw notFound();
-        if (verb === 'scale') {
-          d.desiredReplicaCount = body.replicaCount;
-          d.replicaCount = body.replicaCount;
-          d.replicaStats = { readyReplicaCount: body.replicaCount };
-          return { data: {} };
+        const dep = deployments.get(deploymentId(url)!);
+        if (!dep) throw notFound();
+        if (url.endsWith(':scale')) {
+          dep.replicaStats = { readyReplicaCount: Number(body.replicaCount ?? 0) };
+          dep.desiredReplicaCount = Number(body.replicaCount ?? 0);
+        } else {
+          dep.minReplicaCount = body.minReplicaCount;
+          dep.maxReplicaCount = body.maxReplicaCount;
         }
-        Object.assign(d, body);
-        return { data: d };
+        return { data: dep };
       }),
       delete: jest.fn(async (url: string, config: any) => {
         authed(config);
-        const { id } = parse(url);
-        if (!deployments.delete(id!)) throw notFound();
+        if (!deployments.delete(deploymentId(url)!)) throw notFound();
         return { data: {} };
       }),
     } as any,
   };
 }
 
-const fixtureFiles = [
-  { name: 'config.json', size: 12 },
-  { name: 'model.safetensors', size: 40 },
-  { name: 'tokenizer.json', size: 8 },
-  { name: 'almyty-manifest.json', size: 5 },
-];
-const fixtureSource = (): ModelFileSource => ({
-  list: async () => fixtureFiles,
-  open: async (name) => Buffer.alloc(fixtureFiles.find((f) => f.name === name)!.size, 1),
-});
-const noSleep = async () => undefined;
 const live = liveRequested('fireworks');
 const fixture = fixtureHttp();
-const adapter = () => (live ? new FireworksAdapter() : new FireworksAdapter(fixture.http, noSleep, fixtureSource));
-const creds = live ? { apiKey: process.env.FIREWORKS_API_KEY } : { apiKey: 'fw_valid' };
-const account = live ? process.env.FIREWORKS_ACCOUNT : 'almyty-test';
+const adapter = () => (live ? new FireworksAdapter() : new FireworksAdapter(fixture.http));
 
 runConformance(live ? 'fireworks (LIVE)' : 'fireworks (fixture)', {
   adapter,
-  credentials: creds,
+  credentials: live ? { apiKey: process.env.FIREWORKS_API_KEY } : { apiKey: 'fw_valid' },
   badCredentials: { apiKey: 'fw_expired' },
-  tinyVersion: { id: 'v1', name: 'qwen3-0.6b', registryUri: 'hf://Qwen/Qwen3-0.6B@main', base: 'qwen3-0.6b', quantizations: [], manifestSha: 'sha' },
-  providerConfig: { account, acceleratorType: 'NVIDIA_H100_80GB', region: 'GLOBAL' },
-  quotaExceededConfig: live ? undefined : { account, acceleratorType: 'NVIDIA_GB300' },
+  tinyVersion: {
+    id: 'v1',
+    name: 'qwen3-0.6b',
+    // Fireworks deploys a model that already lives in an account.
+    registryUri: live ? (process.env.FIREWORKS_TEST_MODEL as string) : 'fireworks://accounts/fireworks/models/qwen3-0p6b',
+    base: 'qwen3-0.6b',
+    quantizations: [],
+    manifestSha: 'sha',
+  },
+  providerConfig: { account: live ? process.env.FIREWORKS_ACCOUNT : ACCOUNT, acceleratorType: 'NVIDIA_H100_80GB', deploymentShape: 'minimal' },
+  quotaExceededConfig: live ? undefined : { account: ACCOUNT, acceleratorType: 'NVIDIA_B300_288GB' },
   vanish: live ? undefined : (_adapter, ref) => { fixture.deployments.delete(ref.deploymentId); },
   chat: live ? undefined : async () => 'fixture reply',
-  readyTimeoutMs: live ? 45 * 60_000 : 5_000,
+  readyTimeoutMs: live ? 30 * 60_000 : 5_000,
 });
 
 describe('fireworks request shape', () => {
-  const s3Version = { id: 'v-1', name: 'q', registryUri: 's3://registry/models/q@etag', base: 'qwen3-0.6b', quantizations: [], manifestSha: 'sha1' };
-  const cfg = { account: 'almyty-test' };
-
-  it('uploads an S3 registry version file by file to the signed URLs, validates, then deploys the model', async () => {
-    const f = fixtureHttp();
-    const a = new FireworksAdapter(f.http, noSleep, fixtureSource);
-    const ref = await a.deploy(
-      { deploymentId: 'abc-123', organizationId: 'org', version: s3Version, desired: { replicas: 1, minScale: 0, maxScale: 2, region: 'EU_FRANKFURT_1' }, providerConfig: { ...cfg, acceleratorCount: 2, precision: 'FP8', scaleToZeroWindow: '10m' } },
-      { apiKey: 'fw_valid', registryAccessKeyId: 'AK', registrySecretAccessKey: 'SK' },
+  const version = (registryUri: string) => ({ id: 'v-1', name: 'q', registryUri, base: 'qwen3-0.6b', quantizations: [], manifestSha: 's' });
+  const deploy = (f: ReturnType<typeof fixtureHttp>, registryUri: string, providerConfig: Record<string, any> = {}, desired: Record<string, any> = {}) =>
+    new FireworksAdapter(f.http).deploy(
+      { deploymentId: 'abc-123', organizationId: 'org', version: version(registryUri), desired: { replicas: 1, minScale: 0, maxScale: 2, ...desired }, providerConfig: { account: ACCOUNT, ...providerConfig } },
+      { apiKey: 'fw_valid' },
     );
-    const posts = f.http.post.mock.calls;
-    expect(posts[0][0]).toBe('https://api.fireworks.ai/v1/accounts/almyty-test/models');
-    expect(posts[0][1]).toEqual({
-      modelId: 'almyty-v-v1',
-      model: { displayName: 'q', description: 'almyty version v-1', kind: 'HF_BASE_MODEL', baseModelDetails: { checkpointFormat: 'HUGGINGFACE', worldSize: 1, huggingfaceFiles: ['config.json', 'model.safetensors', 'tokenizer.json'] } },
-    });
-    expect(posts[0][2].headers.Authorization).toBe('Bearer fw_valid');
-    expect(posts[1][0]).toBe('https://api.fireworks.ai/v1/accounts/almyty-test/models/almyty-v-v1:getUploadEndpoint');
-    expect(posts[1][1]).toEqual({ filenameToSize: { 'config.json': 12, 'model.safetensors': 40, 'tokenizer.json': 8 }, enableResumableUpload: false });
-    // Three files, streamed with the exact length range and no bearer token on the storage host.
-    expect(f.puts.map((p) => [p.url.split('?')[0].split('/').pop(), p.size, p.headers['x-goog-content-length-range']])).toEqual([
-      ['config.json', 12, '12,12'], ['model.safetensors', 40, '40,40'], ['tokenizer.json', 8, '8,8'],
-    ]);
-    expect(f.puts.every((p) => !p.headers.Authorization)).toBe(true);
-    expect(f.http.get.mock.calls.some((c: any[]) => String(c[0]).endsWith('/models/almyty-v-v1:validateUpload'))).toBe(true);
-    expect(posts[2][0]).toBe('https://api.fireworks.ai/v1/accounts/almyty-test/deployments');
-    expect(posts[2][2].params).toEqual({ deploymentId: 'almyty-d-abc123' });
-    expect(posts[2][1]).toEqual({
-      baseModel: 'accounts/almyty-test/models/almyty-v-v1',
+
+  it('deploys a model that already lives in the account, on a validated shape', async () => {
+    const f = fixtureHttp();
+    const ref = await deploy(f, 'fireworks://accounts/fireworks/models/qwen3-0p6b', { deploymentShape: 'throughput', region: 'US' });
+    const [url, body, config] = f.http.post.mock.calls[0];
+    expect(url).toBe(`https://api.fireworks.ai/v1/accounts/${ACCOUNT}/deployments`);
+    expect(config.params).toEqual({ deploymentId: 'almyty-d-abc123' });
+    expect(body).toEqual({
+      baseModel: 'accounts/fireworks/models/qwen3-0p6b',
       displayName: 'almyty abc-123',
       minReplicaCount: 0,
       maxReplicaCount: 2,
-      acceleratorType: 'NVIDIA_H100_80GB',
-      acceleratorCount: 2,
-      precision: 'FP8',
-      autoscalingPolicy: { scaleToZeroWindow: '10m' },
-      placement: { region: 'EU_FRANKFURT_1' },
+      deploymentShape: 'throughput',
+      autoscalingPolicy: { scaleToZeroWindow: '1h' },
+      placement: { multiRegion: 'US' },
     });
-    expect(JSON.stringify(posts.map((c) => c[1]))).not.toContain('SK');
-    expect(ref.url).toBe('https://api.fireworks.ai/inference/v1');
-    expect(ref.name).toBe('accounts/almyty-test/deployments/almyty-d-abc123');
+    expect(ref).toMatchObject({ account: ACCOUNT, deploymentId: 'almyty-d-abc123', singleRegion: false, url: 'https://api.fireworks.ai/inference/v1' });
+  });
+
+  it('marks a single-region placement, which carries the 1.5x premium', async () => {
+    const f = fixtureHttp();
+    const ref = await deploy(f, 'fireworks://accounts/x/models/y', {}, { region: 'US_IOWA_1' });
+    expect(f.http.post.mock.calls[0][1].placement).toEqual({ region: 'US_IOWA_1' });
     expect(ref.singleRegion).toBe(true);
+    // 3600 metered GPU-seconds of an H100 at 800 cents, times the single-region premium.
+    expect((await new FireworksAdapter(f.http).costSnapshot(ref, { apiKey: 'fw_valid' })).spentCents).toBe(1200);
   });
 
-  it('uploads a hub version with its Hugging Face URL and places it in a multi-region', async () => {
+  it('refuses a hub version outright: Fireworks has no Hugging Face import for inference', async () => {
     const f = fixtureHttp();
-    const a = new FireworksAdapter(f.http, noSleep, fixtureSource);
-    await a.deploy(
-      { deploymentId: 'd', organizationId: 'org', version: { id: 'v2', name: 'q', registryUri: 'hf://Qwen/Qwen3-0.6B@abc123', base: 'qwen3', quantizations: [], manifestSha: 's' }, desired: {}, providerConfig: { ...cfg, region: 'EUROPE' } },
-      { apiKey: 'fw_valid', hfToken: 'hf_secret' },
+    await expect(deploy(f, 'hf://Qwen/Qwen3-0.6B@main')).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_SOURCE' });
+    await expect(deploy(f, 'hf://Qwen/Qwen3-0.6B@main')).rejects.toThrow(/no Hugging Face import for inference/);
+    expect(f.http.post).not.toHaveBeenCalled();
+    expect(f.http.get).not.toHaveBeenCalled();
+  });
+
+  it('points the operator at the documented object-storage import when the model is not in the account yet', async () => {
+    const f = fixtureHttp();
+    await expect(deploy(f, 's3://registry/models/q@etag')).rejects.toMatchObject({ code: 'ADAPTER_UNSUPPORTED_SOURCE' });
+    // Fireworks reads the bucket itself; almyty never streams the checkpoint.
+    await expect(deploy(f, 's3://registry/models/q@etag')).rejects.toThrow(
+      /firectl model create almyty-v-v1 s3:\/\/registry\/models\/q --role-arn/,
     );
-    const posts = f.http.post.mock.calls;
-    expect(posts[0][1].model.huggingFaceUrl).toBe('https://huggingface.co/Qwen/Qwen3-0.6B');
-    expect(posts[2][1].placement).toEqual({ multiRegion: 'EUROPE' });
-    expect(posts[2][1].precision).toBeUndefined();
-    expect(JSON.stringify(posts.map((c) => c[1]))).not.toContain('hf_secret');
+    await expect(deploy(f, 's3://registry/models/q@etag')).rejects.toThrow(/almyty does not stream weights/);
+    expect(f.http.post).not.toHaveBeenCalled();
   });
 
-  it('reuses a READY model for the same version and deploys a fireworks:// URI without uploading', async () => {
+  it('deploys an object-storage version once the operator has imported it', async () => {
     const f = fixtureHttp();
-    const a = new FireworksAdapter(f.http, noSleep, fixtureSource);
-    await a.upload(s3Version, { apiKey: 'fw_valid' }, cfg);
-    const putsAfterFirst = f.puts.length;
-    const again = await a.upload(s3Version, { apiKey: 'fw_valid' }, cfg);
-    expect(again.registryUri).toBe('fireworks://accounts/almyty-test/models/almyty-v-v1@sha1');
-    expect(f.puts.length).toBe(putsAfterFirst);
-    await a.deploy({ deploymentId: 'd', organizationId: 'org', version: { ...s3Version, registryUri: again.registryUri }, desired: {}, providerConfig: cfg }, { apiKey: 'fw_valid' });
-    expect(f.http.post.mock.calls.filter((c: any[]) => String(c[0]).endsWith('/models'))).toHaveLength(1);
+    f.models.set('almyty-v-v1', { name: `accounts/${ACCOUNT}/models/almyty-v-v1`, state: 'READY', kind: 'HF_BASE_MODEL' });
+    const ref = await deploy(f, 's3://registry/models/q@etag');
+    expect(f.http.post.mock.calls[0][1].baseModel).toBe(`accounts/${ACCOUNT}/models/almyty-v-v1`);
+    expect(ref.baseModel).toBe(`accounts/${ACCOUNT}/models/almyty-v-v1`);
   });
 
-  it('keeps polling validateUpload through FAILED_PRECONDITION until the files land', async () => {
+  it('refuses to deploy an imported model that is still UPLOADING', async () => {
     const f = fixtureHttp();
-    const a = new FireworksAdapter(f.http, noSleep, fixtureSource);
-    const real = f.http.get.getMockImplementation()!;
-    let validateCalls = 0;
-    f.http.get.mockImplementation(async (url: string, config: any) => {
-      // The first validation sees files still landing; the second sees them all.
-      if (url.endsWith(':validateUpload') && validateCalls++ === 0) {
-        throw Object.assign(new Error('400'), { response: { status: 400, data: { code: 9, message: 'files are still landing', status: 'FAILED_PRECONDITION' } } });
-      }
-      return real(url, config);
-    });
-    const result = await a.upload(s3Version, { apiKey: 'fw_valid' }, cfg);
-    expect(validateCalls).toBe(2);
-    expect(result.registryUri).toBe('fireworks://accounts/almyty-test/models/almyty-v-v1@sha1');
-    expect(f.models.get('almyty-v-v1').state).toBe('READY');
+    f.models.set('almyty-v-v1', { name: `accounts/${ACCOUNT}/models/almyty-v-v1`, state: 'UPLOADING' });
+    await expect(deploy(f, 's3://registry/models/q@etag')).rejects.toMatchObject({ code: 'ADAPTER_ERROR' });
+    expect(f.http.post).not.toHaveBeenCalled();
   });
 
-  it('scales by patching the floor then :scale, reports zero replicas as stopped, and prices per GPU hour', async () => {
+  it('scales the floor and the live count, and reads scaled-to-zero as stopped', async () => {
     const f = fixtureHttp();
-    const a = new FireworksAdapter(f.http, noSleep, fixtureSource);
-    const ref = await a.deploy({ deploymentId: 'd', organizationId: 'org', version: s3Version, desired: { maxScale: 3, region: 'US_IOWA_1' }, providerConfig: { ...cfg, acceleratorType: 'NVIDIA_B200_180GB', acceleratorCount: 2 } }, { apiKey: 'fw_valid' });
+    const a = new FireworksAdapter(f.http);
+    const ref = await deploy(f, 'fireworks://accounts/x/models/y');
     expect((await a.readEndpoint(ref, { apiKey: 'fw_valid' })).state).toBe('ready');
-    // 1300 cents per GPU hour, two GPUs, single region premium 1.5, one replica.
-    expect((await a.costSnapshot(ref, { apiKey: 'fw_valid' })).ratePerHourCents).toBe(3900);
+    expect((await a.costSnapshot(ref, { apiKey: 'fw_valid' })).ratePerHourCents).toBe(800);
+
     await a.scale(ref, 0, { apiKey: 'fw_valid' });
-    expect(f.http.patch.mock.calls[0][0]).toBe('https://api.fireworks.ai/v1/accounts/almyty-test/deployments/almyty-d-d');
-    expect(f.http.patch.mock.calls[0][1]).toEqual({ baseModel: 'accounts/almyty-test/models/almyty-v-v1', minReplicaCount: 0, maxReplicaCount: 3 });
-    expect(f.http.patch.mock.calls[1][0]).toBe('https://api.fireworks.ai/v1/accounts/almyty-test/deployments/almyty-d-d:scale');
+    expect(f.http.patch.mock.calls[0][1]).toEqual({ baseModel: 'accounts/x/models/y', minReplicaCount: 0, maxReplicaCount: 2 });
     expect(f.http.patch.mock.calls[1][1]).toEqual({ replicaCount: 0 });
-    expect((await a.readEndpoint(ref, { apiKey: 'fw_valid' })).state).toBe('stopped');
+    const stopped = await a.readEndpoint(ref, { apiKey: 'fw_valid' });
+    expect(stopped.state).toBe('stopped');
     expect((await a.costSnapshot(ref, { apiKey: 'fw_valid' })).ratePerHourCents).toBe(0);
-    await a.scale(ref, 2, { apiKey: 'fw_valid' });
-    expect((await a.readEndpoint(ref, { apiKey: 'fw_valid' })).replicas).toBe(2);
-    await a.teardown(ref, { apiKey: 'fw_valid' });
-    expect(f.http.delete.mock.calls[0][1].params).toEqual({ ignoreChecks: true });
-    await expect(a.teardown(ref, { apiKey: 'fw_valid' })).resolves.toBeUndefined();
+  });
+
+  it('falls back to rate times uptime when billing is not readable', async () => {
+    const f = fixtureHttp();
+    const a = new FireworksAdapter(f.http);
+    const ref = await deploy(f, 'fireworks://accounts/x/models/y');
+    f.http.post.mockImplementation(async (url: string) => {
+      if (url.endsWith(':query')) throw Object.assign(new Error('403'), { response: { status: 403, data: { status: 'PERMISSION_DENIED' } } });
+      throw new Error('unexpected');
+    });
+    const snapshot = await a.costSnapshot(ref, { apiKey: 'fw_valid' });
+    expect(snapshot.spentCents).toBeGreaterThanOrEqual(0);
+    expect(snapshot.ratePerHourCents).toBe(800);
   });
 
   it('maps every documented deployment state', async () => {
     const f = fixtureHttp();
-    const a = new FireworksAdapter(f.http, noSleep, fixtureSource);
-    const ref = await a.deploy({ deploymentId: 'd', organizationId: 'org', version: s3Version, desired: {}, providerConfig: cfg }, { apiKey: 'fw_valid' });
-    const d = f.deployments.get(ref.deploymentId);
-    for (const [raw, expected] of Object.entries({ CREATING: 'deploying', READY: 'ready', UPDATING: 'scaling', DELETING: 'stopped', DELETED: 'missing', FAILED: 'failed' })) {
-      d.state = raw;
+    const a = new FireworksAdapter(f.http);
+    const ref = await deploy(f, 'fireworks://accounts/x/models/y');
+    const dep = f.deployments.get(ref.deploymentId);
+    for (const [raw, want] of Object.entries({ CREATING: 'deploying', READY: 'ready', UPDATING: 'scaling', DELETING: 'stopped', DELETED: 'missing', FAILED: 'failed' })) {
+      dep.state = raw;
+      dep.replicaStats = { readyReplicaCount: 1 };
       const actual = await a.readEndpoint(ref, { apiKey: 'fw_valid' });
-      // The fixture flips CREATING to READY on read, like a deployment that came up.
-      expect(actual.state).toBe(raw === 'CREATING' ? 'ready' : expected);
+      // The fixture brings CREATING up on read, like a deployment that came ready.
+      expect(actual.state).toBe(raw === 'CREATING' ? 'ready' : want);
     }
   });
 });

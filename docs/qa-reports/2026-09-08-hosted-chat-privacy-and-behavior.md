@@ -61,6 +61,8 @@ Live regression results:
 - Fictional renewal clause: correctly explains 12-month renewal, cancellation at least 60 days before renewal, and a fee increase of up to 15%; offers questions to ask.
 - “Which specific product or company do you support?”: explicitly says the demo is not connected to a particular company's product or account system.
 - Final three-turn retest completed on September 9 in a fresh conversation: greeting identifies an unconnected demo; product question explains its scope; contract request asks for the text and offers a plain-language review. The screenshot below records this sequence.
+- Additional live check on September 9 at approximately 11:42 UTC: supplied fictional renewal, 60-day cancellation, and 15% price-increase terms in that conversation. The assistant returned an explanation and four questions for counsel; it did not reproduce the blanket refusal or busy/no-response state.
+- Fresh post-deploy conversation at approximately 16:37 UTC, after staging rollout #593: the assistant again identified itself as an unconnected customer-support demo and offered to explain a pasted fictional contract clause. No busy/no-response error appeared.
 
 This configuration change does not add product knowledge or document-upload support. A real product deployment still needs its own product context and tools. Start a new chat when retesting so earlier refusals do not shape the conversation.
 
@@ -69,5 +71,7 @@ This configuration change does not add product knowledge or document-upload supp
 - [Owner privacy settings](../../docs-site/public/screenshots/apps-settings.png)
 - [Hosted privacy menu](../../docs-site/public/screenshots/apps-hosted-chat-privacy.png)
 - [Contract review after the fix](chat-contract-review-after.png)
+- [Fictional clause explanation and questions for counsel](chat-fictional-clause-review-after.png)
+- [Fresh post-deploy scope and contract-review response](chat-post-deploy-after.png)
 
 The docs now distinguish shared-memory opt-in from its off-by-default behavior and describe the new visitor identity after full deletion.

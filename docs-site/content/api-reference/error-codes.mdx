@@ -210,10 +210,13 @@ The [Models API](/api-reference/models-api) and [Connections API](/api-reference
 | `MODEL_NOT_FOUND` | 400 | The provider does not serve the configured model; the card is marked `failed` |
 | `MODEL_NOT_CALLABLE` | 400 | A card needs a `providerId` or an `endpointRef.url` |
 | `MODEL_EXISTS` | 400 | A card for that provider and vendor id (or that name, for an endpoint) already exists; the message carries its id |
-| `REGISTRY_NOT_CONNECTED` | 400 | The organization has no registry connection, so an `s3://` version cannot be registered or deployed |
+| `MODEL_REQUIRED` | 400 | `POST /model-deployments` named neither `model` nor `modelVersionId` |
+| `REGISTRY_NOT_CONNECTED` | 400 | The organization has no registry connection; only reachable by an `s3://` version, and only for the adapters that read one directly (`aws-bedrock-import`, `sagemaker`, `fireworks`, `baseten`) |
 | `VERSION_IN_USE` | 409 | A deployment that is not torn down still references the version |
 | `ADAPTER_UNKNOWN` | 400 | `providerType` names no registered adapter |
-| `ADAPTER_UNSUPPORTED_OPERATION` | 400 | The adapter cannot do this (deploy through `custom-endpoint`, more than one replica per VM, a registry source it does not read) |
+| `ADAPTER_UNSUPPORTED_SOURCE` | 400 | The model's scheme is not one this adapter reads; the response's `accepts` array lists what is |
+| `ADAPTER_UNSUPPORTED_ARCHITECTURE` | 400 | The adapter declares a fixed set of architectures and the model's `base` isn't one of them |
+| `ADAPTER_UNSUPPORTED_OPERATION` | 400 | The adapter cannot do this at all (deploy, scale or teardown through `custom-endpoint`; more than one replica per VM) |
 | `ADAPTER_AUTH` | 401 | The provider rejected the deployment's credential |
 | `ADAPTER_ERROR` | provider's | The provider refused the request; `lastError` on the deployment carries its message |
 | `CONNECTION_VALIDATION_FAILED` | 422 | The provider rejected the credential; the connection is kept with health `failed` |

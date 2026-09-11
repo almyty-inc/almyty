@@ -20,9 +20,30 @@ describe('@almyty/models', () => {
     expect(registerEndpointBody({ ...flags, 'api-key': 'k' }).apiKey).toBe('k');
   });
 
-  it('builds a deploy body and rejects bad JSON', () => {
+  it('takes the model as the positional argument, because naming it is configuration', () => {
+    const a = parseArgs(['deploy', 'hf://Qwen/Qwen3-0.6B@main', '--adapter', 'huggingface-endpoints', '--base', 'qwen3']);
+    expect(deployBody(a.flags, a.positional)).toEqual({ providerType: 'huggingface-endpoints', model: 'hf://Qwen/Qwen3-0.6B@main', base: 'qwen3' });
+
+    const b = parseArgs(['deploy', 'fireworks://accounts/acme/models/qwen3', '--adapter', 'fireworks']);
+    expect(deployBody(b.flags, b.positional)).toEqual({ providerType: 'fireworks', model: 'fireworks://accounts/acme/models/qwen3' });
+  });
+
+  it('still takes a registered version, and never sends both', () => {
     const flags = parseArgs(['deploy', '--model-version', 'v1', '--adapter', 'modal', '--config', '{"tokenId":"a"}', '--desired', '{"replicas":1}', '--budget', 'b1']).flags;
     expect(deployBody(flags)).toEqual({ modelVersionId: 'v1', providerType: 'modal', providerConfig: { tokenId: 'a' }, desired: { replicas: 1 }, budgetId: 'b1' });
+
+    const both = parseArgs(['deploy', 'hf://Qwen/Qwen3-0.6B@main', '--model-version', 'v1', '--adapter', 'modal']);
+    const body = deployBody(both.flags, both.positional);
+    expect(body).toMatchObject({ modelVersionId: 'v1' });
+    expect(body.model).toBeUndefined();
+  });
+
+  it('names the catalog card with --card, so --model is free for the model itself', () => {
+    const a = parseArgs(['deploy', 'hf://Qwen/Qwen3-0.6B@main', '--adapter', 'modal', '--card', 'card-1']);
+    expect(deployBody(a.flags, a.positional).modelId).toBe('card-1');
+  });
+
+  it('rejects bad JSON', () => {
     expect(() => deployBody({ 'model-version': 'v1', adapter: 'modal', config: '{oops' })).toThrow('--config must be valid JSON');
   });
 

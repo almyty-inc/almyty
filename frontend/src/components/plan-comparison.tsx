@@ -27,7 +27,7 @@ export function PlanComparison({ currentPlan }: { currentPlan?: string }) {
       <CardHeader>
         <CardTitle>Compare plans</CardTitle>
         <CardDescription>
-          What each tier includes. Your current plan is highlighted.
+          What each plan includes. Your current plan is highlighted.
         </CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto">

@@ -1,6 +1,6 @@
 # Providers
 
-A provider is a key almyty calls a vendor with. Add one and its models become [cards](/models) in the background; the first passing health check makes the default model selectable, and the router can pick it. almyty ships 24 provider types, and any server that speaks the OpenAI chat API can be registered without one.
+A provider is a key almyty calls a vendor with. Add one and its models become [cards](/models) in the background; the first passing health check makes the default model selectable, and the router can pick it. almyty ships 31 provider types, and any server that speaks the OpenAI chat API can be registered without one.
 
 ![Models page](/screenshots/models.png)
 
@@ -9,53 +9,91 @@ Adding, testing and editing a provider in the dashboard is described in [AI Mode
 ## Two kinds of vendor
 
 - **Call-only vendors** host models and answer chat requests. almyty calls them with your key. That is every entry below.
-- **Deployment providers** run weights you own. Those are [adapters](/models/deployments), and a few names appear on both lists (Together, Fireworks, Baseten, Nebius) because the vendor both hosts a catalog and rents GPUs.
+- **Deployment providers** run weights you own or point at a platform's own hosted catalog. Those are [adapters](/models/deployments). A few names appear on both lists (Together, Fireworks, Baseten, Nebius, DigitalOcean, Modal) because the vendor both serves a call-only catalog and rents dedicated capacity.
+
+DigitalOcean is the clearest case of both: Gradient Serverless Inference is a provider row here, call-only, no deployment involved. Gradient Dedicated Inference is a [deployment adapter](/models/deployments#digitalocean) that reserves GPUs. They are different products behind the same account.
+
+## Verification
+
+Every row below was checked against the vendor's current documentation on 2026-09-09, with a source URL per row in `docs/design/call-only-vendors.md`. Where a doc was ambiguous, an unauthenticated HTTP or DNS probe filled the gap. No live API key was used for any of it: nothing here was tested against a real account. Anything a vendor's docs do not state is marked "not documented" rather than assumed.
 
 ## Provider types
 
-| Type | Vendor | Default base URL | Live model list | Dispatch |
-|---|---|---|---|---|
-| `openai` | OpenAI | `https://api.openai.com/v1` | yes | OpenAI-compatible |
-| `anthropic` | Anthropic | `https://api.anthropic.com/v1` | yes | native |
-| `google` | Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | yes | native |
-| `mistral` | Mistral | `https://api.mistral.ai/v1` | yes | OpenAI-compatible |
-| `xai` | xAI | `https://api.x.ai/v1` | yes | OpenAI-compatible |
-| `deepseek` | DeepSeek | `https://api.deepseek.com/v1` | yes | OpenAI-compatible |
-| `groq` | Groq | `https://api.groq.com/openai/v1` | yes | OpenAI-compatible |
-| `together` | Together | `https://api.together.xyz/v1` | yes | OpenAI-compatible |
-| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | yes | OpenAI-compatible |
-| `azure_openai` | Azure OpenAI | `https://<resource>.openai.azure.com/openai/deployments/<deployment>` | no (deployment name) | OpenAI-compatible |
-| `aws_bedrock` | AWS Bedrock | `https://bedrock-runtime.<region>.amazonaws.com` | no | no chat dispatch yet, so its cards never validate and never route |
-| `cohere` | Cohere | `https://api.cohere.ai/v2` | yes | native |
-| `huggingface` | Hugging Face Inference | `https://api-inference.huggingface.co/models` | no | native |
-| `ollama` | Ollama, local or cloud | `http://localhost:11434` (`/v1` is appended) | yes (`/api/tags`) | OpenAI-compatible |
-| `fireworks` | Fireworks AI | `https://api.fireworks.ai/inference/v1` | yes, with a key | OpenAI-compatible |
-| `cerebras` | Cerebras | `https://api.cerebras.ai/v1` | yes | OpenAI-compatible |
-| `deepinfra` | DeepInfra | `https://api.deepinfra.com/v1/openai` | yes, with a key | OpenAI-compatible |
-| `novita` | Novita | `https://api.novita.ai/openai` | yes, public | OpenAI-compatible |
-| `perplexity` | Perplexity | `https://api.perplexity.ai/router/v1` | yes, with a key | OpenAI-compatible |
-| `zai` | Z.ai | `https://api.z.ai/api/paas/v4` | not documented; set a model by hand | OpenAI-compatible |
-| `baseten` | Baseten Model API | `https://inference.baseten.co/v1` | yes, with prices and context | OpenAI-compatible |
-| `nebius` | Nebius Token Factory | `https://api.tokenfactory.nebius.com/v1` | yes, with a key | OpenAI-compatible |
-| `sambanova` | SambaNova | `https://api.sambanova.ai/v1` | yes, public | OpenAI-compatible |
-| `custom` | Any OpenAI-compatible server | your `baseUrl` | yes (`GET <base>/models`) | OpenAI-compatible |
+### First-party model vendors
 
-Every native type ships with its default base URL; set `baseUrl` to point at a compatible proxy. The key field takes whatever token the vendor issues and is encrypted at rest.
+| Type | Vendor | Default base URL | Auth | Live model list | Tools | Stream |
+|---|---|---|---|---|---|---|
+| `openai` | OpenAI | `https://api.openai.com/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `anthropic` | Anthropic | `https://api.anthropic.com/v1` | `x-api-key` + `anthropic-version` | yes, requests the documented maximum page size | yes | yes |
+| `google` | Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | `x-goog-api-key` header | yes | yes | yes |
+| `mistral` | Mistral AI | `https://api.mistral.ai/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `xai` | xAI (Grok) | `https://api.x.ai/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `deepseek` | DeepSeek | `https://api.deepseek.com` | `Authorization: Bearer` | yes | yes | yes |
+| `moonshot` | Moonshot (Kimi) | `https://api.moonshot.ai/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `qwen` | Qwen (QwenCloud) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `Authorization: Bearer` | **none documented** | yes | yes |
+| `zai` | Z.ai (GLM) | `https://api.z.ai/api/paas/v4` | `Authorization: Bearer` | **none documented** | yes | yes |
+| `cohere` | Cohere | `https://api.cohere.ai/compatibility/v1` | `Authorization: Bearer` | yes, from the native `/v1/models` | yes | yes |
+| `perplexity` | Perplexity | `https://api.perplexity.ai/v1` (Responses-shaped) | `Authorization: Bearer` | yes, unauthenticated | yes, flat Responses shape | yes |
 
-**Live model list.** Where the vendor serves `GET <base>/models`, the model dropdown is populated from it, a configured model is checked against it on save, and a blank model resolves to the vendor's current default by family (never a hardcoded id). Where the list is not served, set the model explicitly; the health check and the catalog surface the vendor's reason when a listing fails.
+### Aggregators and OpenAI-compatible hosts
 
-**Dispatch.** Sixteen of the types ride one OpenAI-compatible code path: chat, streaming and tool calling all go to `<base>/chat/completions` with a Bearer key. Anthropic, Gemini, Cohere and Hugging Face have their own clients. Nothing vendor-specific is added for an OpenAI-compatible host beyond its base URL, its key page and its price-feed namespace.
+| Type | Vendor | Default base URL | Auth | Live model list | Tools | Stream |
+|---|---|---|---|---|---|---|
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | Bearer + `HTTP-Referer` + `X-OpenRouter-Title` | yes, unauthenticated | yes | yes |
+| `groq` | Groq | `https://api.groq.com/openai/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `together` | Together AI | `https://api.together.ai/v1` | `Authorization: Bearer` | yes (the response is a bare array, not `{data:[...]}`, and the parser handles both) | yes | yes |
+| `fireworks` | Fireworks AI | `https://api.fireworks.ai/inference/v1` | `Authorization: Bearer` | not documented on the OpenAI-compatible surface | yes | yes |
+| `cerebras` | Cerebras | `https://api.cerebras.ai/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `deepinfra` | DeepInfra | `https://api.deepinfra.com/v1/openai` | `Authorization: Bearer` | yes, from `https://api.deepinfra.com/v1/models` (one segment above the chat base) | yes | yes |
+| `novita` | Novita | `https://api.novita.ai/openai/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `baseten` | Baseten | `https://inference.baseten.co/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `nebius` | Nebius Token Factory | `https://api.tokenfactory.nebius.com/v1` | `Authorization: Bearer` | yes | yes | not documented |
+| `sambanova` | SambaNova | `https://api.sambanova.ai/v1` | `Authorization: Bearer` | **none documented** | yes | yes |
+| `huggingface` | Hugging Face | `https://router.huggingface.co/v1` | `Authorization: Bearer hf_...` | yes, with per-provider `supports_tools` and pricing | yes | yes |
+
+### The customer's own cloud
+
+| Type | Vendor | Default base URL | Auth | Live model list | Tools | Stream |
+|---|---|---|---|---|---|---|
+| `azure_openai` | Azure OpenAI | `https://{resource}.openai.azure.com/openai/v1` | `api-key` header | yes, the resource's catalog, not its deployments | yes | yes |
+| `azure_ai_foundry` | Azure AI Foundry | `https://{resource}.services.ai.azure.com/openai/v1` | `Authorization: Bearer` or `api-key` | yes | yes | yes |
+| `aws_bedrock` | AWS Bedrock | `https://bedrock-runtime.{region}.amazonaws.com/openai/v1` | `Authorization: Bearer` (Bedrock API key, no SigV4) | yes | client-side | yes |
+| `vertex_ai` | Google Vertex AI | `https://aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/endpoints/openapi` | `Authorization: Bearer` (short-lived OAuth token) | **none on this surface** | yes | yes |
+
+### Vendor serverless we can call without deploying
+
+| Type | Vendor | Default base URL | Auth | Live model list | Tools | Stream |
+|---|---|---|---|---|---|---|
+| `digitalocean` | DigitalOcean Gradient | `https://inference.do-ai.run/v1` | `Authorization: Bearer` (model access key) | yes | not documented | implied, not shown in a documented example |
+| `runpod` | RunPod | `https://api.runpod.ai/v2/{endpoint}/openai/v1` | `Authorization: Bearer rpa_...` | yes, scoped to that endpoint | per-model | yes |
+| `modal` | Modal | `https://inference.us-west.modal.direct/v1` | `Authorization: Bearer wk-<id>.ws-<secret>` | yes, scoped to the token | implied, not shown | implied, not shown |
+
+### Local and generic
+
+| Type | Vendor | Default base URL | Auth | Live model list | Tools | Stream |
+|---|---|---|---|---|---|---|
+| `ollama` | Ollama | `http://localhost:11434/v1` | none (optional Bearer behind a proxy) | yes, native `GET /api/tags` | yes | yes |
+| `custom` | Custom (any OpenAI-compatible server) | your `baseUrl` | per `custom.authMethod` | yes, `GET <base>/models` | operator's | operator's |
+
+Every native type ships with its default base URL; set `baseUrl` to point at a compatible proxy instead. The key field takes whatever token the vendor issues and is encrypted at rest.
+
+**Live model list.** Where the vendor serves a listing, the model dropdown is populated from it, a configured model is checked against it on save, and a blank model resolves to the vendor's current default by family, never a hardcoded id. Where no listing exists, a blank model resolves to `NO_MODEL_CONFIGURED` rather than a guessed id; the health check and the catalog surface the vendor's own reason when a request still fails.
+
+**Dispatch.** Most types ride the OpenAI-compatible chat client: `<base>/chat/completions` with a Bearer key (or an `api-key` header for the two Azure surfaces). Anthropic, Gemini, Cohere, Perplexity, Vertex AI and Hugging Face have their own request shapes; nothing vendor-specific is added for a plain OpenAI-compatible host beyond its base URL, its auth header, its key page and its price-feed namespace.
 
 ### Notes per vendor
 
-- **Perplexity** is mid-transition. The default base is the OpenAI-compatible Router API (`/router/v1`, private preview). The legacy Sonar endpoint at `https://api.perplexity.ai` still answers chat completions but serves no model list; set it as `baseUrl` with an explicit model.
-- **Z.ai** documents no model list. Set a model; the health check reports the listing error if the vendor rejects the request.
-- **Novita** documents `api.novita.ai/openai`; the older `/v3/openai` base still answers.
-- **Nebius AI Studio** is now Nebius Token Factory; the old host still answers, the docs name the new one.
-- **Ollama** is keyless for a local server. Private URLs are blocked by default; self-hosters opt in with `OLLAMA_ALLOW_PRIVATE_URLS=true`. Ollama Cloud (`https://ollama.com`) takes a key and needs no opt-in. See [AI Models](/llm-providers#local-models-with-ollama).
-- **Hosts that serve other authors' open models** (DeepInfra, Novita, Together, Fireworks, Baseten, Nebius, SambaNova, Cerebras, OpenRouter) are priced from the feed under their own namespace. A DeepSeek model on Novita is never billed at DeepSeek's list price; without a feed quote it is unpriced.
-- **Usage reconciliation.** None of the nine OpenAI-compatible hosts publishes a usage or billing API, so [cost governance](/cost-governance) cannot reconcile estimates against actuals for them.
-- **Replicate** is not a provider type: its API is predictions-based and has no chat completions endpoint to ride.
+- **AWS Bedrock** answers through the `bedrock-runtime` OpenAI-compatible surface with a Bedrock API key sent as a plain bearer token. There is no SigV4 signing. Claude is not served on this surface: the API compatibility matrix lists ChatCompletions as unsupported for every Claude row on Bedrock, so Claude requires the native Converse or Messages API, which almyty does not call here. Models that do work include the OpenAI, xAI, Qwen, Z.ai and Writer families. Model ids are often inference profile ids (`us.`, `global.` prefixed), read from the live list rather than hardcoded.
+- **Azure OpenAI** uses the `/openai/v1` data-plane surface with no `api-version` query string, and the key travels as `api-key`, not `Authorization: Bearer`, because on this surface a bearer token means an Entra ID token and fails. The listing is the resource's catalog, not its deployments, so the deployment name is still what you name as the model.
+- **Vertex AI cannot use a static API key.** Google's docs state that only Google Cloud Auth works on this OpenAI-compatible surface; the credential is a service-account JSON key (or a pasted access token), and a short-lived OAuth token is minted per call. It serves no model list on this surface, so a model must be named at save time. Partner models on Vertex (Claude, Mistral, Grok, Jamba) run through Model Garden's native `:rawPredict`, not this surface, so `vertex_ai` only serves Gemini plus self-deployed endpoints. Llama on Vertex Model-as-a-Service is retired.
+- **Qwen, Z.ai, SambaNova and Fireworks document no model listing** on their OpenAI-compatible surface. A model must be configured at save time; a failure resolves to `NO_MODEL_CONFIGURED` rather than a guessed id.
+- **Azure OpenAI, Azure AI Foundry and Modal cannot be validated by key alone.** `model` is the customer's own deployment or endpoint name, so a valid key against nothing deployed still cannot answer. Modal in particular needs a Shared Endpoint created first from its own dashboard.
+- **RunPod always carries an endpoint id in the URL.** There is no shared base URL: for the public catalog it is a shared model slug, for a private worker it is the customer's own endpoint id. Either way it is a required field.
+- **DigitalOcean's tool calling is not documented** on the Gradient Serverless Inference surface, and streaming is only implied by "OpenAI-compatible" rather than shown in a documented example. **Nebius streaming is not documented** either, though the rest of the surface is OpenAI-compatible. None of these is asserted as working; the health check is what tells you.
+- **Perplexity is Responses-shaped now**, not Chat Completions. The legacy Sonar chat-completions alias retires 2026-09-27; the Router API that would replace it is still private preview. The default base already targets the Responses-shaped surface a paying customer can use today.
+- **Hosts that serve other authors' open models** (DeepInfra, Novita, Together, Fireworks, Baseten, Nebius, SambaNova, Cerebras, RunPod, Modal, OpenRouter) are priced from the feed under their own namespace. A DeepSeek model on RunPod is never billed at DeepSeek's list price; without a feed quote it stays unpriced. DigitalOcean, RunPod and Modal currently have no LiteLLM namespace at all, so models there are unpriced until one exists.
+- **Usage reconciliation.** Only OpenAI and Anthropic document a usage or billing API almyty can ingest, so [cost governance](/cost-governance) cannot reconcile estimates against actuals for anything else.
+- **Replicate** is not a provider type: its API is predictions-based and has no chat-completions endpoint to ride.
 
 ## Keys
 
@@ -89,4 +127,5 @@ Lab box  [qwen3-32b]  local/office  unpriced
 
 - [AI Models](/llm-providers): the provider form, connection test and parameters
 - [Models](/models): cards, validation and pricing
+- [Deployments](/models/deployments): weights you own, or a platform's own hosted catalog
 - [Connections](/connections): keys, sign-in flows and who may use them

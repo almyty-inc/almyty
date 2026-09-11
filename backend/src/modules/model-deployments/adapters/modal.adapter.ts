@@ -1,6 +1,3 @@
-import { promises as fs } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
 import { execFile } from 'child_process';
 
 import {
@@ -14,16 +11,27 @@ import {
 } from './adapter.interface';
 
 /**
- * Modal: the raw-container path and the conformance reference.
+ * Modal Endpoints. Verified shapes are in docs/design/adapters/modal.md.
  *
- * Delta from the spec, recorded in docs/design/models-layer.md: Modal has
- * no HTTP API for deploying or stopping apps. This adapter drives the
- * `modal` CLI in a subprocess with a generated app file that serves the
- * registry version through vLLM, the workspace token in the process
- * environment, `modal app list --json` to observe, and `modal app stop`
- * to tear down. Modal is serverless and scales to zero on its own;
- * "replicas" here is the container concurrency ceiling. The API container
- * must ship the `modal` package.
+ * Modal Endpoints is Modal's managed inference product: Modal builds, runs
+ * and autoscales the serving stack, and we name a model. A Dedicated
+ * Endpoint takes a Hugging Face repo id for the base architecture
+ * (`--model`) and, for a fine-tune, weights from a private Hugging Face
+ * repository (`--custom-hf-repo`) or a Modal Volume the operator already
+ * populated (`--custom-volume-name`). Modal pulls them; nothing passes
+ * through almyty, and almyty never writes to a Volume.
+ *
+ * Delta from the spec: Modal publishes no REST control plane for
+ * Endpoints, so this adapter drives the `modal` CLI in a subprocess with
+ * the workspace token in the process environment. `modal endpoint create`
+ * deploys, `modal endpoint list --json` observes, `modal endpoint stop`
+ * removes. The `--json` key names are not published, so rows are read
+ * through the plausible variants rather than one guessed name.
+ *
+ * The CLI exposes no replica control: a Dedicated Endpoint autoscales,
+ * including to zero, on Modal's side. `scale` therefore records intent on
+ * the handle, and a ceiling of zero reads as stopped at no cost, which is
+ * what an idle Modal endpoint is.
  */
 export type Exec = (cmd: string, args: string[], options: { env: Record<string, string>; timeoutMs: number }) => Promise<{ stdout: string; stderr: string }>;
 
@@ -35,14 +43,48 @@ const defaultExec: Exec = (cmd, args, options) =>
     });
   });
 
+const NAME_KEYS = ['name', 'Name', 'endpoint', 'Endpoint', 'identifier', 'Identifier'];
+const STATE_KEYS = ['state', 'State', 'status', 'Status'];
+const URL_KEYS = ['url', 'Url', 'URL', 'endpoint_url', 'endpointUrl', 'Endpoint URL'];
+
+const STATE_MAP: Record<string, ActualState['state']> = {
+  ready: 'ready',
+  running: 'ready',
+  deployed: 'ready',
+  active: 'ready',
+  creating: 'deploying',
+  starting: 'deploying',
+  pending: 'deploying',
+  provisioning: 'deploying',
+  deploying: 'deploying',
+  updating: 'scaling',
+  stopping: 'stopped',
+  stopped: 'stopped',
+  disabled: 'stopped',
+  failed: 'failed',
+  error: 'failed',
+};
+
 export class ModalAdapter implements ModelProviderAdapter {
   readonly key = 'modal';
-  readonly displayName = 'Modal';
+  readonly displayName = 'Modal Endpoints';
 
   constructor(private readonly exec: Exec = defaultExec, private readonly modalBin = process.env.MODAL_BIN ?? 'modal') {}
 
   capabilities(): AdapterCapabilities {
-    return { architectures: 'any', lora: 'merged', serverless: true, dedicated: false, scaleToZero: true, regions: [], registrySources: ['s3'] };
+    return {
+      architectures: 'any',
+      lora: 'merged',
+      serverless: true,
+      dedicated: true,
+      scaleToZero: true,
+      regions: [],
+      // `--model` is a Hugging Face repo id. A Modal Volume is the other
+      // documented source, but filling one is `modal volume put` from the
+      // operator's own machine: almyty references a Volume, never writes
+      // to it, and never streams weights of its own.
+      registrySources: ['hub'],
+    };
   }
 
   configSchema(): Record<string, any> {
@@ -51,18 +93,21 @@ export class ModalAdapter implements ModelProviderAdapter {
       properties: {
         tokenId: { type: 'string', title: 'Modal token id', 'x-secret': true },
         tokenSecret: { type: 'string', title: 'Modal token secret', 'x-secret': true },
-        workspace: { type: 'string', title: 'Workspace', description: 'Your Modal workspace slug; forms the endpoint URL' },
         environment: { type: 'string', title: 'Environment', description: 'Modal environment; leave empty for the default' },
-        gpu: { type: 'string', title: 'GPU', enum: ['T4', 'L4', 'A10G', 'L40S', 'A100-40GB', 'A100-80GB', 'H100', 'H200', 'B200'], default: 'A10G' },
-        image: { type: 'string', title: 'vLLM image', default: 'vllm/vllm-openai:latest' },
-        maxContainers: { type: 'integer', minimum: 1, default: 1 },
-        scaledownWindowSeconds: { type: 'integer', minimum: 30, default: 300 },
-        hourlyRateCents: { type: 'integer', title: 'GPU price per hour (cents)', description: 'Modal publishes no billing API; used to estimate spend' },
-        registryAccessKeyId: { type: 'string', title: 'Registry access key', 'x-secret': true },
-        registrySecretAccessKey: { type: 'string', title: 'Registry secret key', 'x-secret': true },
-        registryEndpoint: { type: 'string', title: 'Registry endpoint' },
+        model: { type: 'string', title: 'Base model', description: 'Overrides the version: a Hugging Face repo id for the base model architecture' },
+        customHfRepo: { type: 'string', title: 'Custom weights repository', description: 'A Hugging Face repo holding fine-tuned weights, served against the base model' },
+        customHfRevision: { type: 'string', title: 'Custom weights revision' },
+        passHfTokenFlag: { type: 'boolean', title: 'Pass the Hugging Face token as a flag', description: 'Off by default: the token goes in the child process environment so it stays out of the process list', default: false },
+        customVolumeName: { type: 'string', title: 'Modal Volume', description: 'A Volume you already populated with weights; almyty never writes to it' },
+        customVolumePath: { type: 'string', title: 'Path within the Volume' },
+        routingRegion: { type: 'string', title: 'Routing region', description: 'Where inference requests are routed; Modal defaults to us-west' },
+        computeRegions: { type: 'array', items: { type: 'string' }, title: 'Compute regions' },
+        colocateCompute: { type: 'boolean', title: 'Colocate compute with routing', default: false },
+        unauthenticated: { type: 'boolean', title: 'Allow unauthenticated requests', description: 'Off by default; a dedicated endpoint otherwise needs a Modal proxy token', default: false },
+        maxContainers: { type: 'integer', minimum: 0, default: 1 },
+        hourlyRateCents: { type: 'integer', title: 'Price per hour (cents)', description: 'Modal has a billing API but it is plan-gated and not per endpoint; used to estimate spend' },
       },
-      required: ['tokenId', 'tokenSecret', 'workspace'],
+      required: ['tokenId', 'tokenSecret'],
     };
   }
 
@@ -70,137 +115,179 @@ export class ModalAdapter implements ModelProviderAdapter {
     if (!credentials.tokenId || !credentials.tokenSecret) {
       throw Object.assign(new Error('missing Modal token'), { code: 'ADAPTER_AUTH', status: 401 });
     }
-    return { MODAL_TOKEN_ID: credentials.tokenId, MODAL_TOKEN_SECRET: credentials.tokenSecret };
+    return {
+      MODAL_TOKEN_ID: credentials.tokenId,
+      MODAL_TOKEN_SECRET: credentials.tokenSecret,
+      ...(credentials.hfToken ? { HF_TOKEN: credentials.hfToken } : {}),
+    };
   }
 
   private classify(err: any, fallback: string): never {
+    if (typeof err?.code === 'string' && err.code.startsWith('ADAPTER_')) throw err;
     const text = `${err?.stderr ?? ''} ${err?.message ?? ''}`;
     if (/auth|token|unauthori[sz]ed|forbidden/i.test(text)) throw Object.assign(new Error(`credential rejected: ${text.trim().slice(0, 200)}`), { code: 'ADAPTER_AUTH', status: 401 });
     if (/quota|limit|insufficient|credits/i.test(text)) throw Object.assign(new Error(`quota: ${text.trim().slice(0, 200)}`), { code: 'ADAPTER_QUOTA_EXCEEDED', status: 429 });
+    if (/unsupported|no recipe|not compatible|architecture/i.test(text)) {
+      throw Object.assign(new Error(`unsupported model: ${text.trim().slice(0, 200)}`), { code: 'ADAPTER_UNSUPPORTED_ARCHITECTURE' });
+    }
     throw Object.assign(new Error(text.trim().slice(0, 500) || fallback), { code: 'ADAPTER_ERROR' });
   }
 
-  static appName(deploymentId: string): string {
+  static endpointName(deploymentId: string): string {
     return `almyty-${deploymentId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20)}`;
   }
 
-  static endpointUrl(workspace: string, environment: string | undefined, appName: string): string {
-    const source = environment ? `${workspace}-${environment}` : workspace;
-    return `https://${source}--${appName}-serve.modal.run`;
+  /** The Hugging Face repo id Modal is asked to serve. */
+  static baseModel(request: DeployRequest): string {
+    const cfg = request.providerConfig ?? {};
+    if (cfg.model) return String(cfg.model);
+    const uri = request.version.registryUri;
+    if (uri.startsWith('hf://')) return uri.slice('hf://'.length).split('@')[0];
+    throw Object.assign(
+      new Error(
+        'Modal Endpoints serve a Hugging Face repository, optionally with custom weights from a private repo or a Modal Volume; ' +
+          'point the version at hf://org/repo, or set providerConfig.model',
+      ),
+      { code: 'ADAPTER_UNSUPPORTED_SOURCE' },
+    );
   }
 
-  /** The Python app Modal runs: vLLM serving the registry version, weights pulled from S3 at cold start. */
-  static appSource(request: DeployRequest, appName: string): string {
-    const cfg = request.providerConfig;
-    const gpu = request.desired.hardware ?? cfg.gpu ?? 'A10G';
-    const image = cfg.image ?? 'vllm/vllm-openai:latest';
-    const maxContainers = request.desired.replicas ?? cfg.maxContainers ?? 1;
-    const scaledown = cfg.scaledownWindowSeconds ?? 300;
-    const uri = request.version.registryUri.replace(/@[^@]+$/, '');
-    return [
-      'import modal, os, subprocess',
-      `app = modal.App(${JSON.stringify(appName)})`,
-      `image = modal.Image.from_registry(${JSON.stringify(image)}).pip_install("boto3")`,
-      'registry = modal.Secret.from_dict({',
-      '    "AWS_ACCESS_KEY_ID": os.environ.get("ALMYTY_REGISTRY_ACCESS_KEY_ID", ""),',
-      '    "AWS_SECRET_ACCESS_KEY": os.environ.get("ALMYTY_REGISTRY_SECRET_ACCESS_KEY", ""),',
-      `    "AWS_ENDPOINT_URL": ${JSON.stringify(cfg.registryEndpoint ?? '')},`,
-      '})',
-      `@app.function(image=image, gpu=${JSON.stringify(gpu)}, max_containers=${Number(maxContainers)}, scaledown_window=${Number(scaledown)}, secrets=[registry])`,
-      '@modal.web_server(port=8000, startup_timeout=900)',
-      'def serve():',
-      '    import boto3',
-      `    uri = ${JSON.stringify(uri)}`,
-      '    bucket, _, prefix = uri[len("s3://"):].partition("/")',
-      '    s3 = boto3.client("s3", endpoint_url=os.environ.get("AWS_ENDPOINT_URL") or None)',
-      '    os.makedirs("/model", exist_ok=True)',
-      '    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):',
-      '        for obj in page.get("Contents", []):',
-      '            rel = obj["Key"][len(prefix):].lstrip("/")',
-      '            if rel:',
-      '                os.makedirs(os.path.dirname("/model/" + rel) or "/model", exist_ok=True)',
-      '                s3.download_file(bucket, obj["Key"], "/model/" + rel)',
-      '    subprocess.Popen(["python", "-m", "vllm.entrypoints.openai.api_server", "--model", "/model", "--port", "8000", "--served-model-name", ' + JSON.stringify(request.version.name) + '])',
-      '',
-    ].join('\n');
+  /** Arguments for `modal endpoint create`, in the order the CLI documents them. */
+  static createArgs(request: DeployRequest, name: string, credentials: AdapterCredentials): string[] {
+    const cfg = request.providerConfig ?? {};
+    const args = ['endpoint', 'create', '--name', name, '--model', ModalAdapter.baseModel(request)];
+    if (cfg.environment) args.push('--env', String(cfg.environment));
+    if (cfg.routingRegion) args.push('--routing-region', String(cfg.routingRegion));
+    for (const region of cfg.computeRegions ?? []) args.push('--compute-region', String(region));
+    if (cfg.colocateCompute) args.push('--colocate-compute');
+    if (cfg.unauthenticated) args.push('--unauthenticated');
+    if (cfg.customHfRepo) {
+      args.push('--custom-hf-repo', String(cfg.customHfRepo));
+      if (cfg.customHfRevision) args.push('--custom-hf-revision', String(cfg.customHfRevision));
+      // The token is otherwise handed over as HF_TOKEN in the child
+      // environment, where it stays out of the process list.
+      if (cfg.passHfTokenFlag && credentials.hfToken) args.push('--custom-hf-token', credentials.hfToken);
+    }
+    if (cfg.customVolumeName) {
+      args.push('--custom-volume-name', String(cfg.customVolumeName));
+      if (cfg.customVolumePath) args.push('--custom-volume-path', String(cfg.customVolumePath));
+    }
+    return args;
+  }
+
+  private static pick(row: any, keys: string[]): string | undefined {
+    for (const key of keys) {
+      const value = row?.[key];
+      if (value !== undefined && value !== null && value !== '') return String(value);
+    }
+    return undefined;
+  }
+
+  private static rows(stdout: string): any[] {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(stdout || '[]');
+    } catch {
+      return [];
+    }
+    if (Array.isArray(parsed)) return parsed;
+    for (const key of ['endpoints', 'data', 'items', 'rows']) if (Array.isArray(parsed?.[key])) return parsed[key];
+    return [];
+  }
+
+  static urlFromOutput(stdout: string, stderr = ''): string | undefined {
+    return `${stdout}\n${stderr}`.match(/https:\/\/[A-Za-z0-9._~:/?#@!$&'*+,;=%-]*modal\.run[A-Za-z0-9._~:/?#@!$&'*+,;=%-]*/)?.[0]?.replace(/[.,)\]]+$/, '');
+  }
+
+  private async list(ref: { environment?: string | null; [key: string]: any }, credentials: AdapterCredentials): Promise<any[]> {
+    const args = ['endpoint', 'list', '--json', ...(ref.environment ? ['--env', String(ref.environment)] : [])];
+    try {
+      const { stdout } = await this.exec(this.modalBin, args, { env: this.env(credentials), timeoutMs: 60_000 });
+      return ModalAdapter.rows(stdout);
+    } catch (err) {
+      this.classify(err, 'modal endpoint list failed');
+    }
   }
 
   async deploy(request: DeployRequest, credentials: AdapterCredentials): Promise<EndpointRef> {
+    const cfg = request.providerConfig ?? {};
     const env = this.env(credentials);
-    const cfg = request.providerConfig;
-    const appName = ModalAdapter.appName(request.deploymentId);
-    const dir = await fs.mkdtemp(join(tmpdir(), 'almyty-modal-'));
-    const file = join(dir, 'app.py');
-    await fs.writeFile(file, ModalAdapter.appSource(request, appName));
-    const args = ['deploy', file, '--name', appName, ...(cfg.environment ? ['--env', cfg.environment] : [])];
+    const name = ModalAdapter.endpointName(request.deploymentId);
+    const args = ModalAdapter.createArgs(request, name, credentials);
+    let base: string | undefined;
     try {
-      await this.exec(this.modalBin, args, {
-        env: {
-          ...env,
-          ...(credentials.registryAccessKeyId ? { ALMYTY_REGISTRY_ACCESS_KEY_ID: credentials.registryAccessKeyId } : {}),
-          ...(credentials.registrySecretAccessKey ? { ALMYTY_REGISTRY_SECRET_ACCESS_KEY: credentials.registrySecretAccessKey } : {}),
-        },
-        timeoutMs: 15 * 60_000,
-      });
+      const { stdout, stderr } = await this.exec(this.modalBin, args, { env, timeoutMs: 30 * 60_000 });
+      base = ModalAdapter.urlFromOutput(stdout, stderr);
     } catch (err) {
-      this.classify(err, 'modal deploy failed');
-    } finally {
-      await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+      this.classify(err, 'modal endpoint create failed');
+    }
+    if (!base) {
+      // The CLI usually prints the URL; when it does not, the listing has it.
+      const row = (await this.list({ environment: cfg.environment ?? null }, credentials)).find((r) => ModalAdapter.pick(r, NAME_KEYS) === name);
+      base = ModalAdapter.pick(row, URL_KEYS);
     }
     return {
-      appName,
-      workspace: cfg.workspace,
+      endpointName: name,
       environment: cfg.environment ?? null,
-      url: ModalAdapter.endpointUrl(cfg.workspace, cfg.environment, appName),
+      model: ModalAdapter.baseModel(request),
+      endpointUrl: base,
+      url: base ? `${base.replace(/\/+$/, '')}/v1` : undefined,
       maxContainers: request.desired.replicas ?? cfg.maxContainers ?? 1,
-      hourlyRateCents: cfg.hourlyRateCents ?? 0,
       createdAt: new Date().toISOString(),
+      hourlyRateCents: cfg.hourlyRateCents ?? 0,
     };
   }
 
   async readEndpoint(ref: EndpointRef, credentials: AdapterCredentials): Promise<ActualState> {
-    const env = this.env(credentials);
-    let apps: Array<{ name?: string; state?: string; ['App ID']?: string; Name?: string; State?: string }>;
-    try {
-      const { stdout } = await this.exec(this.modalBin, ['app', 'list', '--json', ...(ref.environment ? ['--env', ref.environment] : [])], { env, timeoutMs: 60_000 });
-      apps = JSON.parse(stdout || '[]');
-    } catch (err) {
-      this.classify(err, 'modal app list failed');
+    const rows = await this.list(ref, credentials);
+    const row = rows.find((r) => ModalAdapter.pick(r, NAME_KEYS) === ref.endpointName);
+    if (!row) return { state: 'missing', message: 'endpoint not found in workspace' };
+    const raw = (ModalAdapter.pick(row, STATE_KEYS) ?? '').toLowerCase();
+    const base = ModalAdapter.pick(row, URL_KEYS) ?? ref.endpointUrl;
+    const url = base ? `${String(base).replace(/\/+$/, '')}/v1` : ref.url;
+    const ceiling = Number(ref.maxContainers ?? 1);
+    let state = STATE_MAP[raw] ?? 'deploying';
+    let message: string | undefined;
+    if (state === 'ready' && ceiling === 0) {
+      // Modal keeps the endpoint but sleeps it; at ceiling zero we treat
+      // it as stopped, and Modal bills nothing while it is idle.
+      state = 'stopped';
+      message = 'ceiling 0, endpoint idle at no cost';
     }
-    const row = apps.find((a) => (a.name ?? a.Name) === ref.appName);
-    if (!row) return { state: 'missing', message: 'app not found in workspace' };
-    const state = String(row.state ?? row.State ?? '').toLowerCase();
-    if (state === 'deployed' || state === 'running') {
-      const ceiling = Number(ref.maxContainers ?? 1);
-      if (ceiling === 0) return { state: 'stopped', url: ref.url, replicas: 0, details: { rawState: state, note: 'ceiling 0, idle app sleeps at no cost' } };
-      return { state: 'ready', url: ref.url, replicas: ceiling, details: { rawState: state } };
-    }
-
-    if (state === 'stopped') return { state: 'stopped', url: ref.url, replicas: 0, details: { rawState: state } };
-    return { state: 'deploying', url: ref.url, details: { rawState: state } };
+    return {
+      state,
+      url,
+      openAiBase: url,
+      replicas: state === 'ready' ? ceiling : 0,
+      message,
+      details: { rawState: raw || 'unknown', model: ref.model },
+    };
   }
 
   /**
-   * Modal scales to zero on its own when a web endpoint is idle and bills
-   * nothing while it sleeps, so "replicas" here is only the container
-   * ceiling recorded on the handle. Zero means: leave the app deployed
-   * but count it as stopped; the app goes away only on teardown.
+   * Modal autoscales a dedicated endpoint itself, including to zero, and
+   * the CLI exposes no replica control, so this records the ceiling the
+   * reconcile loop asked for rather than pretending to set one.
    */
   async scale(ref: EndpointRef, replicas: number, _credentials: AdapterCredentials): Promise<void> {
     ref.maxContainers = replicas;
   }
 
   async teardown(ref: EndpointRef, credentials: AdapterCredentials): Promise<void> {
-    const env = this.env(credentials);
+    const args = ['endpoint', 'stop', ref.endpointName, '-y', ...(ref.environment ? ['--env', String(ref.environment)] : [])];
     try {
-      await this.exec(this.modalBin, ['app', 'stop', ref.appName, '-y', ...(ref.environment ? ['--env', ref.environment] : [])], { env, timeoutMs: 120_000 });
+      await this.exec(this.modalBin, args, { env: this.env(credentials), timeoutMs: 120_000 });
     } catch (err: any) {
-      if (/not found|no such app/i.test(`${err?.stderr ?? ''} ${err?.message ?? ''}`)) return;
-      this.classify(err, 'modal app stop failed');
+      if (/not found|no such endpoint/i.test(`${err?.stderr ?? ''} ${err?.message ?? ''}`)) return;
+      this.classify(err, 'modal endpoint stop failed');
     }
   }
 
-  /** Modal publishes no billing API: an estimate from the GPU rate and observed running time. */
+  /**
+   * Modal's billing API is plan-gated and reports per app rather than per
+   * endpoint, so this is an estimate from the configured rate and the time
+   * the endpoint has existed.
+   */
   async costSnapshot(ref: EndpointRef, credentials: AdapterCredentials): Promise<CostSnapshot> {
     const actual = await this.readEndpoint(ref, credentials);
     const rate = Number(ref.hourlyRateCents ?? 0);

@@ -6,7 +6,7 @@ import { DeploymentsList } from '../deployments-list'
 import { makeDeployment, makeVersion, ollamaAdapter, hfAdapter } from './fixtures'
 
 describe('DeploymentsList', () => {
-  it('renders adapter, version, one badge per state, replicas, region, spend and burn rate', () => {
+  it('renders provider, the model reference, one badge per state, replicas, region, spend and burn rate', () => {
     const rows = [
       makeDeployment({ id: 'd-ready', state: 'ready', actual: { state: 'ready', replicas: 1, region: 'eu-west-1', spentCents: 1234, ratePerHourCents: 50 } }),
       makeDeployment({ id: 'd-deploying', state: 'deploying', providerType: 'huggingface-endpoints', desired: { replicas: 2, region: 'us-east-1' } }),
@@ -17,7 +17,8 @@ describe('DeploymentsList', () => {
 
     expect(screen.getAllByText('Ollama').length).toBe(3)
     expect(screen.getByText('Hugging Face Endpoints')).toBeInTheDocument()
-    expect(screen.getAllByText('support-bot-v3').length).toBe(4)
+    // The model is configuration on every one of these: no version row anywhere.
+    expect(screen.getAllByText('hf://acme/support-bot-v3@e3b0c442').length).toBe(4)
 
     expect(screen.getByText('ready')).toBeInTheDocument()
     expect(screen.getByText('deploying')).toBeInTheDocument()
@@ -45,13 +46,24 @@ describe('DeploymentsList', () => {
     expect(cell.className).toContain('amber')
   })
 
-  it('falls back to the raw adapter key and a short id when lookups miss', () => {
-    render(<DeploymentsList deployments={[makeDeployment({ providerType: 'modal', modelVersionId: '0123456789abcdef' })]} adapters={[]} versions={[]} onSelect={() => {}} />)
+  it('names the tracked version when there is one, and falls back to a short id when the lookup misses', () => {
+    const { unmount } = render(
+      <DeploymentsList
+        deployments={[makeDeployment({ modelRef: null, modelVersionId: 'v-1' })]}
+        adapters={[ollamaAdapter]}
+        versions={[makeVersion()]}
+        onSelect={() => {}}
+      />,
+    )
+    expect(screen.getByText('support-bot-v3')).toBeInTheDocument()
+    unmount()
+
+    render(<DeploymentsList deployments={[makeDeployment({ providerType: 'modal', modelRef: null, modelVersionId: '0123456789abcdef' })]} adapters={[]} versions={[]} onSelect={() => {}} />)
     expect(screen.getByText('modal')).toBeInTheDocument()
     expect(screen.getByText('01234567')).toBeInTheDocument()
   })
 
-  it('opens the row on click and offers Deploy from the empty state', () => {
+  it('opens the row on click and offers the run action from the empty state', () => {
     const onSelect = vi.fn()
     const onDeploy = vi.fn()
     const { unmount } = render(<DeploymentsList deployments={[makeDeployment()]} adapters={[ollamaAdapter]} versions={[]} onSelect={onSelect} />)
@@ -61,7 +73,7 @@ describe('DeploymentsList', () => {
 
     render(<DeploymentsList deployments={[]} adapters={[]} versions={[]} onSelect={onSelect} onDeploy={onDeploy} />)
     expect(screen.getByText('No deployments yet')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Deploy a version' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run a model' }))
     expect(onDeploy).toHaveBeenCalled()
   })
 })
