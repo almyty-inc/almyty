@@ -6,6 +6,8 @@ import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { Inject, forwardRef } from '@nestjs/common';
 import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callPerplexity, callPerplexityStream, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
+import { decideEgress } from '../connections/egress-policy';
+import { llmCallOptionsFor } from './providers/safe-request';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
@@ -184,6 +186,7 @@ export class LlmProvidersService {
         apiKey: apiKey ?? (createAny.credentialId ? MASKED_PROVIDER_KEY : undefined),
         usageApiKey,
       });
+      await this.assertProviderEgressAllowed(createDto.type, configuration as LlmProviderConfig, organizationId);
       await this.assertModelIsServed(createDto.type, configuration, organizationId, { apiKey, credentialId: createAny.credentialId });
 
 
@@ -242,6 +245,44 @@ export class LlmProvidersService {
     }
   }
 
+  /**
+   * Refuse a provider whose URL points somewhere private, unless this
+   * organization has said that host is theirs.
+   *
+   * Save time is the right gate: the URL is user-supplied here and used
+   * on every call afterwards, so one check here covers every later
+   * request rather than being re-argued per call site. The DNS-pinning
+   * agent still refuses a name that resolves privately at connect, which
+   * is the case this check cannot see.
+   */
+  private async assertProviderEgressAllowed(
+    type: LlmProviderType,
+    configuration: LlmProviderConfig,
+    organizationId: string,
+  ): Promise<void> {
+    // Build the URL the way the entity will, so the gate judges exactly
+    // what the caller will dial rather than a guess at it.
+    const probe = Object.assign(new LlmProvider(), { type, configuration });
+    let url: string;
+    try {
+      url = probe.getApiUrl();
+    } catch {
+      return; // No URL to judge; configuration validation owns that.
+    }
+    if (!url) return;
+
+    // The install-wide escape hatches still apply where they always did:
+    // an operator running Ollama on localhost has already said yes to
+    // private URLs for that provider type across the install.
+    if (llmCallOptionsFor(probe).allowPrivateUrls) return;
+
+    const organization = await this.organizationRepository.findOne({ where: { id: organizationId } });
+    const decision = decideEgress(url, { allowlist: organization?.settings?.egressAllowlist ?? [] });
+    if (!decision.allowed) {
+      throw new BadRequestException({ code: 'EGRESS_NOT_ALLOWED', message: decision.reason });
+    }
+  }
+
   async updateProvider(
     providerId: string,
     updateDto: UpdateLlmProviderDto,
@@ -283,6 +324,9 @@ export class LlmProvidersService {
         pastedKey = split.apiKey;
         pastedUsageKey = split.usageApiKey;
         provider.configuration = { ...provider.configuration, ...split.configuration };
+      }
+      if (updateDto.configuration) {
+        await this.assertProviderEgressAllowed(provider.type, provider.configuration, organizationId);
       }
       if (updateDto.configuration || updateAny.credentialId !== undefined) {
         this.runner.validateProviderConfiguration(

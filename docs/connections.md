@@ -209,3 +209,38 @@ allow-list with the date they go away.
 Not yet on a reference, listed on that allow-list: outbound webhook
 secrets, standalone HTTP tool auth, the audit stream token and the SSO
 client secret and SCIM token.
+
+## Reaching a private host
+
+A provider URL that points at a private, loopback or link-local address is
+refused when you save it. That covers the addresses a string can be known
+by: `http://10.0.0.5/v1`, `http://localhost:8000`, `http://127.0.0.1`,
+`http://169.254.169.254`.
+
+If the endpoint really is on your network, add its host to the
+organization's allowlist and save again:
+
+```http
+PATCH /organizations/{id}
+{ "settings": { "egressAllowlist": ["10.0.0.5", "localhost", "*.internal.acme.test"] } }
+```
+
+Hosts, not URLs. A leading `*.` matches one label or more. The allowlist is
+per organization on purpose: the install-wide `OLLAMA_ALLOW_PRIVATE_URLS`
+and `LLM_ALLOW_PRIVATE_URLS` flags it stands beside open every private
+range to every organization on the install, which is a far larger hole
+than the one anybody is trying to make. Those flags still work where they
+always did.
+
+**What this check cannot do.** A hostname is not known to be private until
+it resolves, so `http://gpu-1.internal/v1` passes the save-time check. It
+is refused later instead: every outbound call resolves through an agent
+that re-validates the address it actually got, before a socket opens. That
+also defeats the `/etc/hosts` trick — pointing a public-looking name at an
+internal address and sending a matching `Host` header — because the name
+is never what we judge.
+
+Today the allowlist is read at save time only. Allowlisting a *hostname*
+therefore does not yet survive the connect-time check, so a private
+endpoint reached by name still needs the install-wide flag. Allowlisting
+an address works end to end.
