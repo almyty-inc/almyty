@@ -7,17 +7,24 @@ import { validateUrl, validateUrlAllowingPrivate } from '../../common/security/u
  * user-supplied base URL, so the gate has to sit under all of them rather
  * than being re-implemented per consumer. See docs/design/layers.md, L1.
  *
- * Before this, reaching a private host was two environment flags,
+ * Called from the provider save path in `llm-providers.service`, which is
+ * where a user-supplied URL enters the system: one check there covers
+ * every later request rather than being re-argued per call site.
+ *
+ * Reaching a private host used to be two environment flags,
  * `OLLAMA_ALLOW_PRIVATE_URLS` and `LLM_ALLOW_PRIVATE_URLS`. Those are
  * install-wide: switching one on to let one team reach one internal
- * endpoint opened every private range to every organization on the
+ * endpoint opens every private range to every organization on the
  * install. An allowlist of hosts, per organization, says the same thing
- * without that blast radius.
+ * without that blast radius. The flags still work where they always did.
  *
- * This is the static gate. A hostname is not known to be private until it
- * resolves, so a name pointing at an internal address is caught at request
- * time by the DNS-pinning agent in `ssrf-safe-agent.ts` instead. The two
- * are complementary and neither replaces the other.
+ * This is the static gate, and it only judges what a string can be known
+ * by. A hostname is not known to be private until it resolves, so a name
+ * pointing at an internal address is caught at request time by the
+ * DNS-pinning agent in `ssrf-safe-agent.ts` instead. The two are
+ * complementary and neither replaces the other — which also means an
+ * allowlisted HOSTNAME does not yet survive the connect-time check, only
+ * an allowlisted address does. See docs/connections.md.
  *
  * The rule: a public URL is allowed if it passes the SSRF validator. A
  * private, loopback or link-local URL is refused unless its host is on

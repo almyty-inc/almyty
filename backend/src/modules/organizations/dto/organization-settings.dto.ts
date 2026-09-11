@@ -50,18 +50,38 @@ export function routingPolicyViolations(value: unknown): string[] {
 }
 
 /**
+ * The egress allowlist: hosts this organization may reach even though they
+ * are private. A bad shape here is worth a 400 rather than a surprise
+ * later, because the value is read on a security decision.
+ */
+export function egressAllowlistViolations(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return ['settings.egressAllowlist must be a list of hosts'];
+  const bad = value.filter((h) => typeof h !== 'string' || !h.trim());
+  if (bad.length) return ['settings.egressAllowlist entries must be non-empty hostnames'];
+  // A URL here means somebody pasted the endpoint instead of its host,
+  // and it would silently never match.
+  const withScheme = value.filter((h: string) => /:\/\//.test(h) || h.includes('/'));
+  if (withScheme.length) {
+    return [`settings.egressAllowlist takes hosts, not URLs: ${withScheme.join(', ')}`];
+  }
+  return [];
+}
+
+/**
  * Validates the typed parts of an organization's `settings` object without
  * touching the keys other features keep there (limits, pending invites).
- * Only `defaultRouting` is checked today.
  */
 @ValidatorConstraint({ name: 'organizationSettings', async: false })
 export class OrganizationSettingsConstraint implements ValidatorConstraintInterface {
   validate(value: unknown): boolean {
     if (value == null || typeof value !== 'object') return true;
-    return routingPolicyViolations((value as Record<string, unknown>).defaultRouting).length === 0;
+    const v = value as Record<string, unknown>;
+    return routingPolicyViolations(v.defaultRouting).length === 0 && egressAllowlistViolations(v.egressAllowlist).length === 0;
   }
   defaultMessage(args: ValidationArguments): string {
     const value = args.value as Record<string, unknown> | null | undefined;
-    return routingPolicyViolations(value?.defaultRouting).join('; ') || 'settings is invalid';
+    const problems = [...routingPolicyViolations(value?.defaultRouting), ...egressAllowlistViolations(value?.egressAllowlist)];
+    return problems.join('; ') || 'settings is invalid';
   }
 }
