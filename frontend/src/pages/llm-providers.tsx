@@ -46,6 +46,7 @@ import {
   type LlmProvider,
 } from '@/components/llm-providers/schema'
 import { buildProviderColumns } from '@/components/llm-providers/columns'
+import { providerTypeOptions } from '@/components/llm-providers/provider-type-config'
 
 interface LlmProvidersPageProps {
   /** Rendered inside the Models page: no page title, the tab already names it. */
@@ -306,7 +307,7 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
             <EmptyState
               icon={Brain}
               title="No models configured"
-              description="Connect an LLM provider to power agents and tool generation. Keys stay encrypted at rest."
+              description="Connect a provider to power agents and tool generation. Keys stay encrypted at rest."
               action={
                 <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
                   <Plus className="h-4 w-4" />
@@ -351,29 +352,9 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="openai">OpenAI</SelectItem>
-                  <SelectItem value="anthropic">Anthropic</SelectItem>
-                  <SelectItem value="google">Google Gemini</SelectItem>
-                  <SelectItem value="fireworks">Fireworks AI</SelectItem>
-                  <SelectItem value="cerebras">Cerebras</SelectItem>
-                  <SelectItem value="deepinfra">DeepInfra</SelectItem>
-                  <SelectItem value="novita">Novita</SelectItem>
-                  <SelectItem value="perplexity">Perplexity</SelectItem>
-                  <SelectItem value="zai">Z.ai</SelectItem>
-                  <SelectItem value="baseten">Baseten</SelectItem>
-                  <SelectItem value="nebius">Nebius Token Factory</SelectItem>
-                  <SelectItem value="sambanova">SambaNova</SelectItem>
-                  <SelectItem value="mistral">Mistral AI</SelectItem>
-                  <SelectItem value="xai">xAI</SelectItem>
-                  <SelectItem value="deepseek">DeepSeek</SelectItem>
-                  <SelectItem value="groq">Groq</SelectItem>
-                  <SelectItem value="together">Together AI</SelectItem>
-                  <SelectItem value="openrouter">OpenRouter</SelectItem>
-                  <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
-                  <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
-                  <SelectItem value="cohere">Cohere</SelectItem>
-                  <SelectItem value="huggingface">HuggingFace</SelectItem>
-                  <SelectItem value="custom">Custom</SelectItem>
+                  {providerTypeOptions.map(({ value, label }) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <TeamFilter

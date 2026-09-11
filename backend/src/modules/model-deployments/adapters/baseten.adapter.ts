@@ -14,19 +14,22 @@ import {
  * Baseten: dedicated deployments on the Baseten Inference Stack (BIS-LLM).
  *
  * Management REST at https://api.baseten.co/v1 (hosted OpenAPI spec at
- * /v1/spec), `Authorization: Bearer <key>`. A version is deployed with
- * `POST /v1/llm_models`, which builds the vLLM or TensorRT-LLM engine
- * from its config alone (no Truss archive upload). Weights are mounted
- * through Baseten's weight distribution (`weights[].source`, hf:// or
- * s3://); for the S3 registry the read keys go into a workspace secret
- * (`aws_secret_json`, the name Baseten's model cache reads for S3) that
- * is upserted before the deployment is created. Deltas from the spec are
- * recorded in docs/design/adapters/baseten.md.
+ * /v1/spec), `Authorization: Bearer <key>`. `POST /v1/llm_models` builds a
+ * vLLM or TensorRT-LLM deployment from config alone, with no archive
+ * upload. Weights come through the Baseten Delivery Network: each
+ * `weights[]` entry names a `source` URI Baseten mirrors itself, and a
+ * private source is authenticated with a per-source `auth` block that
+ * points at a workspace secret. A Hugging Face repo is the documented
+ * default. almyty never carries a weight file. See
+ * docs/design/adapters/baseten.md.
  */
 const BASE_URL = 'https://api.baseten.co/v1';
 const MOUNT_LOCATION = '/models/almyty';
-const DEFAULT_REGISTRY_SECRET = 'aws_secret_json';
 const DEFAULT_HF_SECRET = 'hf_access_token';
+const DEFAULT_AWS_SECRET = 'aws_credentials';
+const DEFAULT_GCS_SECRET = 'gcs_service_account';
+/** BDN source schemes, from the weights reference. */
+const SOURCE_SCHEMES = ['hf', 's3', 'gs', 'bt', 'r2', 'cw', 'azure'];
 const BILLING_WINDOW_DAYS = 31;
 
 const STATE_MAP: Record<string, ActualState['state']> = {
@@ -56,12 +59,14 @@ export class BasetenAdapter implements ModelProviderAdapter {
     return {
       architectures: 'any',
       lora: 'merged',
+      // Baseten's serverless offer is Model APIs over their own catalog; this adapter runs dedicated deployments.
       serverless: false,
       dedicated: true,
       scaleToZero: true,
-      // Regional placement is enabled per workspace by Baseten support and listed by GET /v1/regions; no public static list.
+      // Regional placement is enabled per workspace by Baseten and listed by GET /v1/regions; no public static list.
       regions: [],
-      registrySources: ['s3', 'hub'],
+      // BDN mirrors from any of these itself; the Hub is the documented default.
+      registrySources: ['hub', 's3', 'gcs'],
     };
   }
 
@@ -70,18 +75,19 @@ export class BasetenAdapter implements ModelProviderAdapter {
       type: 'object',
       properties: {
         apiKey: { type: 'string', title: 'Baseten API key', 'x-secret': true },
-        accelerator: { type: 'string', title: 'Accelerator', description: 'config.yaml resources.accelerator, e.g. H100, H100:2, A10G, L4', default: 'H100' },
+        accelerator: { type: 'string', title: 'Accelerator', description: 'resources.accelerator, e.g. H100, H100:2, A10G, L4', default: 'H100' },
         region: { type: 'string', title: 'Region slug', description: 'Only after Baseten enabled the region for the workspace (GET /v1/regions)' },
         engineBackend: { type: 'string', enum: ['vllm', 'trtllm'], default: 'vllm' },
-        engineConfig: { type: 'object', title: 'Engine config', description: 'Passed through as bis_llm.config.engine_config (native engine field names)' },
+        engineConfig: { type: 'object', title: 'Engine config', description: 'Passed through as the engine_config block, in the active engine\'s own field names' },
+        llmVersion: { type: 'string', title: 'Serving stack version', description: 'bis_llm.version; omitted uses the platform default' },
         scaleDownDelaySeconds: { type: 'integer', minimum: 0, default: 120 },
         concurrencyTarget: { type: 'integer', minimum: 1, description: 'Requests per replica before scaling up' },
-        hfToken: { type: 'string', title: 'Hugging Face token (gated hub source)', 'x-secret': true },
-        registrySecretName: { type: 'string', title: 'Workspace secret for S3 registry keys', default: DEFAULT_REGISTRY_SECRET },
-        registryAccessKeyId: { type: 'string', title: 'Registry access key id (S3 source)', description: 'An identifier, not a secret; the secret key below is encrypted' },
-        registrySecretAccessKey: { type: 'string', title: 'Registry secret key (S3 source)', 'x-secret': true },
-        registryEndpoint: { type: 'string', title: 'Registry endpoint (S3 source)' },
-        registryRegion: { type: 'string', title: 'Registry region (S3 source)', default: 'us-east-1' },
+        hfToken: { type: 'string', title: 'Hugging Face token (private or gated repo)', 'x-secret': true },
+        hfSecretName: { type: 'string', title: 'Workspace secret holding the Hub token', default: DEFAULT_HF_SECRET },
+        registrySecretName: { type: 'string', title: 'Workspace secret holding object-storage credentials', default: DEFAULT_AWS_SECRET },
+        registryAccessKeyId: { type: 'string', title: 'Object-storage access key id', description: 'An identifier, not a secret; the secret key below is encrypted' },
+        registrySecretAccessKey: { type: 'string', title: 'Object-storage secret key', 'x-secret': true },
+        registryRegion: { type: 'string', title: 'Object-storage region', default: 'us-east-1' },
         hourlyRateCents: { type: 'integer', title: 'Instance price per hour (cents)', description: 'Fallback when GET /v1/instance_type_prices has no entry for the instance' },
       },
       required: ['apiKey'],
@@ -94,7 +100,7 @@ export class BasetenAdapter implements ModelProviderAdapter {
   }
 
   private classify(err: any, fallback: string): never {
-    if (err?.code === 'ADAPTER_AUTH') throw err;
+    if (typeof err?.code === 'string' && err.code.startsWith('ADAPTER_')) throw err;
     const status = err?.response?.status;
     const body = err?.response?.data;
     const message = body?.error ?? body?.detail ?? body?.message ?? err?.message ?? fallback;
@@ -110,6 +116,18 @@ export class BasetenAdapter implements ModelProviderAdapter {
     return `almyty-${deploymentId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20)}`;
   }
 
+  /** The BDN `source` URI for a version. `hf://` keeps its revision pin; a bucket URI drops the registry's @etag. */
+  static weightSource(registryUri: string): string {
+    const scheme = registryUri.split('://')[0];
+    if (!SOURCE_SCHEMES.includes(scheme)) {
+      throw Object.assign(
+        new Error(`Baseten mirrors weights from ${SOURCE_SCHEMES.map((s) => `${s}://`).join(', ')}; ${scheme}:// is not one of them`),
+        { code: 'ADAPTER_UNSUPPORTED_SOURCE' },
+      );
+    }
+    return scheme === 'hf' ? registryUri : registryUri.replace(/@[A-Za-z0-9._:-]+$/, '');
+  }
+
   private async upsertSecret(name: string, value: string, credentials: AdapterCredentials): Promise<void> {
     await this.http.post(`${BASE_URL}/secrets`, { name, value }, { headers: this.headers(credentials) });
   }
@@ -118,35 +136,51 @@ export class BasetenAdapter implements ModelProviderAdapter {
     const cfg = request.providerConfig;
     const headers = this.headers(credentials);
     const name = BasetenAdapter.modelName(request.deploymentId);
-    const uri = request.version.registryUri;
-    const fromHub = uri.startsWith('hf://');
-    // Baseten's weight distribution takes hf://org/repo@rev as-is; for S3 it wants the bucket path without the registry's @etag pin.
-    const weightSource = fromHub ? uri : uri.replace(/@[A-Za-z0-9._:-]+$/, '');
+    const source = BasetenAdapter.weightSource(request.version.registryUri);
+    const fromHub = source.startsWith('hf://');
     const accelerator = request.desired.hardware ?? cfg.accelerator ?? 'H100';
     const tensorParallel = Number(String(accelerator).split(':')[1] ?? 1) || 1;
     const minReplica = request.desired.minScale ?? 0;
-    const maxReplica = request.desired.maxScale ?? request.desired.replicas ?? 1;
+    const maxReplica = Math.max(request.desired.maxScale ?? request.desired.replicas ?? 1, 1);
 
-    const environment: Record<string, string> = {
-      ...(!fromHub && cfg.registryEndpoint ? { AWS_ENDPOINT_URL: cfg.registryEndpoint } : {}),
-    };
+    // BDN authenticates a private source through this per-source block, not through the top-level secrets config.
+    const secretName = fromHub ? cfg.hfSecretName ?? DEFAULT_HF_SECRET : source.startsWith('gs://') ? DEFAULT_GCS_SECRET : cfg.registrySecretName ?? DEFAULT_AWS_SECRET;
+    const secretValue = fromHub
+      ? credentials.hfToken
+      : credentials.registrySecretAccessKey
+        ? JSON.stringify({
+            aws_access_key_id: credentials.registryAccessKeyId ?? cfg.registryAccessKeyId ?? '',
+            aws_secret_access_key: credentials.registrySecretAccessKey,
+            aws_region: cfg.registryRegion ?? 'us-east-1',
+          })
+        : undefined;
+
     const body = {
       name,
       resources: { accelerator, use_gpu: true },
       ...(request.desired.region ?? cfg.region ? { region: request.desired.region ?? cfg.region } : {}),
+      ...(cfg.llmVersion ? { llm_version: cfg.llmVersion } : {}),
       llm_config: {
         engine_backend: cfg.engineBackend ?? 'vllm',
         checkpoint_name: MOUNT_LOCATION,
         model_name: MOUNT_LOCATION,
+        // Point the engine and its tokenizer at the mounted path so nothing is refetched at startup.
+        model_path: MOUNT_LOCATION,
+        model_path_for_tokenizer: MOUNT_LOCATION,
         served_model_name: request.version.name,
         tensor_parallel_size: tensorParallel,
         ...(cfg.engineConfig ? { engine_config: cfg.engineConfig } : {}),
       },
-      weights: [{ source: weightSource, mount_location: MOUNT_LOCATION }],
-      environment_variables: environment,
+      weights: [
+        {
+          source,
+          mount_location: MOUNT_LOCATION,
+          ...(secretValue ? { auth: { auth_method: 'CUSTOM_SECRET', auth_secret_name: secretName } } : {}),
+        },
+      ],
       autoscaling_settings: {
         min_replica: minReplica,
-        max_replica: Math.max(maxReplica, 1),
+        max_replica: maxReplica,
         scale_down_delay: cfg.scaleDownDelaySeconds ?? 120,
         ...(cfg.concurrencyTarget ? { concurrency_target: cfg.concurrencyTarget } : {}),
       },
@@ -155,15 +189,7 @@ export class BasetenAdapter implements ModelProviderAdapter {
 
     try {
       // Secrets live at workspace level and are referenced by name; they never travel in the deployment body.
-      if (!fromHub && credentials.registrySecretAccessKey) {
-        const value = JSON.stringify({
-          aws_access_key_id: credentials.registryAccessKeyId ?? cfg.registryAccessKeyId ?? '',
-          aws_secret_access_key: credentials.registrySecretAccessKey,
-          aws_region: cfg.registryRegion ?? 'us-east-1',
-        });
-        await this.upsertSecret(cfg.registrySecretName ?? DEFAULT_REGISTRY_SECRET, value, credentials);
-      }
-      if (fromHub && credentials.hfToken) await this.upsertSecret(DEFAULT_HF_SECRET, credentials.hfToken, credentials);
+      if (secretValue) await this.upsertSecret(secretName, secretValue, credentials);
 
       const res = await this.http.post(`${BASE_URL}/llm_models`, body, { headers });
       const handle = res.data ?? {};
@@ -172,10 +198,11 @@ export class BasetenAdapter implements ModelProviderAdapter {
         modelId: handle.model_id,
         deploymentId: handle.version_id,
         hostname,
-        // Deployment-scoped OpenAI-compatible base: /deployment/{id} route with the sync/v1 suffix the production route documents.
+        // Deployment-scoped OpenAI-compatible base: the /deployment/{id} route plus the sync/v1 suffix.
         url: `https://${hostname}/deployment/${handle.version_id}/sync/v1`,
+        servedModelName: request.version.name,
         instanceType: handle.instance_type_name ?? null,
-        maxReplica: Math.max(maxReplica, 1),
+        maxReplica,
         createdAt: new Date().toISOString(),
         hourlyRateCents: cfg.hourlyRateCents ?? 0,
       };
@@ -196,6 +223,7 @@ export class BasetenAdapter implements ModelProviderAdapter {
       return {
         state: STATE_MAP[raw] ?? 'deploying',
         url: ref.url,
+        openAiBase: ref.url,
         replicas: typeof d.active_replica_count === 'number' ? d.active_replica_count : undefined,
         hardware: d.instance_type_name ?? ref.instanceType ?? undefined,
         region: d.region?.slug,
@@ -232,7 +260,7 @@ export class BasetenAdapter implements ModelProviderAdapter {
     }
   }
 
-  /** The model was created for this deployment alone, so both go. The shared registry secret stays. */
+  /** The model was created for this deployment alone, so both go. The workspace secret stays. */
   async teardown(ref: EndpointRef, credentials: AdapterCredentials): Promise<void> {
     const headers = this.headers(credentials);
     const ignoreMissing = (err: any) => {
@@ -254,7 +282,9 @@ export class BasetenAdapter implements ModelProviderAdapter {
     try {
       const prices = await this.http.get(`${BASE_URL}/instance_type_prices`, { headers });
       const match = (prices.data?.instance_types ?? []).find((e: any) => e?.instance_type?.name === instance || e?.instance_type?.id === instance);
-      if (match && typeof match.price === 'number') rate = Math.round(match.price * 60 * 100);
+      // price is USD per minute.
+      const perMinute = Number(match?.price);
+      if (Number.isFinite(perMinute) && perMinute > 0) rate = Math.round(perMinute * 60 * 100);
     } catch {
       // No price list access: the configured rate stands.
     }
@@ -267,6 +297,7 @@ export class BasetenAdapter implements ModelProviderAdapter {
       const usage = await this.http.get(`${BASE_URL}/billing/usage_summary`, { headers, params: { start_date: start.toISOString(), end_date: end.toISOString() } });
       const items: any[] = usage.data?.dedicated_usage?.breakdown ?? [];
       const mine = items.filter((i) => i?.billable_resource?.id === ref.deploymentId || i?.billable_resource?.model_id === ref.modelId);
+      // Money fields come back as a number or a decimal string.
       if (mine.length) spentCents = Math.round(mine.reduce((sum, i) => sum + Number(i.subtotal ?? 0), 0) * 100);
     } catch {
       // Billing summary needs a workspace-level key; the estimate stands.

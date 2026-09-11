@@ -441,14 +441,51 @@ export interface LlmProvider {
   usageMetrics: UsageMetric[]
 }
 
+/**
+ * Mirrors the backend enum (backend/src/entities/llm-provider.entity.ts).
+ * This list had drifted to 8 of the then-24 values; keep it complete, the
+ * type union in components/llm-providers/schema.ts is derived from the same
+ * set and a missing value silently narrows both.
+ */
 export enum LlmProviderType {
   OPENAI = 'openai',
   ANTHROPIC = 'anthropic',
   GOOGLE = 'google',
-  COHERE = 'cohere',
-  HUGGINGFACE = 'huggingface',
+  MISTRAL = 'mistral',
+  XAI = 'xai',
+  DEEPSEEK = 'deepseek',
+  GROQ = 'groq',
+  TOGETHER = 'together',
+  OPENROUTER = 'openrouter',
+  STRAITLY = 'straitly',
   AZURE_OPENAI = 'azure_openai',
   AWS_BEDROCK = 'aws_bedrock',
+  COHERE = 'cohere',
+  HUGGINGFACE = 'huggingface',
+  OLLAMA = 'ollama',
+  FIREWORKS = 'fireworks',
+  CEREBRAS = 'cerebras',
+  DEEPINFRA = 'deepinfra',
+  NOVITA = 'novita',
+  PERPLEXITY = 'perplexity',
+  ZAI = 'zai',
+  BASETEN = 'baseten',
+  NEBIUS = 'nebius',
+  SAMBANOVA = 'sambanova',
+  MOONSHOT = 'moonshot',
+  QWEN = 'qwen',
+  MINIMAX = 'minimax',
+  UPSTAGE = 'upstage',
+  WRITER = 'writer',
+  QIANFAN = 'qianfan',
+  HUNYUAN = 'hunyuan',
+  VOLCENGINE = 'volcengine',
+  SPARK = 'spark',
+  VERTEX_AI = 'vertex_ai',
+  AZURE_AI_FOUNDRY = 'azure_ai_foundry',
+  DIGITALOCEAN = 'digitalocean',
+  RUNPOD = 'runpod',
+  MODAL = 'modal',
   CUSTOM = 'custom',
 }
 

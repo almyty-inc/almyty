@@ -143,7 +143,7 @@ export class CanonicalMemoryController {
   @Post('consolidate')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Run consolidation now for a scope (LLM extracts durable facts from short-tier rows and supersedes them)',
+    summary: 'Run consolidation now for a scope (a model extracts durable facts from short-scope rows and supersedes them)',
   })
   async consolidate(
     @Body() body: { scope_type: ScopeType; scope_id: string; force?: boolean },

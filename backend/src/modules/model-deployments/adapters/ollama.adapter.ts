@@ -17,9 +17,6 @@ import {
  * memory; "scale to zero" unloads it; "teardown" deletes it. Sources:
  *   hf://org/repo@rev     pulled straight from the Hub (hf.co/org/repo[:quant])
  *   file:///path@sha      created from a GGUF or directory on the Ollama host
- *   s3://bucket/key@etag  created from the same path under `registryMirrorPath`,
- *                         a directory on the Ollama host where the registry is
- *                         mounted or synced (Ollama cannot read S3 itself)
  *   library:tag           a plain Ollama library tag (set providerConfig.tag)
  * Chat goes through the server's OpenAI-compatible /v1. A bearer token is
  * optional and only meaningful behind a reverse proxy that checks one.
@@ -38,7 +35,10 @@ export class OllamaAdapter implements ModelProviderAdapter {
       dedicated: true,
       scaleToZero: true,
       regions: [],
-      registrySources: ['s3', 'hub', 'local'],
+      // Ollama pulls from the Hub itself; a local path is the other
+      // documented source. It cannot read object storage, so an s3
+      // version is refused rather than mirrored by us.
+      registrySources: ['hub', 'local'],
     };
   }
 
@@ -50,10 +50,8 @@ export class OllamaAdapter implements ModelProviderAdapter {
         token: { type: 'string', title: 'Bearer token', description: 'Only if a proxy in front of Ollama requires one', 'x-secret': true },
         tag: { type: 'string', title: 'Model tag', description: 'Name to create or library tag to pull; defaults to the version name' },
         keepAlive: { type: 'string', title: 'Keep loaded', description: 'Ollama keep_alive while replicas > 0; -1 keeps the model in memory', default: '-1' },
-        registryMirrorPath: { type: 'string', title: 'Registry mirror path', description: 'Directory on the Ollama host where the S3 registry is mounted or synced' },
         hourlyRateCents: { type: 'integer', title: 'Machine price per hour (cents)', description: 'Ollama bills nothing; set this to account for a rented box' },
       },
-      required: ['baseUrl'],
     };
   }
 
@@ -96,11 +94,10 @@ export class OllamaAdapter implements ModelProviderAdapter {
       return { model: name, from: path };
     }
     if (uri.startsWith('s3://')) {
-      if (!cfg.registryMirrorPath) {
-        throw Object.assign(new Error('an s3:// version needs registryMirrorPath: Ollama cannot read S3 directly'), { code: 'ADAPTER_UNSUPPORTED_SOURCE' });
-      }
-      const [key] = uri.slice('s3://'.length).split('@');
-      return { model: name, from: `${String(cfg.registryMirrorPath).replace(/\/+$/, '')}/${key}` };
+      // Ollama reads the Hub or a path on its own host. Mirroring our
+      // object storage onto that host would make almyty the delivery
+      // route for the weights, so it is refused instead.
+      throw Object.assign(new Error('Ollama serves from a Hugging Face repository or a path on its own host; point the version at hf:// or file://'), { code: 'ADAPTER_UNSUPPORTED_SOURCE' });
     }
     if (uri.startsWith('library:')) return { model: uri.slice('library:'.length), pull: uri.slice('library:'.length) };
     throw Object.assign(new Error(`unsupported registry uri ${uri}`), { code: 'ADAPTER_UNSUPPORTED_SOURCE' });

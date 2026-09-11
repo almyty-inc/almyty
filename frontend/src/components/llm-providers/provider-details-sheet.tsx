@@ -11,6 +11,10 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { UseMutationResult } from '@tanstack/react-query'
+// Logos live in provider-type-config.ts. This file used to keep its own
+// copy, which is how it ended up missing every provider added after that
+// copy was written; a missing glyph renders as an empty span.
+import { providerLogos } from './provider-type-config'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -81,33 +85,6 @@ interface ProviderMetrics {
   responseTimeByHour: Array<{ hour: number; avgResponseTime: number; p95ResponseTime: number }>
   errorsByType: Array<{ type: string; count: number; percentage: number }>
   topErrors: Array<{ error: string; count: number; lastOccurred: string }>
-}
-
-const providerLogos: Record<string, string> = {
-  openai: '🤖',
-  anthropic: '🧠',
-  google: '✦',
-  mistral: '🔷',
-  xai: '𝕏',
-  deepseek: '🔮',
-  groq: '⚡',
-  together: '🤝',
-  openrouter: '🔀',
-  azure_openai: '☁️',
-  aws_bedrock: '🪨',
-  cohere: '🌀',
-  huggingface: '🤗',
-  ollama: '🦙',
-  fireworks: '✧',
-  cerebras: '◎',
-  deepinfra: '∞',
-  novita: '◈',
-  perplexity: '◇',
-  zai: '❋',
-  baseten: '▣',
-  nebius: '◉',
-  sambanova: '◆',
-  custom: '⚙️'
 }
 
 const statusColors: Record<string, string> = {

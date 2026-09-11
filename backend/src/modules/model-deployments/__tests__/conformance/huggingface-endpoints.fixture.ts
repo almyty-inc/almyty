@@ -1,16 +1,47 @@
 /**
- * An in-memory stand-in for the Hugging Face Inference Endpoints API,
- * faithful to the documented paths, states and error codes. Shared by the
- * HF conformance spec (fixture mode) and the acceptance-gate scenarios.
+ * An in-memory stand-in for the Hugging Face Inference Endpoints v2 API,
+ * faithful to the documented paths, states, price list and error codes.
+ * Shared by the HF conformance spec (fixture mode) and the acceptance-gate
+ * scenarios.
  *
  * The only token it accepts is `hf_valid`; an instance type of
  * `nvidia-h100-x8` triggers the quota error; an endpoint becomes running
- * on the first read after creation.
+ * on the first read after creation. `GET /v2/provider` answers with the
+ * same shape the public route does, so `costSnapshot` can price a replica.
  */
 export interface HfFixture {
   endpoints: Map<string, any>;
   http: any;
 }
+
+/** A trimmed copy of the live GET /v2/provider payload (read 2026-09-09). */
+const PROVIDERS = {
+  vendors: [
+    {
+      name: 'aws',
+      status: 'available',
+      regions: [
+        {
+          name: 'us-east-1',
+          label: 'N. Virginia',
+          status: 'available',
+          computes: [
+            { id: 'aws-us-east-1-nvidia-t4-x1', accelerator: 'gpu', instanceType: 'nvidia-t4', instanceSize: 'x1', architecture: 'NVIDIA T4', numAccelerators: 1, memoryGb: 16, pricePerHour: 0.6, status: 'available', quota: { maxAccelerators: 8, usedAccelerators: 0 } },
+            { id: 'aws-us-east-1-nvidia-l4-x1', accelerator: 'gpu', instanceType: 'nvidia-l4', instanceSize: 'x1', architecture: 'NVIDIA L4', numAccelerators: 1, memoryGb: 24, pricePerHour: 0.8, status: 'available', quota: { maxAccelerators: 8, usedAccelerators: 0 } },
+          ],
+        },
+        {
+          name: 'eu-west-1',
+          label: 'Ireland',
+          status: 'available',
+          computes: [
+            { id: 'aws-eu-west-1-nvidia-a10g-x1', accelerator: 'gpu', instanceType: 'nvidia-a10g', instanceSize: 'x1', architecture: 'NVIDIA A10G', numAccelerators: 1, memoryGb: 24, pricePerHour: 1.0, status: 'available', quota: { maxAccelerators: 8, usedAccelerators: 0 } },
+          ],
+        },
+      ],
+    },
+  ],
+};
 
 export function hfFixtureHttp(): HfFixture {
   const endpoints = new Map<string, any>();
@@ -48,6 +79,7 @@ export function hfFixtureHttp(): HfFixture {
       }),
       get: jest.fn(async (url: string, config: any) => {
         authed(config);
+        if (url.endsWith('/v2/provider')) return { data: PROVIDERS };
         const { name } = parse(url);
         const ep = endpoints.get(name!);
         if (!ep) throw notFound();

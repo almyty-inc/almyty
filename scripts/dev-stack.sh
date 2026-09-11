@@ -46,6 +46,13 @@ up() {
   docker inspect "$REDIS_NAME" >/dev/null 2>&1 || docker run -d --name "$REDIS_NAME" -p "$REDIS_PORT:6379" redis:7-alpine >/dev/null
   docker start "$PG_NAME" "$REDIS_NAME" >/dev/null
 
+  # nest-cli sets deleteOutDir, so `start:dev` wipes dist on boot. If an
+  # incremental build state survives that wipe, the compiler reports
+  # "Found 0 errors", emits nothing, and the API dies on a missing
+  # dist/main that never gets rebuilt. Clearing it costs one cold compile
+  # and removes a failure that looks like a code bug and is not.
+  rm -f "$ROOT/backend"/*.tsbuildinfo
+
   (cd "$ROOT/backend" && api_env nohup npm run start:dev >"$LOG_DIR/backend.log" 2>&1 & echo $! >"$LOG_DIR/backend.pid")
   (cd "$ROOT/frontend" && PORT="$WEB_PORT" ALMYTY_API_TARGET="http://localhost:$API_PORT" nohup npm run dev >"$LOG_DIR/frontend.log" 2>&1 & echo $! >"$LOG_DIR/frontend.pid")
 

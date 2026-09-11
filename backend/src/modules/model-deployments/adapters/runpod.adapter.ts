@@ -11,22 +11,21 @@ import {
 } from './adapter.interface';
 
 /**
- * RunPod serverless endpoints running the vLLM worker. Verified shapes are
+ * RunPod Serverless running RunPod's own vLLM worker. Verified shapes are
  * in docs/design/adapters/runpod.md.
  *
- * Control plane: REST at https://rest.runpod.io/v1 with a bearer API key.
- * Deploy creates a template (image plus environment) and an endpoint that
- * points at it with the GPU type and worker bounds; scale patches the
- * bounds; teardown deletes both. Data plane: the endpoint's health at
- * https://api.runpod.ai/v2/{id}/health gives running and idle worker
- * counts, and chat goes to https://api.runpod.ai/v2/{id}/openai/v1.
+ * RunPod operates the workers, the queue and the autoscaler; almyty names
+ * a Hugging Face repository. Control plane: REST at
+ * https://rest.runpod.io/v1 with a bearer API key. Deploy creates a
+ * serverless template (the worker image plus its environment) and an
+ * endpoint pointing at it with the GPU type and worker bounds; scale
+ * patches the bounds; teardown deletes both. Data plane: the endpoint's
+ * health at https://api.runpod.ai/v2/{id}/health gives running and idle
+ * worker counts, and chat goes to
+ * https://api.runpod.ai/v2/{id}/openai/v1.
  *
- * Sources: a hub version is loaded by the stock worker through MODEL_NAME
- * and MODEL_REVISION. An S3 registry version needs the almyty worker image
- * (or a network volume synced ahead of time): the stock worker only reads
- * the Hub or a local path, so the container gets ALMYTY_REGISTRY_URI, the
- * registry's read keys and a local MODEL_NAME to load from once fetched.
- * Template env is the only secret channel RunPod offers.
+ * Source: the worker's MODEL_NAME and MODEL_REVISION, which is a Hub repo
+ * id. No weights pass through almyty.
  *
  * Replicas map to active (always-on) workers: scale(n) sets workersMin to
  * n, scale(0) sets both bounds to 0 so nothing can start until scaled up.
@@ -35,7 +34,6 @@ const REST = 'https://rest.runpod.io/v1';
 const DATA = 'https://api.runpod.ai/v2';
 const DEFAULT_IMAGE = 'runpod/worker-v1-vllm:stable-cuda12.1.0';
 const DEFAULT_GPU = 'NVIDIA A40';
-const REGISTRY_MODEL_PATH = '/runpod-volume/almyty/model';
 
 export class RunPodAdapter implements ModelProviderAdapter {
   readonly key = 'runpod';
@@ -51,7 +49,9 @@ export class RunPodAdapter implements ModelProviderAdapter {
       dedicated: false,
       scaleToZero: true,
       regions: ['US-IL-1', 'US-TX-3', 'US-KS-2', 'US-CA-2', 'CA-MTL-1', 'EU-RO-1', 'EU-SE-1', 'EU-CZ-1', 'AP-JP-1'],
-      registrySources: ['s3', 'hub'],
+      // The stock worker reads the Hub. It has no object-storage source,
+      // so an s3 version is refused rather than smuggled in through us.
+      registrySources: ['hub'],
     };
   }
 
@@ -73,9 +73,6 @@ export class RunPodAdapter implements ModelProviderAdapter {
         executionTimeoutMs: { type: 'integer', minimum: 1000 },
         maxModelLen: { type: 'integer', title: 'vLLM max model length' },
         hourlyRateCents: { type: 'integer', title: 'GPU price per hour per worker (cents)', description: 'RunPod publishes no spend API; used to estimate cost' },
-        registryAccessKeyId: { type: 'string', title: 'Registry access key (S3 source)', 'x-secret': true },
-        registrySecretAccessKey: { type: 'string', title: 'Registry secret key (S3 source)', 'x-secret': true },
-        registryEndpoint: { type: 'string', title: 'Registry endpoint (S3 source)' },
         hfToken: { type: 'string', title: 'Hugging Face token (gated hub models)', 'x-secret': true },
       },
       required: ['apiKey'],
@@ -104,28 +101,33 @@ export class RunPodAdapter implements ModelProviderAdapter {
     return `almyty-${deploymentId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 20)}`;
   }
 
-  /** Worker environment for the version; secrets ride along because template env is RunPod's only secret channel. */
+  /**
+   * Worker environment for the version. The stock worker loads a Hugging
+   * Face repository by id; `HF_TOKEN` rides along because a serverless
+   * template's env is the only secret channel RunPod offers.
+   */
   static workerEnv(request: DeployRequest, credentials: AdapterCredentials): Record<string, string> {
-    const cfg = request.providerConfig;
+    const cfg = request.providerConfig ?? {};
     const uri = request.version.registryUri;
-    const env: Record<string, string> = {
+    if (!uri.startsWith('hf://')) {
+      // worker-vllm reads the Hub or a path already inside the container.
+      // Shipping our object storage credentials to the worker so it could
+      // fetch from us would make almyty the delivery route, so it is
+      // refused instead.
+      throw Object.assign(
+        new Error('the RunPod vLLM worker loads a Hugging Face repository; point the version at hf://org/repo'),
+        { code: 'ADAPTER_UNSUPPORTED_SOURCE' },
+      );
+    }
+    const [repo, rev] = uri.slice('hf://'.length).split('@');
+    return {
       OPENAI_SERVED_MODEL_NAME_OVERRIDE: request.version.name,
       ...(request.desired.quantization ? { QUANTIZATION: request.desired.quantization } : {}),
       ...(cfg.maxModelLen ? { MAX_MODEL_LEN: String(cfg.maxModelLen) } : {}),
+      MODEL_NAME: repo,
+      MODEL_REVISION: rev ?? 'main',
+      ...(credentials.hfToken ? { HF_TOKEN: credentials.hfToken } : {}),
     };
-    if (uri.startsWith('hf://')) {
-      const [repo, rev] = uri.slice('hf://'.length).split('@');
-      env.MODEL_NAME = repo;
-      env.MODEL_REVISION = rev ?? 'main';
-      if (credentials.hfToken) env.HF_TOKEN = credentials.hfToken;
-      return env;
-    }
-    env.ALMYTY_REGISTRY_URI = uri;
-    env.MODEL_NAME = REGISTRY_MODEL_PATH;
-    if (cfg.registryEndpoint) env.AWS_ENDPOINT_URL = cfg.registryEndpoint;
-    if (credentials.registryAccessKeyId) env.AWS_ACCESS_KEY_ID = credentials.registryAccessKeyId;
-    if (credentials.registrySecretAccessKey) env.AWS_SECRET_ACCESS_KEY = credentials.registrySecretAccessKey;
-    return env;
   }
 
   async deploy(request: DeployRequest, credentials: AdapterCredentials): Promise<EndpointRef> {

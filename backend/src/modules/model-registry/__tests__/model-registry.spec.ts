@@ -17,14 +17,34 @@ const manifest = () => ({
 });
 
 describe('parseRegistryUri', () => {
-  it('parses the three shapes and requires the pin', () => {
-    expect(parseRegistryUri('s3://registry/models/qwen3@e3b0c442')).toMatchObject({ scheme: 's3', location: 'registry', prefix: 'models/qwen3', pin: 'e3b0c442' });
-    expect(parseRegistryUri('hf://Qwen/Qwen3-0.6B@abc123')).toMatchObject({ scheme: 'hf', location: 'Qwen/Qwen3-0.6B', pin: 'abc123' });
-    expect(parseRegistryUri('file:///var/models/qwen3@sha1')).toMatchObject({ scheme: 'file', location: '/var/models/qwen3', pin: 'sha1' });
+  it('parses every artifact scheme and requires the pin on each', () => {
+    expect(parseRegistryUri('s3://registry/models/qwen3@e3b0c442')).toMatchObject({ scheme: 's3', kind: 'artifact', location: 'registry', prefix: 'models/qwen3', pin: 'e3b0c442' });
+    expect(parseRegistryUri('gs://bucket/models/qwen3@1725800000')).toMatchObject({ scheme: 'gs', kind: 'artifact', location: 'bucket', prefix: 'models/qwen3', pin: '1725800000' });
+    expect(parseRegistryUri('hf://Qwen/Qwen3-0.6B@abc123')).toMatchObject({ scheme: 'hf', kind: 'artifact', location: 'Qwen/Qwen3-0.6B', pin: 'abc123' });
+    expect(parseRegistryUri('file:///var/models/qwen3@sha1')).toMatchObject({ scheme: 'file', kind: 'artifact', location: '/var/models/qwen3', pin: 'sha1' });
     expect(() => parseRegistryUri('s3://registry/models/qwen3')).toThrow(InvalidRegistryUriError);
-    expect(() => parseRegistryUri('gs://bucket/x@1')).toThrow(InvalidRegistryUriError);
+    expect(() => parseRegistryUri('gs://bucket/models/qwen3')).toThrow(InvalidRegistryUriError);
     expect(() => parseRegistryUri('s3://registry/../x@1')).toThrow(InvalidRegistryUriError);
     expect(() => parseRegistryUri('file://relative/path@1')).toThrow(InvalidRegistryUriError);
+  });
+
+  it('takes a model that already lives on a provider without a pin, because the platform versions it', () => {
+    expect(parseRegistryUri('bedrock://arn:aws:bedrock:us-east-1:1:imported-model/abc')).toMatchObject({ scheme: 'bedrock', kind: 'provider', location: 'arn:aws:bedrock:us-east-1:1:imported-model/abc', pin: '' });
+    expect(parseRegistryUri('fireworks://accounts/acme/models/qwen3')).toMatchObject({ scheme: 'fireworks', kind: 'provider', pin: '' });
+    expect(parseRegistryUri('together://acme/qwen3-tuned')).toMatchObject({ scheme: 'together', kind: 'provider' });
+    expect(parseRegistryUri('baseten://abcd1234')).toMatchObject({ scheme: 'baseten', kind: 'provider' });
+    expect(parseRegistryUri('vertex://publishers/google/models/gemma-3')).toMatchObject({ scheme: 'vertex', kind: 'provider' });
+    expect(parseRegistryUri('sagemaker://model-package/arn:aws:sagemaker:us-east-1:1:model-package/p/1')).toMatchObject({ scheme: 'sagemaker', kind: 'provider' });
+    expect(parseRegistryUri('azureml://registries/azureml/models/Phi-4/labels/latest')).toMatchObject({ scheme: 'azureml', kind: 'provider' });
+    // A pin is allowed where the platform uses one, and it is read off the tail.
+    expect(parseRegistryUri('foundry://openai/gpt-4o@2024-11-20')).toMatchObject({ scheme: 'foundry', kind: 'provider', pin: '2024-11-20' });
+    expect(() => parseRegistryUri('bedrock://')).toThrow(InvalidRegistryUriError);
+    expect(() => parseRegistryUri('bedrock://../escape')).toThrow(InvalidRegistryUriError);
+  });
+
+  it('refuses a scheme nobody can run', () => {
+    expect(() => parseRegistryUri('ftp://host/model@1')).toThrow(InvalidRegistryUriError);
+    expect(() => parseRegistryUri('')).toThrow(InvalidRegistryUriError);
   });
 });
 

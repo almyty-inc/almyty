@@ -13,21 +13,36 @@ import {
 } from './adapter.interface';
 
 /**
- * Google Vertex AI endpoints: dedicated replicas in the customer's own
- * GCP project.
+ * Google Vertex AI, in the customer's own GCP project.
  *
  * REST at https://{location}-aiplatform.googleapis.com/v1 with an OAuth2
  * bearer token, either supplied directly (`accessToken`) or minted from a
  * service-account key (`serviceAccountJson`) through the JWT bearer grant
- * at https://oauth2.googleapis.com/token. A deployment is three long
- * running operations: endpoints.create, models:upload (a vLLM container
- * whose args point at the S3 registry prefix through vLLM's Run:ai
- * streamer, with the registry keys as container env) and
- * endpoints:deployModel with dedicated resources. The first two are
- * awaited inside deploy; the third is tracked by readEndpoint. Scaling is
- * mutateDeployedModel on the replica range, or undeployModel for zero
- * (Vertex itself never scales dedicated resources below one replica).
- * Teardown undeploys, deletes the endpoint, then the model. Deltas:
+ * at https://oauth2.googleapis.com/token.
+ *
+ * Two native paths, chosen from the version's registry URI:
+ *
+ *   vertex://publishers/{publisher}/models/{model}@{version}
+ *   hf://{owner}/{repo}[@revision]
+ *     Model Garden deploys it for us: one call to
+ *     POST {parent}:deploy with `publisherModelName` or
+ *     `huggingFaceModelId`. Google picks the container and, unless the
+ *     operator names a machine type, the machine spec too. Nothing about
+ *     the weights passes through almyty: for a Hugging Face model Vertex
+ *     pulls the repository itself, with `modelConfig.huggingFaceAccessToken`
+ *     for a gated one.
+ *
+ *   gs://bucket/prefix
+ *     The customer's own weights in Cloud Storage, which is the only
+ *     artifact store Vertex reads: models:upload takes `artifactUri` as a
+ *     Cloud Storage directory and Vertex copies it to a bucket of its own,
+ *     handing the serving container an AIP_STORAGE_URI that also begins
+ *     with gs://.
+ *
+ * Both paths end at a Vertex endpoint. Scaling is mutateDeployedModel on
+ * the replica range, or undeployModel for zero, because v1 dedicated
+ * resources may not go below one replica. Teardown undeploys, deletes the
+ * endpoint, then the model. Deltas and verified facts:
  * docs/design/adapters/vertex.md.
  */
 export interface VertexHttp {
@@ -41,14 +56,21 @@ const REGIONS = [
 ];
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
-const DEFAULT_IMAGE = 'vllm/vllm-openai:latest';
+/**
+ * Google's own Model Garden vLLM serving container. Vertex only accepts
+ * images from Artifact Registry or Container Registry, so a Docker Hub
+ * image is not an option here; the dated tag moves, and `image` overrides it.
+ */
+const DEFAULT_IMAGE = 'us-docker.pkg.dev/vertex-ai/vertex-vision-model-garden-dockers/pytorch-vllm-serve:20241001_0916_RC00';
 const CONTAINER_PORT = 8080;
+
+const ACCEPTED_SOURCES = 'a Model Garden model (vertex://publishers/{publisher}/models/{model}@{version}), a Hugging Face repository (hf://) that Model Garden deploys for you, or your own weights in Cloud Storage (gs://)';
 
 const b64url = (s: string | Buffer) => Buffer.from(s).toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
 
 export class VertexAdapter implements ModelProviderAdapter {
   readonly key = 'vertex';
-  readonly displayName = 'Google Vertex AI (endpoint)';
+  readonly displayName = 'Google Vertex AI';
 
   private readonly tokens = new Map<string, { token: string; expiresAt: number }>();
 
@@ -65,7 +87,10 @@ export class VertexAdapter implements ModelProviderAdapter {
       dedicated: true,
       scaleToZero: false,
       regions: REGIONS,
-      registrySources: ['s3'],
+      // Cloud Storage is the artifact store Vertex reads, and Model
+      // Garden pulls a Hugging Face repository itself. Vertex cannot read
+      // S3 from anywhere in either path.
+      registrySources: ['gcs', 'hub'],
     };
   }
 
@@ -77,16 +102,17 @@ export class VertexAdapter implements ModelProviderAdapter {
         accessToken: { type: 'string', title: 'OAuth2 access token', description: 'Alternative to a service account key; short lived', 'x-secret': true },
         projectId: { type: 'string', title: 'Project id' },
         location: { type: 'string', title: 'Location', enum: REGIONS, default: 'us-central1' },
-        image: { type: 'string', title: 'Container image', default: DEFAULT_IMAGE },
-        machineType: { type: 'string', title: 'Machine type', default: 'g2-standard-12' },
+        image: { type: 'string', title: 'Container image', description: `Cloud Storage source only; must live in Artifact Registry or Container Registry. Defaults to Google's Model Garden vLLM container (${DEFAULT_IMAGE})`, default: DEFAULT_IMAGE },
+        predictRoute: { type: 'string', title: 'Container predict route', default: '/v1/chat/completions' },
+        healthRoute: { type: 'string', title: 'Container health route', default: '/health' },
+        machineType: { type: 'string', title: 'Machine type', description: 'Model Garden picks one for you when this is empty' },
         acceleratorType: { type: 'string', title: 'Accelerator', default: 'NVIDIA_L4' },
         acceleratorCount: { type: 'integer', minimum: 0, default: 1 },
         dedicatedEndpoint: { type: 'boolean', title: 'Dedicated endpoint DNS', default: false },
         serviceAccount: { type: 'string', title: 'Runtime service account', description: 'Optional; the deployed container runs as it' },
+        acceptEula: { type: 'boolean', title: 'Accept the model licence', description: 'Model Garden and Hugging Face models whose licence requires acceptance', default: false },
+        huggingFaceToken: { type: 'string', title: 'Hugging Face read token', description: 'Model Garden uses it to pull a gated repository', 'x-secret': true },
         hourlyRateCents: { type: 'integer', title: 'Replica price per hour (cents)', description: 'Machine plus accelerator from the Vertex pricing page; used to estimate spend' },
-        registryAccessKeyId: { type: 'string', title: 'Registry access key (S3 source)', 'x-secret': true },
-        registrySecretAccessKey: { type: 'string', title: 'Registry secret key (S3 source)', 'x-secret': true },
-        registryEndpoint: { type: 'string', title: 'Registry endpoint (S3 source)' },
       },
       required: ['projectId'],
     };
@@ -168,30 +194,60 @@ export class VertexAdapter implements ModelProviderAdapter {
     return `almyty-${deploymentId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 40)}`;
   }
 
-  static chatUrl(ref: EndpointRef, dedicatedDns?: string): string {
-    const host = dedicatedDns ? `https://${dedicatedDns}/v1` : VertexAdapter.base(ref.location);
-    return `${host}/${ref.endpointName}/chat/completions`;
+  /** The dedicated DNS is documented with its scheme already on it, so strip one if it is there. */
+  static host(location: string, dedicatedDns?: string): string {
+    if (!dedicatedDns) return VertexAdapter.base(location);
+    return `https://${dedicatedDns.replace(/^https?:\/\//, '').replace(/\/+$/, '')}/v1`;
   }
 
-  /** vLLM streams weights straight from the S3 prefix; the version @pin is the registry's, not S3's. */
-  static s3Prefix(registryUri: string): string {
-    if (!registryUri.startsWith('s3://')) throw new UnsupportedOperationError('vertex', `deploying from ${registryUri.split(':')[0]}:// (only the S3 registry source)`);
+  /** The OpenAI-compatible base: chat goes to `<openAiBase>/chat/completions`. */
+  static openAiBase(ref: EndpointRef, dedicatedDns?: string): string {
+    return `${VertexAdapter.host(ref.location, dedicatedDns)}/${ref.endpointName}`;
+  }
+
+  static chatUrl(ref: EndpointRef, dedicatedDns?: string): string {
+    return `${VertexAdapter.openAiBase(ref, dedicatedDns)}/chat/completions`;
+  }
+
+  /** Which of the two Vertex paths this version asks for. */
+  static route(registryUri: string): 'garden' | 'gcs' {
+    if (registryUri.startsWith('vertex://') || registryUri.startsWith('hf://')) return 'garden';
+    if (registryUri.startsWith('gs://')) return 'gcs';
+    throw new UnsupportedOperationError('vertex', `a ${registryUri.split(':')[0]}:// version. Vertex deploys ${ACCEPTED_SOURCES}`);
+  }
+
+  /** The Cloud Storage directory holding the weights; the @pin is the version's, not GCS's. */
+  static gcsUri(registryUri: string): string {
     return registryUri.replace(/@[^@/]+$/, '');
   }
 
+  /** `publisherModelName` from a vertex:// version, in either of the two shapes Model Garden accepts. */
+  static publisherModelName(registryUri: string): string {
+    const rest = registryUri.slice('vertex://'.length);
+    const [ref, version] = rest.split('@');
+    const name = ref.startsWith('publishers/') ? ref : `publishers/${ref.replace(/^\/+/, '')}`;
+    if (!/^publishers\/[^/]+\/models\/[^/]+$/.test(name)) {
+      throw new UnsupportedOperationError('vertex', `the Model Garden reference "${rest}". Use vertex://publishers/{publisher}/models/{model}@{version}`);
+    }
+    return version ? `${name}@${version}` : name;
+  }
+
+  private machineSpec(ref: EndpointRef) {
+    return {
+      machineType: ref.machineType,
+      ...(Number(ref.acceleratorCount ?? 0) > 0 ? { acceleratorType: ref.acceleratorType, acceleratorCount: ref.acceleratorCount } : {}),
+    };
+  }
+
   private deployedModelBody(ref: EndpointRef, min: number, max: number) {
+    if (!ref.machineType) {
+      throw Object.assign(new Error('cannot redeploy without a machine type: set machineType on the deployment, or read the endpoint once while the model is still deployed'), { code: 'ADAPTER_CONFIG_INVALID' });
+    }
     return {
       deployedModel: {
         model: ref.modelName,
         displayName: ref.endpointId,
-        dedicatedResources: {
-          machineSpec: {
-            machineType: ref.machineType,
-            ...(ref.acceleratorCount > 0 ? { acceleratorType: ref.acceleratorType, acceleratorCount: ref.acceleratorCount } : {}),
-          },
-          minReplicaCount: min,
-          maxReplicaCount: max,
-        },
+        dedicatedResources: { machineSpec: this.machineSpec(ref), minReplicaCount: min, maxReplicaCount: max },
         ...(ref.serviceAccount ? { serviceAccount: ref.serviceAccount } : {}),
         enableAccessLogging: false,
       },
@@ -200,45 +256,24 @@ export class VertexAdapter implements ModelProviderAdapter {
   }
 
   async deploy(request: DeployRequest, credentials: AdapterCredentials): Promise<EndpointRef> {
+    const route = VertexAdapter.route(request.version.registryUri);
     const cfg = request.providerConfig;
     const location = request.desired.region ?? cfg.location ?? 'us-central1';
-    const parent = `projects/${cfg.projectId}/locations/${location}`;
     const endpointId = VertexAdapter.endpointId(request.deploymentId);
-    const s3 = VertexAdapter.s3Prefix(request.version.registryUri);
     const replicas = Math.max(1, request.desired.replicas ?? 1);
     const min = Math.max(1, request.desired.minScale ?? replicas);
     const max = Math.max(min, request.desired.maxScale ?? replicas);
 
-    const env = [
-      { name: 'ALMYTY_REGISTRY_URI', value: request.version.registryUri },
-      ...(credentials.registryAccessKeyId ? [{ name: 'AWS_ACCESS_KEY_ID', value: credentials.registryAccessKeyId }] : []),
-      ...(credentials.registrySecretAccessKey ? [{ name: 'AWS_SECRET_ACCESS_KEY', value: credentials.registrySecretAccessKey }] : []),
-      ...(cfg.registryEndpoint ? [{ name: 'AWS_ENDPOINT_URL', value: cfg.registryEndpoint }] : []),
-    ];
-    const model = {
-      model: {
-        displayName: endpointId,
-        containerSpec: {
-          imageUri: cfg.image ?? DEFAULT_IMAGE,
-          args: ['--model', s3, '--load-format', 'runai_streamer', '--served-model-name', request.version.name, '--port', String(CONTAINER_PORT), ...(request.desired.quantization ? ['--quantization', request.desired.quantization] : [])],
-          env,
-          ports: [{ containerPort: CONTAINER_PORT }],
-          predictRoute: '/v1/chat/completions',
-          healthRoute: '/health',
-        },
-        labels: { 'almyty-deployment': request.deploymentId.replace(/[^a-z0-9_-]/gi, '').toLowerCase(), 'almyty-organization': request.organizationId.replace(/[^a-z0-9_-]/gi, '').toLowerCase() },
-      },
-    };
-
     const ref: EndpointRef = {
+      route,
       project: cfg.projectId,
       location,
       endpointId,
-      endpointName: `${parent}/endpoints/${endpointId}`,
+      endpointName: `projects/${cfg.projectId}/locations/${location}/endpoints/${endpointId}`,
       modelName: undefined,
       deployedModelId: undefined,
       deployOperation: undefined,
-      machineType: request.desired.hardware ?? cfg.machineType ?? 'g2-standard-12',
+      machineType: request.desired.hardware ?? cfg.machineType,
       acceleratorType: cfg.acceleratorType ?? 'NVIDIA_L4',
       acceleratorCount: cfg.acceleratorCount ?? 1,
       serviceAccount: cfg.serviceAccount,
@@ -247,26 +282,112 @@ export class VertexAdapter implements ModelProviderAdapter {
       hourlyRateCents: cfg.hourlyRateCents ?? 0,
       createdAt: new Date().toISOString(),
     };
+    ref.url = VertexAdapter.chatUrl(ref);
+
+    return route === 'garden'
+      ? this.deployFromModelGarden(request, credentials, ref, min, max)
+      : this.deployFromCloudStorage(request, credentials, ref, min, max);
+  }
+
+  /**
+   * One call: Model Garden uploads the model, creates the endpoint and
+   * deploys, and reports progress on a single operation that readEndpoint
+   * tracks. `endpointUserId` and `modelUserId` pin the resource names so
+   * the handle is complete before the operation finishes.
+   */
+  private async deployFromModelGarden(request: DeployRequest, credentials: AdapterCredentials, ref: EndpointRef, min: number, max: number): Promise<EndpointRef> {
+    const cfg = request.providerConfig;
+    const uri = request.version.registryUri;
+    const fromHub = uri.startsWith('hf://');
+    const modelUserId = `${ref.endpointId}-model`;
+    ref.modelName = `projects/${cfg.projectId}/locations/${ref.location}/models/${modelUserId}`;
+
+    const body: Record<string, any> = {
+      ...(fromHub
+        ? { huggingFaceModelId: uri.slice('hf://'.length).split('@')[0] }
+        : { publisherModelName: VertexAdapter.publisherModelName(uri) }),
+      modelConfig: {
+        modelUserId,
+        modelDisplayName: ref.endpointId,
+        acceptEula: Boolean(cfg.acceptEula),
+        ...(credentials.huggingFaceToken ? { huggingFaceAccessToken: credentials.huggingFaceToken } : {}),
+      },
+      endpointConfig: {
+        endpointUserId: ref.endpointId,
+        endpointDisplayName: ref.endpointId,
+        dedicatedEndpointEnabled: cfg.dedicatedEndpoint ?? false,
+        labels: VertexAdapter.labels(request),
+      },
+      // Without a machine type, Model Garden uses the machine spec Google
+      // recommends for this model rather than one we invented.
+      ...(ref.machineType ? { deployConfig: { dedicatedResources: { machineSpec: this.machineSpec(ref), minReplicaCount: min, maxReplicaCount: max } } } : {}),
+    };
 
     try {
-      const createOp = await this.call('POST', location, `${parent}/endpoints`, credentials, { displayName: endpointId, dedicatedEndpointEnabled: cfg.dedicatedEndpoint ?? false }, { endpointId });
-      await this.waitOperation(location, createOp.name, credentials);
+      const op = await this.call('POST', ref.location, `projects/${cfg.projectId}/locations/${ref.location}:deploy`, credentials, body);
+      ref.deployOperation = op.name;
+      return ref;
+    } catch (err) {
+      this.classify(err, 'model garden deploy failed');
+    }
+  }
 
-      const uploadOp = await this.call('POST', location, `${parent}/models:upload`, credentials, model);
-      const uploaded = await this.waitOperation(location, uploadOp.name, credentials);
+  /** The customer's own weights: Vertex reads the Cloud Storage directory itself. */
+  private async deployFromCloudStorage(request: DeployRequest, credentials: AdapterCredentials, ref: EndpointRef, min: number, max: number): Promise<EndpointRef> {
+    const cfg = request.providerConfig;
+    const parent = `projects/${cfg.projectId}/locations/${ref.location}`;
+    const artifactUri = VertexAdapter.gcsUri(request.version.registryUri);
+    ref.machineType = ref.machineType ?? 'g2-standard-12';
+
+    const model = {
+      model: {
+        displayName: ref.endpointId,
+        artifactUri,
+        containerSpec: {
+          imageUri: cfg.image ?? DEFAULT_IMAGE,
+          args: [
+            `--model=${artifactUri}`,
+            `--served-model-name=${request.version.name}`,
+            `--port=${CONTAINER_PORT}`,
+            ...(request.desired.quantization ? [`--quantization=${request.desired.quantization}`] : []),
+          ],
+          env: [
+            { name: 'MODEL_ID', value: artifactUri },
+            { name: 'DEPLOY_SOURCE', value: 'almyty' },
+          ],
+          ports: [{ containerPort: CONTAINER_PORT }],
+          predictRoute: cfg.predictRoute ?? '/v1/chat/completions',
+          healthRoute: cfg.healthRoute ?? '/health',
+        },
+        labels: VertexAdapter.labels(request),
+      },
+    };
+
+    try {
+      const createOp = await this.call('POST', ref.location, `${parent}/endpoints`, credentials, { displayName: ref.endpointId, dedicatedEndpointEnabled: cfg.dedicatedEndpoint ?? false }, { endpointId: ref.endpointId });
+      await this.waitOperation(ref.location, createOp.name, credentials);
+
+      const uploadOp = await this.call('POST', ref.location, `${parent}/models:upload`, credentials, model);
+      const uploaded = await this.waitOperation(ref.location, uploadOp.name, credentials);
       ref.modelName = uploaded?.response?.model;
       if (!ref.modelName) throw Object.assign(new Error('models:upload finished without a model name'), { code: 'ADAPTER_ERROR' });
 
-      const deployOp = await this.call('POST', location, `${ref.endpointName}:deployModel`, credentials, this.deployedModelBody(ref, min, max));
+      const deployOp = await this.call('POST', ref.location, `${ref.endpointName}:deployModel`, credentials, this.deployedModelBody(ref, min, max));
       ref.deployOperation = deployOp.name;
-      ref.url = VertexAdapter.chatUrl(ref);
       return ref;
     } catch (err) {
       // Leave nothing half-made: the endpoint and model that got created are removed again.
-      await this.call('DELETE', location, ref.endpointName, credentials).catch(() => undefined);
-      if (ref.modelName) await this.call('DELETE', location, ref.modelName, credentials).catch(() => undefined);
+      await this.call('DELETE', ref.location, ref.endpointName, credentials).catch(() => undefined);
+      if (ref.modelName) await this.call('DELETE', ref.location, ref.modelName, credentials).catch(() => undefined);
       this.classify(err, 'deploy failed');
     }
+  }
+
+  static labels(request: DeployRequest): Record<string, string> {
+    return {
+      'almyty-deployment': request.deploymentId.replace(/[^a-z0-9_-]/gi, '').toLowerCase(),
+      'almyty-organization': request.organizationId.replace(/[^a-z0-9_-]/gi, '').toLowerCase(),
+    };
   }
 
   private findDeployed(endpoint: any, ref: EndpointRef): any | undefined {
@@ -279,31 +400,56 @@ export class VertexAdapter implements ModelProviderAdapter {
     try {
       endpoint = await this.call('GET', ref.location, ref.endpointName, credentials);
     } catch (err: any) {
-      if (err?.response?.status === 404) return { state: 'missing', message: 'endpoint not found' };
+      if (err?.response?.status === 404) {
+        // Model Garden creates the endpoint part-way through its own
+        // operation, so a 404 before that operation has ever produced an
+        // endpoint is progress, not an orphan. Once the endpoint has been
+        // seen, a 404 means it really is gone.
+        if (ref.route === 'garden' && ref.deployOperation && !ref.seenEndpoint) {
+          const op = await this.call('GET', ref.location, ref.deployOperation, credentials).catch(() => undefined);
+          if (op?.done && op.error) return { state: 'failed', region: ref.location, message: op.error.message, details: { rpcCode: op.error.code } };
+          return { state: 'deploying', region: ref.location, details: { route: ref.route, operation: ref.deployOperation, done: Boolean(op?.done) } };
+        }
+        return { state: 'missing', message: 'endpoint not found' };
+      }
       this.classify(err, 'read endpoint failed');
     }
+    ref.seenEndpoint = true;
     const url = VertexAdapter.chatUrl(ref, endpoint?.dedicatedEndpointDns);
+    const openAiBase = VertexAdapter.openAiBase(ref, endpoint?.dedicatedEndpointDns);
     const deployed = this.findDeployed(endpoint, ref);
     if (deployed) {
       if (!ref.deployedModelId) ref.deployedModelId = deployed.id;
+      // Model Garden may have chosen the machine spec; remember it so a
+      // redeploy after scale-to-zero asks for the same hardware.
+      const spec = deployed.dedicatedResources?.machineSpec;
+      if (spec?.machineType) {
+        ref.machineType = spec.machineType;
+        ref.acceleratorType = spec.acceleratorType ?? ref.acceleratorType;
+        ref.acceleratorCount = spec.acceleratorCount ?? (spec.acceleratorType ? ref.acceleratorCount : 0);
+      }
       const min = deployed.dedicatedResources?.minReplicaCount ?? ref.minReplicas;
       const scaling = ref.scaleOperation ? !(await this.call('GET', ref.location, ref.scaleOperation, credentials).catch(() => ({ done: true })))?.done : false;
       return {
         state: scaling ? 'scaling' : 'ready',
         url,
-        replicas: Number(min ?? 1),
-        hardware: deployed.dedicatedResources?.machineSpec?.machineType ?? ref.machineType,
+        openAiBase,
+        replicas: Number(deployed.status?.availableReplicaCount ?? min ?? 1),
+        hardware: spec?.machineType ?? ref.machineType,
         region: ref.location,
-        details: { deployedModelId: deployed.id, maxReplicaCount: deployed.dedicatedResources?.maxReplicaCount, dedicatedEndpointDns: endpoint?.dedicatedEndpointDns },
+        details: { route: ref.route, deployedModelId: deployed.id, maxReplicaCount: deployed.dedicatedResources?.maxReplicaCount, dedicatedEndpointDns: endpoint?.dedicatedEndpointDns },
       };
     }
     if (ref.deployOperation) {
       const op = await this.call('GET', ref.location, ref.deployOperation, credentials).catch((err) => this.classify(err, 'read deploy operation failed'));
       if (op?.done && op.error) return { state: 'failed', url, region: ref.location, message: op.error.message, details: { rpcCode: op.error.code } };
-      if (op?.done && op.response?.deployedModel?.id && !ref.deployedModelId) ref.deployedModelId = op.response.deployedModel.id;
-      return { state: 'deploying', url, region: ref.location, details: { operation: ref.deployOperation, done: Boolean(op?.done) } };
+      if (op?.done) {
+        if (op.response?.deployedModel?.id && !ref.deployedModelId) ref.deployedModelId = op.response.deployedModel.id;
+        if (op.response?.model && !ref.modelName) ref.modelName = op.response.model;
+      }
+      return { state: 'deploying', url, region: ref.location, details: { route: ref.route, operation: ref.deployOperation, done: Boolean(op?.done) } };
     }
-    return { state: 'stopped', url, replicas: 0, region: ref.location, details: { note: 'model undeployed; endpoint kept' } };
+    return { state: 'stopped', url, openAiBase, replicas: 0, region: ref.location, details: { route: ref.route, note: 'model undeployed; endpoint kept' } };
   }
 
   async scale(ref: EndpointRef, replicas: number, credentials: AdapterCredentials): Promise<void> {

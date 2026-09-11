@@ -39,7 +39,7 @@ export type PipelineNodeType = keyof typeof nodeTypes
 export const NODE_TYPE_CONFIG: Record<PipelineNodeType, { label: string; color: string; description: string }> = {
   input: { label: 'Input', color: 'bg-green-500', description: 'Pipeline input data' },
   output: { label: 'Output', color: 'bg-red-500', description: 'Pipeline output' },
-  llm_call: { label: 'LLM Call', color: 'bg-blue-500', description: 'Call an LLM model' },
+  llm_call: { label: 'Model Call', color: 'bg-blue-500', description: 'Call a model' },
   tool_call: { label: 'Tool Call', color: 'bg-purple-500', description: 'Execute a tool' },
   condition: { label: 'Condition', color: 'bg-amber-500', description: 'Branch on condition' },
   loop: { label: 'Loop', color: 'bg-rose-500', description: 'Iterate over array' },
