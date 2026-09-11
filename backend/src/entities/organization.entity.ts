@@ -34,6 +34,14 @@ export interface OrganizationSettings {
   };
   /** Routing policy an llm_call node that names neither a provider nor a policy falls back to. */
   defaultRouting?: RoutingPolicy | null;
+  /**
+   * Hosts this organization may reach even though they resolve to a
+   * private or loopback address. Per organization on purpose: the
+   * install-wide env flags it stands next to open every private range to
+   * every organization on the install, which is a far larger hole than
+   * the one anybody is trying to make.
+   */
+  egressAllowlist?: string[];
 }
 
 @Entity('organizations')
