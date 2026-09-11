@@ -100,4 +100,36 @@ describe('a provider URL is gated on save', () => {
       else process.env.OLLAMA_ALLOW_PRIVATE_URLS = previous;
     }
   });
+
+  it('stamps the allowlisted host so the connect-time check can make the same exception', async () => {
+    const configuration: any = { apiUrl: 'http://gpu-1.internal:8000/v1' };
+    await gate(organization(['*.internal']))(LlmProviderType.CUSTOM, configuration);
+    // Without this the name is refused when it resolves, and allowlisting
+    // it would have achieved nothing.
+    expect(configuration.egressApprovedHost).toBe('gpu-1.internal');
+  });
+
+  it('stamps nothing for a host nobody allowlisted', async () => {
+    const configuration: any = { apiUrl: 'https://api.example.com/v1' };
+    await gate(organization(['gpu-1.internal']))(LlmProviderType.CUSTOM, configuration);
+    expect(configuration.egressApprovedHost).toBeUndefined();
+  });
+
+  it('refuses to take the stamp from the request body', async () => {
+    // The whole point of the stamp is that it lets a name past DNS
+    // pinning. Accepting it as input would hand every caller the decision
+    // this gate exists to make.
+    const configuration: any = {
+      apiUrl: 'https://api.example.com/v1',
+      egressApprovedHost: '169.254.169.254',
+    };
+    await gate(organization())(LlmProviderType.CUSTOM, configuration);
+    expect(configuration.egressApprovedHost).toBeUndefined();
+  });
+
+  it('drops a stale stamp when the host is no longer allowlisted', async () => {
+    const configuration: any = { apiUrl: 'http://gpu-1.internal:8000/v1', egressApprovedHost: 'gpu-1.internal' };
+    await gate(organization([]))(LlmProviderType.CUSTOM, configuration);
+    expect(configuration.egressApprovedHost).toBeUndefined();
+  });
 });
