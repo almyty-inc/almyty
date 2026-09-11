@@ -77,3 +77,41 @@ export function pinnedLookup(
 
 export const ssrfSafeHttpAgent = new HttpAgent({ lookup: pinnedLookup as any });
 export const ssrfSafeHttpsAgent = new HttpsAgent({ lookup: pinnedLookup as any });
+
+/**
+ * Agents that make one exception, for one host.
+ *
+ * An organization can allowlist a host it owns on a private network. The
+ * URL-string gate can act on that when the host is an address, but a NAME
+ * is not knowably private until it resolves, so without this the pinning
+ * lookup refuses the very name the organization just vouched for.
+ *
+ * The exception is deliberately as narrow as it can be: it applies to one
+ * hostname, matched exactly, and every other name resolved through these
+ * agents is checked as strictly as before. That matters because a pool is
+ * shared across requests — an exception any wider would leak to hosts
+ * nobody approved.
+ */
+const exemptAgents = new Map<string, { httpAgent: HttpAgent; httpsAgent: HttpsAgent }>();
+
+export function agentsExempting(host: string): { httpAgent: HttpAgent; httpsAgent: HttpsAgent } {
+  const key = host.toLowerCase();
+  const existing = exemptAgents.get(key);
+  if (existing) return existing;
+
+  const lookup = (hostname: string, options: any, callback?: any): void => {
+    if (hostname.toLowerCase() === key) {
+      const cb = typeof options === 'function' ? options : callback;
+      const opts = typeof options === 'function' || typeof options === 'number' ? {} : options;
+      return (dns.lookup as any)(hostname, opts, cb);
+    }
+    return pinnedLookup(hostname, options, callback);
+  };
+
+  const agents = {
+    httpAgent: new HttpAgent({ lookup: lookup as any }),
+    httpsAgent: new HttpsAgent({ lookup: lookup as any }),
+  };
+  exemptAgents.set(key, agents);
+  return agents;
+}

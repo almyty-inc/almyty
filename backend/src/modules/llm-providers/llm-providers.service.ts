@@ -6,7 +6,7 @@ import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { Inject, forwardRef } from '@nestjs/common';
 import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callPerplexity, callPerplexityStream, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
-import { decideEgress } from '../connections/egress-policy';
+import { decideEgress, hostMatches } from '../connections/egress-policy';
 import { llmCallOptionsFor } from './providers/safe-request';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
@@ -260,6 +260,11 @@ export class LlmProvidersService {
     configuration: LlmProviderConfig,
     organizationId: string,
   ): Promise<void> {
+    // Never from the request body. The stamp is what lets a name past DNS
+    // pinning at connect, so accepting it as input would let anyone grant
+    // themselves the thing this gate exists to decide.
+    delete (configuration as any).egressApprovedHost;
+
     // Build the URL the way the entity will, so the gate judges exactly
     // what the caller will dial rather than a guess at it.
     const probe = Object.assign(new LlmProvider(), { type, configuration });
@@ -280,6 +285,22 @@ export class LlmProvidersService {
     const decision = decideEgress(url, { allowlist: organization?.settings?.egressAllowlist ?? [] });
     if (!decision.allowed) {
       throw new BadRequestException({ code: 'EGRESS_NOT_ALLOWED', message: decision.reason });
+    }
+
+    // Record the host whenever the organization has vouched for it, not
+    // only when the string gate needed the allowlist to say yes. A NAME
+    // passes that gate on its own — it is not knowably private until it
+    // resolves — so keying the stamp off the refusal would never fire for
+    // the case the stamp exists to serve.
+    let host: string | undefined;
+    try {
+      host = new URL(url).hostname;
+    } catch {
+      host = undefined;
+    }
+    const allowlist = organization?.settings?.egressAllowlist ?? [];
+    if (host && allowlist.some((pattern) => hostMatches(host as string, pattern))) {
+      configuration.egressApprovedHost = host;
     }
   }
 
