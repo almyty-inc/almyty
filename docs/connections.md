@@ -240,7 +240,13 @@ also defeats the `/etc/hosts` trick — pointing a public-looking name at an
 internal address and sending a matching `Host` header — because the name
 is never what we judge.
 
-Today the allowlist is read at save time only. Allowlisting a *hostname*
-therefore does not yet survive the connect-time check, so a private
-endpoint reached by name still needs the install-wide flag. Allowlisting
-an address works end to end.
+Allowlisting a hostname works end to end. When you save a provider whose
+host is on the allowlist, that one host is recorded on the provider, and
+the connect-time check makes the same exception for that name and no
+other. Every other name the process resolves is checked as strictly as
+before.
+
+The record is never taken from a request body — it is the thing that lets
+a name past the resolution check, so accepting it as input would hand the
+decision to whoever is asking. Remove a host from the allowlist and the
+record is dropped the next time that provider is saved.

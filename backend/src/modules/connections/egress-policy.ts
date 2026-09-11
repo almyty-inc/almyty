@@ -22,9 +22,10 @@ import { validateUrl, validateUrlAllowingPrivate } from '../../common/security/u
  * by. A hostname is not known to be private until it resolves, so a name
  * pointing at an internal address is caught at request time by the
  * DNS-pinning agent in `ssrf-safe-agent.ts` instead. The two are
- * complementary and neither replaces the other — which also means an
- * allowlisted HOSTNAME does not yet survive the connect-time check, only
- * an allowlisted address does. See docs/connections.md.
+ * complementary and neither replaces the other. An allowlisted hostname
+ * survives the connect-time check because the save path records that one
+ * host on the provider and the agent exempts exactly it; see
+ * `agentsExempting` and docs/connections.md.
  *
  * The rule: a public URL is allowed if it passes the SSRF validator. A
  * private, loopback or link-local URL is refused unless its host is on
