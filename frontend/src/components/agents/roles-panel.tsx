@@ -83,7 +83,11 @@ export function RolesPanel({
     )
   }
 
-  const resolvedByKey = new Map(resolved.map((r) => [r.key, r] as const))
+  // Defended rather than assumed: a resolve that answered with something
+  // unexpected should cost the rationale line, not the whole tab. This
+  // threw and took the roles, the strategy picker and the orchestrator
+  // down with it.
+  const resolvedByKey = new Map((Array.isArray(resolved) ? resolved : []).map((r) => [r.key, r] as const))
 
   return (
     <div data-testid="roles-panel" className="space-y-2">
