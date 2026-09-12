@@ -140,11 +140,28 @@ export class AgentExecutionEngine {
       // A chosen strategy IS the pipeline for this run. Compiled here
       // rather than saved onto the agent, so the shape stays a choice you
       // can change and the graph stays what the person drew.
-      const compiled = await this.strategyPipelines?.pipelineFor(agent).catch((err) => {
+      // The request text is what an orchestrator decides on, so it has to
+      // reach the resolver rather than being rebuilt from the graph later.
+      const requestText =
+        typeof options.input === 'string'
+          ? options.input
+          : typeof (options.input as any)?.message === 'string'
+            ? (options.input as any).message
+            : JSON.stringify(options.input ?? {});
+
+      const compiled = await this.strategyPipelines?.pipelineFor(agent, requestText).catch((err) => {
         throw classifiedError(err?.message ?? 'Could not compile this strategy', ExecutionErrorType.VALIDATION_ERROR);
       });
       if (compiled) {
-        execution.metadata = { ...(execution.metadata ?? {}), strategyKey: compiled.strategyKey };
+        execution.metadata = {
+          ...(execution.metadata ?? {}),
+          strategyKey: compiled.strategyKey,
+          // Recorded so a run can answer "why this shape?" — a fallback
+          // that looks like a choice is how an orchestrator silently
+          // stops working.
+          ...(compiled.chosenBy ? { strategyChosenBy: compiled.chosenBy } : {}),
+          ...(compiled.fallbackReason ? { strategyFallbackReason: compiled.fallbackReason } : {}),
+        };
         await this.agentExecutionRepository.save(execution);
       }
 
