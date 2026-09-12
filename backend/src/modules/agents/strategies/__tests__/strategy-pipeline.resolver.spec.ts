@@ -59,4 +59,35 @@ describe('the chosen strategy becomes the pipeline', () => {
     const compiled = await resolver(['principal'], [own]).pipelineFor(agent('single'));
     expect(compiled?.pipeline.nodes.map((n) => n.id)).toContain('ours');
   });
+
+  it('lets the orchestrator override the standing choice, which is the point of it', async () => {
+    const orchestrator = { choose: jest.fn().mockResolvedValue({ strategyKey: 'cascade', roleBindings: {}, via: 'orchestrator' }) };
+    const r = new (StrategyPipelineResolver as any)(
+      { find: jest.fn().mockResolvedValue([]) },
+      { find: jest.fn().mockResolvedValue(['drafter', 'verifier', 'principal'].map((key) => ({ key }))) },
+      orchestrator,
+    );
+    const compiled = await r.pipelineFor(agent('single'), 'do the thing');
+
+    expect(orchestrator.choose).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), 'do the thing');
+    expect(compiled.strategyKey).toBe('cascade');
+    expect(compiled.chosenBy).toBe('orchestrator');
+  });
+
+  it('carries the fallback reason through, so a run can say why it got the fallback', async () => {
+    const orchestrator = {
+      choose: jest.fn().mockResolvedValue({ strategyKey: 'single', roleBindings: {}, via: 'fallback', fallbackReason: 'it did not answer within 2000ms' }),
+    };
+    const r = new (StrategyPipelineResolver as any)(
+      { find: jest.fn().mockResolvedValue([]) },
+      { find: jest.fn().mockResolvedValue([{ key: 'principal' }]) },
+      orchestrator,
+    );
+    const compiled = await r.pipelineFor(agent(null), '');
+
+    // No standing choice at all, and the run still gets a shape.
+    expect(compiled.strategyKey).toBe('single');
+    expect(compiled.chosenBy).toBe('fallback');
+    expect(compiled.fallbackReason).toContain('2000ms');
+  });
 });
