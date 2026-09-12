@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
 import { OrganizationsPage } from '../organizations'
@@ -63,6 +64,26 @@ describe('OrganizationsPage', () => {
     if (!Element.prototype.scrollIntoView) {
       Element.prototype.scrollIntoView = vi.fn()
     }
+  })
+
+  it('keeps the API rejection visible in the creation dialog, preserves input, and clears it on retry', async () => {
+    vi.mocked(organizationsApi.getAll).mockResolvedValue([])
+    vi.mocked(organizationsApi.create).mockRejectedValueOnce({
+      response: { data: { error: { message: 'Organization with this name or slug already exists' } } },
+    }).mockImplementationOnce(() => new Promise(() => {}))
+    const user = userEvent.setup()
+    render(<OrganizationsPage />)
+    await user.click(await screen.findByRole('button', { name: 'Create Organization' }))
+    const dialog = within(screen.getByRole('dialog'))
+    const name = dialog.getByLabelText('Organization Name')
+    await user.type(name, 'QA First Run')
+    await user.click(dialog.getByRole('button', { name: 'Create', exact: true }))
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent('Organization with this name or slug already exists')
+    expect(name).toHaveValue('QA First Run')
+    await user.click(dialog.getByRole('button', { name: 'Create', exact: true }))
+    await waitFor(() => expect(dialog.queryByRole('alert')).not.toBeInTheDocument())
+    expect(dialog.getByRole('button', { name: 'Creating...' })).toBeDisabled()
   })
 
   it('renders the org row with its real name when given a flat array (post-extractData)', async () => {

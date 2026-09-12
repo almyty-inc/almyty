@@ -11,6 +11,7 @@ import { Team } from '../../entities/team.entity';
 import { UserTeam } from '../../entities/user-team.entity';
 import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
+import { DataSource, EntitySchema } from 'typeorm';
 
 describe('OrganizationsService', () => {
   let service: OrganizationsService;
@@ -131,6 +132,46 @@ describe('OrganizationsService', () => {
   });
 
   describe('create', () => {
+    it('checks the generated slug before saving when the optional slug is omitted', async () => {
+      const savedOrg = { id: 'org-new', name: 'QA First Run', slug: 'qa-first-run' };
+      // Compile the service's real find options through TypeORM, not only
+      // a permissive repository mock. No socket is needed to reproduce
+      // TypeORM's strict undefined-WHERE rejection seen on staging.
+      const ds = new DataSource({
+        type: 'postgres',
+        invalidWhereValuesBehavior: { undefined: 'throw' },
+        entities: [new EntitySchema({
+          name: 'OrganizationQueryProbe',
+          columns: { id: { type: String, primary: true }, name: { type: String }, slug: { type: String } },
+        })],
+      });
+      await (ds as any).buildMetadatas();
+      organizationRepository.findOne.mockImplementationOnce(async (options: any) => {
+        ds.getRepository('OrganizationQueryProbe').createQueryBuilder('org').setFindOptions(options).getSql();
+        return null;
+      }).mockResolvedValueOnce(savedOrg);
+      organizationRepository.create.mockImplementation((value: any) => value);
+      organizationRepository.save.mockResolvedValue(savedOrg);
+
+      await service.create({ name: 'QA First Run' }, 'user-1');
+
+      expect(organizationRepository.findOne).toHaveBeenNthCalledWith(1, {
+        where: [{ name: 'QA First Run' }, { slug: 'qa-first-run' }],
+      });
+      expect(organizationRepository.create).toHaveBeenCalledWith({ name: 'QA First Run', slug: 'qa-first-run' });
+    });
+
+    it('rejects a generated slug collision before attempting an insert', async () => {
+      organizationRepository.findOne.mockImplementation(async ({ where }: any) =>
+        where.some((part: any) => part.slug === 'qa-first-run')
+          ? { id: 'existing-org', name: 'QA-First Run', slug: 'qa-first-run' }
+          : null,
+      );
+
+      await expect(service.create({ name: 'QA First Run' }, 'user-1')).rejects.toThrow(ConflictException);
+      expect(organizationRepository.save).not.toHaveBeenCalled();
+    });
+
     it('should create organization successfully', async () => {
       const createDto = {
         name: 'New Organization',
