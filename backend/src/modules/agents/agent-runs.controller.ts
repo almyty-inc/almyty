@@ -1,5 +1,10 @@
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AgentExecution } from '../../entities/agent-execution.entity';
+import { traceFor } from './strategies/run-trace';
 import {
   Controller,
+  Optional,
   Get,
   Post,
   Body,
@@ -29,7 +34,61 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class AgentRunsController {
   private readonly logger = new Logger(AgentRunsController.name);
 
-  constructor(private readonly runtimeService: AgentRuntimeService) {}
+  constructor(
+    private readonly runtimeService: AgentRuntimeService,
+    // @Optional() so the harnesses that build this controller without the
+    // execution repository keep resolving. Adding a required dependency to
+    // a controller this widely constructed breaks every one of them, which
+    // is a poor trade for one endpoint.
+    @Optional()
+    @InjectRepository(AgentExecution)
+    private readonly executions?: Repository<AgentExecution>,
+  ) {}
+
+  /**
+   * Where this run's requests actually went.
+   *
+   * Derived from what the run already recorded rather than from a trace
+   * nobody was writing: a node result carries the model that answered,
+   * the ones tried before it, what the policy rejected, and the timings.
+   */
+  @Get(':id/executions/:executionId/trace')
+  @Roles('viewer', 'member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Where a run\'s requests went, hop by hop' })
+  async trace(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('executionId', ParseUUIDPipe) executionId: string,
+    @Request() req: any,
+  ) {
+    const organizationId = req.user?.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException(
+        { success: false, message: 'No organization found', error: 'NO_ORGANIZATION' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (!this.executions) {
+      throw new HttpException(
+        { success: false, message: 'Run traces are not available here', error: 'TRACE_UNAVAILABLE' },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    // Scoped by agent as well as organization: without the agentId any
+    // execution in the caller's org would resolve through any agent's URL.
+    const execution = await this.executions.findOne({
+      where: { id: executionId, organizationId, agentId: id },
+    });
+    if (!execution) {
+      throw new HttpException(
+        { success: false, message: 'Run not found', error: 'RUN_NOT_FOUND' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return { success: true, data: traceFor(execution) };
+  }
 
   // ── Autonomous Agent Runs ──
 
