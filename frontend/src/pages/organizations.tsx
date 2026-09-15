@@ -22,6 +22,7 @@ import { Progress } from '@/components/ui/progress'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 import { organizationsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { formatDate, getInitials, formatCurrency } from '@/lib/utils'
@@ -76,7 +77,7 @@ export function OrganizationsPage() {
       setCurrentOrganization(response)
     },
     onError: (err: any) => {
-      error('Failed to create organization', err.response?.data?.message || 'Please try again.')
+      error('Failed to create organization', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -359,7 +360,10 @@ export function OrganizationsPage() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+          <Dialog open={createDialogOpen} onOpenChange={(open) => {
+            createOrgMutation.reset()
+            setCreateDialogOpen(open)
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
@@ -374,6 +378,11 @@ export function OrganizationsPage() {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={createForm.handleSubmit(handleCreateOrg)} className="space-y-4">
+                {createOrgMutation.isError && (
+                  <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                    {getApiErrorMessage(createOrgMutation.error, 'Could not create the organization. Please try again.')}
+                  </p>
+                )}
                 <div>
                   <Label htmlFor="name">Organization Name</Label>
                   <Input
