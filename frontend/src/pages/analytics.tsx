@@ -7,6 +7,7 @@ import {
   DollarSign,
   Globe,
   MessageSquare,
+  Route,
   ScrollText,
   Wrench,
   Zap,
@@ -27,6 +28,7 @@ import { GatewaysTab } from '@/components/analytics/gateways-tab'
 import { LlmTab } from '@/components/analytics/llm-tab'
 import { OverviewTab } from '@/components/analytics/overview-tab'
 import { RequestLogTab } from '@/components/analytics/request-log-tab'
+import { RoutingTab } from '@/components/analytics/routing-tab'
 import { ToolsTab } from '@/components/analytics/tools-tab'
 
 const TAB_DEFINITIONS: Array<{
@@ -39,6 +41,7 @@ const TAB_DEFINITIONS: Array<{
   { key: 'tools', label: 'Tools', icon: Wrench },
   { key: 'gateways', label: 'Gateways', icon: Zap },
   { key: 'llm', label: 'Models', icon: MessageSquare },
+  { key: 'routing', label: 'Routing', icon: Route },
   { key: 'agents', label: 'Agents', icon: Bot },
   { key: 'cost', label: 'Cost', icon: DollarSign },
   { key: 'audit', label: 'Audit Trail', icon: ScrollText },
@@ -114,6 +117,7 @@ export function AnalyticsPage() {
       {tab === 'tools' && <ToolsTab />}
       {tab === 'gateways' && <GatewaysTab />}
       {tab === 'llm' && <LlmTab />}
+      {tab === 'routing' && <RoutingTab />}
       {tab === 'agents' && <AgentsTab />}
       {tab === 'cost' && <CostTab />}
       {tab === 'audit' && <AuditTab />}
