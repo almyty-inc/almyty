@@ -92,6 +92,29 @@ through the core.
 Code included, work against almyty with a base URL change, carrying
 thinking blocks and real tool use instead of flattening them.
 
+Point one at `POST /v1/messages`:
+
+```bash
+curl https://api.almyty.com/v1/messages \
+  -H "x-api-key: $ALMYTY_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model":"agent:my-agent","max_tokens":1024,
+       "messages":[{"role":"user","content":"hello"}]}'
+```
+
+`model` names the agent, as `agent:<id>` or its name. The key goes in
+`x-api-key`, the way an Anthropic client already sends it, or as a bearer
+token if you have one already. A tool result arrives as a user message of
+`tool_result` blocks and stays a tool turn rather than being flattened
+into text, which is the difference between a client's tool loop working
+and stopping without an error.
+
+Two limits, stated because finding them at run time is worse: streaming
+is not implemented on this route, and a request with `"stream": true` is
+refused saying so rather than answered in the wrong shape; and a run
+records one token total rather than an input/output split, so
+`usage.input_tokens` reports 0 instead of a number we would be inventing.
+
 Compatibility shims are a fallback, not the default: Anthropic's
 OpenAI-compatible endpoint drops thinking blocks, Gemini's shim loses
 safety settings and grounding, Vertex's loses context caching. Routing
