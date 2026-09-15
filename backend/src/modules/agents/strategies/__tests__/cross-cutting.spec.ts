@@ -125,4 +125,16 @@ describe('the route trace does not pretend to know what it cannot', () => {
     expect(summary.divergences).toHaveLength(1);
     expect(summary.capabilitiesDropped).toEqual(['vision']);
   });
+
+  it('separates a cost that is not ours to know from one we simply did not price', () => {
+    // Both have no number. Only one of them is a gap in what we CAN know,
+    // and reporting our own unpriced hop as opaque would overstate how
+    // much of the run is invisible to us.
+    const summary = summariseTrace([
+      ourHop({ layer: 'routing', decidedBy: 'cheapest', chosen: 'card-a', reason: 'rank 1' }),
+      providerHop({ layer: 'provider', decidedBy: 'Straitly', chosen: 'x', reason: 'downstream' }),
+    ]);
+    expect(summary.opaqueHops).toBe(1);
+    expect(summary.knownCostCents).toBe(0);
+  });
 });
