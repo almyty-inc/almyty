@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Settings, Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, Radio, CreditCard, Gift, Bell, Plug } from 'lucide-react'
+import { Settings, Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, Radio, Lock, CreditCard, Gift, Bell, Plug } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,6 +18,7 @@ import { RbacSettings } from '@/components/settings/rbac-settings'
 import { ApprovalPoliciesSettings } from '@/components/settings/approval-policies-settings'
 import { ComplianceSettings } from '@/components/settings/compliance-settings'
 import { AuditStreamsSettings } from '@/components/settings/audit-streams-settings'
+import { KmsSettings } from '@/components/settings/kms-settings'
 import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { DataRetentionCard } from '@/components/settings/data-retention-card'
 import { NotificationPreferences } from '@/components/settings/notification-preferences'
@@ -26,7 +27,7 @@ import { BillingTab } from '@/components/BillingTab'
 import { PlanBadge } from '@/components/plan-indicator'
 import { authApi, organizationsApi } from '@/lib/api'
 
-const SETTINGS_TABS = ['organization', 'members', 'connections', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso', 'rbac', 'approvals', 'compliance', 'audit-streams'] as const
+const SETTINGS_TABS = ['organization', 'members', 'connections', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso', 'rbac', 'approvals', 'compliance', 'audit-streams', 'encryption'] as const
 type SettingsTab = typeof SETTINGS_TABS[number]
 
 function getSettingsTab(pathname: string): SettingsTab {
@@ -79,6 +80,7 @@ export function SettingsPage() {
           { key: 'approvals' as SettingsTab, label: 'Approvals', icon: ShieldAlert },
           { key: 'compliance' as SettingsTab, label: 'Compliance', icon: ScrollText },
           { key: 'audit-streams' as SettingsTab, label: 'Audit streaming', icon: Radio },
+          { key: 'encryption' as SettingsTab, label: 'Encryption', icon: Lock },
         ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -110,6 +112,7 @@ export function SettingsPage() {
         {settingsTab === 'approvals' && <ApprovalPoliciesSettings />}
         {settingsTab === 'compliance' && <ComplianceSettings />}
         {settingsTab === 'audit-streams' && <AuditStreamsSettings />}
+        {settingsTab === 'encryption' && <KmsSettings />}
       </div>
     </div>
   )

@@ -180,6 +180,7 @@ export default defineConfig({
       '/chargeback': { target: apiTarget, changeOrigin: true },
       '/billing': { target: apiTarget, changeOrigin: true },
       '/byo-kms': { target: apiTarget, changeOrigin: true },
+      '/kms': { target: apiTarget, changeOrigin: true },
       '/scim': { target: apiTarget, changeOrigin: true },
       '/sso': { target: apiTarget, changeOrigin: true },
       '/mcp': {
