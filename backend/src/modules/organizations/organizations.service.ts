@@ -51,11 +51,15 @@ export class OrganizationsService {
   ) {}
 
   async create(createOrganizationDto: CreateOrganizationDto, ownerId: string): Promise<Organization> {
+    // Use the value we will persist for the duplicate check as well.
+    // The UI omits this optional field; strict TypeORM rejects an
+    // undefined WHERE value before the first organization can be saved.
+    const slug = createOrganizationDto.slug || this.generateSlug(createOrganizationDto.name);
     // Check if organization name or slug already exists
     const existingOrg = await this.organizationRepository.findOne({
       where: [
         { name: createOrganizationDto.name },
-        { slug: createOrganizationDto.slug },
+        { slug },
       ],
     });
 
@@ -66,7 +70,7 @@ export class OrganizationsService {
     // Create organization
     const organization = this.organizationRepository.create({
       ...createOrganizationDto,
-      slug: createOrganizationDto.slug || this.generateSlug(createOrganizationDto.name),
+      slug,
     });
 
     const savedOrganization = await this.organizationRepository.save(organization);

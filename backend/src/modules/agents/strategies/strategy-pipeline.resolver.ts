@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 
@@ -7,6 +7,7 @@ import { AgentRole } from '../../../entities/agent-role.entity';
 import { Strategy } from '../../../entities/strategy.entity';
 import { STRATEGY_SEEDS } from './strategy-seeds';
 import { compileStrategy, StrategyCompileError } from './strategy-compiler';
+import { OrchestratorService } from './orchestrator.service';
 
 /**
  * Turn the strategy an agent has chosen into the pipeline the engine runs.
@@ -22,6 +23,10 @@ import { compileStrategy, StrategyCompileError } from './strategy-compiler';
 export interface CompiledStrategy {
   pipeline: AgentPipeline;
   strategyKey: string;
+  /** Set when a model chose the shape rather than the agent's setting. */
+  chosenBy?: 'orchestrator' | 'fallback';
+  /** Why the fallback was used, when it was. */
+  fallbackReason?: string;
 }
 
 @Injectable()
@@ -31,11 +36,17 @@ export class StrategyPipelineResolver {
   constructor(
     @InjectRepository(Strategy) private readonly strategies: Repository<Strategy>,
     @InjectRepository(AgentRole) private readonly roles: Repository<AgentRole>,
+    // @Optional() so an install without L6 still runs the agent's own
+    // chosen shape, which is the common case.
+    @Optional() private readonly orchestrator?: OrchestratorService,
   ) {}
 
   /** The chosen shape compiled, or null when the agent runs its own graph. */
-  async pipelineFor(agent: Agent): Promise<CompiledStrategy | null> {
-    const strategyKey = (agent.settings as any)?.execution?.strategyKey as string | undefined | null;
+  async pipelineFor(agent: Agent, request = ''): Promise<CompiledStrategy | null> {
+    // A model picking the shape per request overrides the standing
+    // choice, which is the whole point of switching it on.
+    const choice = (await this.orchestrator?.choose(agent, request)) ?? null;
+    const strategyKey = choice?.strategyKey ?? ((agent.settings as any)?.execution?.strategyKey as string | undefined | null);
     if (!strategyKey) return null;
 
     const shape = await this.find(strategyKey, agent.organizationId);
@@ -44,7 +55,9 @@ export class StrategyPipelineResolver {
       // once, where a silent fall back to the raw graph would quietly run
       // something the person did not ask for.
       throw new StrategyCompileError(
-        `This agent is set to run "${strategyKey}", which no longer exists. Pick another strategy on the Execution tab.`,
+        choice
+          ? `The orchestrator chose "${strategyKey}", which no longer exists.`
+          : `This agent is set to run "${strategyKey}", which no longer exists. Pick another strategy on the Execution tab.`,
       );
     }
 
@@ -55,7 +68,11 @@ export class StrategyPipelineResolver {
     // caring.
     const bindings = Object.fromEntries(roles.map((r) => [r.key, r.key]));
 
-    return { pipeline: compileStrategy(shape, bindings), strategyKey };
+    return {
+      pipeline: compileStrategy(shape, bindings),
+      strategyKey,
+      ...(choice ? { chosenBy: choice.via, fallbackReason: choice.fallbackReason } : {}),
+    };
   }
 
   private async find(key: string, organizationId: string): Promise<Pick<Strategy, 'key' | 'roleSlots' | 'shape'> | null> {
