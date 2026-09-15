@@ -1,6 +1,6 @@
 # AI Models
 
-Bring your own model keys and every agent, LLM Call node, and LLM-type tool can use them. almyty supports 15 providers out of the box (including local models via Ollama) and any OpenAI-compatible endpoint, so you are never locked to one vendor.
+Bring your own model keys and every agent, Model Call node, and Model Prompt tool can use them. almyty supports every provider in the table below out of the box, including local models via Ollama, plus any OpenAI-compatible endpoint — so you are never locked to one vendor.
 
 ![Models page](/screenshots/models.png)
 
@@ -17,7 +17,7 @@ Bring your own model keys and every agent, LLM Call node, and LLM-type tool can 
 6. Click **Test Connection**. almyty sends a lightweight request to verify the key and model.
 7. Click **Save**.
 
-The provider now appears in the Models list, ready for agent pipeline LLM Call nodes and LLM-type tools.
+The provider now appears in the Models list, ready for Model Call nodes and Model Prompt tools.
 
 > **Pick from the live model list.** The dropdown is populated from the
 > provider's current models, not a hardcoded list. Providers deprecate models
@@ -30,23 +30,48 @@ The native MCP control plane exposes `add_provider` and `list_providers`, so you
 
 ## Supported providers
 
-| Provider | Type | Notes |
-|----------|------|-------|
-| OpenAI | `openai` | GPT-4o, GPT-4.1, o3, o4-mini, etc. |
-| Anthropic | `anthropic` | Claude Opus, Sonnet, Haiku |
-| Google Gemini | `google` | Gemini 2.5 Pro, Flash, and more |
-| Mistral | `mistral` | `baseUrl` defaults to `https://api.mistral.ai/v1`. Chat models include Codestral (`codestral-latest`); also serves memory embeddings via `mistral-embed` |
-| xAI | `xai` | Grok models |
-| DeepSeek | `deepseek` | DeepSeek Chat and Reasoner |
-| Groq | `groq` | Fast inference for open models |
-| Together | `together` | Open-source models at scale |
-| OpenRouter | `openrouter` | Unified access to 200+ models |
-| Azure OpenAI | `azure_openai` | Configure resource name and deployment name |
-| AWS Bedrock | `aws_bedrock` | Foundation models through AWS |
-| Cohere | `cohere` | Command models |
-| Hugging Face | `huggingface` | Open-source model inference |
-| Ollama | `ollama` | Local models (llama, qwen, mistral, and more). Keyless; `baseUrl` defaults to `http://localhost:11434` |
-| Custom | `custom` | Any OpenAI-compatible HTTP endpoint (Perplexity, a Vertex proxy, vLLM, ...) |
+{/* generated:providers start */}
+
+almyty speaks to 33 providers out of the box, plus any
+OpenAI-compatible endpoint you point it at.
+
+| Provider | Type | API format | Serves |
+|----------|------|------------|--------|
+| Anthropic | `anthropic` | Anthropic messages (preferred) | Claude Opus, Sonnet and Haiku |
+| AWS Bedrock | `aws_bedrock` | OpenAI chat completions (preferred) | Bedrock models in your own AWS account |
+| Azure AI Foundry | `azure_ai_foundry` | OpenAI chat completions (preferred) | Foundry model deployments in your own Azure subscription |
+| Baidu ERNIE (Qianfan) | `qianfan` | OpenAI chat completions (preferred) | ERNIE 5.1 and the open models Qianfan hosts |
+| Baseten | `baseten` | OpenAI chat completions (preferred) | Open models, and your own weights or container |
+| ByteDance Doubao (Ark) | `volcengine` | OpenAI chat completions (preferred) | Doubao Seed 2.0, and DeepSeek on Ark |
+| Cerebras | `cerebras` | OpenAI chat completions (preferred) | Open models on wafer-scale hardware |
+| Cohere | `cohere` | OpenAI chat completions (preferred) | Command and the Cohere retrieval models |
+| DeepInfra | `deepinfra` | OpenAI chat completions (preferred) | Open models per token, and your own weights on dedicated GPUs |
+| DeepSeek | `deepseek` | OpenAI chat completions (preferred) | DeepSeek V4 and the reasoning line |
+| DigitalOcean Gradient | `digitalocean` | OpenAI chat completions (preferred) | Open models on DigitalOcean serverless inference |
+| Fireworks AI | `fireworks` | OpenAI chat completions (preferred) | Open models and your own fine-tunes on dedicated GPUs |
+| Google Gemini | `google` | Gemini generateContent (preferred) | Gemini Pro and Flash on the Gemini Developer API |
+| Groq | `groq` | OpenAI chat completions (preferred) | Open models at very low latency |
+| iFlytek Spark | `spark` | OpenAI chat completions (preferred) | Spark X2, X1.5 and the 4.0 Ultra line |
+| MiniMax | `minimax` | OpenAI chat completions (preferred) | MiniMax M3 and the M2 family |
+| Mistral AI | `mistral` | OpenAI chat completions (preferred) | Mistral Large, Medium and Codestral |
+| Modal | `modal` | OpenAI chat completions (preferred) | Your own endpoints on Modal |
+| Moonshot (Kimi) | `moonshot` | OpenAI chat completions (preferred) | Kimi K3 and the K2.7 coding models |
+| Nebius Token Factory | `nebius` | OpenAI chat completions (preferred) | Open models, and LoRA adapters on curated bases |
+| Novita | `novita` | OpenAI chat completions (preferred) | Open models, and any Hugging Face repo on a dedicated endpoint |
+| OpenAI | `openai` | OpenAI chat completions (preferred) | GPT-5 and the o-series |
+| OpenRouter | `openrouter` | OpenAI chat completions (preferred) | One key across hundreds of models and providers |
+| Qwen (QwenCloud) | `qwen` | OpenAI chat completions (preferred) | Qwen3 Max, Plus and Flash on QwenCloud |
+| RunPod | `runpod` | OpenAI chat completions (preferred) | Your own serverless vLLM worker |
+| SambaNova | `sambanova` | OpenAI chat completions (preferred) | Open models on RDU hardware |
+| Straitly | `straitly` | OpenAI chat completions (preferred) | One key across 177 models, with cashback instead of a markup |
+| Tencent Hunyuan (TokenHub) | `hunyuan` | OpenAI chat completions (preferred) | Hunyuan, plus DeepSeek, GLM, Kimi and MiniMax on TokenHub |
+| Together AI | `together` | OpenAI chat completions (preferred) | A large open-model catalog, and your own fine-tunes |
+| Upstage Solar | `upstage` | OpenAI chat completions (preferred) | Solar Pro 4 and Solar Mini |
+| Writer (Palmyra) | `writer` | OpenAI chat completions (preferred) | Palmyra X6, X5 and the domain models |
+| xAI (Grok) | `xai` | OpenAI chat completions (preferred) | Grok 4 and the Grok code models |
+| Z.ai (GLM) | `zai` | OpenAI chat completions (preferred) | GLM 5.3 and the GLM coding models |
+
+{/* generated:providers end */}
 
 Each native type ships with the right default `baseUrl`; override it to point at a compatible proxy. For `custom`, set `baseUrl` to the provider's OpenAI-compatible endpoint. The `apiKey` field accepts whatever token the provider expects.
 
@@ -85,7 +110,7 @@ The [Memory](/memory) module embeds content with the organization's own provider
 
 ## Usage in agents
 
-When building an agent pipeline, LLM Call nodes reference a provider by ID. The provider's default model and parameters are used unless overridden in the node configuration. See [Agents](/agents) for details.
+When building an agent pipeline, Model Call nodes reference a provider by ID. The provider's default model and parameters are used unless overridden in the node configuration. See [Agents](/agents) for details.
 
 ## API
 
