@@ -48,7 +48,14 @@ describe('AgentExecutionEngine and a chosen strategy', () => {
       executionRepo as any,
       nodeExecutor as any,
       { sendExecutionWebhook: jest.fn().mockResolvedValue(undefined) } as any,
-      { emitEvent: jest.fn(), bumpAgentStats: jest.fn().mockResolvedValue(undefined) } as any,
+      {
+        emitEvent: jest.fn(),
+        bumpAgentStats: jest.fn().mockResolvedValue(undefined),
+        // Without this the engine's layer wrapper throws, the catch marks
+        // the run TIMEOUT, and the nodes still execute — so assertions on
+        // which nodes ran pass while the run's status is a lie.
+        withTimeout: (promise: Promise<unknown>) => promise,
+      } as any,
       undefined,
       resolver,
     );
@@ -109,5 +116,38 @@ describe('AgentExecutionEngine and a chosen strategy', () => {
     expect(execution.status).toBe(AgentExecutionStatus.FAILED);
     expect(String(execution.error)).toContain('drafter');
     expect(nodeExecutor.execute).not.toHaveBeenCalled();
+  });
+
+  it('stops on the budget policy as DONE, not as a failure', async () => {
+    // "Stop when good enough" and "ran out of money" are different
+    // outcomes and a run that conflates them teaches the wrong lesson to
+    // whoever reads it afterwards.
+    const { engine, executionRepo, nodeExecutor } = makeEngine(undefined);
+    // Costed nodes, so the ceiling is genuinely crossed rather than the
+    // rule firing on a zero that proves nothing.
+    nodeExecutor.execute.mockImplementation(async (node: any) => ({
+      nodeId: node.id,
+      output: {},
+      success: true,
+      cost: 0.05,
+      status: 'completed',
+    }));
+    const budgeted = {
+      ...agent,
+      settings: { budget: { ceilingPerRun: 1, stopWhen: {} } },
+    } as any;
+
+    const execution = await engine.execute(budgeted, 'org-1', 'user-1', { input: {} });
+
+    expect(execution.status).toBe(AgentExecutionStatus.COMPLETED);
+    expect(execution.metadata.budgetStop.reason).toContain('ceiling');
+    expect(executionRepo.save).toHaveBeenCalled();
+  });
+
+  it('leaves an agent with no budget policy exactly as it was', async () => {
+    const { engine } = makeEngine(undefined);
+    const execution = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+    expect(execution.metadata?.budgetStop).toBeUndefined();
   });
 });

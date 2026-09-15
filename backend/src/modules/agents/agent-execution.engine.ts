@@ -54,6 +54,7 @@ import {
   markBranchAsSkipped,
 } from './agent-execution-graph.helper';
 import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolver';
+import { evaluateBudget } from './strategies/budget-policy';
 import {
   classifiedError,
   classifyNodeError,
@@ -194,6 +195,10 @@ export class AgentExecutionEngine {
 
       const nodeResults: Record<string, any> = {};
       let totalCost = 0;
+      // What the layer just finished cost, used as the estimate for the
+      // next one. A projection has to come from somewhere, and the last
+      // layer is the only honest signal available between stages.
+      let lastLayerCost = 0;
       let totalTokens = 0;
       let finalOutput: any = null;
       // Track whether an `output` node actually ran. Distinguishes
@@ -254,6 +259,32 @@ export class AgentExecutionEngine {
           });
 
           this.notifyRunFailed(agent, execution).catch(() => {});
+          return execution;
+        }
+
+        // Stop rules, before the hard cap. A run that has already got
+        // what it needs should finish because it is DONE, not because it
+        // ran out of money — and the recorded reason should say which.
+        // An agent with no budget policy is unaffected: evaluateBudget
+        // returns continue for an absent policy.
+        const budgetVerdict = evaluateBudget(agent.settings?.budget as any, {
+          spentCents: Math.round(totalCost * 100),
+          // The layer just run is the closest estimate of the next one.
+          nextStageCents: Math.round(lastLayerCost * 100),
+        });
+        if (budgetVerdict.action === 'stop') {
+          execution.status = AgentExecutionStatus.COMPLETED;
+          execution.metadata = {
+            ...(execution.metadata ?? {}),
+            budgetStop: { reason: budgetVerdict.reason, projection: budgetVerdict.projection },
+          };
+          execution.executionTime = Date.now() - startTime;
+          execution.totalCost = totalCost;
+          execution.totalTokens = totalTokens;
+          execution.nodeResults = nodeResults;
+          execution.output = context.nodes;
+          await this.agentExecutionRepository.save(execution);
+          this.logger.log(`[EXECUTE] Agent ${agent.id} stopped on budget policy: ${budgetVerdict.reason}`);
           return execution;
         }
 
@@ -421,6 +452,7 @@ export class AgentExecutionEngine {
         let layerHasFailure = false;
 
         // Process layer results
+        let layerCost = 0;
         for (const item of layerResults) {
           if (!item) continue;
           const { nodeId, node, result, error, errorType, errorCode, errorModel, errorProviderId, startedAt, completedAt } = item;
@@ -469,6 +501,7 @@ export class AgentExecutionEngine {
 
 
           totalCost += result.cost || 0;
+          layerCost += result.cost || 0;
           totalTokens += result.tokens || 0;
 
           this.state.emitEvent(onEvent, {
@@ -514,6 +547,10 @@ export class AgentExecutionEngine {
             outputCaptured = true;
           }
         }
+
+        // Carried to the next iteration's budget check: the layer just
+        // finished is the closest thing to an estimate of the next one.
+        lastLayerCost = layerCost;
 
         // Mark skipped nodes in nodeResults
         for (const nodeId of layer) {
