@@ -53,4 +53,21 @@ describe('the published provider table', () => {
   it('refuses to generate into a file whose markers are missing', () => {
     expect(() => withGeneratedTable('# no markers here')).toThrow(/markers are missing/);
   });
+
+  it('uses MDX comments, because an HTML one does not compile', () => {
+    // This is not style. `<!-- -->` is a parse error in MDX -- "Unexpected
+    // character `!`" -- and it broke the docs build the first time these
+    // markers shipped. The guard above only checked that the table
+    // matched the registry, which it did, in a file that no longer built.
+    expect(DOC_START.startsWith('{/*')).toBe(true);
+    expect(DOC_END.startsWith('{/*')).toBe(true);
+    expect(markdown).not.toContain('<!--');
+  });
+
+  it('generates nothing that MDX reads as a tag', () => {
+    // A blurb or display name containing < would be parsed as JSX and
+    // fail the build for a reason nobody would connect to the registry.
+    const table = providersTable();
+    expect(table).not.toMatch(/<[a-zA-Z!/]/);
+  });
 });
