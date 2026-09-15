@@ -30,7 +30,7 @@ The native MCP control plane exposes `add_provider` and `list_providers`, so you
 
 ## Supported providers
 
-<!-- generated:providers start -->
+{/* generated:providers start */}
 
 almyty speaks to 33 providers out of the box, plus any
 OpenAI-compatible endpoint you point it at.
@@ -71,7 +71,7 @@ OpenAI-compatible endpoint you point it at.
 | xAI (Grok) | `xai` | OpenAI chat completions (preferred) | Grok 4 and the Grok code models |
 | Z.ai (GLM) | `zai` | OpenAI chat completions (preferred) | GLM 5.3 and the GLM coding models |
 
-<!-- generated:providers end -->
+{/* generated:providers end */}
 
 Each native type ships with the right default `baseUrl`; override it to point at a compatible proxy. For `custom`, set `baseUrl` to the provider's OpenAI-compatible endpoint. The `apiKey` field accepts whatever token the provider expects.
 
