@@ -118,4 +118,30 @@ describe('the Execution tab saves what you choose', () => {
     fireEvent.click(await screen.findByTestId('strategy-cascade'))
     expect(await screen.findByTestId('execution-error')).toHaveTextContent('No strategy named')
   })
+
+  it('shows what to do when a role cannot be filled, not a generic failure', async () => {
+    // The common case for a new organization: roles exist, no model does.
+    // A generic message here reads as our fault when the fix is one step
+    // and theirs.
+    wire({ roles: [role('principal')] })
+    ;(api.post as any).mockImplementation(async (url: string) => {
+      if (url.endsWith('/resolve')) {
+        return Promise.reject({
+          response: {
+            data: {
+              code: 'ROLE_UNRESOLVED',
+              message: 'Role "principal" could not be filled: no model in the catalog is usable. Add a model to the catalog, or pin this role to one.',
+            },
+          },
+        })
+      }
+      return { data: { data: {} } }
+    })
+
+    render(<ExecutionTab agentId="a1" />)
+
+    const error = await screen.findByTestId('resolve-error')
+    expect(error).toHaveTextContent('principal')
+    expect(error).toHaveTextContent(/add a model to the catalog/i)
+  })
 })
