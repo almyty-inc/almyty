@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
+import { act, configure, screen, fireEvent, waitFor } from '@testing-library/react'
 
 import { render } from '../../test/setup'
 import { HostedChatPage } from '../hosted-chat'
@@ -61,6 +61,28 @@ function currentTest(): string {
   return (expect as any).getState?.()?.currentTestName ?? 'unknown'
 }
 
+/**
+ * Emit a server event and let React settle before asserting.
+ *
+ * The page's stream handler is async: it closes the source, clears the
+ * sending flag, fetches the transcript and only then renders the reply.
+ * Firing the event outside act() leaves those updates to whenever React's
+ * scheduler next runs, and under a loaded full-suite run that can be
+ * later than the assertion's patience -- the probe caught exactly that
+ * state, with the request sent, the transcript fetched, and the DOM still
+ * showing a disabled Send button and no reply.
+ *
+ * act() is not a workaround here: the event genuinely arrives from
+ * outside React, and this is how a test says "and then the app processed
+ * it" rather than hoping it did in time.
+ */
+async function emitAndSettle(type: string, data: unknown) {
+  const stream = await openedStream()
+  await act(async () => {
+    stream.emit(type, data)
+  })
+}
+
 /** The stream this test opened, once the page has opened it. */
 async function openedStream(): Promise<FakeEventSource> {
   const mine = () => FakeEventSource.instances.filter((s) => s.bornIn === currentTest())
@@ -109,6 +131,22 @@ const branding = (overrides: Partial<HostedChatBranding> = {}): HostedChatBrandi
 })
 
 describe('HostedChatPage', () => {
+  // This file renders the heaviest page in the suite thirty times, and
+  // every assertion sits behind a mocked promise chain plus a react-query
+  // refetch. The library's 1s default for an async query is comfortable
+  // on an idle machine and is not when four workers share one, which is
+  // why this file alone failed a full run in ten while passing on its own
+  // every time. The page is not slow; the assertion's patience was tuned
+  // for a quieter machine.
+  //
+  // RTL's configure() applies immediately, unlike vi.setConfig() in a
+  // beforeAll, which is collected too late to change a test's timeout --
+  // an earlier attempt at this did nothing at all and the 5000ms in the
+  // failure message proved it.
+  beforeAll(() => configure({ asyncUtilTimeout: 5_000 }))
+  afterAll(() => configure({ asyncUtilTimeout: 1_000 }))
+
+
   beforeEach(() => {
     vi.clearAllMocks()
     FakeEventSource.instances = []
@@ -273,9 +311,8 @@ describe('HostedChatPage', () => {
 
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalledWith('acme', 'hello', undefined))
 
-    const source = await openedStream()
-    source.emit('token', { token: 'hi ' })
-    source.emit('done', { reason: 'run.completed' })
+    await emitAndSettle('token', { token: 'hi ' })
+    await emitAndSettle('done', { reason: 'run.completed' })
 
     // The transcript is the source of truth, so the finished reply
     // replaces whatever the stream accumulated.
@@ -296,7 +333,7 @@ describe('HostedChatPage', () => {
     await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
-    ;(await openedStream()).emit('done', { reason: 'run.failed' })
+    await emitAndSettle('done', { reason: 'run.failed' })
 
     expect(await screen.findByRole('alert')).toHaveTextContent("The assistant couldn't reply just now")
     // The visitor's own turn stays: it was delivered, the reply is what failed.
@@ -316,7 +353,7 @@ describe('HostedChatPage', () => {
     await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
-    ;(await openedStream()).emit('done', { reason: 'stream_ended' })
+    await emitAndSettle('done', { reason: 'stream_ended' })
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
   })
@@ -337,7 +374,7 @@ describe('HostedChatPage', () => {
     await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
-    ;(await openedStream()).emit('done', { reason: 'run.completed' })
+    await emitAndSettle('done', { reason: 'run.completed' })
 
     expect(await screen.findByText('hi there')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).toBeNull()
@@ -363,7 +400,7 @@ describe('HostedChatPage', () => {
     render(<HostedChatPage slug="acme" />)
     await sendMessage('**literal**')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
-    ;(await openedStream()).emit('done', { reason: 'run.completed' })
+    await emitAndSettle('done', { reason: 'run.completed' })
 
     expect(await screen.findByText('Documentation')).toHaveProperty('tagName', 'STRONG')
     expect(screen.getByText('**literal**')).toBeInTheDocument()
@@ -393,7 +430,7 @@ describe('HostedChatPage', () => {
     render(<HostedChatPage slug="acme" />)
     await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
-    ;(await openedStream()).emit('done', { reason: 'run.completed' })
+    await emitAndSettle('done', { reason: 'run.completed' })
 
     expect(await screen.findByText(/Safe/)).toBeInTheDocument()
     expect(document.querySelector('img')).toBeNull()
@@ -454,10 +491,14 @@ describe('HostedChatPage', () => {
     await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
+    // Three arrivals for one turn: the page must reconcile once, not
+    // three times, however the server repeats itself.
     const source = (await openedStream()) as any
-    source.emit('done', { reason: 'run.failed' })
-    source.onerror?.()
-    source.emit('done', { reason: 'run.failed' })
+    await act(async () => {
+      source.emit('done', { reason: 'run.failed' })
+      source.onerror?.()
+      source.emit('done', { reason: 'run.failed' })
+    })
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(screen.getAllByRole('alert')).toHaveLength(1)
@@ -475,7 +516,7 @@ describe('HostedChatPage', () => {
     await sendMessage('hello')
     await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
 
-    ;(await openedStream()).emit('done', { reason: 'run.completed' })
+    await emitAndSettle('done', { reason: 'run.completed' })
 
     expect(await screen.findByRole('alert')).toHaveTextContent("couldn't reply")
     // The visitor's turn survives; only the empty streaming placeholder goes.

@@ -54,6 +54,7 @@ import { AgentRolesService } from './agent-roles.service';
 import { AgentRolesController } from './agent-roles.controller';
 import { StrategiesController } from './strategies/strategies.controller';
 import { AgentExecutionSettingsController } from './agent-execution-settings.controller';
+import { AgentAnthropicCompatController } from './agent-anthropic-compat.controller';
 import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolver';
 import { OrchestratorService } from './strategies/orchestrator.service';
 import { Strategy } from '../../entities/strategy.entity';
@@ -98,7 +99,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
   ],
   providers: [OrchestratorService, StrategyPipelineResolver, 
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper],
-  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController],
+  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController],
   exports: [
     AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService],
 })
