@@ -20,6 +20,7 @@ export type AnalyticsTab =
   | 'tools'
   | 'gateways'
   | 'llm'
+  | 'routing'
   | 'agents'
   | 'cost'
   | 'audit'
@@ -30,6 +31,7 @@ export const ANALYTICS_TABS: AnalyticsTab[] = [
   'tools',
   'gateways',
   'llm',
+  'routing',
   'agents',
   'cost',
   'audit',

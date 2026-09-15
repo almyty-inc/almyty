@@ -27,12 +27,15 @@ import { runStatusVariant, formatDuration } from './constants'
 import type { AgentRun } from '@/types'
 import { VerifyStepCard, VerifySummary } from './verify-step'
 import { PromoteRunDialog } from './promote-run-dialog'
+import { RouteTraceTimeline } from './route-trace-timeline'
 
 interface RunsTabProps {
   runs: AgentRun[]
+  /** Needed to fetch a run's route trace, which is scoped by agent. */
+  agentId?: string
 }
 
-export function RunsTab({ runs }: RunsTabProps) {
+export function RunsTab({ runs, agentId }: RunsTabProps) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null)
 
   return (
@@ -111,6 +114,15 @@ export function RunsTab({ runs }: RunsTabProps) {
                           <div className="space-y-4">
                             {/* Verification verdict (if the agent ran a verify gate) */}
                             <VerifySummary run={run} />
+                            {/* Where the requests went. Only for runs that
+                                routed — a pinned-model run has no trace to
+                                show and an empty panel would read as broken. */}
+                            {agentId && (
+                              <div>
+                                <h4 className="mb-2 text-sm font-medium">Route</h4>
+                                <RouteTraceTimeline agentId={agentId} executionId={run.id} />
+                              </div>
+                            )}
                             {/* Steps */}
                             {run.steps && run.steps.length > 0 && (
                               <div>
