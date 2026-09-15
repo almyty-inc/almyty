@@ -109,12 +109,40 @@ export class AgentRolesController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'What each role would resolve to right now' })
   async resolve(@Request() req: any, @Param('agentId', ParseUUIDPipe) agentId: string) {
-    const resolved = await this.rolesService.resolveRoles(
-      this.orgId(req),
-      agentId,
-      {},
-      req.user?.id ? { id: req.user.id } : undefined,
-    );
-    return { success: true, data: resolved };
+    try {
+      const resolved = await this.rolesService.resolveRoles(
+        this.orgId(req),
+        agentId,
+        {},
+        req.user?.id ? { id: req.user.id } : undefined,
+      );
+      return { success: true, data: resolved };
+    } catch (error: any) {
+      // A role that cannot be filled is an ordinary answer, not a crash.
+      // A new organization with no models is the COMMON case here, and
+      // "Internal server error" tells that person nothing they can act
+      // on — it reads as our fault when the fix is theirs and is one step.
+      if (error?.code === 'ROLE_UNRESOLVED' || error?.name === 'RoleUnresolvedError') {
+        throw new HttpException(
+          {
+            success: false,
+            code: 'ROLE_UNRESOLVED',
+            message: `${error.message}. Add a model to the catalog, or pin this role to one.`,
+          },
+          HttpStatus.CONFLICT,
+        );
+      }
+      if (error?.code === 'NO_ROUTE' || error?.name === 'NoRouteError') {
+        throw new HttpException(
+          {
+            success: false,
+            code: 'NO_ROUTE',
+            message: `${error.message}. No model in the catalog satisfies this role's policy.`,
+          },
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw error;
+    }
   }
 }
