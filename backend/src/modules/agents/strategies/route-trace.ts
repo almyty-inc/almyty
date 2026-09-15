@@ -79,8 +79,12 @@ export function summariseTrace(hops: RouteHop[]): {
   let opaqueHops = 0;
   const dropped = new Set<string>();
   for (const hop of hops) {
-    if (hop.costEstimateCents == null) opaqueHops++;
-    else knownCostCents += hop.costEstimateCents;
+    // Opaque means "not ours to know", which is what `opaqueCost` says.
+    // Counting every missing number as opaque conflates that with one of
+    // our own hops we simply did not price, and the two mean different
+    // things to whoever reads the total.
+    if (hop.opaqueCost) opaqueHops++;
+    else if (hop.costEstimateCents != null) knownCostCents += hop.costEstimateCents;
     for (const c of hop.capabilitiesDropped ?? []) dropped.add(c);
   }
   return {
