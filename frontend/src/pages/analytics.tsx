@@ -7,6 +7,7 @@ import {
   DollarSign,
   Globe,
   MessageSquare,
+  Receipt,
   Route,
   ScrollText,
   Wrench,
@@ -29,6 +30,7 @@ import { LlmTab } from '@/components/analytics/llm-tab'
 import { OverviewTab } from '@/components/analytics/overview-tab'
 import { RequestLogTab } from '@/components/analytics/request-log-tab'
 import { RoutingTab } from '@/components/analytics/routing-tab'
+import { ChargebackTab } from '@/components/analytics/chargeback-tab'
 import { ToolsTab } from '@/components/analytics/tools-tab'
 
 const TAB_DEFINITIONS: Array<{
@@ -44,6 +46,7 @@ const TAB_DEFINITIONS: Array<{
   { key: 'routing', label: 'Routing', icon: Route },
   { key: 'agents', label: 'Agents', icon: Bot },
   { key: 'cost', label: 'Cost', icon: DollarSign },
+  { key: 'chargeback', label: 'Chargeback', icon: Receipt },
   { key: 'audit', label: 'Audit Trail', icon: ScrollText },
 ]
 
@@ -118,6 +121,7 @@ export function AnalyticsPage() {
       {tab === 'gateways' && <GatewaysTab />}
       {tab === 'llm' && <LlmTab />}
       {tab === 'routing' && <RoutingTab />}
+      {tab === 'chargeback' && <ChargebackTab />}
       {tab === 'agents' && <AgentsTab />}
       {tab === 'cost' && <CostTab />}
       {tab === 'audit' && <AuditTab />}

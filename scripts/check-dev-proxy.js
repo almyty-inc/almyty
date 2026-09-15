@@ -21,6 +21,12 @@ const path = require('path');
 
 const repoRoot = path.join(__dirname, '..');
 const backendSrc = path.join(repoRoot, 'backend', 'src');
+// EE controllers live outside backend/src and are proxied the same way.
+// Missing them meant seven EE prefixes -- rbac, compliance, approvals,
+// billing and more -- had no dev-proxy rule at all while this check
+// reported everything covered, so every EE screen 404'd in local dev and
+// nothing said so.
+const backendEe = path.join(repoRoot, 'backend', 'ee');
 const viteConfig = path.join(repoRoot, 'frontend', 'vite.config.ts');
 
 /**
@@ -49,7 +55,7 @@ function walk(dir, out = []) {
 function controllerPrefixes() {
   const prefixes = new Set();
 
-  for (const file of walk(backendSrc)) {
+  for (const file of [...walk(backendSrc), ...(fs.existsSync(backendEe) ? walk(backendEe) : [])]) {
     const source = fs.readFileSync(file, 'utf8');
     // Both @Controller('x') and @Controller({ path: 'x' }).
     const pattern = /@Controller\(\s*(?:\{[^}]*?path:\s*)?['"]([^'"]*)['"]/g;
