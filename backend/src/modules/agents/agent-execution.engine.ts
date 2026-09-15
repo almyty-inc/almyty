@@ -405,6 +405,7 @@ export class AgentExecutionEngine {
               // Typed cause, so callers that only see the persisted node
               // results (the scheduler) can still act on MODEL_NOT_FOUND.
               errorCode: err?.code as string | undefined,
+              triedModels: Array.isArray(err?.tried) ? err.tried : undefined,
               errorModel: findModelNotFound(err)?.model,
               errorProviderId: findModelNotFound(err)?.providerId,
 
@@ -464,6 +465,11 @@ export class AgentExecutionEngine {
               error,
               errorType,
               ...(errorCode ? { errorCode, errorModel, errorProviderId } : {}),
+              // Which models were tried before giving up. A node where every
+              // candidate failed leaves no routing attribution, because
+              // nothing answered -- so without this the co-failures would be
+              // invisible exactly when they matter most.
+              ...(item.triedModels?.length ? { triedModels: item.triedModels } : {}),
               startedAt,
 
               completedAt,

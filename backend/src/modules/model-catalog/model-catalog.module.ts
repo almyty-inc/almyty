@@ -1,3 +1,5 @@
+import { AgentExecution } from '../../entities/agent-execution.entity';
+import { RoutingAnalyticsController } from './routing/routing-analytics.controller';
 import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -25,7 +27,7 @@ import { ModelCatalogController } from './model-catalog.controller';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Model, ModelVersion, ModelDeployment, LlmProvider]),
+    TypeOrmModule.forFeature([Model, ModelVersion, ModelDeployment, LlmProvider, AgentExecution]),
     BullModule.registerQueue({ name: MODEL_PRICE_FEED_QUEUE }),
     BullModule.registerQueue({ name: MODEL_CATALOG_SYNC_QUEUE }),
     AuditLogModule,
@@ -34,7 +36,7 @@ import { ModelCatalogController } from './model-catalog.controller';
     EndpointProviderModule,
   ],
   providers: [PriceFeedService, PriceFeedProcessor, CatalogSyncProcessor, ModelRouterService, ModelCatalogService],
-  controllers: [ModelCatalogController],
+  controllers: [ModelCatalogController, RoutingAnalyticsController],
   exports: [PriceFeedService, ModelRouterService, ModelCatalogService],
 })
 export class ModelCatalogModule {}
