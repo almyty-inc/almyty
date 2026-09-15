@@ -13,8 +13,12 @@ import { PROVIDER_PROFILES } from './provider-profile';
  * it. See `providers-doc.spec.ts` for the guard that fails when the
  * checked-in fragment no longer matches the registry.
  */
-export const DOC_START = '<!-- generated:providers start -->';
-export const DOC_END = '<!-- generated:providers end -->';
+// MDX comments, not HTML ones. An HTML comment is a parse error in MDX
+// ("Unexpected character `!`"), which broke the docs build the first time
+// these markers shipped — the file is .mdx and the surrounding prose is
+// JSX, however much of it reads as plain markdown.
+export const DOC_START = '{/* generated:providers start */}';
+export const DOC_END = '{/* generated:providers end */}';
 
 const PROTOCOL_NAMES: Record<string, string> = {
   chat_completions: 'OpenAI chat completions',
