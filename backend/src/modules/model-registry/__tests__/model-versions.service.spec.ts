@@ -66,6 +66,27 @@ describe('ModelVersionsService', () => {
     await expect(svc.register('org', { name: 'b', registryUri: 'hf://x/y@1', base: 'b' })).rejects.toBeInstanceOf(ConflictException);
   });
 
+  /**
+   * The duplicate check sits before a manifest fetch that takes seconds,
+   * so a double-click gets past it -- two rows for one registry URI,
+   * after which the check itself returns an arbitrary one and the
+   * in-use teardown guard counts deployments against a single copy.
+   * The unique index is the real guard; this is it being honoured.
+   */
+  it('turns a unique-violation from a concurrent register back into VERSION_EXISTS', async () => {
+    registry.describeVersion.mockRejectedValue(new Error('404'));
+    await svc.register('org', { name: 'first', registryUri: 'hf://x/y@2', base: 'b' });
+
+    // The row lands between the check and the insert, which is exactly
+    // what the check cannot see.
+    versions.findOne.mockResolvedValueOnce(null);
+    versions.save.mockRejectedValueOnce(Object.assign(new Error('duplicate key'), { code: '23505' }));
+
+    await expect(
+      svc.register('org', { name: 'second', registryUri: 'hf://x/y@2', base: 'b' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
   it('remove refuses while a deployment that is not torn down references the version', async () => {
     registry.describeVersion.mockRejectedValue(new Error('404'));
     const v = await svc.register('org', { name: 'a', registryUri: 'hf://x/y@1', base: 'b' });

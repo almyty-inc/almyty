@@ -22,6 +22,7 @@ import {
  * - requestLogsDays   -> request_logs (scoped via the org's gateways)
  * - usageMetricsDays  -> usage_metrics
  * - auditLogDays      -> audit_logs
+ * - toolExecutionsDays -> tool_executions
  */
 @Entity('retention_policies')
 @Index(['organizationId'], { unique: true })
@@ -50,6 +51,14 @@ export class RetentionPolicy {
 
   @Column({ type: 'int', nullable: true })
   auditLogDays: number | null;
+
+  /**
+   * tool_executions. The only per-event table with no sweep, and the one
+   * that grows fastest in bytes: each row keeps `parameters` and
+   * `result` as json, and the HTTP executor allows 10MB responses.
+   */
+  @Column({ type: 'int', nullable: true })
+  toolExecutionsDays: number | null;
 
   @CreateDateColumn()
   createdAt: Date;
