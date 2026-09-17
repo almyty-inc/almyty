@@ -220,7 +220,7 @@ export function WorkspacesPage() {
 function Header() {
   return (
     <div>
-      <h1 className="text-2xl font-bold">Workspaces</h1>
+      <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Workspaces</h1>
       <p className="text-sm text-muted-foreground mt-1">
         (runner, cwd) reservations with a TTL. Created by your agents; surfaced here for audit and recovery.
       </p>

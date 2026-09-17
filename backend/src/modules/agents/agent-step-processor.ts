@@ -32,6 +32,9 @@ import { shouldAutoSaveMemory } from './memory-autosave.policy';
  * database fresh on every step — there is no per-instance state on
  * this class.
  */
+
+/** Per-step input/output cap in the persisted json column. */
+const STEP_PAYLOAD_CAP = 32 * 1024;
 @Injectable()
 export class AgentStepProcessor {
   constructor(
@@ -734,6 +737,34 @@ export class AgentStepProcessor {
     }
   }
 
+  /**
+   * Bound what a step contributes to the persisted row.
+   *
+   * `steps` is a json column that is rewritten whole on every commit, so
+   * a run that grows it linearly writes O(n^2) bytes of TOAST and WAL --
+   * and the pushes carry untruncated tool results, where the HTTP
+   * executor allows 10MB responses and the default ceiling is 100 tool
+   * calls. The in-memory array the current tick reasons over is left
+   * alone; this only bounds what goes to Postgres, the same trade the
+   * request logger already makes with its bodies.
+   */
+  private boundStepsForPersist(steps: AgentRun['steps']): AgentRun['steps'] {
+    if (!Array.isArray(steps)) return steps;
+
+    const cap = (value: unknown): unknown => {
+      if (value === null || value === undefined) return value;
+      const text = typeof value === 'string' ? value : JSON.stringify(value);
+      if (text === undefined || text.length <= STEP_PAYLOAD_CAP) return value;
+      return `${text.slice(0, STEP_PAYLOAD_CAP)}… (truncated from ${text.length} characters)`;
+    };
+
+    return steps.map((step) =>
+      step && typeof step === 'object'
+        ? { ...step, input: cap((step as any).input), output: cap((step as any).output) }
+        : step,
+    );
+  }
+
   private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {
     const res = await this.s.runRepository.update(
       { id: run.id, currentStep: expectedStep },
@@ -743,7 +774,7 @@ export class AgentStepProcessor {
         totalCost: run.totalCost,
         totalTokens: run.totalTokens,
         executionTime: run.executionTime,
-        steps: run.steps,
+        steps: this.boundStepsForPersist(run.steps),
         output: run.output,
         error: run.error,
         workingMemory: run.workingMemory,

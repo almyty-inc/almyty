@@ -240,9 +240,9 @@ export function CreateToolDialog({
               {/* Link to API */}
               {availableApis.length > 0 && (
                 <div>
-                  <Label>Link to API (optional)</Label>
+                  <Label htmlFor="tool-link-to-api">Link to API (optional)</Label>
                   <Select value={selectedApiId} onValueChange={setSelectedApiId}>
-                    <SelectTrigger><SelectValue placeholder="None - use full URL" /></SelectTrigger>
+                    <SelectTrigger id="tool-link-to-api"><SelectValue placeholder="None - use full URL" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None - use full URL</SelectItem>
                       {availableApis.map((api: any) => (
@@ -289,9 +289,9 @@ export function CreateToolDialog({
               {['POST', 'PUT', 'PATCH'].includes(httpConfig.method) && (
                 <>
                   <div>
-                    <Label>Body Encoding</Label>
+                    <Label htmlFor="tool-body-encoding">Body Encoding</Label>
                     <Select value={bodyEncoding} onValueChange={setBodyEncoding}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="tool-body-encoding"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="json">JSON</SelectItem>
                         <SelectItem value="form-urlencoded">Form URL-encoded</SelectItem>
@@ -401,8 +401,8 @@ export function CreateToolDialog({
                 {responseMappingOpen && (
                   <div className="p-3 pt-0 space-y-2">
                     <div>
-                      <Label className="text-xs">Data Path</Label>
-                      <Input
+                      <Label htmlFor="tool-data-path" className="text-xs">Data Path</Label>
+                      <Input id="tool-data-path"
                         value={responseMapping.dataPath}
                         onChange={(e) => setResponseMapping({ ...responseMapping, dataPath: e.target.value })}
                         placeholder="e.g. data.results, value"
@@ -410,8 +410,8 @@ export function CreateToolDialog({
                       />
                     </div>
                     <div>
-                      <Label className="text-xs">Error Path</Label>
-                      <Input
+                      <Label htmlFor="tool-error-path" className="text-xs">Error Path</Label>
+                      <Input id="tool-error-path"
                         value={responseMapping.errorPath}
                         onChange={(e) => setResponseMapping({ ...responseMapping, errorPath: e.target.value })}
                         placeholder="e.g. error.message"
@@ -419,8 +419,8 @@ export function CreateToolDialog({
                       />
                     </div>
                     <div>
-                      <Label className="text-xs">Success Condition</Label>
-                      <Input
+                      <Label htmlFor="tool-success-condition" className="text-xs">Success Condition</Label>
+                      <Input id="tool-success-condition"
                         value={responseMapping.successCondition}
                         onChange={(e) => setResponseMapping({ ...responseMapping, successCondition: e.target.value })}
                         placeholder="e.g. data.ok === true"
@@ -444,9 +444,9 @@ export function CreateToolDialog({
                 {paginationOpen && (
                   <div className="p-3 pt-0 space-y-2">
                     <div>
-                      <Label className="text-xs">Type</Label>
+                      <Label htmlFor="tool-type" className="text-xs">Type</Label>
                       <Select value={paginationType} onValueChange={setPaginationType}>
-                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="tool-type" className="h-8 text-sm"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">None</SelectItem>
                           <SelectItem value="cursor">Cursor</SelectItem>
@@ -458,8 +458,8 @@ export function CreateToolDialog({
                     {paginationType === 'cursor' && (
                       <>
                         <div>
-                          <Label className="text-xs">Cursor Path</Label>
-                          <Input
+                          <Label htmlFor="tool-cursor-path" className="text-xs">Cursor Path</Label>
+                          <Input id="tool-cursor-path"
                             value={paginationConfig.cursorPath}
                             onChange={(e) => setPaginationConfig({ ...paginationConfig, cursorPath: e.target.value })}
                             placeholder="e.g. meta.next_cursor"
@@ -467,8 +467,8 @@ export function CreateToolDialog({
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">Cursor Param</Label>
-                          <Input
+                          <Label htmlFor="tool-cursor-param" className="text-xs">Cursor Param</Label>
+                          <Input id="tool-cursor-param"
                             value={paginationConfig.cursorParam}
                             onChange={(e) => setPaginationConfig({ ...paginationConfig, cursorParam: e.target.value })}
                             placeholder="e.g. cursor"
@@ -480,8 +480,8 @@ export function CreateToolDialog({
                     {paginationType === 'offset' && (
                       <>
                         <div>
-                          <Label className="text-xs">Offset Param</Label>
-                          <Input
+                          <Label htmlFor="tool-offset-param" className="text-xs">Offset Param</Label>
+                          <Input id="tool-offset-param"
                             value={paginationConfig.offsetParam}
                             onChange={(e) => setPaginationConfig({ ...paginationConfig, offsetParam: e.target.value })}
                             placeholder="e.g. offset"
@@ -489,8 +489,8 @@ export function CreateToolDialog({
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">Limit Param</Label>
-                          <Input
+                          <Label htmlFor="tool-limit-param" className="text-xs">Limit Param</Label>
+                          <Input id="tool-limit-param"
                             value={paginationConfig.limitParam}
                             onChange={(e) => setPaginationConfig({ ...paginationConfig, limitParam: e.target.value })}
                             placeholder="e.g. limit"
@@ -498,8 +498,8 @@ export function CreateToolDialog({
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">Default Limit</Label>
-                          <Input
+                          <Label htmlFor="tool-default-limit" className="text-xs">Default Limit</Label>
+                          <Input id="tool-default-limit"
                             type="number"
                             value={paginationConfig.defaultLimit}
                             onChange={(e) => setPaginationConfig({ ...paginationConfig, defaultLimit: parseInt(e.target.value) || 20 })}
@@ -510,8 +510,8 @@ export function CreateToolDialog({
                     )}
                     {paginationType !== 'none' && (
                       <div>
-                        <Label className="text-xs">Max Pages</Label>
-                        <Input
+                        <Label htmlFor="tool-max-pages" className="text-xs">Max Pages</Label>
+                        <Input id="tool-max-pages"
                           type="number"
                           value={paginationConfig.maxPages}
                           onChange={(e) => setPaginationConfig({ ...paginationConfig, maxPages: parseInt(e.target.value) || 5 })}
@@ -655,9 +655,9 @@ export function CreateToolDialog({
               <Label className="text-base font-semibold">Model Configuration</Label>
 
               <div>
-                <Label>Provider</Label>
+                <Label htmlFor="tool-provider">Provider</Label>
                 <Select value={llmConfig.providerId} onValueChange={(v) => onLlmConfigChange({ ...llmConfig, providerId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select provider..." /></SelectTrigger>
+                  <SelectTrigger id="tool-provider"><SelectValue placeholder="Select provider..." /></SelectTrigger>
                   <SelectContent>
                     {activeProviders.map((p: any) => (
                       <SelectItem key={p.id} value={p.id}>{p.name} ({p.provider})</SelectItem>
@@ -667,8 +667,8 @@ export function CreateToolDialog({
               </div>
 
               <div>
-                <Label>System Prompt (optional)</Label>
-                <Textarea
+                <Label htmlFor="tool-system-prompt">System Prompt (optional)</Label>
+                <Textarea id="tool-system-prompt"
                   placeholder="You are a helpful assistant that..."
                   value={llmConfig.systemPrompt}
                   onChange={(e) => onLlmConfigChange({ ...llmConfig, systemPrompt: e.target.value })}
@@ -677,8 +677,8 @@ export function CreateToolDialog({
               </div>
 
               <div>
-                <Label>Prompt Template</Label>
-                <Textarea
+                <Label htmlFor="tool-prompt-template">Prompt Template</Label>
+                <Textarea id="tool-prompt-template"
                   placeholder="Analyze the following data: {{input}}&#10;&#10;Use {{parameter}} placeholders for tool parameters."
                   value={llmConfig.promptTemplate}
                   onChange={(e) => onLlmConfigChange({ ...llmConfig, promptTemplate: e.target.value })}
@@ -691,9 +691,9 @@ export function CreateToolDialog({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Output Mode</Label>
+                  <Label htmlFor="tool-output-mode">Output Mode</Label>
                   <Select value={llmConfig.outputMode} onValueChange={(v: 'text' | 'json') => onLlmConfigChange({ ...llmConfig, outputMode: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="tool-output-mode"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="text">Raw Text</SelectItem>
                       <SelectItem value="json">Structured JSON</SelectItem>
@@ -701,8 +701,8 @@ export function CreateToolDialog({
                   </Select>
                 </div>
                 <div>
-                  <Label>Model Override (optional)</Label>
-                  <Input
+                  <Label htmlFor="tool-model-override">Model Override (optional)</Label>
+                  <Input id="tool-model-override"
                     placeholder="e.g. gpt-4o"
                     value={llmConfig.model}
                     onChange={(e) => onLlmConfigChange({ ...llmConfig, model: e.target.value })}
@@ -712,8 +712,8 @@ export function CreateToolDialog({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Temperature ({llmConfig.temperature})</Label>
-                  <Input
+                  <Label htmlFor="tool-temperature">Temperature ({llmConfig.temperature})</Label>
+                  <Input id="tool-temperature"
                     type="range"
                     min="0"
                     max="2"
@@ -723,8 +723,8 @@ export function CreateToolDialog({
                   />
                 </div>
                 <div>
-                  <Label>Max Tokens</Label>
-                  <Input
+                  <Label htmlFor="tool-max-tokens">Max Tokens</Label>
+                  <Input id="tool-max-tokens"
                     type="number"
                     value={llmConfig.maxTokens}
                     onChange={(e) => onLlmConfigChange({ ...llmConfig, maxTokens: parseInt(e.target.value) || 1024 })}
@@ -734,8 +734,8 @@ export function CreateToolDialog({
 
               {llmConfig.outputMode === 'json' && (
                 <div>
-                  <Label>Output JSON Schema</Label>
-                  <Textarea
+                  <Label htmlFor="tool-output-json-schema">Output JSON Schema</Label>
+                  <Textarea id="tool-output-json-schema"
                     placeholder={'{\n  "type": "object",\n  "properties": {\n    "summary": { "type": "string" }\n  }\n}'}
                     value={llmConfig.outputSchema}
                     onChange={(e) => onLlmConfigChange({ ...llmConfig, outputSchema: e.target.value })}
@@ -753,9 +753,9 @@ export function CreateToolDialog({
               <Label className="text-base font-semibold">SDK Configuration</Label>
 
               <div>
-                <Label>SDK API</Label>
+                <Label htmlFor="tool-sdk-api">SDK API</Label>
                 <Select value={sdkApiId} onValueChange={setSdkApiId}>
-                  <SelectTrigger>
+                  <SelectTrigger id="tool-sdk-api">
                     <SelectValue placeholder="Select an SDK API..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -787,9 +787,9 @@ export function CreateToolDialog({
           {/* Authentication Configuration */}
           {executionMethod !== 'custom' && executionMethod !== 'llm' && executionMethod !== 'sdk' && (
             <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
-              <Label>Authentication</Label>
+              <Label htmlFor="tool-authentication">Authentication</Label>
               <Select value={authConfig.type} onValueChange={(value) => onAuthConfigChange({ ...authConfig, type: value })}>
-                <SelectTrigger>
+                <SelectTrigger id="tool-authentication">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

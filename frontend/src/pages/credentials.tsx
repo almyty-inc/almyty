@@ -9,8 +9,20 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { DataTable, createActionsColumn } from '@/components/ui/data-table'
-import { cn } from '@/lib/utils'
+// formatDate is the shared one from lib/utils: a local copy here returned
+// relative time ("3h ago") while every other page showed "Jan 5, 2026".
+import { cn, formatDate } from '@/lib/utils'
 import { credentialsApi, accessKeysApi, gatewaysApi, agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
@@ -21,15 +33,6 @@ import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, typ
 import { credentialConfig, createCredentialSchema } from '@/components/credentials/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
 import type { VaultCredential, AccessKey } from '@/types'
-
-function formatDate(date: string | null | undefined): string {
-  if (!date) return 'Never'
-  const d = new Date(date), diff = Date.now() - d.getTime()
-  if (diff < 60000) return 'Just now'
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return d.toLocaleDateString()
-}
 
 const SECRET_TYPES = [
   { value: 'api_key', label: 'API Key' }, { value: 'bearer_token', label: 'Bearer Token' },
@@ -101,6 +104,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
+  const [credentialToDelete, setCredentialToDelete] = useState<VaultCredential | null>(null)
 
   const { data: credentialsRaw, isLoading } = useQuery({
     queryKey: ['credentials'], queryFn: () => credentialsApi.getAll(),
@@ -109,12 +113,15 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   const visibleCredentials = filterByTeamVisibility(credentials as any[], teamFilter)
   const createMut = useMutation({
     mutationFn: (data: any) => credentialsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm(EMPTY_CREDENTIAL_FORM); notify.success('Created', 'Credential created') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm(EMPTY_CREDENTIAL_FORM); notify.success('Credential created', `"${form.name}" is now in the vault.`) },
     onError: (err) => notify.error('Error', getApiErrorMessage(err, 'Failed to create credential')),
   })
   const deleteMut = useMutation({
     mutationFn: (id: string) => credentialsApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); notify.success('Deleted', 'Credential deleted') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setCredentialToDelete(null); notify.success('Credential deleted', 'The secret has been removed from the vault.') },
+    // A failed delete used to be silent: the dialog closed and the row
+    // stayed, which reads as a UI glitch rather than a rejected request.
+    onError: (err) => { setCredentialToDelete(null); notify.error('Failed to delete credential', getApiErrorMessage(err, 'Please try again.')) },
   })
 
   const columns = [
@@ -154,12 +161,12 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
     }},
     createActionsColumn<VaultCredential>({ cell: ({ row }: any) => (
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><Button variant="ghost" className="h-8 w-8 p-0" aria-label="Open actions menu"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {/* View + Edit had no onClick handlers and silently no-op'd;
               drop them until a real detail/edit dialog exists. Delete
               is the only actionable item right now. */}
-          <DropdownMenuItem className="text-destructive" onClick={() => deleteMut.mutate(row.original.id)}><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
+          <DropdownMenuItem className="text-destructive" onClick={() => setCredentialToDelete(row.original)}><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     )}),
@@ -254,6 +261,39 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
           </div>
         </DialogContent>
       </Dialog>
+
+      {/*
+        Deleting a vault secret is irreversible and the row menu is one
+        click away from Copy, so it goes through a confirm that names the
+        credential rather than firing the mutation straight from the menu.
+      */}
+      <AlertDialog
+        open={credentialToDelete !== null}
+        onOpenChange={(open) => { if (!open) setCredentialToDelete(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete credential?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{credentialToDelete?.name}" from the vault.
+              Anything using it will stop authenticating. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (credentialToDelete) {
+                  deleteMut.mutate(credentialToDelete.id)
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Credential
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
@@ -273,12 +313,13 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
 
   const createMut = useMutation({
     mutationFn: (data: any) => accessKeysApi.create(data),
-    onSuccess: (data: any) => { qc.invalidateQueries({ queryKey: ['access-keys'] }); setGeneratedKey(data?.key || data?.accessKey || 'Key generated'); notify.success('Generated', 'Access key created') },
+    onSuccess: (data: any) => { qc.invalidateQueries({ queryKey: ['access-keys'] }); setGeneratedKey(data?.key || data?.accessKey || 'Key generated'); notify.success('Access key created', 'Copy it now -- it is not shown again.') },
     onError: () => notify.error('Error', 'Failed to generate key'),
   })
   const revokeMut = useMutation({
     mutationFn: (id: string) => accessKeysApi.revoke(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['access-keys'] }); notify.success('Revoked', 'Access key revoked') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['access-keys'] }); notify.success('Access key revoked', 'The key can no longer be used.') },
+    onError: (err) => notify.error('Failed to revoke access key', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const toggleScope = (s: string) => setForm(f => ({ ...f, scopes: f.scopes.includes(s) ? f.scopes.filter(x => x !== s) : [...f.scopes, s] }))
@@ -310,7 +351,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
     { accessorKey: 'scopes', header: 'Scopes', cell: ({ row }: any) => (
       <div className="flex gap-1 flex-wrap">{(row.original.scopes || []).map((s: string) => <Badge key={s} variant="outline" className="text-xs">{s}</Badge>)}</div>
     )},
-    { accessorKey: 'lastUsedAt', header: 'Last Used', cell: ({ row }: any) => <span className="text-sm text-muted-foreground">{formatDate(row.original.lastUsedAt)}</span> },
+    { accessorKey: 'lastUsedAt', header: 'Last Used', cell: ({ row }: any) => <span className="text-sm text-muted-foreground">{row.original.lastUsedAt ? formatDate(row.original.lastUsedAt) : 'Never'}</span> },
     { accessorKey: 'createdAt', header: 'Created', cell: ({ row }: any) => <span className="text-sm text-muted-foreground">{formatDate(row.original.createdAt)}</span> },
     createActionsColumn<AccessKey>({ cell: ({ row }: any) => (
       <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => revokeMut.mutate(row.original.id)}>

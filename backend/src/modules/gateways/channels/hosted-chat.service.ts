@@ -16,6 +16,7 @@ import {
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { OrgLicenseResolver } from '../../licensing/org-license.resolver';
+import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
 
 import {
   CustomDomainConfig,
@@ -114,8 +115,23 @@ export class HostedChatService {
    * secret added to that blob must not become publicly readable by
    * default. Same discipline as sanitizeWidgetConfig.
    */
-  publicBranding(gateway: Gateway): Record<string, any> {
+  async publicBranding(gateway: Gateway): Promise<Record<string, any>> {
     const config: HostedChatConfig = hostedChatConfigFrom(gateway.configuration);
+
+    // The entitlement is re-read here, not trusted from stored config.
+    //
+    // Publishing gates white label and disclosure removal, but nothing
+    // re-checked them afterwards — so an org that bought Enterprise,
+    // turned white label on and then downgraded kept the almyty mark off
+    // its public page indefinitely, and kept the EU AI Act Art. 50
+    // disclosure off with it. A licence that has lapsed has lapsed on
+    // the read path too.
+    const entitled = this.orgLicense
+      ? await this.orgLicense
+          .hasForOrg(gateway.organizationId, EE_ENTITLEMENTS.WHITE_LABEL)
+          .catch(() => false)
+      : false;
+
     return {
       appName: config.appName,
       primaryColor: config.primaryColor,
@@ -124,14 +140,13 @@ export class HostedChatService {
       logoUrl: config.logoUrl,
       suggestedPrompts: config.suggestedPrompts,
       authMode: config.authMode,
-      whiteLabel: config.whiteLabel,
+      whiteLabel: entitled ? config.whiteLabel : false,
       visitorCanDelete: config.visitorCanDelete,
       visitorCanExport: config.visitorCanExport,
 
       // Null means "use the default line". An empty string is a
-      // deliberate removal, which publishing already gated on the
-      // white-label entitlement.
-      aiDisclosure: config.aiDisclosure,
+      // deliberate removal, which only an entitled org may have.
+      aiDisclosure: entitled ? config.aiDisclosure : config.aiDisclosure || null,
     };
   }
 

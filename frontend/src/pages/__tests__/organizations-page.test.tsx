@@ -152,4 +152,33 @@ describe('OrganizationsPage', () => {
       expect(await screen.findByText(/ada@example.com/i)).toBeInTheDocument()
     })
   })
+
+  // The row's onRowClick was the only way into an organization, and a click
+  // handler on a <tr> is invisible to the keyboard. The name is a real
+  // button now, so it is tabbable and opens on Enter.
+  it('opens the organization from the keyboard', async () => {
+    vi.mocked(organizationsApi.getAll).mockResolvedValue([
+      {
+        id: 'org-a',
+        name: 'alpha-org',
+        slug: 'alpha-org',
+        isActive: true,
+        plan: 'free',
+        memberCount: 1,
+        createdAt: '2026-06-01T12:17:57.470Z',
+        updatedAt: '2026-06-02T00:00:00.000Z',
+      },
+    ] as any)
+    vi.mocked(organizationsApi.getMembers).mockResolvedValue([] as any)
+
+    render(<OrganizationsPage />)
+
+    const nameButton = await screen.findByRole('button', { name: 'alpha-org' })
+    nameButton.focus()
+    expect(nameButton).toHaveFocus()
+
+    await userEvent.keyboard('{Enter}')
+
+    expect(await screen.findByRole('tab', { name: /members/i })).toBeInTheDocument()
+  })
 })

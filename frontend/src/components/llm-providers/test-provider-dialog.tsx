@@ -46,8 +46,8 @@ export function TestProviderDialog({
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-4">
             <div>
-              <Label>Test Input</Label>
-              <Textarea
+              <Label htmlFor="test-provider-test-input">Test Input</Label>
+              <Textarea id="test-provider-test-input"
                 placeholder="Enter test prompt..."
                 value={testInput}
                 onChange={(e) => onTestInputChange(e.target.value)}

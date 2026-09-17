@@ -109,23 +109,47 @@ describe('HostedChatService', () => {
   });
 
   describe('publicBranding', () => {
-    it('returns presentation fields only', () => {
-      const branding = service.publicBranding(gateway());
+    it('returns presentation fields only', async () => {
+      const branding = await service.publicBranding(gateway());
       expect(branding.appName).toBe('Acme Assistant');
       expect(branding.primaryColor).toBe('#22d3ee');
     });
 
-    it('never leaks a credential from the same configuration blob', () => {
-      const serialised = JSON.stringify(service.publicBranding(gateway()));
+    it('never leaks a credential from the same configuration blob', async () => {
+      const serialised = JSON.stringify(await service.publicBranding(gateway()));
       expect(serialised).not.toContain('xoxb-super-secret');
       expect(serialised).not.toContain('re_secret');
       expect(serialised).not.toContain('bot_token');
     });
 
-    it('falls back to defaults for a surface with no hosted chat block', () => {
+    it('falls back to defaults for a surface with no hosted chat block', async () => {
       const bare = gateway();
       bare.configuration = { bot_token: 'xoxb' };
-      expect(service.publicBranding(bare).appName).toBe('Assistant');
+      expect((await service.publicBranding(bare)).appName).toBe('Assistant');
+    });
+
+    /**
+     * A licence that has lapsed has lapsed on the read path too.
+     *
+     * Publishing gates white label and disclosure removal, and nothing
+     * re-checked them afterwards — so an org that bought Enterprise,
+     * turned white label on and then downgraded kept the almyty mark off
+     * its public page indefinitely, and the EU AI Act Art. 50 disclosure
+     * off with it.
+     */
+    it('puts the mark and the disclosure back when the entitlement is gone', async () => {
+      const surface = gateway();
+      surface.configuration.hostedChat = {
+        ...(surface.configuration.hostedChat ?? {}),
+        whiteLabel: true,
+        aiDisclosure: '',
+      };
+
+      const branding = await service.publicBranding(surface);
+
+      expect(branding.whiteLabel).toBe(false);
+      // Null is "use the default line", which is what an unentitled org gets.
+      expect(branding.aiDisclosure).toBeNull();
     });
   });
 

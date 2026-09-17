@@ -407,6 +407,41 @@ describe('RetentionSweepService', () => {
       await expect(service.sweepApps('org-1', 30)).resolves.toEqual({ conversations: 0, messages: 0, runs: 0 });
     });
   });
+
+  /**
+   * `version` is the one table the per-org sweep cannot reach.
+   *
+   * It has no organizationId, so no retention policy can name it — while
+   * the version subscriber writes a whole serialized entity on every
+   * update of a @VersionedEntity, and the model reconcile loop saves
+   * several of those every two minutes per deployment whether or not
+   * anything changed. Ten deployments for a year is millions of rows of
+   * JSON that nothing ever deleted.
+   */
+  describe('entity-version snapshots', () => {
+    it('deletes snapshots past the global age, in batches', async () => {
+      policyRepo.query = jest
+        .fn()
+        .mockResolvedValueOnce({ 1: 5000 })
+        .mockResolvedValueOnce({ 1: 12 });
+
+      const deleted = await service.sweepEntityVersions();
+
+      expect(deleted).toBe(5012);
+      // Batched, so one pass cannot lock the table.
+      expect(policyRepo.query).toHaveBeenCalledTimes(2);
+      const [sql, params] = policyRepo.query.mock.calls[0];
+      expect(sql).toMatch(/DELETE FROM "version"/);
+      expect(params[0]).toBeInstanceOf(Date);
+    });
+
+    it('stops as soon as a pass comes back short', async () => {
+      policyRepo.query = jest.fn().mockResolvedValue({ 1: 3 });
+
+      expect(await service.sweepEntityVersions()).toBe(3);
+      expect(policyRepo.query).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 /**

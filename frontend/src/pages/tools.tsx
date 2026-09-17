@@ -239,7 +239,7 @@ export function ToolsPage() {
     mutationFn: (id: string) => toolsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
-      notifications.success('Success', 'Tool deleted successfully')
+      notifications.success('Tool deleted', 'The tool has been removed.')
       setDeletingTool(null)
     },
     onError: (error: any) => {
@@ -381,7 +381,7 @@ return new Promise((resolve, reject) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
-      notifications.success('Success', 'Tool created successfully')
+      notifications.success('Tool created', 'It is ready to assign to a gateway.')
       setIsCreateDialogOpen(false)
       createForm.reset()
       setToolParameters({ type: 'object', properties: {} })
@@ -405,7 +405,7 @@ return new Promise((resolve, reject) => {
     onSuccess: (response: any) => {
       setExecutionResult(response)
       if (response.success) {
-        notifications.success('Success', 'Tool executed successfully')
+        notifications.success('Tool executed', 'The run finished successfully.')
       } else {
         notifications.error('Execution Failed', response.error || 'Tool execution failed')
       }
@@ -883,7 +883,7 @@ return new Promise((resolve, reject) => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Delete tool?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete the tool "{deletingTool?.name}". This
               action cannot be undone.

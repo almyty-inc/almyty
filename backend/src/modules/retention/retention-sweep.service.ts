@@ -32,6 +32,17 @@ const SWEEP_BATCH = 1000;
 const MAX_BATCHES_PER_CLASS = 50;
 
 /**
+ * How long an entity-version snapshot is kept.
+ *
+ * `version` carries no organizationId, so it cannot be a retention-policy
+ * class; this is a deployment-wide floor under it. Long enough that the
+ * Change History panel still has something to show.
+ */
+const VERSION_RETENTION_DAYS = 90;
+const VERSION_SWEEP_BATCH = 5_000;
+const VERSION_SWEEP_MAX_PASSES = 20;
+
+/**
  * Only runs in a terminal state are ever deleted. PENDING, RUNNING,
  * WAITING_INPUT, SLEEPING and WAITING_APPROVAL rows are left alone no
  * matter how old they are — they are still live workflow state.
@@ -119,7 +130,9 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     if (process.env.NODE_ENV === 'test') return;
     this.timer = setInterval(() => {
-      this.sweep().catch((err) => {
+      // Both sweeps on the same tick: the per-org one, and the global
+      // version prune the per-org one cannot express.
+      Promise.all([this.sweep(), this.sweepEntityVersions()]).catch((err) => {
         this.logger.warn(`Retention sweep failed: ${err.message}`);
       });
     }, SWEEP_INTERVAL_MS);
@@ -151,6 +164,44 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return results;
+  }
+
+  /**
+   * Prune entity-version snapshots past a global age.
+   *
+   * `version` is the one table the per-organization sweep structurally
+   * cannot reach: it has no organizationId column, so there is nothing
+   * to scope a policy to. It is also one of the fastest-growing, because
+   * the version subscriber writes a full serialized entity on every
+   * update of a @VersionedEntity — and the model reconcile loop saves
+   * several of those every two minutes per deployment, whether anything
+   * changed or not. Ten deployments running for a year is millions of
+   * rows of whole-entity JSON that nothing ever deleted.
+   *
+   * Age-based and deployment-wide, because that is the only axis this
+   * table offers. Batched so one pass cannot lock the table.
+   */
+  async sweepEntityVersions(now = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - VERSION_RETENTION_DAYS * 86_400_000);
+    let deleted = 0;
+
+    for (let pass = 0; pass < VERSION_SWEEP_MAX_PASSES; pass++) {
+      const result = await this.policyRepository.query(
+        `DELETE FROM "version"
+          WHERE "id" IN (
+            SELECT "id" FROM "version" WHERE "timestamp" < $1 LIMIT $2
+          )`,
+        [cutoff, VERSION_SWEEP_BATCH],
+      );
+      const affected = Array.isArray(result) ? result.length : (result?.[1] ?? 0);
+      deleted += affected;
+      if (affected < VERSION_SWEEP_BATCH) break;
+    }
+
+    if (deleted > 0) {
+      this.logger.log(`Pruned ${deleted} entity-version snapshot(s) older than ${VERSION_RETENTION_DAYS}d`);
+    }
+    return deleted;
   }
 
   /** Sweep a single org according to its policy. Returns per-class counts. */

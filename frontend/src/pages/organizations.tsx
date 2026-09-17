@@ -199,13 +199,30 @@ export function OrganizationsPage() {
       ...createSortableColumn('name', 'Name'),
       cell: ({ row }) => {
         const org = row.original
+        const openDetails = () => {
+          setSelectedOrg(org)
+          setSelectedOrgId(org.id)
+          setOrgDetailsOpen(true)
+        }
         return (
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
               <span className="text-sm font-medium">{getInitials(org.name)}</span>
             </div>
             <div>
-              <div className="font-medium">{org.name}</div>
+              {/*
+                The row's onRowClick was the only way into an organization, and
+                a click handler on a <tr> is invisible to the keyboard. A real
+                button here is tabbable and announces itself; DataTable skips
+                onRowClick for clicks on a <button>, so it does not double-fire.
+              */}
+              <button
+                type="button"
+                onClick={openDetails}
+                className="font-medium text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+              >
+                {org.name}
+              </button>
               <div className="text-sm text-muted-foreground">
                 {org.memberCount ?? org.members?.length ?? 0} members
               </div>
@@ -727,7 +744,7 @@ export function OrganizationsPage() {
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Organization</AlertDialogTitle>
+                            <AlertDialogTitle>Delete organization?</AlertDialogTitle>
                             <AlertDialogDescription>
                               Are you sure you want to delete {selectedOrg.name}?
                               This action cannot be undone and will permanently delete
@@ -738,7 +755,7 @@ export function OrganizationsPage() {
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => deleteOrgMutation.mutate(selectedOrg.id)}
-                              className="bg-red-600 hover:bg-red-700"
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
                               Delete Organization
                             </AlertDialogAction>

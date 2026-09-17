@@ -345,7 +345,7 @@ export function ApisPage() {
       <AlertDialog open={!!deletingApi} onOpenChange={(open) => !open && setDeletingApi(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Delete API?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete the API "{deletingApi?.name}" and all associated tools and operations.
               This action cannot be undone.

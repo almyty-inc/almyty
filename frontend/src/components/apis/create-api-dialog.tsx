@@ -330,8 +330,8 @@ export function CreateApiDialog({
               </TabsList>
               <TabsContent value="file" className="space-y-3 mt-3">
                 <div>
-                  <Label>Schema File</Label>
-                  <Input
+                  <Label htmlFor="create-api-schema-file">Schema File</Label>
+                  <Input id="create-api-schema-file"
                     type="file"
                     accept=".json,.yaml,.yml,.graphql,.gql,.wsdl,.xml,.proto"
                     onChange={(e) => {
@@ -349,7 +349,7 @@ export function CreateApiDialog({
               </TabsContent>
               <TabsContent value="url" className="space-y-3 mt-3">
                 <div>
-                  <Label>Schema URL</Label>
+                  <Label htmlFor="inlineSchemaUrl">Schema URL</Label>
                   <Input
                     id="inlineSchemaUrl"
                     type="url"
@@ -360,7 +360,7 @@ export function CreateApiDialog({
               </TabsContent>
               <TabsContent value="paste" className="space-y-3 mt-3">
                 <div>
-                  <Label>Schema Content</Label>
+                  <Label htmlFor="inlineSchemaContent">Schema Content</Label>
                   <Textarea
                     id="inlineSchemaContent"
                     placeholder="Paste your schema here..."

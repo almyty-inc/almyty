@@ -125,6 +125,7 @@ export function FilesTab({ agentId, files }: FilesTabProps) {
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
+                        aria-label={`Download ${file.name}`}
                         onClick={async () => {
                           try {
                             const response = await filesApi.download(file.id)
