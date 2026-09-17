@@ -87,7 +87,10 @@ export class McpSourcesController {
   }
 
   @Delete(':id')
-  @Roles('member', 'admin', 'owner')
+  // Removing a source removes every tool materialized from it, which
+  // breaks every gateway serving them. Every sibling module gates its
+  // @Delete to admin/owner; this one did not.
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Delete an MCP source and all tools discovered from it' })
   async remove(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,

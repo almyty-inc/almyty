@@ -102,6 +102,21 @@ export class AgentSchedulerService implements OnModuleInit {
     const validated = validateIntervalMinutes(intervalMinutes);
     const agent = await this.agentsService.getAgent(agentId, organizationId);
 
+    // Say no here rather than at the first tick.
+    //
+    // handleScheduledExecution refuses to run a non-ACTIVE agent and
+    // removes the job, and restoreSchedules only restores ACTIVE ones --
+    // but nothing stopped you scheduling a draft. The schedule saved,
+    // the card counted down to the next run, and the job quietly deleted
+    // itself the first time it fired. Agents are created as DRAFT, so
+    // this was the default outcome for anyone who set a schedule before
+    // activating.
+    if (agent.status !== AgentStatus.ACTIVE) {
+      throw new BadRequestException(
+        'Activate this agent before scheduling it. A schedule on an inactive agent never runs.',
+      );
+    }
+
     // Update agent settings with schedule config
     const settings = { ...(agent.settings || {}) };
     settings.schedule = {
@@ -183,6 +198,10 @@ export class AgentSchedulerService implements OnModuleInit {
         await this.schedulerQueue.removeRepeatableByKey(job.key);
       }
 
+      // ACTIVE only, matching the gate in handleScheduledExecution:
+      // restoring a draft agent's job would only have it removed again on
+      // its first tick. Scheduling a non-active agent is refused up front
+      // instead, in scheduleAgent.
       const agents = await this.agentRepo.find({
         where: { status: AgentStatus.ACTIVE },
       });
@@ -192,6 +211,7 @@ export class AgentSchedulerService implements OnModuleInit {
       // addRepeatableJob -> removeRepeatableJob -> getRepeatableJobs inside
       // every iteration, which made restore O(N^2) on startup.
       let restoredCount = 0;
+      const failed: Agent[] = [];
       for (const agent of agents) {
         const schedule = agent.settings?.schedule as AgentScheduleConfig | undefined;
         if (!schedule?.enabled) continue;
@@ -206,12 +226,54 @@ export class AgentSchedulerService implements OnModuleInit {
           continue;
         }
 
-        await this.enqueueRepeatableJob(agent, minutes, schedule.input || {});
-        restoredCount++;
+        // Per agent, so one failure does not abandon the rest.
+        //
+        // This block clears every repeatable job before rebuilding them,
+        // and a throw part-way through used to escape to the outer catch
+        // — which logged one line and let the process finish booting
+        // with the queue emptied and only partly repopulated. Nothing in
+        // the UI changed, because `settings.schedule.enabled` stays
+        // true, so the agent went on reading as "scheduled every 15
+        // minutes" and never ran again until somebody toggled it.
+        try {
+          await this.enqueueRepeatableJob(agent, minutes, schedule.input || {});
+          restoredCount++;
+        } catch (err: any) {
+          failed.push(agent);
+          this.logger.error(`[RESTORE] Could not restore agent ${agent.id}: ${err.message}`);
+        }
       }
 
       if (restoredCount > 0) {
         this.logger.log(`[RESTORE] Restored ${restoredCount} scheduled agent(s) via BullMQ`);
+      }
+
+      // Say so on the agents themselves, through the same channel
+      // pauseForBrokenModel uses, so the schedule card stops claiming a
+      // next run that is not coming.
+      for (const agent of failed) {
+        try {
+          const settings = { ...(agent.settings || {}) };
+          if (settings.schedule) {
+            settings.schedule = {
+              ...settings.schedule,
+              enabled: false,
+              pausedReason: {
+                code: 'RESTORE_FAILED',
+                message:
+                  'This schedule could not be restored when the service restarted. Re-enable it to start it again.',
+                detectedAt: new Date().toISOString(),
+              } as any,
+            };
+          }
+          agent.settings = settings;
+          await this.agentRepo.save(agent);
+        } catch (err: any) {
+          this.logger.error(`[RESTORE] Could not mark agent ${agent.id} as unrestored: ${err.message}`);
+        }
+      }
+      if (failed.length > 0) {
+        this.logger.error(`[RESTORE] ${failed.length} schedule(s) could not be restored and were paused`);
       }
     } catch (err: any) {
       this.logger.error(`[RESTORE] Failed to restore schedules: ${err.message}`);

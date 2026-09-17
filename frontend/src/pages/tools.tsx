@@ -137,10 +137,8 @@ export function ToolsPage() {
   const PAGE_SIZE = 10
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null)
   const [deletingTool, setDeletingTool] = useState<Tool | null>(null)
-  const [toolForSettings, setToolForSettings] = useState<Tool | null>(null)
   const [toolForExecution, setToolForExecution] = useState<Tool | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
-  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
   const [isExecutionDialogOpen, setIsExecutionDialogOpen] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isAddMcpDialogOpen, setIsAddMcpDialogOpen] = useState(false)
@@ -345,12 +343,27 @@ return new Promise((resolve, reject) => {
         };
       }
 
+      // The Authentication block was collected, rendered, and never
+      // sent, so every hand-built HTTP tool executed unauthenticated --
+      // and there is no tool edit UI, so it could not be added later
+      // either. The backend stores it nested (`{ type, config }`), while
+      // the form holds it flat, hence the reshape.
+      const inlineAuth =
+        authConfig.type === 'bearer' && authConfig.bearerToken
+          ? { type: 'bearer', config: { token: authConfig.bearerToken } }
+          : authConfig.type === 'apiKey' && authConfig.apiKey
+            ? { type: 'apiKey', config: { key: authConfig.apiKey, headerName: 'X-API-Key' } }
+            : authConfig.type === 'basic' && authConfig.username
+              ? { type: 'basic', config: { username: authConfig.username, password: authConfig.password } }
+              : null;
+
       const payload: any = {
         ...data,
         type,
         parameters: toolParameters,
         executionMethod,
         llmConfig: llmConfigPayload,
+        ...(inlineAuth ? { authConfig: inlineAuth } : {}),
       };
 
       // HTTP tools: send httpConfig, no code
@@ -842,126 +855,14 @@ return new Promise((resolve, reject) => {
       </Dialog>
 
       {/* Tool Settings Dialog */}
-      <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <Settings className="h-5 w-5" />
-              Tool Settings
-            </DialogTitle>
-            <DialogDescription>
-              Configure {toolForSettings?.name} execution settings
-            </DialogDescription>
-          </DialogHeader>
-
-          {toolForSettings && (
-            <div className="space-y-6">
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-medium mb-3">Execution Configuration</h4>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium">Timeout (ms)</label>
-                      <Input
-                        type="number"
-                        defaultValue={toolForSettings.configuration?.timeout || 30000}
-                        className="mt-1"
-                        placeholder="30000"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Maximum time in milliseconds to wait for tool execution
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium">Retries</label>
-                      <Input
-                        type="number"
-                        defaultValue={toolForSettings.configuration?.retries || 3}
-                        className="mt-1"
-                        min="0"
-                        max="10"
-                        placeholder="3"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Number of retry attempts on failure
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium">Rate Limit (requests/min)</label>
-                      <Input
-                        type="number"
-                        defaultValue={60}
-                        className="mt-1"
-                        min="1"
-                        placeholder="60"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Maximum number of requests per minute
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium mb-3">Caching</h4>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="text-sm font-medium">Enable Cache</label>
-                      <p className="text-xs text-muted-foreground">
-                        Cache successful responses for faster repeated requests
-                      </p>
-                    </div>
-                    <Switch
-                      defaultChecked={toolForSettings.configuration?.cache?.enabled}
-                    />
-                  </div>
-                  <div className="mt-3">
-                    <label className="text-sm font-medium">Cache TTL (seconds)</label>
-                    <Input
-                      type="number"
-                      defaultValue={300}
-                      className="mt-1"
-                      placeholder="300"
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium mb-3">Authentication</h4>
-                  <Select defaultValue="inherit">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select authentication" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="inherit">Inherit from API</SelectItem>
-                      <SelectItem value="none">None</SelectItem>
-                      <SelectItem value="bearer">Bearer Token</SelectItem>
-                      <SelectItem value="api-key">API Key</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsSettingsDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={() => {
-                  notifications.success('Settings Updated', 'Tool configuration saved successfully')
-                  setIsSettingsDialogOpen(false)
-                }}>
-                  Save Settings
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* The Tool Settings dialog lived here. It could never open --
+          nothing ever called setIsSettingsDialogOpen(true) -- and if it
+          had, every field was uncontrolled and "Save Settings" only
+          raised a success toast: no mutation, no request. A dialog that
+          reports success without saving is worse than a missing one,
+          because the person believes the setting took. Timeout, retries,
+          rate limit, cache and per-tool auth genuinely have no UI; that
+          is now visibly true rather than faked. */}
 
       {/* Tool Execution Dialog */}
       <ToolExecutionDialog

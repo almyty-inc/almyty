@@ -38,6 +38,10 @@ describe('OrganizationsService', () => {
             delete: jest.fn(),
             remove: jest.fn(),
             createQueryBuilder: jest.fn(),
+            // Pending invites are appended by the database now, because
+            // two admins inviting at once both wrote their own full copy
+            // of the array and one invite was silently lost.
+            query: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -244,12 +248,25 @@ describe('OrganizationsService', () => {
       ];
 
       userOrganizationRepository.find.mockResolvedValue(mockMemberships);
+      // findAll also counts members per organization, because the list
+      // page prints that number and used to read it off a relation this
+      // query does not load.
+      userOrganizationRepository.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ organizationId: 'org-1', count: '3' }]),
+      }));
 
       const result = await service.findAll('user-1');
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('org-1');
       expect(result[1].id).toBe('org-2');
+      expect((result[0] as any).memberCount).toBe(3);
+      expect((result[1] as any).memberCount).toBe(0);
     });
   });
 
@@ -654,6 +671,35 @@ describe('OrganizationsService', () => {
       expect(result).toHaveProperty('inviteSent');
     });
 
+    /**
+     * Two admins inviting two different people, or one double-click.
+     *
+     * pendingInvites is an array inside a json column. Reading it,
+     * pushing, and writing the whole settings object back meant both
+     * writers started from the same snapshot and the second overwrote
+     * the first -- one invite gone from the database while its recipient
+     * held a link that would answer "Invalid or expired invitation"
+     * forever, with nothing logging the loss.
+     */
+    it('appends the pending invite in the database rather than rewriting the array', async () => {
+      userRepository.findOne
+        .mockResolvedValueOnce(mockInviter)
+        .mockResolvedValueOnce(null);
+
+      await service.inviteUser('org-1', { email: 'new@test.com', role: OrganizationRole.MEMBER }, 'user-1');
+
+      expect(organizationRepository.query).toHaveBeenCalled();
+      const [sql, params] = (organizationRepository.query as jest.Mock).mock.calls[0];
+      // Appends one element; it must not send a whole array it read.
+      expect(sql).toMatch(/\|\|\s*\$2::jsonb/);
+      expect(JSON.parse(params[1])).toHaveLength(1);
+      // And the old read-modify-write path must be gone.
+      expect(organizationRepository.update).not.toHaveBeenCalledWith(
+        'org-1',
+        expect.objectContaining({ settings: expect.anything() }),
+      );
+    });
+
     it('should throw ConflictException when user is already an active member', async () => {
       const mockUser = { id: 'user-2', email: 'existing@test.com' };
       const mockMembership = {
@@ -834,8 +880,12 @@ describe('OrganizationsService', () => {
   describe('addTeamMember', () => {
     it('should throw ConflictException when user is already a team member', async () => {
       // assertTeamInOrg runs first and must see a team that belongs
-      // to the requested org before the conflict check fires.
+      // to the requested org before the conflict check fires; the org
+      // membership check runs next, and a user who is not in the
+      // organization now gets NotFound rather than reaching the
+      // already-a-team-member branch at all.
       teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+      userOrganizationRepository.findOne.mockResolvedValue({ userId: 'user-1', organizationId: 'org-1', isActive: true });
 
       const module: TestingModule = await Test.createTestingModule({
         providers: [
@@ -871,6 +921,17 @@ describe('OrganizationsService', () => {
       await expect(localService.addTeamMember('org-1', 'team-1', 'user-1'))
         .rejects
         .toThrow(ConflictException);
+    });
+
+    it('refuses to add somebody who is not in the organization', async () => {
+      // A team membership for a non-member is a row that means nothing
+      // today and a live hole the day anything trusts user_teams alone.
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.addTeamMember('org-1', 'team-1', 'outsider'))
+        .rejects
+        .toThrow(NotFoundException);
     });
   });
 

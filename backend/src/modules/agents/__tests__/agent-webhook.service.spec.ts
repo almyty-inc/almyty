@@ -14,9 +14,11 @@ const mockedAxios = axios as unknown as { post: jest.Mock };
 
 describe('AgentWebhookService', () => {
   let service: AgentWebhookService;
+  let executions: { update: jest.Mock };
 
   beforeEach(() => {
-    service = new AgentWebhookService();
+    executions = { update: jest.fn().mockResolvedValue(undefined) };
+    service = new AgentWebhookService(executions as any);
     mockedAxios.post.mockReset();
     mockedAxios.post.mockResolvedValue({ data: 'ok' });
   });
@@ -138,5 +140,63 @@ describe('AgentWebhookService', () => {
     await expect(
       service.sendExecutionWebhook(makeAgent(), makeExecution()),
     ).resolves.not.toThrow();
+  });
+
+  /**
+   * A webhook that stops arriving.
+   *
+   * Refusing an invalid URL at save time covers the typo. It does
+   * nothing for a receiver that starts returning 500s a week later:
+   * every failure was a logger.warn and nothing else, so the agent kept
+   * reporting "completed", the webhook kept reading as configured, and
+   * zero deliveries landed with no trace anywhere a user can see.
+   */
+  describe('recording what became of the delivery', () => {
+    it('stamps a success on the run', async () => {
+      mockedAxios.post.mockResolvedValue({ status: 200, data: 'ok' });
+
+      await service.sendExecutionWebhook(makeAgent(), makeExecution());
+
+      expect(executions.update).toHaveBeenCalledWith(
+        'exec-1',
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            webhookDelivery: expect.objectContaining({ status: 'delivered', statusCode: 200 }),
+          }),
+        }),
+      );
+    });
+
+    it('stamps the failure, with the reason, instead of only logging it', async () => {
+      mockedAxios.post.mockRejectedValue(
+        Object.assign(new Error('connect ECONNREFUSED'), { response: { status: 500 } }),
+      );
+
+      await service.sendExecutionWebhook(makeAgent(), makeExecution());
+
+      const delivery = executions.update.mock.calls[0][1].metadata.webhookDelivery;
+      expect(delivery.status).toBe('failed');
+      expect(delivery.statusCode).toBe(500);
+      expect(delivery.error).toMatch(/ECONNREFUSED/);
+    });
+
+    it('stamps a blocked URL too, which the SSRF guard used to drop in silence', async () => {
+      await service.sendExecutionWebhook(
+        makeAgent({ webhookUrl: 'http://169.254.169.254/latest/meta-data' }),
+        makeExecution(),
+      );
+
+      expect(mockedAxios.post).not.toHaveBeenCalled();
+      expect(executions.update.mock.calls[0][1].metadata.webhookDelivery.status).toBe('blocked');
+    });
+
+    it('never lets recording the outcome fail the delivery path', async () => {
+      executions.update.mockRejectedValue(new Error('db down'));
+      mockedAxios.post.mockResolvedValue({ status: 200, data: 'ok' });
+
+      await expect(
+        service.sendExecutionWebhook(makeAgent(), makeExecution()),
+      ).resolves.toBeUndefined();
+    });
   });
 });

@@ -38,7 +38,7 @@ export function OverviewTab({
 }: OverviewTabProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { success, error } = useNotifications()
+  const { success, error, warning } = useNotifications()
   const [testResults, setTestResults] = useState<Record<string, unknown> | null>(null)
   const [testing, setTesting] = useState(false)
 
@@ -145,8 +145,22 @@ export function OverviewTab({
                 queryClient.invalidateQueries({ queryKey: ['api', api.id] })
                 queryClient.invalidateQueries({ queryKey: ['apis'] })
                 queryClient.invalidateQueries({ queryKey: ['tools'] })
-                const toolCount = Array.isArray(result) ? result.length : 0
-                success('Tools generated', `${toolCount} tools created successfully`)
+                // The endpoint now reports what it could not generate as
+                // well as what it could. This used to count the returned
+                // array and call it success, so an import where 60 of 600
+                // operations failed showed a green "540 tools created
+                // successfully" and the failures lived only in the server
+                // log.
+                const generated = result?.generated ?? (Array.isArray(result) ? result.length : 0)
+                const failed = result?.failed ?? 0
+                if (failed > 0) {
+                  warning(
+                    'Some tools could not be generated',
+                    `${generated} created, ${failed} failed out of ${result?.total ?? generated + failed} operations.`,
+                  )
+                } else {
+                  success('Tools generated', `${generated} tools created successfully`)
+                }
               } catch (err: any) {
                 error('Failed to generate tools', err.response?.data?.message || 'Please try again.')
               }
@@ -162,9 +176,17 @@ export function OverviewTab({
             setTesting(true)
             setTestResults(null)
             try {
+              // The endpoint answers 200 with `success: false` for a
+              // failed test, so the axios call never rejects and this
+              // used to raise a green "successful" over a red Failed
+              // card sitting directly underneath it.
               const testResult = await apisApi.testConnection(api.id)
               setTestResults(testResult)
-              success('Test completed', 'API connection test successful')
+              if (testResult?.success === false) {
+                error('Test failed', testResult?.error || testResult?.message || 'The API did not respond.')
+              } else {
+                success('Test completed', 'API connection test successful')
+              }
             } catch (err: any) {
               setTestResults({ success: false, error: err.response?.data?.message || 'Connection failed' })
               error('Test failed', err.response?.data?.message || 'Please try again.')

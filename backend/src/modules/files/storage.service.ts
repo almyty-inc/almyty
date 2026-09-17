@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Readable } from 'stream';
 
 export interface StorageProvider {
   /**
@@ -12,6 +13,18 @@ export interface StorageProvider {
   readonly canPresign: boolean;
   upload(key: string, data: Buffer, contentType: string): Promise<string>;
   download(key: string): Promise<Buffer>;
+  /**
+   * The same bytes as a stream.
+   *
+   * download() reads the whole object into heap, and both download
+   * routes then `res.send(buffer)` -- which copies it again. Uploads are
+   * capped at 50MB, so three concurrent file downloads exhausted a pod
+   * that peaks around 286MB; build artifacts have no cap at all, and an
+   * Electron desktop package is 100-200MB, so one of those was an OOM on
+   * its own. The comment on the files route claiming it "streams the
+   * bytes" was aspirational.
+   */
+  downloadStream(key: string): Promise<Readable>;
   delete(key: string): Promise<void>;
   getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
 }
@@ -95,6 +108,10 @@ class LocalStorageProvider implements StorageProvider {
   async download(key: string): Promise<Buffer> {
     const filePath = this.resolveSafe(key);
     return fs.readFileSync(filePath);
+  }
+
+  async downloadStream(key: string): Promise<Readable> {
+    return fs.createReadStream(this.resolveSafe(key));
   }
 
   async delete(key: string): Promise<void> {
@@ -183,6 +200,18 @@ class S3StorageProvider implements StorageProvider {
     return Buffer.concat(chunks);
   }
 
+  async downloadStream(key: string): Promise<Readable> {
+    assertSafeStorageKey(key);
+    const { GetObjectCommand } = require('@aws-sdk/client-s3');
+    const response = await this.s3Client.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    }));
+    // The SDK already hands back a stream; the old path only turned it
+    // into a Buffer so the caller could re-send it.
+    return response.Body as Readable;
+  }
+
   async delete(key: string): Promise<void> {
     assertSafeStorageKey(key);
     const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
@@ -247,6 +276,10 @@ export class StorageService {
 
   async upload(key: string, data: Buffer, contentType: string): Promise<string> {
     return this.provider.upload(key, data, contentType);
+  }
+
+  async downloadStream(key: string): Promise<Readable> {
+    return this.provider.downloadStream(key);
   }
 
   async download(key: string): Promise<Buffer> {

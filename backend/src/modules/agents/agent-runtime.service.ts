@@ -515,7 +515,16 @@ export class AgentRuntimeService implements OnModuleInit {
     if (approval.status === 'approved') {
       run.status = AgentRunStatus.RUNNING;
       await this.runRepository.save(run);
-      await this.runtimeQueue.add('next-step', { runId: run.id }, {
+      // Same seq-from-timestamp rule as the resume path above, and for
+      // the same reason. Without a seq the processor read it as 0 and
+      // enqueued the next step as `step:<runId>:1` -- an id already in
+      // Redis from before the pause, which Bull drops silently. The run
+      // then sat RUNNING with nothing queued until the reaper timed it
+      // out half an hour later with a misleading "worker likely
+      // terminated".
+      const resumeSeq = Date.now();
+      await this.runtimeQueue.add('next-step', { runId: run.id, seq: resumeSeq }, {
+        jobId: `step:${run.id}:${resumeSeq}`,
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
         removeOnComplete: 100,

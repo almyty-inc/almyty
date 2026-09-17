@@ -77,3 +77,59 @@ describe('AuditTab export entitlement gating', () => {
     expect(screen.queryByRole('link', { name: /export \(business\)/i })).not.toBeInTheDocument()
   })
 })
+
+/**
+ * A zero you can trust.
+ *
+ * Every branch of the audit summary had its own `.catch(() => 0)`, so a
+ * database problem rendered "0 events today / this week / this month" --
+ * indistinguishable from a genuinely quiet organization, on the one
+ * surface where that distinction is the entire point. The API now says
+ * which figures it could not read.
+ */
+describe('the audit summary says when a figure is missing rather than zero', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockedLogs.mockResolvedValue({ data: [], total: 0 })
+    mockedApiGet.mockResolvedValue(withEntitlements([]))
+  })
+
+  it('shows a dash and a banner for the figures that failed', async () => {
+    mockedSummary.mockResolvedValue({
+      partial: true,
+      unavailable: ['today', 'thisWeek'],
+      totals: { today: 0, thisWeek: 0, thisMonth: 42 },
+      topUsers: [],
+      byAction: [],
+      byResourceType: [],
+      timeline: [],
+    })
+
+    render(<AuditTab />)
+
+    expect(await screen.findByTestId('audit-summary-partial')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2))
+    // The figure that DID come back is still shown as itself.
+    expect(screen.getByText('42')).toBeInTheDocument()
+  })
+
+  it('shows no banner when every figure was read', async () => {
+    mockedSummary.mockResolvedValue({
+      partial: false,
+      unavailable: [],
+      totals: { today: 0, thisWeek: 3, thisMonth: 9 },
+      topUsers: [],
+      byAction: [],
+      byResourceType: [],
+      timeline: [],
+    })
+
+    render(<AuditTab />)
+
+    await waitFor(() => expect(screen.getByText('9')).toBeInTheDocument())
+    expect(screen.queryByTestId('audit-summary-partial')).not.toBeInTheDocument()
+    // A real zero still reads as zero, not as a dash.
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0)
+    expect(screen.queryByText('—')).not.toBeInTheDocument()
+  })
+})

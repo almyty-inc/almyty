@@ -89,15 +89,15 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
 
   const { data: providersRaw, isLoading, isError, error, refetch: refetchProviders } = useQuery({
     queryKey: ['llm-providers'],
+    // No try/catch: swallowing the rejection and returning [] made
+    // isError permanently false, so a 500 or an expired session rendered
+    // the "No models configured -- connect a provider" empty state over
+    // providers that were still there, with no retry. The QueryError
+    // branch below was unreachable.
     queryFn: async () => {
-      try {
-        const d = await llmProvidersApi.getAll()
-        const result = d?.providers || (Array.isArray(d) ? d : [])
-        return Array.isArray(result) ? result : []
-      } catch (err) {
-        console.error('Failed to fetch AI models:', err)
-        return []
-      }
+      const d = await llmProvidersApi.getAll()
+      const result = d?.providers || (Array.isArray(d) ? d : [])
+      return Array.isArray(result) ? result : []
     }
   })
   const providers = Array.isArray(providersRaw) ? providersRaw : []

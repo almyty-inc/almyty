@@ -19,7 +19,15 @@ import { captureEvent } from '@/lib/analytics'
  * `external_client` is likewise excluded from the ring — it is an optional
  * bonus surfaced once first_call lands (per the spec).
  */
-const CORE_STEPS: {
+/**
+ * The steps the ring counts. `provider` is deliberately NOT one of them
+ * -- it is offered separately as a contextual on-ramp, because the
+ * tool/gateway path does not need a model. Exported so the sidebar pill
+ * counts the same steps: it kept its own list with `provider` added, so
+ * the same org read "0 of 3 complete" on the card and "Setup 0/4" in the
+ * sidebar at the same time.
+ */
+export const CORE_STEPS: {
   key: keyof OnboardingState['steps']
   label: string
   description: string

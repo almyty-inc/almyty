@@ -44,6 +44,19 @@ export class AnalyticsExportHelper {
         .innerJoin('log.gateway', 'gw')
         .where('gw.organizationId = :orgId', { orgId: query.organizationId })
         .andWhere('log.timestamp BETWEEN :from AND :to', { from, to })
+        // Only the columns the export emits.
+        //
+        // `take(10000)` bounds the row count and nothing bounded the row
+        // SIZE: RequestLog carries requestBody and responseBody, each
+        // truncated to 10KB at write, plus headers/queryParams/metadata
+        // json. Worst case that is 200MB+ materialized in one request on
+        // a pod that peaks around 286MB -- and the CSV column list below
+        // includes neither body, so every byte of it was waste.
+        .select([
+          'log.id', 'log.method', 'log.path', 'log.statusCode', 'log.responseTime',
+          'log.userAgent', 'log.ipAddress', 'log.gatewayId', 'log.toolId', 'log.userId',
+          'log.errorMessage', 'log.requestSize', 'log.responseSize', 'log.timestamp',
+        ])
         .orderBy('log.timestamp', 'DESC')
         .take(10000)
         .getMany();
@@ -59,8 +72,15 @@ export class AnalyticsExportHelper {
     }
 
     if (query.type === 'tool-executions') {
+      // Same reason: ToolExecution carries `parameters` and `result` as
+      // untruncated json and the HTTP executor allows 10MB responses,
+      // and the CSV below uses neither.
       const execs = await this.toolExecutionRepository.find({
         where: { organizationId: query.organizationId, createdAt: Between(from, to) },
+        select: {
+          id: true, toolId: true, userId: true, organizationId: true, success: true,
+          executionTime: true, cached: true, retryCount: true, error: true, createdAt: true,
+        },
         order: { createdAt: 'DESC' },
         take: 10000,
       });

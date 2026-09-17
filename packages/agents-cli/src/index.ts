@@ -99,6 +99,9 @@ function formatAgent(a: AgentInfo, prefix = ''): string {
   return `${prefix}${a.name}${mode}${status}${desc}`;
 }
 
+/** Terminal statuses that mean the run did what was asked. */
+const RUN_SUCCEEDED = new Set(['completed', 'succeeded']);
+
 async function cmdList(args: ParsedArgs): Promise<void> {
   const client = newClient();
   const agents = await client.listAgents();
@@ -217,6 +220,14 @@ async function cmdRun(args: ParsedArgs): Promise<void> {
       },
     });
 
+    // A failed run is a failed command.
+    //
+    // pollRun returns on ANY terminal status, and this printed
+    // "Run failed." and exited 0 -- so `almyty agents run deploy-check
+    // --watch && ./ship.sh` shipped on a failed check. The models CLI
+    // already sets exitCode on failure; this did not.
+    if (!RUN_SUCCEEDED.has(final.status)) process.exitCode = 1;
+
     if (args.flags.json) {
       console.log(JSON.stringify(final, null, 2));
       return;
@@ -233,6 +244,8 @@ async function cmdRun(args: ParsedArgs): Promise<void> {
 
   // workflow mode
   const result = await client.invokeAgent(agent.id, rawInput ?? {});
+  // Same rule: the endpoint answers 200 with status 'failed'.
+  if (result?.status && !RUN_SUCCEEDED.has(result.status)) process.exitCode = 1;
   if (args.flags.json) {
     console.log(JSON.stringify(result, null, 2));
     return;

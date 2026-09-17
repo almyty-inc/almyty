@@ -28,6 +28,10 @@ export interface ModelLineage {
 @Entity('model_versions')
 @VersionedEntity()
 @Index(['organizationId', 'base'])
+// One row per registry URI. The check-then-insert in registerVersion
+// holds its window open across a manifest fetch, so a double-click
+// produced two rows for the same model.
+@Index(['organizationId', 'registryUri'], { unique: true })
 export class ModelVersion {
   @PrimaryGeneratedColumn('uuid')
   id: string;

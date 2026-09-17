@@ -109,11 +109,24 @@ token if you have one already. A tool result arrives as a user message of
 into text, which is the difference between a client's tool loop working
 and stopping without an error.
 
-Two limits, stated because finding them at run time is worse: streaming
-is not implemented on this route, and a request with `"stream": true` is
-refused saying so rather than answered in the wrong shape; and a run
-records one token total rather than an input/output split, so
-`usage.input_tokens` reports 0 instead of a number we would be inventing.
+Three limits, stated because finding them at run time is worse.
+
+**Client-declared tools are refused.** An almyty agent runs its own
+tools: a `tool_call` node executes inside the run and the answer comes
+back finished, so there is no turn at which a tool could be handed to you
+to run. A request carrying `tools` gets a 400 saying so. Accepting them
+and answering normally would leave a client whose tools never fire and
+nothing to debug. Give the agent the tools instead. This is the reason
+Claude Code, which always sends tools, does not work against this
+endpoint yet — the loop would have to run on our side and be reported
+back, which is not built.
+
+**Streaming is not implemented here.** `"stream": true` is refused
+saying so, rather than answered with one JSON object where the client is
+waiting for SSE.
+
+**Usage is not split.** A run records one token total, so
+`usage.input_tokens` reports 0 rather than a number we would invent.
 
 Compatibility shims are a fallback, not the default: Anthropic's
 OpenAI-compatible endpoint drops thinking blocks, Gemini's shim loses

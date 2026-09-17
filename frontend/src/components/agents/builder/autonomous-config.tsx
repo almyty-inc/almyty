@@ -6,6 +6,7 @@
  * All state is owned by the parent (AgentBuilderPage) and threaded via props.
  */
 import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Search, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -105,12 +106,33 @@ export function AutonomousConfig({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-sm">Provider</Label>
-              <Select value={modelConfig.providerId || ''} onValueChange={(v) => onModelConfigChange({ ...modelConfig, providerId: v })}>
-                <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
-                <SelectContent>
-                  {providers.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name} ({p.type})</SelectItem>)}
-                </SelectContent>
-              </Select>
+              {providers.length === 0 ? (
+                // A required field with nothing in it is a dead end: save
+                // refuses with "A model provider must be selected", and
+                // opening the empty select showed a 4px sliver with no
+                // items and no explanation. Say what is missing and where
+                // to fix it instead.
+                <div
+                  data-testid="no-providers"
+                  className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
+                >
+                  No model providers connected yet.{' '}
+                  <Link
+                    to="/models?tab=providers&new=1"
+                    className="text-primary underline-offset-2 hover:underline"
+                  >
+                    Connect one
+                  </Link>{' '}
+                  to give this agent a model.
+                </div>
+              ) : (
+                <Select value={modelConfig.providerId || ''} onValueChange={(v) => onModelConfigChange({ ...modelConfig, providerId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
+                  <SelectContent>
+                    {providers.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name} ({p.type})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <div className="space-y-2">
               <Label className="text-sm">Model</Label>

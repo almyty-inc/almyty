@@ -181,7 +181,10 @@ export class AwsBedrockImportAdapter implements ModelProviderAdapter {
       inferenceProfileName,
       description: `almyty deployment ${request.deploymentId}`,
       modelSource: { copyFrom },
-      clientRequestToken: randomUUID(),
+      // Derived from the deployment, not random: AWS provides this field
+      // so a retried create returns the first result instead of making a
+      // second inference profile, and a fresh UUID per call defeated it.
+      clientRequestToken: request.deploymentId,
       tags: [
         { key: 'almyty:deployment', value: request.deploymentId },
         { key: 'almyty:organization', value: request.organizationId },

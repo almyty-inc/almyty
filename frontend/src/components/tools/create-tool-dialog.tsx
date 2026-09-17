@@ -165,7 +165,25 @@ export function CreateToolDialog({
             Create a custom tool with JavaScript code or link to an API operation.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={createForm.handleSubmit((data: any) => createToolMutation.mutate({ ...data, visibility: visibility.visibility, teamId: visibility.teamId }))} className="space-y-4">
+        {/*
+          selectedApiId was local state whose only effects were the field
+          label and helper text. "Link to API" therefore relabelled URL
+          to Path, told you the path would be relative to the API's base
+          URL, and then saved a tool with apiId null -- so the relative
+          path was never prefixed and the tool was rejected as an invalid
+          URL at execution, every time.
+        */}
+        <form
+          onSubmit={createForm.handleSubmit((data: any) =>
+            createToolMutation.mutate({
+              ...data,
+              visibility: visibility.visibility,
+              teamId: visibility.teamId,
+              apiId: selectedApiId && selectedApiId !== 'none' ? selectedApiId : undefined,
+            }),
+          )}
+          className="space-y-4"
+        >
           <div>
             <Label htmlFor="execution-method">Execution Method</Label>
             <Select

@@ -69,7 +69,7 @@ export class Organization {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: 'jsonb', nullable: true })
   settings: OrganizationSettings;
 
   @Column({ type: 'json', nullable: true })

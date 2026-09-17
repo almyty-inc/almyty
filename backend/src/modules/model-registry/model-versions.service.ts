@@ -103,7 +103,25 @@ export class ModelVersionsService {
         manifest: manifest ? summarize(manifest) : null,
       },
     });
-    const saved = await this.versions.save(row);
+    // The duplicate check above sits before a manifest fetch that takes
+    // seconds, so a double-click gets past it. The unique index is the
+    // real guard; this turns its violation back into the same conflict
+    // the caller would have got from the check.
+    let saved: ModelVersion;
+    try {
+      saved = await this.versions.save(row);
+    } catch (err: any) {
+      if (err?.code === '23505') {
+        const existing = await this.versions.findOne({ where: { organizationId, registryUri: input.registryUri } });
+        throw new ConflictException({
+          code: 'VERSION_EXISTS',
+          message: existing
+            ? `This registry URI is already registered as ${existing.name} (${existing.id})`
+            : 'This registry URI is already registered',
+        });
+      }
+      throw err;
+    }
     this.audit(saved, AuditAction.CREATE, userId, { registryUri: saved.registryUri, hasManifest: Boolean(manifest) });
     return saved;
   }

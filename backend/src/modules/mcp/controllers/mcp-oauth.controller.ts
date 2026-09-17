@@ -40,6 +40,32 @@ export class McpOAuthController {
     private readonly resolve: McpOAuthResolveHelper,
   ) {}
 
+  /**
+   * The org in the URL has to be one the signed-in user belongs to.
+   *
+   * These routes take the organization from the path slug and never
+   * compared it to the caller, while client registration is
+   * unauthenticated by design. So anyone with a login could register a
+   * client against a victim org's slug, authorize it as themselves, and
+   * exchange the code for a token stamped with the victim's
+   * organizationId -- which the gateway then honours for the whole
+   * platform-management tool surface. It is the same cross-tenant reach
+   * that scope checks elsewhere are there to prevent, re-entered at the
+   * organization boundary instead.
+   */
+  private assertMember(user: any, organizationId: string): void {
+    const userId = user?.sub || user?.id;
+    const memberships: any[] = user?.organizations ?? [];
+    const isMember = memberships.some((o: any) => o?.id === organizationId);
+    if (!userId || !isMember) {
+      throw new HttpException(
+        { error: 'access_denied', error_description: 'You are not a member of this organization' },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
+
   // ---------------------------------------------------------------------------
   // 1. Authorization Server Metadata (RFC 8414)
   // GET /:orgSlug/:gatewaySlug/.well-known/oauth-authorization-server
@@ -187,6 +213,8 @@ export class McpOAuthController {
       return res.redirect(302, loginUrl);
     }
 
+    this.assertMember(user, organization.id);
+
     // --- User is authenticated — show the consent screen ---
     // OAuth 2.1 best practice: do NOT silently mint a code. Validate the
     // request up front (so an invalid client_id / redirect_uri is rejected
@@ -288,6 +316,7 @@ export class McpOAuthController {
     @Req() req: any,
   ) {
     const { organization, gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    this.assertMember(req.user, organization.id);
 
     const responseType = body.response_type;
     const clientId = body.client_id;
