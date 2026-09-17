@@ -189,7 +189,7 @@ export function GettingStartedCard({
                 }`}
               >
                 {done ? (
-                  <div className="flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-600 shrink-0">
+                  <div className="flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300 shrink-0">
                     <Check className="h-4 w-4" />
                   </div>
                 ) : (
@@ -216,7 +216,7 @@ export function GettingStartedCard({
               }`}
             >
               {state.steps.external_client ? (
-                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-600 shrink-0">
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300 shrink-0">
                   <Check className="h-4 w-4" />
                 </div>
               ) : (

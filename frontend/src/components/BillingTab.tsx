@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { billingApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { PlanComparison } from '@/components/plan-comparison'
+import { QueryError } from '@/components/ui/query-error'
 import { PLANS, toPlanKey } from '@/lib/plan-catalog'
 
 interface BillingStatus {
@@ -73,7 +74,13 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
   const { error } = useNotifications()
   const [interval, setInterval] = useState<BillingInterval>('month')
 
-  const { data: status, isLoading } = useQuery<BillingStatus>({
+  const {
+    data: status,
+    isLoading,
+    isError: statusFailed,
+    error: statusError,
+    refetch: refetchStatus,
+  } = useQuery<BillingStatus>({
     queryKey: ['billing-status', organizationId],
     queryFn: () => billingApi.getStatus(organizationId!),
     enabled: !!organizationId,
@@ -113,6 +120,29 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
           <div className="text-muted-foreground">No organization selected</div>
         </CardContent>
       </Card>
+    )
+  }
+
+  // The status query had no error branch, so a failed fetch left `status`
+  // undefined and the render fell through to plan='free' plus
+  // "Hosted billing is not configured" — a fabricated answer on both counts.
+  // GET /billing/:organizationId is admin/owner-only while Settings shows this
+  // tab to every role, so the common failure is a 403 from a member of a
+  // *paying* org, who would otherwise be told their org is unpaid.
+  if (statusFailed) {
+    const forbidden = (statusError as any)?.response?.status === 403
+    return (
+      <QueryError
+        error={statusError}
+        // Retrying a 403 just fails again; only offer it for transient errors.
+        onRetry={forbidden ? undefined : () => void refetchStatus()}
+        title={forbidden ? 'Billing is restricted to admins and owners' : "We couldn't load your billing details"}
+        description={
+          forbidden
+            ? 'Your role cannot view this organization’s plan or invoices. Ask an owner or admin if you need them.'
+            : undefined
+        }
+      />
     )
   }
 

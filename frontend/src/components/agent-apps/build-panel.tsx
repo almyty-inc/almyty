@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useCopy } from '@/lib/clipboard'
 import { credentialsApi } from '@/lib/api'
 import { SigningCredentialDialog } from './signing-credential-dialog'
@@ -110,7 +111,7 @@ export function BuildPanel({
       queryClient.invalidateQueries({ queryKey: ['app-builds', app.slug] })
     },
     onError: (err: any) =>
-      errorNotif('Could not start', err?.response?.data?.message || 'Something went wrong.'),
+      errorNotif('Could not start the build', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const download = useMutation({
