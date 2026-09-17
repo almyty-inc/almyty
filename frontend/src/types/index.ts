@@ -62,6 +62,8 @@ export interface Organization {
   createdAt: string
   updatedAt: string
   members: OrganizationMembership[]
+  /** Active member count, sent by the list endpoint, which does not hydrate `members`. */
+  memberCount?: number
   gateways: Gateway[]
   apis: Api[]
   tools: Tool[]

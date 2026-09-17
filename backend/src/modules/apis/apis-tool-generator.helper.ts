@@ -19,6 +19,16 @@ import { Tool } from '../../entities/tool.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ApisService } from './apis.service';
 
+/** What a generation run produced, including what it could not. */
+export interface ToolGenerationResult {
+  tools: Tool[];
+  generated: number;
+  failed: number;
+  skippedInactive: number;
+  skippedExisting: number;
+  total: number;
+}
+
 @Injectable()
 export class ApisToolGeneratorHelper {
   private readonly logger = new Logger(ApisToolGeneratorHelper.name);
@@ -36,7 +46,7 @@ export class ApisToolGeneratorHelper {
     organizationId: string,
     preloadedOperations?: Operation[],
     onBatchProgress?: (done: number, total: number) => void | Promise<void>,
-  ): Promise<Tool[]> {
+  ): Promise<ToolGenerationResult> {
     // When operations are supplied by the caller (e.g. inline from
     // importSchema), skip the heavy relation-loading findOne. That
     // call eager-loads `schemas` — which deserializes the entire
@@ -166,7 +176,18 @@ export class ApisToolGeneratorHelper {
     this.logger.log(`[TOOL-GEN]   - Skipped (existing): ${skippedExisting}`);
     this.logger.log(`[TOOL-GEN]   - Errors: ${errorCount}`);
 
-    return generatedTools;
+    // The counts travel with the tools. They were logged and discarded,
+    // so a 600-operation import that failed on 60 of them answered with
+    // 540 tools and a green "540 tools created successfully" -- the
+    // failures were visible only in the server log.
+    return {
+      tools: generatedTools,
+      generated: generatedTools.length,
+      failed: errorCount,
+      skippedInactive,
+      skippedExisting,
+      total: operations.length,
+    };
   }
 
   logMemoryPhase(phase: string): void {

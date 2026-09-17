@@ -295,6 +295,32 @@ export function GatewayDetailPage() {
         </div>
       </div>
 
+      {/*
+        Webhook registration failed and nothing said so.
+
+        Telling a platform where to deliver inbound messages happens
+        fire-and-forget after the gateway is saved, so a rejected
+        setWebhook -- bad token, unreachable PUBLIC_API_URL -- left the
+        gateway reading "Active" while no message could ever arrive. The
+        failure was recorded on the gateway and read by nothing.
+      */}
+      {['failed', 'skipped'].includes((gateway as any)?.metadata?.webhookRegistration?.status) && (
+        <div
+          data-testid="webhook-registration-failed"
+          className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4"
+        >
+          <Info className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium text-destructive">This channel is not receiving messages</p>
+            <p className="text-sm text-destructive/90">
+              {(gateway as any).metadata.webhookRegistration.error ||
+                'The platform rejected the webhook registration.'}{' '}
+              Fix the credential below and save again to retry.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* System gateway banner */}
       {gateway.isSystem && (
         <div className="flex items-start gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 dark:border-violet-800 dark:bg-violet-950/30">

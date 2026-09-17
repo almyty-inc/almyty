@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -39,6 +40,7 @@ interface ExecutionSettings {
 
 export function ExecutionTab({ agentId }: { agentId: string }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [addingRole, setAddingRole] = useState(false)
 
   const rolesQuery = useQuery({
@@ -90,9 +92,38 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
         next === 'pinned'
           ? { mode: 'pinned' as const, modelId: resolve.data?.find((r) => r.key === role.key)?.modelId ?? '' }
           : { mode: 'resolved' as const, policy: { objective: 'cheapest' } }
-      return (await api.post(`/agents/${agentId}/roles`, { ...role, binding })).data.data
+      // Only the fields the upsert accepts. GET returns whole AgentRole
+      // rows -- id, organizationId, agentId, createdAt, updatedAt -- and
+      // posting those straight back is rejected by the whitelist pipe, so
+      // the toggle answered with a validation dump and never changed
+      // anything. Spreading the entity was the bug.
+      return (
+        await api.post(`/agents/${agentId}/roles`, {
+          key: role.key,
+          displayName: role.displayName,
+          ...(role.requirement ? { requirement: role.requirement } : {}),
+          binding,
+        })
+      ).data.data
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent-roles', agentId] }),
+  })
+
+  const removeRole = useMutation({
+    mutationFn: async (key: string) => (await api.delete(`/agents/${agentId}/roles/${key}`)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent-roles', agentId] }),
+  })
+
+  // Ejecting rewrites the agent's graph and clears the strategy, so the
+  // builder is where you land afterwards -- otherwise the tab you are on
+  // stops describing the agent you now have.
+  const eject = useMutation({
+    mutationFn: async () => (await api.post(`/agents/${agentId}/execution/eject`, {})).data.data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-execution', agentId] })
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] })
+      navigate(`/agents/${agentId}/edit`)
+    },
   })
 
   const roles = rolesQuery.data ?? []
@@ -139,6 +170,7 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
             loading={rolesQuery.isLoading}
             error={rolesQuery.isError ? getApiErrorMessage(rolesQuery.error, 'Could not read this agent\'s roles') : undefined}
             onAddRole={() => setAddingRole(true)}
+            onRemoveRole={(key) => removeRole.mutate(key)}
             onToggleBinding={(key, next) => {
               const role = roles.find((r) => r.key === key)
               if (role) toggleBinding.mutate({ role, next })
@@ -164,6 +196,11 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
               {getApiErrorMessage(toggleBinding.error, 'Could not change that binding')}
             </p>
           )}
+          {removeRole.isError && (
+            <p data-testid="remove-role-error" className="mt-2 text-xs text-red-600 dark:text-red-400">
+              {getApiErrorMessage(removeRole.error, 'Could not remove that role')}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -180,7 +217,13 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
             loading={strategiesQuery.isLoading || executionQuery.isLoading}
             error={strategiesQuery.isError ? getApiErrorMessage(strategiesQuery.error, 'Could not read the strategies') : undefined}
             onSelect={(key) => saveExecution.mutate({ strategyKey: key })}
+            onEject={() => eject.mutate()}
           />
+          {eject.isError && (
+            <p data-testid="eject-error" className="mt-2 text-xs text-red-600 dark:text-red-400">
+              {getApiErrorMessage(eject.error, 'Could not eject this strategy')}
+            </p>
+          )}
           {saveExecution.isError && (
             <p data-testid="execution-error" className="mt-2 text-xs text-red-600 dark:text-red-400">
               {getApiErrorMessage(saveExecution.error, 'Could not save that choice')}

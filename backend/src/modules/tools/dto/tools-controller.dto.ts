@@ -30,6 +30,18 @@ export class CreateToolBodyDto {
   @IsObject()
   authConfig?: any;
 
+  /**
+   * The API this tool's path is relative to.
+   *
+   * The service validates it and the entity has the column, but this DTO
+   * did not list it -- and with forbidNonWhitelisted on, sending it
+   * would have 400'd the whole request. So "Link to API" could never
+   * reach the server by any route.
+   */
+  @IsOptional()
+  @IsString()
+  apiId?: string;
+
   @IsOptional()
   @IsObject()
   configuration?: {

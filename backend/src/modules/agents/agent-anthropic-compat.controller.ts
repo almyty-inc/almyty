@@ -79,6 +79,26 @@ export class AgentAnthropicCompatController {
       // asked for SSE and got one JSON object gets a parse failure it
       // cannot explain, so say so plainly instead: an error naming the
       // limitation is debuggable, a wrong shape is not.
+      // Client-declared tools cannot work here, and saying so is the only
+      // honest answer. An almyty agent runs its OWN tools: a tool_call
+      // node executes and the run returns the finished answer, so there
+      // is no turn at which we could hand a tool back for the client to
+      // run. Accepting these and returning a normal answer would leave a
+      // client whose tools simply never fire, with nothing to debug --
+      // which is worse than a refusal that names the reason.
+      if (internal.tools?.length) {
+        return res
+          .status(400)
+          .json(
+            toAnthropicError(
+              400,
+              'This endpoint does not take client-declared tools. An almyty agent runs its own tools and returns the finished answer, ' +
+                'so there is no turn at which one could be handed back to you. Give the agent the tools instead.',
+              'invalid_request_error',
+            ),
+          );
+      }
+
       if (internal.stream) {
         return res
           .status(400)

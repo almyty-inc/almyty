@@ -50,10 +50,34 @@ describe('AgentSchedulerService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
+  /**
+   * Scheduling something that will never run.
+   *
+   * handleScheduledExecution refuses a non-ACTIVE agent and deletes the
+   * job, and restoreSchedules only restores ACTIVE ones -- but nothing
+   * stopped you scheduling a draft. The card counted down to a run that
+   * deleted itself the first time it fired, and agents are created as
+   * DRAFT, so that was the default outcome for anyone who set a schedule
+   * before activating.
+   */
+  describe('scheduleAgent: the agent has to be able to run', () => {
+    it('refuses to schedule an agent that is not active', async () => {
+      agentsService.getAgent.mockResolvedValue({
+        id: 'a1',
+        organizationId: 'org-1',
+        status: AgentStatus.DRAFT,
+        settings: {},
+      });
+
+      await expect(service.scheduleAgent('a1', 'org-1', 15)).rejects.toThrow(/activate this agent/i);
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
   // ── intervalMinutes validation ──────────────────────────────────────
 
   describe('scheduleAgent: intervalMinutes validation', () => {
-    const baseAgent = { id: 'a1', organizationId: 'org-1', settings: {}, createdBy: 'u1' };
+    const baseAgent = { id: 'a1', organizationId: 'org-1', settings: {}, createdBy: 'u1', status: AgentStatus.ACTIVE };
 
     beforeEach(() => {
       agentsService.getAgent.mockResolvedValue(baseAgent);
@@ -137,7 +161,54 @@ describe('AgentSchedulerService', () => {
     });
   });
 
-  // ── restoreSchedules: corrupted schedule handling ──────────────────
+  // ── restoreSchedules ────────────────────────────────────────────────
+
+  /**
+   * Boot clears every repeatable job before rebuilding them, so a throw
+   * part-way through used to escape to the outer catch: one logged line,
+   * the process finishes booting, and the queue is left emptied and only
+   * partly repopulated. Nothing visible changed, because
+   * `settings.schedule.enabled` stays true -- so the card went on saying
+   * "next run in ~N minutes" for a job that no longer existed.
+   */
+  describe('restoreSchedules: one agent that will not restore', () => {
+    const scheduledAgent = (id: string) => ({
+      id,
+      organizationId: 'org-1',
+      status: AgentStatus.ACTIVE,
+      settings: { schedule: { enabled: true, intervalMinutes: 10, input: {} } },
+    });
+
+    it('restores the rest, and pauses the one it could not', async () => {
+      queue.getRepeatableJobs.mockResolvedValue([]);
+      agentRepo.find.mockResolvedValue([scheduledAgent('a1'), scheduledAgent('a2'), scheduledAgent('a3')]);
+      queue.add
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('redis blip'))
+        .mockResolvedValueOnce(undefined);
+
+      await service.restoreSchedules();
+
+      // a1 and a3 are back on the queue; a2 is not abandoned in silence.
+      expect(queue.add).toHaveBeenCalledTimes(3);
+      const paused = agentRepo.save.mock.calls.map((c: any[]) => c[0]);
+      expect(paused).toHaveLength(1);
+      expect(paused[0].id).toBe('a2');
+      expect(paused[0].settings.schedule.enabled).toBe(false);
+      expect(paused[0].settings.schedule.pausedReason).toMatchObject({ code: 'RESTORE_FAILED' });
+    });
+
+    it('leaves the agents it did restore alone', async () => {
+      queue.getRepeatableJobs.mockResolvedValue([]);
+      agentRepo.find.mockResolvedValue([scheduledAgent('a1')]);
+      queue.add.mockResolvedValue(undefined);
+
+      await service.restoreSchedules();
+
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
 
   // ── handleScheduledExecution: retired model ─────────────────────────
 
@@ -213,6 +284,7 @@ describe('AgentSchedulerService', () => {
       agentsService.getAgent.mockResolvedValue({
         id: 'a1',
         organizationId: 'org-1',
+        status: AgentStatus.ACTIVE,
         settings: {
           modelIssue: { code: 'MODEL_NOT_FOUND', model: 'old', message: 'gone', detectedAt: 'x' },
           schedule: { enabled: false, intervalMinutes: 10, input: {}, pausedReason: { code: 'MODEL_NOT_FOUND' } },

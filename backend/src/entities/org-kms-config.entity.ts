@@ -36,7 +36,7 @@ export class OrgKmsConfig {
 
   /** One KMS config per organization. */
   @Index({ unique: true })
-  @Column()
+  @Column({ type: 'uuid' })
   organizationId: string;
 
   /**

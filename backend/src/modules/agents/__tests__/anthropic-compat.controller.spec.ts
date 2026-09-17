@@ -155,19 +155,21 @@ describe('POST /v1/messages', () => {
     expect(engine.execute).not.toHaveBeenCalled();
   });
 
-  it('carries declared tools into the run, or the client can never call one', async () => {
-    // Dropped here, a client that declared tools gets an answer that
-    // cannot call them and its loop ends without an error anywhere.
-    await post(
+  it('refuses client-declared tools, because an agent runs its own', async () => {
+    // Nothing in the execution path produces tool calls for a caller to
+    // run: a tool_call node executes inside the agent and the run returns
+    // the finished answer. Accepting these and answering normally leaves
+    // a client whose tools never fire and nothing to debug.
+    const { body: res } = await post(
       body({
         tools: [{ name: 'weather', description: 'look up weather', input_schema: { type: 'object', properties: {} } }],
         tool_choice: { type: 'auto' },
       }),
-    ).expect(200)
+    ).expect(400)
 
-    const input = (engine.execute.mock.calls[0] as any[])[3].input
-    expect(input.tools).toEqual([expect.objectContaining({ name: 'weather' })])
-    expect(input.toolChoice).toBeDefined()
+    expect(res.error.type).toBe('invalid_request_error')
+    expect(res.error.message).toMatch(/runs its own tools/i)
+    expect(engine.execute).not.toHaveBeenCalled()
   })
 
   it('returns tool_use blocks and stop_reason tool_use when the run called a tool', async () => {

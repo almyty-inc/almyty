@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Repository, Between, LessThanOrEqual, MoreThanOrEqual, In } from 'typeorm';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { User } from '../../entities/user.entity';
 import { AUDIT_STREAM_HOOK, AuditStreamHook } from '../../common/ee-hooks/ee-hooks';
@@ -150,12 +150,41 @@ export class AuditLogService {
     const [data, total] = await qb.getManyAndCount();
 
     return {
-      data,
+      data: await this.withUserEmails(data),
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  /**
+   * Fill in the acting user's email on rows that lack it.
+   *
+   * `log()` resolves the email when it writes, so this only matters for
+   * rows written before it did, or by a path that builds the entry
+   * itself. Those rows made the Audit Log's USER column read as a
+   * truncated uuid -- "24746e30" -- which tells a person nothing about
+   * who did the thing. Resolved on read, in one query for the whole page.
+   */
+  private async withUserEmails(rows: AuditLog[]): Promise<AuditLog[]> {
+    const missing = [...new Set(rows.filter(row => row.userId && !row.userEmail).map(row => row.userId))];
+    if (missing.length === 0) return rows;
+
+    try {
+      const users = await this.userRepository.find({
+        where: { id: In(missing) },
+        select: { id: true, email: true },
+      });
+      const emailById = new Map(users.map(user => [user.id, user.email]));
+      for (const row of rows) {
+        if (row.userId && !row.userEmail) row.userEmail = emailById.get(row.userId) ?? row.userEmail;
+      }
+    } catch (err: any) {
+      // Reading the log must not fail because a name could not be found.
+      this.logger.warn(`Could not resolve audit user emails: ${err?.message ?? err}`);
+    }
+    return rows;
   }
 
   /**

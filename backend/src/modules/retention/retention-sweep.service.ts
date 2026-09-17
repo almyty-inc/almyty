@@ -13,6 +13,7 @@ import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
+import { ToolExecution } from '../../entities/tool-execution.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { AgentApp, appPrivacyFrom } from '../../entities/agent-app.entity';
@@ -47,6 +48,7 @@ export interface SweepCounts {
   messages: number;
   requestLogs: number;
   usageMetrics: number;
+  toolExecutions: number;
   auditLogs: number;
 }
 
@@ -90,6 +92,9 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     private readonly usageMetricRepository: Repository<UsageMetric>,
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
+    @Optional()
+    @InjectRepository(ToolExecution)
+    private readonly toolExecutionRepository: Repository<ToolExecution>,
     @InjectRepository(Gateway)
     private readonly gatewayRepository: Repository<Gateway>,
     private readonly auditLogService: AuditLogService,
@@ -153,6 +158,7 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       requestLogs: 0,
       usageMetrics: 0,
       auditLogs: 0,
+      toolExecutions: 0,
     };
 
     if (policy.agentRunsDays != null) {
@@ -200,6 +206,15 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         organizationId,
         createdAt: LessThan(this.cutoff(policy.auditLogDays)),
       } as FindOptionsWhere<AuditLog>);
+    }
+
+    // tool_executions had no sweep at all while every sibling table had
+    // one, and it is the table that grows fastest in bytes per row.
+    if (policy.toolExecutionsDays != null && this.toolExecutionRepository) {
+      counts.toolExecutions = await this.batchDelete(this.toolExecutionRepository, {
+        organizationId,
+        createdAt: LessThan(this.cutoff(policy.toolExecutionsDays)),
+      } as FindOptionsWhere<ToolExecution>);
     }
 
     const total =

@@ -23,6 +23,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 import { organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { formatDate, getInitials, formatCurrency } from '@/lib/utils'
@@ -43,7 +44,7 @@ type InviteMemberFormData = z.infer<typeof inviteMemberSchema>
 
 export function OrganizationsPage() {
   const { currentOrganization, organizations, setCurrentOrganization } = useOrganizationStore()
-  const { success, error } = useNotifications()
+  const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
 
   React.useEffect(() => {
@@ -54,6 +55,9 @@ export function OrganizationsPage() {
   const [selectedOrg, setSelectedOrg] = React.useState<Organization | null>(null)
   const [selectedOrgId, setSelectedOrgId] = React.useState<string | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  // Honour ?new=1, so Settings and the palette can send you straight to
+  // the dialog -- there was no create affordance anywhere else.
+  useCreateDeepLink(setCreateDialogOpen)
   const [inviteDialogOpen, setInviteDialogOpen] = React.useState(false)
   const [orgDetailsOpen, setOrgDetailsOpen] = React.useState(false)
 
@@ -84,9 +88,19 @@ export function OrganizationsPage() {
   const inviteMemberMutation = useMutation({
     mutationFn: ({ orgId, data }: { orgId: string; data: InviteMemberFormData }) =>
       organizationsApi.addMember(orgId, data),
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['organization-members'] })
-      success('Member invited', 'Invitation sent successfully.')
+      // Same branch as the other invite dialog: the mail service returns
+      // false rather than throwing, so this said "sent" over a send that
+      // was refused.
+      if ((result as any)?.inviteSent === false) {
+        warning(
+          'Invite created, email not delivered',
+          'They are invited, but the email could not be sent. Share the invite link with them directly.',
+        )
+      } else {
+        success('Member invited', 'Invitation sent successfully.')
+      }
       setInviteDialogOpen(false)
     },
     onError: (err: any) => {
@@ -186,7 +200,7 @@ export function OrganizationsPage() {
             <div>
               <div className="font-medium">{org.name}</div>
               <div className="text-sm text-muted-foreground">
-                {org.members?.length || 0} members
+                {org.memberCount ?? org.members?.length ?? 0} members
               </div>
             </div>
           </div>
@@ -346,8 +360,11 @@ export function OrganizationsPage() {
   // createdAt/isActive — that's why the table showed 'Invalid Date'
   // and 'Inactive' for the active org.
   const orgs = Array.isArray(organizationsData) ? organizationsData : []
-  const membersExtracted = membersData?.data?.members || membersData?.data || []
-  const members = Array.isArray(membersExtracted) ? membersExtracted : []
+  // getMembers also runs through apiGet → extractData, so membersData is
+  // already the array. Reaching for `.data` on it was undefined, so the
+  // Members tab was permanently empty no matter how many people were in
+  // the organization.
+  const members = Array.isArray(membersData) ? membersData : []
 
   return (
     <div className="space-y-8">
@@ -490,7 +507,7 @@ export function OrganizationsPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {selectedOrg.members?.length || 0}
+                        {selectedOrg.memberCount ?? members.length}
                       </div>
                     </CardContent>
                   </Card>

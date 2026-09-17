@@ -143,6 +143,7 @@ describe('ToolsService', () => {
 
     toolExecutionRepo = {
       find: jest.fn(),
+      createQueryBuilder: jest.fn(),
     };
 
     apiRepo = {
@@ -1076,12 +1077,42 @@ describe('ToolsService', () => {
 
   // ─── getOrganizationToolStats ──────────────────────────────────────────────
 
+  /**
+   * The execution aggregate the service now asks the database for.
+   *
+   * It used to load every tool_executions row in the organization --
+   * with `relations: { tool: true }` -- to produce a count, a mean and a
+   * top ten. A ToolExecution carries untruncated `parameters` and
+   * `result` json and the HTTP executor allows 10MB responses, so rows
+   * can be megabytes: the same shape as the rawSchema OOM.
+   */
+  const makeExecutionAggregate = (
+    totals: { count: string; avg: string | null },
+    usage: Array<{ toolId: string; count: string }>,
+  ) => {
+    let selected: 'totals' | 'usage' = 'totals';
+    const qb: any = {
+      select: (expr: string) => { selected = expr.includes('COUNT') ? 'totals' : 'usage'; return qb; },
+      addSelect: () => qb,
+      where: () => qb,
+      andWhere: () => qb,
+      groupBy: () => qb,
+      orderBy: () => qb,
+      limit: () => qb,
+      getRawOne: async () => totals,
+      getRawMany: async () => usage,
+    };
+    return qb;
+  };
+
   describe('getOrganizationToolStats', () => {
     it('should return zeroed stats when no tools or executions', async () => {
       const qb = makeQueryBuilder([], 0);
       qb.getRawMany.mockResolvedValue([]);
       toolRepo.createQueryBuilder.mockReturnValue(qb);
-      toolExecutionRepo.find.mockResolvedValue([]);
+      toolExecutionRepo.createQueryBuilder.mockReturnValue(
+        makeExecutionAggregate({ count: '0', avg: null }, []),
+      );
       toolRepo.find.mockResolvedValue([]);
 
       const stats = await service.getOrganizationToolStats('org-1');
@@ -1103,7 +1134,9 @@ describe('ToolsService', () => {
         { tool_status: ToolStatus.INACTIVE, count: '2' },
       ]);
       toolRepo.createQueryBuilder.mockReturnValue(qb);
-      toolExecutionRepo.find.mockResolvedValue([]);
+      toolExecutionRepo.createQueryBuilder.mockReturnValue(
+        makeExecutionAggregate({ count: '0', avg: null }, []),
+      );
       toolRepo.find.mockResolvedValue([]);
 
       const stats = await service.getOrganizationToolStats('org-1');
@@ -1117,22 +1150,25 @@ describe('ToolsService', () => {
     it('should compute average execution time and top tools', async () => {
       const tool1 = makeTool({ id: 'tool-1' });
       const tool2 = makeTool({ id: 'tool-2' });
-      const executions: Partial<ToolExecution>[] = [
-        { toolId: 'tool-1', executionTime: 100 },
-        { toolId: 'tool-1', executionTime: 200 },
-        { toolId: 'tool-2', executionTime: 300 },
-      ];
 
       const qb = makeQueryBuilder([], 0);
       qb.getRawMany.mockResolvedValue([]);
       toolRepo.createQueryBuilder.mockReturnValue(qb);
-      toolExecutionRepo.find.mockResolvedValue(executions);
+      // Three executions: two of tool-1, one of tool-2, mean 200.
+      toolExecutionRepo.createQueryBuilder.mockReturnValue(
+        makeExecutionAggregate({ count: '3', avg: '200' }, [
+          { toolId: 'tool-1', count: '2' },
+          { toolId: 'tool-2', count: '1' },
+        ]),
+      );
       toolRepo.find.mockResolvedValue([tool1, tool2]);
 
       const stats = await service.getOrganizationToolStats('org-1');
 
       expect(stats.totalExecutions).toBe(3);
-      expect(stats.averageExecutionTime).toBe(Math.round((100 + 200 + 300) / 3));
+      expect(stats.averageExecutionTime).toBe(200);
+      // And it must not have hauled the rows themselves into heap.
+      expect(toolExecutionRepo.find).not.toHaveBeenCalled();
       expect(stats.topUsedTools).toHaveLength(2);
       const tool1Stats = stats.topUsedTools.find(t => t.tool.id === 'tool-1');
       expect(tool1Stats?.executionCount).toBe(2);

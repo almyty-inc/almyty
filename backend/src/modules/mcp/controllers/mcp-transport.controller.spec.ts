@@ -236,7 +236,15 @@ describe('McpTransportController', () => {
       const result = await controller.sendSseMessage(connectionId, mockMessage, mockRequest);
 
       expect(result).toEqual({ success: true });
-      expect(sseTransport.handleSseMessage).toHaveBeenCalledWith(connectionId, mockMessage);
+      // The caller's org travels with the message: the connection is
+      // not proof of who is posting to it, and without this a POST to
+      // somebody else's connection id ran tools in their organization
+      // and returned the result to the poster.
+      expect(sseTransport.handleSseMessage).toHaveBeenCalledWith(
+        connectionId,
+        mockMessage,
+        'org-1',
+      );
     });
 
     it('should throw error when organization context is missing', async () => {

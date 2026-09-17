@@ -74,6 +74,7 @@ describe('GatewaysService', () => {
             find: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -746,9 +747,20 @@ describe('GatewaysService', () => {
 
       gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
       gatewayRepository.find.mockResolvedValue(mockGateways);
-      usageMetricRepository.find.mockResolvedValue(mockMetrics);
+      // One average, computed by the database. This used to load every
+      // usage_metrics row the org had ever written -- the interceptor
+      // writes two per request, so ~1.7M rows/day at 10 req/s -- into
+      // heap to produce a single mean.
+      usageMetricRepository.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ avg: '120' }),
+      });
 
       const result = await service.getOrganizationGatewayStats('org-1');
+      expect(result.averageResponseTime).toBe(120);
+      expect(usageMetricRepository.find).not.toHaveBeenCalled();
 
       expect(result).toEqual({
         totalGateways: expect.any(Number),

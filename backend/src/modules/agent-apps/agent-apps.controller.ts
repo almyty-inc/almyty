@@ -331,14 +331,15 @@ export class AgentAppsController {
     @Request() req: any,
     @Res() res: Response,
   ) {
-    const { body, filename } = await this.builds.artifact(this.org(req), buildId);
+    const { body, filename, bytes } = await this.builds.artifact(this.org(req), buildId);
 
     // An executable is never rendered inline, and the name is quoted
     // because a product slug can contain characters a bare header
     // value would end at.
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
-    res.setHeader('Content-Length', String(body.length));
-    res.send(body);
+    if (bytes) res.setHeader('Content-Length', String(bytes));
+    body.on('error', () => res.destroy());
+    body.pipe(res);
   }
 }

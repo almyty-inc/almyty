@@ -109,4 +109,47 @@ describe('OrganizationsPage', () => {
     // through to a Zustand-store fallback with no createdAt field.
     expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
   })
+  /**
+   * Two numbers on this page were always wrong. The row subtitle read
+   * `org.members?.length` off a list payload that does not hydrate the
+   * relation, so it said "0 members" for a full organization; the Members
+   * tab reached for `membersData.data` on a value that was already the
+   * array, so it was permanently empty. Both are read straight now.
+   */
+  describe('member numbers', () => {
+    const org = {
+      id: 'org-a',
+      name: 'alpha-org',
+      slug: 'alpha-org',
+      isActive: true,
+      plan: 'free',
+      memberCount: 5,
+      createdAt: '2026-06-01T12:17:57.470Z',
+      updatedAt: '2026-06-02T00:00:00.000Z',
+    }
+
+    it('prints the count the API sent, not zero', async () => {
+      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
+      vi.mocked(organizationsApi.getMembers).mockResolvedValue([] as any)
+
+      render(<OrganizationsPage />)
+
+      expect(await screen.findByText('5 members')).toBeInTheDocument()
+      expect(screen.queryByText('0 members')).not.toBeInTheDocument()
+    })
+
+    it('lists the members the API returned', async () => {
+      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
+      vi.mocked(organizationsApi.getMembers).mockResolvedValue([
+        { id: 'm1', userId: 'u1', role: 'owner', user: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' } },
+      ] as any)
+
+      render(<OrganizationsPage />)
+
+      await userEvent.click(await screen.findByText('alpha-org'))
+      await userEvent.click(await screen.findByRole('tab', { name: /members/i }))
+
+      expect(await screen.findByText(/ada@example.com/i)).toBeInTheDocument()
+    })
+  })
 })

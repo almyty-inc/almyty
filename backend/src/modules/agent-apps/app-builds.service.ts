@@ -25,6 +25,7 @@ import { signingReadiness } from './build-signing';
 import { downloadedFilename } from './build-handoff';
 import { buildsRunOnWorker } from './build-mode';
 import { ProcessToolchainRunner, TOOL_FOR_TARGET, toolchainReadiness } from './build-toolchain';
+import { Readable } from 'stream';
 
 export const APP_BUILD_QUEUE = 'app-build';
 
@@ -269,7 +270,7 @@ export class AppBuildsService {
   async artifact(
     organizationId: string,
     buildId: string,
-  ): Promise<{ body: Buffer; filename: string }> {
+  ): Promise<{ body: Readable; filename: string; bytes?: number }> {
     const build = await this.findOne(organizationId, buildId);
 
     if (build.status !== BuildStatus.SUCCEEDED) {
@@ -287,7 +288,14 @@ export class AppBuildsService {
     if (!app) throw new NotFoundException('That app no longer exists.');
 
     return {
-      body: await this.storage.download(build.artifactKey!),
+      // Piped, not buffered. A bun --compile binary is ~60-100MB and an
+      // Electron desktop package 100-200MB, with no size cap anywhere on
+      // this path -- so reading one into heap and then res.send()ing it
+      // (which copies) was an OOM on its own, on a pod that peaks around
+      // 286MB. artifactBytes is on the row, so the length header
+      // survives.
+      body: await this.storage.downloadStream(build.artifactKey!),
+      bytes: build.artifactBytes ? Number(build.artifactBytes) : undefined,
       // Named after the product rather than a row id, because this is
       // what lands in someone's Downloads folder. Shared with the
       // instructions we hand out, so the two cannot name different

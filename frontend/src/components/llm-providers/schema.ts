@@ -157,7 +157,20 @@ function pastedKey(value: unknown): string | undefined {
  * vault credential goes up as `credentialId`; a pasted key rides inside
  * `configuration`; the masked marker never does.
  */
-export function buildProviderCreateBody(data: CreateProviderFormData): Record<string, any> {
+/**
+ * `visibility`/`teamId` are not on CreateProviderFormData -- the dialog
+ * holds them in their own state and spreads them onto the mutation
+ * argument -- so they arrive here as extra keys on `data`. They were
+ * then dropped, because this builds a hand-written literal rather than
+ * spreading, and every provider was created org-wide however you set the
+ * picker. Every other create surface in the app forwards them.
+ */
+type ProviderCreateInput = CreateProviderFormData & {
+  visibility?: 'org' | 'team'
+  teamId?: string | null
+}
+
+export function buildProviderCreateBody(data: ProviderCreateInput): Record<string, any> {
   const credentialId = data.connectionId || data.credentialId || undefined
   const apiKey = credentialId ? undefined : pastedKey(data.apiKey)
   const usageApiKey = pastedKey(data.usageApiKey)
@@ -174,6 +187,8 @@ export function buildProviderCreateBody(data: CreateProviderFormData): Record<st
   return {
     name: data.name,
     type: data.type,
+    ...(data.visibility && { visibility: data.visibility }),
+    ...(data.teamId !== undefined && { teamId: data.teamId }),
     ...(credentialId && { credentialId }),
     configuration: {
       // Ollama is keyless: only send the key when one was typed (the zod
