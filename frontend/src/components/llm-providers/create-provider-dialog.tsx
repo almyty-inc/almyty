@@ -83,7 +83,7 @@ export function CreateProviderDialog({
               placeholder="e.g., OpenAI Production"
             />
             {createForm.formState.errors.name && (
-              <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.name as any).message}</p>
+              <p className="text-sm text-destructive mt-1">{(createForm.formState.errors.name as any).message}</p>
             )}
           </div>
 
@@ -107,7 +107,7 @@ export function CreateProviderDialog({
               )}
             />
             {createForm.formState.errors.type && (
-              <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.type as any).message}</p>
+              <p className="text-sm text-destructive mt-1">{(createForm.formState.errors.type as any).message}</p>
             )}
           </div>
 
@@ -129,7 +129,7 @@ export function CreateProviderDialog({
                 <p className="text-xs text-muted-foreground mt-1">{field.hint}</p>
               )}
               {createForm.formState.errors[field.name] && (
-                <p className="text-sm text-red-600 mt-1">
+                <p className="text-sm text-destructive mt-1">
                   {String((createForm.formState.errors as any)[field.name].message)}
                 </p>
               )}
@@ -150,7 +150,7 @@ export function CreateProviderDialog({
                 this surface does not accept an API key.
               </p>
               {createForm.formState.errors.model && (
-                <p className="text-sm text-red-600 mt-1">
+                <p className="text-sm text-destructive mt-1">
                   {String((createForm.formState.errors as any).model.message)}
                 </p>
               )}
@@ -256,14 +256,14 @@ export function CreateProviderDialog({
                   {typeof testResult.latencyMs === 'number' ? ` (${testResult.latencyMs}ms)` : ''}
                 </p>
               ) : (
-                <p className="text-xs text-red-600 flex items-center gap-1">
+                <p className="text-xs text-destructive flex items-center gap-1">
                   <XCircle className="h-3 w-3" /> {testResult.error || 'Connection failed'}
                 </p>
               ))}
             </div>
           )}
           {createForm.formState.errors.apiKey && (
-            <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
+            <p className="text-sm text-destructive mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
           )}
 
           {/* Usage API key — only for types with a supported usage/cost API */}
@@ -303,7 +303,7 @@ export function CreateProviderDialog({
                 placeholder="org-..."
               />
               {createForm.formState.errors.organizationId && (
-                <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.organizationId as any).message}</p>
+                <p className="text-sm text-destructive mt-1">{(createForm.formState.errors.organizationId as any).message}</p>
               )}
             </div>
           )}

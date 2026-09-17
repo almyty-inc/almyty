@@ -54,7 +54,7 @@ const BADGE_TONE: Record<PlanKey, string> = {
   pro: 'bg-primary/10 text-primary border-primary/30',
   business: 'bg-primary/15 text-primary border-primary/40',
   enterprise:
-    'bg-gradient-to-r from-primary to-cyan-500 text-white border-transparent',
+    'bg-gradient-to-r from-primary to-cyan-400 text-white border-transparent',
 }
 
 interface PlanBadgeProps {

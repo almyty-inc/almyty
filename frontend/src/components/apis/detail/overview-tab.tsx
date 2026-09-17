@@ -210,7 +210,7 @@ export function OverviewTab({
 
       {/* Test Results */}
       {testResults && (
-        <Card className={testResults.success ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}>
+        <Card className={testResults.success ? 'border-green-200 bg-green-50/50 dark:border-green-500/30 dark:bg-green-500/10' : 'border-red-200 bg-red-50/50 dark:border-destructive/30 dark:bg-destructive/10'}>
           <CardContent className="pt-6">
             <div className="space-y-2">
               <div className="flex items-center justify-between">

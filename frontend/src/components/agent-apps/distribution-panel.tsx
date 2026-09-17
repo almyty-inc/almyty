@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import {
   CHANNEL_CREDENTIAL_FIELDS,
   DISTRIBUTION_BLURBS,
@@ -139,7 +140,7 @@ export function DistributionPanel({
       onSaved()
     },
     onError: (err: any) =>
-      errorNotif('Could not save', err?.response?.data?.message || 'Something went wrong.'),
+      errorNotif('Could not save the distribution', getApiErrorMessage(err, 'Please try again.')),
   })
 
   return (
