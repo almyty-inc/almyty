@@ -120,6 +120,7 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
                         size="sm"
                         variant="ghost"
                         className="gap-1 text-destructive"
+                        aria-label={`Delete promoted skill ${skill.name}`}
                         disabled={removeMutation.isPending}
                         onClick={() => removeMutation.mutate(skill.id)}
                       >

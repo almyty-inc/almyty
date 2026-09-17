@@ -67,9 +67,9 @@ export function SecurityTab({ api, open, onOpenChange }: SecurityTabProps) {
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label>Authentication Type</Label>
+            <Label htmlFor="apisec-authentication-type">Authentication Type</Label>
             <Select value={authType} onValueChange={(value) => setAuthType(value as ApiAuthType)}>
-              <SelectTrigger>
+              <SelectTrigger id="apisec-authentication-type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -85,16 +85,16 @@ export function SecurityTab({ api, open, onOpenChange }: SecurityTabProps) {
           {authType === ApiAuthType.API_KEY && (
             <>
               <div>
-                <Label>Header Name</Label>
-                <Input
+                <Label htmlFor="apisec-header-name">Header Name</Label>
+                <Input id="apisec-header-name"
                   placeholder="X-API-Key"
                   value={authConfig.headerName || ''}
                   onChange={(e) => setAuthConfig({...authConfig, headerName: e.target.value})}
                 />
               </div>
               <div>
-                <Label>API Key</Label>
-                <Input
+                <Label htmlFor="apisec-api-key">API Key</Label>
+                <Input id="apisec-api-key"
                   type="password"
                   placeholder="Enter API key"
                   value={authConfig.apiKey || ''}
@@ -106,8 +106,8 @@ export function SecurityTab({ api, open, onOpenChange }: SecurityTabProps) {
 
           {authType === ApiAuthType.BEARER_TOKEN && (
             <div>
-              <Label>Bearer Token</Label>
-              <Input
+              <Label htmlFor="apisec-bearer-token">Bearer Token</Label>
+              <Input id="apisec-bearer-token"
                 type="password"
                 placeholder="Enter bearer token"
                 value={authConfig.token || ''}
@@ -119,16 +119,16 @@ export function SecurityTab({ api, open, onOpenChange }: SecurityTabProps) {
           {authType === ApiAuthType.BASIC_AUTH && (
             <>
               <div>
-                <Label>Username</Label>
-                <Input
+                <Label htmlFor="apisec-username">Username</Label>
+                <Input id="apisec-username"
                   placeholder="Enter username"
                   value={authConfig.username || ''}
                   onChange={(e) => setAuthConfig({...authConfig, username: e.target.value})}
                 />
               </div>
               <div>
-                <Label>Password</Label>
-                <Input
+                <Label htmlFor="apisec-password">Password</Label>
+                <Input id="apisec-password"
                   type="password"
                   placeholder="Enter password"
                   value={authConfig.password || ''}
@@ -141,16 +141,16 @@ export function SecurityTab({ api, open, onOpenChange }: SecurityTabProps) {
           {authType === ApiAuthType.OAUTH2 && (
             <>
               <div>
-                <Label>Client ID</Label>
-                <Input
+                <Label htmlFor="apisec-client-id">Client ID</Label>
+                <Input id="apisec-client-id"
                   placeholder="Enter OAuth client ID"
                   value={authConfig.clientId || ''}
                   onChange={(e) => setAuthConfig({...authConfig, clientId: e.target.value})}
                 />
               </div>
               <div>
-                <Label>Client Secret</Label>
-                <Input
+                <Label htmlFor="apisec-client-secret">Client Secret</Label>
+                <Input id="apisec-client-secret"
                   type="password"
                   placeholder="Enter client secret"
                   value={authConfig.clientSecret || ''}
@@ -158,16 +158,16 @@ export function SecurityTab({ api, open, onOpenChange }: SecurityTabProps) {
                 />
               </div>
               <div>
-                <Label>Token URL</Label>
-                <Input
+                <Label htmlFor="apisec-token-url">Token URL</Label>
+                <Input id="apisec-token-url"
                   placeholder="https://oauth.example.com/token"
                   value={authConfig.tokenUrl || ''}
                   onChange={(e) => setAuthConfig({...authConfig, tokenUrl: e.target.value})}
                 />
               </div>
               <div>
-                <Label>Authorization URL (Optional)</Label>
-                <Input
+                <Label htmlFor="apisec-authorization-url">Authorization URL (Optional)</Label>
+                <Input id="apisec-authorization-url"
                   placeholder="https://oauth.example.com/authorize"
                   value={authConfig.authUrl || ''}
                   onChange={(e) => setAuthConfig({...authConfig, authUrl: e.target.value})}

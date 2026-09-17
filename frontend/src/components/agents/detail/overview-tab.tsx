@@ -180,6 +180,7 @@ export function OverviewTab({
                 <Button
                   disabled={!testInput.trim() || testLoading}
                   onClick={handleTest}
+                  aria-label="Run test"
                 >
                   {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 </Button>
@@ -190,7 +191,7 @@ export function OverviewTab({
                 </div>
               )}
               {testOutput && (
-                <div className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[200px] overflow-auto">
+                <div role="status" aria-live="polite" className="bg-muted rounded-lg p-3 text-sm whitespace-pre-wrap max-h-[200px] overflow-auto">
                   {testOutput}
                 </div>
               )}

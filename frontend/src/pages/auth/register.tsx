@@ -228,14 +228,16 @@ export function RegisterPage() {
             className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
           />
           <Label htmlFor="terms" className="ml-2 block text-sm text-foreground">
+            {/*
+              These were <a href="#">: focus stops that scrolled to the top of
+              the page and nothing else, on a checkbox you cannot submit
+              without. There is no /terms or /privacy route yet, so they read
+              as plain text until there is something real to point at.
+            */}
             I agree to the{' '}
-            <a href="#" className="text-primary hover:text-primary/80">
-              Terms of Service
-            </a>{' '}
+            <span className="font-medium">Terms of Service</span>{' '}
             and{' '}
-            <a href="#" className="text-primary hover:text-primary/80">
-              Privacy Policy
-            </a>
+            <span className="font-medium">Privacy Policy</span>
           </Label>
         </div>
         {errors.terms && (

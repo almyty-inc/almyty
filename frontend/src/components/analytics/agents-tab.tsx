@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import type { Agent, AgentExecution } from '@/types'
 
+import { TABLE_HEAD_CLASS as TH } from './constants'
 import { formatDate, formatMs, formatNumber } from './format'
 import { StatCard } from './stat-card'
 
@@ -177,8 +178,10 @@ export function AgentsTab() {
             agentStats.overallSuccessRate >= 90
               ? ''
               : agentStats.overallSuccessRate >= 70
-                ? 'border-yellow-200 bg-yellow-50/50'
-                : 'border-red-200 bg-red-50/50'
+                // Both halves: a light-only tint is invisible in dark
+                // mode, which is the same defect the toast variants had.
+                ? 'border-yellow-200 bg-yellow-50/50 dark:border-yellow-900/40 dark:bg-yellow-900/20'
+                : 'border-red-200 bg-red-50/50 dark:border-red-900/40 dark:bg-red-900/20'
           }
         />
         <StatCard
@@ -197,26 +200,26 @@ export function AgentsTab() {
           <div className="rounded-lg border bg-card">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground bg-muted">
-                  <th className="px-4 py-3 font-medium">Agent</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium text-right">Total Execs</th>
-                  <th className="px-4 py-3 font-medium text-right">24h</th>
-                  <th className="px-4 py-3 font-medium text-right">7d</th>
-                  <th className="px-4 py-3 font-medium text-right">Success Rate</th>
-                  <th className="px-4 py-3 font-medium text-right">Avg Time</th>
-                  <th className="px-4 py-3 font-medium text-right">Cost</th>
+                <tr className="border-b text-left bg-muted">
+                  <th className={TH}>Agent</th>
+                  <th className={TH}>Status</th>
+                  <th className={`${TH} text-right`}>Total Execs</th>
+                  <th className={`${TH} text-right`}>24h</th>
+                  <th className={`${TH} text-right`}>7d</th>
+                  <th className={`${TH} text-right`}>Success Rate</th>
+                  <th className={`${TH} text-right`}>Avg Time</th>
+                  <th className={`${TH} text-right`}>Cost</th>
                 </tr>
               </thead>
               <tbody>
                 {agentStats.perAgent.map(({ agent, executions24h, executions7d, successRate, avgTime, unavailable }) => (
                   <tr key={agent.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-3">
                       <Link to={`/agents/${agent.id}`} className="font-medium hover:underline text-sm">
                         {agent.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-3">
                       <Badge
                         variant={
                           agent.status === 'active'
@@ -230,7 +233,7 @@ export function AgentsTab() {
                         {agent.status}
                       </Badge>
                     </td>
-                    <td className="px-4 py-2.5 text-right font-medium">
+                    <td className="px-4 py-3 text-right font-medium">
                       {agent.totalExecutions.toLocaleString()}
                     </td>
                     {/*
@@ -242,32 +245,32 @@ export function AgentsTab() {
                       <td
                         colSpan={4}
                         data-testid={`agent-stats-unavailable-${agent.id}`}
-                        className="px-4 py-2.5 text-right text-xs text-muted-foreground italic"
+                        className="px-4 py-3 text-right text-xs text-muted-foreground italic"
                       >
                         Couldn&apos;t load this agent&apos;s runs
                       </td>
                     ) : (
                       <>
-                        <td className="px-4 py-2.5 text-right text-muted-foreground">{executions24h}</td>
-                        <td className="px-4 py-2.5 text-right text-muted-foreground">{executions7d}</td>
-                        <td className="px-4 py-2.5 text-right">
+                        <td className="px-4 py-3 text-right text-muted-foreground">{executions24h}</td>
+                        <td className="px-4 py-3 text-right text-muted-foreground">{executions7d}</td>
+                        <td className="px-4 py-3 text-right">
                           <span
                             className={cn(
                               'font-medium',
                               successRate >= 90
-                                ? 'text-green-600'
+                                ? 'text-green-600 dark:text-green-400'
                                 : successRate >= 70
-                                  ? 'text-yellow-600'
-                                  : 'text-red-600',
+                                  ? 'text-yellow-600 dark:text-yellow-400'
+                                  : 'text-red-600 dark:text-red-400',
                             )}
                           >
                             {successRate}%
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-right text-muted-foreground">{formatMs(avgTime)}</td>
+                        <td className="px-4 py-3 text-right text-muted-foreground">{formatMs(avgTime)}</td>
                       </>
                     )}
-                    <td className="px-4 py-2.5 text-right text-muted-foreground">
+                    <td className="px-4 py-3 text-right text-muted-foreground">
                       {agent.totalCost > 0 ? `$${agent.totalCost.toFixed(4)}` : '--'}
                     </td>
                   </tr>

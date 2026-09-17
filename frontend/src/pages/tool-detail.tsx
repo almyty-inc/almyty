@@ -78,7 +78,7 @@ export function ToolDetailPage() {
         fullError: ok ? undefined : response,
       })
       if (ok) {
-        notifications.success('Success', 'Tool executed successfully')
+        notifications.success('Tool executed', 'The run finished successfully.')
       } else {
         notifications.error('Execution failed', response?.error || response?.message || 'Tool execution returned success=false')
       }
@@ -105,7 +105,7 @@ export function ToolDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tool', id] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
-      notifications.success('Success', 'Tool status updated')
+      notifications.success('Tool status updated', 'The change is live on every gateway serving it.')
     },
   })
 
@@ -566,17 +566,20 @@ export function ToolDetailPage() {
               <div className="space-y-2">
                 {tool.gatewayAssociations && tool.gatewayAssociations.length > 0 ? (
                   tool.gatewayAssociations.map((assoc: GatewayToolAssociation) => (
-                    <div
+                    // A <div onClick> that navigates is invisible to the
+                    // keyboard; a Link keeps the row look and gets focus,
+                    // Enter and cmd-click for free.
+                    <Link
                       key={assoc.id}
-                      className="flex items-center justify-between p-3 border rounded cursor-pointer hover:bg-muted"
-                      onClick={() => navigate(`/gateways/${assoc.gateway?.id}`)}
+                      to={`/gateways/${assoc.gateway?.id}`}
+                      className="flex items-center justify-between p-3 border rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <div>
                         <div className="font-medium">{assoc.gateway?.name || 'Unknown'}</div>
                         <div className="text-xs text-muted-foreground">{assoc.gateway?.endpoint || 'No endpoint'}</div>
                       </div>
                       <Badge variant="outline">{assoc.gateway?.type?.toUpperCase() || 'N/A'}</Badge>
-                    </div>
+                    </Link>
                   ))
                 ) : (
                   <div className="text-center py-8">
