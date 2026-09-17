@@ -3,9 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DollarSign, RefreshCw, Scale } from 'lucide-react'
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
 import { Button } from '@/components/ui/button'
 import { budgetsApi, agentsApi, providerUsageApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
+
+import { TABLE_HEAD_CLASS as TH } from './constants'
 
 interface SpendBucket {
   periodStart: string
@@ -45,7 +48,7 @@ export function CostTab() {
   const { currentOrganization } = useOrganizationStore()
   const [period, setPeriod] = useState<'day' | 'month'>('month')
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['spend-summary', currentOrganization?.id, period],
     queryFn: () => budgetsApi.getSpend(period, 'day'),
     enabled: !!currentOrganization,
@@ -98,6 +101,11 @@ export function CostTab() {
         <div className="flex items-center justify-center h-48">
           <LoadingSpinner size="lg" />
         </div>
+      ) : isError ? (
+        // A failed spend fetch used to fall through to "No spend data",
+        // which on a cost surface reads as "you spent nothing" rather
+        // than "we could not read your spend".
+        <QueryError error={error} onRetry={() => refetch()} title="Couldn't load spend" />
       ) : hasData ? (
         <div className="space-y-6">
           <div className="rounded-lg border bg-card p-5">
@@ -143,20 +151,20 @@ export function CostTab() {
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground bg-muted">
-                  <th className="px-4 py-3 font-medium">Agent</th>
-                  <th className="px-4 py-3 font-medium text-right">Runs</th>
-                  <th className="px-4 py-3 font-medium text-right">Spend</th>
+                <tr className="border-b text-left bg-muted">
+                  <th className={TH}>Agent</th>
+                  <th className={`${TH} text-right`}>Runs</th>
+                  <th className={`${TH} text-right`}>Spend</th>
                 </tr>
               </thead>
               <tbody>
                 {summary!.byAgent.map((a) => (
                   <tr key={a.agentId} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-2.5 font-medium">
+                    <td className="px-4 py-3 font-medium">
                       {agentNameMap[a.agentId] || a.agentId.slice(0, 8)}
                     </td>
-                    <td className="px-4 py-2.5 text-right">{a.runCount.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right font-medium">{usd(a.spentCents)}</td>
+                    <td className="px-4 py-3 text-right">{a.runCount.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-medium">{usd(a.spentCents)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -193,7 +201,7 @@ function ReconciliationSection({
 }) {
   const queryClient = useQueryClient()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['provider-reconciliation', period],
     queryFn: () => providerUsageApi.getReconciliation(period),
     enabled,
@@ -236,6 +244,16 @@ function ReconciliationSection({
         <div className="flex items-center justify-center h-24">
           <LoadingSpinner size="md" />
         </div>
+      ) : isError ? (
+        // A failed reconciliation fetch used to render as "no LLM
+        // providers configured", which is a very different thing to tell
+        // someone chasing a billing discrepancy.
+        <QueryError
+          error={error}
+          onRetry={() => refetch()}
+          title="Couldn't load the reconciliation"
+          className="m-4"
+        />
       ) : rows.length === 0 ? (
         <p className="px-4 py-6 text-xs text-muted-foreground">
           No LLM providers configured. Add a provider to reconcile spend.
@@ -244,11 +262,11 @@ function ReconciliationSection({
         <>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b text-left text-muted-foreground bg-muted">
-                <th className="px-4 py-3 font-medium">Provider</th>
-                <th className="px-4 py-3 font-medium text-right">Our estimate</th>
-                <th className="px-4 py-3 font-medium text-right">Provider actual</th>
-                <th className="px-4 py-3 font-medium text-right">Delta</th>
+              <tr className="border-b text-left bg-muted">
+                <th className={TH}>Provider</th>
+                <th className={`${TH} text-right`}>Our estimate</th>
+                <th className={`${TH} text-right`}>Provider actual</th>
+                <th className={`${TH} text-right`}>Delta</th>
               </tr>
             </thead>
             <tbody>
@@ -260,16 +278,16 @@ function ReconciliationSection({
                     key={r.llmProviderId}
                     className="border-b last:border-0 hover:bg-muted/30"
                   >
-                    <td className="px-4 py-2.5 font-medium">
+                    <td className="px-4 py-3 font-medium">
                       {r.providerName}
                       <span className="ml-2 text-xs text-muted-foreground">
                         {r.providerType}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-4 py-3 text-right">
                       {usd(r.estimateCents)}
                     </td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-4 py-3 text-right">
                       {hasActual ? (
                         usd(r.actualCents as number)
                       ) : (
@@ -278,9 +296,9 @@ function ReconciliationSection({
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 text-right font-medium">
+                    <td className="px-4 py-3 text-right font-medium">
                       {hasActual && r.deltaCents !== null ? (
-                        <span className={over ? 'text-rose-500' : 'text-emerald-500'}>
+                        <span className={over ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}>
                           {over ? '+' : ''}
                           {usd(r.deltaCents)}
                           {r.deltaPct !== null ? ` (${over ? '+' : ''}${r.deltaPct}%)` : ''}

@@ -242,7 +242,7 @@ export function HostedChatBuilder({ gateway, entitlements = {} }: HostedChatBuil
                     placeholder="Track my order"
                     aria-label="New suggested prompt"
                   />
-                  <Button type="button" variant="outline" onClick={addPrompt}>
+                  <Button aria-label="Add suggested prompt" type="button" variant="outline" onClick={addPrompt}>
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>

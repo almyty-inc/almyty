@@ -315,7 +315,24 @@ describe('AgentsPage', () => {
       expect(screen.getByText(/No agents match/)).toBeInTheDocument()
     })
 
-    it('should navigate to agent detail page when clicking an agent row', async () => {
+    // The row's onClick was the only route to an agent's detail page, and a
+    // handler on a <tr> is invisible to the keyboard -- the row menu offers
+    // Edit but never detail. The name is a real link now, so assert that
+    // rather than a navigate() call: a link is what makes it reachable.
+    it('should expose the agent detail page as a real link on the name', async () => {
+      renderAgentsPage()
+
+      await waitFor(() => {
+        expect(screen.getByText('Chat Agent')).toBeInTheDocument()
+      })
+
+      expect(screen.getByRole('link', { name: 'Chat Agent' })).toHaveAttribute(
+        'href',
+        '/agents/agent-1',
+      )
+    })
+
+    it('should still navigate to agent detail page when clicking elsewhere in the row', async () => {
       const user = userEvent.setup()
       renderAgentsPage()
 
@@ -323,8 +340,8 @@ describe('AgentsPage', () => {
         expect(screen.getByText('Chat Agent')).toBeInTheDocument()
       })
 
-      // Click the agent row (click on the name text, which is inside the row)
-      await user.click(screen.getByText('Chat Agent'))
+      // Click the description, which is inside the row but outside the link.
+      await user.click(screen.getByText('A chat agent'))
 
       expect(mockNavigate).toHaveBeenCalledWith('/agents/agent-1')
     })
@@ -399,18 +416,19 @@ describe('AgentsPage', () => {
       expect(screen.queryByText('Research Agent')).not.toBeInTheDocument()
     })
 
-    it('should navigate to new agent with template when template is clicked', async () => {
-      const user = userEvent.setup()
+    // Template cards are the headline "create an agent" entry. They were a
+    // <Card onClick>: no tab stop, no Enter, no cmd-click. Now each card is
+    // wrapped in a link, so the assertion is on the href.
+    it('should expose each template as a real link to the builder', async () => {
       renderAgentsPage()
 
       await waitFor(() => {
         expect(screen.getByText('Simple Chat Agent')).toBeInTheDocument()
       })
 
-      // Click on a template card
-      await user.click(screen.getByText('Simple Chat Agent'))
-
-      expect(mockNavigate).toHaveBeenCalledWith('/agents/new?template=simple-chat')
+      expect(
+        screen.getByRole('link', { name: /Simple Chat Agent/ }),
+      ).toHaveAttribute('href', '/agents/new?template=simple-chat')
     })
   })
 

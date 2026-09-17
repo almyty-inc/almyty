@@ -138,12 +138,12 @@ function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; 
   return (
     <div className="space-y-3">
       <div>
-        <Label>Output Source</Label>
+        <Label htmlFor="node-output-source">Output Source</Label>
         <Select
           value={(node.data.mapping as string) || ''}
           onValueChange={(v) => updateData('mapping', v)}
         >
-          <SelectTrigger className="mt-1">
+          <SelectTrigger id="node-output-source" className="mt-1">
             <SelectValue placeholder="Select output source" />
           </SelectTrigger>
           <SelectContent>
@@ -300,7 +300,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
       ) : (
         <>
       <div>
-        <Label>Provider</Label>
+        <Label htmlFor="node-provider">Provider</Label>
         <Select
           value={(node.data.providerId as string) || ''}
           onValueChange={(v) => {
@@ -316,7 +316,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
             setUseCustomModel(false)
           }}
         >
-          <SelectTrigger className="mt-1">
+          <SelectTrigger id="node-provider" className="mt-1">
             <SelectValue placeholder="Select provider" />
           </SelectTrigger>
           <SelectContent>
@@ -756,12 +756,12 @@ function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[
       ) : (
         <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
           <div>
-            <Label className="text-xs">If</Label>
+            <Label htmlFor="node-if" className="text-xs">If</Label>
             <Select
               value={condSource}
               onValueChange={(v) => updateCondition(v, condOperator, condValue)}
             >
-              <SelectTrigger className="mt-1 text-xs font-mono">
+              <SelectTrigger id="node-if" className="mt-1 text-xs font-mono">
                 <SelectValue placeholder="Select source" />
               </SelectTrigger>
               <SelectContent>
@@ -779,12 +779,12 @@ function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[
           </div>
 
           <div>
-            <Label className="text-xs">Operator</Label>
+            <Label htmlFor="node-operator" className="text-xs">Operator</Label>
             <Select
               value={condOperator}
               onValueChange={(v) => updateCondition(condSource, v, condValue)}
             >
-              <SelectTrigger className="mt-1 text-xs">
+              <SelectTrigger id="node-operator" className="mt-1 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -796,8 +796,8 @@ function ConditionConfig({ node, nodes, updateData }: { node: Node; nodes: Node[
           </div>
 
           <div>
-            <Label className="text-xs">Value</Label>
-            <Input
+            <Label htmlFor="node-value" className="text-xs">Value</Label>
+            <Input id="node-value"
               className="mt-1 text-xs"
               value={condValue}
               onChange={(e) => updateCondition(condSource, condOperator, e.target.value)}
@@ -851,12 +851,12 @@ function MergeConfig({ node, updateData }: { node: Node; updateData: UpdateDataF
   return (
     <div className="space-y-3">
       <div>
-        <Label>Merge Strategy</Label>
+        <Label htmlFor="node-merge-strategy">Merge Strategy</Label>
         <Select
           value={(node.data.strategy as string) || 'first_response'}
           onValueChange={(v) => updateData('strategy', v)}
         >
-          <SelectTrigger className="mt-1">
+          <SelectTrigger id="node-merge-strategy" className="mt-1">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1031,8 +1031,8 @@ function LoopConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn
         </p>
       </div>
       <div>
-        <Label>Max Iterations</Label>
-        <Input
+        <Label htmlFor="node-max-iterations">Max Iterations</Label>
+        <Input id="node-max-iterations"
           type="number"
           className="mt-1"
           min={1}

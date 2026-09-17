@@ -204,8 +204,9 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
             <div key={prop.name} className="border rounded-lg p-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Property Name</Label>
+                  <Label className="text-xs" htmlFor={`prop-${prop.name}-name`}>Property Name</Label>
                   <Input
+                    id={`prop-${prop.name}-name`}
                     value={prop.name}
                     onChange={(e) => updateProperty(prop.name, { name: e.target.value })}
                     placeholder="property_name"
@@ -214,13 +215,13 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
                   />
                 </div>
                 <div>
-                  <Label className="text-xs">Type</Label>
+                  <Label className="text-xs" htmlFor={`prop-${prop.name}-type`}>Type</Label>
                   <Select
                     value={prop.type}
                     onValueChange={(value) => updateProperty(prop.name, { type: value })}
                     disabled={readOnly}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id={`prop-${prop.name}-type`}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -236,8 +237,9 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
               </div>
 
               <div>
-                <Label className="text-xs">Description</Label>
+                <Label className="text-xs" htmlFor={`prop-${prop.name}-description`}>Description</Label>
                 <Input
+                  id={`prop-${prop.name}-description`}
                   value={prop.description || ''}
                   onChange={(e) => updateProperty(prop.name, { description: e.target.value })}
                   placeholder="Describe this parameter"
@@ -248,16 +250,18 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
                   <Switch
+                    id={`prop-${prop.name}-required`}
                     checked={prop.required || false}
                     onCheckedChange={(checked) => updateProperty(prop.name, { required: checked })}
                     disabled={readOnly}
                   />
-                  <Label className="text-xs">Required</Label>
+                  <Label className="text-xs" htmlFor={`prop-${prop.name}-required`}>Required</Label>
                 </div>
                 {!readOnly && (
                   <Button
                     variant="ghost"
                     size="sm"
+                    aria-label={`Remove property ${prop.name}`}
                     onClick={() => removeProperty(prop.name)}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />

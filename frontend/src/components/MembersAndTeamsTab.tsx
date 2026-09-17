@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { EmptyState } from '@/components/ui/empty-state'
 
 import { organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -381,6 +382,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         <Button
                           variant="ghost"
                           size="sm"
+                          aria-label={`Remove ${member.firstName} ${member.lastName} from the organization`}
                           data-testid={`remove-member-${member.userId ?? member.id}`}
                           disabled={removeMemberMutation.isPending}
                           onClick={() => setMemberToRemove(member)}
@@ -420,6 +422,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                       <Button
                         variant="ghost"
                         size="sm"
+                        aria-label={`Revoke invite for ${invite.email}`}
                         onClick={() => revokeInviteMutation.mutate(invite.id)}
                         disabled={revokeInviteMutation.isPending}
                         title="Revoke invite"
@@ -494,17 +497,17 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             {teamsLoading ? (
               <LoadingSpinner />
             ) : teams.length === 0 ? (
-              <div className="text-center py-8">
-                <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">No teams yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  Create teams to organize your organization members
-                </p>
-                <Button onClick={() => setCreateTeamDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create First Team
-                </Button>
-              </div>
+              <EmptyState
+                icon={Users}
+                title="No teams yet"
+                description="Create teams to organize your organization members"
+                action={
+                  <Button onClick={() => setCreateTeamDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Team
+                  </Button>
+                }
+              />
             ) : (
               <div className="space-y-3">
                 {teams.map((team: any) => (
@@ -531,6 +534,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         <Button 
                           variant="ghost" 
                           size="sm"
+                          aria-label={`Add a member to ${team.name}`}
                           onClick={() => openAddToTeamDialog(team)}
                           title="Add member"
                         >
@@ -539,6 +543,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         <Button 
                           variant="ghost" 
                           size="sm"
+                          aria-label={`Edit team ${team.name}`}
                           onClick={() => openEditTeamDialog(team)}
                           title="Edit team"
                         >
@@ -547,6 +552,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         <Button
                           variant="ghost"
                           size="sm"
+                          aria-label={`Delete team ${team.name}`}
                           disabled={team.isDefault || deleteTeamMutation.isPending}
                           title={team.isDefault ? 'Default team cannot be deleted' : 'Delete team'}
                           onClick={() => {
@@ -600,6 +606,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  aria-label={`Remove ${member.user?.firstName || 'member'} from ${team.name}`}
                                   disabled={removeFromTeamMutation.isPending}
                                   title="Remove from team"
                                   onClick={() => {
@@ -636,9 +643,9 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label>Select Member</Label>
+            <Label htmlFor="members-select-member">Select Member</Label>
             <Select value={selectedMemberToAdd} onValueChange={setSelectedMemberToAdd}>
-              <SelectTrigger>
+              <SelectTrigger id="members-select-member">
                 <SelectValue placeholder="Choose a member" />
               </SelectTrigger>
               <SelectContent>
@@ -653,9 +660,9 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             </Select>
           </div>
           <div>
-            <Label>Role in Team</Label>
+            <Label htmlFor="members-role-in-team">Role in Team</Label>
             <Select value={selectedMemberRole} onValueChange={setSelectedMemberRole}>
-              <SelectTrigger>
+              <SelectTrigger id="members-role-in-team">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

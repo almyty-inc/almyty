@@ -14,6 +14,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -91,15 +101,19 @@ export function AppDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['agent-app-check', slug] })
   }
 
+  const [distributionToRemove, setDistributionToRemove] = useState<DistributionTarget | null>(null)
   const removeDistribution = useMutation({
     mutationFn: (target: DistributionTarget) => agentAppsApi.removeDistribution(slug, target),
     onSuccess: () => {
       success('Distribution removed', 'It is no longer on this app.')
+      setDistributionToRemove(null)
       setEditing(null)
       invalidate()
     },
-    onError: (err: any) =>
-      errorNotif('Could not remove', err?.response?.data?.message || 'Something went wrong.'),
+    onError: (err: any) => {
+      setDistributionToRemove(null)
+      errorNotif('Could not remove', err?.response?.data?.message || 'Something went wrong.')
+    },
   })
 
   if (isLoading) {
@@ -242,7 +256,7 @@ export function AppDetailPage() {
                 variant="ghost"
                 className="mt-2 w-full text-destructive"
                 disabled={removeDistribution.isPending}
-                onClick={() => removeDistribution.mutate(openDistribution.target)}
+                onClick={() => setDistributionToRemove(openDistribution.target)}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Remove
@@ -251,6 +265,40 @@ export function AppDetailPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/*
+        Removing a distribution unpublishes a shipping target; the button is
+        inside the config dialog where people are only fiddling with settings,
+        so it asks first and names the target.
+      */}
+      <AlertDialog
+        open={distributionToRemove !== null}
+        onOpenChange={(open) => { if (!open) setDistributionToRemove(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove distribution?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {distributionToRemove
+                ? `This removes the ${DISTRIBUTION_LABELS[distributionToRemove]} distribution and its configuration from this app. Builds already downloaded keep working.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (distributionToRemove) {
+                  removeDistribution.mutate(distributionToRemove)
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Remove Distribution
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AddDistributionDialog
         app={app}

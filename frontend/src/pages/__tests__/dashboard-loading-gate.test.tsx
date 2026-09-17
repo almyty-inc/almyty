@@ -96,4 +96,30 @@ describe('the dashboard loading gate', () => {
     // The number beside that label is the real one, not a placeholder zero.
     expect(label.parentElement?.textContent).toBe('1Gateway Serving')
   })
+
+  // The two "Needs Attention" lines were <div onClick> dressed as links.
+  // They are the only remediation path the dashboard offers for a gateway
+  // with no authentication, so a keyboard user could not act on the warning
+  // at all. Real links put them back in the tab order.
+  it('offers the Needs Attention warnings as real links', async () => {
+    ;(gatewaysApi.getAll as any).mockResolvedValue({
+      gateways: [{ id: 'g1', name: 'Open Gateway', authConfig: { required: false } }],
+      total: 1,
+    })
+    ;(toolsApi.getAll as any).mockResolvedValue({ tools: [] })
+    ;(apisApi.getAll as any).mockResolvedValue({
+      apis: [{ id: 'a1', name: 'Bare API', tools: [] }],
+    })
+    ;(agentsApi.getAll as any).mockResolvedValue({ agents: [] })
+    ;(analyticsApi.getRequestLogs as any).mockResolvedValue({ logs: [] })
+
+    render(<DashboardPage />)
+
+    expect(
+      await screen.findByRole('link', { name: /have no authentication configured/ }),
+    ).toHaveAttribute('href', '/gateways')
+    expect(
+      screen.getByRole('link', { name: /have no generated tools/ }),
+    ).toHaveAttribute('href', '/apis')
+  })
 })

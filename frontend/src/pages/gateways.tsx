@@ -205,7 +205,7 @@ export function GatewaysPage() {
     onSuccess: async (result) => {
       captureEvent('gateway_deployed')
       // Show success message first
-      success('Success', result?.message || 'Gateway created successfully')
+      success('Gateway created', result?.message || 'It is now serving on its protocol endpoint.')
 
       // Invalidate and refetch gateway queries - wait for completion
       await queryClient.invalidateQueries({ queryKey: ['gateways'] })

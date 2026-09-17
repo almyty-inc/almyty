@@ -66,6 +66,7 @@ describe('planFromEntitlements', () => {
       'connections_governance',
       'byo_kms',
       'chargeback',
+      'white_label',
     ]
     expect(planFromEntitlements(enterpriseEnts)).toBe('enterprise')
   })

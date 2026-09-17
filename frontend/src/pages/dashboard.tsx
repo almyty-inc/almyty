@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import {
   Activity,
   AlertTriangle,
@@ -235,23 +235,29 @@ export function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
+                  {/*
+                    These two were <div onClick> styled as links -- and they are
+                    the only remediation path offered for "no authentication
+                    configured", so a keyboard user had no way to act on the
+                    warning at all. Real links fix that and get cmd-click too.
+                  */}
                   {apisWithNoTools.length > 0 && (
-                    <div
-                      className="flex items-center gap-2 text-sm text-amber-600 cursor-pointer hover:underline"
-                      onClick={() => navigate('/apis')}
+                    <Link
+                      to="/apis"
+                      className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
                       <span>{apisWithNoTools.length} API(s) have no generated tools</span>
-                    </div>
+                    </Link>
                   )}
                   {gatewaysWithNoAuth.length > 0 && (
-                    <div
-                      className="flex items-center gap-2 text-sm text-amber-600 cursor-pointer hover:underline"
-                      onClick={() => navigate('/gateways')}
+                    <Link
+                      to="/gateways"
+                      className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
                       <span>{gatewaysWithNoAuth.length} gateway(s) have no authentication configured</span>
-                    </div>
+                    </Link>
                   )}
                 </div>
               </CardContent>

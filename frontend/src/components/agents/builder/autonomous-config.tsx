@@ -105,7 +105,7 @@ export function AutonomousConfig({
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-sm">Provider</Label>
+              <Label className="text-sm" htmlFor="autonomous-provider">Provider</Label>
               {providers.length === 0 ? (
                 // A required field with nothing in it is a dead end: save
                 // refuses with "A model provider must be selected", and
@@ -127,7 +127,7 @@ export function AutonomousConfig({
                 </div>
               ) : (
                 <Select value={modelConfig.providerId || ''} onValueChange={(v) => onModelConfigChange({ ...modelConfig, providerId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
+                  <SelectTrigger id="autonomous-provider"><SelectValue placeholder="Select provider" /></SelectTrigger>
                   <SelectContent>
                     {providers.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name} ({p.type})</SelectItem>)}
                   </SelectContent>
@@ -135,18 +135,18 @@ export function AutonomousConfig({
               )}
             </div>
             <div className="space-y-2">
-              <Label className="text-sm">Model</Label>
-              <Input value={modelConfig.model || ''} onChange={(e) => onModelConfigChange({ ...modelConfig, model: e.target.value })}
+              <Label htmlFor="autonomous-model" className="text-sm">Model</Label>
+              <Input id="autonomous-model" value={modelConfig.model || ''} onChange={(e) => onModelConfigChange({ ...modelConfig, model: e.target.value })}
                 placeholder="e.g. gpt-4o, claude-sonnet-5" />
             </div>
             <div className="space-y-2">
-              <Label className="text-sm">Temperature</Label>
-              <Input type="number" min={0} max={2} step={0.1} value={modelConfig.temperature ?? 0.7}
+              <Label htmlFor="autonomous-temperature" className="text-sm">Temperature</Label>
+              <Input id="autonomous-temperature" type="number" min={0} max={2} step={0.1} value={modelConfig.temperature ?? 0.7}
                 onChange={(e) => onModelConfigChange({ ...modelConfig, temperature: parseFloat(e.target.value) })} />
             </div>
             <div className="space-y-2">
-              <Label className="text-sm">Max Tokens</Label>
-              <Input type="number" min={1} max={200000} value={modelConfig.maxTokens ?? 4096}
+              <Label htmlFor="autonomous-max-tokens" className="text-sm">Max Tokens</Label>
+              <Input id="autonomous-max-tokens" type="number" min={1} max={200000} value={modelConfig.maxTokens ?? 4096}
                 onChange={(e) => onModelConfigChange({ ...modelConfig, maxTokens: parseInt(e.target.value) })} />
             </div>
           </div>
@@ -255,13 +255,13 @@ export function AutonomousConfig({
           {heartbeat.enabled && (
             <div className="space-y-4 pt-2">
               <div className="space-y-2">
-                <Label className="text-sm">Interval (minutes)</Label>
-                <Input type="number" min={1} value={heartbeat.intervalMinutes}
+                <Label htmlFor="autonomous-interval" className="text-sm">Interval (minutes)</Label>
+                <Input id="autonomous-interval" type="number" min={1} value={heartbeat.intervalMinutes}
                   onChange={(e) => onHeartbeatChange({ ...heartbeat, intervalMinutes: parseInt(e.target.value) || 60 })} />
               </div>
               <div className="space-y-2">
-                <Label className="text-sm">Heartbeat Prompt</Label>
-                <Textarea value={heartbeat.prompt} onChange={(e) => onHeartbeatChange({ ...heartbeat, prompt: e.target.value })}
+                <Label htmlFor="autonomous-heartbeat-prompt" className="text-sm">Heartbeat Prompt</Label>
+                <Textarea id="autonomous-heartbeat-prompt" value={heartbeat.prompt} onChange={(e) => onHeartbeatChange({ ...heartbeat, prompt: e.target.value })}
                   placeholder="Check my inbox for new messages. If there are urgent items, summarize them."
                   className="min-h-[100px] font-mono text-sm" />
                 <p className="text-xs text-muted-foreground">What the agent should do on each heartbeat wake-up.</p>
@@ -317,7 +317,20 @@ function ToolGroupList({ tools, toolSearch, selectedIds, onSelectedIdsChange, ex
 
         return (
           <div key={groupName} className="border rounded-md">
-            <div className="flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/50 select-none" onClick={toggleGroup}>
+            <div
+              className="flex items-center gap-2 p-2 cursor-pointer hover:bg-muted/50 select-none"
+              role="button"
+              tabIndex={0}
+              aria-expanded={isExpanded}
+              onClick={toggleGroup}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  toggleGroup()
+                }
+              }}
+            >
               {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
               <span className="text-sm font-medium flex-1">{groupName}</span>
               <span className="text-xs text-muted-foreground">{groupTools.length} tool{groupTools.length !== 1 ? 's' : ''}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
@@ -357,9 +370,9 @@ function CollaborationConfig({ agentId, collaboration, onChange, availableAgents
   return (
     <div className="space-y-4 pt-2">
       <div className="space-y-2">
-        <Label className="text-sm">Strategy</Label>
+        <Label htmlFor="autonomous-strategy" className="text-sm">Strategy</Label>
         <Select value={collaboration.strategy} onValueChange={(v: any) => onChange({ ...collaboration, strategy: v })}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger id="autonomous-strategy"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="sequential">Sequential — agents run one after another, piping output to input</SelectItem>
             <SelectItem value="parallel">Parallel — all agents run simultaneously, results merged</SelectItem>
@@ -403,8 +416,8 @@ function CollaborationConfig({ agentId, collaboration, onChange, availableAgents
       </div>
 
       <div className="space-y-2">
-        <Label className="text-sm">Shared Brief</Label>
-        <Textarea placeholder="Context shared with all participating agents..." value={collaboration.sharedBrief || ''}
+        <Label htmlFor="autonomous-shared-brief" className="text-sm">Shared Brief</Label>
+        <Textarea id="autonomous-shared-brief" placeholder="Context shared with all participating agents..." value={collaboration.sharedBrief || ''}
           onChange={(e) => onChange({ ...collaboration, sharedBrief: e.target.value })} rows={2} />
       </div>
 
@@ -412,37 +425,37 @@ function CollaborationConfig({ agentId, collaboration, onChange, availableAgents
         <Label className="text-sm font-medium">Rules of Engagement</Label>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Max Total Cost ($)</Label>
-            <Input type="number" min={0} step={0.01} placeholder="No limit" value={collaboration.rules?.maxTotalCost ?? ''}
+            <Label htmlFor="autonomous-max-total-cost" className="text-xs text-muted-foreground">Max Total Cost ($)</Label>
+            <Input id="autonomous-max-total-cost" type="number" min={0} step={0.01} placeholder="No limit" value={collaboration.rules?.maxTotalCost ?? ''}
               onChange={(e) => onChange({ ...collaboration, rules: { ...collaboration.rules, maxTotalCost: e.target.value ? parseFloat(e.target.value) : undefined } })} />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Max Chain Depth</Label>
-            <Input type="number" min={1} max={10} placeholder="No limit" value={collaboration.rules?.maxChainDepth ?? ''}
+            <Label htmlFor="autonomous-max-chain-depth" className="text-xs text-muted-foreground">Max Chain Depth</Label>
+            <Input id="autonomous-max-chain-depth" type="number" min={1} max={10} placeholder="No limit" value={collaboration.rules?.maxChainDepth ?? ''}
               onChange={(e) => onChange({ ...collaboration, rules: { ...collaboration.rules, maxChainDepth: e.target.value ? parseInt(e.target.value) : undefined } })} />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Output Format</Label>
+            <Label htmlFor="autonomous-output-format" className="text-xs text-muted-foreground">Output Format</Label>
             <Select value={collaboration.rules?.outputFormat || ''} onValueChange={(v: any) => onChange({ ...collaboration, rules: { ...collaboration.rules, outputFormat: v || undefined } })}>
-              <SelectTrigger><SelectValue placeholder="Default" /></SelectTrigger>
+              <SelectTrigger id="autonomous-output-format"><SelectValue placeholder="Default" /></SelectTrigger>
               <SelectContent><SelectItem value="text">Text</SelectItem><SelectItem value="json">JSON</SelectItem></SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Escalation</Label>
+            <Label htmlFor="autonomous-escalation" className="text-xs text-muted-foreground">Escalation</Label>
             <Select value={collaboration.rules?.escalation || ''} onValueChange={(v: any) => onChange({ ...collaboration, rules: { ...collaboration.rules, escalation: v || undefined } })}>
-              <SelectTrigger><SelectValue placeholder="Default" /></SelectTrigger>
+              <SelectTrigger id="autonomous-escalation"><SelectValue placeholder="Default" /></SelectTrigger>
               <SelectContent><SelectItem value="never">Never</SelectItem><SelectItem value="on_failure">On Failure</SelectItem><SelectItem value="on_low_confidence">On Low Confidence</SelectItem></SelectContent>
             </Select>
           </div>
         </div>
         {collaboration.strategy === 'parallel' && (
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Conflict Resolution</Label>
+            <Label htmlFor="autonomous-conflict-resolution" className="text-xs text-muted-foreground">Conflict Resolution</Label>
             <Select value={collaboration.rules?.conflictResolution || ''} onValueChange={(v: any) => onChange({ ...collaboration, rules: { ...collaboration.rules, conflictResolution: v || undefined } })}>
-              <SelectTrigger><SelectValue placeholder="Default" /></SelectTrigger>
+              <SelectTrigger id="autonomous-conflict-resolution"><SelectValue placeholder="Default" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="judge">Judge decides</SelectItem><SelectItem value="majority">Majority wins</SelectItem>
                 <SelectItem value="first_wins">First wins</SelectItem><SelectItem value="merge">Merge all</SelectItem>
@@ -469,16 +482,16 @@ function CollaborationConfig({ agentId, collaboration, onChange, availableAgents
       {(collaboration.strategy === 'debate' || collaboration.strategy === 'parallel') && (
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label className="text-sm">Judge Agent</Label>
+            <Label htmlFor="autonomous-judge-agent" className="text-sm">Judge Agent</Label>
             <Select value={collaboration.judgeAgentId || ''} onValueChange={(v) => onChange({ ...collaboration, judgeAgentId: v })}>
-              <SelectTrigger><SelectValue placeholder="Select judge" /></SelectTrigger>
+              <SelectTrigger id="autonomous-judge-agent"><SelectValue placeholder="Select judge" /></SelectTrigger>
               <SelectContent>{availableAgents.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           {collaboration.strategy === 'debate' && (
             <div className="space-y-2">
-              <Label className="text-sm">Max Rounds</Label>
-              <Input type="number" min={1} max={10} value={collaboration.maxRounds ?? 3}
+              <Label htmlFor="autonomous-max-rounds" className="text-sm">Max Rounds</Label>
+              <Input id="autonomous-max-rounds" type="number" min={1} max={10} value={collaboration.maxRounds ?? 3}
                 onChange={(e) => onChange({ ...collaboration, maxRounds: parseInt(e.target.value) })} />
             </div>
           )}
