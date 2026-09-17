@@ -244,12 +244,25 @@ describe('OrganizationsService', () => {
       ];
 
       userOrganizationRepository.find.mockResolvedValue(mockMemberships);
+      // findAll also counts members per organization, because the list
+      // page prints that number and used to read it off a relation this
+      // query does not load.
+      userOrganizationRepository.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ organizationId: 'org-1', count: '3' }]),
+      }));
 
       const result = await service.findAll('user-1');
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('org-1');
       expect(result[1].id).toBe('org-2');
+      expect((result[0] as any).memberCount).toBe(3);
+      expect((result[1] as any).memberCount).toBe(0);
     });
   });
 
@@ -834,8 +847,12 @@ describe('OrganizationsService', () => {
   describe('addTeamMember', () => {
     it('should throw ConflictException when user is already a team member', async () => {
       // assertTeamInOrg runs first and must see a team that belongs
-      // to the requested org before the conflict check fires.
+      // to the requested org before the conflict check fires; the org
+      // membership check runs next, and a user who is not in the
+      // organization now gets NotFound rather than reaching the
+      // already-a-team-member branch at all.
       teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+      userOrganizationRepository.findOne.mockResolvedValue({ userId: 'user-1', organizationId: 'org-1', isActive: true });
 
       const module: TestingModule = await Test.createTestingModule({
         providers: [
@@ -871,6 +888,17 @@ describe('OrganizationsService', () => {
       await expect(localService.addTeamMember('org-1', 'team-1', 'user-1'))
         .rejects
         .toThrow(ConflictException);
+    });
+
+    it('refuses to add somebody who is not in the organization', async () => {
+      // A team membership for a non-member is a row that means nothing
+      // today and a live hole the day anything trusts user_teams alone.
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.addTeamMember('org-1', 'team-1', 'outsider'))
+        .rejects
+        .toThrow(NotFoundException);
     });
   });
 
