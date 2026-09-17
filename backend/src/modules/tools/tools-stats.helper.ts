@@ -45,13 +45,28 @@ export class ToolsStatsHelper {
 
     const since = new Date(Date.now() - timeframeDurations[timeframe]);
 
+    // Only the columns these figures are computed from.
+    //
+    // This loaded `parameters` and `result` -- untruncated json, up to
+    // 10MB apiece -- plus a whole User entity per row, to count
+    // successes, average a duration, size a Set of user ids and bucket a
+    // trend. The window is a caller-supplied param that goes up to a
+    // month, so how much it loaded was chosen by whoever called it.
     const executions = await this.toolExecutionRepository.find({
       where: {
         toolId: tool.id,
         organizationId,
         createdAt: MoreThanOrEqual(since),
       },
-      relations: { user: true },
+      select: {
+        id: true,
+        success: true,
+        executionTime: true,
+        cached: true,
+        userId: true,
+        createdAt: true,
+        metadata: true,
+      },
     });
 
     const total = executions.length;

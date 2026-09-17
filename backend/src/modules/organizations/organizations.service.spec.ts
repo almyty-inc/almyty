@@ -38,6 +38,10 @@ describe('OrganizationsService', () => {
             delete: jest.fn(),
             remove: jest.fn(),
             createQueryBuilder: jest.fn(),
+            // Pending invites are appended by the database now, because
+            // two admins inviting at once both wrote their own full copy
+            // of the array and one invite was silently lost.
+            query: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -665,6 +669,35 @@ describe('OrganizationsService', () => {
       const result = await service.inviteUser('org-1', { email: 'nonexistent@test.com', role: OrganizationRole.MEMBER }, 'user-1');
 
       expect(result).toHaveProperty('inviteSent');
+    });
+
+    /**
+     * Two admins inviting two different people, or one double-click.
+     *
+     * pendingInvites is an array inside a json column. Reading it,
+     * pushing, and writing the whole settings object back meant both
+     * writers started from the same snapshot and the second overwrote
+     * the first -- one invite gone from the database while its recipient
+     * held a link that would answer "Invalid or expired invitation"
+     * forever, with nothing logging the loss.
+     */
+    it('appends the pending invite in the database rather than rewriting the array', async () => {
+      userRepository.findOne
+        .mockResolvedValueOnce(mockInviter)
+        .mockResolvedValueOnce(null);
+
+      await service.inviteUser('org-1', { email: 'new@test.com', role: OrganizationRole.MEMBER }, 'user-1');
+
+      expect(organizationRepository.query).toHaveBeenCalled();
+      const [sql, params] = (organizationRepository.query as jest.Mock).mock.calls[0];
+      // Appends one element; it must not send a whole array it read.
+      expect(sql).toMatch(/\|\|\s*\$2::jsonb/);
+      expect(JSON.parse(params[1])).toHaveLength(1);
+      // And the old read-modify-write path must be gone.
+      expect(organizationRepository.update).not.toHaveBeenCalledWith(
+        'org-1',
+        expect.objectContaining({ settings: expect.anything() }),
+      );
     });
 
     it('should throw ConflictException when user is already an active member', async () => {

@@ -9,6 +9,14 @@ import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { GatewaysService } from './gateways.service';
 
+/**
+ * How many metric rows one gateway's stats will look at.
+ *
+ * Enough to be representative of a window, small enough that a busy
+ * gateway cannot take the pod down by having its detail page opened.
+ */
+const METRIC_SAMPLE_LIMIT = 50_000;
+
 @Injectable()
 export class GatewaysStatsHelper {
   private readonly logger = new Logger(GatewaysStatsHelper.name);
@@ -46,11 +54,18 @@ export class GatewaysStatsHelper {
     // silently returning empty metrics for its entire life.
     // Same class of dead code as the `{$in: ...}` fix in
     // users.service.bulkUpdate and tool-executor.service.
+    // Windowed, and bounded. At two metric rows per HTTP request a busy
+    // gateway writes ~1.7M rows for a `day` window and ~50M for `month`,
+    // all of which were loaded and then filtered in JS -- on the query
+    // the gateway detail page runs on every visit.
     const metrics = await this.usageMetricRepository.find({
       where: {
         gatewayId: gateway.id,
         createdAt: MoreThanOrEqual(since),
       },
+      select: { id: true, type: true, value: true, status: true, userId: true, createdAt: true },
+      order: { createdAt: 'DESC' },
+      take: METRIC_SAMPLE_LIMIT,
     });
 
     const requestMetrics = metrics.filter(m => m.type === 'request_count');
