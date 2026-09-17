@@ -185,9 +185,9 @@ export function ImportExternalA2ADialog({ open, onOpenChange }: ImportExternalA2
           {/* Credential picker */}
           {previewData && (
             <div>
-              <Label>Credential (optional)</Label>
+              <Label htmlFor="a2a-import-credential">Credential (optional)</Label>
               <Select value={credentialId} onValueChange={setCredentialId}>
-                <SelectTrigger className="mt-1">
+                <SelectTrigger id="a2a-import-credential" className="mt-1">
                   <SelectValue placeholder="No authentication" />
                 </SelectTrigger>
                 <SelectContent>

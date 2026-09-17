@@ -136,9 +136,9 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Merge policy</Label>
+                  <Label htmlFor="verify-merge-policy">Merge policy</Label>
                   <Select value={policy} onValueChange={(p) => setPolicy(p as Policy)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="verify-merge-policy"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="any_fail_blocks">Any fail blocks</SelectItem>
                       <SelectItem value="majority">Majority</SelectItem>
@@ -214,6 +214,7 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
                         size="sm"
                         variant="ghost"
                         className="text-destructive shrink-0"
+                        aria-label="Remove reviewer"
                         onClick={() => setCheckers((cur) => cur.filter((_, idx) => idx !== i))}
                       >
                         <Trash2 className="h-3.5 w-3.5" />

@@ -121,6 +121,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
                 <Button
                   size="sm"
                   variant="ghost"
+                  aria-label={`Delete constraint: ${c.rule}`}
                   className="text-destructive shrink-0"
                   disabled={removeMutation.isPending}
                   onClick={() => removeMutation.mutate(c.id)}

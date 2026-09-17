@@ -73,6 +73,7 @@ export function GatewayConfigurationCard({
               <Button
                 size="sm"
                 variant="outline"
+                aria-label={gateway.type === 'skills' ? 'Copy install command' : 'Copy endpoint URL'}
                 onClick={handleCopy}
               >
                 <Copy className="h-4 w-4" />

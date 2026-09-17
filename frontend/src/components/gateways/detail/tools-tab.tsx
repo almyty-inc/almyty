@@ -283,6 +283,7 @@ export function GatewayToolsTab({
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  aria-label={`Configure security policy for ${tool.name}`}
                                   onClick={() => {
                                     const gt = gatewayTools.find(
                                       (gt: any) => gt.toolId === tool.id || gt.tool?.id === tool.id,

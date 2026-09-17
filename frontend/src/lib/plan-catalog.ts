@@ -77,6 +77,10 @@ export const PLAN_ENTITLEMENTS: Record<PlanKey, string[]> = {
     'connections_governance',
     'byo_kms',
     'chargeback',
+    // Removing the almyty mark. Granted by PLAN_ENTERPRISE on the
+    // backend and missing here, so a customer comparing plans never saw
+    // it listed as something Enterprise includes.
+    'white_label',
   ],
 }
 
@@ -109,6 +113,7 @@ export const FEATURE_MATRIX: FeatureRow[] = [
   { label: 'Connections governance', entitlement: 'connections_governance' },
   { label: 'BYO-KMS (customer-managed keys)', entitlement: 'byo_kms' },
   { label: 'Cost attribution / chargeback', entitlement: 'chargeback' },
+  { label: 'White label (remove the almyty mark)', entitlement: 'white_label' },
   { label: 'Priority support / SLAs', includedIn: ['enterprise'] },
 ]
 

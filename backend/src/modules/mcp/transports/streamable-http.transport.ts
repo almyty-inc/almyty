@@ -597,6 +597,15 @@ export class StreamableHttpTransport extends EventEmitter {
             try { session.stream.end(); } catch { /* */ }
           }
           this.sessions.delete(id);
+          // And forget that we minted it.
+          //
+          // sessionMintedHere was only ever added to: the GC dropped the
+          // session but not this entry, so the Set grew monotonically for
+          // the pod's lifetime. Every client that POSTs without a live
+          // session id mints one, and the stale window is five minutes,
+          // so reconnect churn is the normal case rather than the
+          // exception.
+          this.sessionMintedHere.delete(id);
           this.logger.log(`gc removed stale session ${id}`);
         }
       }

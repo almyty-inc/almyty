@@ -72,6 +72,27 @@ describe('ApprovalPolicyHookImpl', () => {
       expect(await hook.scoreProgress('org-1', 'pol-1', approvals)).toBeNull();
     });
 
+    /**
+     * A deleted policy and a database that would not answer are not the
+     * same thing.
+     *
+     * Both used to be caught here and returned as null, and null is the
+     * core's signal to fall back to the OSS single gate -- so a dropped
+     * connection or a query timeout turned a configured 3-of-5 into one
+     * approver and let the gated tool call run. The core was changed to
+     * hold the gate when this throws, and that fix was inert while this
+     * swallow was here: the hook could never throw, so the core test
+     * passed only because it mocked the hook out.
+     */
+    it('rethrows anything that is not a missing policy, so the gate holds', async () => {
+      const { hook, service } = make(true);
+      service.get.mockRejectedValue(new Error('connection terminated unexpectedly'));
+
+      await expect(hook.scoreProgress('org-1', 'pol-1', approvals)).rejects.toThrow(
+        /connection terminated/,
+      );
+    });
+
     it('returns null without the approval_policy entitlement', async () => {
       const { hook, service } = make(false);
 

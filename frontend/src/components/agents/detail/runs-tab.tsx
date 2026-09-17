@@ -80,7 +80,16 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                   <React.Fragment key={run.id}>
                     <TableRow
                       className="cursor-pointer hover:bg-muted/50"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expandedRunId === run.id}
                       onClick={() => setExpandedRunId(expandedRunId === run.id ? null : run.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setExpandedRunId(expandedRunId === run.id ? null : run.id)
+                        }
+                      }}
                     >
                       <TableCell className="px-2">
                         {expandedRunId === run.id

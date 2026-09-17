@@ -67,3 +67,34 @@ describe('Toaster (zustand selector subscription)', () => {
     })
   })
 })
+
+// The tinted variants (success / warning / info) were light-only:
+// `bg-green-50 text-green-900` with no dark: pair, so in dark mode a
+// success toast was a near-white block on a near-black page. The tint
+// has to carry both halves, the way badge.tsx does.
+describe('Toaster tinted variants carry a dark half', () => {
+  beforeEach(() => {
+    act(() => {
+      useAppStore.setState({ notifications: [] })
+    })
+  })
+
+  const toastFor = (type: 'success' | 'warning' | 'info') => {
+    render(<Toaster />)
+    act(() => {
+      useAppStore.getState().addNotification({ title: `${type} title`, type })
+    })
+    return screen.getByText(`${type} title`).closest('li') as HTMLElement
+  }
+
+  it.each([
+    ['success', 'green'],
+    ['warning', 'yellow'],
+    ['info', 'blue'],
+  ] as const)('%s has a dark background and text tint', (type, hue) => {
+    const toast = toastFor(type)
+    expect(toast.className).toContain(`bg-${hue}-50`)
+    expect(toast.className).toContain(`dark:bg-${hue}-900/30`)
+    expect(toast.className).toContain(`dark:text-${hue}-400`)
+  })
+})

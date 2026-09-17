@@ -110,6 +110,7 @@ function AuditStreams() {
                 <Button
                   size="sm"
                   variant="ghost"
+                  aria-label={`Remove audit stream ${row.endpoint}`}
                   data-testid={`remove-stream-${row.id}`}
                   disabled={remove.isPending}
                   onClick={() => remove.mutate(row.id)}

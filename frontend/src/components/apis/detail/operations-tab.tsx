@@ -105,7 +105,15 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                 <div
                   key={operation.id}
                   className="flex items-center justify-between p-4 border rounded hover:bg-muted cursor-pointer group"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedOperation(operation)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setSelectedOperation(operation)
+                    }
+                  }}
                 >
                   <div className="flex items-center space-x-3 flex-1">
                     {operation.method && (
@@ -180,6 +188,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                   <Button
                     size="sm"
                     variant="outline"
+                    aria-label="Copy full endpoint URL"
                     onClick={() => {
                       const fullEndpoint = `${api.baseUrl}${selectedOperation.endpoint || selectedOperation.path || ''}`
                       navigator.clipboard.writeText(fullEndpoint)

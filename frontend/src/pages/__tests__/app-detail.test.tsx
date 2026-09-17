@@ -112,4 +112,24 @@ describe('AppDetailPage', () => {
 
     expect(await screen.findByText(/No distributions yet/)).toBeInTheDocument()
   })
+
+  // Remove sits inside the config dialog, where people are only adjusting
+  // settings -- it used to unpublish a shipping target on one click.
+  it('confirms before removing a distribution', async () => {
+    ;(agentAppsApi.removeDistribution as any).mockResolvedValue({})
+    render(<AppDetailPage />)
+
+    fireEvent.click(await screen.findByText('Slack'))
+    fireEvent.click(await screen.findByRole('button', { name: /^Remove$/ }))
+
+    const confirm = await screen.findByRole('alertdialog')
+    expect(confirm).toHaveTextContent('Remove distribution?')
+    expect(agentAppsApi.removeDistribution).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Remove Distribution/ }))
+
+    await waitFor(() =>
+      expect(agentAppsApi.removeDistribution).toHaveBeenCalledWith('acme-support', 'slack'),
+    )
+  })
 })

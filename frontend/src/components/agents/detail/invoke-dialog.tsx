@@ -127,7 +127,7 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
                   {(invokeResult as any).error || 'The agent did not finish this run.'}
                 </div>
               ) : (
-                <div>
+                <div role="status" aria-live="polite">
                   <Label>Output</Label>
                   <div className="mt-1">
                     {output === null || output === undefined ? (
