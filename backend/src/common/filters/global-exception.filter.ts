@@ -169,6 +169,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     response.status(status).json({
+      // A sibling copy of the reason, at the top level.
+      //
+      // 63 frontend files read `response.data.message` and this filter
+      // only ever set `error.message`, so every one of them fell through
+      // to a generic string: a signup rejected for "Organization name
+      // must be at least 2 characters long" told the person "Please check
+      // your information and try again", and the shared QueryError
+      // component showed axios's "Request failed with status code 400" in
+      // 27 places. Fixing the readers one at a time leaves the next one
+      // to make the same mistake; answering in both shapes does not.
+      //
+      // `success: false` for the same reason -- the success envelope has
+      // it, and code that branches on it treated an error body as a
+      // success because the key was simply absent.
+      success: false,
+      message,
       error: {
         code,
         message,
