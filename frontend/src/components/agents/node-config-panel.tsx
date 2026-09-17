@@ -320,6 +320,16 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
             <SelectValue placeholder="Select provider" />
           </SelectTrigger>
           <SelectContent>
+            {/*
+              A required field whose select opens on nothing is a dead
+              end: the node fails validation, Save is blocked, and the
+              screen never says why.
+            */}
+            {providerList.length === 0 && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                No model providers connected yet — add one under Models.
+              </div>
+            )}
             {providerList.map((p) => (
               <SelectItem key={p.id} value={p.id}>
                 {p.name} <span className="text-muted-foreground ml-1">({p.type})</span>
@@ -589,6 +599,16 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
             <SelectValue placeholder="Select tool" />
           </SelectTrigger>
           <SelectContent>
+            {/*
+              A required field whose select opens on nothing is a dead
+              end: the node fails validation, Save is blocked, and the
+              screen never says why.
+            */}
+            {toolList.length === 0 && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                No tools yet — generate some from an API, or create one under Tools.
+              </div>
+            )}
             {toolList.map((t) => (
               <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
             ))}
@@ -943,6 +963,16 @@ function SubAgentConfig({ node, updateData }: { node: Node; updateData: UpdateDa
             <SelectValue placeholder="Select agent" />
           </SelectTrigger>
           <SelectContent>
+            {/*
+              A required field whose select opens on nothing is a dead
+              end: the node fails validation, Save is blocked, and the
+              screen never says why.
+            */}
+            {agentList.length === 0 && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                No other agents to call yet.
+              </div>
+            )}
             {agentList.map((a) => (
               <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
             ))}

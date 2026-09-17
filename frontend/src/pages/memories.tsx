@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { memoriesApi, type MemoryTier, type MemoryMode } from '@/lib/api'
 import { useNotifications } from '@/store/app'
@@ -279,7 +280,14 @@ export function MemoriesPage() {
             />
           </div>
 
-          {list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (
+          {/*
+            A failed fetch is not an empty vault. Collapsing the two told
+            an org with hundreds of memories that it has none, and
+            offered a "New memory" button as the remedy.
+          */}
+          {list.isError ? (
+            <QueryError error={list.error} onRetry={() => list.refetch()} title="Couldn't load memories" />
+          ) : list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (
             <Card><CardContent className="p-0"><EmptyState
               icon={Brain}
               title="No memories yet"
@@ -388,7 +396,14 @@ export function MemoriesPage() {
                       <CardTitle className="text-base font-mono">{b.id}</CardTitle>
                       <Badge variant={h?.ok ? 'default' : 'outline'} className="flex items-center gap-1">
                         <HeartPulse className="h-3 w-3" />
-                        {h?.ok ? `${h.latency_ms}ms` : 'unconfigured'}
+                        {/*
+                          Three states, not two: a probe in flight and a
+                          backend that did not answer both used to read
+                          as "unconfigured", so almyty-native -- which is
+                          always configured -- showed a config error
+                          while its own health check was still running.
+                        */}
+                        {healthQ.isLoading ? 'checking…' : h?.ok ? `${h.latency_ms}ms` : h ? 'unreachable' : 'unconfigured'}
                       </Badge>
                     </div>
                   </CardHeader>

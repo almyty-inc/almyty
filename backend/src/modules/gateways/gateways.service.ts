@@ -14,6 +14,9 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
+import { canPublishHostedChat } from './channels/hosted-chat.config';
+import { EE_ENTITLEMENTS } from '../licensing/license.constants';
+import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import {
   encryptChannelConfigSecrets,
@@ -192,7 +195,54 @@ export class GatewaysService {
     // Optional for the same reason. When present, channel secrets are
     // moved to the credential store instead of being encrypted inline.
     @Optional() private readonly channelCredentials?: ChannelCredentialService,
+    // Optional for the same reason. Absent means unentitled, which is the
+    // safe answer for the checks below.
+    @Optional() private readonly orgLicense?: OrgLicenseResolver,
   ) {}
+
+  /**
+   * Refuse a hosted-chat configuration the organization is not entitled to.
+   *
+   * canPublishHostedChat existed and was called from exactly one place:
+   * the builder component, in the browser. Nothing on the server ran it,
+   * and the gateway write path has no HOSTED_CHAT case at all -- so a
+   * PATCH setting `whiteLabel: true` and `aiDisclosure: ""` was simply
+   * accepted, and the public page then dropped both the almyty mark and
+   * the AI disclosure. The disclosure is an EU AI Act Art. 50 control,
+   * not decoration, so a browser-only check was never enough.
+   */
+  private async assertHostedChatEntitled(
+    organizationId: string,
+    configuration: Record<string, any> | undefined,
+  ): Promise<void> {
+    const hostedChat = configuration?.hostedChat;
+    if (!hostedChat) return;
+
+    const entitled = async (key: string) => {
+      try {
+        return this.orgLicense ? await this.orgLicense.hasForOrg(organizationId, key) : false;
+      } catch {
+        return false;
+      }
+    };
+
+    const check = canPublishHostedChat(hostedChat as any, {
+      costCapCents: hostedChat.costCapCents ?? null,
+      perEndUserRateLimit: hostedChat.perEndUserRateLimit ?? null,
+      perIpRateLimit: hostedChat.perIpRateLimit ?? null,
+      hasEnterpriseAuth: await entitled(EE_ENTITLEMENTS.SSO),
+      hasWhiteLabel: await entitled(EE_ENTITLEMENTS.WHITE_LABEL),
+    });
+
+    if (!check.publishable) {
+      throw new BadRequestException({
+        success: false,
+        code: 'HOSTED_CHAT_NOT_PUBLISHABLE',
+        message: check.refusals.map(r => r.message).join(' '),
+        refusals: check.refusals,
+      });
+    }
+  }
 
   /**
    * Keep the persistent discord gateway connection in sync with the
@@ -399,6 +449,7 @@ export class GatewaysService {
 
       if (createGatewayDto.type === GatewayType.HOSTED_CHAT) {
         await this.assertHostedChatSlugAvailable(createGatewayDto.configuration);
+        await this.assertHostedChatEntitled(organizationId, createGatewayDto.configuration);
       }
 
       // Validate team scoping before persisting.
@@ -515,6 +566,7 @@ export class GatewaysService {
         this.init.validateGatewayConfiguration(gateway.type, gateway.configuration);
         if (gateway.type === GatewayType.HOSTED_CHAT) {
           await this.assertHostedChatSlugAvailable(gateway.configuration, gateway.id);
+          await this.assertHostedChatEntitled(gateway.organizationId, gateway.configuration);
         }
         await this.storeChannelSecrets(gateway, gateway.configuration, oldValues.configuration);
       }
