@@ -156,6 +156,20 @@ export interface GatewayStats {
   }>;
 }
 
+/**
+ * The hosted-chat refusals that are about what an organization has paid
+ * for, as opposed to how an operator has configured a surface.
+ *
+ * Only these are enforced server-side on write. The rest — the cost cap
+ * and rate limits a public link needs — depend on values that do not
+ * exist on a gateway, so this path cannot judge them.
+ */
+const ENTITLEMENT_REFUSALS = new Set([
+  'WHITE_LABEL_NOT_ENTITLED',
+  'DISCLOSURE_REMOVAL_NOT_ENTITLED',
+  'AUTH_MODE_NOT_ENTITLED',
+]);
+
 @Injectable()
 export class GatewaysService {
   private readonly logger = new Logger(GatewaysService.name);
@@ -226,20 +240,32 @@ export class GatewaysService {
       }
     };
 
+    // Entitlement refusals only.
+    //
+    // canPublishHostedChat also gates a public link on a cost cap and
+    // rate limits, and those values do not exist on a gateway: they live
+    // on AgentApp.limits, and the builder reads them from the gateway row
+    // rather than from this config blob. Passing the blob's (absent) keys
+    // in made the context permanently null, so every public_link save --
+    // the schema default, and the ordinary case -- was refused with
+    // PUBLIC_LINK_NEEDS_COST_CAP and no value an operator could set to
+    // clear it. That was a regression this method introduced.
+    //
+    // What belongs here is the half the browser must not be trusted with:
+    // whether this organization may remove the almyty mark, blank the AI
+    // disclosure, or use an enterprise auth mode.
     const check = canPublishHostedChat(hostedChat as any, {
-      costCapCents: hostedChat.costCapCents ?? null,
-      perEndUserRateLimit: hostedChat.perEndUserRateLimit ?? null,
-      perIpRateLimit: hostedChat.perIpRateLimit ?? null,
       hasEnterpriseAuth: await entitled(EE_ENTITLEMENTS.SSO),
       hasWhiteLabel: await entitled(EE_ENTITLEMENTS.WHITE_LABEL),
     });
 
-    if (!check.publishable) {
+    const entitlementRefusals = check.refusals.filter(r => ENTITLEMENT_REFUSALS.has(r.code));
+    if (entitlementRefusals.length > 0) {
       throw new BadRequestException({
         success: false,
         code: 'HOSTED_CHAT_NOT_PUBLISHABLE',
-        message: check.refusals.map(r => r.message).join(' '),
-        refusals: check.refusals,
+        message: entitlementRefusals.map(r => r.message).join(' '),
+        refusals: entitlementRefusals,
       });
     }
   }
