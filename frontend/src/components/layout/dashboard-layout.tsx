@@ -149,13 +149,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [isAuthenticated, hasHydrated, authChecked, navigate])
 
-  // Initialize organizations from user data when available
+  // A persisted profile can predate a newly-created organization. Do not let
+  // it overwrite the saved selection while checkAuth is fetching memberships.
+  // Auth initialization remains authoritative, including revoked memberships.
   useEffect(() => {
-    if (user && organizations.length === 0) {
+    if (authChecked && isAuthenticated && user && organizations.length === 0) {
       const { initializeFromUser } = useOrganizationStore.getState()
       initializeFromUser(user)
     }
-  }, [user, organizations.length])
+  }, [authChecked, isAuthenticated, user, organizations.length])
 
   // Listen for 403 responses from the axios interceptor and surface
   // them as a permission toast. Before this the 403s that came back
