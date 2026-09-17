@@ -126,6 +126,12 @@ export class ToolAuthService {
       headers.Authorization = `Bearer ${authConfig.config.token}`;
     } else if (authConfig.type === 'apiKey' && authConfig.config?.key) {
       headers[authConfig.config.headerName || 'X-API-Key'] = authConfig.config.key;
+    } else if (authConfig.type === 'basic' && authConfig.config?.username) {
+      // The create-tool dialog offers Basic alongside the other two and
+      // this did not implement it, so a tool configured that way sent no
+      // credentials at all and got a 401 it could not explain.
+      const pair = `${authConfig.config.username}:${authConfig.config.password ?? ''}`;
+      headers.Authorization = `Basic ${Buffer.from(pair).toString('base64')}`;
     }
   }
 

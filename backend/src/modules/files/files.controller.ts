@@ -84,11 +84,13 @@ export class FilesController {
    * to fetch via a separate, MIME-whitelisted endpoint (not built
    * yet — flagged as follow-up).
    */
-  private safeDownloadHeaders(res: Response, file: any, buffer: Buffer): void {
+  private safeDownloadHeaders(res: Response, file: any, size?: number): void {
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Disposition', this.buildContentDisposition(file.name));
-    res.setHeader('Content-Length', buffer.length);
+    // From the row rather than a materialized buffer, so the response
+    // can be streamed and still declare its length.
+    if (typeof size === 'number') res.setHeader('Content-Length', size);
   }
 
   /**
@@ -212,9 +214,10 @@ export class FilesController {
   async download(@Param('id', ParseUUIDPipe) id: string, @Request() req: any, @Res() res: Response) {
     try {
       const organizationId = this.getOrgId(req);
-      const { buffer, file } = await this.filesService.download(id, organizationId);
-      this.safeDownloadHeaders(res, file, buffer);
-      res.send(buffer);
+      const { stream, file } = await this.filesService.downloadStream(id, organizationId);
+      this.safeDownloadHeaders(res, file, file.size);
+      stream.on('error', () => res.destroy());
+      stream.pipe(res);
     } catch (error) {
       res.status(error.status || HttpStatus.NOT_FOUND).json({ success: false, message: error.message, error: 'FILE_DOWNLOAD_FAILED' });
     }
