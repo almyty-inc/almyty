@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { toolHubApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
@@ -34,13 +35,23 @@ export function ToolHubPage() {
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
-  const { data: providersData, isLoading: providersLoading } = useQuery({
+  const {
+    data: providersData,
+    isLoading: providersLoading,
+    isError: providersError,
+    error: providersErrorValue,
+    refetch: refetchProviders,
+  } = useQuery({
     queryKey: ['tool-hub-providers'],
     queryFn: () => toolHubApi.getProviders(),
     enabled: !!currentOrganization,
   })
 
-  const { data: templatesData, isLoading: templatesLoading } = useQuery({
+  const {
+    data: templatesData,
+    isLoading: templatesLoading,
+    isError: templatesError,
+  } = useQuery({
     queryKey: ['tool-hub-templates', searchQuery, categoryFilter],
     queryFn: () => {
       const params: Record<string, string> = {}
@@ -149,6 +160,15 @@ export function ToolHubPage() {
         <div className="flex items-center justify-center h-64">
           <LoadingSpinner size="lg" />
         </div>
+      ) : providersError || templatesError ? (
+        // Both lists default to [], so a 500 or a dropped connection
+        // landed in the empty state below and told the user the Tool Hub
+        // is not configured -- when it is broken -- with no retry.
+        <QueryError
+          error={providersErrorValue}
+          onRetry={() => refetchProviders()}
+          title="Couldn't load the Tool Hub"
+        />
       ) : providers.length === 0 && templates.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
