@@ -35,7 +35,7 @@ describe('AgentExecutionEngine and a chosen strategy', () => {
     ],
   };
 
-  function makeEngine(resolver?: any) {
+  function makeEngine(resolver?: any, roles?: any) {
     const executionRepo = {
       create: jest.fn((data: any) => ({ id: 'exec-1', ...data })),
       save: jest.fn(async (e: any) => e),
@@ -58,6 +58,7 @@ describe('AgentExecutionEngine and a chosen strategy', () => {
       } as any,
       undefined,
       resolver,
+      roles,
     );
     return { engine, nodeExecutor, executionRepo };
   }
@@ -149,5 +150,53 @@ describe('AgentExecutionEngine and a chosen strategy', () => {
     const execution = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
 
     expect(execution.metadata?.budgetStop).toBeUndefined();
+  });
+
+  it('fills the roles before running a compiled strategy, and hands them to the node', async () => {
+    // Without this the executor throws "names role principal, which this
+    // agent does not define" on an agent that defines exactly that role:
+    // the compiler was wired to the engine and L4 was not.
+    const resolver = { pipelineFor: jest.fn().mockResolvedValue({ pipeline: compiledPipeline, strategyKey: 'single' }) };
+    const roles = { resolveRoles: jest.fn().mockResolvedValue([{ key: 'principal', modelId: 'm1', via: 'resolved' }]) };
+    const { engine, nodeExecutor } = makeEngine(resolver, roles);
+
+    await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+    expect(roles.resolveRoles).toHaveBeenCalledWith('org-1', 'a1', {}, { id: 'user-1' });
+    const options = (nodeExecutor.execute.mock.calls[0] as any[])[4];
+    expect(options.resolvedRoles).toEqual([{ key: 'principal', modelId: 'm1', via: 'resolved' }]);
+  });
+
+  it('resolves the roles ONCE for the run, not per node', async () => {
+    // Per node, two nodes of one run could answer from different models
+    // and the run would be unexplainable afterwards.
+    const resolver = { pipelineFor: jest.fn().mockResolvedValue({ pipeline: compiledPipeline, strategyKey: 'single' }) };
+    const roles = { resolveRoles: jest.fn().mockResolvedValue([{ key: 'principal', modelId: 'm1', via: 'resolved' }]) };
+    const { engine } = makeEngine(resolver, roles);
+
+    await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+    expect(roles.resolveRoles).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not resolve roles for an agent running its own graph', async () => {
+    const roles = { resolveRoles: jest.fn() };
+    const { engine } = makeEngine({ pipelineFor: jest.fn().mockResolvedValue(null) }, roles);
+
+    await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+    expect(roles.resolveRoles).not.toHaveBeenCalled();
+  });
+
+  it('stops the run naming the role when one cannot be filled', async () => {
+    const resolver = { pipelineFor: jest.fn().mockResolvedValue({ pipeline: compiledPipeline, strategyKey: 'single' }) };
+    const roles = { resolveRoles: jest.fn().mockRejectedValue(new Error('Role "principal" could not be filled: no usable model')) };
+    const { engine, nodeExecutor } = makeEngine(resolver, roles);
+
+    const execution = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+    expect(execution.status).toBe(AgentExecutionStatus.FAILED);
+    expect(String(execution.error)).toContain('principal');
+    expect(nodeExecutor.execute).not.toHaveBeenCalled();
   });
 });
