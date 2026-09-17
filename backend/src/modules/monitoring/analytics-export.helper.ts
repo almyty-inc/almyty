@@ -95,8 +95,21 @@ export class AnalyticsExportHelper {
     }
 
     if (query.type === 'llm-sessions') {
+      // Only the columns the CSV emits -- the same miss as the two
+      // exports above, left in this one. A Conversation carries `context`
+      // (which holds the system prompt) and `metadata`, and the column
+      // list below uses neither.
       const sessions = await this.conversationRepository.find({
         where: { organizationId: query.organizationId, createdAt: Between(from, to) },
+        select: {
+          // `type` is in the CSV column list below but is not a column on
+          // Conversation, so that column has always come out empty --
+          // left alone here rather than changed, since a consumer may be
+          // parsing the header.
+          id: true, providerId: true, status: true, messageCount: true,
+          totalInputTokens: true, totalOutputTokens: true, totalCost: true,
+          toolCalls: true, successfulToolCalls: true, createdAt: true, completedAt: true,
+        },
         order: { createdAt: 'DESC' },
         take: 10000,
       });
