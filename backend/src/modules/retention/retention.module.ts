@@ -8,6 +8,8 @@ import { Message } from '../../entities/message.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
+import { ToolExecution } from '../../entities/tool-execution.entity';
+import { Notification } from '../../entities/notification.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { AgentApp } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
@@ -27,6 +29,13 @@ import { RetentionController } from './retention.controller';
       RequestLog,
       UsageMetric,
       AuditLog,
+      // Both of these were injected @Optional() into the sweep and left
+      // out here, so their repositories resolved to undefined and the
+      // sweep clauses could never run -- two tables still growing
+      // forever behind a fix that reads as done. The spec builds the
+      // service directly with mock repos, so it could not see this.
+      ToolExecution,
+      Notification,
       Gateway,
       AgentApp,
       AppDistribution,
