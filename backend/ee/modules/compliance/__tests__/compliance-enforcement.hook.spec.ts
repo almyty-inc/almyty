@@ -19,7 +19,12 @@ describe('ComplianceEnforcementHookImpl', () => {
 
   function make(entitled: boolean, policy: any = effective()) {
     const compliance = { getEffectivePolicy: jest.fn(async () => policy) };
-    const license = { has: jest.fn((f: string) => entitled && f === 'compliance_pack') };
+    // hasForOrg, not has(): licensing here is per organization. The hook
+    // used the process-global LicenseService, which is community unless
+    // a license token is in the environment -- and the deployed API sets
+    // only the signing key, so every EE entitlement read as false no
+    // matter what the org had paid for.
+    const license = { hasForOrg: jest.fn(async (_org: string, f: string) => entitled && f === 'compliance_pack') };
     const hook = new ComplianceEnforcementHookImpl(compliance as any, license as any);
     return { hook, compliance, license };
   }

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Receipt } from 'lucide-react'
 
@@ -8,6 +9,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { EntitlementGate } from '@/components/entitlement-gate'
 import { UpgradePrompt } from '@/components/plan-indicator'
+import { useTeamLookup } from '@/components/ui/team-filter'
+import { useOrganizationStore } from '@/store/organization'
+import { agentsApi } from '@/lib/api'
 
 /**
  * Who spent what: cost per team and per agent, plus a projection.
@@ -61,12 +65,37 @@ export function ChargebackTab(props: { teamNames?: Record<string, string>; agent
 }
 
 function ChargebackReportView({
-  teamNames = {},
-  agentNames = {},
+  teamNames: teamNamesProp,
+  agentNames: agentNamesProp,
 }: {
   teamNames?: Record<string, string>
   agentNames?: Record<string, string>
 }) {
+  // Resolved here rather than waited for from a parent.
+  //
+  // analytics.tsx renders <ChargebackTab /> with no props, and both
+  // labels fall back to the raw id -- so "who spent what" came out as a
+  // column of uuids against dollar amounts, which is the one thing this
+  // report exists not to be. A caller may still pass names in; nothing
+  // does today.
+  const { currentOrganization } = useOrganizationStore()
+  const { byId: teamsById } = useTeamLookup(currentOrganization?.id)
+  const { data: agentList } = useQuery({
+    queryKey: ['agents', currentOrganization?.id],
+    queryFn: () => agentsApi.getAll(),
+    enabled: !!currentOrganization,
+  })
+
+  const teamNames = useMemo(
+    () => teamNamesProp ?? Object.fromEntries(Object.entries(teamsById).map(([id, t]) => [id, t.name])),
+    [teamNamesProp, teamsById],
+  )
+  const agentNames = useMemo(() => {
+    if (agentNamesProp) return agentNamesProp
+    const list = Array.isArray(agentList) ? agentList : ((agentList as any)?.agents ?? [])
+    return Object.fromEntries(list.map((a: any) => [a.id, a.name]))
+  }, [agentNamesProp, agentList])
+
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['analytics', 'chargeback'],
     queryFn: async () => (await api.get('/chargeback/report')).data.data as ChargebackReport,

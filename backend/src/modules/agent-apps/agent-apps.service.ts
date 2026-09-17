@@ -43,6 +43,7 @@ import {
 } from './distribution-publish';
 import { GatewaysService } from '../gateways/gateways.service';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
+import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 
 
 export interface CreateAppDto {
@@ -273,6 +274,13 @@ export class AgentAppsService {
       // SSO is an enterprise entitlement; until this was passed in, every
       // SSO app was refused at publish whether the org had it or not.
       hasEnterpriseAuth: this.orgLicense ? await this.orgLicense.hasForOrg(app.organizationId, 'sso') : false,
+      // And the same for white label, which was left out when the SSO
+      // half above was fixed -- so WHITE_LABEL_NOT_ENTITLED and
+      // DISCLOSURE_REMOVAL_NOT_ENTITLED refused every app, entitled or
+      // not, for exactly the reason the comment above describes.
+      hasWhiteLabel: this.orgLicense
+        ? await this.orgLicense.hasForOrg(app.organizationId, EE_ENTITLEMENTS.WHITE_LABEL)
+        : false,
       ...context,
     };
   }

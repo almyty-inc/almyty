@@ -353,7 +353,20 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
               <div><label className="text-sm font-medium">{form.resourceType === 'gateway' ? 'Gateway' : 'Agent'}</label>
                 <Select value={form.resourceId} onValueChange={v => setForm(f => ({ ...f, resourceId: v }))}>
                   <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent>{(form.resourceType === 'gateway' ? gateways : agents).map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {/*
+                      An access key needs a resource, and an org with no
+                      agents yet -- very common, since keys are often set
+                      up first -- opened this on an empty sliver with a
+                      greyed-out button and no explanation.
+                    */}
+                    {(form.resourceType === 'gateway' ? gateways : agents).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-muted-foreground">
+                        {form.resourceType === 'gateway' ? 'No gateways yet.' : 'No agents yet.'}
+                      </div>
+                    )}
+                    {(form.resourceType === 'gateway' ? gateways : agents).map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                  </SelectContent>
                 </Select></div>
               <div><label className="text-sm font-medium">Scopes</label>
                 <div className="flex gap-2 flex-wrap mt-1">
@@ -366,6 +379,12 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
                 </div></div>
               <Button className="w-full" disabled={!form.name || !form.resourceId || createMut.isPending} onClick={handleGenerate}>
                 {createMut.isPending ? 'Generating...' : 'Generate Key'}</Button>
+              {/* A disabled button that does not say why is a dead end. */}
+              {(!form.name || !form.resourceId) && (
+                <p className="text-xs text-muted-foreground text-center">
+                  {!form.name ? 'Give the key a name' : `Choose the ${form.resourceType} this key is for`} to continue.
+                </p>
+              )}
             </div>
           )}
         </DialogContent>

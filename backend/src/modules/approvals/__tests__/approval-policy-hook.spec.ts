@@ -293,15 +293,30 @@ describe('ApprovalsService — approval policy hook', () => {
       expect(decided.status).toBe('approved');
     });
 
-    it('a throwing scoreProgress falls back to the single gate', async () => {
+    /**
+     * A scorer that threw is not a scorer that said "no policy".
+     *
+     * Both used to land as `progress === null`, and null means "fall
+     * back to the OSS single gate" -- so one transient error inside the
+     * EE scorer silently turned a configured 3-of-5 quorum into a single
+     * approver and let the gated tool call run. That is the one outcome
+     * a human-in-the-loop control must never reach by accident, and it
+     * left no signal behind: the row simply read as approved.
+     */
+    it('holds the gate when scoreProgress throws, rather than approving on one vote', async () => {
       const hook = makeQuorumHook();
       const { svc } = makeService(hook);
       const row = await svc.create(createInput);
 
       hook.scoreProgress.mockRejectedValue(new Error('boom'));
-      const decided = await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' });
 
-      expect(decided.status).toBe('approved');
+      await expect(
+        svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }),
+      ).rejects.toMatchObject({ status: 503 });
+
+      // And the request is still waiting for its quorum.
+      const after = await svc.findOne(row.id, { id: 'u1' }, row.organizationId);
+      expect(after.status).toBe('pending');
     });
   });
 });
