@@ -33,13 +33,33 @@ const isTest = (f: string) => /(__tests__|\.test\.|\.spec\.)/.test(f)
 describe('every component file is imported by something real', () => {
   it('has no orphans', () => {
     const sources = files.filter(f => !isTest(f))
-    const importGraph = sources
-      .map(f => readFileSync(f, 'utf8'))
-      .join('\n')
+
+    // Read every file ONCE, up front, and refuse to guess about one that
+    // will not read.
+    //
+    // This walks the filesystem while the rest of the suite is running.
+    // Reading lazily meant a single transient failure silently dropped
+    // that file's imports out of the graph, and whatever it was the only
+    // importer of then looked orphaned -- a flake that accuses innocent
+    // code. A file that genuinely cannot be read is a real problem and
+    // says so, rather than becoming a wrong answer about a different
+    // file.
+    const contents = new Map<string, string>()
+    const unreadable: string[] = []
+    for (const f of sources) {
+      try {
+        contents.set(f, readFileSync(f, 'utf8'))
+      } catch {
+        unreadable.push(relative(SRC, f))
+      }
+    }
+    expect(unreadable).toEqual([])
+
+    const importGraph = [...contents.values()].join('\n')
 
     const orphans = sources
       .filter(f => f.includes(`${'/'}components${'/'}`) || f.includes(`${'/'}pages${'/'}`))
-      .filter(f => /export (function|const|default) [A-Z]/.test(readFileSync(f, 'utf8')))
+      .filter(f => /export (function|const|default) [A-Z]/.test(contents.get(f) ?? ''))
       .filter(f => {
         // Match on the module specifier's last segment, which is how every
         // import in this codebase ends regardless of alias or relative form.
