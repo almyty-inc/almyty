@@ -59,15 +59,15 @@ const TOOLS = [
   { name: 'build_app', description: 'Queue a downloadable build (tui/desktop/binary) on the server for one platform. Returns a build record; poll list_builds for status.', inputSchema: { type: 'object', properties: { slug: { type: 'string' }, target: { type: 'string', enum: ['tui', 'desktop', 'binary'] }, platform: { type: 'string', description: 'e.g. linux-x64, darwin-arm64, win-x64' }, version: { type: 'string' }, macPackaging: { type: 'string', description: 'macOS desktop only: how to package the .app' } }, required: ['slug', 'target', 'platform'] } },
   { name: 'list_builds', description: 'Build history for an app', inputSchema: { type: 'object', properties: { slug: { type: 'string' } }, required: ['slug'] } },
   // ── Memory (canonical schema v1) ──────────────────────────────
-  { name: 'memory_put', description: 'Write a memory or document item. memory mode = agent-written facts/preferences; document mode = chunked imported text.', inputSchema: { type: 'object', properties: { mode: { type: 'string', enum: ['memory', 'document'] }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'], description: 'Defaults to workspace if omitted.' }, scope_id: { type: 'string', description: 'Defaults to the calling organization id when scope_type=workspace.' }, content: { type: 'string' }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'], description: 'Memory mode only. Defaults to short.' }, tags: { type: 'array', items: { type: 'string' } }, ttl_seconds: { type: 'number' }, source_uri: { type: 'string', description: 'Document mode: where the text came from.' }, source_version: { type: 'number' } }, required: ['mode', 'content'] } },
-  { name: 'memory_search', description: 'Hybrid (vector + FTS) search across a scope.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' }, mode: { type: 'string', enum: ['memory', 'document'] }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, top_k: { type: 'number' }, fts_only: { type: 'boolean' } }, required: ['query'] } },
-  { name: 'memory_list', description: 'List memory items in a scope (newest first).', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' }, mode: { type: 'string', enum: ['memory', 'document'] }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, tags: { type: 'array', items: { type: 'string' } }, include_superseded: { type: 'boolean' }, include_deleted: { type: 'boolean' }, limit: { type: 'number' }, cursor: { type: 'string' } } } },
+  { name: 'memory_put', description: 'Write a memory or document item. memory mode = agent-written facts/preferences; document mode = chunked imported text.', inputSchema: { type: 'object', properties: { mode: { type: 'string', enum: ['memory', 'document'] }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'], description: 'Defaults to workspace if omitted.' }, content: { type: 'string' }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'], description: 'Memory mode only. Defaults to short.' }, tags: { type: 'array', items: { type: 'string' } }, ttl_seconds: { type: 'number' }, source_uri: { type: 'string', description: 'Document mode: where the text came from.' }, source_version: { type: 'number' } }, required: ['mode', 'content'] } },
+  { name: 'memory_search', description: 'Hybrid (vector + FTS) search across a scope.', inputSchema: { type: 'object', properties: { query: { type: 'string' }, scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, mode: { type: 'string', enum: ['memory', 'document'] }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, top_k: { type: 'number' }, fts_only: { type: 'boolean' } }, required: ['query'] } },
+  { name: 'memory_list', description: 'List memory items in a scope (newest first).', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, mode: { type: 'string', enum: ['memory', 'document'] }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, tags: { type: 'array', items: { type: 'string' } }, include_superseded: { type: 'boolean' }, include_deleted: { type: 'boolean' }, limit: { type: 'number' }, cursor: { type: 'string' } } } },
   { name: 'memory_get', description: 'Get a single memory item by id.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
   { name: 'memory_delete', description: 'Delete a memory item. mode=soft (default) sets deleted_at; mode=hard removes the row.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, mode: { type: 'string', enum: ['soft', 'hard'] } }, required: ['id'] } },
   { name: 'memory_supersede', description: 'Bi-temporal supersession (memory mode only): close valid_until on the old row and write a new one with the same logical content.', inputSchema: { type: 'object', properties: { old_id: { type: 'string' }, content: { type: 'string' }, tier: { type: 'string', enum: ['short', 'project', 'long', 'shared'] }, tags: { type: 'array', items: { type: 'string' } } }, required: ['old_id', 'content'] } },
-  { name: 'memory_consolidate', description: 'Run consolidation now: a model extracts durable facts from short-scope rows and supersedes them. Returns the run report.', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' }, force: { type: 'boolean', description: 'Bypass enabled-flag and min_short_count thresholds.' } } } },
-  { name: 'memory_transfer', description: 'Move memory items from one backend to another for a scope. Returns a TransferReport with capability-degradation warnings.', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' }, source: { type: 'string', description: 'Source backend id (almyty-native, mem0, zep, supermemory, vertex-memory-bank, anthropic-memory-tool)' }, target: { type: 'string' }, mode: { type: 'string', enum: ['memory', 'document'] }, dry_run: { type: 'boolean' } }, required: ['source', 'target'] } },
-  { name: 'memory_sync', description: 'Reconcile primary↔mirror for a scope. Last-write-wins by updated_at. Returns counts moved each direction.', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, scope_id: { type: 'string' } } } },
+  { name: 'memory_consolidate', description: 'Run consolidation now: a model extracts durable facts from short-scope rows and supersedes them. Returns the run report.', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, force: { type: 'boolean', description: 'Bypass enabled-flag and min_short_count thresholds.' } } } },
+  { name: 'memory_transfer', description: 'Move memory items from one backend to another for a scope. Returns a TransferReport with capability-degradation warnings.', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] }, source: { type: 'string', description: 'Source backend id (almyty-native, mem0, zep, supermemory, vertex-memory-bank, anthropic-memory-tool)' }, target: { type: 'string' }, mode: { type: 'string', enum: ['memory', 'document'] }, dry_run: { type: 'boolean' } }, required: ['source', 'target'] } },
+  { name: 'memory_sync', description: 'Reconcile primary↔mirror for a scope. Last-write-wins by updated_at. Returns counts moved each direction.', inputSchema: { type: 'object', properties: { scope_type: { type: 'string', enum: ['user', 'workspace', 'project', 'collab'] } } } },
   { name: 'memory_list_backends', description: 'List configured memory backends + capabilities + supported modes.', inputSchema: { type: 'object', properties: {} } },
   { name: 'memory_backends_health', description: 'Run a health check against every backend.', inputSchema: { type: 'object', properties: {} } },
 ];
@@ -315,7 +315,11 @@ export class AlmytyMcpService {
         const memSvc = get(CanonicalMemoryService);
         const mode = args.mode as Mode;
         const scope_type = (args.scope_type as ScopeType) || 'workspace';
-        const scope_id = args.scope_id || orgId;
+        // Never args.scope_id. The org id is not a secret -- it travels in
+        // headers, invite links and gateway URLs -- so accepting it here let
+        // any client authorized on org A's gateway read, write and repoint
+        // org B's memory.
+        const scope_id = orgId;
         const provenance: Provenance = {
           agent_id: null,
           session_id: null,
@@ -357,7 +361,7 @@ export class AlmytyMcpService {
         const ranked = await get(CanonicalMemoryService).search({
           scope: {
             scope_type: (args.scope_type as ScopeType) || 'workspace',
-            scope_id: args.scope_id || orgId,
+            scope_id: orgId,
           },
           query: String(args.query),
           mode: args.mode,
@@ -380,7 +384,7 @@ export class AlmytyMcpService {
         const page = await get(CanonicalMemoryService).list({
           scope: {
             scope_type: (args.scope_type as ScopeType) || 'workspace',
-            scope_id: args.scope_id || orgId,
+            scope_id: orgId,
           },
           mode: args.mode,
           tier: args.tier,
@@ -458,7 +462,7 @@ export class AlmytyMcpService {
         return get(ConsolidationService).run(
           {
             scope_type: (args.scope_type as ScopeType) || 'workspace',
-            scope_id: args.scope_id || orgId,
+            scope_id: orgId,
           },
           { force: !!args.force },
         );
@@ -466,7 +470,7 @@ export class AlmytyMcpService {
         return get(MemoryRouter).transfer(
           {
             scope_type: (args.scope_type as ScopeType) || 'workspace',
-            scope_id: args.scope_id || orgId,
+            scope_id: orgId,
           },
           String(args.source),
           String(args.target),
@@ -475,7 +479,7 @@ export class AlmytyMcpService {
       case 'memory_sync':
         return get(MemorySyncService).sync({
           scope_type: (args.scope_type as ScopeType) || 'workspace',
-          scope_id: args.scope_id || orgId,
+          scope_id: orgId,
         });
       case 'memory_list_backends':
         return get(MemoryRouter).list_backends();

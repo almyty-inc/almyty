@@ -41,8 +41,24 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
     if (headerOrgId && headerOrgId !== validApiKey.organizationId) {
       throw new UnauthorizedException('API key is not scoped to the requested organization');
     }
-    (user as any).currentOrganizationId =
-      validApiKey.organizationId || validApiKey.organization?.id;
+    const keyOrgId = validApiKey.organizationId || validApiKey.organization?.id;
+
+    // Defence in depth: the key's org has to still be one this user
+    // belongs to. createApiKey refuses to stamp a foreign org on a new
+    // key, and this covers the rest -- a key minted before that check
+    // existed, and the ordinary case of somebody being removed from an
+    // organization while holding a key scoped to it. Without it, a key
+    // outlives the membership that justified it.
+    if (keyOrgId) {
+      const stillAMember = user.organizationMemberships?.some(
+        (m: any) => (m.organizationId || m.organization?.id) === keyOrgId && m.isActive !== false,
+      );
+      if (!stillAMember) {
+        throw new UnauthorizedException('API key is not valid for that organization');
+      }
+    }
+
+    (user as any).currentOrganizationId = keyOrgId;
 
     // Attach org list (matches JwtStrategy shape).
     (user as any).organizations = user.organizationMemberships?.map((m: any) => ({

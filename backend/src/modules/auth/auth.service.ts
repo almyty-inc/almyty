@@ -449,6 +449,24 @@ export class AuthService {
     // doesn't provide one (e.g. the CLI login flow mints a key from
     // the frontend without an explicit org ID).
     let orgId = createApiKeyDto.organizationId;
+
+    // A caller-supplied org has to be one the caller actually belongs to.
+    //
+    // This took the id from the body verbatim, and ApiKeyStrategy then
+    // sets `currentOrganizationId` from the stored key -- so anyone with
+    // a login could mint themselves a key stamped with another tenant's
+    // org id and authenticate as that org on every JwtAuthGuard route.
+    // That walks straight through per-request scope checks, because the
+    // thing those checks compare against is exactly this value.
+    if (orgId) {
+      const membership = await this.userOrganizationRepository.findOne({
+        where: { userId, organizationId: orgId, isActive: true },
+      });
+      if (!membership) {
+        throw new ForbiddenException('You are not a member of that organization');
+      }
+    }
+
     if (!orgId) {
       const user = await this.userRepository.findOne({
         where: { id: userId },

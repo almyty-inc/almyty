@@ -47,13 +47,18 @@ export class ApisController {
   @Roles('member', 'admin', 'owner')
   async findAll(
     @Request() req,
-    @Query('organizationId') organizationId?: string,
     @Query('type') type?: ApiType,
     @Query('status') status?: ApiStatus,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
   ) {
-    const orgId = organizationId || req.user.currentOrganizationId;
+    // The session's org, never a query parameter. RolesGuard
+    // deliberately ignores a query-supplied organizationId, so the role
+    // check ran against the caller's own org while the handler queried
+    // whichever one they asked for -- and an Api row carries `headers`
+    // and `authentication`, which routinely hold API keys. Every other
+    // handler in this controller already reads it from the session.
+    const orgId = req.user.currentOrganizationId;
     if (!orgId) {
       throw new BadRequestException('Organization ID is required');
     }

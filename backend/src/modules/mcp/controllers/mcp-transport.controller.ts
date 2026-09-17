@@ -85,7 +85,7 @@ export class McpTransportController {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
-    return this.sseTransport.handleSseMessage(connectionId, message);
+    return this.sseTransport.handleSseMessage(connectionId, message, organizationId);
   }
 
   // Server-specific SSE endpoints

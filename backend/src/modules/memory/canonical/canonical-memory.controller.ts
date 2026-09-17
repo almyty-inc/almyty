@@ -77,6 +77,29 @@ export class CanonicalMemoryController {
     }
   }
 
+  /**
+   * The caller's own scope, whatever they asked for.
+   *
+   * `scope_id` IS the organization id (see scopeToOrganizationId), and
+   * every handler here used to pass the client's value straight through
+   * to a service that scoped on it and nothing else. Pasting another
+   * tenant's org id -- not a secret; it travels in headers, invite links
+   * and gateway URLs -- read their memory, wrote rows into it, or
+   * repointed their memory backend, with the audit row filed under the
+   * victim's org so it did not show up in the attacker's log.
+   *
+   * A mismatch is refused loudly rather than quietly corrected, so a
+   * confused client hears about it; the returned scope is then the
+   * caller's own by construction, so a handler cannot forget.
+   */
+  private ownScope(
+    req: any,
+    scope: { scope_type?: ScopeType; scope_id?: string } | undefined,
+  ): { scope_type: ScopeType; scope_id: string } {
+    this.assertScope(req, scope);
+    return { scope_type: (scope?.scope_type ?? 'org') as ScopeType, scope_id: this.orgId(req) };
+  }
+
   constructor(
     private readonly service: CanonicalMemoryService,
     private readonly router: MemoryRouter,
@@ -106,6 +129,7 @@ export class CanonicalMemoryController {
   async getConfig(
     @Query('scope_type') scopeType: ScopeType,
     @Query('scope_id') scopeId: string,
+    @Request() req: any,
   ) {
     if (!scopeType || !scopeId) {
       throw new HttpException(
@@ -113,7 +137,8 @@ export class CanonicalMemoryController {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const cfg = await this.service.getOrCreateConfig(scopeType, scopeId);
+    const scope = this.ownScope(req, { scope_type: scopeType, scope_id: scopeId });
+    const cfg = await this.service.getOrCreateConfig(scope.scope_type, scope.scope_id);
     return { success: true, data: cfg };
   }
 
@@ -140,9 +165,10 @@ export class CanonicalMemoryController {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const scope = this.ownScope(req, body);
     const updated = await this.service.updateConfig(
-      body.scope_type,
-      body.scope_id,
+      scope.scope_type,
+      scope.scope_id,
       {
         embedding_model: body.embedding_model,
         embedding_dim: body.embedding_dim,
@@ -162,6 +188,7 @@ export class CanonicalMemoryController {
   async listSoftcapWarnings(
     @Query('scope_type') scopeType: ScopeType,
     @Query('scope_id') scopeId: string,
+    @Request() req?: any,
     @Query('limit') limitRaw?: string,
   ) {
     if (!scopeType || !scopeId) {
@@ -170,8 +197,9 @@ export class CanonicalMemoryController {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const scope = this.ownScope(req, { scope_type: scopeType, scope_id: scopeId });
     const limit = Math.min(Math.max(Number(limitRaw) || 50, 1), 500);
-    const rows = await this.service.listSoftcapWarnings(scopeType, scopeId, limit);
+    const rows = await this.service.listSoftcapWarnings(scope.scope_type, scope.scope_id, limit);
     return { success: true, data: rows };
   }
 
@@ -184,6 +212,7 @@ export class CanonicalMemoryController {
   })
   async consolidate(
     @Body() body: { scope_type: ScopeType; scope_id: string; force?: boolean },
+    @Request() req: any,
   ) {
     if (!body?.scope_type || !body?.scope_id) {
       throw new HttpException(
@@ -192,7 +221,7 @@ export class CanonicalMemoryController {
       );
     }
     const result = await this.consolidation.run(
-      { scope_type: body.scope_type, scope_id: body.scope_id },
+      this.ownScope(req, body),
       { force: !!body.force },
     );
     return { success: true, data: result };
@@ -207,6 +236,7 @@ export class CanonicalMemoryController {
   })
   async syncScope(
     @Body() body: { scope_type: ScopeType; scope_id: string; force?: boolean },
+    @Request() req: any,
   ) {
     if (!body?.scope_type || !body?.scope_id) {
       throw new HttpException(
@@ -215,7 +245,7 @@ export class CanonicalMemoryController {
       );
     }
     const result = await this.memorySync.sync(
-      { scope_type: body.scope_type, scope_id: body.scope_id },
+      this.ownScope(req, body),
       { force: !!body.force },
     );
     return { success: true, data: result };
@@ -235,10 +265,11 @@ export class CanonicalMemoryController {
       mode?: Mode;
       dry_run?: boolean;
     },
+    @Request() req: any,
   ) {
     try {
       const report = await this.router.transfer(
-        { scope_type: body.scope_type, scope_id: body.scope_id },
+        this.ownScope(req, body),
         body.source,
         body.target,
         { mode: body.mode, dry_run: body.dry_run },
@@ -276,7 +307,7 @@ export class CanonicalMemoryController {
     }
     try {
       const result = await this.chunker.importSource({
-        scope: { scope_type: body.scope_type, scope_id: body.scope_id },
+        scope: this.ownScope(req, body),
         source_uri: body.source_uri,
         content: body.content,
         content_format: body.content_format,
@@ -308,7 +339,7 @@ export class CanonicalMemoryController {
       const item = await this.service.put(
         {
           mode: body.mode,
-          scope: body.scope,
+          scope: this.ownScope(req, body.scope),
           content: body.content,
           content_format: body.content_format,
           tags: body.tags,
@@ -374,9 +405,10 @@ export class CanonicalMemoryController {
   @ApiOperation({ summary: 'List memory items in a scope' })
   async list(
     @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) body: ListMemoryDto,
+    @Request() req: any,
   ) {
     const page = await this.service.list({
-      scope: body.scope,
+      scope: this.ownScope(req, body.scope),
       mode: body.mode,
       tier: body.tier,
       tags: body.tags,
@@ -395,9 +427,10 @@ export class CanonicalMemoryController {
   @ApiOperation({ summary: 'Hybrid search (vector + FTS)' })
   async search(
     @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) body: SearchMemoryDto,
+    @Request() req: any,
   ) {
     const results = await this.service.search({
-      scope: body.scope,
+      scope: this.ownScope(req, body.scope),
       query: body.query,
       mode: body.mode,
       tier: body.tier,
