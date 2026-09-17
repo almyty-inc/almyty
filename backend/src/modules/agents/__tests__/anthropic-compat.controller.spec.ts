@@ -154,4 +154,63 @@ describe('POST /v1/messages', () => {
     expect(res.error.message).toMatch(/streaming is not supported/i);
     expect(engine.execute).not.toHaveBeenCalled();
   });
+
+  it('carries declared tools into the run, or the client can never call one', async () => {
+    // Dropped here, a client that declared tools gets an answer that
+    // cannot call them and its loop ends without an error anywhere.
+    await post(
+      body({
+        tools: [{ name: 'weather', description: 'look up weather', input_schema: { type: 'object', properties: {} } }],
+        tool_choice: { type: 'auto' },
+      }),
+    ).expect(200)
+
+    const input = (engine.execute.mock.calls[0] as any[])[3].input
+    expect(input.tools).toEqual([expect.objectContaining({ name: 'weather' })])
+    expect(input.toolChoice).toBeDefined()
+  })
+
+  it('returns tool_use blocks and stop_reason tool_use when the run called a tool', async () => {
+    // The half that was missing: results came IN as tool turns, and calls
+    // could never go back OUT, so the loop stopped on the first turn.
+    execution = {
+      id: 'e3',
+      status: 'completed',
+      output: { content: '', toolCalls: [{ id: 'toolu_1', name: 'weather', arguments: '{"city":"Zagreb"}' }] },
+      totalTokens: 5,
+    }
+
+    const { body: res } = await post(body()).expect(200)
+
+    expect(res.stop_reason).toBe('tool_use')
+    const use = res.content.find((b: any) => b.type === 'tool_use')
+    expect(use).toMatchObject({ name: 'weather', id: 'toolu_1' })
+    expect(use.input).toEqual({ city: 'Zagreb' })
+  })
+
+  it('reads a tool call recorded in the OpenAI shape too, since the engine may use either', async () => {
+    execution = {
+      id: 'e4',
+      status: 'completed',
+      output: { tool_calls: [{ id: 'call_1', function: { name: 'search', arguments: '{"q":"x"}' } }] },
+      totalTokens: 1,
+    }
+
+    const { body: res } = await post(body()).expect(200)
+    expect(res.stop_reason).toBe('tool_use')
+    expect(res.content.find((b: any) => b.type === 'tool_use')).toMatchObject({ name: 'search' })
+  })
+
+  it('still says end_turn for a plain text answer', async () => {
+    const { body: res } = await post(body()).expect(200)
+    expect(res.stop_reason).toBe('end_turn')
+  })
+
+  it('does not dump a JSON blob as the reply when the turn was tool calls', async () => {
+    execution = { id: 'e5', status: 'completed', output: { toolCalls: [{ id: 't1', name: 'weather', arguments: '{}' }] }, totalTokens: 1 }
+
+    const { body: res } = await post(body()).expect(200)
+    const text = res.content.find((b: any) => b.type === 'text')
+    expect(text?.text ?? '').not.toContain('toolCalls')
+  })
 });
