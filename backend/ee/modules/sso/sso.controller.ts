@@ -39,9 +39,13 @@ import {
  */
 @ApiTags('SSO')
 @Controller('sso')
+// No EntitlementGuard here: @Public() means JwtAuthGuard attaches no
+// user, so the guard has no organization to resolve and falls back to
+// the deployment-global license — community — and answers 402 to every
+// paying customer's login. The check lives in
+// SsoConfigService.getDecrypted, which every route below passes through
+// and which knows the org from the URL.
 @Public()
-@UseGuards(EntitlementGuard)
-@RequiresEntitlement(EE_ENTITLEMENTS.SSO)
 export class SsoController {
   constructor(
     private readonly ssoService: SsoService,

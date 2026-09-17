@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
+import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 import { organizationsApi } from '@/lib/api'
@@ -61,7 +62,13 @@ export function OrganizationsPage() {
   const [inviteDialogOpen, setInviteDialogOpen] = React.useState(false)
   const [orgDetailsOpen, setOrgDetailsOpen] = React.useState(false)
 
-  const { data: organizationsData, isLoading } = useQuery({
+  const {
+    data: organizationsData,
+    isLoading,
+    isError: orgsError,
+    error: orgsErrorValue,
+    refetch: refetchOrgs,
+  } = useQuery({
     queryKey: ['organizations'],
     queryFn: () => organizationsApi.getAll(),
   })
@@ -351,6 +358,13 @@ export function OrganizationsPage() {
         <LoadingSpinner size="lg" />
       </div>
     )
+  }
+
+  // Every signed-in user belongs to at least one organization, so an
+  // empty table here is always a failure rather than a fact -- and it
+  // rendered with no message and no retry.
+  if (orgsError) {
+    return <QueryError error={orgsErrorValue} onRetry={() => refetchOrgs()} title="Couldn't load your organizations" />
   }
 
   // organizationsApi.getAll() runs through apiGet → extractData, so
