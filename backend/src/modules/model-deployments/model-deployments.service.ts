@@ -227,7 +227,9 @@ export class ModelDeploymentsService {
 
   async enqueue(deploymentId: string): Promise<void> {
     try {
-      await this.queue.add(MODEL_RECONCILE_JOB, { deploymentId }, { jobId: `reconcile-${deploymentId}-${Date.now()}`, removeOnComplete: true, removeOnFail: 50 });
+      await this.queue.add(MODEL_RECONCILE_JOB, { deploymentId }, { // Deterministic, so a retry or a double-click collapses into one job
+      // rather than racing the sweep to deploy the same model twice.
+      jobId: `reconcile-${deploymentId}`, removeOnComplete: true, removeOnFail: 50 });
     } catch (err: any) {
       // The repeatable sweep will pick it up; a queue hiccup must not fail the request.
       this.logger.warn(`Could not enqueue reconcile for ${deploymentId}: ${err.message}`);

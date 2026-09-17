@@ -31,6 +31,37 @@ class FakeApprovalsRepo {
     else this.rows.push(r);
     return r;
   }
+
+  /**
+   * decide() flips the row with `WHERE id = ? AND status = 'pending'`
+   * and emits only when that matched, so two reviewers acting at once
+   * cannot both decide the same request. Modelled rather than stubbed,
+   * so a fake that always reported a hit could not hide the race.
+   */
+  createQueryBuilder() {
+    const self = this;
+    let patch: Partial<ApprovalRequest> = {};
+    let targetId: string | undefined;
+    let requiredStatus: string | undefined;
+
+    const qb: any = {
+      update: () => qb,
+      set: (values: Partial<ApprovalRequest>) => { patch = values; return qb; },
+      where: (_clause: string, params: any) => { targetId = params.id; return qb; },
+      andWhere: (_clause: string, params?: any) => {
+        if (params?.pending) requiredStatus = params.pending;
+        return qb;
+      },
+      execute: async () => {
+        const row = self.rows.find((r) => r.id === targetId);
+        if (!row) return { affected: 0 };
+        if (requiredStatus && row.status !== requiredStatus) return { affected: 0 };
+        Object.assign(row, patch);
+        return { affected: 1 };
+      },
+    };
+    return qb;
+  }
 }
 
 class FakeRunsRepo {

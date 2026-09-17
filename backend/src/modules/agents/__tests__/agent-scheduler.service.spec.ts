@@ -50,10 +50,34 @@ describe('AgentSchedulerService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
+  /**
+   * Scheduling something that will never run.
+   *
+   * handleScheduledExecution refuses a non-ACTIVE agent and deletes the
+   * job, and restoreSchedules only restores ACTIVE ones -- but nothing
+   * stopped you scheduling a draft. The card counted down to a run that
+   * deleted itself the first time it fired, and agents are created as
+   * DRAFT, so that was the default outcome for anyone who set a schedule
+   * before activating.
+   */
+  describe('scheduleAgent: the agent has to be able to run', () => {
+    it('refuses to schedule an agent that is not active', async () => {
+      agentsService.getAgent.mockResolvedValue({
+        id: 'a1',
+        organizationId: 'org-1',
+        status: AgentStatus.DRAFT,
+        settings: {},
+      });
+
+      await expect(service.scheduleAgent('a1', 'org-1', 15)).rejects.toThrow(/activate this agent/i);
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
   // ── intervalMinutes validation ──────────────────────────────────────
 
   describe('scheduleAgent: intervalMinutes validation', () => {
-    const baseAgent = { id: 'a1', organizationId: 'org-1', settings: {}, createdBy: 'u1' };
+    const baseAgent = { id: 'a1', organizationId: 'org-1', settings: {}, createdBy: 'u1', status: AgentStatus.ACTIVE };
 
     beforeEach(() => {
       agentsService.getAgent.mockResolvedValue(baseAgent);
@@ -213,6 +237,7 @@ describe('AgentSchedulerService', () => {
       agentsService.getAgent.mockResolvedValue({
         id: 'a1',
         organizationId: 'org-1',
+        status: AgentStatus.ACTIVE,
         settings: {
           modelIssue: { code: 'MODEL_NOT_FOUND', model: 'old', message: 'gone', detectedAt: 'x' },
           schedule: { enabled: false, intervalMinutes: 10, input: {}, pausedReason: { code: 'MODEL_NOT_FOUND' } },

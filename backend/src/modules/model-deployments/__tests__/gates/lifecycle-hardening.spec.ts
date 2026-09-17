@@ -179,4 +179,34 @@ describe('deployment lifecycle hardening', () => {
     expect(card().endpointRef).toBeNull();
     teardown.mockRestore();
   });
+
+  /**
+   * Two reconciles, one deploy.
+   *
+   * adapter.deploy() is a provider call that runs for minutes (Modal's
+   * timeout is 30), and reconcile is reachable from the 2-minute sweep,
+   * from a user pressing retry, and from every API replica at once.
+   * Both readers saw `externalRef` null and both deployed; the second
+   * save overwrote externalRef, leaving the first endpoint a paid GPU
+   * resource no row points at. The orphan check cannot find those --
+   * it only notices deployments the PROVIDER has forgotten, never one
+   * the database has.
+   */
+  it('deploys once when two reconciles race the same row', async () => {
+    let inFlight = 0;
+    let concurrentPeak = 0;
+    const realDeploy = stub.deploy.bind(stub);
+    const deploy = jest.spyOn(stub, 'deploy').mockImplementation(async (...args: any[]) => {
+      inFlight += 1;
+      concurrentPeak = Math.max(concurrentPeak, inFlight);
+      await new Promise((r) => setTimeout(r, 5));
+      inFlight -= 1;
+      return (realDeploy as any)(...args);
+    });
+
+    await Promise.all([processor.reconcile(id), processor.reconcile(id)]);
+
+    expect(concurrentPeak).toBe(1);
+    expect(deploy).toHaveBeenCalledTimes(1);
+  });
 });

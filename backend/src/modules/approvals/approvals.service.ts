@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional, Inject } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { EventEmitter } from 'events';
@@ -48,12 +48,23 @@ const MAX_TTL_SECONDS = 7 * 24 * 60 * 60; // 7d
  *      result (approve) or marks it CANCELLED (reject).
  *
  * Auto-expiry: a sweep flips pending rows past expiresAt to 'expired'
- * and treats them as rejections. Currently lives as a method here;
- * a BullMQ scheduled job is the obvious follow-up.
+ * and treats them as rejections, on an interval started here.
+ *
+ * The sweep existed as a method with no caller at all, which made
+ * `expiresAt` decorative: nobody approves, nothing flips the row,
+ * 'approval.decided' never fires, and the run waits in WAITING_APPROVAL
+ * forever -- the stuck-run reaper only looks at RUNNING, so nothing else
+ * caught it either. An interval here rather than a BullMQ job because
+ * that is the shape the sibling sweeps already use
+ * (AgentRunReaperService, the workspace TTL sweep).
  */
+/** How often pending approvals are checked against their expiresAt. */
+const EXPIRY_SWEEP_INTERVAL_MS = 60_000;
+
 @Injectable()
-export class ApprovalsService extends EventEmitter {
+export class ApprovalsService extends EventEmitter implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ApprovalsService.name);
+  private sweepTimer?: NodeJS.Timeout;
 
   constructor(
     @InjectRepository(ApprovalRequest)
@@ -75,6 +86,23 @@ export class ApprovalsService extends EventEmitter {
     private readonly notifications?: NotificationsService,
   ) {
     super();
+  }
+
+  onModuleInit(): void {
+    this.sweepTimer = setInterval(() => {
+      this.sweepExpired().catch((err) => {
+        this.logger.warn(`Approval expiry sweep failed: ${err.message}`);
+      });
+    }, EXPIRY_SWEEP_INTERVAL_MS);
+    // Don't hold the event loop open for it, matching the other sweeps.
+    this.sweepTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = undefined;
+    }
   }
 
   /**
@@ -157,11 +185,42 @@ export class ApprovalsService extends EventEmitter {
       if (stillPending) return stillPending;
     }
 
+    // The flip IS the guard.
+    //
+    // The pending check above happens several awaits before this write
+    // (canAccess, and applyPolicyProgress which writes), and a
+    // multi-reviewer queue is the designed use case -- so two reviewers
+    // acting at once both read 'pending'. One approved, saved, and
+    // emitted, which resumed the run and executed the gated tool call;
+    // the other then wrote 'rejected' over it. The row ended up
+    // rejected on a request whose action had already run, the initiator
+    // got two contradictory notifications, and the human-in-the-loop
+    // gate was defeated. Only the writer who actually moved the row off
+    // 'pending' emits.
+    const decidedAt = new Date();
+    const claim = await this.approvals
+      .createQueryBuilder()
+      .update()
+      .set({
+        status: next,
+        decidedBy: decision.decidedBy,
+        decidedAt,
+        decisionReason: decision.decisionReason ?? null,
+      })
+      .where('id = :id', { id: row.id })
+      .andWhere('status = :pending', { pending: 'pending' })
+      .execute();
+
+    if (!claim.affected) {
+      const current = await this.approvals.findOne({ where: { id: row.id } });
+      throw new BadRequestException(`approval already ${current?.status ?? 'decided'}`);
+    }
+
     row.status = next;
     row.decidedBy = decision.decidedBy;
-    row.decidedAt = new Date();
+    row.decidedAt = decidedAt;
     row.decisionReason = decision.decisionReason ?? null;
-    const saved = await this.approvals.save(row);
+    const saved = row;
 
     this.emit('approval.decided', saved);
     this.notifyDecided(saved).catch(() => {});
@@ -300,15 +359,28 @@ export class ApprovalsService extends EventEmitter {
     const expired = await this.approvals.find({
       where: { status: 'pending', expiresAt: LessThan(now) },
     });
+    let flipped = 0;
     for (const row of expired) {
+      // Same conditional flip as decide(): this sweep could otherwise
+      // stamp 'expired' and emit over a request that was approved and
+      // resumed a moment earlier.
+      const claim = await this.approvals
+        .createQueryBuilder()
+        .update()
+        .set({ status: 'expired', decidedAt: now, decisionReason: 'approval expired' })
+        .where('id = :id', { id: row.id })
+        .andWhere('status = :pending', { pending: 'pending' })
+        .execute();
+      if (!claim.affected) continue;
+
       row.status = 'expired';
       row.decidedAt = now;
       row.decisionReason = 'approval expired';
-      await this.approvals.save(row);
+      flipped++;
       this.emit('approval.decided', row);
       this.notifyDecided(row).catch(() => {});
     }
-    return expired.length;
+    return flipped;
   }
 
   // ── Notifications (best-effort, fire-and-forget) ─────────────────

@@ -2,6 +2,7 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
 import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -101,6 +102,25 @@ export class AgentsService {
     private readonly accessPolicy: AccessPolicyService,
   ) {}
 
+  /**
+   * Refuse a webhook URL the delivery path will silently drop.
+   *
+   * agent-webhook.service runs this same check at delivery time and, on
+   * failure, logs a warning and returns. Nothing surfaces that anywhere:
+   * the agent saved cleanly, the UI said "Webhook URL updated", and every
+   * run afterwards posted nowhere with no toast, no run detail and no
+   * delivery record. Say no at save time, where somebody is looking.
+   */
+  private assertWebhookUrl(webhookUrl?: string | null): void {
+    if (!webhookUrl) return;
+    const validation = validateUrl(webhookUrl);
+    if (!validation.valid) {
+      throw new BadRequestException(
+        `That webhook URL cannot be used: ${validation.error}`,
+      );
+    }
+  }
+
   async createAgent(
     createDto: CreateAgentInput,
     organizationId: string,
@@ -108,6 +128,8 @@ export class AgentsService {
   ): Promise<Agent> {
     try {
       this.logger.log(`[CREATE_AGENT] Creating agent '${createDto.name}' for org=${organizationId}, user=${userId}`);
+
+      this.assertWebhookUrl(createDto.webhookUrl);
 
       // Verify organization
       const organization = await this.organizationRepository.findOne({
@@ -309,6 +331,7 @@ export class AgentsService {
       }
     }
 
+    this.assertWebhookUrl(updateDto.webhookUrl);
     Object.assign(agent, updateDto);
     // Sanitize the team-scoping fields after the spread so a flip
     // back to visibility='org' doesn't leave the old teamId dangling.

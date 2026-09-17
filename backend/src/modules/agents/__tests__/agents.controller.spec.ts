@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { AgentManagementController } from '../agent-management.controller';
 import { AgentRunsController } from '../agent-runs.controller';
 import { AgentsController } from '../agents.controller';
@@ -7,6 +8,7 @@ import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentSchedulerService } from '../agent-scheduler.service';
+import { AgentRole } from '../../../entities/agent-role.entity';
 import { AgentAuditService } from '../agent-audit.service';
 import { AgentTechDocHelper } from '../agent-tech-doc.helper';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -98,6 +100,13 @@ describe('AgentsController', () => {
         {
           provide: AgentAuditService,
           useValue: mockAuditService,
+        },
+        {
+          // Duplicating an agent copies its roles, which live in their
+          // own table -- the copy used to keep the strategy and lose
+          // every role that strategy needs.
+          provide: getRepositoryToken(AgentRole),
+          useValue: { find: jest.fn().mockResolvedValue([]), create: jest.fn(r => r), save: jest.fn(r => r) },
         },
         {
           provide: AgentTechDocHelper,

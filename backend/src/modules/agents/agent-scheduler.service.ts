@@ -102,6 +102,21 @@ export class AgentSchedulerService implements OnModuleInit {
     const validated = validateIntervalMinutes(intervalMinutes);
     const agent = await this.agentsService.getAgent(agentId, organizationId);
 
+    // Say no here rather than at the first tick.
+    //
+    // handleScheduledExecution refuses to run a non-ACTIVE agent and
+    // removes the job, and restoreSchedules only restores ACTIVE ones --
+    // but nothing stopped you scheduling a draft. The schedule saved,
+    // the card counted down to the next run, and the job quietly deleted
+    // itself the first time it fired. Agents are created as DRAFT, so
+    // this was the default outcome for anyone who set a schedule before
+    // activating.
+    if (agent.status !== AgentStatus.ACTIVE) {
+      throw new BadRequestException(
+        'Activate this agent before scheduling it. A schedule on an inactive agent never runs.',
+      );
+    }
+
     // Update agent settings with schedule config
     const settings = { ...(agent.settings || {}) };
     settings.schedule = {
@@ -183,6 +198,10 @@ export class AgentSchedulerService implements OnModuleInit {
         await this.schedulerQueue.removeRepeatableByKey(job.key);
       }
 
+      // ACTIVE only, matching the gate in handleScheduledExecution:
+      // restoring a draft agent's job would only have it removed again on
+      // its first tick. Scheduling a non-active agent is refused up front
+      // instead, in scheduleAgent.
       const agents = await this.agentRepo.find({
         where: { status: AgentStatus.ACTIVE },
       });
