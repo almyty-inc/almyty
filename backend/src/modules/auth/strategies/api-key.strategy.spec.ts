@@ -64,7 +64,10 @@ describe('ApiKeyStrategy', () => {
           resetPasswordExpires: null,
           lastLoginAt: new Date(),
           currentOrganizationId: 'org-1',
-          organizationMemberships: [],
+          // The key is scoped to org-1, so the user has to still be in
+          // it -- a key must not outlive the membership that justified
+          // it.
+          organizationMemberships: [{ organizationId: 'org-1', isActive: true } as any],
           apiKeys: [],
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -124,7 +127,7 @@ describe('ApiKeyStrategy', () => {
           resetPasswordExpires: null,
           lastLoginAt: new Date(),
           currentOrganizationId: 'org-2',
-          organizationMemberships: [],
+          organizationMemberships: [{ organizationId: 'org-2', isActive: true } as any],
           apiKeys: [],
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -168,5 +171,24 @@ describe('ApiKeyStrategy', () => {
       await expect(strategy.validate(mockRequest)).rejects.toThrow(UnauthorizedException);
       await expect(strategy.validate(mockRequest)).rejects.toThrow('Invalid API key');
     });
+  });
+
+  /**
+   * A key is only as good as the membership behind it.
+   *
+   * createApiKey refuses to stamp a foreign org on a NEW key; this
+   * covers the two cases that check cannot: a key minted before it
+   * existed, and the ordinary case of somebody being removed from an
+   * organization while still holding a key scoped to it.
+   */
+  it('refuses a key whose organization the user no longer belongs to', async () => {
+    const request = { headers: { authorization: 'Bearer almyty_test_key' } } as any;
+    (authService.validateApiKey as jest.Mock).mockResolvedValue({
+      id: 'key-1',
+      organizationId: 'org-they-left',
+      user: { id: 'user-1', organizationMemberships: [{ organizationId: 'org-1', isActive: true }] },
+    });
+
+    await expect(strategy.validate(request)).rejects.toThrow(UnauthorizedException);
   });
 });

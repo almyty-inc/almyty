@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import { McpService } from '../mcp.service';
 import { McpSessionService } from '../mcp-session.service';
 import { JsonRpcRequest, JsonRpcResponse, McpSession } from '../types/mcp.types';
+import { randomUUID } from 'crypto';
 
 export interface SseConnection {
   id: string;
@@ -47,7 +48,11 @@ export class SseTransport extends EventEmitter {
     userId?: string,
     serverId?: string,
   ): Promise<string> {
-    const connectionId = `sse_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // randomUUID, not Date.now()+Math.random(): the id is what a POST to
+    // this connection is addressed by, and Math.random() is not a CSPRNG
+    // -- an attacker who opens their own connection samples the same
+    // generator and can predict neighbouring ids.
+    const connectionId = `sse_${randomUUID()}`;
     
     // Create MCP session
     const session = this.mcpSessionService.createSession(organizationId, 'sse', userId);
@@ -127,11 +132,33 @@ export class SseTransport extends EventEmitter {
   }
 
   // Handle incoming JSON-RPC requests via POST to SSE endpoint
+  /**
+   * `callerOrganizationId` is required: the connection is not proof of
+   * who is posting to it.
+   *
+   * This ran the JSON-RPC under `connection.organizationId` and
+   * `connection.userId` and returned the result in the poster's own HTTP
+   * response, so posting to somebody else's connection id enumerated and
+   * EXECUTED tools in their organization. Connection ids were
+   * `Date.now()` plus `Math.random()`, which is not a CSPRNG and can be
+   * sampled by opening your own connection.
+   *
+   * A foreign id answers exactly as an unknown one, so this does not
+   * confirm which ids exist.
+   */
   async handleSseMessage(
     connectionId: string,
     message: JsonRpcRequest,
+    callerOrganizationId?: string,
   ): Promise<JsonRpcResponse> {
     const connection = this.connections.get(connectionId);
+    if (connection && callerOrganizationId && connection.organizationId !== callerOrganizationId) {
+      return {
+        jsonrpc: '2.0',
+        id: message.id,
+        error: { code: -32001, message: 'Connection not found' },
+      };
+    }
     if (!connection) {
       return {
         jsonrpc: '2.0',
