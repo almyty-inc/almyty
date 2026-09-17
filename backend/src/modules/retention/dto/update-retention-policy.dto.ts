@@ -43,4 +43,24 @@ export class UpdateRetentionPolicyDto {
   @Min(RETENTION_MIN_DAYS)
   @Max(RETENTION_MAX_DAYS)
   auditLogDays?: number | null;
+
+  /**
+   * The two classes the sweep gained without a way to configure them.
+   *
+   * The controller and main both validate with whitelist +
+   * forbidNonWhitelisted, so a PUT carrying either of these was rejected
+   * 400 -- the column could never be set to non-null through the
+   * product, and the sweep clause behind it was unreachable.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(RETENTION_MIN_DAYS)
+  @Max(RETENTION_MAX_DAYS)
+  toolExecutionsDays?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(RETENTION_MIN_DAYS)
+  @Max(RETENTION_MAX_DAYS)
+  notificationsDays?: number | null;
 }
