@@ -104,26 +104,7 @@ export class AgentAnthropicCompatController {
           .json(toAnthropicError(502, execution.error || 'The agent did not complete this request', 'api_error'));
       }
 
-      const content =
-        execution.output != null
-          ? typeof execution.output === 'string'
-            ? execution.output
-            : JSON.stringify(execution.output)
-          : '';
-
-      return res.status(200).json(
-        toAnthropicResponse({
-          id: `msg_${execution.id}`,
-          model: body.model,
-          content,
-          finishReason: 'stop',
-          // A run records one total rather than a split, so reporting it
-          // as output and claiming zero input would be a made-up number.
-          // Clients use these for cost display; a wrong split is worse
-          // than an honest zero.
-          usage: { outputTokens: execution.totalTokens ?? 0 },
-        }),
-      );
+      return res.status(200).json(toAnthropicResponse(this.toInternalResponse(execution, body.model)));
     } catch (error: any) {
       // Anthropic clients branch on the error shape, so a 400 that looks
       // like our own envelope reads as a transport failure to them.
@@ -144,14 +125,77 @@ export class AgentAnthropicCompatController {
     }
   }
 
-  /** The conversation, flattened the way the agent engine takes input. */
+  /**
+   * The conversation, the way the agent engine takes input.
+   *
+   * The tools and the tool choice have to travel with it. Dropping them
+   * here was the bug: the translator carried them, the engine never saw
+   * them, and a client that declared tools got an answer that could never
+   * call one -- its loop simply ended.
+   */
   private toAgentInput(internal: ReturnType<typeof fromAnthropicRequest>): Record<string, any> {
     const last = [...internal.messages].reverse().find((m) => m.role === 'user');
     return {
       message: last?.content ?? '',
       messages: internal.messages,
       ...(internal.systemPrompt ? { systemPrompt: internal.systemPrompt } : {}),
+      ...(internal.tools?.length ? { tools: internal.tools } : {}),
+      ...(internal.toolChoice ? { toolChoice: internal.toolChoice } : {}),
+      ...(internal.maxTokens ? { maxTokens: internal.maxTokens } : {}),
+      ...(internal.temperature !== undefined ? { temperature: internal.temperature } : {}),
     };
+  }
+
+  /**
+   * What the run produced, in the shape the translator expects.
+   *
+   * A turn that called tools must come back as tool_use blocks with
+   * stop_reason "tool_use". Hardcoding 'stop' and passing only text was
+   * the other half of the same bug: the client saw a finished turn, ran
+   * nothing, and the loop stopped without an error anywhere.
+   */
+  private toInternalResponse(execution: any, model: string) {
+    const output = execution.output;
+    const toolCalls = this.toolCallsFrom(output);
+
+    const content =
+      typeof output === 'string'
+        ? output
+        : typeof output?.content === 'string'
+          ? output.content
+          : typeof output?.message === 'string'
+            ? output.message
+            : output == null || toolCalls.length > 0
+              ? ''
+              : JSON.stringify(output);
+
+    return {
+      id: `msg_${execution.id}`,
+      model,
+      content,
+      ...(toolCalls.length ? { toolCalls } : {}),
+      // The translator turns this into stop_reason, and a turn carrying
+      // tool uses must report tool_use or the client never runs them.
+      finishReason: 'stop',
+      usage: { outputTokens: execution.totalTokens ?? 0 },
+    };
+  }
+
+  /** Tool calls an agent run produced, wherever the engine recorded them. */
+  private toolCallsFrom(output: any): Array<{ id: string; name: string; arguments: string }> {
+    const raw = Array.isArray(output?.toolCalls) ? output.toolCalls : Array.isArray(output?.tool_calls) ? output.tool_calls : [];
+    return raw
+      .filter((call: any) => call && (call.name || call.function?.name))
+      .map((call: any, i: number) => ({
+        id: String(call.id ?? `toolu_${i}`),
+        name: String(call.name ?? call.function?.name),
+        arguments:
+          typeof call.arguments === 'string'
+            ? call.arguments
+            : typeof call.function?.arguments === 'string'
+              ? call.function.arguments
+              : JSON.stringify(call.arguments ?? call.input ?? {}),
+      }));
   }
 
   private async authenticate(authHeader?: string, xApiKey?: string): Promise<ApiKey> {
