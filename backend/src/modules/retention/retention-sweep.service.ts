@@ -14,6 +14,7 @@ import { Message } from '../../entities/message.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
+import { Notification } from '../../entities/notification.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { AgentApp, appPrivacyFrom } from '../../entities/agent-app.entity';
@@ -49,6 +50,7 @@ export interface SweepCounts {
   requestLogs: number;
   usageMetrics: number;
   toolExecutions: number;
+  notifications: number;
   auditLogs: number;
 }
 
@@ -95,6 +97,9 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     @Optional()
     @InjectRepository(ToolExecution)
     private readonly toolExecutionRepository: Repository<ToolExecution>,
+    @Optional()
+    @InjectRepository(Notification)
+    private readonly notificationRepository: Repository<Notification>,
     @InjectRepository(Gateway)
     private readonly gatewayRepository: Repository<Gateway>,
     private readonly auditLogService: AuditLogService,
@@ -159,6 +164,7 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       usageMetrics: 0,
       auditLogs: 0,
       toolExecutions: 0,
+      notifications: 0,
     };
 
     if (policy.agentRunsDays != null) {
@@ -215,6 +221,16 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
         organizationId,
         createdAt: LessThan(this.cutoff(policy.toolExecutionsDays)),
       } as FindOptionsWhere<ToolExecution>);
+    }
+
+    // notifications is the other per-event table nothing swept. A
+    // permanently broken 5-minute schedule writes 288 rows a day
+    // forever, and rows outlive any reason to read them.
+    if (policy.notificationsDays != null && this.notificationRepository) {
+      counts.notifications = await this.batchDelete(this.notificationRepository, {
+        organizationId,
+        createdAt: LessThan(this.cutoff(policy.notificationsDays)),
+      } as FindOptionsWhere<Notification>);
     }
 
     const total =

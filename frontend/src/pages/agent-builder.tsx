@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -94,7 +95,13 @@ export function AgentBuilderPage() {
   }, [isEditing])
 
   // Fetch existing agent when editing
-  const { data: agentData, isLoading: isLoadingAgent } = useQuery({
+  const {
+    data: agentData,
+    isLoading: isLoadingAgent,
+    isError: agentError,
+    error: agentErrorValue,
+    refetch: refetchAgent,
+  } = useQuery({
     queryKey: ['agent', id],
     queryFn: () => agentsApi.getById(id!),
     enabled: isEditing,
@@ -361,6 +368,25 @@ export function AgentBuilderPage() {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-64px)]">
         <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  // An agent that no longer exists.
+  //
+  // The init effect only runs when `agentData` is present, and its other
+  // branches are for the create path, so a 404 left the canvas empty,
+  // the name field blank and a validation banner up -- with nothing
+  // saying the agent was gone, and Save still PATCHing an id that is not
+  // there. The detail page already guards this; the builder did not.
+  if (isEditing && agentError) {
+    return (
+      <div className="p-6">
+        <QueryError
+          error={agentErrorValue}
+          onRetry={() => refetchAgent()}
+          title="Couldn't open that agent"
+        />
       </div>
     )
   }

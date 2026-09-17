@@ -12,6 +12,23 @@ const TERMINAL_EVENT_TYPES = ['run.completed', 'run.failed', 'run.cancelled'];
 const TERMINAL_RUN_STATES = ['completed', 'failed', 'cancelled', 'timeout'];
 
 /**
+ * Entries kept per run stream. Every streamed token is one entry, so a
+ * long reply runs to hundreds; this is a generous replay window that
+ * still bounds a runaway run.
+ */
+const RUN_EVENT_STREAM_MAXLEN = 5_000;
+
+/**
+ * Backstop TTL, refreshed on every write.
+ *
+ * A run that reaches a terminal event gets the short replay window
+ * instead. This is for the ones that never do -- timed out, pod killed,
+ * abandoned waiting on approval -- which previously left the key with no
+ * expiry at all.
+ */
+const RUN_EVENT_STREAM_TTL_SECONDS = 6 * 60 * 60;
+
+/**
  * Owns run-event emission for AgentRuntimeService:
  *  - per-run EventEmitter map (same-pod fast path)
  *  - Redis Stream fan-out (cross-pod)
@@ -96,14 +113,33 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    // Capped, and given a TTL on every write rather than only on a
+    // terminal one.
+    //
+    // Every streamed token is one XADD (llm.chunk is emitted per chunk),
+    // so a 500-token reply is ~500 entries and a 10-step run about a
+    // megabyte. The TTL was set only when a run emitted
+    // completed/failed/cancelled -- and a run that times out never emits
+    // one: the reaper flips it to TIMEOUT with a bare repository update
+    // and calls nothing here. Same for a pod killed mid-run, and for
+    // anything abandoned waiting on input or approval. Redis has no
+    // default expiry, so those keys were immortal, full token history
+    // included.
+    //
+    // MAXLEN ~ is the cheap approximate trim; the window is generous
+    // enough that a live subscriber never loses events it has not read.
     const streamKey = `run:${runId}:events`;
-    this.redis.xadd(streamKey, '*', 'event', JSON.stringify(event)).catch((err) => {
-      this.logger.warn(`Failed to write event to Redis stream ${streamKey}: ${err.message}`);
-    });
+    this.redis
+      .xadd(streamKey, 'MAXLEN', '~', RUN_EVENT_STREAM_MAXLEN, '*', 'event', JSON.stringify(event))
+      .catch((err) => {
+        this.logger.warn(`Failed to write event to Redis stream ${streamKey}: ${err.message}`);
+      });
 
-    if (TERMINAL_EVENT_TYPES.includes(type)) {
-      this.redis.expire(streamKey, 300).catch(() => {});
-    }
+    // A terminal event shortens it to the replay window; every other
+    // write refreshes a long backstop, so an abandoned run still expires.
+    this.redis
+      .expire(streamKey, TERMINAL_EVENT_TYPES.includes(type) ? 300 : RUN_EVENT_STREAM_TTL_SECONDS)
+      .catch(() => {});
   }
 
   /**

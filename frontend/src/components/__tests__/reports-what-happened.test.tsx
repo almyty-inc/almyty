@@ -7,7 +7,6 @@ import { AgentsTab } from '../analytics/agents-tab'
 
 const notify = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
 vi.mock('@/store/app', () => ({ useNotifications: () => notify }))
-vi.mock('../../store/app', () => ({ useNotifications: () => notify }))
 
 vi.mock('@/lib/api', () => ({
   organizationsApi: {

@@ -22,6 +22,15 @@ export interface ToolUsageStats {
  * execution-trend computation. The whole class is a thin facade
  * over the tool + tool-execution repositories.
  */
+/**
+ * How many executions one tool's usage figures will look at.
+ *
+ * Mirrors METRIC_SAMPLE_LIMIT on the gateway side: enough to be
+ * representative of a window, small enough that opening a busy tool's
+ * detail page cannot take the pod down.
+ */
+const EXECUTION_SAMPLE_LIMIT = 50_000;
+
 @Injectable()
 export class ToolsStatsHelper {
   constructor(
@@ -67,6 +76,13 @@ export class ToolsStatsHelper {
         createdAt: true,
         metadata: true,
       },
+      // And bounded. `timeframe` is caller-supplied up to a month, and
+      // nothing else caps this table -- its retention window defaults to
+      // keep-forever, like every sibling data class. One tool at 1 req/s
+      // over a month is ~2.6M rows, reached by opening that tool's
+      // detail page.
+      order: { createdAt: 'DESC' },
+      take: EXECUTION_SAMPLE_LIMIT,
     });
 
     const total = executions.length;

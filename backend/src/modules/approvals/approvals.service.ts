@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, ServiceUnavailableException, Optional, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { EventEmitter } from 'events';
@@ -275,7 +275,15 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     const roles = await this.resolveApproverRoles(caller.id, row);
     const collected = [...prior, { approverId: caller.id, roles }];
 
-    let progress: ApprovalPolicyProgress | null = null;
+    // A scorer that THREW is not a scorer that said "no policy".
+    //
+    // Both used to end here as `progress === null`, and null falls back
+    // to the OSS single gate -- so one transient error turned a
+    // configured 3-of-5 or multi-step gate into a single approver, and
+    // the gated tool call ran. That is the one outcome a human-in-the-
+    // loop control must never produce by accident. The request stays
+    // pending instead, and the caller is told to try again.
+    let progress: ApprovalPolicyProgress | null;
     try {
       progress = await this.approvalPolicyHook.scoreProgress(
         row.organizationId,
@@ -283,10 +291,17 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
         collected,
       );
     } catch (err: any) {
-      this.logger.warn(`approval policy scoring failed: ${err?.message ?? err}`);
+      this.logger.error(`approval policy scoring failed: ${err?.message ?? err}`);
+      throw new ServiceUnavailableException({
+        success: false,
+        code: 'APPROVAL_POLICY_UNAVAILABLE',
+        message:
+          'This request is governed by an approval policy that could not be evaluated just now. It is still pending -- try again.',
+      });
     }
-    // No progress (unlicensed / policy deleted / hook failure) → fall back
-    // to the OSS single gate: this approval decides the request.
+
+    // A genuine null -- unlicensed, or the policy was deleted -- is the
+    // designed degradation to the OSS single gate.
     if (!progress) return null;
 
     row.payload = {
