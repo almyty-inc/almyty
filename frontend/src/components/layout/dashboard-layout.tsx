@@ -26,6 +26,7 @@ import {
   Database,
   Store,
   Cpu,
+  FolderGit2,
   Package,
   Shield,
 } from 'lucide-react'
@@ -97,6 +98,7 @@ const navigation: { name: string; href: string; icon: any; dataTour?: string }[]
   { name: 'Agents', href: '/agents', icon: Bot },
   { name: 'Apps', href: '/apps', icon: Package, dataTour: 'nav-apps' },
   { name: 'Runners', href: '/runners', icon: Cpu },
+  { name: 'Workspaces', href: '/workspaces', icon: FolderGit2 },
   { name: 'Credentials', href: '/credentials', icon: Key },
   { name: 'Approvals', href: '/approvals', icon: Shield },
   // Configuration

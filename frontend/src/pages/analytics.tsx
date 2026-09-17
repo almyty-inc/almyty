@@ -15,6 +15,8 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { analyticsApi } from '@/lib/api'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -51,6 +53,7 @@ const TAB_DEFINITIONS: Array<{
 ]
 
 export function AnalyticsPage() {
+  const { error } = useNotifications()
   const location = useLocation()
   const navigate = useNavigate()
   const tab = getAnalyticsTab(location.pathname)
@@ -80,7 +83,9 @@ export function AnalyticsPage() {
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      console.error('Export failed:', err)
+      // A click that produces no file and no message is indistinguishable
+      // from a click that did not register.
+      error('Export failed', getApiErrorMessage(err, 'The export could not be produced.'))
     }
   }
 

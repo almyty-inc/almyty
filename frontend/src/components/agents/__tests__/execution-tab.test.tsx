@@ -6,7 +6,7 @@ import { ExecutionTab } from '../execution-tab'
 import { api } from '@/lib/api'
 
 vi.mock('@/lib/api', () => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }))
 
 /**
@@ -49,7 +49,14 @@ function wire({ roles = [] as any[], execution = {} as any } = {}) {
   ;(api.post as any).mockImplementation(async (url: string) =>
     url.endsWith('/resolve') ? { data: { data: [] } } : { data: { data: {} } },
   )
+  ;(api.delete as any).mockResolvedValue({ data: { success: true } })
 }
+
+const navigate = vi.fn()
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
+  return { ...actual, useNavigate: () => navigate }
+})
 
 describe('the Execution tab saves what you choose', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -171,5 +178,63 @@ describe('the Execution tab saves what you choose', () => {
       expect(sent).not.toHaveProperty(banned)
     }
     expect(sent.key).toBe('principal')
+  })
+})
+
+/**
+ * Two controls on this tab were built, styled, and rendered behind
+ * optional props the tab never passed, so neither ever appeared: removing
+ * a role (the DELETE route existed the whole time) and ejecting a
+ * strategy into an editable graph (the compiler existed; the endpoint did
+ * not, and now does). A prop that is optional hides its button silently
+ * -- nothing fails, the feature is just absent.
+ */
+describe('the controls that were rendered behind props nobody passed', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('removes a role through the endpoint that always existed', async () => {
+    wire({ roles: [role('principal')] })
+    render(<ExecutionTab agentId="a1" />)
+
+    fireEvent.click(await screen.findByTestId('remove-role-principal'))
+
+    await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/agents/a1/roles/principal'))
+  })
+
+  it('says why when a role will not delete, instead of looking removed', async () => {
+    wire({ roles: [role('principal')] })
+    ;(api.delete as any).mockRejectedValue({ response: { data: { message: 'A strategy still needs it.' } } })
+    render(<ExecutionTab agentId="a1" />)
+
+    fireEvent.click(await screen.findByTestId('remove-role-principal'))
+
+    expect(await screen.findByTestId('remove-role-error')).toHaveTextContent('A strategy still needs it')
+  })
+
+  it('ejects the chosen strategy and lands in the builder', async () => {
+    wire({ roles: [role('principal')], execution: { strategyKey: 'single' } })
+    render(<ExecutionTab agentId="a1" />)
+
+    fireEvent.click(await screen.findByTestId('eject-strategy'))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/agents/a1/execution/eject', {}))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/agents/a1/edit'))
+  })
+
+  it('does not move you to the builder when the eject was refused', async () => {
+    wire({ roles: [role('principal')], execution: { strategyKey: 'single' } })
+    ;(api.post as any).mockImplementation(async (url: string) => {
+      if (url.endsWith('/resolve')) return { data: { data: [] } }
+      if (url.endsWith('/eject')) {
+        throw { response: { data: { message: 'This agent already has a graph.' } } }
+      }
+      return { data: { data: {} } }
+    })
+    render(<ExecutionTab agentId="a1" />)
+
+    fireEvent.click(await screen.findByTestId('eject-strategy'))
+
+    expect(await screen.findByTestId('eject-error')).toHaveTextContent('already has a graph')
+    expect(navigate).not.toHaveBeenCalled()
   })
 })
