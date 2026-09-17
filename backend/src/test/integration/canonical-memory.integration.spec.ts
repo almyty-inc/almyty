@@ -288,6 +288,7 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
 
     const { old: refreshedOld, new: replacement } = await service.supersede(
       old.id,
+      'wks_super',
       { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_super' },
         content: 'pluto is a dwarf planet', tier: 'long', provenance: baseProvenance },
       { user_id: 'u' },
@@ -325,6 +326,7 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
     await new Promise((r) => setTimeout(r, 50));
     await service.supersede(
       old.id,
+      'wks_asof',
       { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_asof' },
         content: 'temperature is in Celsius', tier: 'long', provenance: baseProvenance },
       { user_id: 'u' },
@@ -343,12 +345,12 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
       { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_del' },
         content: 'will be deleted', tier: 'short', provenance: baseProvenance },
       { user_id: 'u' });
-    expect(await service.delete(item.id, 'soft', { user_id: 'u' })).toBe(true);
+    expect(await service.delete(item.id, 'wks_del', 'soft', { user_id: 'u' })).toBe(true);
 
     const page = await service.list({ scope: { scope_type: 'workspace', scope_id: 'wks_del' } });
     expect(page.items.map((i) => i.id)).not.toContain(item.id);
 
-    expect(await service.delete(item.id, 'hard', { user_id: 'u' })).toBe(true);
+    expect(await service.delete(item.id, 'wks_del', 'hard', { user_id: 'u' })).toBe(true);
     const row = await ds.getRepository(CanonicalMemory).findOne({ where: { id: item.id } });
     expect(row).toBeNull();
   });
@@ -634,7 +636,7 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
       UPDATE memories m SET valid_until = now(), updated_at = now()
       FROM expired WHERE m.id = expired.id
     `);
-    const reloaded = await service.get(item.id);
+    const reloaded = await service.get(item.id, scope.scope_id);
     expect(reloaded?.valid_until).not.toBeNull();
   });
 

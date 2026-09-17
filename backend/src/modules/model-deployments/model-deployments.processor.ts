@@ -198,7 +198,36 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
         const model = version
           ? { id: version.id, name: version.name, registryUri: version.registryUri, base: version.base, quantizations: version.quantizations, manifestSha: version.manifestSha }
           : { id: d.id, name: d.modelRef as string, registryUri: d.modelRef as string, base: d.modelBase ?? '', quantizations: [] as string[], manifestSha: null };
-        await this.transition(d, d.state, 'deploying');
+        // Claim the row before deploying.
+        //
+        // adapter.deploy() is a provider call that can run for minutes
+        // (Modal's timeout is 30). Two readers -- the 2-minute sweep and
+        // a user pressing retry, or two API replicas -- both saw
+        // externalRef null and both deployed. The second save overwrote
+        // externalRef, so the first endpoint became a paid GPU resource
+        // no row points at: the orphan check only notices deployments
+        // the PROVIDER has forgotten, never one the database has.
+        const claim = await this.deployments
+          .createQueryBuilder()
+          .update()
+          .set({ state: 'deploying', lastReconcileAt: new Date() })
+          .where('id = :id', { id: d.id })
+          .andWhere('state != :deploying', { deploying: 'deploying' })
+          .execute();
+        if (!claim.affected) {
+          this.logger.log(`Deployment ${d.id} is already being deployed elsewhere; leaving it alone`);
+          return d;
+        }
+        // The claim IS the transition, so it still gets audited -- the
+        // row moved pending -> deploying and the trail has to say so.
+        const cameFrom = d.state;
+        d.state = 'deploying';
+        d.lastReconcileAt = new Date();
+        this.service.audit(d, AuditAction.MODEL_DEPLOYMENT_TRANSITION, null, {
+          from: cameFrom,
+          to: 'deploying',
+        });
+
         const ref = await adapter.deploy(
           {
             deploymentId: d.id,

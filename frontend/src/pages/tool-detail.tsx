@@ -171,10 +171,12 @@ export function ToolDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={() => navigate(`/tools/${id}/edit`)}>
-            <Settings className="h-4 w-4 mr-2" />
-            Edit Tool
-          </Button>
+          {/* "Edit Tool" used to navigate to /tools/:id/edit, a route that
+              does not exist, so it landed on the 404 page. There is no
+              tool-editing UI anywhere in the app -- the API supports it,
+              nothing calls it -- and a button that 404s is a worse answer
+              than no button. Removed rather than left promising something
+              the product cannot do. */}
           <Badge variant={tool.status === 'active' ? 'success' : 'secondary'}>
             {tool.status === 'active' ? 'Active' : tool.status}
           </Badge>

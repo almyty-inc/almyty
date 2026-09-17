@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { authApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 
 export function SecurityTab() {
@@ -17,6 +18,13 @@ export function SecurityTab() {
   const [confirmPassword, setConfirmPassword] = useState('')
 
   // Change password mutation
+  // The button under "Email Verification" had no handler at all, while
+  // the identical action in the top-of-page banner worked. Someone who
+  // never dismissed the banner would never find the working one.
+  const resendVerification = useMutation({
+    mutationFn: () => authApi.resendVerification(),
+  })
+
   const changePasswordMutation = useMutation({
     mutationFn: (data: { currentPassword: string; newPassword: string }) =>
       authApi.changePassword(data),
@@ -136,12 +144,16 @@ export function SecurityTab() {
           </div>
           
           <div className="mt-4 pt-4 border-t">
-            <Button variant="destructive" size="sm">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              Revoke All Other Sessions
-            </Button>
-            <p className="text-xs text-muted-foreground mt-2">
-              This will sign you out of all other devices
+            {/* "Revoke All Other Sessions" was here with no handler, under
+                the promise "This will sign you out of all other devices".
+                It signed nobody out of anything, and there is no endpoint
+                behind it -- /auth has logout and nothing that revokes
+                other sessions. A security control that reports nothing and
+                does nothing is worse than an absent one, because someone
+                who suspects a compromise believes they have acted. */}
+            <p className="text-xs text-muted-foreground">
+              Signing out elsewhere is not supported yet. To cut off another device, change your password: existing
+              sessions are issued against your current credentials.
             </p>
           </div>
         </CardContent>
@@ -164,10 +176,30 @@ export function SecurityTab() {
                   Verify your email for better security
                 </div>
               </div>
-              <Button variant="outline" size="sm">
-                Send Verification
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="send-verification"
+                disabled={resendVerification.isPending}
+                onClick={() => resendVerification.mutate()}
+              >
+                {resendVerification.isPending ? 'Sending...' : 'Send Verification'}
               </Button>
             </div>
+
+            {/* Said out loud: a button that does its work silently is only
+                marginally better than one that does nothing, because the
+                person cannot tell the difference. */}
+            {resendVerification.isSuccess && (
+              <p data-testid="verification-sent" className="text-xs text-emerald-600 dark:text-emerald-400">
+                Verification email sent. Check your inbox.
+              </p>
+            )}
+            {resendVerification.isError && (
+              <p data-testid="verification-error" className="text-xs text-red-600 dark:text-red-400">
+                {getApiErrorMessage(resendVerification.error, 'Could not send the verification email')}
+              </p>
+            )}
 
             <div className="flex items-center justify-between">
               <div>

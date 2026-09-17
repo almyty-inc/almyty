@@ -16,12 +16,12 @@ import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 
+import { getApiErrorMessage } from '@/lib/api-error'
 import { apisApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { Api, ApiType } from '@/types'
-import { ApiDetailDialog } from '@/components/apis/api-detail-dialog'
 import { ApisFilters } from '@/components/apis/apis-filters'
 import { createApisColumns } from '@/components/apis/apis-columns'
 import { CreateApiDialog } from '@/components/apis/create-api-dialog'
@@ -35,7 +35,7 @@ export function ApisPage() {
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
-  const { success, error } = useNotifications()
+  const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
@@ -62,8 +62,6 @@ export function ApisPage() {
   // Honour ?new=1 from the command palette Create API action.
   useCreateDeepLink(setCreateDialogOpen)
   const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false)
-  const [apiDetailsOpen, setApiDetailsOpen] = React.useState(false)
-  const [testResults, setTestResults] = React.useState<any>(null)
   const [uploadFile, setUploadFile] = React.useState<File | null>(null)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [typeFilter, setTypeFilter] = React.useState('all')
@@ -78,18 +76,11 @@ export function ApisPage() {
     refetchInterval: 60000,
   })
 
-  const { data: apiOperations } = useQuery({
-    queryKey: ['api-operations', selectedApi?.id],
-    queryFn: () => selectedApi ? apisApi.getOperations(selectedApi.id) : null,
-    enabled: !!selectedApi,
-  })
-
   const deleteApiMutation = useMutation({
     mutationFn: apisApi.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       success('API deleted', 'API has been deleted successfully.')
-      setApiDetailsOpen(false)
       setDeletingApi(null)
     },
     onError: (err: any) => {
@@ -142,23 +133,42 @@ export function ApisPage() {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       queryClient.invalidateQueries({ queryKey: ['tools', currentOrganization?.id] })
-      const toolCount = Array.isArray(result) ? result.length : 0
-      success('Tools generated', `${toolCount} tools have been generated successfully.`)
+      const generated = (result as any)?.generated ?? (Array.isArray(result) ? result.length : 0)
+      const failed = (result as any)?.failed ?? 0
+      if (failed > 0) {
+        warning(
+          'Some tools could not be generated',
+          `${generated} created, ${failed} failed out of ${(result as any)?.total ?? generated + failed} operations.`,
+        )
+      } else {
+        success('Tools generated', `${generated} tools have been generated successfully.`)
+      }
     },
     onError: (err: any) => {
       error('Failed to generate tools', err.response?.data?.message || 'Please try again.')
     },
   })
 
+  // The result is said here rather than stashed for a panel to show.
+  // It used to be kept in state whose only reader was a dialog nothing
+  // opened, under a toast promising "results are available" -- so the
+  // test ran, reported nothing, and pointed at a screen that did not
+  // exist.
   const testApiMutation = useMutation({
     mutationFn: ({ id }: { id: string }) => apisApi.testConnection(id),
-    onSuccess: (result) => {
-      setTestResults(result)
-      success('API test completed', 'Connection test results are available.')
+    onSuccess: (result: any) => {
+      const reachable = result?.success !== false
+      const detail = [result?.statusCode, result?.responseTime ? `${result.responseTime}ms` : null]
+        .filter(Boolean)
+        .join(' · ')
+      if (reachable) {
+        success('Connection OK', detail || 'The API responded.')
+      } else {
+        error('Connection failed', result?.message || result?.error || 'The API did not respond.')
+      }
     },
     onError: (err: any) => {
-      setTestResults({ error: err.response?.data?.message || 'Test failed' })
-      error('API test failed', err.response?.data?.message || 'Please try again.')
+      error('Connection failed', getApiErrorMessage(err, 'The API did not respond.'))
     },
   })
 
@@ -202,8 +212,6 @@ export function ApisPage() {
 
   const apisExtracted = apisData?.apis || apisData || []
   const apis = Array.isArray(apisExtracted) ? apisExtracted : []
-  const operationsExtracted = apiOperations?.operations || apiOperations || []
-  const operations = Array.isArray(operationsExtracted) ? operationsExtracted : []
 
   const filteredApis = filterByTeamVisibility(apis as any[], teamFilter).filter((api: Api) => {
     const matchesSearch =
@@ -358,19 +366,6 @@ export function ApisPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <ApiDetailDialog
-        open={apiDetailsOpen}
-        onOpenChange={setApiDetailsOpen}
-        selectedApi={selectedApi}
-        operations={operations}
-        allTools={allTools}
-        testResults={testResults}
-        onOpenUploadDialog={() => setUploadDialogOpen(true)}
-        generateToolsMutation={generateToolsMutation}
-        testApiMutation={testApiMutation}
-        onCopySuccess={success}
-      />
 
     </div>
   )

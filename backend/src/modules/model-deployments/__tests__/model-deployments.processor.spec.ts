@@ -30,7 +30,23 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
       desired: { replicas: 1, minScale: 0, maxScale: 1 }, providerConfig: { token: 'valid', simulate: 'none' },
       externalRef: null, actual: null, state: 'pending', budgetId: null, createdBy: 'u-1', createdAt: new Date(), updatedAt: new Date(),
     });
-    deployments = { findOne: jest.fn(async () => row), save: jest.fn(async (r: any) => r), find: jest.fn(async () => [row]) };
+    deployments = {
+      findOne: jest.fn(async () => row),
+      save: jest.fn(async (r: any) => r),
+      find: jest.fn(async () => [row]),
+      // The claim the processor takes before a minutes-long deploy, so
+      // the sweep and a retry cannot both deploy the same model.
+      createQueryBuilder: jest.fn(() => {
+        const qb: any = {
+          update: () => qb,
+          set: (values: Record<string, any>) => { Object.assign(row, values); return qb; },
+          where: () => qb,
+          andWhere: () => qb,
+          execute: async () => ({ affected: 1 }),
+        };
+        return qb;
+      }),
+    };
     versions = { findOne: jest.fn(async () => ({ id: 'v-1', name: 'qwen', base: 'qwen3-0.6b', registryUri: 's3://r/q@1', quantizations: [], manifestSha: 'x' })) };
     models = { findOne: jest.fn(async () => ({ id: 'm-1', organizationId: 'org-1', pricingOverride: null })), save: jest.fn(async (m: any) => m) };
     budgets = { findOne: jest.fn(async () => null) };

@@ -362,6 +362,35 @@ export class UnifiedEndpointController {
       .where('agent.organizationId = :organizationId', { organizationId })
       .andWhere('LOWER(agent.name) = LOWER(:name)', { name: deslugified })
       .getOne();
-    return agent;
+    if (agent) return agent;
+
+    // Last resort: slugify each name the way the client does and compare.
+    //
+    // Undoing hyphens into spaces only reverses names made of letters,
+    // digits and spaces. The Integration snippet builds its URL with
+    // `name.toLowerCase().replace(/[^a-z0-9]+/g, '-')`, so every agent
+    // whose name carries punctuation -- "Support Bot (Copy)", "v1.2",
+    // "Ann's agent" -- was handed a copy-pasteable URL that 404'd. The
+    // three lookups above are indexed and answer the common case; this
+    // one runs only when they all miss.
+    const candidates = await this.agentRepository.find({
+      where: { organizationId },
+      select: { id: true, name: true },
+    });
+    const wanted = slugifyName(slugOrName);
+    const match = candidates.find(candidate => slugifyName(candidate.name) === wanted);
+    return match ? this.agentRepository.findOne({ where: { id: match.id, organizationId } }) : null;
   }
+}
+
+/**
+ * The client's slug rule, so both ends agree on what a name looks like in
+ * a URL. Leading and trailing separators are dropped: "(Copy)" would
+ * otherwise leave a bare hyphen hanging off the end.
+ */
+export function slugifyName(name: string): string {
+  return (name ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }

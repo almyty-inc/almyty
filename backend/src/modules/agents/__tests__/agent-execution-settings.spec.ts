@@ -5,7 +5,9 @@ import request from 'supertest';
 
 import { Agent } from '../../../entities/agent.entity';
 import { Strategy } from '../../../entities/strategy.entity';
+import { AgentRole } from '../../../entities/agent-role.entity';
 import { AgentExecutionSettingsController } from '../agent-execution-settings.controller';
+import { StrategyPipelineResolver } from '../strategies/strategy-pipeline.resolver';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 
@@ -21,7 +23,8 @@ import { RolesGuard } from '../../auth/guards/roles.guard';
 describe('agent execution settings', () => {
   let app: INestApplication;
   let agent: Partial<Agent>;
-  const strategyRows = { count: jest.fn().mockResolvedValue(0) };
+  const strategyRows = { count: jest.fn().mockResolvedValue(0), find: jest.fn().mockResolvedValue([]) };
+  const roleRows = { find: jest.fn().mockResolvedValue([]) };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -39,6 +42,10 @@ describe('agent execution settings', () => {
           },
         },
         { provide: getRepositoryToken(Strategy), useValue: strategyRows },
+        { provide: getRepositoryToken(AgentRole), useValue: roleRows },
+        // The real resolver, so ejecting exercises the actual compiler
+        // rather than a stub that always returns a graph.
+        StrategyPipelineResolver,
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -64,6 +71,8 @@ describe('agent execution settings', () => {
   beforeEach(() => {
     agent = { id, organizationId: 'org-1', settings: undefined as any };
     strategyRows.count.mockResolvedValue(0);
+    strategyRows.find.mockResolvedValue([]);
+    roleRows.find.mockResolvedValue([]);
   });
 
   const put = (body: unknown) => request(app.getHttpServer()).put(`/agents/${id}/execution`).send(body as object);
@@ -125,5 +134,70 @@ describe('agent execution settings', () => {
   it('does not serve another organization an agent', async () => {
     agent.organizationId = 'someone-else';
     await get().expect(404);
+  });
+  /**
+   * Ejecting: the strategy becomes the agent's own graph, and stops being
+   * a strategy.
+   *
+   * The button for this shipped in the Execution tab behind an optional
+   * prop nobody passed, because there was no endpoint to call. The
+   * compiler that produces the graph had no caller outside its own tests.
+   */
+  describe('eject', () => {
+    const eject = () => request(app.getHttpServer()).post(`/agents/${id}/execution/eject`).send({});
+
+    it('compiles the chosen strategy onto the agent and clears the strategy', async () => {
+      agent.settings = { execution: { strategyKey: 'single' } } as any;
+      roleRows.find.mockResolvedValue([{ key: 'principal' }]);
+
+      const { body } = await eject().expect(201);
+
+      expect(body.data.pipeline.nodes.length).toBeGreaterThan(0);
+      expect(body.data.execution.strategyKey).toBeNull();
+      expect(agent.pipeline?.nodes?.length).toBeGreaterThan(0);
+    });
+
+    it('names a role on each compiled node, never a model', async () => {
+      agent.settings = { execution: { strategyKey: 'single' } } as any;
+      roleRows.find.mockResolvedValue([{ key: 'principal' }]);
+
+      const { body } = await eject().expect(201);
+
+      const llmNodes = body.data.pipeline.nodes.filter((n: any) => n.type === 'llm_call');
+      expect(llmNodes.length).toBeGreaterThan(0);
+      for (const node of llmNodes) {
+        expect(node.data?.modelId ?? null).toBeNull();
+      }
+    });
+
+    it('refuses to overwrite a graph somebody drew by hand', async () => {
+      agent.settings = { execution: { strategyKey: 'single' } } as any;
+      agent.pipeline = { nodes: [{ id: 'mine', type: 'input' }], edges: [] } as any;
+
+      const { body } = await eject().expect(409);
+
+      expect(body.code).toBe('PIPELINE_NOT_EMPTY');
+    });
+
+    it('says so when the agent runs no strategy at all', async () => {
+      const { body } = await eject().expect(400);
+      expect(body.code).toBe('STRATEGY_NOT_COMPILABLE');
+      expect(body.message).toMatch(/nothing to eject/i);
+    });
+
+    it('says which roles are missing rather than compiling a broken graph', async () => {
+      agent.settings = { execution: { strategyKey: 'cascade' } } as any;
+      roleRows.find.mockResolvedValue([]);
+
+      const { body } = await eject().expect(400);
+
+      expect(body.code).toBe('STRATEGY_NOT_COMPILABLE');
+      expect(body.message).toMatch(/not bound/i);
+    });
+
+    it('does not eject another organization\'s agent', async () => {
+      agent.organizationId = 'someone-else';
+      await eject().expect(404);
+    });
   });
 });

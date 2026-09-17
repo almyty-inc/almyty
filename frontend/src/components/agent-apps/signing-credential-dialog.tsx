@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -65,6 +65,7 @@ export function SigningCredentialDialog({
 
   const apple = kind === 'apple'
 
+  const queryClient = useQueryClient()
   const create = useMutation({
     mutationFn: async () => {
       if (!file) throw new Error('Choose a certificate file.')
@@ -88,6 +89,11 @@ export function SigningCredentialDialog({
     },
     onSuccess: (credential: any) => {
       success('Certificate stored', 'Builds for this distribution can be signed with it.')
+      // Into the cache before it is selected: the picker reads
+      // ['signing-credentials'] and had no row with this id, so the
+      // Select fell back to its placeholder and read "Nothing, ship it
+      // unsigned" for a build that would in fact be signed.
+      queryClient.invalidateQueries({ queryKey: ['signing-credentials'] })
       onCreated(credential.id)
       onOpenChange(false)
     },

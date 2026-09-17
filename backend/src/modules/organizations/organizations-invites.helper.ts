@@ -119,17 +119,34 @@ export class OrganizationsInvitesHelper {
     // User doesn't exist — store pending invite in organization metadata
     // When the user registers via the invite link, the accept endpoint creates the real membership
     // We store invite info in the organization's metadata so we can look it up by token
-    const pendingInvites = (org.settings as any)?.pendingInvites || [];
-    pendingInvites.push({
+    const pendingInvite = {
       email: inviteUserDto.email,
       role: inviteUserDto.role,
       inviteToken,
       inviteExpiresAt: inviteExpiresAt.toISOString(),
       invitedBy,
-    });
-    await this.organizationRepository.update(organizationId, {
-      settings: { ...(org.settings as any || {}), pendingInvites },
-    });
+    };
+
+    // Appended by the database, not read-modify-written here.
+    //
+    // pendingInvites is an array inside a json column, and this used to
+    // load the org, push onto the in-memory copy, and write the whole
+    // settings object back. Two admins inviting two different people --
+    // or one admin double-clicking -- both read the same snapshot and
+    // both wrote their own full array, so one invite vanished from the
+    // database while its recipient held a live-looking link that would
+    // answer "Invalid or expired invitation" forever. Nothing logged the
+    // loss. The email is sent after this write, so both still go out.
+    await this.organizationRepository.query(
+      `UPDATE organizations
+          SET settings = jsonb_set(
+            COALESCE(settings, '{}'::jsonb),
+            '{pendingInvites}',
+            COALESCE(settings->'pendingInvites', '[]'::jsonb) || $2::jsonb
+          )
+        WHERE id = $1`,
+      [organizationId, JSON.stringify([pendingInvite])],
+    );
 
     // Send invite email to new user
     const emailSent = await this.mailService.sendInvitation({

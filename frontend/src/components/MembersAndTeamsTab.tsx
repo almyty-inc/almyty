@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 import { organizationsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 
 interface MembersAndTeamsTabProps {
@@ -21,10 +22,13 @@ interface MembersAndTeamsTabProps {
 }
 
 export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) {
-  const { success, error } = useNotifications()
+  const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
   const [createTeamDialogOpen, setCreateTeamDialogOpen] = useState(false)
   const [inviteMemberDialogOpen, setInviteMemberDialogOpen] = useState(false)
+  // Confirmed before it happens: removing someone cuts their access
+  // immediately and there is no undo.
+  const [memberToRemove, setMemberToRemove] = useState<any>(null)
   const [addToTeamDialogOpen, setAddToTeamDialogOpen] = useState(false)
   const [editTeamDialogOpen, setEditTeamDialogOpen] = useState(false)
   const [selectedTeam, setSelectedTeam] = useState<any>(null)
@@ -81,13 +85,41 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
   })
 
   // Invite member mutation
+  // The delete button on each member row had no onClick at all, while
+  // organizationsApi.removeMember existed and was already used on the
+  // /organizations page -- which is not in the sidebar, so Settings is
+  // where anyone would actually look.
+  const removeMemberMutation = useMutation({
+    mutationFn: (userId: string) => organizationsApi.removeMember(organizationId!, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-members', organizationId] })
+      success('Member removed', 'They no longer have access to this organization.')
+      setMemberToRemove(null)
+    },
+    onError: (err: any) => {
+      error('Could not remove member', getApiErrorMessage(err, 'The member was not removed.'))
+      setMemberToRemove(null)
+    },
+  })
+
   const inviteMemberMutation = useMutation({
     mutationFn: (data: { email: string; role: string }) =>
       organizationsApi.addMember(organizationId!, data),
-    onSuccess: () => {
+    // The mail service returns false rather than throwing when the
+    // provider rejects the send, and this reported "Invitation has been
+    // sent" over it -- with a pending-invite row appearing, so the admin
+    // had no reason to suspect the teammate would never hear from them.
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['organization-members', organizationId] })
       queryClient.invalidateQueries({ queryKey: ['organization-pending-invites', organizationId] })
-      success('Member invited', 'Invitation has been sent.')
+      if (result?.inviteSent === false) {
+        warning(
+          'Invite created, email not delivered',
+          'They are invited, but the email could not be sent. Share the invite link with them directly.',
+        )
+      } else {
+        success('Member invited', 'Invitation has been sent.')
+      }
       setInviteMemberDialogOpen(false)
       setNewMemberEmail('')
       setNewMemberRole('member')
@@ -346,8 +378,14 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         {member.role}
                       </Badge>
                       {member.role !== 'owner' && (
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="h-3 w-3" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          data-testid={`remove-member-${member.userId ?? member.id}`}
+                          disabled={removeMemberMutation.isPending}
+                          onClick={() => setMemberToRemove(member)}
+                        >
+                          <Trash2 className="h-3 w-3 text-destructive" />
                         </Button>
                       )}
                     </div>
@@ -681,6 +719,32 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
         </div>
       </DialogContent>
     </Dialog>
+      <Dialog open={!!memberToRemove} onOpenChange={(open) => !open && setMemberToRemove(null)}>
+        <DialogContent data-testid="remove-member-dialog">
+          <DialogHeader>
+            <DialogTitle>
+              Remove {memberToRemove?.firstName} {memberToRemove?.lastName}?
+            </DialogTitle>
+            <DialogDescription>
+              They lose access to this organization immediately. Anything they created stays, and you can invite them
+              again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setMemberToRemove(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              data-testid="confirm-remove-member"
+              disabled={removeMemberMutation.isPending}
+              onClick={() => removeMemberMutation.mutate(memberToRemove.userId ?? memberToRemove.id)}
+            >
+              {removeMemberMutation.isPending ? 'Removing...' : 'Remove member'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

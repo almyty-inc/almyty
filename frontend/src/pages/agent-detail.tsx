@@ -218,9 +218,13 @@ export function AgentDetailPage() {
     mutationFn: async () => {
       return agentsApi.duplicate(id!)
     },
-    onSuccess: async () => {
-      success('Agent Duplicated', 'A copy has been created.')
-      queryClient.invalidateQueries({ queryKey: ['agents'] })
+    // Land on the copy. Staying put left the page identical to before
+    // the click, so a duplicate that had in fact been created read as a
+    // button that did nothing.
+    onSuccess: async (copy: any) => {
+      success('Agent duplicated', `"${copy?.name ?? 'The copy'}" was created as a draft.`)
+      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      if (copy?.id) navigate(`/agents/${copy.id}`)
     },
     onError: (err: any) => {
       errorNotif('Duplicate Failed', err?.response?.data?.message || err?.message || 'Failed to duplicate')
@@ -233,6 +237,11 @@ export function AgentDetailPage() {
       success('Agent activated', 'This agent is now active.')
       await queryClient.invalidateQueries({ queryKey: ['agent', id] })
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      // Both of these are on this same page and were invalidated by
+      // nothing anywhere: the new version row and the audit entry
+      // for what you just did stayed invisible until a reload.
+      await queryClient.invalidateQueries({ queryKey: ['entity-versions', 'Agent', id] })
+      await queryClient.invalidateQueries({ queryKey: ['agent-audit-log', id] })
     },
     onError: (err: any) => {
       errorNotif(
@@ -248,6 +257,11 @@ export function AgentDetailPage() {
       success('Agent deactivated', 'This agent is now inactive.')
       await queryClient.invalidateQueries({ queryKey: ['agent', id] })
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      // Both of these are on this same page and were invalidated by
+      // nothing anywhere: the new version row and the audit entry
+      // for what you just did stayed invisible until a reload.
+      await queryClient.invalidateQueries({ queryKey: ['entity-versions', 'Agent', id] })
+      await queryClient.invalidateQueries({ queryKey: ['agent-audit-log', id] })
     },
     onError: (err: any) => {
       errorNotif(

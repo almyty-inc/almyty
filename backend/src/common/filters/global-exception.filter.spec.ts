@@ -252,4 +252,23 @@ describe('GlobalExceptionFilter: structured detail reaches the client', () => {
     expect(body().message).toBe('a must be a string; b is required');
     expect(Object.keys(body()).sort()).toEqual(['code', 'message', 'path', 'statusCode', 'timestamp']);
   });
+
+  describe('the reason is readable in both shapes', () => {
+    it('puts the message at the top level as well as under error', () => {
+      // 63 frontend files read response.data.message and this filter only
+      // set error.message, so every one of them showed a generic string
+      // instead of the reason the server gave. Answering in both shapes
+      // fixes them all at once and cannot be got wrong by the next reader.
+      filter.catch(new BadRequestException('Organization name must be at least 2 characters long'), mockHost as any);
+
+      const body = mockResponse.json.mock.calls[0][0];
+      expect(body.message).toBe('Organization name must be at least 2 characters long');
+      expect(body.error.message).toBe(body.message);
+    });
+
+    it('marks the body as not successful, so code branching on it is not fooled', () => {
+      filter.catch(new BadRequestException('nope'), mockHost as any);
+      expect(mockResponse.json.mock.calls[0][0].success).toBe(false);
+    });
+  });
 });

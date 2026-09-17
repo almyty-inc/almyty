@@ -5,6 +5,23 @@ import { Repository, MoreThanOrEqual } from 'typeorm';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 
+/**
+ * A fallback that remembers it was used.
+ *
+ * Every branch of these summaries had its own `.catch(() => 0)` /
+ * `.catch(() => [])`, so a database problem rendered "0 events today /
+ * this week / this month" -- indistinguishable from a genuinely quiet
+ * organization, on a compliance surface where that distinction is the
+ * whole point. The catches stay, so one bad query does not take the
+ * panel down; what changes is that the answer now says it is partial.
+ */
+function recorded<T>(failures: string[], name: string, fallback: T) {
+  return (err: unknown): T => {
+    failures.push(name);
+    return fallback;
+  };
+}
+
 @Injectable()
 export class AnalyticsSummariesHelper {
   constructor(
@@ -24,10 +41,11 @@ export class AnalyticsSummariesHelper {
     const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
+    const failures: string[] = [];
     const [totalToday, totalWeek, totalMonth, byResourceType, byAction, topUsers, hourlyTimeline] = await Promise.all([
-      this.auditLogRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(todayStart) } }).catch(() => 0),
-      this.auditLogRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(weekStart) } }).catch(() => 0),
-      this.auditLogRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(monthStart) } }).catch(() => 0),
+      this.auditLogRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(todayStart) } }).catch(recorded(failures, 'today', 0)),
+      this.auditLogRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(weekStart) } }).catch(recorded(failures, 'thisWeek', 0)),
+      this.auditLogRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(monthStart) } }).catch(recorded(failures, 'thisMonth', 0)),
       this.auditLogRepository
         .createQueryBuilder('audit')
         .select('audit.resourceType', 'resourceType')
@@ -37,7 +55,7 @@ export class AnalyticsSummariesHelper {
         .groupBy('audit.resourceType')
         .orderBy('COUNT(*)', 'DESC')
         .getRawMany()
-        .catch(() => []),
+        .catch(recorded(failures, 'byResourceType', [])),
       this.auditLogRepository
         .createQueryBuilder('audit')
         .select('audit.action', 'action')
@@ -47,7 +65,7 @@ export class AnalyticsSummariesHelper {
         .groupBy('audit.action')
         .orderBy('COUNT(*)', 'DESC')
         .getRawMany()
-        .catch(() => []),
+        .catch(recorded(failures, 'byAction', [])),
       this.auditLogRepository
         .createQueryBuilder('audit')
         .select('audit.userEmail', 'userEmail')
@@ -61,7 +79,7 @@ export class AnalyticsSummariesHelper {
         .orderBy('COUNT(*)', 'DESC')
         .limit(10)
         .getRawMany()
-        .catch(() => []),
+        .catch(recorded(failures, 'topUsers', [])),
       this.auditLogRepository
         .createQueryBuilder('audit')
         .select("date_trunc('hour', audit.createdAt)", 'bucket')
@@ -71,10 +89,14 @@ export class AnalyticsSummariesHelper {
         .groupBy('bucket')
         .orderBy('bucket', 'ASC')
         .getRawMany()
-        .catch(() => []),
+        .catch(recorded(failures, 'timeline', [])),
     ]);
 
     return {
+      // Present and true when at least one figure below could not be
+      // read, so the surface can say so rather than print a zero.
+      partial: failures.length > 0,
+      unavailable: failures,
       totals: { today: totalToday, thisWeek: totalWeek, thisMonth: totalMonth },
       byResourceType: byResourceType.map(r => ({ resourceType: r.resourceType, count: parseInt(r.count, 10) })),
       byAction: byAction.map(r => ({ action: r.action, count: parseInt(r.count, 10) })),

@@ -98,6 +98,19 @@ export interface AuthenticationResult {
   metadata?: Record<string, any>;
 }
 
+/** Config keys on a gateway auth row that are credentials, not settings. */
+const AUTH_SECRET_KEYS = ['secret', 'clientSecret', 'privateKey', 'password', 'token'];
+
+/** Replace secret values with a presence flag the UI can still render. */
+export function maskAuthSecrets(configuration: any): any {
+  if (!configuration || typeof configuration !== 'object') return configuration;
+  const masked: Record<string, any> = { ...configuration };
+  for (const key of AUTH_SECRET_KEYS) {
+    if (masked[key] !== undefined && masked[key] !== null && masked[key] !== '') masked[key] = '••••••••';
+  }
+  return masked;
+}
+
 @Injectable()
 export class GatewayAuthService {
   private readonly logger = new Logger(GatewayAuthService.name);
@@ -210,10 +223,21 @@ export class GatewayAuthService {
       throw new NotFoundException('Gateway not found');
     }
 
-    return this.gatewayAuthRepository.find({
+    const rows = await this.gatewayAuthRepository.find({
       where: { gatewayId },
       order: { createdAt: 'ASC' },
     });
+
+    // configuration.secret is the gateway's JWT signing key, stored in
+    // plaintext, and this route is open to `member`. Returning it let any
+    // member mint gateway JWTs with any claims they liked -- a complete
+    // bypass of gateway authentication for every consumer. The sibling
+    // API-key route already uses an explicit select; this one returned
+    // the row as stored.
+    return rows.map((row) => ({
+      ...row,
+      configuration: maskAuthSecrets(row.configuration),
+    })) as typeof rows;
   }
 
   async deleteGatewayAuth(authId: string, organizationId: string): Promise<void> {

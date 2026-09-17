@@ -25,6 +25,7 @@ export interface FakeRepo<T extends { id?: string }> {
   save: jest.Mock;
   find: jest.Mock;
   findOne: jest.Mock;
+  createQueryBuilder: jest.Mock;
   get(id: string): T;
 }
 
@@ -42,6 +43,38 @@ export function fakeRepo<T extends { id?: string }>(factory: () => T, seed: T[] 
     }),
     find: jest.fn(async (opts?: { where?: Record<string, any> }) => [...rows.values()].filter((r) => matches(r, opts?.where))),
     findOne: jest.fn(async (opts?: { where?: Record<string, any> }) => [...rows.values()].find((r) => matches(r, opts?.where)) ?? null),
+    /**
+     * The conditional claim the reconcile loop takes before deploying.
+     *
+     * adapter.deploy() runs for minutes, so the processor now claims the
+     * row with `UPDATE ... WHERE id = ? AND state != 'deploying'` and
+     * bails when nothing matched -- otherwise the 2-minute sweep and a
+     * user pressing retry both saw externalRef null and both deployed,
+     * and the second save orphaned the first (paid) endpoint.
+     */
+    createQueryBuilder: jest.fn(() => {
+      let patch: Record<string, any> = {};
+      let targetId: string | undefined;
+      let excludedState: string | undefined;
+
+      const qb: any = {
+        update: () => qb,
+        set: (values: Record<string, any>) => { patch = values; return qb; },
+        where: (_clause: string, params: any) => { targetId = params.id; return qb; },
+        andWhere: (_clause: string, params?: any) => {
+          if (params?.deploying) excludedState = params.deploying;
+          return qb;
+        },
+        execute: async () => {
+          const row: any = targetId ? rows.get(targetId) : undefined;
+          if (!row) return { affected: 0 };
+          if (excludedState && row.state === excludedState) return { affected: 0 };
+          Object.assign(row, patch);
+          return { affected: 1 };
+        },
+      };
+      return qb;
+    }),
     get(id: string) {
       const row = rows.get(id);
       if (!row) throw new Error(`no row ${id}`);

@@ -81,6 +81,10 @@ describe('AuthService', () => {
     const mockUserOrganizationRepository = {
       create: jest.fn(),
       save: jest.fn(),
+      // createApiKey checks membership before stamping a caller-supplied
+      // org on a key; default to "yes, a member" so the existing cases
+      // exercise what they were written for.
+      findOne: jest.fn().mockResolvedValue({ userId: 'user-1', organizationId: 'org-1', isActive: true }),
     };
 
     const mockJwtService = {
@@ -890,6 +894,41 @@ describe('AuthService', () => {
       expect(result.keyData).toBe(mockApiKey);
       expect(apiKeyRepository.create).toHaveBeenCalled();
       expect(apiKeyRepository.save).toHaveBeenCalled();
+    });
+
+    /**
+     * ApiKeyStrategy sets `currentOrganizationId` from the stored key,
+     * and that value is exactly what every per-request scope check
+     * compares against. Taking the org from the request body unchecked
+     * therefore let anyone with a login mint a key stamped with another
+     * tenant's org and authenticate as that org on every
+     * JwtAuthGuard-only route -- walking straight through the memory
+     * scope checks, among others.
+     */
+    it('refuses to stamp an organization the caller does not belong to', async () => {
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.createApiKey('user-1', { name: 'x', organizationId: 'someone-elses-org' } as any),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(apiKeyRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('still defaults the org from membership when none is asked for', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 'user-1',
+        organizationMemberships: [{ organizationId: 'org-1' }],
+      } as any);
+      const mockApiKey = { id: 'key-2' } as any;
+      apiKeyRepository.create.mockReturnValue(mockApiKey);
+      apiKeyRepository.save.mockResolvedValue(mockApiKey);
+
+      await service.createApiKey('user-1', { name: 'cli' } as any);
+
+      expect(apiKeyRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ organizationId: 'org-1' }),
+      );
     });
   });
 

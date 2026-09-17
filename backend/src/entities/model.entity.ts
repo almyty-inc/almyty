@@ -59,7 +59,9 @@ export interface ModelLatency {
 @VersionedEntity()
 @Index(['organizationId', 'status'])
 @Index(['organizationId', 'providerId'])
-@Index(['organizationId', 'vendorModelId'])
+// Unique, not merely indexed: two concurrent syncs both saw the vendor
+// id missing from their own snapshot and both inserted it.
+@Index(['organizationId', 'providerId', 'vendorModelId'], { unique: true })
 export class Model {
   @PrimaryGeneratedColumn('uuid')
   id: string;

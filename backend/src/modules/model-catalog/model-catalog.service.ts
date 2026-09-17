@@ -263,7 +263,17 @@ export class ModelCatalogService {
         continue;
       }
       const card = this.newProviderCard(provider, m, { syncedFrom: 'provider_list', ownedBy: m.owned_by ?? null });
-      created.push(await this.models.save(card));
+      try {
+        created.push(await this.models.save(card));
+      } catch (err: any) {
+        // Another sync inserted this card between our snapshot and this
+        // write -- the user pressing "Sync models" while the background
+        // sweep covers the same provider is the common case, and the
+        // in-process dedup guard does not span the two call sites (or
+        // two pods). The row exists, which is all we wanted.
+        if (err?.code !== '23505') throw err;
+        skipped++;
+      }
     }
     const retired: Model[] = [];
     if (listed.length > 0) {

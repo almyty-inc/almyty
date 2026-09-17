@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Settings, Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, Radio, Lock, CreditCard, Gift, Bell, Plug } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -231,9 +231,19 @@ function OrganizationTab({ organization }: { organization: any }) {
             <CardDescription>Manage your organization settings</CardDescription>
           </div>
           {!isEditing ? (
-            <Button variant="outline" onClick={() => setIsEditing(true)}>
-              Edit Organization
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsEditing(true)}>
+                Edit Organization
+              </Button>
+              {/*
+                Creating one was possible and unreachable: the
+                organizations page holds the dialog and is in neither the
+                sidebar nor anywhere a person looks for it.
+              */}
+              <Button variant="outline" asChild data-testid="new-organization">
+                <Link to="/organizations?new=1">New Organization</Link>
+              </Button>
+            </div>
           ) : (
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleCancel}>Cancel</Button>

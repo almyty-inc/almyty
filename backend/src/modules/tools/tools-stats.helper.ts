@@ -45,13 +45,28 @@ export class ToolsStatsHelper {
 
     const since = new Date(Date.now() - timeframeDurations[timeframe]);
 
+    // Only the columns these figures are computed from.
+    //
+    // This loaded `parameters` and `result` -- untruncated json, up to
+    // 10MB apiece -- plus a whole User entity per row, to count
+    // successes, average a duration, size a Set of user ids and bucket a
+    // trend. The window is a caller-supplied param that goes up to a
+    // month, so how much it loaded was chosen by whoever called it.
     const executions = await this.toolExecutionRepository.find({
       where: {
         toolId: tool.id,
         organizationId,
         createdAt: MoreThanOrEqual(since),
       },
-      relations: { user: true },
+      select: {
+        id: true,
+        success: true,
+        executionTime: true,
+        cached: true,
+        userId: true,
+        createdAt: true,
+        metadata: true,
+      },
     });
 
     const total = executions.length;
@@ -104,27 +119,39 @@ export class ToolsStatsHelper {
       0,
     );
 
-    const executions = await this.toolExecutionRepository.find({
-      where: { organizationId },
-      relations: { tool: true },
-    });
+    // Counted and averaged by the database, not in heap.
+    //
+    // This loaded every tool_executions row the organization had ever
+    // written, with `relations: { tool: true }` dragging a full Tool
+    // entity alongside each -- to produce a count, a mean and a top ten.
+    // A ToolExecution carries `parameters` and `result` as untruncated
+    // json, and the HTTP executor allows 10MB responses, so individual
+    // rows can be megabytes. This is the rawSchema OOM verbatim.
+    const [totals, usageRows] = await Promise.all([
+      this.toolExecutionRepository
+        .createQueryBuilder('execution')
+        .select('COUNT(*)', 'count')
+        .addSelect('AVG(execution.executionTime)', 'avg')
+        .where('execution.organizationId = :organizationId', { organizationId })
+        .getRawOne<{ count: string; avg: string | null }>(),
+      this.toolExecutionRepository
+        .createQueryBuilder('execution')
+        .select('execution.toolId', 'toolId')
+        .addSelect('COUNT(*)', 'count')
+        .where('execution.organizationId = :organizationId', { organizationId })
+        .groupBy('execution.toolId')
+        .orderBy('COUNT(*)', 'DESC')
+        .limit(10)
+        .getRawMany<{ toolId: string; count: string }>(),
+    ]);
 
-    const totalExecutions = executions.length;
-    const averageExecutionTime =
-      totalExecutions > 0
-        ? Math.round(executions.reduce((sum, e) => sum + e.executionTime, 0) / totalExecutions)
-        : 0;
+    const totalExecutions = Number(totals?.count ?? 0);
+    const averageExecutionTime = totals?.avg ? Math.round(Number(totals.avg)) : 0;
 
-    const toolUsage = executions.reduce<Record<string, number>>((acc, execution) => {
-      const toolId = execution.toolId;
-      acc[toolId] = (acc[toolId] || 0) + 1;
-      return acc;
-    }, {});
-
-    const topToolIds = Object.entries(toolUsage)
-      .sort(([, a], [, b]) => (b as number) - (a as number))
-      .slice(0, 10)
-      .map(([toolId]) => toolId);
+    const toolUsage: Record<string, number> = Object.fromEntries(
+      usageRows.map((row) => [row.toolId, Number(row.count)]),
+    );
+    const topToolIds = usageRows.map((row) => row.toolId);
 
     const topTools = await this.toolRepository.find({
       where: { id: In(topToolIds) },

@@ -35,14 +35,18 @@ export function AgentsTab() {
       agents.map((a) => a.id).join(','),
     ],
     queryFn: async () => {
-      const map: Record<string, AgentExecution[]> = {}
+      const map: Record<string, AgentExecution[] | null> = {}
       await Promise.all(
         agents.map(async (agent) => {
           try {
             const d = await agentsApi.getExecutions(agent.id, { limit: 50 })
             map[agent.id] = Array.isArray(d) ? d : d?.executions || []
           } catch {
-            map[agent.id] = []
+            // null, not []: an agent whose executions could not be read
+            // is not an agent with no executions, and rendering both as
+            // "0 runs, 0% success" hid a broken request behind a
+            // plausible number.
+            map[agent.id] = null
           }
         }),
       )
@@ -68,10 +72,14 @@ export function AgentsTab() {
       successRate: number
       avgTime: number
       recentFailures: AgentExecution[]
+      /** The executions request for this agent failed; its figures are not zeros. */
+      unavailable: boolean
     }> = []
 
     for (const agent of agents) {
-      const executions = agentExecutionsMap?.[agent.id] || []
+      const loaded = agentExecutionsMap?.[agent.id]
+      const unavailable = loaded === null
+      const executions = loaded ?? []
       let a24h = 0
       let a7d = 0
       let aSuccess = 0
@@ -114,6 +122,7 @@ export function AgentsTab() {
               : 0,
         avgTime: aTimed > 0 ? aTime / aTimed : agent.averageExecutionTime,
         recentFailures: failures.slice(0, 3),
+        unavailable,
       })
     }
 
@@ -200,7 +209,7 @@ export function AgentsTab() {
                 </tr>
               </thead>
               <tbody>
-                {agentStats.perAgent.map(({ agent, executions24h, executions7d, successRate, avgTime }) => (
+                {agentStats.perAgent.map(({ agent, executions24h, executions7d, successRate, avgTime, unavailable }) => (
                   <tr key={agent.id} className="border-b last:border-0 hover:bg-muted/30">
                     <td className="px-4 py-2.5">
                       <Link to={`/agents/${agent.id}`} className="font-medium hover:underline text-sm">
@@ -224,23 +233,40 @@ export function AgentsTab() {
                     <td className="px-4 py-2.5 text-right font-medium">
                       {agent.totalExecutions.toLocaleString()}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-muted-foreground">{executions24h}</td>
-                    <td className="px-4 py-2.5 text-right text-muted-foreground">{executions7d}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <span
-                        className={cn(
-                          'font-medium',
-                          successRate >= 90
-                            ? 'text-green-600'
-                            : successRate >= 70
-                              ? 'text-yellow-600'
-                              : 'text-red-600',
-                        )}
+                    {/*
+                      An agent whose executions could not be read is not
+                      an agent with no executions. Printing "0 / 0%" for
+                      both made a broken request look like a quiet agent.
+                    */}
+                    {unavailable ? (
+                      <td
+                        colSpan={4}
+                        data-testid={`agent-stats-unavailable-${agent.id}`}
+                        className="px-4 py-2.5 text-right text-xs text-muted-foreground italic"
                       >
-                        {successRate}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-right text-muted-foreground">{formatMs(avgTime)}</td>
+                        Couldn&apos;t load this agent&apos;s runs
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground">{executions24h}</td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground">{executions7d}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span
+                            className={cn(
+                              'font-medium',
+                              successRate >= 90
+                                ? 'text-green-600'
+                                : successRate >= 70
+                                  ? 'text-yellow-600'
+                                  : 'text-red-600',
+                            )}
+                          >
+                            {successRate}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-muted-foreground">{formatMs(avgTime)}</td>
+                      </>
+                    )}
                     <td className="px-4 py-2.5 text-right text-muted-foreground">
                       {agent.totalCost > 0 ? `$${agent.totalCost.toFixed(4)}` : '--'}
                     </td>

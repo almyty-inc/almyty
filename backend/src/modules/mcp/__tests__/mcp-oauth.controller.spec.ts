@@ -701,12 +701,40 @@ describe('McpOAuthController', () => {
       resource: undefined as string | undefined,
     };
 
+    // Signed in AND a member of the org in the URL, which is the case
+    // every test below means to exercise. The controller now checks
+    // membership because client registration is unauthenticated by
+    // design, so authorize is the only place the org boundary is
+    // enforced -- without it, anyone with a login could register a
+    // client against a victim org's slug and exchange the code for a
+    // token stamped with that org's id.
     const mockReq = (user?: any) => ({ user });
     const mockRes = () => {
       const res: any = {};
       res.redirect = jest.fn().mockReturnValue(res);
       return res;
     };
+
+    it('refuses to mint a code for an organization the caller is not in', async () => {
+      const res = mockRes();
+
+      await expect(
+        controller.authorize(
+          'test-org',
+          'almyty',
+          validQuery.responseType,
+          validQuery.clientId,
+          validQuery.redirectUri,
+          validQuery.codeChallenge,
+          validQuery.codeChallengeMethod,
+          validQuery.scope,
+          validQuery.state,
+          validQuery.resource,
+          mockReq({ sub: 'outsider', organizations: [{ id: 'some-other-org' }] }),
+          res,
+        ),
+      ).rejects.toMatchObject({ response: { error: 'access_denied' } });
+    });
 
     it('should reject missing required params (no response_type)', async () => {
       const res = mockRes();
@@ -973,7 +1001,7 @@ describe('McpOAuthController', () => {
         validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
         validQuery.codeChallenge, validQuery.codeChallengeMethod,
         validQuery.scope, validQuery.state, validQuery.resource,
-        mockReq({ id: 'user-1' }), res,
+        mockReq({ id: 'user-1', organizations: [{ id: 'org-uuid-1234' }] }), res,
       );
 
       const url = res.redirect.mock.calls[0][1];
@@ -996,7 +1024,7 @@ describe('McpOAuthController', () => {
           validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
           validQuery.codeChallenge, validQuery.codeChallengeMethod,
           validQuery.scope, validQuery.state, validQuery.resource,
-          mockReq({ id: 'user-1' }), res,
+          mockReq({ id: 'user-1', organizations: [{ id: 'org-uuid-1234' }] }), res,
         ),
       ).rejects.toThrow('Invalid or inactive client');
       expect(res.redirect).not.toHaveBeenCalled();
@@ -1010,7 +1038,7 @@ describe('McpOAuthController', () => {
         validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
         validQuery.codeChallenge, validQuery.codeChallengeMethod,
         validQuery.scope, 'my-state-value', validQuery.resource,
-        mockReq({ id: 'user-1' }), res,
+        mockReq({ id: 'user-1', organizations: [{ id: 'org-uuid-1234' }] }), res,
       );
 
       const url = new URL(res.redirect.mock.calls[0][1]);
@@ -1033,7 +1061,7 @@ describe('McpOAuthController', () => {
         validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
         validQuery.codeChallenge, validQuery.codeChallengeMethod,
         validQuery.scope, undefined as any, validQuery.resource,
-        mockReq({ id: 'user-1' }), res,
+        mockReq({ id: 'user-1', organizations: [{ id: 'org-uuid-1234' }] }), res,
       );
 
       const url = new URL(res.redirect.mock.calls[0][1]);
@@ -1049,7 +1077,7 @@ describe('McpOAuthController', () => {
         validQuery.responseType, validQuery.clientId, validQuery.redirectUri,
         validQuery.codeChallenge, validQuery.codeChallengeMethod,
         undefined as any, validQuery.state, validQuery.resource,
-        mockReq({ id: 'user-1' }), res,
+        mockReq({ id: 'user-1', organizations: [{ id: 'org-uuid-1234' }] }), res,
       );
 
       expect(spy).toHaveBeenCalledWith(

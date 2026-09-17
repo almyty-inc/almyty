@@ -77,7 +77,7 @@ export class SampleWorkspaceService {
 
     let tools: Tool[] = imported.tools ?? [];
     if (tools.length === 0) {
-      tools = await this.apisService.generateToolsFromApi(api.id, organizationId);
+      tools = (await this.apisService.generateToolsFromApi(api.id, organizationId)).tools;
     }
 
     // Stamp generated tools as sample so the delete sweep can find them.

@@ -460,7 +460,14 @@ describe('AlmytyMcpService', () => {
       expect(parsed.id).toBe('mem-1');
     });
 
-    it('memory_put: forwards explicit scope and tier', async () => {
+    /**
+     * This test used to assert that a caller-supplied scope_id was
+     * honoured, which was the vulnerability rather than the feature:
+     * scope_id IS the organization id, so any client authorized on one
+     * org's gateway could name another org and read or write its memory.
+     * The tool no longer accepts the field at all.
+     */
+    it('memory_put: forwards the tier but pins the scope to the caller\'s own org', async () => {
       await call('tools/call', {
         name: 'memory_put',
         arguments: {
@@ -474,7 +481,7 @@ describe('AlmytyMcpService', () => {
       });
       expect(mockMemoryService.put).toHaveBeenCalledWith(
         expect.objectContaining({
-          scope: { scope_type: 'project', scope_id: 'proj_42' },
+          scope: { scope_type: 'project', scope_id: 'org-1' },
           tier: 'project',
           tags: ['note'],
         }),
@@ -517,7 +524,9 @@ describe('AlmytyMcpService', () => {
         name: 'memory_get',
         arguments: { id: 'mem-1' },
       });
-      expect(mockMemoryService.get).toHaveBeenCalledWith('mem-1');
+      // Scoped to the caller's organization: unscoped, this tool read any
+      // tenant's memory by uuid.
+      expect(mockMemoryService.get).toHaveBeenCalledWith('mem-1', 'org-1');
       const parsed = JSON.parse(res.result.content[0].text);
       expect(parsed.id).toBe('mem-1');
     });
@@ -527,7 +536,7 @@ describe('AlmytyMcpService', () => {
         name: 'memory_delete',
         arguments: { id: 'mem-1' },
       });
-      expect(mockMemoryService.delete).toHaveBeenCalledWith('mem-1', 'soft', {
+      expect(mockMemoryService.delete).toHaveBeenCalledWith('mem-1', 'org-1', 'soft', {
         user_id: 'user-1',
       });
     });
@@ -539,6 +548,7 @@ describe('AlmytyMcpService', () => {
       });
       expect(mockMemoryService.supersede).toHaveBeenCalledWith(
         'mem-1',
+        'org-1',
         expect.objectContaining({
           mode: 'memory',
           content: 'corrected fact',

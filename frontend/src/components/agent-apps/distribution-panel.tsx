@@ -106,6 +106,11 @@ export function DistributionPanel({
           ? 'It has stopped answering. Its settings and address are kept.'
           : 'It is answering now.',
       )
+      // The sibling save mutation refreshes this and publish did not,
+      // so the panel kept showing the blockers from before the publish.
+      queryClient.invalidateQueries({
+        queryKey: ['agent-app-distribution-check', app.slug, distribution.target],
+      })
       onSaved()
     },
     onError: (err: any) =>

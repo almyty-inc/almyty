@@ -51,8 +51,14 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
       </CardHeader>
       <CardContent>
         {runs.length === 0 ? (
+          // A tab called "Runs" that never shows the run you just made is
+          // a trap. This one only ever lists autonomous runs; workflow
+          // invocations land in Recent Executions on Overview, so say so.
           <p className="text-sm text-muted-foreground text-center py-6">
-            No runs yet. Start a run by invoking the agent in autonomous mode.
+            No autonomous runs yet. Runs appear here once this agent runs in autonomous mode.
+            <br />
+            Invoking a workflow agent records it under <span className="font-medium">Recent Executions</span> on the
+            Overview tab instead.
           </p>
         ) : (
           <div className="overflow-x-auto">
