@@ -7,6 +7,7 @@ import { TextExtractorService } from './text-extractor.service';
 import { v4 as uuidv4 } from 'uuid';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { Readable } from 'stream';
 
 @Injectable()
 export class FilesService {
@@ -116,6 +117,22 @@ export class FilesService {
     this.auditLogService.log({ organizationId, action: AuditAction.FILE_DOWNLOAD, resourceType: AuditResource.FILE, resourceId: file.id, resourceName: file.name });
 
     return { buffer, file };
+  }
+
+  /**
+   * The same download, piped rather than buffered.
+   *
+   * Reading a 50MB upload into heap and then `res.send`ing it (which
+   * copies) pinned ~100MB per concurrent download on a pod that peaks
+   * around 286MB.
+   */
+  async downloadStream(id: string, organizationId: string): Promise<{ stream: Readable; file: AgentFile }> {
+    const file = await this.findById(id, organizationId);
+    const stream = await this.storageService.downloadStream(file.storageKey);
+
+    this.auditLogService.log({ organizationId, action: AuditAction.FILE_DOWNLOAD, resourceType: AuditResource.FILE, resourceId: file.id, resourceName: file.name });
+
+    return { stream, file };
   }
 
   async remove(id: string, organizationId: string): Promise<void> {

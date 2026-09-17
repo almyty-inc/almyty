@@ -118,15 +118,23 @@ export class GatewaysStatsHelper {
     const successfulRequests = gateways.reduce((sum, g) => sum + g.successfulRequests, 0);
     const successRate = totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0;
 
-    // Get usage metrics for average response time
-    const metrics = await this.usageMetricRepository.find({
-      where: { organizationId },
-    });
-
-    const responseTimeMetrics = metrics.filter(m => m.type === 'response_time');
-    const averageResponseTime = responseTimeMetrics.length > 0
-      ? responseTimeMetrics.reduce((sum, m) => sum + m.value, 0) / responseTimeMetrics.length
-      : 0;
+    // One average, computed by the database.
+    //
+    // This loaded every usage_metrics row the organization had ever
+    // written -- no window, no take -- to compute a single mean. The
+    // global request-logging interceptor writes two rows per HTTP
+    // request, each with a metadata json blob, so the table grows at
+    // twice the request rate: ~1.7M rows/day at a modest 10 req/s. One
+    // call to this endpoint was enough to OOM the pod within days of an
+    // org going live, and the sibling method above already windows its
+    // own query.
+    const { avg } = await this.usageMetricRepository
+      .createQueryBuilder('metric')
+      .select('AVG(metric.value)', 'avg')
+      .where('metric.organizationId = :organizationId', { organizationId })
+      .andWhere('metric.type = :type', { type: 'response_time' })
+      .getRawOne<{ avg: string | null }>() ?? { avg: null };
+    const averageResponseTime = avg ? Number(avg) : 0;
 
     // Get top gateways by request count
     const topGateways = gateways

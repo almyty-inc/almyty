@@ -253,16 +253,19 @@ export class ApisImportHelper {
       this.toolGen.logMemoryPhase('after-commit');
 
       let generatedTools: Tool[] = [];
+      let toolFailures = 0;
+      let toolTotal = 0;
       if (options.generateTools) {
         try {
-          generatedTools = await this.toolGen.generateToolsFromApi(
+          ({ tools: generatedTools, failed: toolFailures, total: toolTotal } =
+            await this.toolGen.generateToolsFromApi(
             apiId,
             organizationId,
             savedOperations,
             onProgress
               ? async (done, total) => onProgress(50 + Math.floor((done / Math.max(total, 1)) * 50))
               : undefined,
-          );
+          ));
         } catch (toolErr: any) {
           this.logger.error(
             `Tool generation failed after schema import for API ${apiId} (operations are committed; retry via /apis/${apiId}/generate-tools): ${toolErr.message}`,
