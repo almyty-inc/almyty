@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import axios from 'axios';
 
 import { Agent } from '../../entities/agent.entity';
@@ -15,6 +17,40 @@ const MAX_RESPONSE_BYTES = 16 * 1024;   // 16 KB — we don't need much from the
 export class AgentWebhookService {
   private readonly logger = new Logger(AgentWebhookService.name);
 
+  constructor(
+    // @Optional() so the many unit tests that construct this service
+    // with no arguments keep working; without it the outcome is simply
+    // not recorded, which is the old behaviour.
+    @Optional()
+    @InjectRepository(AgentExecution)
+    private readonly executions?: Repository<AgentExecution>,
+  ) {}
+
+  /**
+   * Record what became of a delivery, on the run it belongs to.
+   *
+   * Refusing an invalid URL at save time stopped the typo case. It did
+   * nothing for the receiver that starts returning 500s a week later:
+   * every failure was a logger.warn and nothing else, so the agent kept
+   * reporting "completed", the webhook kept reading as configured, and
+   * zero deliveries arrived with no trace anywhere in the product. Not
+   * failing the run is right; not telling anyone was a separate
+   * decision.
+   */
+  private async record(
+    execution: AgentExecution,
+    delivery: { status: 'delivered' | 'failed' | 'blocked'; statusCode?: number; error?: string },
+  ): Promise<void> {
+    const stamped = { ...delivery, at: new Date().toISOString() };
+    execution.metadata = { ...(execution.metadata ?? {}), webhookDelivery: stamped };
+    try {
+      await this.executions?.update(execution.id, { metadata: execution.metadata });
+    } catch (err: any) {
+      // Recording the outcome must not become its own failure.
+      this.logger.warn(`Could not record webhook outcome for ${execution.id}: ${err?.message ?? err}`);
+    }
+  }
+
   async sendExecutionWebhook(agent: Agent, execution: AgentExecution): Promise<void> {
     const webhookUrl = agent.webhookUrl;
     if (!webhookUrl) return;
@@ -27,11 +63,12 @@ export class AgentWebhookService {
       this.logger.warn(
         `Webhook blocked for execution ${execution.id}: ${validation.error}`,
       );
+      await this.record(execution, { status: 'blocked', error: validation.error });
       return;
     }
 
     try {
-      await axios.post(
+      const response = await axios.post(
         webhookUrl,
         {
           event: 'agent.execution.completed',
@@ -67,9 +104,16 @@ export class AgentWebhookService {
         },
       );
       this.logger.log(`Webhook sent for execution ${execution.id} to ${webhookUrl}`);
+      await this.record(execution, { status: 'delivered', statusCode: response?.status });
     } catch (err: any) {
       this.logger.warn(`Webhook failed for execution ${execution.id}: ${err.message}`);
-      // Don't throw — webhook failure shouldn't fail the execution
+      // Don't throw -- a webhook failure must not fail the execution.
+      // It is written onto the run instead, so somebody can see it.
+      await this.record(execution, {
+        status: 'failed',
+        statusCode: err?.response?.status,
+        error: String(err?.message ?? err).slice(0, 500),
+      });
     }
   }
 
