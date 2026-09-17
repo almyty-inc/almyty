@@ -168,6 +168,12 @@ export function MemoriesPage() {
         `${r.succeeded ?? 0} of ${r.total_source ?? 0} items, ${r.warnings?.length ?? 0} warnings`,
       )
       setTransferOpen(false)
+      // Same reason the config mutation does it: what was transferred and
+      // which backend is healthy both just changed.
+      if (!transfer.dry_run) {
+        qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
+        qc.invalidateQueries({ queryKey: ['memories', 'backends', 'health'] })
+      }
     },
     onError: (err: any) => {
       notify.error('Transfer failed', err.message ?? String(err))
@@ -736,6 +742,7 @@ interface SoftcapWarning {
 // hasn't fired yet.
 function ConsolidationCard({ orgId }: { orgId: string }) {
   const notify = useNotifications()
+  const qc = useQueryClient()
   const [last, setLast] = useState<{ consolidated_facts: number; superseded: number; skipped: boolean; reason?: string } | null>(null)
   const mut = useMutation({
     mutationFn: (force: boolean) =>
@@ -751,6 +758,8 @@ function ConsolidationCard({ orgId }: { orgId: string }) {
           `${r.consolidated_facts} fact(s) written, ${r.superseded} row(s) in short scope superseded`,
         )
       }
+      // The toast counts rows that Browse was still listing unchanged.
+      qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
     },
     onError: (err: any) => notify.error('Consolidation failed', err.message ?? String(err)),
   })

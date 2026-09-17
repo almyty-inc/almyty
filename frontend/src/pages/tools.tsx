@@ -343,12 +343,27 @@ return new Promise((resolve, reject) => {
         };
       }
 
+      // The Authentication block was collected, rendered, and never
+      // sent, so every hand-built HTTP tool executed unauthenticated --
+      // and there is no tool edit UI, so it could not be added later
+      // either. The backend stores it nested (`{ type, config }`), while
+      // the form holds it flat, hence the reshape.
+      const inlineAuth =
+        authConfig.type === 'bearer' && authConfig.bearerToken
+          ? { type: 'bearer', config: { token: authConfig.bearerToken } }
+          : authConfig.type === 'apiKey' && authConfig.apiKey
+            ? { type: 'apiKey', config: { key: authConfig.apiKey, headerName: 'X-API-Key' } }
+            : authConfig.type === 'basic' && authConfig.username
+              ? { type: 'basic', config: { username: authConfig.username, password: authConfig.password } }
+              : null;
+
       const payload: any = {
         ...data,
         type,
         parameters: toolParameters,
         executionMethod,
         llmConfig: llmConfigPayload,
+        ...(inlineAuth ? { authConfig: inlineAuth } : {}),
       };
 
       // HTTP tools: send httpConfig, no code

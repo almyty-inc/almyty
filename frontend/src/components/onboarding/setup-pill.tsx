@@ -5,9 +5,9 @@ import { Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { onboardingApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
-import { useOnboarding } from './getting-started-card'
+import { CORE_STEPS, useOnboarding } from './getting-started-card'
 
-const CORE_KEYS = ['provider', 'api', 'gateway', 'first_call'] as const
+const CORE_KEYS = CORE_STEPS.map((s) => s.key)
 
 interface SetupPillProps {
   collapsed?: boolean
