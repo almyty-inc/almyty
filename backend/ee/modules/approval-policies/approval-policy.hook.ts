@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 import {
   ApprovalPolicyApproval,
@@ -68,11 +68,19 @@ export class ApprovalPolicyHookImpl implements ApprovalPolicyHook {
     try {
       const policy = await this.policies.get(organizationId, policyId);
       return this.policies.scoreProgress(policy, approvals);
-    } catch {
-      // Policy deleted (or otherwise unavailable) since the request was
-      // created — degrade to the OSS single gate rather than dead-locking
-      // the pending approval.
-      return null;
+    } catch (err) {
+      // A deleted policy degrades to the OSS single gate. Anything else
+      // does not.
+      //
+      // This used to catch everything and return null, and null is the
+      // caller's signal to fall back to that single gate -- so a dropped
+      // connection, a query timeout or an exhausted pool turned a
+      // configured 3-of-5 into one approver and let the gated tool call
+      // run. The caller was changed to hold the gate on a throw, and this
+      // swallow defeated it one layer down: the hook could never reject,
+      // so the core test passed only because it mocked the hook.
+      if (err instanceof NotFoundException) return null;
+      throw err;
     }
   }
 }

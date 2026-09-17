@@ -396,7 +396,7 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
       <AlertDialog open={!!providerToDelete} onOpenChange={() => setProviderToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Provider</AlertDialogTitle>
+            <AlertDialogTitle>Delete provider?</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete &quot;{providerToDelete?.name}&quot;? This action cannot be undone.
               All configuration and usage history will be permanently removed.
@@ -411,7 +411,7 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
                   setProviderToDelete(null)
                 }
               }}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
             </AlertDialogAction>

@@ -104,7 +104,7 @@ export function RunnerNewPage() {
       </div>
 
       <div>
-        <h1 className="text-2xl font-bold">Start a runner</h1>
+        <h1 className="text-4xl font-heading font-extrabold tracking-tight">Start a runner</h1>
         <p className="text-sm text-muted-foreground mt-1">
           The almyty backend dispatches jobs to long-running daemons you start on machines you own.
           Three terminal commands and you're done.

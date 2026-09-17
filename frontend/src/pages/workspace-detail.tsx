@@ -98,7 +98,7 @@ export function WorkspaceDetailPage() {
         <div className="flex items-center gap-3">
           <Layers className="h-7 w-7 text-muted-foreground" />
           <div>
-            <h1 className="text-xl font-bold font-mono">{ws.id}</h1>
+            <h1 className="text-3xl font-mono font-extrabold tracking-tight">{ws.id}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant={workspaceStatusVariant[ws.status]}>{ws.status}</Badge>
               <span className="text-sm text-muted-foreground">

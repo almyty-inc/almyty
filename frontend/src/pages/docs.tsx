@@ -10,7 +10,7 @@ export function DocsPage() {
   return (
     <div className="flex flex-col items-center justify-center py-24">
       <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
-      <h1 className="text-2xl font-heading font-bold mb-2">Documentation</h1>
+      <h1 className="text-4xl font-heading font-extrabold tracking-tight mb-2">Documentation</h1>
       <p className="text-muted-foreground mb-6 max-w-md text-center">
         Complete guides, API reference, and tutorials for almyty.
       </p>
