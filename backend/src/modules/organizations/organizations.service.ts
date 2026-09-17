@@ -69,7 +69,6 @@ export class OrganizationsService {
     private userRepository: Repository<User>,
     private readonly mailService: MailService,
     @Inject(forwardRef(() => GatewaysService))
-    @Inject(forwardRef(() => GatewaysService))
     private readonly gatewaysService: GatewaysService,
     private readonly invitesHelper: OrganizationsInvitesHelper,
     private readonly teamMembershipHelper: TeamMembershipHelper,
@@ -131,6 +130,18 @@ export class OrganizationsService {
     return this.findOne(savedOrganization.id);
   }
 
+  /**
+   * The organizations this user belongs to, each carrying how many active
+   * members it has.
+   *
+   * The count is not decoration: the list page prints "N members" per row
+   * and the detail header repeats it. Nothing here loaded `members`, so
+   * `org.members?.length` was undefined and every organization claimed
+   * zero members -- including ones the caller could see a full member
+   * table for on the next tab. Counted with a grouped COUNT rather than
+   * by hydrating the relation, because the rows themselves are not wanted
+   * and each one drags a User with it.
+   */
   async findAll(userId: string): Promise<Organization[]> {
     const memberships = await this.userOrganizationRepository.find({
       where: { userId, isActive: true },
@@ -138,7 +149,29 @@ export class OrganizationsService {
       order: { joinedAt: 'DESC' },
     });
 
-    return memberships.map(membership => membership.organization);
+    const organizations = memberships.map(membership => membership.organization);
+    if (organizations.length === 0) {
+      return organizations;
+    }
+
+    const counts = await this.userOrganizationRepository
+      .createQueryBuilder('membership')
+      .select('membership.organizationId', 'organizationId')
+      .addSelect('COUNT(*)', 'count')
+      .where('membership.organizationId IN (:...ids)', {
+        ids: organizations.map(organization => organization.id),
+      })
+      .andWhere('membership.isActive = :isActive', { isActive: true })
+      .groupBy('membership.organizationId')
+      .getRawMany<{ organizationId: string; count: string }>();
+
+    const byId = new Map(counts.map(row => [row.organizationId, Number(row.count)]));
+    for (const organization of organizations) {
+      (organization as Organization & { memberCount: number }).memberCount =
+        byId.get(organization.id) ?? 0;
+    }
+
+    return organizations;
   }
 
   /**
@@ -523,6 +556,17 @@ export class OrganizationsService {
     actingUserId?: string,
   ): Promise<void> {
     await this.assertTeamInOrg(teamId, organizationId);
+
+    // A team membership for somebody who is not in the organization is
+    // a row that means nothing today -- access still goes through the
+    // org role first -- and a live hole the day anything trusts
+    // user_teams on its own.
+    const orgMembership = await this.userOrganizationRepository.findOne({
+      where: { userId, organizationId, isActive: true },
+    });
+    if (!orgMembership) {
+      throw new NotFoundException('User not found in this organization');
+    }
 
     if (actingUserId) {
       await this.assertCanManageTeam(actingUserId, organizationId, teamId, 'manage-members');
