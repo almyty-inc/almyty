@@ -517,7 +517,9 @@ describe('AlmytyMcpService', () => {
         name: 'memory_get',
         arguments: { id: 'mem-1' },
       });
-      expect(mockMemoryService.get).toHaveBeenCalledWith('mem-1');
+      // Scoped to the caller's organization: unscoped, this tool read any
+      // tenant's memory by uuid.
+      expect(mockMemoryService.get).toHaveBeenCalledWith('mem-1', 'org-1');
       const parsed = JSON.parse(res.result.content[0].text);
       expect(parsed.id).toBe('mem-1');
     });
@@ -527,7 +529,7 @@ describe('AlmytyMcpService', () => {
         name: 'memory_delete',
         arguments: { id: 'mem-1' },
       });
-      expect(mockMemoryService.delete).toHaveBeenCalledWith('mem-1', 'soft', {
+      expect(mockMemoryService.delete).toHaveBeenCalledWith('mem-1', 'org-1', 'soft', {
         user_id: 'user-1',
       });
     });
@@ -539,6 +541,7 @@ describe('AlmytyMcpService', () => {
       });
       expect(mockMemoryService.supersede).toHaveBeenCalledWith(
         'mem-1',
+        'org-1',
         expect.objectContaining({
           mode: 'memory',
           content: 'corrected fact',

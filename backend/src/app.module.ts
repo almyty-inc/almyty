@@ -299,6 +299,12 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     McpModule,
     JobsModule,
     PluginsModule,
+    // Imported at the top of this file since it was written and never
+    // listed here, so its processor was never constructed: every signup
+    // enqueued a welcome job that no worker consumed, the jobs sat in
+    // Redis, no welcome or nudge email was ever sent, and the unsubscribe
+    // link in those unsent emails pointed at a route that did not exist.
+    LifecycleModule,
     MetricsModule,
     MonitoringModule,
     HealthModule,

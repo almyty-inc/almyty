@@ -90,7 +90,19 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
         next === 'pinned'
           ? { mode: 'pinned' as const, modelId: resolve.data?.find((r) => r.key === role.key)?.modelId ?? '' }
           : { mode: 'resolved' as const, policy: { objective: 'cheapest' } }
-      return (await api.post(`/agents/${agentId}/roles`, { ...role, binding })).data.data
+      // Only the fields the upsert accepts. GET returns whole AgentRole
+      // rows -- id, organizationId, agentId, createdAt, updatedAt -- and
+      // posting those straight back is rejected by the whitelist pipe, so
+      // the toggle answered with a validation dump and never changed
+      // anything. Spreading the entity was the bug.
+      return (
+        await api.post(`/agents/${agentId}/roles`, {
+          key: role.key,
+          displayName: role.displayName,
+          ...(role.requirement ? { requirement: role.requirement } : {}),
+          binding,
+        })
+      ).data.data
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent-roles', agentId] }),
   })

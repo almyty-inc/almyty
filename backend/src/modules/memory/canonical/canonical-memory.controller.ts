@@ -40,6 +40,43 @@ import { MemorySyncService } from './memory-sync.service';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 export class CanonicalMemoryController {
+  /**
+   * The organization this request is allowed to touch.
+   *
+   * Every route here took its scope from the path or the body and never
+   * compared it to the caller. With only JwtAuthGuard on the class, any
+   * authenticated user on the instance could read, overwrite, delete or
+   * bulk-transfer any other tenant's memory by pasting their scope_id.
+   * The service layer's comment said the controller checked this. It did
+   * not, so the check lives here now and the service refuses to look
+   * anything up without it.
+   */
+  private orgId(req: any): string {
+    const organizationId = req.user?.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException(
+        { success: false, message: 'No organization found for user', error: 'NO_ORGANIZATION' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return organizationId;
+  }
+
+  /** Refuse a scope that is not the caller's own. */
+  private assertScope(req: any, scope: { scope_type?: string; scope_id?: string } | undefined): void {
+    const organizationId = this.orgId(req);
+    if (scope?.scope_id && scope.scope_id !== organizationId) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'That scope belongs to another organization',
+          error: 'SCOPE_FORBIDDEN',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+  }
+
   constructor(
     private readonly service: CanonicalMemoryService,
     private readonly router: MemoryRouter,
@@ -300,8 +337,8 @@ export class CanonicalMemoryController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a memory item by id' })
-  async get(@Param('id') id: string) {
-    const item = await this.service.get(id);
+  async get(@Param('id') id: string, @Request() req: any) {
+    const item = await this.service.get(id, this.orgId(req));
     if (!item) {
       throw new HttpException(
         { success: false, error: 'NOT_FOUND', message: `memory ${id} not found` },
@@ -320,7 +357,7 @@ export class CanonicalMemoryController {
     @Query('mode') mode: 'soft' | 'hard' | undefined,
     @Request() req: any,
   ) {
-    const ok = await this.service.delete(id, mode ?? 'soft', { user_id: req.user?.sub ?? req.user?.id });
+    const ok = await this.service.delete(id, this.orgId(req), mode ?? 'soft', { user_id: req.user?.sub ?? req.user?.id });
     if (!ok) {
       throw new HttpException(
         { success: false, error: 'NOT_FOUND', message: `memory ${id} not found` },
@@ -382,8 +419,10 @@ export class CanonicalMemoryController {
     @Request() req: any,
   ) {
     try {
+      this.assertScope(req, body.new_item.scope);
       const result = await this.service.supersede(
         id,
+        this.orgId(req),
         {
           mode: body.new_item.mode,
           scope: body.new_item.scope,
