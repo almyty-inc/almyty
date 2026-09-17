@@ -72,7 +72,10 @@ export class ScimAuthGuard implements CanActivate {
     // off the token.
     if (!(await this.entitled(orgId))) {
       throw new PaymentRequiredException(
-        this.scimError('SCIM provisioning is not included in this organization plan'),
+        this.scimError(
+          'SCIM provisioning is not included in this organization plan',
+          HttpStatus.PAYMENT_REQUIRED,
+        ),
       );
     }
 
@@ -80,10 +83,15 @@ export class ScimAuthGuard implements CanActivate {
     return true;
   }
 
-  private scimError(detail: string) {
+  /**
+   * The SCIM envelope carries the status too, so it has to agree with
+   * the HTTP one — Okta and Entra parse this body. It was hardcoded to
+   * '401', so a 402 told the client two different things at once.
+   */
+  private scimError(detail: string, status: HttpStatus = HttpStatus.UNAUTHORIZED) {
     return {
       schemas: ['urn:ietf:params:scim:api:messages:2.0:Error'],
-      status: '401',
+      status: String(status),
       detail,
     };
   }
