@@ -50,6 +50,7 @@ import { AgentRunsController } from './agent-runs.controller';
 import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
+import { ModelCatalogModule } from '../model-catalog/model-catalog.module';
 import { AgentRolesService } from './agent-roles.service';
 import { AgentRolesController } from './agent-roles.controller';
 import { StrategiesController } from './strategies/strategies.controller';
@@ -89,6 +90,12 @@ import { BudgetsModule } from '../budgets/budgets.module';
     BullModule.registerQueue({ name: 'agent-scheduler' }),
     BullModule.registerQueue({ name: 'agent-runtime' }),
     forwardRef(() => LlmProvidersModule),
+    // ModelRouterService is exported ONLY here. Without this import the
+    // @Optional() router injections in AgentRolesService and
+    // OrchestratorService resolve to undefined and every resolved role
+    // answers "routing is not available on this install" -- a silence
+    // that looked like a missing license rather than a missing import.
+    forwardRef(() => ModelCatalogModule),
     forwardRef(() => ToolsModule),
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
