@@ -3,16 +3,16 @@ import { screen, waitFor } from '@testing-library/react'
 
 import { render } from '../test/setup'
 
+// One specifier per module.
+//
+// Both pages import via the `@/` alias only. Registering a second mock
+// for the same module under its relative specifier -- and worse, having
+// one of them re-import the other -- made which factory won depend on
+// module resolution order, so this file passed or failed nondeterminis-
+// tically across identical runs.
 const notify = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
 vi.mock('@/store/app', () => ({ useNotifications: () => notify }))
-vi.mock('../store/app', () => ({ useNotifications: () => notify }))
 vi.mock('@/store/organization', () => ({
-  useOrganizationStore: (sel?: any) => {
-    const state = { currentOrganization: { id: 'org-1', name: 'Acme' }, organizations: [], setCurrentOrganization: vi.fn() }
-    return typeof sel === 'function' ? sel(state) : state
-  },
-}))
-vi.mock('../store/organization', () => ({
   useOrganizationStore: (sel?: any) => {
     const state = { currentOrganization: { id: 'org-1', name: 'Acme' }, organizations: [], setCurrentOrganization: vi.fn() }
     return typeof sel === 'function' ? sel(state) : state
@@ -24,7 +24,6 @@ vi.mock('@/lib/api', () => ({
   toolHubApi: { getProviders: vi.fn(), getTemplates: vi.fn(), getCategories: vi.fn() },
   api: { get: vi.fn(), post: vi.fn() },
 }))
-vi.mock('../lib/api', async () => await import('@/lib/api'))
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')

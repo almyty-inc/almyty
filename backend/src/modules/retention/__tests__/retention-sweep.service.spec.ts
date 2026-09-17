@@ -24,6 +24,7 @@ function policy(overrides: Partial<RetentionPolicy> = {}): RetentionPolicy {
     usageMetricsDays: null,
     auditLogDays: null,
     toolExecutionsDays: null,
+    notificationsDays: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -39,6 +40,7 @@ describe('RetentionSweepService', () => {
   let usageMetricRepo: any;
   let auditLogRepo: any;
   let toolExecutionRepo: any;
+  let notificationRepo: any;
   let gatewayRepo: any;
   let auditLogService: any;
   let service: RetentionSweepService;
@@ -52,6 +54,7 @@ describe('RetentionSweepService', () => {
     usageMetricRepo = mockRepo();
     auditLogRepo = mockRepo();
     toolExecutionRepo = mockRepo();
+    notificationRepo = mockRepo();
     gatewayRepo = mockRepo();
     auditLogService = { log: jest.fn().mockResolvedValue(null) };
     service = new RetentionSweepService(
@@ -63,6 +66,7 @@ describe('RetentionSweepService', () => {
       usageMetricRepo,
       auditLogRepo,
       toolExecutionRepo,
+      notificationRepo,
       gatewayRepo,
       auditLogService,
     );
@@ -106,6 +110,15 @@ describe('RetentionSweepService', () => {
     expect(toolExecutionRepo.find).toHaveBeenCalled();
   });
 
+  it('sweeps notifications past the window, the other table nothing swept', async () => {
+    notificationRepo.find.mockResolvedValueOnce([{ id: 'n1' }]).mockResolvedValue([]);
+    notificationRepo.delete.mockResolvedValue({ affected: 1 });
+
+    const counts = await service.sweepOrganization(policy({ notificationsDays: 30 }));
+
+    expect(counts.notifications).toBe(1);
+  });
+
   it('keeps them forever when no window is set', async () => {
     const counts = await service.sweepOrganization(policy());
 
@@ -124,6 +137,7 @@ describe('RetentionSweepService', () => {
       usageMetrics: 0,
       auditLogs: 0,
       toolExecutions: 0,
+      notifications: 0,
     });
     expect(runRepo.find).not.toHaveBeenCalled();
     expect(conversationRepo.find).not.toHaveBeenCalled();
@@ -264,6 +278,7 @@ describe('RetentionSweepService', () => {
       usageMetrics: 0,
       auditLogs: 0,
       toolExecutions: 0,
+      notifications: 0,
     });
   });
 
@@ -322,6 +337,7 @@ describe('RetentionSweepService', () => {
         usageMetricRepo,
         auditLogRepo,
         toolExecutionRepo,
+        notificationRepo,
         gatewayRepo,
         auditLogService,
         undefined,
@@ -408,6 +424,7 @@ describe('RetentionSweepService notifications', () => {
       usageMetricRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       auditLogRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       toolExecutionRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
+      notificationRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       gatewayRepo: { find: jest.fn().mockResolvedValue([]) },
     };
     const notifications = {
@@ -423,6 +440,7 @@ describe('RetentionSweepService notifications', () => {
       repos.usageMetricRepo as any,
       repos.auditLogRepo as any,
       repos.toolExecutionRepo as any,
+      repos.notificationRepo as any,
       repos.gatewayRepo as any,
       { log: jest.fn().mockResolvedValue(null) } as any,
       notifications as any,
