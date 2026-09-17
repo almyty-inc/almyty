@@ -53,6 +53,25 @@ Ejecting turns a strategy into an ordinary editable graph. It is
 is what makes it safe: an ejected graph cannot behave differently from the
 strategy it came from, because it *is* what the strategy would have run.
 
+`POST /agents/:agentId/execution/eject` compiles the agent's **standing**
+strategy — the one on its execution settings, not whatever an orchestrator
+might pick for a particular request — writes the result to the agent's
+pipeline, and clears `strategyKey`. Compiled nodes carry a `roleKey` and
+never a model, so ejecting pins nothing: routing still fills each role at
+run time.
+
+Two refusals, both 4xx with a code:
+
+- `PIPELINE_NOT_EMPTY` (409) when the agent already has a graph.
+  Overwriting one somebody drew by hand is not recoverable from that
+  screen, so it is refused rather than done quietly.
+- `STRATEGY_NOT_COMPILABLE` (400) when the agent runs no strategy, when
+  the strategy named on it no longer exists, or when a role slot the
+  shape needs is unbound — the message names the missing slots.
+
+The UI offers this as "Eject to an editable graph" on the Execution tab,
+and lands you in the builder afterwards, because the agent you now have
+is not the one the tab was describing.
 ## extract_context
 
 Its own step, with its own cost, on purpose.

@@ -208,6 +208,8 @@ Tokens live in httpOnly cookies only. `withCredentials: true` on every axios cal
 - `docs/agent-factory.md` — `/apps`: builds, signing, distributions
 - `docs/runner.md` — Runner + workspace architecture
 - `docs/models.md` — Models layer: catalog, routing, pricing, deployments (design: `docs/design/models-layer.md`)
+- `docs/enterprise.md` — EE entitlements, what each grants, and how per-org gating works
+- `docs/retention.md` — Data retention classes and the sweep
 - `docs/brand/` — Color system, logo specs, typography
 
 ---
