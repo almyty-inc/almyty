@@ -54,6 +54,7 @@ import {
   markBranchAsSkipped,
 } from './agent-execution-graph.helper';
 import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolver';
+import { AgentRolesService } from './agent-roles.service';
 import { evaluateBudget } from './strategies/budget-policy';
 import {
   classifiedError,
@@ -90,6 +91,9 @@ export class AgentExecutionEngine {
     // its own graph either way.
     @Optional()
     private readonly strategyPipelines?: StrategyPipelineResolver,
+    // L4, needed whenever a compiled strategy is what runs.
+    @Optional()
+    private readonly agentRoles?: AgentRolesService,
   ) {}
 
   /**
@@ -164,6 +168,22 @@ export class AgentExecutionEngine {
           ...(compiled.fallbackReason ? { strategyFallbackReason: compiled.fallbackReason } : {}),
         };
         await this.agentExecutionRepository.save(execution);
+      }
+
+      // A compiled strategy names roles on its nodes, so the roles have to
+      // be filled before any of them runs. Without this the executor threw
+      // "names role principal, which this agent does not define" on an
+      // agent that defines exactly that role, because nothing had resolved
+      // it — the compiler was wired to the engine and L4 was not.
+      let resolvedRoles: Array<{ key: string; modelId: string; via: 'pinned' | 'resolved'; rationale?: string }> | undefined;
+      if (compiled && this.agentRoles) {
+        try {
+          resolvedRoles = await this.agentRoles.resolveRoles(organizationId, agent.id, {}, userId ? { id: userId } : undefined);
+        } catch (err: any) {
+          // A role that cannot be filled stops the run here, naming the
+          // role, rather than surfacing as a confusing node error later.
+          throw classifiedError(err?.message ?? 'A role could not be filled', ExecutionErrorType.VALIDATION_ERROR);
+        }
       }
 
       const pipeline = compiled?.pipeline ?? agent.pipeline;
@@ -362,6 +382,11 @@ export class AgentExecutionEngine {
                 nestingDepth: internalOptions?.nestingDepth,
                 maxNestingDepth: internalOptions?.maxNestingDepth,
                 signal: layerAbort.signal,
+                // Filled once for the whole run, above, rather than per
+                // node: a role is one decision, and resolving it per node
+                // would let two nodes of the same run answer from
+                // different models.
+                resolvedRoles,
               },
             );
 
