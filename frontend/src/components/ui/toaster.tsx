@@ -35,9 +35,17 @@ const toastVariants = cva(
         default: "border bg-background text-foreground",
         destructive:
           "destructive border-destructive bg-destructive text-destructive-foreground",
-        success: "border-green-500 bg-green-50 text-green-900",
-        warning: "border-yellow-500 bg-yellow-50 text-yellow-900",
-        info: "border-blue-500 bg-blue-50 text-blue-900",
+        // Each tint carries both halves. Light-only tints (bg-green-50
+        // text-green-900 with no dark: pair) rendered a success toast as a
+        // near-white block on a near-black page in dark mode. The pattern
+        // is the one badge.tsx uses: a -100/-700 light pair and a
+        // -900/30 + -400 dark pair.
+        success:
+          "border-green-500 bg-green-50 text-green-900 dark:border-green-500/40 dark:bg-green-900/30 dark:text-green-400",
+        warning:
+          "border-yellow-500 bg-yellow-50 text-yellow-900 dark:border-yellow-500/40 dark:bg-yellow-900/30 dark:text-yellow-400",
+        info:
+          "border-blue-500 bg-blue-50 text-blue-900 dark:border-blue-500/40 dark:bg-blue-900/30 dark:text-blue-400",
       },
     },
     defaultVariants: {

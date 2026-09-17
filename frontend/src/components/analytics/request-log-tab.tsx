@@ -2,15 +2,16 @@ import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Globe } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
+import { QueryError } from '@/components/ui/query-error'
 import { analyticsApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import type { RequestLog } from '@/types'
 
-import { protocolColors, statusColors } from './constants'
+import { TABLE_HEAD_CLASS as TH, statusColors } from './constants'
 import { formatMs } from './format'
 
 export function RequestLogTab() {
@@ -18,7 +19,13 @@ export function RequestLogTab() {
   const [logPage, setLogPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
 
-  const { data: requestLogs, isLoading: loadingLogs } = useQuery({
+  const {
+    data: requestLogs,
+    isLoading: loadingLogs,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['analytics-requests', currentOrganization?.id, logPage, statusFilter],
     queryFn: async () => {
       const params: Record<string, string> = { page: String(logPage), limit: '25' }
@@ -57,50 +64,50 @@ export function RequestLogTab() {
         <div className="flex items-center justify-center h-48">
           <LoadingSpinner size="lg" />
         </div>
+      ) : isError ? (
+        // A failed fetch used to fall through to "No request logs yet",
+        // which reads as a healthy, quiet system rather than a broken
+        // request the user could retry.
+        <QueryError error={error} onRetry={() => refetch()} title="Couldn't load the request log" />
       ) : requestLogs?.data?.length > 0 ? (
         <>
           <div className="rounded-lg border bg-card overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground bg-muted">
-                  <th className="px-3 py-2 font-medium">Time</th>
-                  <th className="px-3 py-2 font-medium">Method</th>
-                  <th className="px-3 py-2 font-medium">Path</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium text-right">Duration</th>
-                  <th className="px-3 py-2 font-medium">Protocol</th>
-                  <th className="px-3 py-2 font-medium">IP</th>
+                <tr className="border-b text-left bg-muted">
+                  <th className={TH}>Time</th>
+                  <th className={TH}>Method</th>
+                  <th className={TH}>Path</th>
+                  <th className={TH}>Status</th>
+                  <th className={`${TH} text-right`}>Duration</th>
+                  <th className={TH}>Protocol</th>
+                  <th className={TH}>IP</th>
                 </tr>
               </thead>
               <tbody>
                 {requestLogs.data.map((log: RequestLog) => (
                   <tr key={log.id} className="border-b last:border-0 hover:bg-muted/30 text-xs">
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                       {new Date(log.timestamp).toLocaleString()}
                     </td>
-                    <td className="px-3 py-2 font-mono font-medium">{log.method}</td>
-                    <td className="px-3 py-2 font-mono text-muted-foreground max-w-[300px] truncate">
+                    <td className="px-4 py-3 font-mono font-medium">{log.method}</td>
+                    <td className="px-4 py-3 font-mono text-muted-foreground max-w-[300px] truncate">
                       {log.path}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       <span className={cn('font-medium', statusColors[String(log.statusCode)[0]] || '')}>
                         {log.statusCode}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right text-muted-foreground">{formatMs(log.responseTime)}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3 text-right text-muted-foreground">{formatMs(log.responseTime)}</td>
+                    <td className="px-4 py-3">
                       {log.protocol ? (
-                        <Badge
-                          variant="outline"
-                          className={cn('text-[10px] uppercase px-1.5 py-0', protocolColors[log.protocol])}
-                        >
-                          {log.protocol}
-                        </Badge>
+                        <ProtocolBadge protocol={log.protocol} className="text-[10px] px-1.5 py-0" />
                       ) : (
                         <span className="text-muted-foreground">--</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground font-mono">{log.ipAddress || '--'}</td>
+                    <td className="px-4 py-3 text-muted-foreground font-mono">{log.ipAddress || '--'}</td>
                   </tr>
                 ))}
               </tbody>

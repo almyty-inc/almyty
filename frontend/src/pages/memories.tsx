@@ -9,6 +9,16 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { QueryError } from '@/components/ui/query-error'
@@ -134,11 +144,18 @@ export function MemoriesPage() {
   })
 
   // ── delete ──────────────────────────────────────────────────────────
+  const [memoryToDelete, setMemoryToDelete] = useState<Item | null>(null)
   const removeMut = useMutation({
     mutationFn: ({ id, mode }: { id: string; mode: 'soft' | 'hard' }) => memoriesApi.remove(id, mode),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
-      notify.success('Deleted')
+      setMemoryToDelete(null)
+      notify.success('Memory deleted')
+    },
+    // Without this a rejected delete left the row in place and said nothing.
+    onError: (err: any) => {
+      setMemoryToDelete(null)
+      notify.error('Failed to delete memory', err?.message ?? String(err))
     },
   })
 
@@ -323,7 +340,7 @@ export function MemoriesPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => removeMut.mutate({ id: m.id, mode: 'soft' })}
+                        onClick={() => setMemoryToDelete(m)}
                         title="Soft delete"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -557,6 +574,39 @@ export function MemoriesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/*
+        The trash button sits inches from the memory body, so deleting used
+        to happen on a single stray click with no way back. Confirm first,
+        quoting enough of the memory that you know which one you picked.
+      */}
+      <AlertDialog
+        open={memoryToDelete !== null}
+        onOpenChange={(open) => { if (!open) setMemoryToDelete(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete memory?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the memory from search and retrieval for every agent in this
+              workspace.{memoryToDelete ? ` It starts "${memoryToDelete.content.slice(0, 80)}${memoryToDelete.content.length > 80 ? '…' : ''}".` : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (memoryToDelete) {
+                  removeMut.mutate({ id: memoryToDelete.id, mode: 'soft' })
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Memory
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

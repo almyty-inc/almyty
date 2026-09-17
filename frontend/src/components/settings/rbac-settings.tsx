@@ -499,9 +499,9 @@ function AssignUsersDialog({
 
         <div className="flex items-end gap-2 py-2">
           <div className="flex-1 space-y-2">
-            <Label>Member</Label>
+            <Label htmlFor="rbac-member">Member</Label>
             <Select value={selectedUser} onValueChange={setSelectedUser}>
-              <SelectTrigger aria-label="Select member">
+              <SelectTrigger id="rbac-member" aria-label="Select member">
                 <SelectValue placeholder="Select a member" />
               </SelectTrigger>
               <SelectContent>
@@ -568,9 +568,9 @@ function EffectivePermissionsCard({ members }: { members: OrgMember[] }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="max-w-sm space-y-2">
-          <Label>Member</Label>
+          <Label htmlFor="rbac-member-2">Member</Label>
           <Select value={userId} onValueChange={setUserId}>
-            <SelectTrigger aria-label="Select member for permissions">
+            <SelectTrigger id="rbac-member-2" aria-label="Select member for permissions">
               <SelectValue placeholder="Select a member" />
             </SelectTrigger>
             <SelectContent>
@@ -812,12 +812,12 @@ function PolicyDialog({
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Effect</Label>
+                <Label htmlFor="rbac-effect">Effect</Label>
                 <Select
                   value={form.watch('effect')}
                   onValueChange={(v) => form.setValue('effect', v as 'allow' | 'deny')}
                 >
-                  <SelectTrigger aria-label="Effect">
+                  <SelectTrigger id="rbac-effect" aria-label="Effect">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>

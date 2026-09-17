@@ -297,6 +297,7 @@ export function BuildPanel({
                             size="sm"
                             variant="ghost"
                             className="h-7 shrink-0"
+                            aria-label="Copy handoff command"
                             onClick={() => copy(build.handoff!.command!, 'Command copied')}
                           >
                             <Copy className="h-3 w-3" />

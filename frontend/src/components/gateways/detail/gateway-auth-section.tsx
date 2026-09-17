@@ -177,8 +177,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       case 'api_key':
         return (
           <div>
-            <Label>Header Name</Label>
-            <Input
+            <Label htmlFor="gwauth-header-name">Header Name</Label>
+            <Input id="gwauth-header-name"
               value={newAuthConfig.keyHeader || 'x-api-key'}
               onChange={e => setNewAuthConfig({ ...newAuthConfig, keyHeader: e.target.value })}
               placeholder="x-api-key"
@@ -190,8 +190,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       case 'bearer_token':
         return (
           <div>
-            <Label>Token Prefix</Label>
-            <Input
+            <Label htmlFor="gwauth-token-prefix">Token Prefix</Label>
+            <Input id="gwauth-token-prefix"
               value={newAuthConfig.tokenPrefix || 'Bearer'}
               onChange={e => setNewAuthConfig({ ...newAuthConfig, tokenPrefix: e.target.value })}
               placeholder="Bearer"
@@ -210,8 +210,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
         return (
           <div className="space-y-3">
             <div>
-              <Label>Scopes (comma-separated)</Label>
-              <Input
+              <Label htmlFor="gwauth-scopes">Scopes (comma-separated)</Label>
+              <Input id="gwauth-scopes"
                 value={newAuthConfig.scopes || ''}
                 onChange={e => setNewAuthConfig({ ...newAuthConfig, scopes: e.target.value })}
                 placeholder="read, write, admin"
@@ -227,8 +227,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
         return (
           <div className="space-y-3">
             <div>
-              <Label>JWKS URL (optional)</Label>
-              <Input
+              <Label htmlFor="gwauth-jwks-url">JWKS URL (optional)</Label>
+              <Input id="gwauth-jwks-url"
                 value={newAuthConfig.jwksUrl || ''}
                 onChange={e => setNewAuthConfig({ ...newAuthConfig, jwksUrl: e.target.value })}
                 placeholder="https://auth.example.com/.well-known/jwks.json"
@@ -236,8 +236,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
               />
             </div>
             <div>
-              <Label>Issuer (optional)</Label>
-              <Input
+              <Label htmlFor="gwauth-issuer">Issuer (optional)</Label>
+              <Input id="gwauth-issuer"
                 value={newAuthConfig.issuer || ''}
                 onChange={e => setNewAuthConfig({ ...newAuthConfig, issuer: e.target.value })}
                 placeholder="https://auth.example.com"
@@ -250,8 +250,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
         return (
           <div className="space-y-3">
             <div>
-              <Label>Header Name</Label>
-              <Input
+              <Label htmlFor="gwauth-header-name-2">Header Name</Label>
+              <Input id="gwauth-header-name-2"
                 value={newAuthConfig.headerName || ''}
                 onChange={e => setNewAuthConfig({ ...newAuthConfig, headerName: e.target.value })}
                 placeholder="X-Custom-Auth"
@@ -259,8 +259,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
               />
             </div>
             <div>
-              <Label>Validation Regex (optional)</Label>
-              <Input
+              <Label htmlFor="gwauth-validation-regex">Validation Regex (optional)</Label>
+              <Input id="gwauth-validation-regex"
                 value={newAuthConfig.validationRegex || ''}
                 onChange={e => setNewAuthConfig({ ...newAuthConfig, validationRegex: e.target.value })}
                 placeholder="^[a-zA-Z0-9]{32}$"
@@ -357,6 +357,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label="Delete auth configuration"
                   className="text-destructive hover:text-destructive"
                   onClick={() => setDeleteAuthId(config.id)}
                 >
@@ -424,9 +425,9 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Auth Type</Label>
+              <Label htmlFor="gwauth-auth-type">Auth Type</Label>
               <Select value={newAuthType} onValueChange={(v) => { setNewAuthType(v); setNewAuthConfig({}) }}>
-                <SelectTrigger className="mt-1">
+                <SelectTrigger id="gwauth-auth-type" className="mt-1">
                   <SelectValue placeholder="Select authentication type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -492,8 +493,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
           ) : (
             <div className="space-y-4">
               <div>
-                <Label>Key Name</Label>
-                <Input
+                <Label htmlFor="gwauth-key-name">Key Name</Label>
+                <Input id="gwauth-key-name"
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                   placeholder="e.g. Production, CI/CD, Development"

@@ -149,7 +149,7 @@ export function RunnerDetailPage() {
         <div className="flex items-center gap-3">
           <Cpu className="h-7 w-7 text-muted-foreground" />
           <div>
-            <h1 className="text-2xl font-bold">{runner.name}</h1>
+            <h1 className="text-4xl font-heading font-extrabold tracking-tight">{runner.name}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant={runnerStateVariant[runner.state]}>{runner.state}</Badge>
               <span className="text-sm text-muted-foreground" title={runner.lastHeartbeatAt ?? ''}>
