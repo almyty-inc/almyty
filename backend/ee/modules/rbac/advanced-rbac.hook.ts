@@ -4,7 +4,7 @@ import {
   AdvancedRbacHook,
   RbacHookDecision,
 } from '../../../src/common/ee-hooks/ee-hooks';
-import { LicenseService } from '../../../src/modules/licensing/license.service';
+import { OrgLicenseResolver } from '../../../src/modules/licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 
 import { CustomRoleService } from './custom-role.service';
@@ -28,15 +28,36 @@ import { EvaluationContext } from './policy-evaluator.service';
 export class AdvancedRbacHookImpl implements AdvancedRbacHook {
   constructor(
     private readonly customRoles: CustomRoleService,
-    private readonly license: LicenseService,
+    private readonly licenses: OrgLicenseResolver,
   ) {}
+
+  /**
+   * Per-organization, not per-process.
+   *
+   * Licensing in this product is org-scoped: tokens are minted per org
+   * by billing, EntitlementGuard resolves per org, and
+   * /licensing/entitlements answers for the requesting org. This hook
+   * checked LicenseService -- the process-global singleton, which is
+   * community unless ALMYTY_LICENSE_KEY/TOKEN is in the environment.
+   * The deployed API sets only the license SIGNING key, so has()
+   * returned false for every entitlement, forever: a Business or
+   * Enterprise org could reach the settings screen, configure the
+   * feature, be told it saved, and have it do nothing at run time.
+   */
+  private async licensed(organizationId: string, key: string): Promise<boolean> {
+    try {
+      return await this.licenses.hasForOrg(organizationId, key);
+    } catch {
+      return false;
+    }
+  }
 
   async hasPermission(
     organizationId: string,
     userId: string,
     permission: string,
   ): Promise<boolean> {
-    if (!this.license.has(EE_ENTITLEMENTS.ADVANCED_RBAC)) return false;
+    if (!(await this.licensed(organizationId, EE_ENTITLEMENTS.ADVANCED_RBAC))) return false;
     return this.customRoles.hasPermission(organizationId, userId, permission);
   }
 
@@ -45,7 +66,7 @@ export class AdvancedRbacHookImpl implements AdvancedRbacHook {
     action: string,
     ctx: EvaluationContext,
   ): Promise<RbacHookDecision> {
-    if (!this.license.has(EE_ENTITLEMENTS.ADVANCED_RBAC)) {
+    if (!(await this.licensed(organizationId, EE_ENTITLEMENTS.ADVANCED_RBAC))) {
       return { effect: 'abstain' };
     }
     const decision = await this.customRoles.evaluateAccess(organizationId, action, ctx);

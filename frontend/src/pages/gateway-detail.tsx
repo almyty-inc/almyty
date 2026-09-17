@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 
 import { gatewaysApi, toolsApi } from '@/lib/api'
+import { useEntitlements } from '@/hooks/use-entitlement'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 
@@ -38,6 +39,7 @@ import { WidgetBuilder } from '@/components/gateways/widget-builder'
 import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
 
 export function GatewayDetailPage() {
+  const entitlements = useEntitlements()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { currentOrganization } = useOrganizationStore()
@@ -379,6 +381,17 @@ export function GatewayDetailPage() {
               perEndUser: (gateway as any).rateLimits?.requestsPerMinute ?? null,
               perIp: (gateway as any).rateLimits?.requestsPerHour ?? null,
             },
+          }}
+          /*
+            Without these the builder defaulted both to undefined, so the
+            white-label toggle was hard-disabled and the SSO auth mode
+            permanently refused -- for every organization, including the
+            ones that had bought them. The whole hosted-chat SSO
+            controller existed to serve a mode nothing could select.
+          */
+          entitlements={{
+            whiteLabel: entitlements.has('white_label'),
+            enterpriseAuth: entitlements.has('sso'),
           }}
         />
       )}

@@ -40,7 +40,15 @@ describe('SsoConfigService', () => {
 
   beforeEach(() => {
     repo = fakeRepo();
-    service = new SsoConfigService(repo as any);
+    // Entitled: this spec is about encryption at rest, not billing.
+    // getDecrypted refuses an unentitled org now, because the public
+    // login routes cannot carry a guard that knows which org they are
+    // for -- so the check moved to the one method they all pass through.
+    service = new SsoConfigService(
+      repo as any,
+      undefined,
+      { hasForOrg: jest.fn().mockResolvedValue(true) } as any,
+    );
   });
 
   it('encrypts the OIDC client secret at rest and decrypts it on read', async () => {

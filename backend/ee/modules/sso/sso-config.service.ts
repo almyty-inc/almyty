@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
@@ -11,6 +11,8 @@ import {
   decryptField,
   isEncrypted,
 } from '../../../src/common/security/field-crypto';
+import { OrgLicenseResolver } from '../../../src/modules/licensing/org-license.resolver';
+import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 
 /** Fields an org admin may set. Secrets are accepted plaintext and encrypted here. */
 export interface UpsertSsoConfigDto {
@@ -45,11 +47,23 @@ export class SsoConfigService {
     // service without it keep working.
     @Optional()
     private readonly notifications?: NotificationsService,
+    // @Optional() for the same reason: a test that builds this service
+    // bare gets the unentitled answer, which is the safe one.
+    @Optional()
+    private readonly licenses?: OrgLicenseResolver,
   ) {}
 
   /** Raw entity (secrets still encrypted). */
   async get(organizationId: string): Promise<OrgSsoConfig | null> {
     return this.repo.findOne({ where: { organizationId } });
+  }
+
+  private async entitled(organizationId: string): Promise<boolean> {
+    try {
+      return this.licenses ? await this.licenses.hasForOrg(organizationId, EE_ENTITLEMENTS.SSO) : false;
+    } catch {
+      return false;
+    }
   }
 
   async getOrThrow(organizationId: string): Promise<OrgSsoConfig> {
@@ -60,8 +74,27 @@ export class SsoConfigService {
     return config;
   }
 
-  /** Config with `oidcClientSecret` decrypted — never return this over the wire. */
+  /**
+   * Config with `oidcClientSecret` decrypted — never return this over the wire.
+   *
+   * The entitlement is checked here rather than by a controller guard.
+   * SsoController is @Public(), because an SSO login arrives with no app
+   * session, and JwtAuthGuard short-circuits on @Public() without
+   * attaching a user — so EntitlementGuard had no org to resolve and
+   * fell to its global branch, which is community on this deployment.
+   * The result was 402 on every SAML and OIDC login for every paying
+   * customer: an admin could configure SSO successfully from the
+   * authenticated settings screen and then nobody could use it. Every
+   * login route reaches the identity provider through this method, so
+   * this is the one place that covers all of them.
+   */
   async getDecrypted(organizationId: string): Promise<DecryptedSsoConfig | null> {
+    if (!(await this.entitled(organizationId))) {
+      throw new HttpException(
+        { success: false, code: 'SSO_NOT_ENTITLED', message: 'Single sign-on is not included in this organization plan' },
+        HttpStatus.PAYMENT_REQUIRED,
+      );
+    }
     const config = await this.get(organizationId);
     if (!config) return null;
     return {

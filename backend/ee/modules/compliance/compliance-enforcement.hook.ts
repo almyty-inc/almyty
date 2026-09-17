@@ -4,7 +4,7 @@ import {
   ComplianceEnforcement,
   ComplianceEnforcementHook,
 } from '../../../src/common/ee-hooks/ee-hooks';
-import { LicenseService } from '../../../src/modules/licensing/license.service';
+import { OrgLicenseResolver } from '../../../src/modules/licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 
 import { ComplianceService, EffectiveCompliancePolicy } from './compliance.service';
@@ -32,11 +32,32 @@ export class ComplianceEnforcementHookImpl implements ComplianceEnforcementHook 
 
   constructor(
     private readonly compliance: ComplianceService,
-    private readonly license: LicenseService,
+    private readonly licenses: OrgLicenseResolver,
   ) {}
 
+  /**
+   * Per-organization, not per-process.
+   *
+   * Licensing in this product is org-scoped: tokens are minted per org
+   * by billing, EntitlementGuard resolves per org, and
+   * /licensing/entitlements answers for the requesting org. This hook
+   * checked LicenseService -- the process-global singleton, which is
+   * community unless ALMYTY_LICENSE_KEY/TOKEN is in the environment.
+   * The deployed API sets only the license SIGNING key, so has()
+   * returned false for every entitlement, forever: a Business or
+   * Enterprise org could reach the settings screen, configure the
+   * feature, be told it saved, and have it do nothing at run time.
+   */
+  private async licensed(organizationId: string, key: string): Promise<boolean> {
+    try {
+      return await this.licenses.hasForOrg(organizationId, key);
+    } catch {
+      return false;
+    }
+  }
+
   async getEnforcement(organizationId: string): Promise<ComplianceEnforcement | null> {
-    if (!this.license.has(EE_ENTITLEMENTS.COMPLIANCE_PACK)) return null;
+    if (!(await this.licensed(organizationId, EE_ENTITLEMENTS.COMPLIANCE_PACK))) return null;
 
     const hit = this.cache.get(organizationId);
     if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;

@@ -113,7 +113,12 @@ export function DashboardPage() {
     enabled: !!orgId,
   })
 
-  const isLoading = loadingGateways && loadingTools && loadingApis && loadingAgents
+  // Any one of these still loading means the numbers below are not the
+  // truth yet. With `&&`, visiting Gateways and then Dashboard inside
+  // the 30s staleTime made one query fresh, which let the whole page
+  // render "0 APIs · 0 Tools · 0 Gateways · 0 Agents" until the other
+  // three landed -- on an org with plenty of all four.
+  const isLoading = loadingGateways || loadingTools || loadingApis || loadingAgents
 
   if (isLoading) {
     return (
