@@ -83,7 +83,9 @@ After the rollout settled, agent creation succeeded without a login redirect.
 
 Recovered the QA change onto development `4c18e147` after the temporary worktree
 was partially removed during the pause. Organization/auth regressions and the
-hosted-chat suite passed **41/41** focused tests; TypeScript passed.
+hosted-chat suite passed **41/41** focused tests; TypeScript passed. The current
+full frontend run passed **131 files / 1,014 tests**. Fix #628 merged into
+development as `560c15ec`; staging promotion is #629.
 
 The September 15 full-suite attempt was **987 passed / 1 failed** (hosted-chat
 timeout), not a clean run. Upstream has since explicitly quarantined this known
@@ -95,3 +97,26 @@ and tool choice, hardcodes the finish reason to `stop`, and serializes output as
 text without outbound tool calls. This was reported to the implementing peer;
 translator unit coverage does not establish a working client-side tool loop.
 Issue #621 must not be considered fully verified on route availability alone.
+
+Live re-probe returned **401** with the Anthropic authentication-error shape,
+replacing the earlier 404. This used an intentionally invalid key, not an
+authenticated tool-loop test.
+
+### Roles and orchestrator: persistence is not execution
+
+- The principal role, selected single-call strategy and enabled orchestrator
+  survived session/browser reopening. [Settings evidence](2026-09-17-orchestrator-persisted.png).
+- Role preview now names the failure, but the exact reason is **routing is not
+  available on this install**, not a missing model/key. [Evidence](2026-09-17-routing-unavailable.png).
+  `AgentsModule` does not import `ModelCatalogModule`, which exports the router
+  required by the optional role and orchestrator dependencies. Reported to owner.
+- Activated only the disposable QA agent and invoked it once through the UI.
+  Run `92dee506-dcb9-4f47-8551-d57b07aa3749` failed, saying `principal` was not
+  defined even though its role was visible. The node executor expects
+  `options.resolvedRoles`, but the engine never resolves/passes them. This is a
+  second runtime handoff defect, not a missing provider credential.
+- A read-only check of that exact execution confirmed `strategyKey=single`,
+  `strategyChosenBy=fallback`, and `strategyFallbackReason=no model is wired to
+  decide with`. Fallback **recording passes**; successful execution does not.
+- Deactivated the disposable agent after the test. No schedule or paid
+  deployment was created.
