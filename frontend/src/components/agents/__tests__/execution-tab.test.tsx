@@ -24,7 +24,19 @@ const strategies = [
   { key: 'cascade', displayName: 'Cascade', description: 'Cheap first.', roleSlots: ['drafter', 'verifier', 'principal'], steps: 3, costBand: 'medium' as const, latencyBand: 'medium' as const, builtIn: true },
 ]
 
-const role = (key: string) => ({ key, displayName: key, binding: { mode: 'resolved' as const, policy: {} } })
+// A row as GET actually returns it, entity columns and all. The thin
+// fixture this replaced is why a toggle that posts the whole row back
+// passed here and 400'd against the real validation pipe.
+const role = (key: string) => ({
+  id: `role-${key}`,
+  organizationId: 'org-1',
+  agentId: 'a1',
+  createdAt: '2026-09-01T00:00:00Z',
+  updatedAt: '2026-09-01T00:00:00Z',
+  key,
+  displayName: key,
+  binding: { mode: 'resolved' as const, policy: {} },
+})
 
 function wire({ roles = [] as any[], execution = {} as any } = {}) {
   ;(api.get as any).mockImplementation(async (url: string) => {
@@ -143,5 +155,21 @@ describe('the Execution tab saves what you choose', () => {
     const error = await screen.findByTestId('resolve-error')
     expect(error).toHaveTextContent('principal')
     expect(error).toHaveTextContent(/add a model to the catalog/i)
+  })
+
+  it('posts only the fields the upsert accepts, never the whole row back', async () => {
+    wire({ roles: [role('principal')] })
+    render(<ExecutionTab agentId="a1" />)
+
+    await screen.findByTestId('roles-panel')
+    fireEvent.click(screen.getByRole('button', { name: /pin a model/i }))
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/agents/a1/roles', expect.anything()))
+    const [, sent] = (api.post as any).mock.calls.find((c: any[]) => c[0] === '/agents/a1/roles' && c[1]?.binding)
+    // Server-managed columns would be refused by the whitelist pipe.
+    for (const banned of ['id', 'organizationId', 'agentId', 'createdAt', 'updatedAt']) {
+      expect(sent).not.toHaveProperty(banned)
+    }
+    expect(sent.key).toBe('principal')
   })
 })

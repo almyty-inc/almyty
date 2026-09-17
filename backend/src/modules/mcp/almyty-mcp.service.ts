@@ -406,12 +406,13 @@ export class AlmytyMcpService {
         };
       }
       case 'memory_get': {
-        const item = await get(CanonicalMemoryService).get(String(args.id));
+        const item = await get(CanonicalMemoryService).get(String(args.id), orgId);
         return item ?? { error: { kind: 'not_found', id: args.id } };
       }
       case 'memory_delete': {
         const ok = await get(CanonicalMemoryService).delete(
           String(args.id),
+          orgId,
           (args.mode as 'soft' | 'hard') ?? 'soft',
           { user_id: userId },
         );
@@ -431,6 +432,7 @@ export class AlmytyMcpService {
         try {
           const result = await get(CanonicalMemoryService).supersede(
             String(args.old_id),
+            orgId,
             {
               mode: 'memory',
               scope: { scope_type: 'workspace', scope_id: orgId },

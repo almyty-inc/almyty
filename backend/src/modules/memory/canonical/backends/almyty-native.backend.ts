@@ -74,7 +74,7 @@ export class AlmytyNativeBackend implements MemoryBackend {
   }
 
   get(id: string, _creds?: BackendCredentials): Promise<MemoryItem | null> {
-    return this.service.get(id);
+    return this.service.getForTransfer(id);
   }
 
   /**
@@ -91,7 +91,7 @@ export class AlmytyNativeBackend implements MemoryBackend {
   }
 
   delete(id: string, mode: 'soft' | 'hard' = 'soft', _creds?: BackendCredentials): Promise<boolean> {
-    return this.service.delete(id, mode, {});
+    return this.service.deleteForTransfer(id, mode);
   }
 
   list(query: ListQuery, _creds?: BackendCredentials): Promise<Page<MemoryItem>> {
