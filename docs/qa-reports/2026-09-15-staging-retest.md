@@ -120,3 +120,18 @@ authenticated tool-loop test.
   decide with`. Fallback **recording passes**; successful execution does not.
 - Deactivated the disposable agent after the test. No schedule or paid
   deployment was created.
+
+The two role/routing handoff defects are tracked in
+[issue #632](https://github.com/almyty-inc/almyty/issues/632).
+
+### Current chat and free-plan gates
+
+A fresh hosted-chat request on September 17 returned the correct unconnected-demo
+description without a busy/no-response error. [Reply](2026-09-17-chat-reply.png).
+For the free QA organization, Analytics → Chargeback, Settings → Audit streaming,
+and Settings → Encryption each rendered the corresponding upgrade prompt.
+This verifies the unentitled path only; it does not test a paid configuration,
+audit delivery, or live KMS provisioning.
+
+Promotion #629 merged into staging at `b9b995b6`; its rollout and a fresh
+create/reload selection check remain to be verified.
