@@ -163,6 +163,11 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
       setNewInterfaceType('a2a')
       setInterfaceConfig({})
       // Walk the user straight into platform-side setup for the new channel.
+      // Without this the canvas still shows the channel as un-deployed,
+      // and clicking that tile looks it up by id in this same query,
+      // misses, and reopens the deploy dialog -- a second gateway for
+      // the same channel.
+      queryClient.invalidateQueries({ queryKey: ['agent-gateways', agentId] })
       const gateway = created?.gateway || created
       if (gateway?.id) setSetupGateway(gateway as Gateway)
     },

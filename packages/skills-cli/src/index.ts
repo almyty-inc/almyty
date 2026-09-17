@@ -433,7 +433,13 @@ async function main(): Promise<void> {
       }
 
       const totalInstalled = results.reduce((sum, r) => sum + r.installed, 0);
+      const totalSkipped = results.reduce((sum, r) => sum + r.skipped, 0);
       console.log(`\nInstalled ${totalInstalled} skill files across ${results.length} agent(s).`);
+      // Said out loud: a skill refused for an unsafe name used to be
+      // counted as installed, so the total was the number offered.
+      if (totalSkipped > 0) {
+        console.log(`${totalSkipped} skill(s) were skipped — see the warnings above.`);
+      }
       console.log('Skills will be automatically loaded by your AI coding agent.');
       break;
     }
@@ -506,13 +512,18 @@ async function main(): Promise<void> {
           const currentHash = skills.map(s => `${s.name}:${s.content.length}`).join('|');
 
           if (currentHash !== lastHash) {
-            lastHash = currentHash;
             const ts = new Date().toLocaleTimeString();
 
+            let written = 0;
             for (const target of targets) {
-              installSkills(skills, target);
+              written += installSkills(skills, target).installed;
             }
-            console.log(`[${ts}] Synced ${skills.length} skills to ${targets.length} agent(s).`);
+            // Only once the install actually happened. Stamping the hash
+            // first meant a throw inside installSkills logged one "Sync
+            // error" and then every later tick matched the hash and
+            // printed nothing -- indistinguishable from "up to date".
+            lastHash = currentHash;
+            console.log(`[${ts}] Synced ${written} skill files to ${targets.length} agent(s).`);
           }
         } catch (err: any) {
           const ts = new Date().toLocaleTimeString();
@@ -604,7 +615,6 @@ async function main(): Promise<void> {
           const currentHash = skills.map(s => `${s.name}:${s.content.length}`).join('|');
 
           if (currentHash !== lastHash) {
-            lastHash = currentHash;
             const ts = new Date().toLocaleTimeString();
 
             if (skills.length === 0) {
@@ -612,10 +622,13 @@ async function main(): Promise<void> {
               return;
             }
 
+            let written = 0;
             for (const target of targets) {
-              installSkills(skills, target);
+              written += installSkills(skills, target).installed;
             }
-            console.log(`[${ts}] Synced ${skills.length} skills to ${targets.length} agent(s).`);
+            // After the install, not before -- see the watch loop above.
+            lastHash = currentHash;
+            console.log(`[${ts}] Synced ${written} skill files to ${targets.length} agent(s).`);
           }
         } catch (err: any) {
           const ts = new Date().toLocaleTimeString();

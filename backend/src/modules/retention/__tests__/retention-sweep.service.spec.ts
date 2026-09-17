@@ -23,6 +23,7 @@ function policy(overrides: Partial<RetentionPolicy> = {}): RetentionPolicy {
     requestLogsDays: null,
     usageMetricsDays: null,
     auditLogDays: null,
+    toolExecutionsDays: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -37,6 +38,7 @@ describe('RetentionSweepService', () => {
   let requestLogRepo: any;
   let usageMetricRepo: any;
   let auditLogRepo: any;
+  let toolExecutionRepo: any;
   let gatewayRepo: any;
   let auditLogService: any;
   let service: RetentionSweepService;
@@ -49,6 +51,7 @@ describe('RetentionSweepService', () => {
     requestLogRepo = mockRepo();
     usageMetricRepo = mockRepo();
     auditLogRepo = mockRepo();
+    toolExecutionRepo = mockRepo();
     gatewayRepo = mockRepo();
     auditLogService = { log: jest.fn().mockResolvedValue(null) };
     service = new RetentionSweepService(
@@ -59,6 +62,7 @@ describe('RetentionSweepService', () => {
       requestLogRepo,
       usageMetricRepo,
       auditLogRepo,
+      toolExecutionRepo,
       gatewayRepo,
       auditLogService,
     );
@@ -86,6 +90,29 @@ describe('RetentionSweepService', () => {
     expect(runRepo.find).not.toHaveBeenCalled();
   });
 
+  /**
+   * tool_executions was the one per-event table with no sweep, while
+   * every sibling had one. Each row keeps `parameters` and `result` as
+   * untruncated json and the HTTP executor allows 10MB responses, so it
+   * is also the table that grows fastest in bytes.
+   */
+  it('sweeps tool executions past the window, like every other class', async () => {
+    toolExecutionRepo.find.mockResolvedValueOnce([{ id: 'e1' }, { id: 'e2' }]).mockResolvedValue([]);
+    toolExecutionRepo.delete.mockResolvedValue({ affected: 2 });
+
+    const counts = await service.sweepOrganization(policy({ toolExecutionsDays: 30 }));
+
+    expect(counts.toolExecutions).toBe(2);
+    expect(toolExecutionRepo.find).toHaveBeenCalled();
+  });
+
+  it('keeps them forever when no window is set', async () => {
+    const counts = await service.sweepOrganization(policy());
+
+    expect(counts.toolExecutions).toBe(0);
+    expect(toolExecutionRepo.find).not.toHaveBeenCalled();
+  });
+
   it('skips every data class whose day-count is null (keep forever)', async () => {
     const counts = await service.sweepOrganization(policy());
 
@@ -96,6 +123,7 @@ describe('RetentionSweepService', () => {
       requestLogs: 0,
       usageMetrics: 0,
       auditLogs: 0,
+      toolExecutions: 0,
     });
     expect(runRepo.find).not.toHaveBeenCalled();
     expect(conversationRepo.find).not.toHaveBeenCalled();
@@ -235,6 +263,7 @@ describe('RetentionSweepService', () => {
       requestLogs: 0,
       usageMetrics: 0,
       auditLogs: 0,
+      toolExecutions: 0,
     });
   });
 
@@ -292,6 +321,7 @@ describe('RetentionSweepService', () => {
         requestLogRepo,
         usageMetricRepo,
         auditLogRepo,
+        toolExecutionRepo,
         gatewayRepo,
         auditLogService,
         undefined,
@@ -377,6 +407,7 @@ describe('RetentionSweepService notifications', () => {
       requestLogRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       usageMetricRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       auditLogRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
+      toolExecutionRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       gatewayRepo: { find: jest.fn().mockResolvedValue([]) },
     };
     const notifications = {
@@ -391,6 +422,7 @@ describe('RetentionSweepService notifications', () => {
       repos.requestLogRepo as any,
       repos.usageMetricRepo as any,
       repos.auditLogRepo as any,
+      repos.toolExecutionRepo as any,
       repos.gatewayRepo as any,
       { log: jest.fn().mockResolvedValue(null) } as any,
       notifications as any,

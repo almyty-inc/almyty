@@ -38,7 +38,11 @@ export interface RolesPanelProps {
   /** Names for model ids, so a slot does not read as a uuid. */
   modelNames?: Record<string, string>
   onAddRole?: () => void
-  onEditRole?: (key: string) => void
+  /**
+   * Removing a role. `DELETE /agents/:id/roles/:key` has always existed
+   * and nothing reached it, so a role added by mistake was permanent.
+   */
+  onRemoveRole?: (key: string) => void
   onToggleBinding?: (key: string, next: 'pinned' | 'resolved') => void
   loading?: boolean
   error?: string
@@ -49,7 +53,7 @@ export function RolesPanel({
   resolved = [],
   modelNames = {},
   onAddRole,
-  onEditRole,
+  onRemoveRole,
   onToggleBinding,
   loading,
   error,
@@ -115,7 +119,14 @@ export function RolesPanel({
                 )}
               >
                 {pinned ? <Pin className="h-3 w-3" aria-hidden="true" /> : <Route className="h-3 w-3" aria-hidden="true" />}
-                {pinned ? 'Pinned' : 'Resolved'}
+                {/*
+                  The badge names how the role is FILLED, not whether it
+                  has been. Saying "Resolved" here put a card in the state
+                  of claiming "Resolved", "Not resolved yet" and "could
+                  not be filled" at the same time. "Routed" is the word
+                  the strategy picker already uses for the same thing.
+                */}
+                {pinned ? 'Pinned' : 'Routed'}
               </Badge>
             </div>
 
@@ -123,7 +134,9 @@ export function RolesPanel({
               {modelId ? (
                 <span data-testid={`role-model-${role.key}`}>{modelNames[modelId] ?? modelId}</span>
               ) : (
-                <span data-testid={`role-unresolved-${role.key}`}>Not resolved yet</span>
+                <span data-testid={`role-unresolved-${role.key}`}>
+                  {pinned ? 'No model pinned yet' : 'Routing has not picked a model yet'}
+                </span>
               )}
               {pinned ? (
                 // Worth saying out loud on the surface: this is what makes
@@ -144,9 +157,14 @@ export function RolesPanel({
                   {pinned ? 'Let routing choose' : 'Pin a model'}
                 </Button>
               )}
-              {onEditRole && (
-                <Button size="sm" variant="ghost" onClick={() => onEditRole(role.key)}>
-                  Edit
+              {onRemoveRole && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid={`remove-role-${role.key}`}
+                  onClick={() => onRemoveRole(role.key)}
+                >
+                  Remove
                 </Button>
               )}
             </div>

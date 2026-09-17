@@ -125,6 +125,9 @@ export function OverviewTab({
       success('Rolled Back', 'Agent has been rolled back to the selected version.')
       queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
       queryClient.invalidateQueries({ queryKey: ['agent-versions', agent.id] })
+      // The Change History panel reads this key, not ['agent-versions'].
+      queryClient.invalidateQueries({ queryKey: ['entity-versions', 'Agent', agent.id] })
+      queryClient.invalidateQueries({ queryKey: ['agent-audit-log', agent.id] })
       setRollbackIndex(null)
     } catch (err: any) {
       errorNotif('Rollback Failed', err?.response?.data?.message || err?.message || 'Failed to rollback')

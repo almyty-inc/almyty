@@ -72,6 +72,12 @@ function AuditExportButtons({
 import { formatMs, formatNumber } from './format'
 import { StatCard } from './stat-card'
 
+/** A figure, or a dash when the query behind it did not answer. */
+function auditFigure(summary: any, key: string, value: number | undefined): string {
+  if (summary?.unavailable?.includes(key)) return '—'
+  return formatNumber(value || 0)
+}
+
 export function AuditTab() {
   const { currentOrganization } = useOrganizationStore()
   const [auditPage, setAuditPage] = useState(1)
@@ -111,26 +117,44 @@ export function AuditTab() {
         </div>
       ) : auditSummary ? (
         <>
+          {/*
+            "0 events today" and "the query failed" are the same picture
+            without this. On a compliance surface that distinction is the
+            whole point, so the API now says when a figure could not be
+            read and the cards show a dash instead of a confident zero.
+          */}
+          {auditSummary.partial && (
+            <div
+              data-testid="audit-summary-partial"
+              className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm"
+            >
+              <Activity className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <p className="text-amber-800 dark:text-amber-300">
+                Some figures could not be read just now, so they are shown as &mdash; rather than zero. Reload to try
+                again.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard
               icon={ScrollText}
               label="Actions Today"
-              value={formatNumber(auditSummary.totals?.today || 0)}
+              value={auditFigure(auditSummary, 'today', auditSummary.totals?.today)}
             />
             <StatCard
               icon={Activity}
               label="Actions This Week"
-              value={formatNumber(auditSummary.totals?.thisWeek || 0)}
+              value={auditFigure(auditSummary, 'thisWeek', auditSummary.totals?.thisWeek)}
             />
             <StatCard
               icon={Activity}
               label="Actions This Month"
-              value={formatNumber(auditSummary.totals?.thisMonth || 0)}
+              value={auditFigure(auditSummary, 'thisMonth', auditSummary.totals?.thisMonth)}
             />
             <StatCard
               icon={Users}
               label="Active Users"
-              value={String(auditSummary.topUsers?.length || 0)}
+              value={auditFigure(auditSummary, 'topUsers', auditSummary.topUsers?.length)}
             />
           </div>
 

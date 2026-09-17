@@ -10,6 +10,12 @@ import { Message } from '../../entities/message.entity';
 import { BUILT_IN_TOOLS } from './agent-runtime.service';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 
+/**
+ * How many recent messages a run rebuilds its thread from by default.
+ * Overridable per agent via modelConfig.historyMessageLimit.
+ */
+const DEFAULT_HISTORY_MESSAGES = 100;
+
 @Injectable()
 export class AgentRuntimeBuilders {
   constructor(
@@ -111,12 +117,25 @@ export class AgentRuntimeBuilders {
 
     messages.push({ role: 'system', content: systemPrompt });
 
-    // Thread history: load from messages table
+    // Thread history: load from messages table.
+    //
+    // Bounded to the tail. This loaded the entire conversation on EVERY
+    // step of EVERY run, and compaction -- the thing that folds an old
+    // prefix into a summary -- is off unless the agent opts in. So the
+    // default path re-materialized the whole message table for a
+    // conversation that, in a hosted chat or a Slack channel, lives for
+    // weeks. The provider eventually refuses on context length, but the
+    // heap on the API pod gives out first, and the cost is paid per
+    // step. Compaction still folds the prefix when it is on; this is
+    // the floor under it when it is not.
     if (run.conversationId) {
-      const conversationMessages = await this.messageRepository.find({
+      const historyLimit = (agent.modelConfig as any)?.historyMessageLimit ?? DEFAULT_HISTORY_MESSAGES;
+      const recent = await this.messageRepository.find({
         where: { conversationId: run.conversationId },
-        order: { createdAt: 'ASC' },
+        order: { createdAt: 'DESC' },
+        take: historyLimit,
       });
+      const conversationMessages = recent.reverse();
       for (const msg of conversationMessages) {
         const msgObj: any = { role: msg.role, content: msg.content };
         if (msg.toolCalls) {

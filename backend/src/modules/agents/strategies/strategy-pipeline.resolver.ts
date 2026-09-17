@@ -75,6 +75,29 @@ export class StrategyPipelineResolver {
     };
   }
 
+  /**
+   * The agent's standing strategy compiled, ignoring the orchestrator.
+   *
+   * Ejecting is about the shape the agent is configured to run, not the
+   * one a model might pick for one particular request -- baking an
+   * orchestrator's per-request choice into a permanent graph would freeze
+   * an accident.
+   */
+  async compileStanding(agent: Agent): Promise<AgentPipeline> {
+    const strategyKey = (agent.settings as any)?.execution?.strategyKey as string | undefined | null;
+    if (!strategyKey) {
+      throw new StrategyCompileError('This agent runs its own graph already, so there is nothing to eject.');
+    }
+
+    const shape = await this.find(strategyKey, agent.organizationId);
+    if (!shape) {
+      throw new StrategyCompileError(`This agent is set to run "${strategyKey}", which no longer exists.`);
+    }
+
+    const roles = await this.roles.find({ where: { organizationId: agent.organizationId, agentId: agent.id } });
+    return compileStrategy(shape, Object.fromEntries(roles.map((r) => [r.key, r.key])));
+  }
+
   private async find(key: string, organizationId: string): Promise<Pick<Strategy, 'key' | 'roleSlots' | 'shape'> | null> {
     // An organization's own row wins over the built-in of the same key,
     // which is how you customise one.

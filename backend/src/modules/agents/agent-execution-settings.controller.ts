@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpException, HttpStatus, Param, ParseUUIDPipe, Put, Request, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, Get, HttpException, HttpStatus, Param, ParseUUIDPipe, Post, Put, Request, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -11,6 +11,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Agent } from '../../entities/agent.entity';
 import { STRATEGY_SEEDS } from './strategies/strategy-seeds';
 import { Strategy } from '../../entities/strategy.entity';
+import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolver';
+import { StrategyCompileError } from './strategies/strategy-compiler';
 
 /**
  * How an agent runs: which shape it uses, and whether a model picks that
@@ -56,6 +58,7 @@ export class AgentExecutionSettingsController {
   constructor(
     @InjectRepository(Agent) private readonly agents: Repository<Agent>,
     @InjectRepository(Strategy) private readonly strategies: Repository<Strategy>,
+    private readonly resolver: StrategyPipelineResolver,
   ) {}
 
   private orgId(req: any): string {
@@ -118,5 +121,61 @@ export class AgentExecutionSettingsController {
     agent.settings = { ...(agent.settings ?? {}), execution };
     await this.agents.save(agent);
     return { success: true, data: execution };
+  }
+
+  /**
+   * Turn the chosen strategy into this agent's own graph, and stop
+   * running the strategy.
+   *
+   * A strategy is a shape somebody else decided. Sooner or later you want
+   * one step changed, and without this the only way out is to rebuild the
+   * whole pipeline by hand from a description. The compiler already
+   * produces a runnable graph -- the Execution tab had an "Eject to an
+   * editable graph" button waiting on an endpoint that was never written,
+   * so the button never rendered.
+   *
+   * Compiled nodes carry a roleKey, not a model, so ejecting does not
+   * pin anything: routing still fills each role at run time.
+   */
+  @Post('eject')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: "Compile the chosen strategy into the agent's own editable pipeline" })
+  async eject(@Request() req: any, @Param('agentId', ParseUUIDPipe) agentId: string) {
+    const agent = await this.load(req, agentId);
+
+    // Overwriting a graph somebody drew by hand is not recoverable from
+    // this screen, so it is refused rather than done quietly.
+    if (agent.pipeline?.nodes?.length) {
+      throw new HttpException(
+        {
+          success: false,
+          code: 'PIPELINE_NOT_EMPTY',
+          message: 'This agent already has a graph. Ejecting would overwrite it.',
+        },
+        HttpStatus.CONFLICT,
+      );
+    }
+
+    let pipeline;
+    try {
+      pipeline = await this.resolver.compileStanding(agent);
+    } catch (err) {
+      if (err instanceof StrategyCompileError) {
+        throw new HttpException(
+          { success: false, code: 'STRATEGY_NOT_COMPILABLE', message: err.message },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      throw err;
+    }
+
+    const current = (agent.settings?.execution ?? {}) as AgentExecutionSettings;
+    const execution: AgentExecutionSettings = { ...current, strategyKey: null };
+
+    agent.pipeline = pipeline;
+    agent.settings = { ...(agent.settings ?? {}), execution };
+    await this.agents.save(agent);
+
+    return { success: true, data: { pipeline, execution } };
   }
 }

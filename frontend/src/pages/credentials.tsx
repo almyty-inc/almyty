@@ -18,7 +18,7 @@ import { useCopySensitive } from '@/lib/clipboard'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { createCredentialSchema } from '@/components/credentials/schema'
+import { credentialConfig, createCredentialSchema } from '@/components/credentials/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
 import type { VaultCredential, AccessKey } from '@/types'
 
@@ -87,10 +87,16 @@ export function CredentialsPage() {
   )
 }
 
+/** A blank credential form, whatever type it ends up being. */
+const EMPTY_CREDENTIAL_FORM = {
+  name: '', type: 'api_key', description: '', value: '',
+  username: '', password: '', clientId: '', clientSecret: '',
+}
+
 function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen: boolean; setIsCreateOpen: (v: boolean) => void }) {
   const qc = useQueryClient(), notify = useNotifications()
   const { currentOrganization } = useOrganizationStore()
-  const [form, setForm] = useState({ name: '', type: 'api_key', description: '', value: '' })
+  const [form, setForm] = useState(EMPTY_CREDENTIAL_FORM)
   const [formError, setFormError] = useState<string | null>(null)
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
@@ -103,7 +109,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   const visibleCredentials = filterByTeamVisibility(credentials as any[], teamFilter)
   const createMut = useMutation({
     mutationFn: (data: any) => credentialsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm({ name: '', type: 'api_key', description: '', value: '' }); notify.success('Created', 'Credential created') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm(EMPTY_CREDENTIAL_FORM); notify.success('Created', 'Credential created') },
     onError: (err) => notify.error('Error', getApiErrorMessage(err, 'Failed to create credential')),
   })
   const deleteMut = useMutation({
@@ -176,7 +182,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
       <Dialog open={isCreateOpen} onOpenChange={(open) => {
         setIsCreateOpen(open)
         if (!open) {
-          setForm({ name: '', type: 'api_key', description: '', value: '' })
+          setForm(EMPTY_CREDENTIAL_FORM)
           setFormError(null)
           createMut.reset()
         }
@@ -198,13 +204,23 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
               <div><label className="text-sm font-medium">{form.type === 'api_key' ? 'API Key' : form.type === 'bearer_token' ? 'Token' : 'JWT Token'}</label>
                 <Input type="password" placeholder="Enter value..." value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} /></div>
             )}
+            {/*
+              These four were `onChange={() => {}}` -- the only no-op
+              handlers in the frontend. Whatever you typed went nowhere,
+              so submitting failed on a `value` field that is not even
+              rendered for these types.
+            */}
             {form.type === 'basic_auth' && (<>
-              <div><label className="text-sm font-medium">Username</label><Input placeholder="Username" onChange={() => {}} /></div>
-              <div><label className="text-sm font-medium">Password</label><Input type="password" placeholder="Password" onChange={() => {}} /></div>
+              <div><label className="text-sm font-medium">Username</label>
+                <Input placeholder="Username" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} /></div>
+              <div><label className="text-sm font-medium">Password</label>
+                <Input type="password" placeholder="Password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></div>
             </>)}
             {form.type === 'oauth2' && (<>
-              <div><label className="text-sm font-medium">Client ID</label><Input placeholder="Client ID" onChange={() => {}} /></div>
-              <div><label className="text-sm font-medium">Client Secret</label><Input type="password" placeholder="Client Secret" onChange={() => {}} /></div>
+              <div><label className="text-sm font-medium">Client ID</label>
+                <Input placeholder="Client ID" value={form.clientId} onChange={e => setForm(f => ({ ...f, clientId: e.target.value }))} /></div>
+              <div><label className="text-sm font-medium">Client Secret</label>
+                <Input type="password" placeholder="Client Secret" value={form.clientSecret} onChange={e => setForm(f => ({ ...f, clientSecret: e.target.value }))} /></div>
             </>)}
             <div><label className="text-sm font-medium">Description</label>
               <Input placeholder="Optional description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
@@ -225,10 +241,11 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
               setFormError(null)
               // Backend's CreateCredentialDto (PR #154) expects { name, type, description?, config: object, visibility, teamId? }.
               // The legacy flat 'value' shape is rejected by forbidNonWhitelisted.
-              const { value: secret, ...rest } = form
               createMut.mutate({
-                ...rest,
-                config: secret ? { value: secret } : {},
+                name: form.name,
+                type: form.type,
+                description: form.description,
+                config: credentialConfig(form),
                 visibility: visibility.visibility,
                 teamId: visibility.teamId,
               })

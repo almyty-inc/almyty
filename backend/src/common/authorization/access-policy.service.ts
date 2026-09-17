@@ -222,6 +222,13 @@ export class AccessPolicyService {
     alias: string,
   ): Promise<{ bypass: boolean; teamIds: string[] }> {
     const orgRole = await this.getOrgRole(user.id, organizationId);
+    // A non-member is denied, not merely filtered. Falling through to
+    // the org-visibility clause below returned every org-visible row of
+    // an organization the caller has no membership in -- canAccess
+    // already refuses this case, and a list must refuse it the same way.
+    if (!orgRole) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
     if (orgRole === OrganizationRole.OWNER || orgRole === OrganizationRole.ADMIN) {
       // Bypass: caller sees every row in the org.
       qb.andWhere(`${alias}."organizationId" = :_orgId`, { _orgId: organizationId });

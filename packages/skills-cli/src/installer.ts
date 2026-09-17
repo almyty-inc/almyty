@@ -54,7 +54,10 @@ function isInside(baseDir: string, candidate: string): boolean {
 export interface InstallResult {
   agent: string;
   skillsDir: string;
+  /** How many skill files were actually written. */
   installed: number;
+  /** How many were refused (unsafe name, or a path outside skillsDir). */
+  skipped: number;
   files: string[];
 }
 
@@ -130,7 +133,12 @@ export function installSkills(
   return {
     agent: target.name,
     skillsDir: target.skillsDir,
-    installed: skills.length,
+    // What was written, not what was offered. The loop skips skills with
+    // an unsafe name or a path that escapes the skills directory, and
+    // counting the input meant "Installed 12 skill files" for ten files
+    // on disk -- the two that were refused were reported as installed.
+    installed: files.length,
+    skipped: skills.length - files.length,
     files,
   };
 }
