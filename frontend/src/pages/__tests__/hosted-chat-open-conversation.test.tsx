@@ -1,9 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor, act } from '@testing-library/react'
 
 import { render } from '../../test/setup'
 import { HostedChatPage } from '../hosted-chat'
 import { hostedChatApi, type HostedChatBranding } from '@/lib/hosted-chat'
+
+// react-markdown is loaded with React.lazy behind a Suspense boundary, so
+// rendering an assistant message depends on a dynamic import resolving. In
+// the full 185-file suite that import competes with everything else in the
+// pool, and this test's 10s findBy window is not guaranteed to cover it --
+// which is what made this the one test that passed alone and failed in the
+// full run. Mocking it makes the render synchronous and removes the only
+// nondeterministic step in the path. The Suspense fallback renders the same
+// text, so this changes what is exercised as little as possible.
+vi.mock('react-markdown', () => ({
+  default: ({ children }: { children: string }) => children,
+}))
 
 vi.mock('@/lib/hosted-chat', async () => {
   const actual = await vi.importActual<typeof import('@/lib/hosted-chat')>('@/lib/hosted-chat')
@@ -131,13 +143,19 @@ describe('hosted chat: opening a past conversation', () => {
     await screen.findByRole('status', { name: 'Loading conversation' }, WAIT)
     expect(screen.queryByText('How can Acme help?')).toBeNull()
 
-    thread.resolve({
-      conversationId: 'c1',
-      title: 'Where is my order',
-      messages: [
-        { id: 'm1', role: 'user', content: 'Where is my order?', createdAt: new Date().toISOString() },
-        { id: 'm2', role: 'assistant', content: 'It ships tomorrow.', createdAt: new Date().toISOString() },
-      ],
+    // Inside act: resolving this drives setState in a microtask. Outside
+    // act React may not have committed when the assertion runs -- the test
+    // passed on a quiet machine and failed once under load, which is what
+    // that race looks like from the outside.
+    await act(async () => {
+      thread.resolve({
+        conversationId: 'c1',
+        title: 'Where is my order',
+        messages: [
+          { id: 'm1', role: 'user', content: 'Where is my order?', createdAt: new Date().toISOString() },
+          { id: 'm2', role: 'assistant', content: 'It ships tomorrow.', createdAt: new Date().toISOString() },
+        ],
+      })
     })
 
     expect(await screen.findByText('It ships tomorrow.', {}, WAIT)).toBeInTheDocument()
@@ -152,7 +170,9 @@ describe('hosted chat: opening a past conversation', () => {
     await clickTheConversation()
     await screen.findByRole('status', { name: 'Loading conversation' }, WAIT)
 
-    thread.reject({ response: { data: { message: 'Conversation not found.' } } })
+    await act(async () => {
+      thread.reject({ response: { data: { message: 'Conversation not found.' } } })
+    })
 
     // The rejection is handled and surfaced, not swallowed as an unhandled promise.
     expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('Conversation not found.')

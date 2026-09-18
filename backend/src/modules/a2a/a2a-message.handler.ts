@@ -50,18 +50,27 @@ export class A2AMessageHandler {
    *     the proto default of false means the server MUST wait until the task
    *     reaches a terminal or interrupted state.
    *
-   * We honour both when the client states one. We do NOT adopt v1.0's
-   * wait-by-default, because holding every request open for up to
-   * SEND_POLL_TIMEOUT_MS is a product decision about this deployment's request
-   * budget, not a wire-format one. Clients that want the v1.0 default get it by
-   * sending `returnImmediately: false` explicitly.
+   * We emit v1.0, so we honour v1.0's default: no configuration, or a
+   * configuration that states neither flag, means wait. A v1.0 client that
+   * sends nothing expects a settled Task, and handing it a SUBMITTED one is
+   * a conformance failure the client cannot detect — it reads an unfinished
+   * task as the answer.
+   *
+   * A v0.x client is unaffected in practice: `blocking` is the only flag it
+   * knows, and stating it either way still decides. The one behaviour that
+   * changes is a v0.x client that sends no configuration at all and relied
+   * on `blocking` defaulting to false; such a client now waits up to
+   * SEND_POLL_TIMEOUT_MS, and gets a settled task rather than one it would
+   * have had to poll for.
    */
   private shouldBlock(params: any): boolean {
     const config = params?.configuration;
-    if (!config) return false;
+    if (!config) return true;
     if (config.returnImmediately === false) return true;
     if (config.returnImmediately === true) return false;
-    return config.blocking === true;
+    if (config.blocking === true) return true;
+    if (config.blocking === false) return false;
+    return true;
   }
 
   /** A new agent run started via A2A is one workflow execution. */

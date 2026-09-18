@@ -549,6 +549,29 @@ describe('A2A wire conformance (v1.0 JSON-RPC binding)', () => {
       await send(svc, { blocking: true, returnImmediately: true });
       expect(runRepo.findOne).not.toHaveBeenCalled();
     });
+
+    // The v1.0 default. We emit v1.0, so a client that states nothing gets
+    // v1.0 semantics: returnImmediately defaults to false, which means the
+    // server MUST wait for a terminal or interrupted state. Handing such a
+    // client a SUBMITTED task is a conformance failure it cannot detect --
+    // it reads an unfinished task as the answer.
+    it('waits when a v1.0 client sends no configuration at all', async () => {
+      const { svc, runRepo } = setup();
+      await send(svc, undefined);
+      expect(runRepo.findOne).toHaveBeenCalled();
+    });
+
+    it('waits when the configuration states neither flag', async () => {
+      const { svc, runRepo } = setup();
+      await send(svc, { acceptedOutputModes: ['text/plain'] } as any);
+      expect(runRepo.findOne).toHaveBeenCalled();
+    });
+
+    it('still returns immediately when a v0.x client says blocking: false', async () => {
+      const { svc, runRepo } = setup();
+      await send(svc, { blocking: false });
+      expect(runRepo.findOne).not.toHaveBeenCalled();
+    });
   });
 
   it('declares a protocol version the rest of the module actually implements', () => {
