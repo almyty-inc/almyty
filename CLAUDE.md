@@ -27,7 +27,7 @@
 - **Port**: 3002 (dev), 8080 (production/nginx)
 
 ### Infrastructure
-- **Docker**: Multi-stage Dockerfiles (node:24-alpine, nginx:1.25-alpine)
+- **Docker**: Multi-stage Dockerfiles (node:26-alpine, nginx:1.31-alpine)
 - **Docker Compose**: postgres, redis, backend, frontend, nginx
 - **Kubernetes**: Kustomize base + 3 overlays (development, staging, production)
 - **CI/CD**: GitHub Actions
@@ -50,7 +50,6 @@ backend/src/
 │   ├── files/         # File uploads / attachments
 │   ├── gateways/      # Gateway CRUD, auth enforcement, protocol serving, unified endpoint
 │   ├── health/        # /health, /health/live, /health/ready
-│   ├── interfaces/    # Interface definition CRUD only — the 12 chat channel adapters live in gateways/channels/adapters/
 │   ├── jobs/          # BullMQ background jobs
 │   ├── json-schema-translator/ # JSON Schema conversion
 │   ├── llm-providers/ # OpenAI, Anthropic, + 12 more provider integrations
@@ -105,7 +104,7 @@ packages/
 
 ## Key Facts
 
-- **Entities**: 72 (`ls backend/src/entities/*.entity.ts | wc -l` — count it, do not trust this line)
+- **Entities**: 73 (`ls backend/src/entities/*.entity.ts | wc -l` — count it, do not trust this line)
 - **Agent node types** (12): `input`, `output`, `llm_call`, `tool_call`, `condition`, `transform`, `loop`, `parallel`, `merge`, `sub_agent`, `verify`, `extract_context`. The dispatch switch in `agents/agent-node-executor.ts` is the list — count it there. `verify` runs a panel of refute-only checkers and emits a verdict a `condition` can branch on; `extract_context` compresses what upstream steps learned into a small structured brief. Both are load-bearing for the compiled strategies (cascade, best_of_n, explore_extract_patch) and neither is in the builder palette — see `docs/strategies.md`.
 - **Gateway types**: MCP, A2A, UTCP, Skills
 - **App distribution targets**: `web`, `tui`, `desktop`, `binary` + 13 messaging platforms. `tui`/`binary` compile via `bun --compile`; `desktop` packages via electron-builder. See `docs/agent-factory.md`.
@@ -113,8 +112,8 @@ packages/
 - **LLM Providers**: 39. `backend/src/entities/llm-provider-type.ts` is the list, mirrored member-for-member in `frontend/src/types/index.ts`; count it there rather than trusting a list in prose. It spans the first-party vendors (OpenAI, Anthropic, Google Gemini, Mistral, xAI, DeepSeek, Cohere), the hosted-inference fleet (Groq, Together, OpenRouter, Fireworks, Cerebras, DeepInfra, Novita, Baseten, Nebius, SambaNova, Perplexity, and more), cloud-owned surfaces (Azure OpenAI, Azure AI Foundry, AWS Bedrock, Vertex AI, DigitalOcean, RunPod, Modal), brand-named model families (Moonshot, Qwen, MiniMax, Upstage, Writer, Z.ai, and the Chinese vendors Qianfan, Hunyuan, Volcengine, Spark), plus Hugging Face, Ollama and `custom`. Most are OpenAI-compatible and ride the OpenAI dispatch path; Ollama is keyless local inference, and its private URLs are gated by `OLLAMA_ALLOW_PRIVATE_URLS` (default off).
 - **Chat channel adapters**: 14, in `gateways/channels/adapters/` NOT `interfaces/` (Slack, Discord, Telegram, WhatsApp, WhatsApp Cloud, SMS, Microsoft Teams, Google Chat, Signal, Matrix, IRC, Email, Webhook, Chat Widget). Chat Widget serves both `CHAT_WIDGET` and `HOSTED_CHAT`, so 14 adapter classes cover 15 gateway types. Shared pipeline + AI disclosure in `channel-gateway.service.ts`; Discord inbound via `discord-gateway.transport.ts`. SMS is Twilio-backed and verifies `X-Twilio-Signature` via `twilio-signature.helper.ts`; WhatsApp Cloud talks to Meta directly, verifies `X-Hub-Signature-256` fail-closed and answers the `hub.challenge` GET handshake in `unified-gateway-delegation.helper.ts`. Audit: `docs/interface-adapters-audit.md`
 - **Built-in plugins**: 5 (performance-monitor, rate-limiter, pii-filter, request-logger, security-scanner)
-- **Backend tests**: 316 suites, ~5,770 passing (NestJS 11, Node 24). Real-integration specs in `src/test/integration/` require `RUN_DB_INTEGRATION=1`.
-- **Frontend tests**: 82 vitest files, ~589 tests + Playwright E2E suite (`frontend/tests/e2e/`)
+- **Backend tests**: 535 suites, 8,881 tests (NestJS 11). Real-integration specs in `src/test/integration/` require `RUN_DB_INTEGRATION=1`. Run the full suite on an otherwise idle machine: several concurrent runs deadlock on each other and report SIGSEGV workers, which looks like a code failure and is not.
+- **Frontend tests**: 175 vitest files, 1,211 tests + Playwright E2E suite (`frontend/tests/e2e/`)
 - **Agent Skills**: Compliant with https://agentskills.io spec
 - **Models layer** (`docs/models.md`): support is registry data, never a code list. A card is usable only via `Model.isSelectable()` (active + callable + one passed validation run). Pricing is automatic (LiteLLM feed + OpenRouter cross-check); the table in `llm-models.helper.ts` is an offline seed only. Invariants: deployment adapters never import each other; `providerConfig` is opaque to everything but its adapter; only the reconcile processor mutates a provider; routed calls stamp `routing` attribution on the response, node result and audit log.
 - **Connections** (`docs/connections.md`): the single store for every third-party secret is `credentials`; connectors are data (`GET /connectors`), a connection is a Credential with connectorKey/accountLabel/health, use goes through grants (`connection_grants`) and every resolve is audited. No module may add a secret column of its own (`no-secrets-outside-credentials.spec.ts` ratchets this). The model registry is an org-owned `s3_compatible` connection; env `MODEL_REGISTRY_S3_*` only seeds a single-tenant install.
@@ -192,7 +191,10 @@ Keep commit messages concise and human-readable:
 ## Deploy Pins (do not change)
 
 - `.github/workflows/*.yml`: All GitHub Actions pinned to latest major — `docker/build-push-action@v7`, `docker/setup-buildx-action@v4`, `docker/login-action@v4`, `actions/checkout@v6`, `actions/setup-node@v6`, `dorny/paths-filter@v4`.
-- `frontend/Dockerfile`: `nginx:1.25-alpine` is pinned.
+- `frontend/Dockerfile`: the `nginx` tag is pinned. Read the Dockerfile for the
+  current tag rather than trusting a version written here — this line said
+  1.25 long after the file said 1.31, which turns "restore the pin" into a
+  downgrade.
 
 ---
 
