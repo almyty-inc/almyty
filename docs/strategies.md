@@ -37,7 +37,7 @@ That is enforced three times over, because the failure is silent:
 
 A strategy plus role bindings compiles to the pipeline the engine already
 runs: `input`, `parallel`, `llm_call`, `extract_context`, `verify`,
-`merge`, `output`.
+`condition`, `merge`, `output`.
 
 **The engine does not change shape for strategies.** If a strategy needs
 an executor change, the compiler is wrong. That constraint is what keeps
@@ -45,6 +45,86 @@ this layer from becoming a second execution model.
 
 Compiled nodes carry `roleKey`, never a model, so a compiled graph is
 exactly as portable as the strategy that produced it.
+
+### A check is a branch
+
+A `verify` step's `next` is its **failure** path, and the compiler emits
+it as one: the check feeds a `condition` node reading its verdict, whose
+false handle goes to the escalation and whose true handle goes straight to
+the output. The engine already skips whatever hangs off the untaken
+handle, so a passing check costs nothing past the check.
+
+That branch is the whole of cascade. Compiled as an ordinary edge, the
+escalation ran on every request — the expensive role was paid for each
+time, and being the only leaf, its answer was the result even when the
+draft had been fine.
+
+An unreadable verdict takes the false handle, so "we could not tell"
+escalates rather than passing an unchecked draft.
+
+Because a condition branches exactly two ways, a verify step with a
+failure path needs exactly one step to escalate to, and cannot itself be
+replicated by a fan-out. Both are refused at compile time rather than
+compiled into a graph the validator would reject later.
+
+### What a check checks with
+
+A `verify` node runs a panel of refute-only checkers, and a checker needs
+a model. The strategy names a slot, so the compiled checker names the role
+bound to that slot — the same answer `llm_call` and a judged `merge` give.
+A checker list written into the step's params wins, for a shape that wants
+to pin its own panel.
+
+### Fan-out happens at compile time
+
+A `parallel` step with `n` means "run what comes next n times over", and
+the compiler makes that real by emitting n copies of each of the step's
+**immediate** targets. Everything past those targets converges.
+
+That rule is deliberately one step wide, because it is what both fan-out
+shapes want: `best_of_n` becomes three candidates into one judge, and
+`explore_extract_patch` becomes three rollouts into one extraction. If the
+extraction replicated too, the strategy would defeat itself — its whole
+point is one compression read by the expensive role instead of three
+transcripts.
+
+The copies are `<step>#1`, `<step>#2`, … and each carries
+`strategyBranch`. They all name the same role: fan-out is n attempts on
+one slot, not n different models.
+
+Two shapes are refused rather than compiled into something surprising: a
+replicated target that is also reached from another step (there would be
+no telling which copy the other step feeds), and a `parallel` step whose
+target is itself `parallel` — nested fan-out is not compiled, so give the
+inner step its own `n`.
+
+The engine's `parallel` node is a pass-through by design. It is the join
+marker and the place a hand-drawn graph forks; it does not multiply
+anything, which is exactly why the multiplication has to be compiled.
+
+### The judged merges
+
+`merge` with `best_of_n` or `consensus` needs a model to judge with, and
+it takes one the same way an `llm_call` node does: the node's `roleKey`,
+then a pinned `providerId`, then a routing policy, then the
+organization's default. `judgeConfig` still pins a provider for a
+hand-drawn graph.
+
+`best_of_n` with one incoming branch returns it without paying for a
+judging call — there is nothing to choose between.
+
+`consensus` asks the judge for two things: how many branches agree on the
+substance, and what that group says. It outputs
+
+```json
+{ "answer": "...", "agreement": 0.67, "consensusReached": true, "threshold": 0.5, "responses": 3 }
+```
+
+so a downstream `condition` node can branch on disagreement. That is what
+`consensusThreshold` applies to. When the judge does not answer in the
+asked-for shape, the answer is kept and `agreement` is `undefined` —
+`consensusReached` is then false, because "we could not tell" must not
+read as "they agreed".
 
 ## Eject
 
@@ -72,6 +152,7 @@ Two refusals, both 4xx with a code:
 The UI offers this as "Eject to an editable graph" on the Execution tab,
 and lands you in the builder afterwards, because the agent you now have
 is not the one the tab was describing.
+
 ## extract_context
 
 Its own step, with its own cost, on purpose.
@@ -96,6 +177,27 @@ array: an empty brief reads as "nothing relevant was found" and would send
 the expensive role in blind. Fences and surrounding prose are tolerated,
 because models produce them and failing on that would be flaky for a
 reason unrelated to the work.
+
+A brief that does not validate fails the node, with the code
+`EXTRACTED_CONTEXT_INVALID` and the model's raw answer attached. Falling
+back to passing the transcripts through instead would look like a cheap
+extraction on the cost line while handing the expensive role exactly the
+context the step existed to spare it.
+
+As a node in a hand-drawn graph, `extract_context` takes the same
+provider, role and routing fields as `llm_call` — it goes through the same
+call path, so a role is filled once for the run and a routed call is
+attributed the same way — plus:
+
+| field | default |
+|---|---|
+| `task` | the run input |
+| `sources` | the outputs of the nodes with edges into this one |
+| `instruction` | the built-in extraction instruction |
+
+`task` and `sources` are template-resolved when given as strings. With no
+`sources` and nothing upstream, the node fails rather than calling a model
+with nothing to compress.
 
 ## Cost and latency bands
 
