@@ -39,23 +39,3 @@ export function acpPartsToAgentInput(parts: Part[]): {
 
   return result;
 }
-
-/**
- * Convert agent output (string or object) into ACP Parts.
- */
-export function agentOutputToAcpParts(output: any): Part[] {
-  if (output === null || output === undefined) {
-    return [];
-  }
-
-  if (typeof output === 'string') {
-    return [{ type: 'text', text: output }];
-  }
-
-  if (typeof output === 'object') {
-    return [{ type: 'data', data: output }];
-  }
-
-  // Fallback: coerce to string
-  return [{ type: 'text', text: String(output) }];
-}

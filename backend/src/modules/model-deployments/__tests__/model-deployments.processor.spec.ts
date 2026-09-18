@@ -33,6 +33,8 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
     deployments = {
       findOne: jest.fn(async () => row),
       save: jest.fn(async (r: any) => r),
+      // Column-scoped write: the reconcile loop writes only what it owns.
+      update: jest.fn(async (_criteria: any, patch: Record<string, any>) => { Object.assign(row, patch); return { affected: 1 }; }),
       find: jest.fn(async () => [row]),
       // The claim the processor takes before a minutes-long deploy, so
       // the sweep and a retry cannot both deploy the same model.

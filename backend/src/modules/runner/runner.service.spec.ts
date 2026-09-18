@@ -64,6 +64,21 @@ describe('RunnerService', () => {
         ...data,
       })),
       save: jest.fn(async (r: Runner) => { runners._store.set(r.id, r); return r; }),
+      /**
+       * Conditional state write, modelled rather than stubbed. Every FSM
+       * transition carries the state it believes the runner is in, and
+       * the guard is the fix — a mock that always reported a hit would
+       * let a heartbeat overwrite a drain without a test going red.
+       */
+      update: jest.fn(async (criteria: any, patch: any) => {
+        let affected = 0;
+        for (const r of runners._store.values()) {
+          if (!Object.entries(criteria).every(([k, v]: any) => (r as any)[k] === v)) continue;
+          Object.assign(r, patch);
+          affected += 1;
+        }
+        return { affected };
+      }),
       remove: jest.fn(async (r: Runner) => { runners._store.delete(r.id); }),
     };
     sessions = {
@@ -106,6 +121,33 @@ describe('RunnerService', () => {
           Object.entries(where).every(([k, v]: any) => (ws as any)[k] === v),
         ).length,
       ),
+      /**
+       * SELECT DISTINCT ws."runnerId" ... JOIN runners r ... WHERE
+       * ws.status = 'active' AND r.state = 'offline' — the self-heal
+       * lookup for a runner flipped offline whose workspaces were never
+       * stranded.
+       */
+      createQueryBuilder: jest.fn(() => {
+        let activeStatus: string | undefined;
+        let offlineState: string | undefined;
+        const qb: any = {
+          select: () => qb,
+          innerJoin: () => qb,
+          where: (_clause: string, params: any) => { activeStatus = params?.active; return qb; },
+          andWhere: (_clause: string, params: any) => { offlineState = params?.offline; return qb; },
+          getRawMany: async () => {
+            const ids = new Set<string>();
+            for (const ws of workspaces._store.values() as Iterable<Workspace>) {
+              if (activeStatus && ws.status !== activeStatus) continue;
+              const runner = runners._store.get(ws.runnerId);
+              if (!runner || (offlineState && runner.state !== offlineState)) continue;
+              ids.add(ws.runnerId);
+            }
+            return [...ids].map((runnerId) => ({ runnerId }));
+          },
+        };
+        return qb;
+      }),
     };
 
 

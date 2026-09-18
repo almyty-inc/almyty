@@ -1876,8 +1876,9 @@ describe('LlmProvidersService', () => {
       it('should look up tools scoped to the calling organization', async () => {
         // Regression: the lookup was `{ name: toolCall.name }` with NO
         // org filter — an LLM in org A could resolve and execute a tool
-        // named e.g. `send_email` from org B.
-        toolRepository.findOne.mockResolvedValue(null);
+        // named e.g. `send_email` from org B. The lookup is now one
+        // batched query for the whole turn, still org-scoped.
+        toolRepository.find.mockResolvedValue([]);
 
         const toolCalls: any[] = [
           { id: 'call-1', name: 'send_email', parameters: {} },
@@ -1886,9 +1887,10 @@ describe('LlmProvidersService', () => {
 
         await service['executeToolCalls'](toolCalls, session as any, 'org-1');
 
-        expect(toolRepository.findOne).toHaveBeenCalledWith({
-          where: { name: 'send_email', organizationId: 'org-1' },
+        expect(toolRepository.find).toHaveBeenCalledWith({
+          where: [{ name: 'send_email', organizationId: 'org-1' }],
         });
+        expect(toolRepository.findOne).not.toHaveBeenCalled();
         // Tool was not found in our org → mark as error, do NOT execute.
         expect(toolCalls[0].error).toContain('not found');
         expect(toolExecutorService.executeTool).not.toHaveBeenCalled();
@@ -1928,7 +1930,7 @@ describe('LlmProvidersService', () => {
         name: 'get_weather',
       };
 
-      toolRepository.findOne.mockResolvedValue(mockTool);
+      toolRepository.find.mockResolvedValue([{ ...mockTool, organizationId: 'org-1' }]);
       toolExecutorService.executeTool.mockRejectedValue(new Error('Tool execution failed'));
 
       const toolCalls: any = [
@@ -1946,7 +1948,7 @@ describe('LlmProvidersService', () => {
     });
 
     it('should set error when tool not found during execution', async () => {
-      toolRepository.findOne.mockResolvedValue(null);
+      toolRepository.find.mockResolvedValue([]);
 
       const toolCalls: any = [
         {
@@ -2740,7 +2742,7 @@ describe('LlmProvidersService', () => {
         name: 'get_weather',
       };
 
-      toolRepository.findOne.mockResolvedValue(mockTool);
+      toolRepository.find.mockResolvedValue([{ ...mockTool, organizationId: 'org-1' }]);
       toolExecutorService.executeTool.mockResolvedValue({
         success: true,
         data: { temperature: 72 },
@@ -2771,7 +2773,7 @@ describe('LlmProvidersService', () => {
         name: 'get_weather',
       };
 
-      toolRepository.findOne.mockResolvedValue(mockTool);
+      toolRepository.find.mockResolvedValue([{ ...mockTool, organizationId: 'org-1' }]);
       toolExecutorService.executeTool.mockResolvedValue({
         success: false,
         error: 'API timeout',
@@ -2798,7 +2800,7 @@ describe('LlmProvidersService', () => {
         name: 'get_weather',
       };
 
-      toolRepository.findOne.mockResolvedValue(mockTool);
+      toolRepository.find.mockResolvedValue([{ ...mockTool, organizationId: 'org-1' }]);
       toolExecutorService.executeTool.mockResolvedValue({
         success: true,
         data: { temperature: 72 },

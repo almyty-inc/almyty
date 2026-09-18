@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { ApprovalsService } from '../approvals.service';
 import { ApprovalRequest } from '../../../entities/approval-request.entity';
 import { ApprovalPolicyApproval } from '../../../common/ee-hooks/ee-hooks';
+import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
 
 /**
  * EE hook seam: on create the optional APPROVAL_POLICY_HOOK may attach a
@@ -30,6 +31,18 @@ class FakeApprovalsRepo {
     if (existing >= 0) this.rows[existing] = r;
     else this.rows.push(r);
     return r;
+  }
+
+  /**
+   * Scoped column update. applyPolicyProgress writes only `payload`
+   * this way, so a reviewer's stale `status`/`decidedBy` can never ride
+   * along over the CAS'd flip.
+   */
+  async update(criteria: any, patch: Partial<ApprovalRequest>) {
+    const row = this.rows.find((r) => r.id === criteria.id);
+    if (!row) return { affected: 0 };
+    Object.assign(row, patch);
+    return { affected: 1 };
   }
 
   /**
@@ -124,8 +137,15 @@ function makeService(hook?: any) {
   const approvals = new FakeApprovalsRepo();
   const runs = new FakeRunsRepo();
   const policy = new FakeAccessPolicy();
-  const svc = new ApprovalsService(approvals as any, runs as any, policy as any, hook);
-  return { svc, approvals, runs, policy };
+  const policyApprovals = new FakePolicyApprovalsRepo();
+  const svc = new ApprovalsService(
+    approvals as any,
+    runs as any,
+    policyApprovals as any,
+    policy as any,
+    hook,
+  );
+  return { svc, approvals, runs, policy, policyApprovals };
 }
 
 const createInput = {

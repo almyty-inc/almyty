@@ -209,4 +209,72 @@ describe('deployment lifecycle hardening', () => {
     expect(concurrentPeak).toBe(1);
     expect(deploy).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * A teardown committed mid-tick is not erased by that tick.
+   *
+   * The sweep loads the deployment ready, then spends seconds inside a
+   * provider read. The user tears down in that window: `tearing_down`
+   * plus `desired.teardownRequested` are committed and the API returns
+   * 200. The read then fails, and `save(entity)` wrote back every
+   * column that differed from the row -- including the tick's stale
+   * `desired` -- so the teardown intent was erased, the next tick
+   * reconciled the endpoint back to ready, and the GPU kept billing.
+   */
+  it('a teardown committed while a provider read is in flight survives the tick that missed it', async () => {
+    await processor.reconcile(id);
+    // Two requests get two entities, the way TypeORM hands each its own.
+    deployments.findOne.mockImplementation(async (opts: any) => {
+      const row: any = [...deployments.rows.values()].find(
+        (r: any) => r.id === opts?.where?.id && (opts?.where?.organizationId === undefined || r.organizationId === opts.where.organizationId),
+      );
+      return row ? Object.assign(new ModelDeployment(), row) : null;
+    });
+
+    const read = jest.spyOn(stub, 'readEndpoint').mockImplementationOnce(async () => {
+      await service.teardown(ORG, id, 'owner-1');
+      throw Object.assign(new Error('provider 503'), { code: 'ADAPTER_ERROR' });
+    });
+    await processor.reconcile(id);
+    read.mockRestore();
+
+    const row = deployments.get(id);
+    expect((row.desired as any).teardownRequested).toBe(true);
+
+    // And the intent is acted on, so nothing keeps billing.
+    const done = (await processor.reconcile(id))!;
+    expect(done.state).toBe('torn_down');
+    expect(done.externalRef).toBeNull();
+    expect(deployments.get(id).state).toBe('torn_down');
+  });
+
+  /**
+   * A claim is a lease. A pod that died inside adapter.deploy() left the
+   * row `deploying` with a null externalRef, and `state != 'deploying'`
+   * never matched again: nothing at the provider, nothing the orphan
+   * check can see (it only notices endpoints the provider forgot), and
+   * no tick able to retry.
+   */
+  it('reclaims a deploy claim abandoned by a dead pod', async () => {
+    const crash = jest.spyOn(stub, 'deploy').mockRejectedValueOnce(Object.assign(new Error('pod killed'), { code: 'ADAPTER_ERROR' }));
+    await processor.reconcile(id);
+    crash.mockRestore();
+    // What the dead pod left behind: claimed, no endpoint.
+    const stuck = deployments.get(id);
+    stuck.state = 'deploying';
+    stuck.externalRef = null;
+    stuck.lastReconcileAt = new Date();
+    await deployments.save(stuck);
+
+    const blocked = (await processor.reconcile(id))!;
+    expect(blocked.externalRef).toBeNull();
+
+    // Past the lease the claim is taken over and the deploy happens.
+    const aged = deployments.get(id);
+    aged.lastReconcileAt = new Date(Date.now() - 46 * 60 * 1000);
+    await deployments.save(aged);
+    const retried = (await processor.reconcile(id))!;
+    expect(retried.externalRef).toBeTruthy();
+    expect(retried.state).toBe('ready');
+  });
 });

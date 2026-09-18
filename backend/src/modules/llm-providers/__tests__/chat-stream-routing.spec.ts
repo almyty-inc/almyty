@@ -55,7 +55,14 @@ describe('LlmChatHelper.chatStream with a routing policy', () => {
     expect(calledRequest.model).toBe('gpt-cheap');
     expect(calledRequest.routing).toBeUndefined();
     expect(res.routing).toEqual({ modelId: 'card-1', modelVersionId: 'v-1', vendorModelId: 'gpt-cheap', providerId: 'p-head', rationale: candidate.rationale, attempt: 1, tried: [], rejected: [{ modelId: 'card-2', reason: 'lacks tools' }] });
-    expect(runner.recordRoute).toHaveBeenCalledWith('org', res.routing, { userId: 'u', conversationId: 'conv-1' });
+    // Cost and tokens ride along to the audit row: the streaming head is
+    // a routed call too, and its spend has to be attributable to a model.
+    expect(runner.recordRoute).toHaveBeenCalledWith('org', res.routing, {
+      userId: 'u',
+      conversationId: 'conv-1',
+      cost: 0,
+      tokens: 2,
+    });
   });
 
   it('surfaces NO_ROUTE before opening any stream', async () => {

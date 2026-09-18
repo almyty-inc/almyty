@@ -5,11 +5,9 @@ import { Request, Response } from 'express';
 
 import { Gateway } from '../../entities/gateway.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
-import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
-import { AcpDiscoveryService } from './acp-discovery.service';
 import { agentRunToSessionUpdate } from './acp-session.mapper';
 import { acpPartsToAgentInput } from './acp-part.mapper';
 import type {
@@ -29,11 +27,8 @@ export class AcpServerService {
 
   constructor(
     private readonly agentRuntimeService: AgentRuntimeService,
-    private readonly acpDiscoveryService: AcpDiscoveryService,
     @InjectRepository(AgentRun)
     private readonly runRepository: Repository<AgentRun>,
-    @InjectRepository(Conversation)
-    private readonly conversationRepository: Repository<Conversation>,
     @InjectRepository(Message)
     private readonly messageRepository: Repository<Message>,
   ) {}
