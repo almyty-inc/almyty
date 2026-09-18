@@ -35,7 +35,7 @@ export function SecurityTab() {
       setConfirmPassword('')
     },
     onError: (err: any) => {
-      error('Failed to change password', err.response?.data?.message || 'Please try again.')
+      error('Failed to change password', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 

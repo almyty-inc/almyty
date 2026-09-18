@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { Api, ApiOperation, Tool } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface OverviewTabProps {
   api: Api
@@ -162,7 +163,7 @@ export function OverviewTab({
                   success('Tools generated', `${generated} tools created successfully`)
                 }
               } catch (err: any) {
-                error('Failed to generate tools', err.response?.data?.message || 'Please try again.')
+                error('Failed to generate tools', getApiErrorMessage(err, 'Please try again.'))
               }
             }}
           >
@@ -188,8 +189,8 @@ export function OverviewTab({
                 success('Test completed', 'API connection test successful')
               }
             } catch (err: any) {
-              setTestResults({ success: false, error: err.response?.data?.message || 'Connection failed' })
-              error('Test failed', err.response?.data?.message || 'Please try again.')
+              setTestResults({ success: false, error: getApiErrorMessage(err, 'Connection failed') })
+              error('Test failed', getApiErrorMessage(err, 'Please try again.'))
             } finally {
               setTesting(false)
             }
@@ -210,7 +211,7 @@ export function OverviewTab({
 
       {/* Test Results */}
       {testResults && (
-        <Card className={testResults.success ? 'border-green-200 bg-green-50/50' : 'border-red-200 bg-red-50/50'}>
+        <Card className={testResults.success ? 'border-green-200 bg-green-50/50 dark:border-green-500/30 dark:bg-green-500/10' : 'border-red-200 bg-red-50/50 dark:border-destructive/30 dark:bg-destructive/10'}>
           <CardContent className="pt-6">
             <div className="space-y-2">
               <div className="flex items-center justify-between">

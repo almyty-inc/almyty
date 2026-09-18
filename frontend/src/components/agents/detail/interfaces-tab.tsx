@@ -42,6 +42,8 @@ import {
 } from '@/components/ui/dialog'
 
 import { gatewaysApi } from '@/lib/api'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
 import { captureEvent } from '@/lib/analytics'
@@ -92,6 +94,7 @@ const CHANNEL_TYPES = [
 
 import { SurfacesCanvas } from '@/components/agents/surfaces/surfaces-canvas'
 import type { SurfaceDescriptor } from '@/components/agents/surfaces/surface-types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
   const queryClient = useQueryClient()
@@ -126,7 +129,13 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
   })()
 
   // Fetch agent-kind gateways for this agent
-  const { data: gatewaysData, isLoading } = useQuery({
+  const {
+    data: gatewaysData,
+    isLoading,
+    isError: gatewaysFailed,
+    error: gatewaysError,
+    refetch: refetchGateways,
+  } = useQuery({
     queryKey: ['agent-gateways', agentId],
     queryFn: () => gatewaysApi.getAll({ kind: 'agent', agentId }),
     enabled: !!agentId,
@@ -172,7 +181,7 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
       if (gateway?.id) setSetupGateway(gateway as Gateway)
     },
     onError: (err: any) => {
-      errorNotif('Deploy Failed', err?.response?.data?.message || err?.message || 'Failed to deploy channel')
+      errorNotif('Deploy Failed', getApiErrorMessage(err, 'Failed to deploy channel'))
     },
   })
 
@@ -197,7 +206,7 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
       }
     },
     onError: (err: any) => {
-      errorNotif('Update Failed', err?.response?.data?.message || err?.message || 'Failed to update the channel connection')
+      errorNotif('Update Failed', getApiErrorMessage(err, 'Failed to update the channel connection'))
     },
   })
 
@@ -264,12 +273,30 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
         <div className="flex justify-center py-8">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
+      ) : gatewaysFailed ? (
+        // Checked before the canvas branch and before the empty branch: a
+        // channel list that failed to load must not read as "no channels
+        // deployed yet", or the operator deploys a second gateway on top of
+        // the one that is already live.
+        <QueryError
+          error={gatewaysError}
+          onRetry={() => refetchGateways()}
+          title="Couldn't load this agent's channels"
+        />
       ) : view === 'canvas' ? null : gateways.length === 0 ? (
         <Card>
-          <CardContent className="py-8">
-            <p className="text-sm text-muted-foreground text-center">
-              No channels deployed yet. Deploy a channel to make this agent accessible via A2A, Slack, Discord, and more.
-            </p>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={Plug}
+              title="No channels deployed yet"
+              description="Deploy a channel to make this agent reachable over A2A, Slack, Discord, email and more."
+              action={
+                <Button onClick={() => setDeployInterfaceOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Deploy channel
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       ) : (

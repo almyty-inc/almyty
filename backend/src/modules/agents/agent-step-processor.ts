@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
-import { In } from 'typeorm';
+import { In, Not } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { ConversationStatus } from '../../entities/conversation.entity';
@@ -33,8 +33,80 @@ import { shouldAutoSaveMemory } from './memory-autosave.policy';
  * this class.
  */
 
-/** Per-step input/output cap in the persisted json column. */
-const STEP_PAYLOAD_CAP = 32 * 1024;
+/**
+ * Per-step input/output cap in the persisted json column. Shared with
+ * the workflow engine's node results via `persist-cap`, so the two
+ * execution shapes truncate at the same size and with the same marker.
+ */
+import { capPersistedPayload } from './persist-cap';
+/**
+ * A run in one of these is finished and no worker may write it back to
+ * running — the same list `AgentRun.isDone()` answers with.
+ */
+const TERMINAL_STATUSES: AgentRunStatus[] = [
+  AgentRunStatus.COMPLETED,
+  AgentRunStatus.FAILED,
+  AgentRunStatus.CANCELLED,
+  AgentRunStatus.TIMEOUT,
+];
+
+/**
+ * The agent columns an autonomous step actually reads.
+ *
+ * `relations: { agent: true }` pulled the whole agent row once per step of
+ * every run, and the two heaviest columns on it — `pipeline` (workflow-only)
+ * and `metadata` (which carries the inline version history) — are never read
+ * on this path. Listing the rest narrows the join without costing a second
+ * query. `agent-columns.spec.ts` fails if a new Agent column is added and
+ * not classified here.
+ */
+export const AGENT_STEP_COLUMNS = {
+  id: true,
+  name: true,
+  description: true,
+  organizationId: true,
+  visibility: true,
+  teamId: true,
+  status: true,
+  version: true,
+  variables: true,
+  settings: true,
+  mode: true,
+  instructions: true,
+  personality: true,
+  heartbeat: true,
+  toolIds: true,
+  modelConfig: true,
+  memoryConfig: true,
+  agentConfig: true,
+  isTemporary: true,
+  parentRunId: true,
+  collaboration: true,
+  webhookUrl: true,
+  totalExecutions: true,
+  successfulExecutions: true,
+  totalCost: true,
+  averageExecutionTime: true,
+  lastExecutedAt: true,
+  createdBy: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+/** Agent columns deliberately left out of AGENT_STEP_COLUMNS. */
+export const AGENT_STEP_COLUMNS_OMITTED = ['pipeline', 'metadata'] as const;
+
+/**
+ * How long a resolved tool set stays usable across steps of a run.
+ *
+ * The same `IN (toolIds)` query ran on every step. A tool definition only
+ * feeds the model's prompt here — ToolExecutorService re-loads the row by id
+ * before it runs anything — so a short window of staleness cannot change what
+ * executes, only how the next prompt describes it.
+ */
+const TOOL_CACHE_TTL_MS = 60_000;
+/** Cap on distinct (org, toolIds) keys held at once. */
+const TOOL_CACHE_MAX_ENTRIES = 200;
 @Injectable()
 export class AgentStepProcessor {
   constructor(
@@ -45,8 +117,36 @@ export class AgentStepProcessor {
     private readonly constraints: AgentConstraintsService,
   ) {}
 
+  /**
+   * Tool sets resolved for (organizationId, toolIds), with the capped payload
+   * of each step memoized alongside. Bounded and TTL'd; see the constants.
+   */
+  private readonly toolCache = new Map<
+    string,
+    { at: number; tools: Awaited<ReturnType<AgentStepProcessor['loadTools']>> }
+  >();
+
+  /**
+   * Per-step-object memo of the capped payload written to Postgres.
+   *
+   * `commitStep` rewrites the whole `steps` array every step, so capping it
+   * from scratch each time re-serialized every prior step's input and output:
+   * step k paid for k payloads, Σk = N²/2 for an N-step run. The step objects
+   * themselves are append-only, so each one only has to be capped once. A
+   * WeakMap keyed on the step object means nothing has to be invalidated and
+   * a finished run's entries are collectable.
+   */
+  private readonly cappedStepCache = new WeakMap<object, any>();
+
   async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
-    const run = await this.s.runRepository.findOne({ where: { id: runId }, relations: { agent: true } });
+    const run = await this.s.runRepository.findOne({
+      where: { id: runId },
+      relations: { agent: true },
+      // Narrow the joined agent: `pipeline` and `metadata` are the two
+      // biggest columns on the row and neither is read on the autonomous
+      // path. Still one query.
+      select: { agent: { ...AGENT_STEP_COLUMNS } } as any,
+    });
     if (!run) {
       this.s.logger.warn(`Run ${runId} not found, skipping`);
       return 'done';
@@ -64,16 +164,23 @@ export class AgentStepProcessor {
     // cost or steps — the loser's UPDATE matches 0 rows and it aborts.
     const expectedStep = run.currentStep;
 
+    // The organization used to be loaded twice per step with the identical
+    // query — once inside resolveLimits and again ~80 lines below to build
+    // the system prompt. Load it once and hand it to both.
+    const organization = await this.loadOrganization(run.organizationId);
+
     // Enforce limits. The trip carries both a machine-readable code and
     // an explanation, so a caller can decide whether to retry smaller,
     // raise the ceiling, or escalate, rather than seeing a bare stop.
-    const resolvedLimits = await this.s.misc.resolveLimits(run);
+    const resolvedLimits = await this.s.misc.resolveLimits(run, organization);
     const limitCheck = checkRunLimits(run, resolvedLimits);
     if (limitCheck) {
       run.status = AgentRunStatus.FAILED;
       run.error = `${limitCheck.code}: ${limitCheck.message}`;
       run.metadata = { ...(run.metadata || {}), limitTrip: limitCheck };
-      await this.s.runRepository.save(run);
+      // Guarded like every other terminal write (see commitStep): the
+      // trip must not overwrite a status that is already final.
+      if (!(await this.commitStep(run, expectedStep))) return 'done';
       this.s.emitEvent(runId, 'run.failed', {
         error: run.error,
         reasonCode: limitCheck.code,
@@ -92,7 +199,9 @@ export class AgentStepProcessor {
       if (totalSiblingCost >= agent.collaboration.rules.maxTotalCost) {
         run.status = AgentRunStatus.FAILED;
         run.error = `Collaboration total cost limit exceeded ($${totalSiblingCost.toFixed(2)} >= $${agent.collaboration.rules.maxTotalCost})`;
-        await this.s.runRepository.save(run);
+        // Guarded like every other terminal write (see commitStep): a run
+        // cancelled while this worker was starting up stays cancelled.
+        if (!(await this.commitStep(run, expectedStep))) return 'done';
         this.s.emitEvent(runId, 'run.failed', { error: run.error });
         return 'done';
       }
@@ -104,10 +213,13 @@ export class AgentStepProcessor {
     }
 
     try {
-      // Load agent's tools from DB
-      const tools = agent.toolIds?.length
-        ? await this.s.toolRepository.find({ where: { id: In(agent.toolIds) } })
-        : [];
+      // Load the agent's tools, org-scoped. `agent.toolIds` is a plain
+      // string array with no referential integrity, so an id from another
+      // tenant survives in it — and these tool names, descriptions and
+      // parameter schemas go straight into the model's prompt. Execution
+      // fails closed in ToolExecutorService, so the scoping here is what
+      // keeps the disclosure from happening in the first place.
+      const tools = await this.resolveTools(agent);
 
       // Recall memories if memory is enabled
       let memoryContext = '';
@@ -139,11 +251,8 @@ export class AgentStepProcessor {
         }
       }
 
-      // Load organization defaults for system prompt
-      const org = await this.s.organizationRepository.findOne({ where: { id: run.organizationId } });
-
-      // Build messages for the LLM
-      let messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, org);
+      // Build messages for the LLM, reusing the organization loaded above.
+      let messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, organization);
 
       // Compact long-running context (off unless the agent opts in). Folds the
       // old prefix into a summary so per-step token cost doesn't grow unbounded.
@@ -238,6 +347,10 @@ export class AgentStepProcessor {
       run.totalCost += stepCost;
       run.totalTokens += stepTotalTokens;
 
+      // The user may have cancelled while the model was answering. Stop
+      // here, before a single tool runs, rather than at the next commit.
+      if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
+
       const responseMessage = llmResponse.message;
 
       this.s.emitEvent(runId, 'llm.response', {
@@ -246,6 +359,11 @@ export class AgentStepProcessor {
         toolCalls: responseMessage.toolCalls?.map(tc => ({ id: tc.id, name: tc.name })),
         usage: { inputTokens: stepInputTokens, outputTokens: stepOutputTokens },
         cost: stepCost,
+        // Which card answered, on the live event and not only on the
+        // persisted step. A client watching a run could show the cost as
+        // it accrued but not the model it was accruing on, which is the
+        // half that makes multi-model routing legible.
+        ...(llmResponse.routing ? { routing: llmResponse.routing } : {}),
       });
 
       // Check if the LLM returned tool calls
@@ -305,7 +423,7 @@ export class AgentStepProcessor {
               run.steps.push({
                 type: 'llm_call',
                 input: { messageCount: messages.length, toolCount: allToolDefs.length },
-                output: { status: 'sleeping', reason: toolCall.parameters?.reason },
+                output: { status: 'sleeping', reason: toolCall.parameters?.reason, ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
                 cost: stepCost,
                 tokens: { input: stepInputTokens, output: stepOutputTokens },
                 duration: stepDuration,
@@ -323,7 +441,7 @@ export class AgentStepProcessor {
               run.steps.push({
                 type: 'llm_call',
                 input: { messageCount: messages.length, toolCount: allToolDefs.length },
-                output: { status: 'waiting_input', question: toolCall.parameters?.question },
+                output: { status: 'waiting_input', question: toolCall.parameters?.question, ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
                 cost: stepCost,
                 tokens: { input: stepInputTokens, output: stepOutputTokens },
                 duration: stepDuration,
@@ -582,7 +700,7 @@ export class AgentStepProcessor {
             run.steps.push({
               type: 'llm_call',
               input: { messageCount: messages.length, toolCount: allToolDefs.length },
-              output: { status: 'revising', content: finalContent.substring(0, 200) },
+              output: { status: 'revising', content: finalContent.substring(0, 200), ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
               cost: stepCost,
               tokens: { input: stepInputTokens, output: stepOutputTokens },
               duration: verifyStepDuration,
@@ -643,7 +761,18 @@ export class AgentStepProcessor {
         run.steps.push({
           type: 'llm_call',
           input: { messageCount: messages.length, toolCount: allToolDefs.length },
-          output: { status: 'completed', content: finalContent.substring(0, 200) },
+          // Routing attribution belongs on this step too. The
+          // tool-calling branch stamps it; this one did not, so the
+          // commonest shape of all — a one-step answer with no tool
+          // calls — recorded a cost with no model behind it, and the
+          // documented invariant that a routed call stamps attribution
+          // on the response, the node result and the audit log was
+          // false for exactly the case people look at most.
+          output: {
+            status: 'completed',
+            content: finalContent.substring(0, 200),
+            ...(llmResponse.routing ? { routing: llmResponse.routing } : {}),
+          },
           cost: stepCost,
           tokens: { input: stepInputTokens, output: stepOutputTokens },
           duration: stepDuration,
@@ -747,27 +876,117 @@ export class AgentStepProcessor {
    * calls. The in-memory array the current tick reasons over is left
    * alone; this only bounds what goes to Postgres, the same trade the
    * request logger already makes with its bodies.
+   *
+   * Capping used to re-run on every prior step at every commit, so step k
+   * re-serialized k payloads -- Σk = N²/2 JSON.stringify passes per run, on
+   * the event loop. Step objects are append-only once pushed, so each one is
+   * capped once and the result is memoized against the step object itself.
    */
   private boundStepsForPersist(steps: AgentRun['steps']): AgentRun['steps'] {
     if (!Array.isArray(steps)) return steps;
 
-    const cap = (value: unknown): unknown => {
-      if (value === null || value === undefined) return value;
-      const text = typeof value === 'string' ? value : JSON.stringify(value);
-      if (text === undefined || text.length <= STEP_PAYLOAD_CAP) return value;
-      return `${text.slice(0, STEP_PAYLOAD_CAP)}… (truncated from ${text.length} characters)`;
-    };
+    return steps.map((step) => {
+      if (!step || typeof step !== 'object') return step;
+      const memo = this.cappedStepCache.get(step as object);
+      if (memo !== undefined) return memo;
+      const capped = {
+        ...step,
+        input: capPersistedPayload((step as any).input),
+        output: capPersistedPayload((step as any).output),
+      };
+      this.cappedStepCache.set(step as object, capped);
+      return capped;
+    }) as AgentRun['steps'];
+  }
 
-    return steps.map((step) =>
-      step && typeof step === 'object'
-        ? { ...step, input: cap((step as any).input), output: cap((step as any).output) }
-        : step,
+  /**
+   * The run's organization, once per step.
+   *
+   * A ceiling we cannot read must not become a ceiling we ignore, so a
+   * failure here is warned and returns null — resolveRunLimits still clamps
+   * to the operator env floor. Same contract resolveLimits had when it did
+   * this load itself.
+   */
+  private async loadOrganization(organizationId: string) {
+    try {
+      return await this.s.organizationRepository.findOne({ where: { id: organizationId } });
+    } catch (err: any) {
+      this.s.logger.warn(
+        `Could not load organization ${organizationId} for this step: ${err.message}`,
+      );
+      return null;
+    }
+  }
+
+  /** The `IN (toolIds)` query, run once per (org, toolIds) per TTL window. */
+  private async loadTools(agent: Agent) {
+    return this.s.toolRepository.find({
+      where: { id: In(agent.toolIds), organizationId: agent.organizationId },
+    });
+  }
+
+  /**
+   * The agent's tools for this step, served from a short-lived cache.
+   *
+   * The identical query ran on every step of every run. The result only
+   * shapes the prompt — ToolExecutorService re-loads the tool row by id
+   * before executing anything — so a stale entry cannot change what runs.
+   */
+  private async resolveTools(agent: Agent) {
+    if (!agent.toolIds?.length) return [];
+    const key = `${agent.organizationId}:${[...agent.toolIds].sort().join(',')}`;
+    const now = Date.now();
+    const hit = this.toolCache.get(key);
+    if (hit && now - hit.at < TOOL_CACHE_TTL_MS) {
+      // Refresh recency for the LRU eviction below.
+      this.toolCache.delete(key);
+      this.toolCache.set(key, hit);
+      return hit.tools;
+    }
+    const tools = await this.loadTools(agent);
+    this.toolCache.set(key, { at: now, tools });
+    while (this.toolCache.size > TOOL_CACHE_MAX_ENTRIES) {
+      const oldest = this.toolCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.toolCache.delete(oldest);
+    }
+    return tools;
+  }
+
+  /**
+   * Cancellation is a row, not a signal.
+   *
+   * The model call runs for seconds to minutes and nothing looked at the
+   * run again in that window, so a user who cancelled watched the UI go
+   * to cancelled while this worker carried on: it ran the tool calls and
+   * then committed the step -- cancel leaves `currentStep` alone, so the
+   * CAS matched -- writing `running` back over CANCELLED. Look before
+   * spending anything more, and bank the cost of the call already paid
+   * for without touching status or currentStep.
+   */
+  private async abandonIfTerminal(run: AgentRun, expectedStep: number): Promise<AgentRunStatus | null> {
+    const live = await this.s.runRepository.findOne({
+      where: { id: run.id },
+      select: { id: true, status: true },
+    });
+    if (!live || !TERMINAL_STATUSES.includes(live.status)) return null;
+    await this.s.runRepository.update(
+      { id: run.id, currentStep: expectedStep },
+      { totalCost: run.totalCost, totalTokens: run.totalTokens },
     );
+    this.s.logger.log(`Run ${run.id} is ${live.status}; abandoning step ${expectedStep} instead of finishing it`);
+    return live.status;
   }
 
   private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {
     const res = await this.s.runRepository.update(
-      { id: run.id, currentStep: expectedStep },
+      // The step number alone was not enough. Cancelling a run sets the
+      // status and leaves `currentStep` where it was, so this CAS still
+      // matched: `status` was written back to running, the step
+      // advanced, and the next one was enqueued -- while the UI said
+      // cancelled and the SSE consumer had already detached. A terminal
+      // status is final, whoever gets there first.
+      { id: run.id, currentStep: expectedStep, status: Not(In(TERMINAL_STATUSES)) },
       {
         status: run.status,
         currentStep: run.currentStep,

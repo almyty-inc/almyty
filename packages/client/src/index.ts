@@ -1,4 +1,4 @@
-export { AlmytyClient, GatewayClient } from './client.js';
+export { AlmytyClient, GatewayClient, parseSseFrame, isAbortError } from './client.js';
 export type {
   AgentInfo,
   AgentTool,
@@ -16,6 +16,7 @@ export {
   resolveCredentials,
   resolveCredentialsOrExit,
   getOrgSlugFromToken,
+  credentialsExpired,
   CREDENTIALS_FILE,
 } from './credentials.js';
 export type { StoredCredentials } from './credentials.js';

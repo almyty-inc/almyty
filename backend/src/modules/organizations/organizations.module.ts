@@ -6,6 +6,9 @@ import { UserOrganization } from '../../entities/user-organization.entity';
 import { Team } from '../../entities/team.entity';
 import { UserTeam } from '../../entities/user-team.entity';
 import { User } from '../../entities/user.entity';
+import { CanonicalMemory } from '../memory/canonical/canonical-memory.entity';
+import { CanonicalMemoryWorkspaceConfig } from '../memory/canonical/canonical-memory-config.entity';
+import { CanonicalMemorySoftcapWarning } from '../memory/canonical/canonical-memory-softcap-warning.entity';
 
 import { OrganizationsService } from './organizations.service';
 import { OrganizationsInvitesHelper } from './organizations-invites.helper';
@@ -22,6 +25,11 @@ import { GatewaysModule } from '../gateways/gateways.module';
       Team,
       UserTeam,
       User,
+      // Org deletion clears canonical memory by scope_id; the tables
+      // have no organizationId for a cascade to follow.
+      CanonicalMemory,
+      CanonicalMemoryWorkspaceConfig,
+      CanonicalMemorySoftcapWarning,
     ]),
     forwardRef(() => GatewaysModule),
   ],

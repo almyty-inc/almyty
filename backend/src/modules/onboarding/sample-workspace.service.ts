@@ -3,9 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 
 import { Api, ApiType } from '../../entities/api.entity';
-import { Tool } from '../../entities/tool.entity';
+import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
-import { Agent } from '../../entities/agent.entity';
+import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { LlmProvider, LlmProviderStatus } from '../../entities/llm-provider.entity';
 
 import { ApisService } from '../apis/apis.service';
@@ -68,6 +68,36 @@ export class SampleWorkspaceService {
       userId,
     );
 
+    try {
+      return await this.seedFromApi(api, organizationId, userId);
+    } catch (error: any) {
+      // seed() drives five services with their own writes, so it cannot
+      // be one transaction. Without a sweep, a failure part-way through
+      // left the stamped API behind -- and because findExistingSample
+      // keys off that stamp, every later attempt returned
+      // `created: false` and built nothing. The action could never
+      // succeed again, and the button vanished with it, since
+      // hasSampleWorkspace reads the same row. Removing the partial
+      // sample is what makes the action retryable.
+      this.logger.error(
+        `[SAMPLE_WORKSPACE] Seed failed for org=${organizationId}: ${error.message}. Removing the partial sample.`,
+      );
+      try {
+        await this.remove(organizationId, userId);
+      } catch (cleanupError: any) {
+        this.logger.error(
+          `[SAMPLE_WORKSPACE] Could not remove the partial sample for org=${organizationId}: ${cleanupError.message}`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async seedFromApi(
+    api: Api,
+    organizationId: string,
+    userId: string,
+  ): Promise<SampleWorkspaceResult> {
     const imported = await this.apisService.importSchema(
       api.id,
       PETSTORE_OPENAPI,
@@ -80,12 +110,21 @@ export class SampleWorkspaceService {
       tools = (await this.apisService.generateToolsFromApi(api.id, organizationId)).tools;
     }
 
-    // Stamp generated tools as sample so the delete sweep can find them.
+    // Stamp the generated tools as sample so the delete sweep can find
+    // them, and activate them in the same write.
+    //
+    // Every tool generated from a schema is created DRAFT, and a gateway
+    // only serves active tools -- so the association loop below threw on
+    // the first tool and took the whole seed with it. A sample workspace
+    // whose tools are not servable is not a sample workspace.
     if (tools.length > 0) {
       await this.toolRepo.update(
         { id: In(tools.map((t) => t.id)) },
-        { metadata: { ...SAMPLE_METADATA } } as any,
+        { metadata: { ...SAMPLE_METADATA }, status: ToolStatus.ACTIVE } as any,
       );
+      for (const tool of tools) {
+        tool.status = ToolStatus.ACTIVE;
+      }
     }
 
     // 2. MCP gateway with the tools assigned + an API key.
@@ -222,36 +261,25 @@ export class SampleWorkspaceService {
     }
 
     const model = provider.configuration?.model || 'default';
+
+    // Autonomous and active, not a draft workflow.
+    //
+    // The sample used to be a three-node pipeline -- input, one llm_call,
+    // output -- created DRAFT. Draft agents cannot be invoked
+    // (assertAgentInvokable), and a workflow pipeline never reaches the
+    // tools the sample just generated, so the demo agent could neither
+    // run nor demonstrate anything. Autonomous mode is the one that
+    // calls tools, and the point of the sample is an agent that works
+    // the moment it appears.
     const agent = await this.agentsService.createAgent(
       {
         name: 'Petstore Demo Agent (sample)',
-        description: 'A minimal agent wired to your first provider.',
-        mode: 'workflow',
-        pipeline: {
-          nodes: [
-            { id: 'input_1', type: 'input', config: {} },
-            {
-              id: 'llm_1',
-              type: 'llm_call',
-              config: {},
-              data: {
-                providerId: provider.id,
-                model,
-                userPromptTemplate: '{{input.message}}',
-              },
-            },
-            {
-              id: 'output_1',
-              type: 'output',
-              config: {},
-              data: { mapping: '{{nodes.llm_1.output}}' },
-            },
-          ],
-          edges: [
-            { id: 'e1', source: 'input_1', target: 'llm_1' },
-            { id: 'e2', source: 'llm_1', target: 'output_1' },
-          ],
-        },
+        description: 'An agent that answers questions using the Petstore tools.',
+        mode: 'autonomous',
+        status: AgentStatus.ACTIVE,
+        instructions:
+          'You help people explore the Petstore API. Use the Petstore tools to ' +
+          'look up, list and create pets, and say plainly which tool you called.',
         modelConfig: { providerId: provider.id, model },
         toolIds,
         metadata: { ...SAMPLE_METADATA },

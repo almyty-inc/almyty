@@ -221,7 +221,7 @@ export function CreateToolDialog({
               {...createForm.register('name')}
             />
             {createForm.formState.errors.name && (
-              <p className="text-sm text-red-500 mt-1">{(createForm.formState.errors.name as any).message}</p>
+              <p className="text-sm text-destructive mt-1">{(createForm.formState.errors.name as any).message}</p>
             )}
           </div>
 

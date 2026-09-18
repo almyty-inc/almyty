@@ -189,6 +189,23 @@ export class ToolsStatsHelper {
     };
   }
 
+  /**
+   * The bucket a timestamp falls in, for a given timeframe. Same grouping
+   * the per-bucket `filter` used to express inline.
+   */
+  private trendBucketKey(d: Date, timeframe: 'hour' | 'day' | 'week' | 'month'): string {
+    switch (timeframe) {
+      case 'hour':
+        return `${d.toDateString()}#${d.getHours()}`;
+      case 'day':
+        return d.toDateString();
+      case 'week':
+        return `${d.getFullYear()}#W${this.getWeekNumber(d)}`;
+      case 'month':
+        return `${d.getFullYear()}#${d.getMonth()}`;
+    }
+  }
+
   private calculateExecutionTrend(
     executions: ToolExecution[],
     timeframe: 'hour' | 'day' | 'week' | 'month',
@@ -196,6 +213,21 @@ export class ToolsStatsHelper {
     const intervals = { hour: 24, day: 30, week: 12, month: 12 };
     const interval = intervals[timeframe];
     const trend: Array<{ date: string; executions: number; success: number; failed: number }> = [];
+
+    // One pass over the rows, bucketed by key. This used to re-scan the whole
+    // array once per bucket: 30 buckets x the 50,000-row cap meant 1.5M Date
+    // constructions and 1.5M toDateString() calls per page view.
+    const buckets = new Map<string, { total: number; successful: number }>();
+    for (const e of executions) {
+      const key = this.trendBucketKey(new Date(e.createdAt), timeframe);
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = { total: 0, successful: 0 };
+        buckets.set(key, bucket);
+      }
+      bucket.total += 1;
+      if (e.success) bucket.successful += 1;
+    }
 
     for (let i = interval - 1; i >= 0; i--) {
       let date: Date;
@@ -220,36 +252,11 @@ export class ToolsStatsHelper {
           break;
       }
 
-      const periodExecutions = executions.filter((e) => {
-        const executionDate = new Date(e.createdAt);
-        switch (timeframe) {
-          case 'hour':
-            return (
-              executionDate.getHours() === date.getHours() &&
-              executionDate.toDateString() === date.toDateString()
-            );
-          case 'day':
-            return executionDate.toDateString() === date.toDateString();
-          case 'week':
-            return (
-              this.getWeekNumber(executionDate) === this.getWeekNumber(date) &&
-              executionDate.getFullYear() === date.getFullYear()
-            );
-          case 'month':
-            return (
-              executionDate.getMonth() === date.getMonth() &&
-              executionDate.getFullYear() === date.getFullYear()
-            );
-          default:
-            return false;
-        }
-      });
+      const bucket = buckets.get(this.trendBucketKey(date, timeframe));
+      const total = bucket?.total ?? 0;
+      const successful = bucket?.successful ?? 0;
 
-      const total = periodExecutions.length;
-      const successful = periodExecutions.filter((e) => e.success).length;
-      const failed = total - successful;
-
-      trend.push({ date: dateKey, executions: total, success: successful, failed });
+      trend.push({ date: dateKey, executions: total, success: successful, failed: total - successful });
     }
 
     return trend;

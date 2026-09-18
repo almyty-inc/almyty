@@ -7,12 +7,25 @@ Something has to choose which strategy runs. Usually that is a person, in
 configuration. The orchestrator is what chooses when you would rather it
 were decided per request.
 
-## Off by default, and the product is complete without it
+## Off by default, per agent, and the product is complete without it
 
-`ORCHESTRATOR_ENABLED` defaults to false. Disabled, it returns the
-configured static strategy without calling anything. Every other layer
-works unchanged, which is the point: a feature that decides things for you
-should be something you switch on, not something you have to work around.
+There is no global switch and no environment variable. Orchestration is a
+per-agent setting, stored on the agent itself at
+`settings.execution.orchestrator` and merged over `ORCHESTRATOR_DEFAULTS`
+(`enabled: false`). An agent that has never been given the setting has no
+stored config at all, and `choose()` returns null for both cases — no
+stored config, and a stored config with `enabled: false`. Null means the
+run uses the configured static strategy without calling anything.
+
+Set it under Agents → the agent → the **Execution** tab, in the
+Orchestrator panel: an Enabled switch, and once it is on, the role that
+decides, the timeout, the fallback strategy and the allowed strategy list.
+The panel reads and writes `GET`/`PUT /agents/:agentId/execution`, whose
+body carries `orchestrator` as the block above.
+
+Every other layer works unchanged when it is off, which is the point: a
+feature that decides things for you should be something you switch on, not
+something you have to work around.
 
 ## How it decides
 
@@ -60,6 +73,9 @@ The decision costs a call. A cost that does not appear in the budget is a
 cost nobody can see, so it is consulted like any other stage.
 
 ## Configuration
+
+Every field below lives under `settings.execution.orchestrator` on the
+agent. Anything left out falls back to the default in the second column.
 
 | Setting | Default |
 |---------|---------|

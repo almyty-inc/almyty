@@ -41,16 +41,26 @@ import {
 } from '@/components/ui/table'
 
 import { memoriesApi } from '@/lib/api'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { Memory } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface MemoryTabProps {
   agentId: string
   memories: Memory[]
+  /**
+   * The memories query lives on the agent detail page, so the failure has to
+   * be handed down: without it a fetch that failed rendered the same "no
+   * memories yet" line as an agent that genuinely has none.
+   */
+  error?: unknown
+  onRetry?: () => void
 }
 
-export function MemoryTab({ agentId, memories }: MemoryTabProps) {
+export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
 
@@ -93,13 +103,16 @@ export function MemoryTab({ agentId, memories }: MemoryTabProps) {
     onSuccess: () => {
       success('Memory Added', 'Memory has been created for this agent.')
       queryClient.invalidateQueries({ queryKey: ['agent-memories', agentId] })
+      // The Memory page lists the same rows under its own key, and a
+      // memory added here is the org's memory too.
+      queryClient.invalidateQueries({ queryKey: ['memories', 'list'] })
       setAddMemoryOpen(false)
       setNewMemoryContent('')
       setNewMemoryType('fact')
       setNewMemoryTags('')
     },
     onError: (err: any) => {
-      errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to add memory')
+      errorNotif('Failed', getApiErrorMessage(err, 'Failed to add memory'))
     },
   })
 
@@ -121,10 +134,20 @@ export function MemoryTab({ agentId, memories }: MemoryTabProps) {
           </div>
         </CardHeader>
         <CardContent>
-          {memories.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No memories yet. Add memories to give this agent persistent knowledge.
-            </p>
+          {error ? (
+            <QueryError error={error} onRetry={onRetry} title="Couldn't load memories" />
+          ) : memories.length === 0 ? (
+            <EmptyState
+              icon={Brain}
+              title="No memories yet"
+              description="Memories are the knowledge this agent carries between runs — facts, preferences and instructions it should not have to be told twice."
+              action={
+                <Button onClick={() => setAddMemoryOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add memory
+                </Button>
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>

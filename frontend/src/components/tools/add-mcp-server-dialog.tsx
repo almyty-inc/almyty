@@ -19,6 +19,7 @@ import { ConnectAccountButton } from '@/components/connections/connect-sheet'
 import { ConnectedChip } from '@/components/connections/connected-chip'
 import { ConnectionSelect } from '@/components/connections/connection-select'
 import type { Connection } from '@/types/connections'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface AddMcpServerDialogProps {
   open: boolean
@@ -77,11 +78,7 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
       onOpenChange(false)
     },
     onError: (error: any) => {
-      const msg =
-        error.response?.data?.message ??
-        error.response?.data?.error?.message ??
-        error.message ??
-        'Failed to add MCP server'
+      const msg = getApiErrorMessage(error, 'Failed to add MCP server')
       notifications.error('Error', msg)
     },
   })

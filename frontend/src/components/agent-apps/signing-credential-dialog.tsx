@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { credentialsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 export interface SigningCredentialDialogProps {
   open: boolean
@@ -98,10 +99,7 @@ export function SigningCredentialDialog({
       onOpenChange(false)
     },
     onError: (err: any) =>
-      errorNotif(
-        'Could not store it',
-        err?.response?.data?.message || err?.message || 'Something went wrong.',
-      ),
+      errorNotif('Could not store the certificate', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const ready =

@@ -19,6 +19,7 @@ import type {
   JsonRpcRequest,
   JsonRpcResponse,
   Task,
+  StreamResponse,
 } from './types/a2a-spec.types';
 import { A2A_ERROR_CODES } from './types/a2a-spec.types';
 
@@ -47,7 +48,7 @@ export class A2AServerService {
       pollForCompletion: this.pollForCompletion.bind(this),
       getRunMessages: this.getRunMessages.bind(this),
       findActiveRunByConversationId: this.findActiveRunByConversationId.bind(this),
-      writeSseEvent: this.writeSseEvent.bind(this),
+      writeStreamResponse: this.writeStreamResponse.bind(this),
       jsonRpcError: this.jsonRpcError.bind(this),
     };
 
@@ -131,12 +132,22 @@ export class A2AServerService {
         }
 
         case 'message/stream':
-        case 'StreamMessage': {
+        case 'StreamMessage':
+        case 'SendStreamingMessage': {
           this.metrics?.record(MetricType.A2A_MESSAGE, {
             organizationId: gateway.organizationId,
             dimensions: { agentId: gateway.agentId },
           });
           await this.messageHandler.handleMessageStream(gateway, rpcReq.params, rpcReq.id, req, res);
+          return;
+        }
+
+        // Reattach an SSE stream to a task that is still running, for a client
+        // whose original stream dropped. `SubscribeToTask` is the v1.0 name;
+        // `tasks/resubscribe` is what v0.2.x / v0.3.x clients send.
+        case 'SubscribeToTask':
+        case 'tasks/resubscribe': {
+          await this.messageHandler.handleTaskSubscribe(gateway, rpcReq.params, rpcReq.id, req, res);
           return;
         }
 
@@ -272,8 +283,25 @@ export class A2AServerService {
     });
   }
 
-  private writeSseEvent(res: Response, eventName: string, data: any): void {
-    res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
+  /**
+   * Write one SSE frame of a streaming A2A method.
+   *
+   * Per the JSON-RPC binding, each frame's `data` is a COMPLETE JSON-RPC
+   * response envelope carrying a StreamResponse in `result`, reusing the id of
+   * the request that opened the stream:
+   *
+   *   data: {"jsonrpc":"2.0","id":1,"result":{"statusUpdate":{...}}}
+   *
+   * A conforming client validates every frame against that envelope and
+   * raises on the first one that is a bare event object instead.
+   */
+  private writeStreamResponse(
+    res: Response,
+    rpcId: string | number,
+    payload: StreamResponse,
+  ): void {
+    const envelope = this.jsonRpcSuccess(rpcId, payload);
+    res.write(`data: ${JSON.stringify(envelope)}\n\n`);
   }
 
   private jsonRpcSuccess(id: string | number, result: any): JsonRpcResponse {

@@ -88,9 +88,11 @@ vendors; writing it twice is the duplication that caused most of a week's
 bugs. Inbound protocols are translators at the edge, never branches
 through the core.
 
-`anthropic_messages` inbound is what makes an Anthropic SDK client, Claude
-Code included, work against almyty with a base URL change, carrying
-thinking blocks and real tool use instead of flattening them.
+`anthropic_messages` inbound is what lets an Anthropic SDK client reach an
+almyty agent with a base URL change, carrying thinking blocks and real tool
+use instead of flattening them. Claude Code is **not** one of those clients:
+it always declares tools, and this endpoint refuses client-declared tools for
+the reason set out below.
 
 Point one at `POST /v1/messages`:
 
@@ -109,6 +111,15 @@ token if you have one already. A tool result arrives as a user message of
 into text, which is the difference between a client's tool loop working
 and stopping without an error.
 
+The conversation, the `system` prompt, `temperature` and `max_tokens` all
+reach the run. `/v1/messages` is stateless, so the `messages` array is the
+conversation and a client resends it whole every turn; it is rendered into
+the agent's input as a labelled transcript, because an agent prompt binds one
+string and anything left beside it reaches no model. `system` is folded into
+the same transcript, ahead of the turns. `temperature` and `max_tokens` are
+applied to the run's `llm_call` nodes and to `modelConfig` for the length of
+the request; nothing is written back to the stored agent.
+
 Three limits, stated because finding them at run time is worse.
 
 **Client-declared tools are refused.** An almyty agent runs its own
@@ -125,8 +136,12 @@ back, which is not built.
 saying so, rather than answered with one JSON object where the client is
 waiting for SSE.
 
-**Usage is not split.** A run records one token total, so
-`usage.input_tokens` reports 0 rather than a number we would invent.
+**Usage is not split.** A run records one token total and nothing keeps the
+input and output halves apart, so `usage.input_tokens` reports 0 and
+`output_tokens` carries the whole run rather than the completion alone. Every
+response on both compat routes carries `x-almyty-usage-split: unavailable` so
+a caller can tell the split apart from a measurement. Do not attribute cost
+from it.
 
 Compatibility shims are a fallback, not the default: Anthropic's
 OpenAI-compatible endpoint drops thinking blocks, Gemini's shim loses
@@ -140,6 +155,30 @@ capability the native path lacks must be able to select a compat path.
 The invariant is narrower: when two paths both satisfy a requirement,
 prefer native, and record any downgrade in the route trace with the
 capabilities dropped. Silence is forbidden, not the downgrade.
+
+### The OpenAI-compatible route
+
+`POST /v1/chat/completions` and `GET /v1/models` follow the same three rules:
+the whole `messages` array reaches the run as a transcript, `temperature` and
+`max_tokens` are honoured per request, and the token split is disclosed rather
+than invented — `total_tokens` is measured, `prompt_tokens` and
+`completion_tokens` are 0, and the same `x-almyty-usage-split` header says so.
+
+What it cannot honour, it refuses with a 400 naming the field in
+`error.param`: `tools`, `tool_choice`, `functions`, `function_call`, a
+`response_format` other than `text`, `n` other than 1, `top_p` other than 1,
+non-zero `frequency_penalty` or `presence_penalty`, `stop`, `seed`,
+`logprobs` and `top_logprobs`. The defaults a client library sends unasked
+(`n: 1`, `top_p: 1`, zero penalties) pass. `stream_options.include_usage` is
+honoured: the final chunk before `[DONE]` carries `usage` with an empty
+`choices` array.
+
+A stream that fails after the headers are flushed ends with an SSE frame
+carrying an `error` object, which is what the real API sends and what both
+SDKs raise on, rather than `finish_reason: "error"` — not one of the five
+OpenAI values, so a consumer switching on it reads a truncated answer as a
+finished one. A non-streaming run that does not complete is a 502 carrying an
+error object, for the same reason.
 
 ### Capabilities are protocol-scoped
 
@@ -247,22 +286,61 @@ A deployment with a `budgetId` is charged from the adapter's cost snapshot on ev
 
 ## CLI
 
+`@almyty/models`, documented in `packages/models-cli/README.md`. Every read
+command takes `--json`.
+
 ```
-npx @almyty/models list [--selectable] [--json]
+npx @almyty/models list [--selectable] [--status active|inactive|error|deploying]
+                        [--tier public|private_cloud|local] [--provider <providerId>]
 npx @almyty/models get <id>
-npx @almyty/models register --name <n> --provider <providerId> --model <vendorModelId> [--tier public|private_cloud|local] [--region r]
-npx @almyty/models register-endpoint --name <n> --url <base url> --model <vendorModelId> [--api-key k] [--tier ...] [--region ...]
-npx @almyty/models sync <providerId>
+npx @almyty/models register --name <n> --provider <providerId> --model <vendorModelId>
+                           [--tier t] [--region r] [--context n]
+npx @almyty/models register-endpoint --name <n> --url <base url> --model <vendorModelId>
+                           [--api-key-stdin] [--tier t] [--region r] [--context n]
+npx @almyty/models set <id> [--name n] [--tier t] [--region r] [--context n]
+                           [--status s] [--price-in n --price-out n] [--clear-price]
+npx @almyty/models sync [providerId]
 npx @almyty/models validate <id>
+npx @almyty/models delete <id>
+npx @almyty/models route [--objective cheapest|fastest|pinned] [--tier t] [--regions a,b]
+                         [--needs tools,vision] [--capabilities '<json>'] [--pinned m]
+                         [--chain a,b] [--budget-headroom cents] [--prefer a,b]
 npx @almyty/models versions
 npx @almyty/models register-version --name <n> --uri <pinned registry uri> [--base b] [--quantizations q1,q2]
 npx @almyty/models adapters
-npx @almyty/models deploy <model> --adapter <key> [--base b] [--config '<json>'] [--desired '<json>'] [--credential <id>] [--budget <id>] [--card <cardId>]
+npx @almyty/models deploy <model> --adapter <key> [--base b] [--config-file <path>] [--config-stdin]
+                         [--desired '<json>'] [--credential <id>] [--budget <id>] [--card <cardId>]
 npx @almyty/models deploy --model-version <modelVersionId> --adapter <key> [...]
 npx @almyty/models deployments
+npx @almyty/models deployment <id>
 npx @almyty/models scale <deploymentId> <replicas>
 npx @almyty/models teardown <deploymentId>
 ```
+
+`list` and `get` report **why** a card is not selectable — a status that is
+not active and its retirement reason, nothing that can call it, or no passed
+validation run — rather than printing a name and leaving the router's refusal
+to be discovered by running something.
+
+`route` is `POST /models/route-preview` from the terminal: it takes a policy
+and answers with the ordered candidates and every rejection with its reason,
+calling nothing. It exits 5 when no card satisfies the policy.
+
+`set` is `PATCH /models/:id`. A `--price-in`/`--price-out` pair writes
+`pricingOverride`, which wins over the feed; `--clear-price` drops back to it.
+Both numbers are required together: half an override would price input by hand
+and output from the feed.
+
+**No secret is taken as a flag value**, because argv is visible in `ps`, in
+shell history and in most CI logs. An endpoint key is prompted without echo or
+read with `--api-key-stdin`; adapter configuration comes from `--config-file`
+or `--config-stdin`, or better, from `--credential <connectionId>` naming a
+connection. `--config` is still accepted for the fields an adapter does not
+mark `x-secret` and is refused the moment it carries one that is; `adapters`
+prints which fields those are.
+
+Exit codes are the suite's shared table: 0 success, 1 unexpected, 2 usage,
+3 not authenticated, 4 not found, 5 the operation ran and failed.
 
 ## Environment
 

@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { apisApi } from '@/lib/api'
 import { Api } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface SchemaTabProps {
   api: Api
@@ -42,7 +43,7 @@ export function SchemaTab({ api, open, onOpenChange }: SchemaTabProps) {
       setParsed(data)
       setView('parsed')
     } catch (e: any) {
-      setError(e?.response?.data?.message || e?.message || 'Failed to parse schema')
+      setError(getApiErrorMessage(e, 'Failed to parse schema'))
     } finally {
       setLoading(false)
     }

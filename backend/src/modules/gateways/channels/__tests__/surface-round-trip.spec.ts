@@ -518,4 +518,73 @@ describe('surface round trips', () => {
       expect(parseSentJson(reply).text).toBe(`This is a bot.\n\n${AGENT_REPLY}`);
     });
   });
+
+  /**
+   * "I asked your Slack bot at 14:05 and it never answered."
+   *
+   * What the operator used to find for that question was an
+   * `inbound/received` row and an `outbound/processed` row with
+   * `errorMessage: null` — which reads as delivered — while Slack had
+   * actually answered `{ok: false, error: "not_in_channel"}` and the
+   * reply went nowhere. The reason appeared in no row and no log line.
+   *
+   * These two drive the whole pipeline and assert on the rows an
+   * operator would actually open.
+   */
+  describe('what the event log says about a reply', () => {
+    const signingSecret = 'record-keeping-secret';
+    const inbound = {
+      team_id: 'T123',
+      event_id: 'Ev-record',
+      event: { type: 'message', text: 'hello', user: 'U1', channel: 'C42', ts: '1700000000.1' },
+    };
+    const rawBody = JSON.stringify(inbound);
+    const timestamp = '1700000000';
+    const headers = {
+      'x-slack-request-timestamp': timestamp,
+      'x-slack-signature':
+        'v0=' +
+        crypto.createHmac('sha256', signingSecret).update(`v0:${timestamp}:${rawBody}`).digest('hex'),
+    };
+    const configuration = { bot_token: 'xoxb-real', signing_secret: signingSecret };
+
+    it('records a delivered reply as processed, on both rows, cross-linked to the run', async () => {
+      const { inboundEvent, outboundEvent } = await roundTrip({
+        type: GatewayType.SLACK,
+        configuration,
+        inbound,
+        headers,
+        rawBody,
+        agentOutput: AGENT_REPLY,
+      });
+
+      expect(outboundEvent).toMatchObject({ status: 'processed', errorMessage: null });
+      expect(outboundEvent.runId).toBe('run-round-trip');
+      // The inbound row is what an operator searches by: it is the one
+      // that carries the platform's delivery id.
+      expect(inboundEvent).toMatchObject({ status: 'processed', runId: 'run-round-trip' });
+      expect(inboundEvent.deliveryId).toBe('slack:Ev-record');
+    });
+
+    it('records a reply Slack refused as failed, with Slack\'s own reason', async () => {
+      const { inboundEvent, outboundEvent } = await roundTrip({
+        type: GatewayType.SLACK,
+        configuration,
+        inbound,
+        headers,
+        rawBody,
+        agentOutput: AGENT_REPLY,
+        // HTTP 200. This is the whole defect: the transport succeeded.
+        platformResponse: { ok: true, status: 200, json: { ok: false, error: 'not_in_channel' } },
+      });
+
+      expect(outboundEvent.status).toBe('failed');
+      expect(outboundEvent.errorMessage).toMatch(/not_in_channel/);
+      expect(outboundEvent.runId).toBe('run-round-trip');
+      expect(inboundEvent).toMatchObject({ status: 'failed', runId: 'run-round-trip' });
+      expect(inboundEvent.errorMessage).toMatch(/not_in_channel/);
+      // And the token that was used to try is nowhere in the record.
+      expect(JSON.stringify([inboundEvent, outboundEvent])).not.toContain('xoxb-real');
+    });
+  });
 });

@@ -22,10 +22,12 @@ import { Copy, Loader2, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { gatewaysApi, getApiBaseUrl } from '@/lib/api'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useCopy } from '@/lib/clipboard'
 import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
 import type { Gateway } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface ChannelInstallationsPanelProps {
   gateway: Gateway
@@ -66,7 +68,7 @@ export function ChannelInstallationsPanel({ gateway }: ChannelInstallationsPanel
     onError: (err: any) => {
       errorNotif(
         'Revoke Failed',
-        err?.response?.data?.message || err?.message || 'Failed to revoke installation',
+        getApiErrorMessage(err, 'Failed to revoke installation'),
       )
     },
   })
@@ -109,9 +111,16 @@ export function ChannelInstallationsPanel({ gateway }: ChannelInstallationsPanel
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         ) : installations.length === 0 ? (
-          <p className="text-xs text-muted-foreground" data-testid="no-installations">
-            No workspaces have installed this channel yet.
-          </p>
+          // data-testid stays on a wrapper: EmptyState takes no testid, and
+          // the panel test finds this branch by it.
+          <div data-testid="no-installations">
+            <EmptyState
+              icon={Building2}
+              title="No workspaces yet"
+              description="Share the install URL above and each workspace that accepts it shows up here."
+              className="py-6"
+            />
+          </div>
         ) : (
           <ul className="space-y-2">
             {installations.map((installation) => (

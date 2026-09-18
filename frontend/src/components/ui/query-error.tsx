@@ -12,6 +12,7 @@ import { AlertTriangle, RotateCw } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface QueryErrorProps {
   /** Usually `query.error` from React Query. */
@@ -27,14 +28,11 @@ interface QueryErrorProps {
 
 function parseErrorMessage(error: unknown): string {
   if (!error) return 'An unexpected error occurred.'
-  // Axios errors surface the backend message at `response.data.message`.
-  // Native Errors have `.message`. Fall through to String coercion.
-  if (typeof error === 'object' && error !== null) {
-    const anyErr = error as Record<string, any>
-    if (anyErr.response?.data?.message) return String(anyErr.response.data.message)
-    if (anyErr.message) return String(anyErr.message)
-  }
-  return String(error)
+  // The backend wraps every error as { error: { code, message, ... } };
+  // this used to read the flat `response.data.message`, which that shape
+  // never carries, so every page's error state showed axios's own
+  // "Request failed with status code 4xx" instead of the reason.
+  return getApiErrorMessage(error, 'An unexpected error occurred.')
 }
 
 export function QueryError({

@@ -53,7 +53,7 @@ export const PLANS: Record<PlanKey, PlanMeta> = {
     key: 'enterprise',
     label: 'Enterprise',
     price: 'Custom',
-    blurb: 'Customer-managed keys, cost attribution, SLAs.',
+    blurb: 'Customer-managed keys, cost attribution, white label, SLAs.',
     selfServe: false,
   },
 }

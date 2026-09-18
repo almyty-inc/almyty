@@ -15,6 +15,8 @@ import { QueryError } from '@/components/ui/query-error'
 
 import { CodeBlock } from '@/components/ui/code-block'
 import { toolsApi, workspacesApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
+import { formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
@@ -84,11 +86,11 @@ export function ToolDetailPage() {
       }
     },
     onError: (error: Error & { response?: { data?: Record<string, any>; status?: number }; config?: { url?: string; method?: string } }) => {
-      notifications.error('Error', error.message || 'Failed to execute tool')
+      const message = getApiErrorMessage(error, 'Failed to execute tool')
+      notifications.error('Error', message)
       setExecutionResult({
         success: false,
-        error: error.response?.data?.error || error.message || 'Failed to execute tool',
-        message: error.response?.data?.message,
+        error: message,
         statusCode: error.response?.status,
         url: error.config?.url,
         method: error.config?.method,
@@ -106,6 +108,16 @@ export function ToolDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['tool', id] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       notifications.success('Tool status updated', 'The change is live on every gateway serving it.')
+    },
+    // A refused activation -- a draft tool with no code, an org-scope
+    // check, a 403 -- used to stop the spinner, leave the badge on
+    // Draft and say nothing at all, which is indistinguishable from a
+    // dead switch.
+    onError: (err: unknown, { status }) => {
+      notifications.error(
+        status === 'active' ? 'Could not activate tool' : 'Could not deactivate tool',
+        getApiErrorMessage(err, 'The tool status was not changed.'),
+      )
     },
   })
 
@@ -182,6 +194,8 @@ export function ToolDetailPage() {
           </Badge>
           <Switch
             checked={tool.status === 'active'}
+            aria-label={tool.status === 'active' ? 'Deactivate tool' : 'Activate tool'}
+            disabled={toggleStatusMutation.isPending}
             onCheckedChange={(checked) => {
               toggleStatusMutation.mutate({
                 status: checked ? 'active' : 'inactive',
@@ -623,7 +637,7 @@ export function ToolDetailPage() {
               </div>
               {tool.lastUsedAt && (
                 <p className="text-xs text-muted-foreground mt-4">
-                  Last used: {new Date(tool.lastUsedAt).toLocaleString()}
+                  Last used: {formatDateTime(tool.lastUsedAt)}
                 </p>
               )}
               {(tool.usageCount || 0) === 0 && (

@@ -264,11 +264,18 @@ export class ReferralsService {
     const usedThisYear = recent
       .filter((r) => r.id !== referral.id)
       .reduce((sum, r) => sum + (r.rewardDays || 0), 0) + (referral.rewardDays || 0);
-    const granted = Math.max(0, Math.min(days, yearlyCapDays() - usedThisYear));
+    const granted = Math.trunc(Math.max(0, Math.min(days, yearlyCapDays() - usedThisYear)));
     if (granted <= 0) return 0;
 
+    // The counter, and only the counter. `save(referral)` wrote this
+    // copy's whole row back, and the copy can be seconds old by now: an
+    // abuse flag raised in the meantime was erased with it. The
+    // increment is done in SQL so two grants can never lose each other.
     referral.rewardDays = (referral.rewardDays || 0) + granted;
-    await this.referralRepository.save(referral);
+    await this.referralRepository.update(
+      { id: referral.id },
+      { rewardDays: () => `"rewardDays" + ${granted}` },
+    );
 
     if (referrerOrg.plan === 'pro') {
       this.extendPlan(referrerOrg, granted);
@@ -367,10 +374,19 @@ export class ReferralsService {
     if (!org || org.plan !== 'pro') return 0;
 
     const days = code.accruedRewardDays;
+    // Claim the bank before spending it. The accrual pass runs in the
+    // same multi-replica sweep as the qualification passes, and zeroing
+    // the balance with `save(code)` from a stale copy applied the same
+    // banked days to the plan twice.
+    const claim = await this.referralCodeRepository.update(
+      { id: code.id, accruedRewardDays: days },
+      { accruedRewardDays: 0 },
+    );
+    if (!claim.affected) return 0;
+    code.accruedRewardDays = 0;
+
     this.extendPlan(org, days);
     await this.organizationRepository.save(org);
-    code.accruedRewardDays = 0;
-    await this.referralCodeRepository.save(code);
 
     this.auditLogService.log({
       organizationId: org.id,

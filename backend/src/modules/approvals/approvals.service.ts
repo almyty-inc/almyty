@@ -5,7 +5,9 @@ import { EventEmitter } from 'events';
 
 import { ApprovalRequest, ApprovalStatus } from '../../entities/approval-request.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { ApprovalPolicyApprovalRecord } from '../../entities/approval-policy-approval.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -71,6 +73,12 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     private readonly approvals: Repository<ApprovalRequest>,
     @InjectRepository(AgentRun)
     private readonly runs: Repository<AgentRun>,
+    // One row per collected approval, unique on (requestId, approverId) —
+    // the authoritative record of who has approved a policy-governed
+    // request, in place of an accumulator in the request's payload that
+    // two concurrent reviewers wrote over each other.
+    @InjectRepository(ApprovalPolicyApprovalRecord)
+    private readonly policyApprovals: Repository<ApprovalPolicyApprovalRecord>,
     private readonly accessPolicy: AccessPolicyService,
     // EE hook (approval_policy): multi-step / quorum policies. Absent in
     // the community build — @Optional() resolves to undefined and the
@@ -144,7 +152,24 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
       status: 'pending' as ApprovalStatus,
       expiresAt,
     } as Partial<ApprovalRequest>);
-    const saved = await this.approvals.save(row);
+    // `approval_requests_run_toolcall_uq` is the guard that makes this
+    // idempotent: a stalled `next-step` job redelivered alongside the
+    // original used to produce two gates for one tool call and two
+    // approval notifications. Losing the insert race is an answer, not a
+    // failure — the winner already paused the run, emitted and notified
+    // — so return their row rather than surfacing a 500 on a request the
+    // caller is entitled to make.
+    let saved: ApprovalRequest;
+    try {
+      saved = await this.approvals.save(row);
+    } catch (err: any) {
+      if (!isUniqueViolation(err) || !input.toolCallId) throw err;
+      const raced = await this.approvals.findOne({
+        where: { runId: input.runId, toolCallId: input.toolCallId },
+      });
+      if (!raced) throw err;
+      return raced;
+    }
 
     // Pause the run.
     await this.runs.update({ id: input.runId }, { status: AgentRunStatus.WAITING_APPROVAL });
@@ -258,6 +283,19 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
    * the caller then skips the status flip. Returns null when the OSS
    * single-gate flip should proceed: no hook, no recorded policy, policy
    * gone / unlicensed (hook scores null), or the policy is satisfied.
+   *
+   * The collected approvals are rows in `approval_policy_approvals`, one
+   * per approver, unique on (requestId, approverId) — not a list in the
+   * request's payload. A list meant every reviewer read it, appended
+   * itself and wrote the whole thing back, and two reviewers acting at
+   * once (the designed use case for a quorum) each wrote over the
+   * other: on a 3-of-N gate holding [A], B wrote [A,B] and C, loaded
+   * before B committed, wrote [A,C]. B's approval was gone, so either
+   * the quorum never completed and a properly approved request expired
+   * denied, or the erased approver dropped out of the repeat-approver
+   * guard and one human satisfied a 3-of-3 twice over. An INSERT per
+   * approval cannot overwrite anyone, and the index — not a list
+   * lookup — is what refuses a second approval from the same person.
    */
   private async applyPolicyProgress(
     row: ApprovalRequest,
@@ -266,14 +304,29 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     const state = (row.payload as Record<string, any> | null)?._policy;
     if (!this.approvalPolicyHook || !state?.policyId) return null;
 
-    const prior: ApprovalPolicyApproval[] = Array.isArray(state.approvals)
-      ? state.approvals
-      : [];
-    if (prior.some((a) => a.approverId === caller.id)) {
-      throw new BadRequestException('caller has already approved this request');
-    }
     const roles = await this.resolveApproverRoles(caller.id, row);
-    const collected = [...prior, { approverId: caller.id, roles }];
+
+    // The INSERT is the guard. A repeat approver is rejected by the
+    // unique index, which holds no matter how many reviewers are in
+    // flight, rather than by a read of a list that a concurrent write
+    // can erase.
+    try {
+      await this.policyApprovals.insert({
+        requestId: row.id,
+        organizationId: row.organizationId,
+        approverId: caller.id,
+        roles,
+      });
+    } catch (err: any) {
+      // A unique violation here is the index saying this person has
+      // already approved.
+      if (isUniqueViolation(err)) {
+        throw new BadRequestException('caller has already approved this request');
+      }
+      throw err;
+    }
+
+    const collected = await this.collectPolicyApprovals(row);
 
     // A scorer that THREW is not a scorer that said "no policy".
     //
@@ -310,9 +363,51 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     };
     if (progress.satisfied) return null;
 
-    const saved = await this.approvals.save(row);
-    this.emit('approval.progress', saved);
-    return saved;
+    // Only the payload column, and only the derived snapshot in it: the
+    // authoritative approvals are the rows, so a concurrent reviewer
+    // writing their own snapshot a moment later costs nothing and is
+    // recomputed on the next decision. A save() of the whole entity
+    // here would additionally write this reviewer's stale `status` and
+    // `decidedBy` back over whatever the CAS'd flip below committed.
+    await this.approvals.update({ id: row.id }, { payload: row.payload });
+    this.emit('approval.progress', row);
+    return row;
+  }
+
+  /**
+   * Every approval collected for a request, oldest first.
+   *
+   * Reads the rows, and folds in anything a request still carries in
+   * `payload._policy.approvals` so a row written that way is still
+   * counted. Deduped by approverId with the row winning, because the
+   * row is the one the unique index protects.
+   */
+  private async collectPolicyApprovals(
+    row: ApprovalRequest,
+  ): Promise<ApprovalPolicyApproval[]> {
+    const rows = await this.policyApprovals.find({
+      where: { requestId: row.id },
+      order: { createdAt: 'ASC' },
+    });
+    const byApprover = new Map<string, ApprovalPolicyApproval>();
+    const inPayload = (row.payload as Record<string, any> | null)?._policy?.approvals;
+    if (Array.isArray(inPayload)) {
+      for (const entry of inPayload) {
+        if (entry?.approverId) {
+          byApprover.set(entry.approverId, {
+            approverId: entry.approverId,
+            roles: Array.isArray(entry.roles) ? entry.roles : [],
+          });
+        }
+      }
+    }
+    for (const record of rows) {
+      byApprover.set(record.approverId, {
+        approverId: record.approverId,
+        roles: Array.isArray(record.roles) ? record.roles : [],
+      });
+    }
+    return [...byApprover.values()];
   }
 
   /**

@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import {
   DISTRIBUTION_BLURBS,
@@ -89,7 +90,7 @@ export function AddDistributionDialog({
     },
     onError: (err: any) => {
       setPending(null)
-      errorNotif('Could not add', err?.response?.data?.message || 'Something went wrong.')
+      errorNotif('Could not add the distribution', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 

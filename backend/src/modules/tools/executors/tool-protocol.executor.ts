@@ -14,17 +14,13 @@
  * break out of its containing element and inject additional XML.
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
-import { Repository } from 'typeorm';
 import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
-import { ApiSchema } from '../../../entities/api-schema.entity';
 import { Operation } from '../../../entities/operation.entity';
 import { validateUrl, sanitizeHeaders } from '../../../common/security/url-validator';
 import { ToolAuthService } from '../services/tool-auth.service';
-import { GrpcCallerService } from './grpc-caller.service';
 import { ToolGrpcExecutor } from './tool-grpc.executor';
 import {
   ToolExecutionOptions,
@@ -67,10 +63,6 @@ export class ToolProtocolExecutor {
 
   constructor(
     private readonly authService: ToolAuthService,
-    private readonly grpcCaller: GrpcCallerService,
-    @InjectRepository(ApiSchema)
-    @InjectRepository(ApiSchema)
-    private readonly apiSchemaRepo: Repository<ApiSchema>,
     private readonly grpcExecutor: ToolGrpcExecutor,
   ) {}
 

@@ -42,6 +42,14 @@ export interface CanvasAreaProps {
   setSelectedNode: (node: Node | null) => void
   onUpdateNode: (nodeId: string, data: Record<string, any>) => void
   onDeleteNode: (nodeId: string) => void
+  /**
+   * The viewport saved with the pipeline, when there is one. buildPipeline
+   * has always persisted { x, y, zoom } on every save and nothing ever read
+   * it back, so reopening a graph you had positioned threw the position
+   * away and refit. React Flow ignores defaultViewport whenever fitView is
+   * set, so the two are mutually exclusive rather than both passed.
+   */
+  savedViewport?: { x: number; y: number; zoom: number }
 }
 
 export function CanvasArea({
@@ -60,6 +68,7 @@ export function CanvasArea({
   setSelectedNode,
   onUpdateNode,
   onDeleteNode,
+  savedViewport,
 }: CanvasAreaProps) {
   const [showMobilePalette, setShowMobilePalette] = useState(false)
 
@@ -113,8 +122,9 @@ export function CanvasArea({
             onDrop={onDrop}
             onDragOver={onDragOver}
             nodeTypes={nodeTypes}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
+            {...(savedViewport
+              ? { defaultViewport: savedViewport }
+              : { fitView: true, fitViewOptions: { padding: 0.2 } })}
             deleteKeyCode={['Backspace', 'Delete']}
             className="bg-muted/20"
             proOptions={{ hideAttribution: true }}

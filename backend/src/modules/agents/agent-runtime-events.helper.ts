@@ -146,6 +146,13 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
    * Subscribe to run events via Redis Streams (cross-pod). Calls
    * `handler` for each event. Resolves when a terminal event arrives,
    * the abort signal fires, or the timeout expires.
+   *
+   * When the timeout is what ends it, a synthetic `stream.timeout` event
+   * is delivered first. A run can outlive the ceiling — the stream just
+   * stopped, the run did not — and ending the subscription silently left
+   * every client unable to tell "finished" from "we stopped watching".
+   * The CLI reported whatever the next `getRun` said, which for a live
+   * run is `running`, from a connection that had already closed.
    */
   async subscribeRunEvents(
     runId: string,
@@ -156,12 +163,17 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
     const streamKey = `run:${runId}:events`;
     const deadline = Date.now() + timeoutMs;
     let lastId = '0';
+    let sawTerminal = false;
+    let aborted = false;
 
     const subscriber = this.redis.duplicate();
 
     try {
       while (Date.now() < deadline) {
-        if (signal?.aborted) break;
+        if (signal?.aborted) {
+          aborted = true;
+          break;
+        }
 
         const blockMs = Math.min(2000, deadline - Date.now());
         if (blockMs <= 0) break;
@@ -186,6 +198,7 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
               const event = JSON.parse(raw);
               handler(event);
               if (TERMINAL_EVENT_TYPES.includes(event.type)) {
+                sawTerminal = true;
                 return;
               }
             } catch {
@@ -193,6 +206,21 @@ export class AgentRuntimeEventsHelper implements OnModuleInit, OnModuleDestroy {
             }
           }
         }
+      }
+
+      // Fell out of the loop with the run still going. Say so, so a
+      // client can reconnect rather than guess.
+      if (!sawTerminal && !aborted) {
+        handler({
+          type: 'stream.timeout',
+          data: {
+            runId,
+            afterMs: timeoutMs,
+            message:
+              'This event stream reached its time limit. The run is still going server-side — subscribe again to keep watching.',
+          },
+          timestamp: new Date().toISOString(),
+        });
       }
     } finally {
       subscriber.disconnect();

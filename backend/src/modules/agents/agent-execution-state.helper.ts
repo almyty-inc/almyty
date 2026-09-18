@@ -65,15 +65,38 @@ export class AgentExecutionStateHelper {
   /**
    * Wrap a promise with a timeout. The timer is explicitly cleared on
    * settlement so it doesn't keep the event loop alive past the layer.
+   *
+   * `onTimeout` fires the moment the timer does, before the rejection
+   * propagates. Promise.race only stops *waiting* for the loser — the
+   * work behind it runs on — so a caller with something to cancel needs
+   * this hook rather than a catch block that has already lost the
+   * handle.
    */
-  async withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    message: string,
+    onTimeout?: () => void,
+  ): Promise<T> {
+    const fireOnTimeout = () => {
+      try {
+        onTimeout?.();
+      } catch (err: any) {
+        this.logger.warn(`withTimeout cancellation hook failed: ${err.message}`);
+      }
+    };
+
     if (timeoutMs <= 0) {
+      fireOnTimeout();
       throw new Error(message);
     }
 
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      timer = setTimeout(() => {
+        fireOnTimeout();
+        reject(new Error(message));
+      }, timeoutMs);
     });
 
     try {
@@ -81,6 +104,53 @@ export class AgentExecutionStateHelper {
     } finally {
       if (timer) clearTimeout(timer);
     }
+  }
+
+  /**
+   * Wait a bounded moment for work that has just been aborted to
+   * unwind, so whatever it reports on the way out is still counted.
+   *
+   * A timeout that abandons a layer also abandons the layer's spend:
+   * the cost is accumulated as each node returns, so without a chance
+   * to return there is nothing to add up. This gives them that chance
+   * without waiting on work that may never come back, and says which
+   * promises did not make it so the caller can record the gap instead
+   * of quietly writing a lower number.
+   */
+  async settleWithin<T>(
+    promises: Promise<T>[],
+    windowMs: number,
+  ): Promise<{ complete: boolean; results: Array<PromiseSettledResult<T> | undefined> }> {
+    const results: Array<PromiseSettledResult<T> | undefined> = new Array(promises.length).fill(
+      undefined,
+    );
+    let settled = 0;
+    const tracked = promises.map((p, i) =>
+      p.then(
+        (value) => {
+          results[i] = { status: 'fulfilled', value };
+          settled++;
+        },
+        (reason) => {
+          results[i] = { status: 'rejected', reason };
+          settled++;
+        },
+      ),
+    );
+
+    let timer: NodeJS.Timeout | undefined;
+    const window = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, Math.max(0, windowMs));
+      timer.unref?.();
+    });
+
+    try {
+      await Promise.race([Promise.all(tracked), window]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+
+    return { complete: settled === promises.length, results };
   }
 
   emitEvent(onEvent: ((event: StreamEvent) => void) | undefined, event: StreamEvent): void {

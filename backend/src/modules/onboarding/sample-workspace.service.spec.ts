@@ -41,25 +41,63 @@ describe('SampleWorkspaceService', () => {
   let gatewayToolService: any;
   let gatewayAuthService: any;
   let agentsService: any;
+  let toolStore: Map<string, any>;
 
   beforeEach(async () => {
+    // The tool rows the seed works on, keyed by id. The fakes below read
+    // and write this store the way the real repository and the real
+    // GatewayToolService do -- so a draft tool genuinely refuses to be
+    // assigned to a gateway. The previous version stubbed associateTool
+    // to resolve unconditionally, which is why a spec suite could be
+    // green while the button it covered failed on its first tool every
+    // single time.
+    toolStore = new Map<string, any>([
+      ['tool-1', { id: 'tool-1', name: 'getPetById', status: 'draft' }],
+      ['tool-2', { id: 'tool-2', name: 'listPets', status: 'draft' }],
+    ]);
+
     apiRepo = { createQueryBuilder: jest.fn(() => makeQb()) };
-    toolRepo = { createQueryBuilder: jest.fn(() => makeQb()), update: jest.fn() };
+    toolRepo = {
+      createQueryBuilder: jest.fn(() => makeQb()),
+      update: jest.fn(async (criteria: any, patch: any) => {
+        const ids: string[] = criteria?.id?.value ?? [];
+        for (const id of ids) {
+          const tool = toolStore.get(id);
+          if (tool) Object.assign(tool, patch);
+        }
+        return { affected: ids.length };
+      }),
+    };
     gatewayRepo = { createQueryBuilder: jest.fn(() => makeQb()) };
     agentRepo = { createQueryBuilder: jest.fn(() => makeQb()) };
     providerRepo = { findOne: jest.fn().mockResolvedValue(null) };
 
     apisService = {
       create: jest.fn().mockResolvedValue({ id: 'api-1' }),
-      importSchema: jest.fn().mockResolvedValue({ tools: [{ id: 'tool-1' }, { id: 'tool-2' }] }),
-      generateToolsFromApi: jest.fn().mockResolvedValue([]),
+      // Copies, not the stored rows: the only thing that may flip a
+      // tool to active is a write through the repository.
+      importSchema: jest.fn(async () => ({
+        tools: [...toolStore.values()].map((t) => ({ ...t })),
+      })),
+      generateToolsFromApi: jest.fn().mockResolvedValue({ tools: [] }),
       remove: jest.fn().mockResolvedValue(undefined),
     };
     gatewaysService = {
       createGateway: jest.fn().mockResolvedValue({ id: 'gw-1' }),
       deleteGateway: jest.fn().mockResolvedValue(undefined),
     };
-    gatewayToolService = { associateTool: jest.fn().mockResolvedValue({}) };
+    gatewayToolService = {
+      associateTool: jest.fn(async (_gatewayId: string, dto: any) => {
+        const tool = toolStore.get(dto.toolId);
+        if (!tool) throw new Error('Tool not found');
+        if (tool.status !== 'active') {
+          throw new Error(
+            `Tool '${tool.name}' is ${tool.status}, and a gateway only serves active tools.`,
+          );
+        }
+        return { id: `gt-${dto.toolId}` };
+      }),
+    };
     gatewayAuthService = { generateApiKey: jest.fn().mockResolvedValue({ id: 'key-1' }) };
     agentsService = {
       createAgent: jest.fn().mockResolvedValue({ id: 'agent-1' }),
@@ -110,6 +148,50 @@ describe('SampleWorkspaceService', () => {
         gatewayId: 'gw-1',
         agentId: 'agent-1',
       });
+    });
+
+    it('activates the generated tools, because a gateway only serves active tools', async () => {
+      apiRepo.createQueryBuilder.mockReturnValue(makeQb({ one: null }));
+
+      await service.seed(ORG, USER);
+
+      // The stamping write is also the activating write.
+      const [, patch] = toolRepo.update.mock.calls[0];
+      expect(patch).toMatchObject({ status: 'active' });
+      expect([...toolStore.values()].map((t: any) => t.status)).toEqual(['active', 'active']);
+
+      // And nothing was skipped: both tools reached the gateway.
+      expect(gatewayToolService.associateTool).toHaveBeenCalledTimes(2);
+      expect(gatewayToolService.associateTool.mock.results.every((r: any) => r.type === 'return'))
+        .toBe(true);
+    });
+
+    it('creates a demo agent that can actually run: autonomous and active', async () => {
+      apiRepo.createQueryBuilder.mockReturnValue(makeQb({ one: null }));
+      providerRepo.findOne.mockResolvedValue({ id: 'prov-1', configuration: { model: 'm' } });
+
+      await service.seed(ORG, USER);
+
+      const [input] = agentsService.createAgent.mock.calls[0];
+      expect(input.mode).toBe('autonomous');
+      expect(input.status).toBe('active');
+      expect(input.toolIds).toEqual(['tool-1', 'tool-2']);
+      expect(typeof input.instructions).toBe('string');
+      expect(input.instructions.length).toBeGreaterThan(0);
+    });
+
+    it('removes the partial sample when a later step fails, so the action can be retried', async () => {
+      // No sample yet, but the cleanup sweep finds what the failed run left.
+      apiRepo.createQueryBuilder.mockReturnValue(makeQb({ one: null, many: [{ id: 'api-1' }] }));
+      gatewayRepo.createQueryBuilder.mockReturnValue(makeQb({ one: null, many: [{ id: 'gw-1' }] }));
+      gatewayAuthService.generateApiKey.mockRejectedValue(new Error('key minting failed'));
+
+      await expect(service.seed(ORG, USER)).rejects.toThrow('key minting failed');
+
+      // The stamped API is gone, so findExistingSample cannot find an
+      // orphan and answer `created: false` forever.
+      expect(gatewaysService.deleteGateway).toHaveBeenCalledWith('gw-1', ORG, USER);
+      expect(apisService.remove).toHaveBeenCalledWith('api-1', ORG, USER);
     });
 
     it('is idempotent — a second run creates nothing new', async () => {

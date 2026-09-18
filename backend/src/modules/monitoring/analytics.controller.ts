@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AnalyticsService } from './analytics.service';
+import { clampTimeframe, clampGranularity } from './analytics-timeframe';
 
 /**
  * Analytics endpoints. Every handler below resolves the org from
@@ -95,7 +96,7 @@ export class AnalyticsController {
     @Query('timeframe') timeframe: string = '7d',
   ) {
     const orgId = this.requireOrg(req);
-    const data = await this.analyticsService.getToolUsage(orgId, timeframe);
+    const data = await this.analyticsService.getToolUsage(orgId, clampTimeframe(timeframe));
     return { success: true, data, message: 'Tool usage retrieved successfully' };
   }
 
@@ -106,7 +107,7 @@ export class AnalyticsController {
     @Query('timeframe') timeframe: string = '7d',
   ) {
     const orgId = this.requireOrg(req);
-    const data = await this.analyticsService.getGatewayUsage(orgId, timeframe);
+    const data = await this.analyticsService.getGatewayUsage(orgId, clampTimeframe(timeframe));
     return { success: true, data, message: 'Gateway usage retrieved successfully' };
   }
 
@@ -117,7 +118,7 @@ export class AnalyticsController {
     @Query('timeframe') timeframe: string = '7d',
   ) {
     const orgId = this.requireOrg(req);
-    const data = await this.analyticsService.getLlmUsage(orgId, timeframe);
+    const data = await this.analyticsService.getLlmUsage(orgId, clampTimeframe(timeframe));
     return { success: true, data, message: 'Model usage retrieved successfully' };
   }
 
@@ -129,7 +130,13 @@ export class AnalyticsController {
     @Query('granularity') granularity: string = 'hour',
   ) {
     const orgId = this.requireOrg(req);
-    const data = await this.analyticsService.getTimeline(orgId, timeframe, granularity);
+    // Clamp before the service turns these into a window and a date_trunc
+    // interval: an unbounded timeframe scans the whole table and
+    // `?timeframe=999d&granularity=minute` returns up to 1.44M buckets in
+    // one JSON array.
+    const window = clampTimeframe(timeframe);
+    const bucket = clampGranularity(window, granularity);
+    const data = await this.analyticsService.getTimeline(orgId, window, bucket);
     return { success: true, data, message: 'Timeline data retrieved successfully' };
   }
 

@@ -522,4 +522,69 @@ describe('AgentTemplateResolver', () => {
       expect(result).toBe('');
     });
   });
+
+  // ── unresolved references are recorded, not only logged ───────────────────
+
+  describe('unresolved references', () => {
+    // A typo -- `{{nodes.llm1.output}}` for `{{nodes.llm_1.output}}` -- used
+    // to produce a server-side warning and an empty string, so the node built
+    // a prompt with a hole in it and returned a plausible wrong answer that
+    // nothing on the run pointed back at the typo.
+    //
+    // Substituting '' stays: an optional field left unset is a normal thing
+    // and erroring on it would break legitimate templates. What changed is
+    // that the reference is now recorded where a caller can surface it.
+    it('still substitutes an empty string so optional fields keep working', () => {
+      const context: ExecutionContext = {
+        input: { message: 'hello' },
+        nodes: {},
+        unresolvedReferences: [],
+      };
+
+      expect(resolver.resolve('Note: {{input.note}}', context)).toBe('Note: ');
+    });
+
+    it('records the reference that did not resolve', () => {
+      const context: ExecutionContext = {
+        input: {},
+        nodes: { llm_1: { output: 'the answer' } },
+        unresolvedReferences: [],
+      };
+
+      resolver.resolve('Summarize: {{nodes.llm1.output}}', context);
+
+      expect(context.unresolvedReferences).toEqual(['nodes.llm1.output']);
+    });
+
+    it('does not record a reference that resolved', () => {
+      const context: ExecutionContext = {
+        input: {},
+        nodes: { llm_1: { output: 'the answer' } },
+        unresolvedReferences: [],
+      };
+
+      resolver.resolve('Summarize: {{nodes.llm_1.output}}', context);
+
+      expect(context.unresolvedReferences).toEqual([]);
+    });
+
+    it('records each distinct reference once', () => {
+      const context: ExecutionContext = {
+        input: {},
+        nodes: {},
+        unresolvedReferences: [],
+      };
+
+      resolver.resolve('{{input.a}} {{input.a}} {{input.b}}', context);
+
+      expect(context.unresolvedReferences).toEqual(['input.a', 'input.b']);
+    });
+
+    it('resolves normally when no sink was supplied', () => {
+      const context: ExecutionContext = { input: {}, nodes: {} };
+
+      expect(resolver.resolve('Note: {{input.note}}', context)).toBe('Note: ');
+      expect(context.unresolvedReferences).toBeUndefined();
+    });
+  });
 });

@@ -48,31 +48,55 @@ export class WhatsAppCloudAdapter extends BaseAdapter {
     };
   }
 
+  /** The `wamid.` message id Meta assigns, stable across redelivery. */
+  deliveryId(rawPayload: any): string | undefined {
+    const id = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.id;
+    return id ? `whatsapp_cloud:${id}` : undefined;
+  }
+
   formatOutbound(response: AdapterResponse): any {
     return { body: response.text };
   }
 
+  /**
+   * Send through the Cloud API.
+   *
+   * The Graph API is HTTP-shaped: 200 with
+   * `{messaging_product, contacts, messages: [{id: "wamid..."}]}` on
+   * success, and a 4xx carrying `{error: {message, type, code,
+   * error_subcode, fbtrace_id}}` on failure — code 131030 for a
+   * recipient not on the allow-list of an unverified number, 190 for an
+   * expired access token, 131047 once the 24-hour customer-service
+   * window has closed and a template is required. So the status is the
+   * verdict, `error.message` is the wording to keep, and `fbtrace_id`
+   * is what Meta support asks for.
+   */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
-    try {
-      const to = threadContext?.from || threadContext?.threadId;
-      const fetch = globalThis.fetch || (await import('node-fetch')).default;
-      await (fetch as any)(
-        `${WhatsAppCloudAdapter.GRAPH_API_BASE}/${config.phone_number_id}/messages`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${config.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            messaging_product: 'whatsapp',
-            to,
-            text: { body: formattedResponse.body },
-          }),
+    const to = threadContext?.from || threadContext?.threadId;
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)(
+      `${WhatsAppCloudAdapter.GRAPH_API_BASE}/${config.phone_number_id}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.access_token}`,
+          'Content-Type': 'application/json',
         },
-      );
-    } catch (error) {
-      this.logger.error(`WhatsApp Cloud send failed: ${error.message}`);
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to,
+          text: { body: formattedResponse.body },
+        }),
+      },
+    );
+
+    const body = await this.readJsonBody(res);
+    const error = body?.error;
+    if (this.httpRejected(res) || error) {
+      const detail = error?.message ?? `HTTP ${this.httpStatus(res)}`;
+      const code = error?.code !== undefined ? ` (code ${error.code}${error?.error_subcode ? `/${error.error_subcode}` : ''})` : '';
+      const trace = error?.fbtrace_id ? ` [fbtrace ${error.fbtrace_id}]` : '';
+      this.sendFailed(`the Cloud API refused the reply: ${detail}${code}${trace}`);
     }
   }
 

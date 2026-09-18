@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Put,
-  Request,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -16,13 +9,14 @@ import { RequiresEntitlement } from '../licensing/decorators/requires-entitlemen
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 
 import { KmsProvisioningService } from './kms-provisioning.service';
-import { SetCmkDto, SetKmsEnabledDto } from './dto/kms-config.dto';
+import { RotateCmkDto, SetCmkDto, SetKmsEnabledDto } from './dto/kms-config.dto';
 
 /**
  * BYO-KMS admin API. Every route requires the `byo_kms` enterprise entitlement
  * (enforced by `EntitlementGuard` → 402 when unlicensed) and org owner/admin
- * role. No route ever returns key material — only the wrapped-DEK "provisioned"
- * flag and the public CMK ARN / region.
+ * role. No route ever returns key material — only the wrapped-DEK
+ * "provisioned" flag, the public CMK ARN / region, and the key ids, which are
+ * fingerprints of blobs already at rest rather than anything secret.
  */
 @Controller('kms')
 @ApiTags('KMS (BYO-KMS)')
@@ -45,12 +39,31 @@ export class KmsController {
   @Put()
   @Roles('admin', 'owner')
   @ApiOperation({
-    summary: 'Attach or replace the customer-managed CMK (wraps a fresh DEK)',
+    summary: 'Attach the customer-managed CMK (wraps a fresh DEK)',
+    description:
+      'Fails with 409 when a key is already attached — replacing one is a ' +
+      'rotation, which retains the key it replaces. Use POST /kms/rotate.',
   })
   async setCmk(@Request() req: any, @Body() body: SetCmkDto) {
-    const data = await this.provisioning.setCmk(
+    const data = await this.provisioning.attachCmk(
       req.user.currentOrganizationId,
       { cmkArn: body.cmkArn, awsRegion: body.awsRegion, enabled: body.enabled },
+    );
+    return { success: true, data };
+  }
+
+  @Post('rotate')
+  @Roles('admin', 'owner')
+  @ApiOperation({
+    summary: 'Rotate onto a fresh DEK, optionally under a different CMK',
+    description:
+      'The outgoing wrapped DEK is retained, so secrets sealed under it stay ' +
+      'readable without being re-encrypted.',
+  })
+  async rotate(@Request() req: any, @Body() body: RotateCmkDto) {
+    const data = await this.provisioning.rotateCmk(
+      req.user.currentOrganizationId,
+      { cmkArn: body.cmkArn, awsRegion: body.awsRegion },
     );
     return { success: true, data };
   }

@@ -110,6 +110,7 @@ export enum ToolStatus {
 @VersionedEntity()
 @Index(['name', 'operationId'])
 @Index(['organizationId', 'name'])
+@Index('tools_org_name_uq', ['organizationId', 'name'], { unique: true, where: "status <> 'deleted'" })
 @Index(['organizationId', 'status'])
 @Index(['organizationId', 'createdAt'])
 export class Tool {

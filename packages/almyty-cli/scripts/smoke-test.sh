@@ -4,18 +4,23 @@
 #
 # What it verifies:
 #
-#   1. All five packages (auth, agents, chat, skills, mcp-server) build
+#   1. auth-cli, agents-cli, chat-cli, skills-cli and almyty-cli build
 #      cleanly into dist/.
-#   2. We can install @almyty/cli from a tarball into a temp directory
-#      and the `almyty` binary lands on PATH.
-#   3. `almyty help` and `almyty version` work without authentication.
-#   4. Each subcommand routes to the right underlying package by
-#      exec'ing it with `--help` and grepping the output for the
-#      package's identifying banner.
+#   2. `almyty` with no arguments prints a short tour, not a wall.
+#   3. `almyty help` lists every routed command, the exit-code table and
+#      the completion subcommand; `almyty --version` agrees with
+#      package.json.
+#   4. `almyty completion <shell>` emits a script for bash, zsh and fish
+#      and refuses anything else.
+#   5. Each subcommand routes to the right underlying package by exec'ing
+#      it with `--help` and grepping for that package's banner.
+#   6. Every package the routing table names is a dependency of
+#      @almyty/cli, so no advertised command can answer "not installed".
+#   7. An unknown command exits 2, and a near-miss suggests the real one.
 #
 # This is a smoke test, not a functional test — it does NOT exercise
-# real backend calls. The point is to prove the umbrella + standalone
-# packages are wired correctly.
+# real backend calls and never authenticates. The point is to prove the
+# umbrella + standalone packages are wired correctly.
 #
 # Usage:
 #   packages/almyty-cli/scripts/smoke-test.sh
@@ -27,13 +32,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PACKAGES_DIR="$REPO_ROOT/packages"
 
-# Five packages we expect to find. The umbrella depends on the first four.
+# Five packages we expect to find. The umbrella depends on all of them,
+# plus @almyty/models, @almyty/connections, @almyty/mcp-server,
+# @almyty/acp-server and @almyty/runner, which this script does not
+# build (their node_modules may be absent in a bare checkout).
 PACKAGES=(auth-cli agents-cli chat-cli skills-cli almyty-cli)
-
-# Optional: mcp-server isn't currently installed by default in tests
-# (its node_modules can be missing) so we don't include it in the smoke
-# test, but the umbrella's routing table includes it for users who do
-# install it.
 
 GREEN=$'\033[32m'
 RED=$'\033[31m'
@@ -77,19 +80,38 @@ done
 ALMYTY_BIN="$PACKAGES_DIR/almyty-cli/dist/index.js"
 [[ -f "$ALMYTY_BIN" ]] || fail "umbrella bin not found at $ALMYTY_BIN"
 
+log "running 'almyty' with no arguments (expect the short tour)…"
+TOUR_OUT=$(node "$ALMYTY_BIN")
+echo "$TOUR_OUT" | grep -q "almyty login" || fail "tour missing 'almyty login'"
+echo "$TOUR_OUT" | grep -q "almyty help" || fail "tour missing the pointer to 'almyty help'"
+[[ $(echo "$TOUR_OUT" | wc -l) -lt 20 ]] || fail "bare 'almyty' printed a wall, not a tour"
+ok "bare 'almyty' prints a short tour"
+
 log "running 'almyty help'…"
 HELP_OUT=$(node "$ALMYTY_BIN" help)
 echo "$HELP_OUT" | grep -q "almyty CLI" || fail "help output missing umbrella banner"
-echo "$HELP_OUT" | grep -q "agents list" || fail "help output missing 'agents list'"
-echo "$HELP_OUT" | grep -q "chat" || fail "help output missing 'chat'"
-echo "$HELP_OUT" | grep -q "skills install" || fail "help output missing 'skills install'"
-echo "$HELP_OUT" | grep -q "login" || fail "help output missing 'login'"
-ok "almyty help routes correctly"
+for cmd in login logout whoami auth agents chat skills models connections runner mcp acp; do
+  echo "$HELP_OUT" | grep -qE "^  $cmd +" || fail "help output missing '$cmd'"
+done
+echo "$HELP_OUT" | grep -q "Exit codes" || fail "help output missing the exit-code table"
+echo "$HELP_OUT" | grep -q "completion <shell>" || fail "help output missing 'completion'"
+ok "almyty help lists every command, the exit codes, and completion"
 
 log "running 'almyty version'…"
 VERSION_OUT=$(node "$ALMYTY_BIN" --version)
 echo "$VERSION_OUT" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+$" || fail "version output not semver: $VERSION_OUT"
-ok "almyty --version returns semver"
+PKG_VERSION=$(node -e "console.log(require('$PACKAGES_DIR/almyty-cli/package.json').version)")
+[[ "$VERSION_OUT" == "$PKG_VERSION" ]] || fail "--version says $VERSION_OUT, package.json says $PKG_VERSION"
+ok "almyty --version matches package.json ($VERSION_OUT)"
+
+log "running 'almyty completion <shell>' for each shell…"
+for shell in bash zsh fish; do
+  node "$ALMYTY_BIN" completion "$shell" | grep -q almyty || fail "completion $shell produced nothing usable"
+done
+if node "$ALMYTY_BIN" completion powershell > /dev/null 2>&1; then
+  fail "completion should reject an unsupported shell"
+fi
+ok "shell completion emitted for bash, zsh and fish"
 
 # ──────────────────────────────────────────────────────────────────
 # 3. Verify each subcommand routes to the right underlying package
@@ -142,16 +164,39 @@ run_subcommand() {
 run_subcommand "auth --help"    "@almyty/auth"    "almyty auth → @almyty/auth"
 run_subcommand "agents --help"  "@almyty/agents"  "almyty agents → @almyty/agents"
 run_subcommand "chat --help"    "@almyty/chat"    "almyty chat → @almyty/chat"
-run_subcommand "skills --help"  "almyty Skills CLI" "almyty skills → @almyty/skills"
+run_subcommand "skills --help"  "@almyty/skills"  "almyty skills → @almyty/skills"
 
 # Top-level shortcut: `almyty login` should also delegate to @almyty/auth.
 run_subcommand "login --help"   "@almyty/auth"    "almyty login → @almyty/auth login"
 
-# Unknown command should error.
-log "running 'almyty bogus' (expect failure)…"
-if NODE_PATH="$TMPDIR/node_modules" node "$ALMYTY_BIN" bogus 2>/dev/null; then
-  fail "unknown command 'bogus' should have exited non-zero"
-fi
-ok "unknown command exits non-zero"
+# Every delegated command must name a package the umbrella depends on,
+# otherwise `almyty models …` answers "package is not installed" for a
+# command its own --help advertises.
+log "checking every routed package is a dependency…"
+node -e '
+const { readFileSync } = require("fs");
+const pkg = JSON.parse(readFileSync(process.argv[1], "utf-8"));
+const src = readFileSync(process.argv[2], "utf-8");
+const routed = [...src.matchAll(/pkg: .(@almyty\/[a-z-]+)./g)].map((m) => m[1]);
+if (routed.length < 8) { console.error("did not find the routing table"); process.exit(1); }
+const missing = routed.filter((p) => !pkg.dependencies?.[p]);
+if (missing.length) { console.error("routed but not depended on: " + missing.join(", ")); process.exit(1); }
+' "$PACKAGES_DIR/almyty-cli/package.json" "$PACKAGES_DIR/almyty-cli/src/commands.ts" \
+  || fail "the routing table names a package @almyty/cli does not depend on"
+ok "every routed package is a dependency"
+
+# Unknown command should be a usage error (2), not a generic failure (1).
+log "running 'almyty bogus' (expect exit 2)…"
+set +e
+NODE_PATH="$TMPDIR/node_modules" node "$ALMYTY_BIN" bogus > /dev/null 2>&1
+bogus_code=$?
+set -e
+[[ $bogus_code -eq 2 ]] || fail "unknown command exited $bogus_code, expected 2"
+ok "unknown command exits 2"
+
+log "checking the suggestion for a near-miss…"
+NODE_PATH="$TMPDIR/node_modules" node "$ALMYTY_BIN" agent 2>&1 | grep -q "Did you mean" \
+  || fail "'almyty agent' should suggest 'almyty agents'"
+ok "a near-miss command suggests the real one"
 
 printf "\n${GREEN}All smoke checks passed.${RESET}\n"

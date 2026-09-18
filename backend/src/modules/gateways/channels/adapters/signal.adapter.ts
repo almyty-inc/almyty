@@ -61,46 +61,71 @@ export class SignalAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * Signal identifies a message by (sender, send timestamp) — that pair
+   * is what a receipt addresses and what the bridge replays on
+   * reconnect, so it is stable. The timestamp alone is not: two senders
+   * can land on the same millisecond.
+   */
+  deliveryId(rawPayload: any): string | undefined {
+    const envelope = rawPayload?.envelope ?? rawPayload;
+    const dataMessage = envelope?.dataMessage ?? envelope?.syncMessage?.sentMessage ?? {};
+    const timestamp = dataMessage?.timestamp ?? envelope?.timestamp;
+    const sender = envelope?.sourceUuid ?? envelope?.source ?? envelope?.sourceNumber;
+    if (timestamp === undefined || timestamp === null || !sender) return undefined;
+    return `signal:${sender}:${timestamp}`;
+  }
+
   formatOutbound(response: AdapterResponse): any {
     return { message: response.text };
   }
 
+  /**
+   * Send through the signal-cli bridge.
+   *
+   * The bridge is HTTP-shaped: 201 with `{timestamp}` when signal-cli
+   * accepted the message, and a 4xx/5xx carrying `{error: "..."}` — or
+   * plain text, depending on which build is deployed — when it did not:
+   * an unregistered `number`, a group id the account is not a member
+   * of, a bridge whose account has been unlinked. So the status is the
+   * verdict and the body is kept as text, because a self-hosted bridge
+   * behind a proxy answers with whatever the proxy feels like.
+   */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
-    try {
-      const apiUrl = config.api_url;
-      const phoneNumber = config.phone_number;
-      if (!apiUrl || !phoneNumber) {
-        this.logger.warn('Signal: api_url or phone_number not configured');
-        return;
-      }
+    const apiUrl = config.api_url;
+    const phoneNumber = config.phone_number;
+    if (!apiUrl || !phoneNumber) {
+      this.sendFailed(
+        `${!apiUrl ? 'api_url' : 'phone_number'} is not configured, so the reply could not be sent`,
+      );
+    }
 
-      // Group replies address the group id ("group." prefixed, per the
-      // bridge's send contract); direct replies address the sender.
-      const groupId = threadContext?.metadata?.groupId;
-      const recipient = groupId
-        ? (String(groupId).startsWith('group.') ? String(groupId) : `group.${groupId}`)
-        : threadContext?.userId || threadContext?.threadId;
-      if (!recipient) {
-        this.logger.warn('Signal: no recipient available');
-        return;
-      }
+    // Group replies address the group id ("group." prefixed, per the
+    // bridge's send contract); direct replies address the sender.
+    const groupId = threadContext?.metadata?.groupId;
+    const recipient = groupId
+      ? (String(groupId).startsWith('group.') ? String(groupId) : `group.${groupId}`)
+      : threadContext?.userId || threadContext?.threadId;
+    if (!recipient) {
+      this.sendFailed('the inbound envelope carried no sender or group to reply to');
+    }
 
-      const fetch = globalThis.fetch || (await import('node-fetch')).default;
-      const res = await (fetch as any)(`${apiUrl}/v2/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: formattedResponse.message,
-          number: phoneNumber,
-          recipients: [recipient],
-        }),
-      });
-      if (res && res.ok === false) {
-        const detail = await res.text?.().catch(() => '');
-        this.logger.error(`Signal send failed: HTTP ${res.status} ${detail || ''}`.trim());
-      }
-    } catch (error) {
-      this.logger.error(`Signal send failed: ${error.message}`);
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)(`${apiUrl}/v2/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: formattedResponse.message,
+        number: phoneNumber,
+        recipients: [recipient],
+      }),
+    });
+
+    if (this.httpRejected(res)) {
+      const detail = await this.readTextBody(res);
+      this.sendFailed(
+        `the signal-cli bridge refused the reply: HTTP ${this.httpStatus(res)}${detail ? ` — ${detail}` : ''}`,
+      );
     }
   }
 

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
 import { promises as dns } from 'dns';
 
@@ -33,6 +33,16 @@ import {
  * and never let a caller name a conversation or an end user they do not
  * already hold the cookie for.
  */
+/** Turns replayed for one conversation. */
+const MESSAGE_PAGE_LIMIT = 500;
+/** Conversations included in one visitor export. */
+const EXPORT_CONVERSATION_LIMIT = 500;
+/**
+ * Overall ceiling on the message rows one export loads. The export used to
+ * issue one query per conversation with no overall bound; this is what keeps
+ * a public endpoint's answer bounded in heap.
+ */
+const EXPORT_MESSAGE_LIMIT = 25_000;
 @Injectable()
 export class HostedChatService {
   /** Cookie holding the per-surface session key. */
@@ -82,7 +92,10 @@ export class HostedChatService {
     const normalized = (slug || '').trim().toLowerCase();
     if (!normalized) throw new NotFoundException('Chat app not found');
 
-    // configuration is jsonb; match the slug inside the hostedChat block.
+    // gateways.configuration is plain `json`, not jsonb: -> and ->> both
+    // work on it, but the jsonb-only operators (@>, ?, jsonb_path_*) do
+    // not. Match the slug inside the hostedChat block by path.
+    // UQ_gateways_hosted_chat_slug indexes this exact expression.
     const gateways = await this.gatewayRepository
       .createQueryBuilder('gateway')
       .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
@@ -110,7 +123,7 @@ export class HostedChatService {
   /**
    * Presentation fields only.
    *
-   * The gateway's `configuration` jsonb also holds channel credentials,
+   * The gateway's `configuration` json also holds channel credentials,
    * so this is a strict whitelist rather than a redaction pass: a new
    * secret added to that blob must not become publicly readable by
    * default. Same discipline as sanitizeWidgetConfig.
@@ -308,19 +321,27 @@ export class HostedChatService {
     const conversations = await this.conversationRepository.find({
       where: { endUserId: endUser.id },
       order: { createdAt: 'ASC' },
-      take: 500,
+      take: EXPORT_CONVERSATION_LIMIT,
     });
-    const threads = [];
-    for (const c of conversations) {
-      const messages = await this.listMessages(c);
-      threads.push({
-        id: c.id,
-        title: c.title,
-        status: c.status,
-        createdAt: c.createdAt,
-        messages: messages.map((m) => ({ role: m.role, content: m.content, createdAt: m.createdAt })),
-      });
-    }
+
+    // One query for every conversation's messages instead of one per
+    // conversation. This was 1 + 500 queries to build a single export, on a
+    // public endpoint.
+    const byConversation = await this.messagesByConversation(
+      conversations.map((c) => c.id),
+    );
+
+    const threads = conversations.map((c) => ({
+      id: c.id,
+      title: c.title,
+      status: c.status,
+      createdAt: c.createdAt,
+      messages: (byConversation.get(c.id) ?? []).map((m) => ({
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+      })),
+    }));
     return {
       exportedAt: new Date().toISOString(),
       app: hostedChatConfigFrom(gateway.configuration).appName,
@@ -333,6 +354,56 @@ export class HostedChatService {
         lastSeen: endUser.lastSeenAt,
       },
       conversations: threads,
+    };
+  }
+
+  /**
+   * Public transcripts for several conversations at once.
+   *
+   * Same filtering `listMessages` applies — only user and assistant turns,
+   * nothing marked internal — and the same per-conversation ceiling, applied
+   * after grouping. The overall `take` is what keeps an export bounded in
+   * heap regardless of how much the visitor has written.
+   */
+  private async messagesByConversation(
+    conversationIds: string[],
+  ): Promise<Map<string, Array<{ id: string; role: string; content: string; createdAt: Date }>>> {
+    const grouped = new Map<string, Array<{ id: string; role: string; content: string; createdAt: Date }>>();
+    if (!conversationIds.length) return grouped;
+
+    const rows = await this.messageRepository.find({
+      where: { conversationId: In(conversationIds) },
+      order: { conversationId: 'ASC', createdAt: 'ASC' },
+      take: EXPORT_MESSAGE_LIMIT,
+    });
+
+    for (const m of rows) {
+      if (!this.isPublicTurn(m)) continue;
+      const bucket = grouped.get(m.conversationId);
+      if (bucket) {
+        if (bucket.length < MESSAGE_PAGE_LIMIT) bucket.push(this.toTranscript(m));
+      } else {
+        grouped.set(m.conversationId, [this.toTranscript(m)]);
+      }
+    }
+    return grouped;
+  }
+
+  /** Tool calls and system scaffolding stay out of a public transcript. */
+  private isPublicTurn(m: Message): boolean {
+    return (
+      (m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT) &&
+      m.metadata?.internal !== true
+    );
+  }
+
+  /** The shape a transcript turn is exposed as. */
+  private toTranscript(m: Message): { id: string; role: string; content: string; createdAt: Date } {
+    return {
+      id: m.id,
+      role: m.role,
+      content: typeof m.getTextContent === 'function' ? m.getTextContent() : m.content,
+      createdAt: m.createdAt,
     };
   }
 
@@ -402,21 +473,10 @@ export class HostedChatService {
     const messages = await this.messageRepository.find({
       where: { conversationId: conversation.id },
       order: { createdAt: 'ASC' },
-      take: 500,
+      take: MESSAGE_PAGE_LIMIT,
     });
 
-    return messages
-      .filter(
-        (m) =>
-          (m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT) &&
-          m.metadata?.internal !== true,
-      )
-      .map((m) => ({
-        id: m.id,
-        role: m.role,
-        content: typeof m.getTextContent === 'function' ? m.getTextContent() : m.content,
-        createdAt: m.createdAt,
-      }));
+    return messages.filter((m) => this.isPublicTurn(m)).map((m) => this.toTranscript(m));
   }
 
   /**
@@ -431,7 +491,7 @@ export class HostedChatService {
     const normalized = (hostname || '').trim().toLowerCase();
     if (!normalized) return null;
 
-    const gateway = await this.gatewayRepository
+    const gateways = await this.gatewayRepository
       .createQueryBuilder('gateway')
       .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
       .andWhere("gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname", {
@@ -440,10 +500,26 @@ export class HostedChatService {
       .andWhere("gateway.configuration -> 'customDomain' ->> 'status' = :status", {
         status: 'active',
       })
-      .getOne();
+      .getMany();
 
-    if (!gateway || !gateway.isActive()) return null;
-    return gateway;
+    const active = gateways.filter((gateway) => gateway.isActive());
+
+    // Same fail-closed rule as findBySlug. A hostname is a global public
+    // address too, and nothing claims one exclusively: the only thing
+    // keeping two tenants off the same name is the TXT verification each
+    // has to pass. If both somehow did, serving an arbitrary one of them
+    // puts a tenant's branding, agent and conversations under somebody
+    // else's URL.
+    if (active.length > 1) {
+      this.logger.error(
+        `Refusing ambiguous hosted-chat domain '${normalized}' claimed by gateways ${active
+          .map((gateway) => gateway.id)
+          .join(', ')}`,
+      );
+      return null;
+    }
+
+    return active[0] ?? null;
   }
 
   /**

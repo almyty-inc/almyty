@@ -186,7 +186,7 @@ export class CliGeneratorService {
     // Execute via almyty UTCP endpoint
     lines.push('# Execute tool via almyty');
     lines.push(`curl -s -X POST \\`);
-    lines.push(`  "\${BASE_URL}/api/utcp/tools/${this.slugify(tool.name)}/execute" \\`);
+    lines.push(`  "\${BASE_URL}/utcp/tools/${this.slugify(tool.name)}/execute" \\`);
     lines.push('  -H "Content-Type: application/json" \\');
     lines.push('  -H "Authorization: Bearer ${TOKEN}" \\');
     lines.push('  -d "$JSON_BODY" | python3 -m json.tool 2>/dev/null || cat');
@@ -243,7 +243,7 @@ export class CliGeneratorService {
 
     // Execute
     lines.push('curl -s -X POST \\');
-    lines.push('  "${BASE_URL}/api/utcp/tools/${COMMAND}/execute" \\');
+    lines.push('  "${BASE_URL}/utcp/tools/${COMMAND}/execute" \\');
     lines.push('  -H "Content-Type: application/json" \\');
     lines.push('  -H "Authorization: Bearer ${TOKEN}" \\');
     lines.push('  -d "$JSON_BODY" | python3 -m json.tool 2>/dev/null || cat');
@@ -319,7 +319,7 @@ export class CliGeneratorService {
     lines.push('');
 
     // Execute
-    lines.push(`  const response = await fetch(\`\${BASE_URL}/api/utcp/tools/${this.slugify(tool.name)}/execute\`, {`);
+    lines.push(`  const response = await fetch(\`\${BASE_URL}/utcp/tools/${this.slugify(tool.name)}/execute\`, {`);
     lines.push("    method: 'POST',");
     lines.push("    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },");
     lines.push('    body: JSON.stringify(params),');
@@ -384,7 +384,7 @@ export class CliGeneratorService {
     lines.push("    process.exit(1);");
     lines.push('  }');
     lines.push('');
-    lines.push('  const response = await fetch(`${BASE_URL}/api/utcp/tools/${command}/execute`, {');
+    lines.push('  const response = await fetch(`${BASE_URL}/utcp/tools/${command}/execute`, {');
     lines.push("    method: 'POST',");
     lines.push("    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TOKEN}` },");
     lines.push('    body: JSON.stringify(args),');

@@ -22,8 +22,10 @@ import {
   SearchMemoryDto,
   SupersedeMemoryDto,
 } from './canonical-memory.dto';
-import { MemoryError, Mode, ScopeType } from './canonical.types';
+import { MemoryError, Mode, ScopeType, SCOPE_TYPE_VALUES } from './canonical.types';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
 import { MemoryRouter } from './memory-router.service';
 import { DocumentChunkerService } from './document-chunker.service';
 import { ConsolidationService } from './consolidation.service';
@@ -38,7 +40,19 @@ import { MemorySyncService } from './memory-sync.service';
 @Controller('memory/canonical')
 @ApiTags('Memory (Canonical v1)')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+// Org scope here is genuinely well defended -- ownScope/assertScope substitute
+// the caller's own org by construction -- but until now nothing checked the
+// caller's ROLE. With only JwtAuthGuard, a `viewer` (permissions: ['read',
+// 'connections:read']) could POST config and repoint the org's memory backend,
+// embedding provider and softcap behaviour, run a transfer between backends,
+// or delete memory rows. Every comparable config surface -- kms.controller.ts,
+// retention.controller.ts, sso-config -- is admin/owner, so config, transfer,
+// sync, consolidate, delete and supersede sit there; reads and ordinary writes
+// sit at member+.
+//
+// RolesGuard returns true when neither @Roles nor @Permissions is present, so
+// the guard below does nothing on its own: the per-route decorator is the gate.
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class CanonicalMemoryController {
   /**
    * The organization this request is allowed to touch.
@@ -97,7 +111,26 @@ export class CanonicalMemoryController {
     scope: { scope_type?: ScopeType; scope_id?: string } | undefined,
   ): { scope_type: ScopeType; scope_id: string } {
     this.assertScope(req, scope);
-    return { scope_type: (scope?.scope_type ?? 'org') as ScopeType, scope_id: this.orgId(req) };
+    // The fallback here used to be `'org' as ScopeType` -- a value that
+    // is not a ScopeType at all. Most routes pre-check scope_type and
+    // never reached it, but `POST transfer` and `POST document/import`
+    // do not: omitting scope_type made transfer query
+    // `scope_type = 'org'`, match nothing, and report a successful
+    // migration of zero items, while document/import tried to insert
+    // rows the `scope_type IN (...)` CHECK constraint rejects with a
+    // raw 500. A scope_type outside the enum is a client error; say so.
+    const scopeType = scope?.scope_type;
+    if (!scopeType || !(SCOPE_TYPE_VALUES as readonly string[]).includes(scopeType)) {
+      throw new HttpException(
+        {
+          success: false,
+          error: 'BAD_REQUEST',
+          message: `scope_type is required and must be one of ${SCOPE_TYPE_VALUES.join('|')}`,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return { scope_type: scopeType, scope_id: this.orgId(req) };
   }
 
   constructor(
@@ -111,12 +144,14 @@ export class CanonicalMemoryController {
   // ── backends list / health ────────────────────────────────────────
 
   @Get('backends')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'List configured memory backends + capabilities' })
   async listBackends() {
     return { success: true, data: this.router.list_backends() };
   }
 
   @Get('backends/health')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Run a health check against every backend' })
   async healthAll() {
     return { success: true, data: await this.router.healthAll() };
@@ -125,6 +160,7 @@ export class CanonicalMemoryController {
   // ── workspace config (per-scope routing + softcap) ────────────────
 
   @Get('config')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get the canonical-memory config for a scope' })
   async getConfig(
     @Query('scope_type') scopeType: ScopeType,
@@ -143,6 +179,7 @@ export class CanonicalMemoryController {
   }
 
   @Post('config')
+  @Roles('admin', 'owner')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Update the canonical-memory config for a scope (routing, mirror, credentials, softcap behavior)',
@@ -184,6 +221,7 @@ export class CanonicalMemoryController {
   // ── audit: soft-cap warnings ──────────────────────────────────────
 
   @Get('warnings/softcap')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Recent soft-cap warnings for a scope (audit dashboard)' })
   async listSoftcapWarnings(
     @Query('scope_type') scopeType: ScopeType,
@@ -206,6 +244,7 @@ export class CanonicalMemoryController {
   // ── consolidation ─────────────────────────────────────────────────
 
   @Post('consolidate')
+  @Roles('admin', 'owner')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Run consolidation now for a scope (a model extracts durable facts from short-scope rows and supersedes them)',
@@ -230,6 +269,7 @@ export class CanonicalMemoryController {
   // ── continuous sync (primary ↔ mirror) ────────────────────────────
 
   @Post('sync')
+  @Roles('admin', 'owner')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Reconcile primary↔mirror for a scope. Last-write-wins by updated_at.',
@@ -254,6 +294,7 @@ export class CanonicalMemoryController {
   // ── transfer between backends ─────────────────────────────────────
 
   @Post('transfer')
+  @Roles('admin', 'owner')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Transfer memory items from one backend to another' })
   async transfer(
@@ -283,6 +324,7 @@ export class CanonicalMemoryController {
   // ── document import (chunker + atomic re-import) ──────────────────
 
   @Post('document/import')
+  @Roles('member', 'admin', 'owner')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Import a document source — chunks the content, dedups by checksum, atomic re-import',
@@ -328,6 +370,7 @@ export class CanonicalMemoryController {
   // ── put ───────────────────────────────────────────────────────────
 
   @Post()
+  @Roles('member', 'admin', 'owner')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Write a memory or document item' })
   @ApiResponse({ status: 201, description: 'Item written; embedding pending' })
@@ -367,6 +410,7 @@ export class CanonicalMemoryController {
   // ── get ───────────────────────────────────────────────────────────
 
   @Get(':id')
+  @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get a memory item by id' })
   async get(@Param('id') id: string, @Request() req: any) {
     const item = await this.service.get(id, this.orgId(req));
@@ -382,6 +426,7 @@ export class CanonicalMemoryController {
   // ── delete ────────────────────────────────────────────────────────
 
   @Delete(':id')
+  @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Soft-delete a memory item (default) or hard-delete' })
   async remove(
     @Param('id') id: string,
@@ -401,6 +446,7 @@ export class CanonicalMemoryController {
   // ── list ──────────────────────────────────────────────────────────
 
   @Post('list')
+  @Roles('member', 'admin', 'owner')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'List memory items in a scope' })
   async list(
@@ -423,6 +469,7 @@ export class CanonicalMemoryController {
   // ── search ────────────────────────────────────────────────────────
 
   @Post('search')
+  @Roles('member', 'admin', 'owner')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Hybrid search (vector + FTS)' })
   async search(
@@ -443,7 +490,22 @@ export class CanonicalMemoryController {
 
   // ── supersede ─────────────────────────────────────────────────────
 
+  /**
+   * `member+`, matching the write route it corrects.
+   *
+   * Supersession is bi-temporal: it closes `valid_until` on the old row
+   * and writes a new one, so nothing is destroyed and the history stays
+   * readable. It is the correction half of the write path, not a
+   * destructive admin action — and gating it above `POST /` would mean
+   * somebody could record a fact and then be unable to fix it, which is
+   * how wrong memories become permanent.
+   *
+   * `consolidate` is the one that stays `admin+`: it runs a model over
+   * the org's short-term rows and supersedes them in bulk, so it costs
+   * money and rewrites things the caller never looked at.
+   */
   @Post(':id/supersede')
+  @Roles('member', 'admin', 'owner')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Bi-temporal supersession: replace an item with a new one' })
   async supersede(

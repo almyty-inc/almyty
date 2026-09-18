@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AlmytyClient, GatewayClient } from '../client.js';
+import { AlmytyClient, GatewayClient, parseSseFrame } from '../client.js';
 import type { StreamEvent } from '../client.js';
 
 const BASE = 'https://api.test.almyty.com';
@@ -365,6 +365,7 @@ describe('AlmytyClient', () => {
           const value = new TextEncoder().encode(chunks[idx++]);
           return Promise.resolve({ done: false, value });
         }),
+        cancel: vi.fn().mockResolvedValue(undefined),
         releaseLock: vi.fn(),
       };
       return vi.fn().mockResolvedValue({
@@ -501,6 +502,7 @@ describe('GatewayClient', () => {
             done: false,
             value: new TextEncoder().encode('event: run.completed\ndata: {"type":"run.completed","data":{"output":"streamed"}}\n\n'),
           }).mockResolvedValue({ done: true, value: undefined }),
+          cancel: vi.fn().mockResolvedValue(undefined),
           releaseLock: vi.fn(),
         };
         return Promise.resolve({ ok: true, status: 200, body: { getReader: () => reader } });
@@ -521,5 +523,244 @@ describe('GatewayClient', () => {
     const result = await gw.streamRun('run-1', (e) => events.push(e));
     expect(events.length).toBeGreaterThanOrEqual(1);
     expect(result.status).toBe('completed');
+  });
+});
+
+/**
+ * SSE transport.
+ *
+ * These cover the three failures that between them made streaming a
+ * no-op for every CLI: the run-event envelope was never unwrapped, frame
+ * state was reset on every chunk boundary, and CRLF line endings matched
+ * nothing.
+ */
+describe('parseSseFrame', () => {
+  it('unwraps a run-event envelope so the payload is reachable', () => {
+    const event = parseSseFrame([
+      'event: llm.chunk',
+      'data: {"type":"llm.chunk","data":{"step":1,"content":"Hel"},"timestamp":"t"}',
+    ]);
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('llm.chunk');
+    // The bug: this read undefined, so no streamed token ever arrived.
+    expect((event!.data as any).content).toBe('Hel');
+    expect((event!.data as any).step).toBe(1);
+  });
+
+  it('keeps top-level fields when the envelope also carries data', () => {
+    const event = parseSseFrame([
+      'event: node.completed',
+      'data: {"type":"node.completed","nodeId":"n1","nodeType":"llm_call","data":{"cost":0.002,"tokens":40}}',
+    ]);
+    expect((event!.data as any).nodeId).toBe('n1');
+    expect((event!.data as any).cost).toBe(0.002);
+  });
+
+  it('leaves a non-object data field alone (coding output is a string)', () => {
+    const event = parseSseFrame([
+      'event: coding.output',
+      'data: {"type":"coding.output","sessionId":"cs_1","data":"npm test\\n","seq":1}',
+    ]);
+    expect(event!.type).toBe('coding.output');
+    expect((event!.data as any).data).toBe('npm test\n');
+  });
+
+  it('falls back to the event: name when the payload has no type', () => {
+    const event = parseSseFrame(['event: done', 'data: {"executionId":"e1","status":"completed"}']);
+    expect(event!.type).toBe('done');
+  });
+
+  it('ignores keep-alive comments and malformed frames', () => {
+    expect(parseSseFrame([': keep-alive'])).toBeNull();
+    expect(parseSseFrame(['event: x', 'data: {not json'])).toBeNull();
+    expect(parseSseFrame([])).toBeNull();
+  });
+
+  it('joins multi-line data fields', () => {
+    const event = parseSseFrame(['data: {"type":"t","data":{', 'data: "content":"x"}}']);
+    expect((event!.data as any).content).toBe('x');
+  });
+});
+
+/**
+ * A ReadableStream of the given chunks, so frame splitting can be forced.
+ * `cancelled` records whether the body was closed, which is the only thing
+ * that returns the socket: releasing the lock alone leaves it open.
+ */
+function sseBody(chunks: string[]) {
+  const encoder = new TextEncoder();
+  let i = 0;
+  const state = { cancelled: false };
+  return {
+    state,
+    getReader() {
+      return {
+        read: async () => (i < chunks.length ? { value: encoder.encode(chunks[i++]), done: false } : { value: undefined, done: true }),
+        cancel: async () => { state.cancelled = true; },
+        releaseLock: () => {},
+      };
+    },
+  };
+}
+
+function mockSse(chunks: string[]) {
+  return vi.fn().mockResolvedValue({ ok: true, status: 200, body: sseBody(chunks) });
+}
+
+describe('AlmytyClient.streamSSE', () => {
+  let origFetch: typeof globalThis.fetch;
+  beforeEach(() => { origFetch = globalThis.fetch; });
+  afterEach(() => { globalThis.fetch = origFetch; });
+
+  it('dispatches a frame whose terminating blank line lands in the next chunk', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    globalThis.fetch = mockSse([
+      'event: llm.chunk\ndata: {"type":"llm.chunk","data":{"content":"one"}}\n',
+      '\nevent: llm.chunk\ndata: {"type":"llm.chunk","data":{"content":"two"}}\n\n',
+    ]) as any;
+    const seen: StreamEvent[] = [];
+    await client.streamSSE('/x', (e) => seen.push(e));
+    expect(seen.map((e) => (e.data as any).content)).toEqual(['one', 'two']);
+  });
+
+  it('dispatches a frame split mid-token across chunks', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    globalThis.fetch = mockSse([
+      'event: llm.chu',
+      'nk\ndata: {"type":"llm.chunk","dat',
+      'a":{"content":"split"}}\n\n',
+    ]) as any;
+    const seen: StreamEvent[] = [];
+    await client.streamSSE('/x', (e) => seen.push(e));
+    expect(seen).toHaveLength(1);
+    expect((seen[0].data as any).content).toBe('split');
+  });
+
+  it('parses CRLF streams', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    globalThis.fetch = mockSse([
+      'event: tool.started\r\ndata: {"type":"tool.started","data":{"tool":"search"}}\r\n\r\n',
+    ]) as any;
+    const seen: StreamEvent[] = [];
+    await client.streamSSE('/x', (e) => seen.push(e));
+    expect(seen).toHaveLength(1);
+    expect((seen[0].data as any).tool).toBe('search');
+  });
+
+  it('stops at a terminal event and ignores anything after it', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    globalThis.fetch = mockSse([
+      'data: {"type":"run.completed","data":{"output":"done"}}\n\n',
+      'data: {"type":"llm.chunk","data":{"content":"late"}}\n\n',
+    ]) as any;
+    const seen: StreamEvent[] = [];
+    await client.streamSSE('/x', (e) => seen.push(e));
+    expect(seen.map((e) => e.type)).toEqual(['run.completed']);
+  });
+
+  it('reads a final frame the server did not terminate', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    globalThis.fetch = mockSse(['data: {"type":"llm.chunk","data":{"content":"tail"}}']) as any;
+    const seen: StreamEvent[] = [];
+    await client.streamSSE('/x', (e) => seen.push(e));
+    expect((seen[0].data as any).content).toBe('tail');
+  });
+
+  it('puts the status and body on a failed stream error', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false, status: 403, text: () => Promise.resolve('{"error":"AGENT_AUTH_FORBIDDEN"}'),
+    }) as any;
+    await expect(client.streamSSE('/x', () => {})).rejects.toMatchObject({ status: 403 });
+  });
+
+  // Returning from the read loop on a terminal event left the response
+  // body unread and the socket open. An SSE endpoint holds its end open
+  // too, so the handle kept Node's event loop alive and `almyty chat`
+  // hung on exit after a streamed turn, one leaked connection per answer.
+  it('closes the body after a terminal event, not just the reader lock', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    const body = sseBody([
+      'data: {"type":"run.completed","data":{"output":"done"}}\n\n',
+      'data: {"type":"llm.chunk","data":{"content":"late"}}\n\n',
+    ]);
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, body }) as any;
+    await client.streamSSE('/x', () => {});
+    expect(body.state.cancelled).toBe(true);
+  });
+
+  it('closes the body when the stream ends on its own', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    const body = sseBody(['data: {"type":"llm.chunk","data":{"content":"tail"}}\n\n']);
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, body }) as any;
+    await client.streamSSE('/x', () => {});
+    expect(body.state.cancelled).toBe(true);
+  });
+});
+
+describe('AlmytyClient.request errors', () => {
+  let origFetch: typeof globalThis.fetch;
+  beforeEach(() => { origFetch = globalThis.fetch; });
+  afterEach(() => { globalThis.fetch = origFetch; });
+
+  it('carries the status and body so callers can explain the failure', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false, status: 400,
+      text: () => Promise.resolve('{"message":"Agent must be active to invoke","error":"AGENT_NOT_ACTIVE"}'),
+    }) as any;
+    await expect(client.request('/x')).rejects.toMatchObject({
+      status: 400,
+      body: expect.stringContaining('AGENT_NOT_ACTIVE'),
+    });
+  });
+
+  it('marks a transport failure as one', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    globalThis.fetch = vi.fn().mockRejectedValue(Object.assign(new Error('fetch failed'), { code: 'ECONNREFUSED' })) as any;
+    await expect(client.request('/x')).rejects.toMatchObject({ networkError: true });
+  });
+});
+
+describe('GatewayClient streaming', () => {
+  let origFetch: typeof globalThis.fetch;
+  beforeEach(() => { origFetch = globalThis.fetch; });
+  afterEach(() => { globalThis.fetch = origFetch; });
+
+  it('streamRun rethrows an abort instead of falling back to polling', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('acme', 'bot');
+    const ac = new AbortController();
+    ac.abort();
+    const fetchMock = vi.fn().mockRejectedValue(Object.assign(new Error('Aborted'), { name: 'AbortError' }));
+    globalThis.fetch = fetchMock as any;
+    await expect(gw.streamRun('r1', () => {}, ac.signal)).rejects.toMatchObject({ name: 'AbortError' });
+    // One attempt: no poll loop behind it.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('streamInvoke POSTs the pipeline stream endpoint', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('acme', 'bot');
+    const fetchMock = mockSse(['data: {"type":"execution.completed","data":{"output":"hi"}}\n\n']);
+    globalThis.fetch = fetchMock as any;
+    const seen: StreamEvent[] = [];
+    await gw.streamInvoke({ message: 'hello' }, (e) => seen.push(e));
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE}/acme/bot/stream`);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ input: { message: 'hello' } });
+    expect(seen[0].type).toBe('execution.completed');
+  });
+
+  it('startRun keeps the cost and token totals', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('acme', 'bot');
+    globalThis.fetch = mockFetch(201, {
+      data: { id: 'r1', status: 'running', totalCost: 0.014, totalTokens: 900 },
+    }) as any;
+    const run = await gw.startRun('hi');
+    expect(run.totalCost).toBe(0.014);
+    expect(run.totalTokens).toBe(900);
   });
 });

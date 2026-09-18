@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { AgentsService, CreateAgentInput, UpdateAgentInput } from '../agents.service';
+import { AgentsService, CreateAgentInput, UpdateAgentInput, AGENT_LIST_COLUMNS, MAX_INLINE_AGENT_VERSIONS } from '../agents.service';
 import { AgentAuditService } from '../agent-audit.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
@@ -64,6 +64,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
 
 function makeQueryBuilder(returnAgents: Agent[] = [], total = 0) {
   const qb: any = {
+    select: jest.fn().mockReturnThis(),
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
@@ -379,6 +380,23 @@ describe('AgentsService', () => {
       expect(result.metadata.versions[0].changelog).toContain('Auto-saved');
     });
 
+    it('does not let the auto-snapshot history grow past MAX_INLINE_AGENT_VERSIONS across repeated edits', async () => {
+      const agent = makeAgent({
+        pipeline: makeValidPipeline(),
+        version: '1.0.0',
+        metadata: {},
+      });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      // Edit the pipeline far more times than the cap allows.
+      for (let i = 0; i < MAX_INLINE_AGENT_VERSIONS * 3; i++) {
+        await service.updateAgent('agent-1', { pipeline: makeValidPipeline() }, 'org-1');
+      }
+
+      expect(agent.metadata.versions).toHaveLength(MAX_INLINE_AGENT_VERSIONS);
+    });
+
     it('should throw NotFoundException when agent does not exist', async () => {
       agentRepo.findOne.mockResolvedValue(null);
 
@@ -631,6 +649,56 @@ describe('AgentsService', () => {
       expect(() => validation.validatePipeline(pipeline)).toThrow('at least 1 output node');
     });
 
+    // Two output nodes that can both run made the run's answer order-dependent:
+    // the engine assigns finalOutput as it walks a layer's results, so the last
+    // one written wins, and "last" is wherever the nodes happen to sit in the
+    // persisted pipeline JSON.
+    it('should reject two output nodes that can both run, and say why', () => {
+      const pipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          { id: 'llm_1', type: 'llm_call', config: {} },
+          { id: 'output_1', type: 'output', config: {} },
+          { id: 'output_2', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'llm_1' },
+          { id: 'e2', source: 'llm_1', target: 'output_1' },
+          { id: 'e3', source: 'llm_1', target: 'output_2' },
+        ],
+      };
+
+      expect(() => validation.validatePipeline(pipeline)).toThrow(BadRequestException);
+      // The refusal has to name them and say what goes wrong, or it reads as
+      // an arbitrary rule.
+      expect(() => validation.validatePipeline(pipeline)).toThrow(/'output_1' and 'output_2'/);
+      expect(() => validation.validatePipeline(pipeline)).toThrow(/can both run in the same execution/);
+      expect(() => validation.validatePipeline(pipeline)).toThrow(/order the nodes happen to be stored in/);
+    });
+
+    it('should reject two output nodes on the same branch of a condition', () => {
+      const pipeline: AgentPipeline = {
+        nodes: [
+          { id: 'input_1', type: 'input', config: {} },
+          { id: 'cond_1', type: 'condition', config: {}, data: { expression: '{{input.flag}}' } },
+          { id: 'llm_true', type: 'llm_call', config: {} },
+          { id: 'llm_false', type: 'llm_call', config: {} },
+          { id: 'output_1', type: 'output', config: {} },
+          { id: 'output_2', type: 'output', config: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'input_1', target: 'cond_1' },
+          { id: 'e2', source: 'cond_1', target: 'llm_true', sourceHandle: 'true' },
+          { id: 'e3', source: 'cond_1', target: 'llm_false', sourceHandle: 'false' },
+          // Both outputs hang off the SAME branch, so both run together.
+          { id: 'e4', source: 'llm_true', target: 'output_1' },
+          { id: 'e5', source: 'llm_true', target: 'output_2' },
+        ],
+      };
+
+      expect(() => validation.validatePipeline(pipeline)).toThrow(/can both run in the same execution/);
+    });
+
     it('should reject condition node with wrong number of outgoing edges', () => {
       const pipeline: AgentPipeline = {
         nodes: [
@@ -702,13 +770,13 @@ describe('AgentsService', () => {
       expect(() => validation.validatePipeline(pipeline)).toThrow(/not reachable/);
     });
 
-    it('should accept a pipeline where at least one output is reachable', () => {
+    it('should reject a pipeline with an output node nothing can reach', () => {
       const pipeline: AgentPipeline = {
         nodes: [
           { id: 'input_1', type: 'input', config: {} },
           { id: 'llm_1', type: 'llm_call', config: {} },
           { id: 'output_1', type: 'output', config: {} },
-          { id: 'output_2', type: 'output', config: {} }, // unreachable, but OK
+          { id: 'output_2', type: 'output', config: {} },
         ],
         edges: [
           { id: 'e1', source: 'input_1', target: 'llm_1' },
@@ -716,7 +784,15 @@ describe('AgentsService', () => {
         ],
       };
 
-      expect(() => validation.validatePipeline(pipeline)).not.toThrow();
+      // This used to pass, on the reasoning that one reachable output is
+      // enough. But an output node no edge reaches never runs and never
+      // becomes the answer -- it is a node someone drew and forgot, and
+      // the only thing it can do is confuse whoever opens the graph next.
+      // The legitimate two-output shape is two outputs on opposite branches
+      // of a condition, which is reachable and is covered below.
+      expect(() => validation.validatePipeline(pipeline)).toThrow(
+        /Node\(s\) 'output_2' are not reachable from the input node 'input_1'/,
+      );
     });
 
     it('should reject pipeline with duplicate node IDs', () => {
@@ -1163,6 +1239,21 @@ describe('AgentsService', () => {
 
       expect(qb.andWhere).toHaveBeenCalledWith('agent.status = :status', { status: AgentStatus.ACTIVE });
     });
+
+    it('projects only the list columns and never pulls metadata (the inline version history)', async () => {
+      const qb = makeQueryBuilder([], 0);
+      agentRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getAgents({ organizationId: 'org-1', caller: { id: 'user-1' } });
+
+      expect(qb.select).toHaveBeenCalledTimes(1);
+      const projected: string[] = qb.select.mock.calls[0][0];
+      expect(Array.isArray(projected)).toBe(true);
+      expect(projected).not.toContain('agent.metadata');
+      expect(projected).toContain('agent.id');
+      expect(projected).toContain('agent.pipeline');
+      expect(projected).toEqual(AGENT_LIST_COLUMNS.map((c) => `agent.${c}`));
+    });
   });
 
   // ── importAgent ───────────────────────────────────────────────────────────
@@ -1222,6 +1313,26 @@ describe('AgentsService', () => {
           }),
         }),
       );
+    });
+
+    it('caps the retained snapshots at MAX_INLINE_AGENT_VERSIONS, keeping the newest', async () => {
+      const existing = Array.from({ length: MAX_INLINE_AGENT_VERSIONS + 25 }, (_, i) => ({
+        version: `0.0.${i}`,
+        pipeline: makeValidPipeline(),
+        savedAt: new Date(2026, 0, 1 + i).toISOString(),
+        changelog: `v${i}`,
+      }));
+      const agent = makeAgent({ metadata: { versions: existing } });
+      agentRepo.findOne.mockResolvedValue(agent);
+      agentRepo.update.mockResolvedValue({ affected: 1 });
+
+      await service.saveVersion('agent-1', 'org-1', 'newest');
+
+      const written = agentRepo.update.mock.calls[0][1].metadata.versions;
+      expect(written).toHaveLength(MAX_INLINE_AGENT_VERSIONS);
+      // The just-pushed snapshot survives; the oldest ones are dropped.
+      expect(written[written.length - 1].changelog).toBe('newest');
+      expect(written.map((v: any) => v.changelog)).not.toContain('v0');
     });
   });
 

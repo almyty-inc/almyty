@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { mcpSourcesApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 export interface McpSourceView {
   id: string
@@ -62,7 +63,7 @@ export function McpSourcesPanel({ organizationId }: McpSourcesPanelProps) {
     },
     onError: (error: any) => {
       queryClient.invalidateQueries({ queryKey: ['mcp-sources'] })
-      notifications.error('Sync failed', error.response?.data?.message ?? error.message ?? 'Sync failed')
+      notifications.error('Sync failed', getApiErrorMessage(error, 'Sync failed'))
     },
   })
 
@@ -75,7 +76,7 @@ export function McpSourcesPanel({ organizationId }: McpSourcesPanelProps) {
       setDeletingSource(null)
     },
     onError: (error: any) => {
-      notifications.error('Error', error.response?.data?.message ?? error.message ?? 'Delete failed')
+      notifications.error('Error', getApiErrorMessage(error, 'Delete failed'))
     },
   })
 

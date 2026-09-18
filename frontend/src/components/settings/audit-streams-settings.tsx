@@ -122,6 +122,14 @@ function AuditStreams() {
           </div>
         )}
 
+        {remove.isError && (
+          // A refused removal left the row in place with no reason
+          // given, which reads as a dead button.
+          <p data-testid="remove-stream-error" className="text-xs text-red-600 dark:text-red-400">
+            {getApiErrorMessage(remove.error, 'The target was not removed.')}
+          </p>
+        )}
+
         {rows.length === 0 && !streams.isLoading && (
           <p className="text-sm text-muted-foreground" data-testid="no-streams">
             No target configured. Audit events are still recorded and can be exported from Analytics; this sends them onward

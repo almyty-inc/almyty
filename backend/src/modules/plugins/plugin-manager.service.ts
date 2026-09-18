@@ -186,6 +186,17 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
 
         if (pluginResult.nextAction === 'stop') {
           this.logger.debug(`Plugin ${plugin.id} requested stop - halting hook chain`);
+          // Recorded on the context because executeHook returns only the
+          // context: without this a caller cannot tell a chain that ran
+          // clean from one a plugin deliberately stopped, which made a
+          // blocking plugin -- pii-filter, security-scanner, rate-limiter --
+          // unable to block anything even once it was wired up.
+          currentContext.metadata.halted = {
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            code: pluginResult.error?.code ?? 'PLUGIN_HALTED',
+            message: pluginResult.error?.message ?? `Blocked by ${plugin.name}`,
+          };
           break;
         }
 

@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import {
   AUTH_MODE_LABELS,
   appPrivacyFrom,
@@ -115,7 +116,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
       onSaved()
     },
     onError: (err: any) =>
-      errorNotif('Could not save', err?.response?.data?.message || 'Something went wrong.'),
+      errorNotif('Could not save app settings', getApiErrorMessage(err, 'Please try again.')),
   })
 
   return (

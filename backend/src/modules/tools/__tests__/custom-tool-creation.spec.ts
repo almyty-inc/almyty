@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ToolsService } from '../tools.service';
@@ -245,5 +246,31 @@ describe('ToolsService - Custom Tool Creation', () => {
     expect(toolRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({ graphqlConfig, soapConfig, grpcConfig, examples }),
     );
+  });
+
+  it('reports a name collision as a conflict rather than letting the driver error surface', async () => {
+    // `tools_org_name_uq` is what keeps one live tool per (org, name),
+    // since name is how the gateways and the skill renderer resolve a
+    // tool. The insert has to speak for the index.
+    toolRepository.save = jest.fn().mockRejectedValue(
+      Object.assign(new Error('duplicate key value violates unique constraint "tools_org_name_uq"'), {
+        code: '23505',
+        constraint: 'tools_org_name_uq',
+      }),
+    );
+
+    await expect(
+      service.createTool(
+        {
+          name: 'Test Custom Tool',
+          description: 'Test tool',
+          type: ToolType.FUNCTION,
+          parameters: { type: 'object', properties: {} },
+          code: 'return {};',
+        } as any,
+        'org-123',
+        'user-123',
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

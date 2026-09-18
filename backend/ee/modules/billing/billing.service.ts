@@ -3,7 +3,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { OrgLicenseResolver } from '../../../src/modules/licensing/org-license.resolver';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -74,6 +76,11 @@ export class BillingService {
     private readonly eventRepo: Repository<BillingEvent>,
     private readonly stripe: StripeService,
     private readonly config: ConfigService,
+    // @Optional() so the many unit tests that construct this service
+    // positionally keep working; absent simply means the 30s cache is
+    // not dropped early, which is the old behaviour.
+    @Optional()
+    private readonly orgLicense?: OrgLicenseResolver,
   ) {}
 
   // ── Read side ───────────────────────────────────────────────────────────
@@ -272,6 +279,12 @@ export class BillingService {
       info.graceUntil = null;
       org.billingInfo = info;
       await this.orgRepo.save(org);
+      // The resolver caches an org's snapshot for 30s, and nothing was
+      // dropping it — so a cancellation left the old entitlements live
+      // for up to half a minute after the row said free. Same on the
+      // upgrade path below: a customer who has just paid waits for a
+      // cache to expire before the feature works.
+      this.orgLicense?.invalidate(org.id);
       this.logger.log(`Org ${org.id} downgraded to free (subscription ${status})`);
       return org.id;
     }
@@ -300,6 +313,7 @@ export class BillingService {
     org.planExpiresAt = expiresAt;
     org.billingInfo = info;
     await this.orgRepo.save(org);
+    this.orgLicense?.invalidate(org.id);
 
     this.logger.log(
       `Org ${org.id} set to plan=${plan} seats=${seats} status=${status}; entitlement token minted`,

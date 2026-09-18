@@ -25,6 +25,15 @@ interface SyncBody {
 }
 
 /**
+ * Ceiling on an explicit [from,to) window. The sync path turns the
+ * window into one outbound call per provider against that provider's
+ * admin usage API and one snapshot row per DAY in it, so an unbounded
+ * window is both an unbounded third-party request and an unbounded
+ * write. A year covers every reporting need we have.
+ */
+const MAX_WINDOW_MS = 366 * 24 * 60 * 60 * 1000;
+
+/**
  * External provider usage/cost ingestion + reconciliation (P7). Reads are
  * member+, the sync (which reaches out to provider admin APIs) is
  * admin/owner — same RBAC shape as the budgets/LLM-providers controllers.
@@ -52,9 +61,33 @@ export class ProviderUsageController {
     return organizationId;
   }
 
+  private badWindow(message: string): never {
+    throw new HttpException(
+      { success: false, message, error: 'INVALID_WINDOW' },
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  /**
+   * Resolve the reporting window. `from`/`to` are caller-supplied
+   * strings: an unparseable one used to become an `Invalid Date` that
+   * reached the query builder and came back as a Postgres cast error
+   * (a 500 for what is a bad request), and a far-past `from` asked the
+   * provider's usage API for decades of daily buckets in one call.
+   */
   private window(period: string | undefined, from?: string, to?: string) {
     if (from) {
-      return { from: new Date(from), to: to ? new Date(to) : new Date() };
+      const start = new Date(from);
+      const end = to ? new Date(to) : new Date();
+      if (Number.isNaN(start.getTime())) this.badWindow(`Invalid 'from' date: ${from}`);
+      if (Number.isNaN(end.getTime())) this.badWindow(`Invalid 'to' date: ${to}`);
+      if (end.getTime() <= start.getTime()) {
+        this.badWindow("'to' must be after 'from'");
+      }
+      if (end.getTime() - start.getTime() > MAX_WINDOW_MS) {
+        this.badWindow('Window too large: at most 366 days may be requested at once');
+      }
+      return { from: start, to: end };
     }
     const periodType = period === 'day' ? 'day' : 'month';
     return { from: startOfPeriod(periodType, new Date()), to: new Date() };

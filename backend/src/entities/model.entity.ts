@@ -62,6 +62,15 @@ export interface ModelLatency {
 // Unique, not merely indexed: two concurrent syncs both saw the vendor
 // id missing from their own snapshot and both inserted it.
 @Index(['organizationId', 'providerId', 'vendorModelId'], { unique: true })
+// Postgres treats NULLs as distinct in a unique index, so the index
+// above constrains nothing for an endpoint-only card (providerId is
+// null). `register` dedupes those on (organizationId, name); this
+// partial index is what makes that key hold under two concurrent
+// POST /models for the same endpoint.
+@Index('models_org_name_endpoint_uq', ['organizationId', 'name'], {
+  unique: true,
+  where: '"providerId" IS NULL',
+})
 export class Model {
   @PrimaryGeneratedColumn('uuid')
   id: string;

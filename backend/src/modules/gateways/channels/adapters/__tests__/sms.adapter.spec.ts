@@ -81,13 +81,40 @@ describe('SmsAdapter', () => {
       expect(form.Body).toHaveLength(1600);
     });
 
-    it('swallows errors', async () => {
+    /** Same Twilio contract as the whatsapp adapter, no address prefix. */
+    it('refuses a non-2xx and keeps Twilio\'s message and code', async () => {
+      fetchMock.setNextResponse({
+        ok: false,
+        status: 400,
+        json: { code: 21610, message: 'Attempt to send to unsubscribed recipient', status: 400 },
+      });
+      await expect(adapter.sendResponse(
+        { twilio_account_sid: 'a', twilio_auth_token: 'b', phone_number: '+1' },
+        { body: 'x' },
+        { from: '+2' },
+      )).rejects.toThrow(/unsubscribed recipient.*21610/);
+    });
+
+    it('refuses a created message Twilio already marked failed', async () => {
+      fetchMock.setNextResponse({
+        ok: true,
+        status: 201,
+        json: { sid: 'SM1', status: 'failed', error_code: 30006, error_message: 'Landline or unreachable carrier' },
+      });
+      await expect(adapter.sendResponse(
+        { twilio_account_sid: 'a', twilio_auth_token: 'b', phone_number: '+1' },
+        { body: 'x' },
+        { from: '+2' },
+      )).rejects.toThrow(/Landline or unreachable carrier/);
+    });
+
+    it('does not swallow a network failure', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('x'));
       await expect(adapter.sendResponse(
         { twilio_account_sid: 'a', twilio_auth_token: 'b', phone_number: '+1' },
         { body: 'x' },
         { from: '+2' },
-      )).resolves.toBeUndefined();
+      )).rejects.toThrow('x');
     });
   });
 

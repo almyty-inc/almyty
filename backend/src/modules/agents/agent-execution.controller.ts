@@ -19,7 +19,7 @@ import { Response } from 'express';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
 import { AgentRuntimeService } from './agent-runtime.service';
-import { AgentStatus } from '../../entities/agent.entity';
+import { AgentNotActive, agentIsInvokable, runsOnAutonomousRuntime } from './agent-invocation';
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -69,9 +69,10 @@ export class AgentExecutionController {
       const userId = req.user.sub || req.user.id;
       const agent = await this.agentsService.getAgent(id, organizationId);
 
-      if (agent.status !== AgentStatus.ACTIVE) {
+      if (!agentIsInvokable(agent)) {
+        const refusal = new AgentNotActive(String(agent.status));
         throw new HttpException(
-          { success: false, message: 'Agent must be active to invoke', error: 'AGENT_NOT_ACTIVE' },
+          { success: false, message: refusal.message, error: refusal.code },
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -81,7 +82,7 @@ export class AgentExecutionController {
       // run (zero nodeResults, null output). Dispatch to the autonomous
       // runtime (the ReAct loop) instead so the agent actually runs and can
       // reach its built-in tools (wait, ask_user, request_approval, memory).
-      if (agent.mode === 'autonomous') {
+            if (runsOnAutonomousRuntime(agent)) {
         const run = await this.runtimeService.startRun(
           id,
           organizationId,
@@ -155,10 +156,10 @@ export class AgentExecutionController {
       const userId = req.user.sub || req.user.id;
       const agent = await this.agentsService.getAgent(id, organizationId);
 
-      if (agent.status !== AgentStatus.ACTIVE) {
+      if (!agentIsInvokable(agent)) {
         res.status(HttpStatus.BAD_REQUEST).json({
           success: false,
-          message: 'Agent must be active to invoke',
+          message: new AgentNotActive(String(agent.status)).message,
           error: 'AGENT_NOT_ACTIVE',
         });
         return;

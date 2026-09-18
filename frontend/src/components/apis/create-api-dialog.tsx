@@ -305,7 +305,7 @@ export function CreateApiDialog({
         </DialogHeader>
         {createStep === 'schema' && createdApiForSchema ? (
           <div className="space-y-6">
-            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 dark:bg-green-500/10 dark:border-green-500/30 rounded-lg">
               <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
               <div>
                 <p className="font-medium text-sm">API "{createdApiForSchema.name}" created</p>
@@ -422,7 +422,7 @@ export function CreateApiDialog({
                 {...createForm.register('name')}
               />
               {createForm.formState.errors.name && (
-                <p className="text-sm text-red-500 mt-1">
+                <p className="text-sm text-destructive mt-1">
                   {createForm.formState.errors.name.message}
                 </p>
               )}
@@ -610,7 +610,7 @@ export function CreateApiDialog({
                   {...createForm.register('baseUrl')}
                 />
                 {createForm.formState.errors.baseUrl && (
-                  <p className="text-sm text-red-500 mt-1">
+                  <p className="text-sm text-destructive mt-1">
                     {createForm.formState.errors.baseUrl.message}
                   </p>
                 )}

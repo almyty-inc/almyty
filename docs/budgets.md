@@ -10,11 +10,15 @@ When to stop spending on a task, and why that decision was made.
 ```json
 {
   "ceilingPerRun": 200,
-  "ceilingPerTask": 1000,
   "stopWhen": { "verifierPasses": true, "confidenceAbove": 0.9, "marginalGainBelow": 0.05 },
   "onExceed": "stop"
 }
 ```
+
+`ceilingPerRun` is in cents, and covers the whole run including any
+sub-agent runs nested inside it — a sub-agent's spend is counted in its
+caller's total, so the ceiling on the outermost run is the ceiling on
+everything it sets off.
 
 `onExceed` is `stop`, `degrade` or `ask`.
 

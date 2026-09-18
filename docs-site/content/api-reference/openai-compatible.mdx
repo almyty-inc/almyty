@@ -5,26 +5,36 @@
 ![Agents list in the UI](/screenshots/agents-list.png)
 
 
-almyty agents can be invoked using an OpenAI-compatible chat completions API.
-This means any application that works with the OpenAI API can be pointed at
-an almyty agent without code changes.
+An almyty agent can be called through an OpenAI-compatible chat completions
+API, so an application built against the OpenAI SDK reaches an agent with a
+base URL change and nothing else.
 
-## Endpoint
+What that does and does not cover is set out below. An agent is not a model:
+it runs its own pipeline and its own tools and hands back the finished answer.
+Fields that would change that — client-declared tools, a forced response
+format, more than one choice — are refused with a 400 naming the field rather
+than accepted and ignored, because a caller whose tools never fire and who
+gets no error has nothing to debug.
+
+## Endpoints
 
 ```
-POST https://api.almyty.com/agents/{agentId}/v1/chat/completions
+POST https://api.almyty.com/v1/chat/completions
+GET  https://api.almyty.com/v1/models
 ```
 
-## Request Format
+Authenticate with an almyty API key as a bearer token. `GET /v1/models` lists
+the organization's active agents in the OpenAI model shape, each as
+`agent:<id>`.
 
-The request follows the OpenAI chat completions format:
+## Request
 
 ```bash
-curl -X POST https://api.almyty.com/agents/{agentId}/v1/chat/completions \
-  -H "Authorization: Bearer $TOKEN" \
+curl -X POST https://api.almyty.com/v1/chat/completions \
+  -H "Authorization: Bearer $ALMYTY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "agent",
+    "model": "agent:my-agent",
     "messages": [
       { "role": "system", "content": "You are a helpful assistant." },
       { "role": "user", "content": "What is the weather in Berlin?" }
@@ -39,31 +49,63 @@ curl -X POST https://api.almyty.com/agents/{agentId}/v1/chat/completions \
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `model` | string | Yes | Use `"agent"` or the agent name |
-| `messages` | array | Yes | Array of message objects with `role` and `content` |
-| `temperature` | number | No | Override the agent's default temperature |
-| `max_tokens` | number | No | Override the agent's default max tokens |
-| `stream` | boolean | No | Enable streaming responses (SSE) |
-| `tools` | array | No | Additional tool definitions (merged with agent tools) |
+| `model` | string | Yes | The agent, as `agent:<id>`, `agent:<name>`, or a bare id or name |
+| `messages` | array | Yes | The conversation. This endpoint is stateless — send the whole history every turn |
+| `temperature` | number | No | Applied to the run's LLM steps for this request only |
+| `max_tokens` | number | No | Applied to the run's LLM steps for this request only |
+| `stream` | boolean | No | Stream the answer as SSE |
+| `stream_options` | object | No | `{ "include_usage": true }` adds a final usage-bearing chunk before `[DONE]` |
 
-### Message Roles
+Limits: at most 100 messages, 100 KB per message, 1 MB per request body.
+
+### Message roles
 
 | Role | Description |
 |------|-------------|
-| `system` | System instructions (overrides agent's system prompt if provided) |
-| `user` | User message |
-| `assistant` | Previous assistant response (for multi-turn conversations) |
+| `system` | Client instructions. Folded into the conversation the agent reads; it does not replace the agent's own system prompt |
+| `user` | A user turn |
+| `assistant` | A previous assistant turn — send these back for multi-turn conversations |
+| `tool` | A tool result from an earlier turn, kept as its own turn |
 
-## Response Format
+The whole array reaches the agent. Because an agent prompt binds one string,
+the conversation is rendered into it as a labelled transcript rather than
+passed as a structured list; a single-turn request is passed through
+unchanged.
 
-### Non-Streaming
+### Fields that are refused
+
+These come back as a `400` whose `error.param` names the field:
+
+`tools`, `tool_choice`, `functions`, `function_call`, a `response_format`
+other than `text`, `n` other than `1`, `top_p` other than `1`, a non-zero
+`frequency_penalty` or `presence_penalty`, `stop`, `seed`, `logprobs`,
+`top_logprobs`.
+
+The defaults a client library sends without being asked to (`n: 1`,
+`top_p: 1`, zero penalties) are accepted, since their behaviour is already
+what happens.
+
+```json
+{
+  "error": {
+    "message": "This endpoint does not take client-declared tools. An almyty agent runs its own tools and returns the finished answer, so there is no turn at which one could be handed back to you. Give the agent the tools instead.",
+    "type": "invalid_request_error",
+    "code": "unsupported_parameter",
+    "param": "tools"
+  }
+}
+```
+
+## Response
+
+### Non-streaming
 
 ```json
 {
   "id": "chatcmpl-uuid",
   "object": "chat.completion",
   "created": 1711234567,
-  "model": "agent",
+  "model": "agent:my-agent",
   "choices": [
     {
       "index": 0,
@@ -75,72 +117,57 @@ curl -X POST https://api.almyty.com/agents/{agentId}/v1/chat/completions \
     }
   ],
   "usage": {
-    "prompt_tokens": 25,
-    "completion_tokens": 18,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
     "total_tokens": 43
   }
 }
 ```
 
+A run that does not complete comes back as a `502` carrying an error object,
+not a `200`.
+
+### Token usage
+
+A run records one token total and nothing keeps the prompt and completion
+halves apart, so `total_tokens` is measured and the other two are `0`. Every
+response carries `x-almyty-usage-split: unavailable` to say so. Do not
+attribute cost from the split.
+
 ### Streaming
 
-When `stream: true`, the response uses Server-Sent Events:
+With `stream: true` the response is Server-Sent Events:
 
 ```
 data: {"id":"chatcmpl-uuid","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
 
 data: {"id":"chatcmpl-uuid","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"The "},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-uuid","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"current "},"finish_reason":null}]}
+data: {"id":"chatcmpl-uuid","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
 
 data: [DONE]
 ```
 
-## Tool Calling
+With `stream_options: {"include_usage": true}` one further chunk arrives
+before `[DONE]`, carrying `usage` and an empty `choices` array.
 
-If the agent has tools configured, the response may include tool calls:
+A run that fails after the headers have gone out ends with a frame carrying
+an `error` object, which is what both SDKs raise on:
 
-```json
-{
-  "choices": [
-    {
-      "message": {
-        "role": "assistant",
-        "content": null,
-        "tool_calls": [
-          {
-            "id": "call_uuid",
-            "type": "function",
-            "function": {
-              "name": "get_weather",
-              "arguments": "{\"city\": \"Berlin\"}"
-            }
-          }
-        ]
-      },
-      "finish_reason": "tool_calls"
-    }
-  ]
-}
+```
+data: {"id":"chatcmpl-uuid","object":"chat.completion.chunk","error":{"message":"...","type":"api_error","code":"agent_execution_failed","param":null}}
+
+data: [DONE]
 ```
 
-Submit tool results back:
+## Tools
 
-```json
-{
-  "messages": [
-    { "role": "user", "content": "What is the weather?" },
-    { "role": "assistant", "tool_calls": [...] },
-    {
-      "role": "tool",
-      "tool_call_id": "call_uuid",
-      "content": "{\"temperature\": 12, \"condition\": \"partly cloudy\"}"
-    }
-  ]
-}
-```
+An agent runs its own tools. A `tool_call` node executes inside the run and
+the answer comes back finished, so there is no turn at which a tool could be
+handed back for you to run, and no `tool_calls` in the response. Give the
+agent the tools instead of declaring them on the request.
 
-## Integration Examples
+## Integration examples
 
 ### Python (openai library)
 
@@ -148,14 +175,16 @@ Submit tool results back:
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://api.almyty.com/agents/{agentId}/v1",
-    api_key="your-almyty-token",
+    base_url="https://api.almyty.com/v1",
+    api_key="your-almyty-api-key",
 )
 
 response = client.chat.completions.create(
-    model="agent",
+    model="agent:my-agent",
     messages=[
-        {"role": "user", "content": "Summarize today's news"}
+        {"role": "user", "content": "My name is Frane."},
+        {"role": "assistant", "content": "Noted."},
+        {"role": "user", "content": "What is my name?"},
     ],
 )
 
@@ -168,12 +197,12 @@ print(response.choices[0].message.content)
 import OpenAI from "openai";
 
 const client = new OpenAI({
-  baseURL: "https://api.almyty.com/agents/{agentId}/v1",
-  apiKey: "your-almyty-token",
+  baseURL: "https://api.almyty.com/v1",
+  apiKey: "your-almyty-api-key",
 });
 
 const response = await client.chat.completions.create({
-  model: "agent",
+  model: "agent:my-agent",
   messages: [{ role: "user", content: "Summarize today's news" }],
 });
 
@@ -182,6 +211,7 @@ console.log(response.choices[0].message.content);
 
 ## Limitations
 
-- The `model` parameter is accepted but ignored, the agent's configured LLM provider is always used
-- Function calling follows the agent's pipeline, not ad-hoc function definitions
-- Token limits are subject to the configured LLM provider's constraints
+- An agent's pipeline decides which model runs each step; `temperature` and
+  `max_tokens` are the only sampling controls a request can set
+- The prompt/completion token split is not measured — see above
+- Client-declared tools and structured-output modes are refused, not ignored

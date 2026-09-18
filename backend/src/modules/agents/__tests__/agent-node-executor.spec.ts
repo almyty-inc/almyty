@@ -351,6 +351,151 @@ describe('AgentNodeExecutor', () => {
       expect(isModelNotFoundError(failure)).toBe(true);
     });
 
+    it('redacts secrets out of a provider error body before it is thrown or logged', async () => {
+      // A provider that echoes the failing request back puts the
+      // Authorization header in `response.data`. That string becomes
+      // nodeResults[nodeId].error and agent_executions.error, so it must
+      // never carry key material.
+      const logged: string[] = [];
+      jest
+        .spyOn((executor as any).logger, 'error')
+        .mockImplementation((msg: any) => {
+          logged.push(String(msg));
+        });
+
+      const err: any = new Error('Request failed with status code 401');
+      err.response = {
+        data: {
+          error: { message: 'invalid api key' },
+          request: {
+            headers: {
+              authorization: 'Bearer sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345',
+              'x-api-key': 'sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345',
+            },
+          },
+        },
+      };
+      llmProvidersService.chat.mockRejectedValue(err);
+
+      const failure = await executor
+        .execute(node('llm_call', { providerId: 'p1', userPrompt: 'x' }), buildContext(), 'org-1')
+        .catch((e: any) => e);
+
+      expect(failure.message).toContain('invalid api key');
+      expect(failure.message).not.toContain('sk-ant-api03');
+      expect(failure.message.length).toBeLessThanOrEqual(600);
+      expect(logged.join('\n')).not.toContain('sk-ant-api03');
+      expect(logged.join('\n')).toContain('[REDACTED]');
+    });
+
+    it('never stringifies a whole provider error body into the thrown message', async () => {
+      // The body has no `error.message` and no `message`, which is the
+      // shape the old code fell through on: it stringified the entire
+      // `response.data` — echoed Authorization header and all — into
+      // both the log line and the persisted node error.
+      const err: any = new Error('Request failed with status code 400');
+      err.response = {
+        data: {
+          detail: 'bad request',
+          echoed_request: {
+            headers: { Authorization: 'Bearer sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' },
+          },
+        },
+      };
+      llmProvidersService.chat.mockRejectedValue(err);
+
+      const failure = await executor
+        .execute(node('llm_call', { providerId: 'p1', userPrompt: 'x' }), buildContext(), 'org-1')
+        .catch((e: any) => e);
+
+      expect(failure.message).not.toContain('sk-proj-');
+      expect(failure.message).not.toContain('echoed_request');
+      expect(failure.message).toContain('Request failed with status code 400');
+    });
+
+    it('stamps the provider and model on a PINNED call, not only a routed one', async () => {
+      // `routing` only lands when the catalog router chose the model, so
+      // a node pinned to a provider recorded a cost and a token count
+      // with no model and no provider beside them — which is why there
+      // was no query that answered "spend by model last week".
+      llmProvidersService.chat.mockResolvedValue({
+        message: { content: 'ok' },
+        usage: { totalTokens: 42 },
+        cost: 0.002,
+        model: 'claude-sonnet-4-20250514',
+      } as any);
+
+      const result = await executor.execute(
+        node('llm_call', { providerId: 'p1', userPrompt: 'x' }),
+        buildContext(),
+        'org-1',
+      );
+
+      expect(result.providerId).toBe('p1');
+      expect(result.model).toBe('claude-sonnet-4-20250514');
+      expect(result.routing).toBeUndefined();
+    });
+
+    it('records the resolved prompt as the node input', async () => {
+      llmProvidersService.chat.mockResolvedValue({
+        message: { content: 'ok' },
+        usage: { totalTokens: 1 },
+        cost: 0,
+        model: 'm',
+      } as any);
+
+      const result = await executor.execute(
+        node('llm_call', {
+          providerId: 'p1',
+          systemPrompt: 'be brief',
+          userPromptTemplate: 'hello {{input.name}}',
+        }),
+        buildContext({ input: { name: 'Ada' } }),
+        'org-1',
+      );
+
+      // No node result recorded its input at all before, so a run was
+      // not reproducible from its own record.
+      expect(result.resolvedInput).toEqual({
+        messages: [
+          { role: 'system', content: 'be brief' },
+          { role: 'user', content: 'hello Ada' },
+        ],
+      });
+    });
+
+    it('carries the resolved prompt on the error of a FAILED call', async () => {
+      llmProvidersService.chat.mockRejectedValue(
+        Object.assign(new Error('upstream 500'), { response: { data: {} } }),
+      );
+
+      const failure: any = await executor
+        .execute(
+          node('llm_call', { providerId: 'p1', userPromptTemplate: 'hi {{input.name}}' }),
+          buildContext({ input: { name: 'Ada' } }),
+          'org-1',
+        )
+        .catch((e: any) => e);
+
+      // The case where reproducing the call matters most.
+      expect(failure.resolvedInput).toEqual({
+        messages: [{ role: 'user', content: 'hi Ada' }],
+      });
+      expect(failure.attemptedProviderId).toBe('p1');
+    });
+
+    it('caps a huge provider error body out of the thrown message', async () => {
+      const err: any = new Error('boom');
+      err.response = { data: { error: { message: 'x'.repeat(50_000) } } };
+      llmProvidersService.chat.mockRejectedValue(err);
+
+      const failure = await executor
+        .execute(node('llm_call', { providerId: 'p1', userPrompt: 'x' }), buildContext(), 'org-1')
+        .catch((e: any) => e);
+
+      expect(failure.message.length).toBeLessThan(1_000);
+    });
+
 
     it('does not crash on missing usage/cost in response', async () => {
       // Regression: LLM Call node previously crashed reading these fields.
@@ -544,6 +689,84 @@ describe('AgentNodeExecutor', () => {
       );
       expect((result.output as any).result).toBe(true);
     });
+
+    // ------------------------------------------------------------------
+    // The visual builder writes a non-numeric value as a quoted literal
+    // ("{{...}} === 'positive'") while the resolver substitutes the other
+    // side unquoted. Nothing stripped the quotes, so every string equality
+    // built in the builder was false and every "not equals" was true.
+    // ------------------------------------------------------------------
+    it.each([
+      ["{{input.sentiment}} === 'positive'", 'positive', true],
+      ["{{input.sentiment}} === 'positive'", 'negative', false],
+      ['{{input.sentiment}} === "positive"', 'positive', true],
+      ["{{input.sentiment}} !== 'positive'", 'positive', false],
+      ["{{input.sentiment}} !== 'positive'", 'negative', true],
+      ["{{input.sentiment}} == 'positive'", 'positive', true],
+      ["{{input.sentiment}} != 'positive'", 'positive', false],
+    ])('quoted literal %s against %s -> %s', async (expr, sentiment, expected) => {
+      const result = await executor.execute(
+        node('condition', { expression: expr }),
+        buildContext({ input: { sentiment } }),
+        'org-1',
+      );
+      expect((result.output as any).result).toBe(expected);
+    });
+
+    it('leaves a value that is not a well-formed literal alone', async () => {
+      // "'a' or 'b'" opens and closes with a quote but is not one literal;
+      // stripping the outer pair would silently compare against `a' or 'b`.
+      const result = await executor.execute(
+        node('condition', { expression: `{{input.v}} === 'a' or 'b'` }),
+        buildContext({ input: { v: `'a' or 'b'` } }),
+        'org-1',
+      );
+      expect((result.output as any).result).toBe(true);
+    });
+
+    // ------------------------------------------------------------------
+    // contains / does not contain / starts with / ends with. The builder
+    // offers all four; the executor implemented none, so the resolved
+    // string fell to the truthiness branch and was always true -- the
+    // leading "!" of "does not contain" included.
+    // ------------------------------------------------------------------
+    it.each([
+      ["{{input.text}}.includes('foo')", 'hello world', false],
+      ["{{input.text}}.includes('world')", 'hello world', true],
+      ["!{{input.text}}.includes('foo')", 'hello world', true],
+      ["!{{input.text}}.includes('world')", 'hello world', false],
+      ["{{input.text}}.startsWith('hello')", 'hello world', true],
+      ["{{input.text}}.startsWith('world')", 'hello world', false],
+      ["{{input.text}}.endsWith('world')", 'hello world', true],
+      ["{{input.text}}.endsWith('hello')", 'hello world', false],
+      ['{{input.text}}.includes("world")', 'hello world', true],
+    ])('method operator %s against %s -> %s', async (expr, text, expected) => {
+      const result = await executor.execute(
+        node('condition', { expression: expr }),
+        buildContext({ input: { text } }),
+        'org-1',
+      );
+      expect((result.output as any).result).toBe(expected);
+    });
+
+    it('refuses a method-call expression it cannot evaluate instead of taking the true branch', async () => {
+      await expect(
+        executor.execute(
+          node('condition', { expression: "{{input.text}}.match('foo')" }),
+          buildContext({ input: { text: 'hello world' } }),
+          'org-1',
+        ),
+      ).rejects.toThrow(/cannot evaluate/);
+    });
+
+    it('still treats prose that merely mentions a dot as a truthiness check', async () => {
+      const result = await executor.execute(
+        node('condition', { expression: '{{input.text}}' }),
+        buildContext({ input: { text: 'see section 3.1 for details' } }),
+        'org-1',
+      );
+      expect((result.output as any).result).toBe(true);
+    });
   });
 
   // ==========================================================================
@@ -710,16 +933,34 @@ describe('AgentNodeExecutor', () => {
       expect(result.output).toEqual(['A', 'B']);
     });
 
-    it('best_of_n requires judgeConfig.providerId', async () => {
+    it('best_of_n returns a lone candidate without paying a judge', async () => {
+      // This used to assert that best_of_n threw without
+      // `judgeConfig.providerId` — which was the bug, not the contract:
+      // the strategy compiler names a role and never a provider, so
+      // insisting on one made the built-in `best_of_n` strategy
+      // unrunnable. There is also nothing to judge here.
+      const result = await executor.execute(
+        node('merge', { strategy: 'best_of_n' }, 'm'),
+        buildContext({ nodes: { a: { output: 'A' } } }),
+        'org-1',
+        undefined,
+        { organizationId: 'org-1', edges: buildEdges(['a'], 'm') },
+      );
+      expect(result.output).toBe('A');
+      expect(llmProvidersService.chat).not.toHaveBeenCalled();
+    });
+
+    it('best_of_n says what is missing when it has candidates but no judge', async () => {
+      orgRepo.findOne.mockResolvedValue(null);
       await expect(
         executor.execute(
           node('merge', { strategy: 'best_of_n' }, 'm'),
-          buildContext({ nodes: { a: { output: 'A' } } }),
+          buildContext({ nodes: { a: { output: 'A' }, b: { output: 'B' } } }),
           'org-1',
           undefined,
-          { organizationId: 'org-1', edges: buildEdges(['a'], 'm') },
+          { organizationId: 'org-1', edges: buildEdges(['a', 'b'], 'm') },
         ),
-      ).rejects.toThrow(/judgeConfig.providerId/);
+      ).rejects.toThrow(/merge node 'm' is missing 'providerId' or 'routing'/);
     });
 
     it('best_of_n picks the option the judge returns', async () => {
@@ -764,9 +1005,9 @@ describe('AgentNodeExecutor', () => {
       expect(result.output).toBe('B');
     });
 
-    it('consensus calls judge and returns its content', async () => {
+    it('consensus returns the judged answer with the agreement it measured', async () => {
       llmProvidersService.chat.mockResolvedValue({
-        message: { content: 'merged answer' },
+        message: { content: JSON.stringify({ agreeing: 2, answer: 'merged answer' }) },
       } as any);
 
       const result = await executor.execute(
@@ -780,7 +1021,16 @@ describe('AgentNodeExecutor', () => {
         undefined,
         { organizationId: 'org-1', edges: buildEdges(['a', 'b'], 'm') },
       );
-      expect(result.output).toBe('merged answer');
+      // The answer is no longer the whole output: a shape whose point is
+      // "disagreement is the signal" has to emit the signal too, and
+      // `consensusThreshold` has to have something to apply to.
+      expect(result.output).toMatchObject({
+        answer: 'merged answer',
+        agreement: 1,
+        consensusReached: true,
+        threshold: 0.5,
+        responses: 2,
+      });
     });
 
     it('default strategy returns the first incoming output', async () => {
@@ -1137,6 +1387,55 @@ describe('AgentNodeExecutor', () => {
       );
       expect(res.cost).toBeCloseTo(0.04);
       expect(res.tokens).toBe(10);
+    });
+  });
+
+  // ==========================================================================
+  // unresolved template references reach the node result
+  // ==========================================================================
+
+  describe('unresolved template references', () => {
+    it('puts a reference that resolved to nothing on the node result', async () => {
+      const result = await executor.execute(
+        // The underscore typo: the node is `llm_1`, the template says `llm1`.
+        node('output', { mapping: 'Answer: {{nodes.llm1.output}}' }),
+        buildContext({ nodes: { llm_1: { output: 'the real answer' } } }),
+        'org-1',
+      );
+
+      // The substitution still happens -- the hole in the prompt is the old,
+      // documented behaviour -- but it is no longer invisible.
+      expect(result.output).toBe('Answer: ');
+      expect(result.unresolvedReferences).toEqual(['nodes.llm1.output']);
+    });
+
+    it('leaves the field off entirely when everything resolved', async () => {
+      const result = await executor.execute(
+        node('output', { mapping: 'Answer: {{nodes.llm_1.output}}' }),
+        buildContext({ nodes: { llm_1: { output: 'the real answer' } } }),
+        'org-1',
+      );
+
+      expect(result.output).toBe('Answer: the real answer');
+      expect(result.unresolvedReferences).toBeUndefined();
+    });
+
+    it('does not let one node collect another node\'s references', async () => {
+      const context = buildContext({ nodes: { llm_1: { output: 'x' } } });
+
+      const withTypo = await executor.execute(
+        node('output', { mapping: '{{nodes.typo.output}}' }, 'out_a'),
+        context,
+        'org-1',
+      );
+      const clean = await executor.execute(
+        node('output', { mapping: '{{nodes.llm_1.output}}' }, 'out_b'),
+        context,
+        'org-1',
+      );
+
+      expect(withTypo.unresolvedReferences).toEqual(['nodes.typo.output']);
+      expect(clean.unresolvedReferences).toBeUndefined();
     });
   });
 });

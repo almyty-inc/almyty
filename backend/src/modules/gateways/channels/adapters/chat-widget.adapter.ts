@@ -46,17 +46,25 @@ export class ChatWidgetAdapter extends BaseAdapter {
 
   /**
    * Persist the reply so the widget can poll it. threadContext carries
-   * gateway/run identity from ChannelGatewayService's dispatch; without
-   * it (e.g. an adapter invoked outside the channel pipeline) there is
-   * nowhere to durably file the message, so we log and drop.
+   * gateway/run identity from ChannelGatewayService's dispatch.
+   *
+   * There is no platform to accept or refuse anything here: the insert
+   * IS the delivery, so a failed insert throws out of `save` on its own
+   * and missing identity — which means the reply has nowhere to be
+   * filed and the visitor will never see it — is a refusal too, rather
+   * than a warning nobody reads.
    */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
     const gatewayId = threadContext?.gatewayId;
     const organizationId = threadContext?.organizationId;
     const threadId = threadContext?.threadId;
     if (!gatewayId || !organizationId || !threadId) {
-      this.logger.warn('Chat widget: missing gateway/thread context, response not persisted');
-      return;
+      const missing = [
+        !gatewayId && 'gatewayId',
+        !organizationId && 'organizationId',
+        !threadId && 'threadId',
+      ].filter(Boolean).join(', ');
+      this.sendFailed(`${missing} missing, so the reply could not be filed for the widget`);
     }
     await this.eventRepository.save(
       this.eventRepository.create({

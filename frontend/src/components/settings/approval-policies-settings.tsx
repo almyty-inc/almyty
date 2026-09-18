@@ -43,6 +43,7 @@ import {
   type UpsertApprovalPolicy,
 } from '@/lib/api'
 import { ApprovalPolicyDialog } from './approval-policy-dialog'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 export function ApprovalPoliciesSettings() {
   return (
@@ -97,7 +98,7 @@ function ApprovalPoliciesManager() {
       await invalidate()
     },
     onError: (err: any) =>
-      error('Failed to create policy', err.response?.data?.message || 'Please try again.'),
+      error('Failed to create policy', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const updateMutation = useMutation({
@@ -110,7 +111,7 @@ function ApprovalPoliciesManager() {
       await invalidate()
     },
     onError: (err: any) =>
-      error('Failed to update policy', err.response?.data?.message || 'Please try again.'),
+      error('Failed to update policy', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const deleteMutation = useMutation({
@@ -121,7 +122,7 @@ function ApprovalPoliciesManager() {
       await invalidate()
     },
     onError: (err: any) =>
-      error('Failed to delete policy', err.response?.data?.message || 'Please try again.'),
+      error('Failed to delete policy', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const handleSubmit = (data: UpsertApprovalPolicy) => {

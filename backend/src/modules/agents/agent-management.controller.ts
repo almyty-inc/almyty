@@ -23,8 +23,6 @@ import { Response } from 'express';
 
 import { AgentsService } from './agents.service';
 import { AgentTechDocHelper } from './agent-tech-doc.helper';
-import { AgentRuntimeService } from './agent-runtime.service';
-import { AgentSchedulerService } from './agent-scheduler.service';
 import { AgentAuditService } from './agent-audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -39,8 +37,6 @@ export class AgentManagementController {
 
   constructor(
     private readonly agentsService: AgentsService,
-    private readonly runtimeService: AgentRuntimeService,
-    private readonly schedulerService: AgentSchedulerService,
     private readonly auditService: AgentAuditService,
     private readonly techDocHelper: AgentTechDocHelper,
   ) {}

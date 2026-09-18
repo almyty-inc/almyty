@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useNotifications } from '@/store/app'
 import { organizationsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const RETENTION_MIN_DAYS = 1
 const RETENTION_MAX_DAYS = 3650
@@ -18,6 +19,8 @@ const DATA_CLASSES = [
   { key: 'requestLogsDays', label: 'Request logs', hint: 'Gateway request/response logs.' },
   { key: 'usageMetricsDays', label: 'Usage metrics', hint: 'Per-request usage and cost metrics.' },
   { key: 'auditLogDays', label: 'Audit log', hint: 'The audit trail itself. Consider your compliance obligations before limiting this.' },
+  { key: 'toolExecutionsDays', label: 'Tool executions', hint: 'The largest class by bytes: every row keeps its parameters and result as untruncated json, and a tool may return up to 10MB.' },
+  { key: 'notificationsDays', label: 'Notifications', hint: 'One row per failed scheduled or webhook run, and per approval request and decision.' },
 ] as const
 
 type DayField = typeof DATA_CLASSES[number]['key']
@@ -31,6 +34,8 @@ const EMPTY_FORM: RetentionForm = {
   requestLogsDays: '',
   usageMetricsDays: '',
   auditLogDays: '',
+  toolExecutionsDays: '',
+  notificationsDays: '',
 }
 
 export function DataRetentionCard({ organizationId }: { organizationId?: string }) {
@@ -54,6 +59,8 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
       requestLogsDays: policy.requestLogsDays ?? '',
       usageMetricsDays: policy.usageMetricsDays ?? '',
       auditLogDays: policy.auditLogDays ?? '',
+      toolExecutionsDays: policy.toolExecutionsDays ?? '',
+      notificationsDays: policy.notificationsDays ?? '',
     })
   }, [policy])
 
@@ -65,7 +72,7 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
       await queryClient.invalidateQueries({ queryKey: ['retention-policy', organizationId] })
     },
     onError: (err: any) => {
-      error('Failed to save retention policy', err.response?.data?.message || 'Please try again.')
+      error('Failed to save retention policy', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -91,6 +98,8 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
       requestLogsDays: form.requestLogsDays === '' ? null : form.requestLogsDays,
       usageMetricsDays: form.usageMetricsDays === '' ? null : form.usageMetricsDays,
       auditLogDays: form.auditLogDays === '' ? null : form.auditLogDays,
+      toolExecutionsDays: form.toolExecutionsDays === '' ? null : form.toolExecutionsDays,
+      notificationsDays: form.notificationsDays === '' ? null : form.notificationsDays,
     })
   }
 

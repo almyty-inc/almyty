@@ -313,8 +313,11 @@ export class CredentialsService {
     const enriched = await batchAsync(keys, 5, async (key) => {
       let agent = null;
       if (key.agentId) {
+        // Org-scoped: a key row predating the check in createAccessKey
+        // can still name a foreign agent, and this listing would print
+        // its name back to whoever asked.
         agent = await this.agentRepository.findOne({
-          where: { id: key.agentId },
+          where: { id: key.agentId, organizationId },
           select: { id: true, name: true },
         });
       }
@@ -353,6 +356,33 @@ export class CredentialsService {
   ): Promise<{ key: ApiKey; plainTextKey: string }> {
     if (!data.name) {
       throw new BadRequestException('Access key name is required');
+    }
+
+    // The gateway and the agent the key is bound to have to be this
+    // organization's.
+    //
+    // Both ids came off the request body and were stamped on the row
+    // unread. The unified endpoint then resolves the gateway from the
+    // key with `where: { id: apiKey.gatewayId, status: ACTIVE }` and no
+    // organization predicate -- so an owner of one tenant could mint a
+    // key naming another tenant's gateway and reach it, auth configs
+    // loaded and the gateway's agent addressed, on the A2A path where
+    // nothing downstream re-checks the owner.
+    if (data.gatewayId) {
+      const gateway = await this.gatewayRepository.findOne({
+        where: { id: data.gatewayId, organizationId },
+      });
+      if (!gateway) {
+        throw new NotFoundException('Gateway not found');
+      }
+    }
+    if (data.agentId) {
+      const agent = await this.agentRepository.findOne({
+        where: { id: data.agentId, organizationId },
+      });
+      if (!agent) {
+        throw new NotFoundException('Agent not found');
+      }
     }
 
     // Generate a plain-text key: almyty_sk_ + 32 random hex chars
