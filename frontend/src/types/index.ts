@@ -386,8 +386,18 @@ export interface ToolTemplate {
   examples: Array<{ name: string; input: any; expectedOutput?: any }>
   apiConfig?: { name: string; baseUrl: string; headers?: Record<string, string>; authRequirements?: { type: string; scopes?: string[]; setupInstructions?: string } }
   isBuiltIn: boolean
+  /**
+   * Null means public -- visible to every organization. A value means the
+   * template belongs to that organization and only it can see, edit or
+   * retract it.
+   */
+  organizationId: string | null
+  sourceToolId?: string | null
+  createdBy?: string | null
   version: string
   installCount: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 export enum ToolType {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Search, Download, Package, ChevronDown, ChevronRight, Plus, Tag } from 'lucide-react'
+import { Search, Download, Package, ChevronDown, ChevronRight, Plus, Store, Trash2 } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,18 +8,39 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { toolHubApi } from '@/lib/api'
+import { formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { ToolTemplate } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
 
-interface Provider {
-  name: string
-  icon?: string
-  description?: string
-  templateCount: number
-  categories: string[]
+/**
+ * A provider rollup as the backend sends it: `GET /tool-hub/providers`
+ * groups templates by provider and answers `{ provider, providerIcon,
+ * count }`. The page previously read `name` / `icon` / `templateCount`,
+ * which no response ever carried.
+ */
+interface ProviderRollup {
+  provider: string
+  providerIcon: string | null
+  count: number
+}
+
+/** `GET /tool-hub/categories` answers rollups too, not bare strings. */
+interface CategoryRollup {
+  category: string
+  count: number
 }
 
 export function ToolHubPage() {
@@ -35,6 +56,7 @@ export function ToolHubPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [retractingTemplate, setRetractingTemplate] = useState<ToolTemplate | null>(null)
 
   const {
     data: providersData,
@@ -69,6 +91,12 @@ export function ToolHubPage() {
     enabled: !!currentOrganization,
   })
 
+  const invalidateHub = () => {
+    queryClient.invalidateQueries({ queryKey: ['tool-hub-templates'] })
+    queryClient.invalidateQueries({ queryKey: ['tool-hub-providers'] })
+    queryClient.invalidateQueries({ queryKey: ['tool-hub-categories'] })
+  }
+
   const installTemplateMutation = useMutation({
     mutationFn: (templateId: string) => toolHubApi.installTemplate(templateId),
     onSuccess: () => {
@@ -93,11 +121,30 @@ export function ToolHubPage() {
     },
   })
 
-  const providers: Provider[] = Array.isArray(providersData) ? providersData : []
-  const templates: ToolTemplate[] = Array.isArray(templatesData?.templates || templatesData) ? (templatesData?.templates || templatesData) : []
-  const categories: string[] = Array.isArray(categoriesData) ? categoriesData : []
+  const retractMutation = useMutation({
+    mutationFn: (templateId: string) => toolHubApi.deleteTemplate(templateId),
+    onSuccess: () => {
+      invalidateHub()
+      setRetractingTemplate(null)
+      success('Retracted', 'The template is no longer in your hub.')
+    },
+    onError: (err: any) => {
+      error('Retract failed', getApiErrorMessage(err, 'Failed to retract template.'))
+    },
+  })
+
+  const providers: ProviderRollup[] = Array.isArray(providersData) ? providersData : []
+  const templates: ToolTemplate[] = Array.isArray(templatesData?.templates || templatesData)
+    ? (templatesData?.templates || templatesData)
+    : []
+  const categories: CategoryRollup[] = Array.isArray(categoriesData) ? categoriesData : []
 
   const isLoading = providersLoading || templatesLoading
+
+  // A template with an organizationId belongs to this organization -- the
+  // backend only ever returns public templates and your own. Those are the
+  // ones this org published, and the only ones it can retract.
+  const publishedHere = templates.filter((t) => !!t.organizationId)
 
   // Group templates by provider
   const templatesByProvider: Record<string, ToolTemplate[]> = {}
@@ -108,8 +155,7 @@ export function ToolHubPage() {
 
   const filteredProviders = providers.filter((p) => {
     if (!searchQuery) return true
-    return p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+    return p.provider.toLowerCase().includes(searchQuery.toLowerCase())
   })
 
   return (
@@ -118,7 +164,7 @@ export function ToolHubPage() {
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Tool Hub</h1>
           <p className="text-muted-foreground">
-            Browse and install pre-built tool templates from popular providers.
+            Install tool templates, and publish your own for the rest of your organization.
           </p>
         </div>
       </div>
@@ -145,12 +191,13 @@ export function ToolHubPage() {
             </Button>
             {categories.map((cat) => (
               <Button
-                key={cat}
-                variant={categoryFilter === cat ? 'default' : 'outline'}
+                key={cat.category}
+                variant={categoryFilter === cat.category ? 'default' : 'outline'}
                 size="sm"
-                onClick={() => setCategoryFilter(cat)}
+                onClick={() => setCategoryFilter(cat.category)}
               >
-                {cat}
+                {cat.category}
+                <span className="ml-1.5 text-xs text-muted-foreground">{cat.count}</span>
               </Button>
             ))}
           </div>
@@ -174,12 +221,13 @@ export function ToolHubPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Package className="h-8 w-8 text-primary" />
+              <Store className="h-8 w-8 text-primary" />
             </div>
-            <h3 className="text-xl font-semibold mb-2">No templates available</h3>
+            <h3 className="text-xl font-semibold mb-2">Nothing published yet</h3>
             <p className="text-muted-foreground mb-4 text-center max-w-md">
-              Tool Hub templates will appear here once they are configured on the backend.
-              You can still create custom tools from the Tools page.
+              Your hub fills up when someone publishes a tool into it. Open Tools,
+              pick a working HTTP tool, and choose Publish to Hub — credentials are
+              stripped on the way.
             </p>
             <Button variant="outline" onClick={() => window.location.href = '/tools'}>
               Go to Tools
@@ -188,29 +236,89 @@ export function ToolHubPage() {
         </Card>
       ) : (
         <div className="space-y-4">
+          {/* Templates this organization published */}
+          {publishedHere.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Published by your organization</CardTitle>
+                <CardDescription>
+                  {publishedHere.length} template{publishedHere.length !== 1 ? 's' : ''} only your organization can see
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {publishedHere.map((template) => (
+                    <div
+                      key={template.id}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/30"
+                    >
+                      <div className="flex-1 min-w-0 mr-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{template.name}</span>
+                          <Badge variant="secondary" className="text-xs">{template.provider}</Badge>
+                          <Badge variant="outline" className="text-xs border-cyan-600/40 text-cyan-700 dark:border-cyan-400/40 dark:text-cyan-400">
+                            {template.category}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1 truncate">
+                          {template.description}
+                        </p>
+                        {template.createdAt && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Published {formatDate(template.createdAt)}
+                            {template.installCount > 0 ? ` · ${template.installCount} installs` : ''}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => installTemplateMutation.mutate(template.id)}
+                          disabled={installTemplateMutation.isPending}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Add
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          aria-label={`Retract ${template.name}`}
+                          onClick={() => setRetractingTemplate(template)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Provider Cards Grid */}
           {filteredProviders.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProviders.map((provider) => (
                 <Card
-                  key={provider.name}
+                  key={provider.provider}
                   className="cursor-pointer hover:border-primary/50 transition-colors"
-                  onClick={() => setExpandedProvider(expandedProvider === provider.name ? null : provider.name)}
+                  onClick={() => setExpandedProvider(expandedProvider === provider.provider ? null : provider.provider)}
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                          {provider.icon ? (
-                            <img src={provider.icon} alt={provider.name} className="w-6 h-6" />
+                          {provider.providerIcon ? (
+                            <img src={provider.providerIcon} alt={provider.provider} className="w-6 h-6" />
                           ) : (
                             <Package className="h-5 w-5 text-primary" />
                           )}
                         </div>
                         <div>
-                          <CardTitle className="text-base">{provider.name}</CardTitle>
+                          <CardTitle className="text-base">{provider.provider}</CardTitle>
                           <p className="text-xs text-muted-foreground">
-                            {provider.templateCount} tool{provider.templateCount !== 1 ? 's' : ''}
+                            {provider.count} tool{provider.count !== 1 ? 's' : ''}
                           </p>
                         </div>
                       </div>
@@ -220,31 +328,19 @@ export function ToolHubPage() {
                           variant="outline"
                           onClick={(e) => {
                             e.stopPropagation()
-                            installProviderMutation.mutate(provider.name)
+                            installProviderMutation.mutate(provider.provider)
                           }}
                           disabled={installProviderMutation.isPending}
                         >
                           <Download className="h-3 w-3 mr-1" />
                           Install All
                         </Button>
-                        {expandedProvider === provider.name
+                        {expandedProvider === provider.provider
                           ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                       </div>
                     </div>
                   </CardHeader>
-                  {provider.description && (
-                    <CardContent className="pt-0">
-                      <p className="text-sm text-muted-foreground">{provider.description}</p>
-                      {provider.categories.length > 0 && (
-                        <div className="flex gap-1 mt-2 flex-wrap">
-                          {provider.categories.map((cat) => (
-                            <Badge key={cat} variant="secondary" className="text-xs">{cat}</Badge>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  )}
                 </Card>
               ))}
             </div>
@@ -351,6 +447,30 @@ export function ToolHubPage() {
           )}
         </div>
       )}
+
+      <AlertDialog
+        open={!!retractingTemplate}
+        onOpenChange={(open) => !open && setRetractingTemplate(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Retract this template?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {retractingTemplate?.name} leaves your hub. Tools already installed from
+              it keep working — they are ordinary tools now.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => retractingTemplate && retractMutation.mutate(retractingTemplate.id)}
+              disabled={retractMutation.isPending}
+            >
+              {retractMutation.isPending ? 'Retracting…' : 'Retract'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

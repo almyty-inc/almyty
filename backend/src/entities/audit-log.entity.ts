@@ -97,6 +97,7 @@ export enum AuditResource {
   AGENT = 'agent',
   AGENT_RUN = 'agent_run',
   TOOL = 'tool',
+  TOOL_TEMPLATE = 'tool_template',
   GATEWAY = 'gateway',
   API = 'api',
   MEMORY = 'memory',

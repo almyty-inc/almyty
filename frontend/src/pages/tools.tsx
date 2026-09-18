@@ -62,6 +62,7 @@ import { CreateToolDialog } from '@/components/tools/create-tool-dialog'
 import { AddMcpServerDialog } from '@/components/tools/add-mcp-server-dialog'
 import { McpSourcesPanel } from '@/components/tools/mcp-sources-panel'
 import { ToolExecutionDialog } from '@/components/tools/tool-execution-dialog'
+import { PublishToolDialog, isPublishable } from '@/components/tools/publish-tool-dialog'
 import { ToolHubPage } from '@/pages/tool-hub'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
@@ -81,6 +82,10 @@ interface Tool {
   name: string
   description?: string
   type: string
+  // Read all over this page (row subtitle, detail dialog) but never
+  // declared, so every read went through an `any`. Publishing needs it
+  // typed: only an HTTP tool can become a template.
+  executionMethod?: string | null
   status: string
   operation?: {
     method?: string
@@ -139,6 +144,7 @@ export function ToolsPage() {
   const PAGE_SIZE = 10
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null)
   const [deletingTool, setDeletingTool] = useState<Tool | null>(null)
+  const [publishingTool, setPublishingTool] = useState<Tool | null>(null)
   const [toolForExecution, setToolForExecution] = useState<Tool | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isExecutionDialogOpen, setIsExecutionDialogOpen] = useState(false)
@@ -668,6 +674,26 @@ return new Promise((resolve, reject) => {
                   Activate
                 </DropdownMenuItem>
               )}
+              {/*
+                Publish, here, on the row.
+
+                Nothing in the product wrote a tool template, so the Tool
+                Hub tab was a permanent empty state. This is the authoring
+                path: a working tool becomes a template your organization
+                can install anywhere. Offered only for HTTP tools, because
+                that is the only shape a template carries back into a tool
+                that can execute.
+              */}
+              {isPublishable(tool) && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setPublishingTool(tool)
+                  }}
+                >
+                  Publish to Hub
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={(e) => {
@@ -1089,6 +1115,10 @@ return new Promise((resolve, reject) => {
         executeToolMutation={executeToolMutation}
       />
 
+      <PublishToolDialog
+        tool={publishingTool}
+        onOpenChange={(open) => !open && setPublishingTool(null)}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog

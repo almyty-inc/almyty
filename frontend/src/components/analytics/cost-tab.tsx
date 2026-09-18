@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { DollarSign, RefreshCw, Scale } from 'lucide-react'
+import { DollarSign, RefreshCw, Scale, Wallet } from 'lucide-react'
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
@@ -96,6 +97,18 @@ export function CostTab() {
             {p === 'day' ? 'Today' : 'This month'}
           </Button>
         ))}
+        {/* The meter is here; the ceiling is one tab away. Without this
+            link a spend budget was a thing you could only reach by URL. */}
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="h-6 text-xs px-2 ml-auto"
+        >
+          <Link to="/analytics/budgets">
+            <Wallet className="h-3 w-3 mr-1" /> Budgets
+          </Link>
+        </Button>
       </div>
 
       {isLoading ? (

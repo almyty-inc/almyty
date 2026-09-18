@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, ILike, IsNull, In } from 'typeorm';
 
@@ -7,6 +13,13 @@ import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import {
+  sanitizeConfiguration,
+  sanitizeExamples,
+  sanitizeHttpConfig,
+  scrubStringMap,
+} from './template-sanitizer';
+import { PublishToolTemplateDto, UpdateToolTemplateDto } from './dto/tool-hub.dto';
 
 export interface ListTemplatesFilters {
   category?: string;
@@ -194,7 +207,12 @@ export class ToolHubService {
             type: ApiType.HTTP,
             status: ApiStatus.ACTIVE,
             organizationId: orgId,
-            headers: template.apiConfig.headers || {},
+            // Scrubbed on the way in as well as on the way out. The
+            // publish path never writes apiConfig.headers, but a template
+            // is data another party may have authored, and this is the
+            // one place a header on it becomes a live default header on
+            // an Api inside the installing organization.
+            headers: scrubStringMap(template.apiConfig.headers) || {},
             version: '1.0.0',
           });
           api = await this.apiRepository.save(newApi);
@@ -284,5 +302,216 @@ export class ToolHubService {
     this.logger.log(`Installed ${tools.length} templates from provider '${provider}' in org ${orgId}`);
 
     return { tools, api: sharedApi };
+  }
+
+  /**
+   * Publish one of the caller's tools into the hub as a template.
+   *
+   * Tenancy. The source tool is read with `organizationId` in the WHERE
+   * clause, not checked after the fact, so a tool id belonging to another
+   * tenant is a 404 and not a publish. The new template's
+   * `organizationId` is the caller's org, always: it is never taken from
+   * the request and is never NULL, so no org user can publish into the
+   * public catalog every other tenant reads.
+   *
+   * Secrets. Everything the template carries goes through
+   * template-sanitizer, which copies named fields only. `authConfig`,
+   * `metadata` (which is where an installed tool's `credentialId` lives),
+   * `code`, `llmConfig`, `runnerConfig` and `memoryConfig` are not copied
+   * at all, `httpConfig.headers` is dropped whole, and the source Api
+   * contributes its name, base URL and the *type* of auth it needs --
+   * never its headers and never `authentication.config`.
+   *
+   * Execution method. Only `http` publishes. `installTemplate` rebuilds a
+   * tool from `httpConfig`, `parameters`, `configuration` and `examples`
+   * and nothing else, so a GraphQL, SOAP, gRPC, custom-code, LLM, runner
+   * or memory tool would round-trip into a tool that cannot execute.
+   * Refusing is the honest answer; a template that installs broken is
+   * worse than no template.
+   */
+  async publishTool(
+    orgId: string,
+    userId: string,
+    dto: PublishToolTemplateDto,
+  ): Promise<ToolTemplate> {
+    const tool = await this.toolRepository.findOne({
+      where: { id: dto.toolId, organizationId: orgId },
+      relations: { api: true },
+    });
+    if (!tool) {
+      // 404 rather than 403: a 403 would confirm the id exists in some
+      // other organization.
+      throw new NotFoundException('Tool not found');
+    }
+
+    if (tool.executionMethod !== ToolExecutionMethod.HTTP) {
+      throw new BadRequestException(
+        `Only HTTP tools can be published to the hub. '${tool.name}' executes via ` +
+          `'${tool.executionMethod ?? 'none'}', which a template cannot carry.`,
+      );
+    }
+
+    const httpConfig = sanitizeHttpConfig(tool.httpConfig);
+    if (!httpConfig?.path || !httpConfig?.method) {
+      throw new BadRequestException(
+        `'${tool.name}' has no HTTP method and path to publish.`,
+      );
+    }
+
+    const name = (dto.name ?? tool.name).trim();
+    const provider = (dto.provider ?? tool.api?.name ?? 'custom').trim();
+
+    const clash = await this.templateRepository.findOne({
+      where: { name, organizationId: orgId },
+    });
+    if (clash) {
+      throw new ConflictException(
+        `Your organization already publishes a template named '${name}'.`,
+      );
+    }
+
+    const template = this.templateRepository.create({
+      name,
+      description: dto.description ?? tool.description ?? null,
+      provider,
+      providerIcon: dto.providerIcon ?? null,
+      category: dto.category.trim(),
+      tags: dto.tags ?? [],
+      executionMethod: ToolExecutionMethod.HTTP,
+      httpConfig,
+      parameters: tool.parameters ?? {},
+      configuration: sanitizeConfiguration(tool.configuration),
+      examples: sanitizeExamples(tool.examples),
+      apiConfig: tool.api
+        ? {
+            name: tool.api.name,
+            baseUrl: tool.api.baseUrl,
+            // No `headers`, and no `authentication.config`. The installing
+            // organization learns which kind of credential it needs, and
+            // supplies its own.
+            authRequirements: { type: tool.api.authentication?.type ?? 'none' },
+          }
+        : null,
+      sdkConfig: null,
+      sdkMap: null,
+      isBuiltIn: false,
+      organizationId: orgId,
+      version: dto.version ?? tool.version ?? '1.0.0',
+      installCount: 0,
+      createdBy: userId,
+      sourceToolId: tool.id,
+    });
+
+    let saved: ToolTemplate;
+    try {
+      saved = await this.templateRepository.save(template);
+    } catch (error: any) {
+      // The partial unique index is the real arbiter; the check above only
+      // turns the common case into a readable message.
+      if (error?.code === '23505') {
+        throw new ConflictException(
+          `Your organization already publishes a template named '${name}'.`,
+        );
+      }
+      throw error;
+    }
+
+    this.logger.log(
+      `Published tool '${tool.id}' as template '${saved.id}' in org ${orgId}`,
+    );
+
+    this.auditLogService.logCreate(
+      orgId,
+      userId,
+      AuditResource.TOOL_TEMPLATE,
+      saved.id,
+      saved.name,
+      { source: 'tool-hub', sourceToolId: tool.id, provider: saved.provider },
+    );
+
+    return saved;
+  }
+
+  /**
+   * Load a template the caller's organization owns, for writing.
+   *
+   * `organizationId: orgId` is an equality predicate, so it matches
+   * neither another tenant's rows nor the public ones where the column is
+   * NULL. That is what stops an org user editing or retracting a public
+   * template every other tenant depends on.
+   */
+  private async getOwnedTemplate(id: string, orgId: string): Promise<ToolTemplate> {
+    const template = await this.templateRepository.findOne({
+      where: { id, organizationId: orgId },
+    });
+    if (!template) {
+      throw new NotFoundException('Template not found');
+    }
+    return template;
+  }
+
+  /** Edit the listing metadata of a template the caller's org published. */
+  async updateTemplate(
+    id: string,
+    orgId: string,
+    userId: string,
+    dto: UpdateToolTemplateDto,
+  ): Promise<ToolTemplate> {
+    const template = await this.getOwnedTemplate(id, orgId);
+
+    if (dto.name !== undefined) {
+      const name = dto.name.trim();
+      if (name !== template.name) {
+        const clash = await this.templateRepository.findOne({
+          where: { name, organizationId: orgId },
+        });
+        if (clash) {
+          throw new ConflictException(
+            `Your organization already publishes a template named '${name}'.`,
+          );
+        }
+      }
+      template.name = name;
+    }
+    if (dto.description !== undefined) template.description = dto.description;
+    if (dto.category !== undefined) template.category = dto.category.trim();
+    if (dto.provider !== undefined) template.provider = dto.provider.trim();
+    if (dto.providerIcon !== undefined) template.providerIcon = dto.providerIcon;
+    if (dto.tags !== undefined) template.tags = dto.tags;
+    if (dto.version !== undefined) template.version = dto.version;
+
+    const saved = await this.templateRepository.save(template);
+
+    this.auditLogService.logUpdate(
+      orgId,
+      userId,
+      AuditResource.TOOL_TEMPLATE,
+      saved.id,
+      saved.name,
+      undefined,
+      { source: 'tool-hub' },
+    );
+
+    return saved;
+  }
+
+  /**
+   * Retract a template the caller's org published. Tools already
+   * installed from it are untouched -- they are ordinary tools in the
+   * organizations that installed them.
+   */
+  async deleteTemplate(id: string, orgId: string, userId: string): Promise<void> {
+    const template = await this.getOwnedTemplate(id, orgId);
+    await this.templateRepository.remove(template);
+
+    this.logger.log(`Retracted template '${id}' from org ${orgId}`);
+
+    this.auditLogService.logDelete(
+      orgId,
+      userId,
+      AuditResource.TOOL_TEMPLATE,
+      id,
+      template.name,
+    );
   }
 }
