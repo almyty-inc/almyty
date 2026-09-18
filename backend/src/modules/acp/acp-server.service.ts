@@ -21,6 +21,16 @@ import { ACP_ERROR_CODES } from './types/acp.types';
 const PROMPT_POLL_TIMEOUT_MS = 30_000;
 const PROMPT_POLL_INTERVAL_MS = 500;
 
+/**
+ * Ceiling on the conversation history attached to a SessionUpdate. The
+ * history is re-read and re-serialized on every poll tick and every
+ * streamed event, so it must not grow with the conversation.
+ */
+const MAX_HISTORY_MESSAGES = 200;
+
+/** Both `agent_runs.id` and `agent_runs.conversationId` are uuid columns. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 @Injectable()
 export class AcpServerService {
   private readonly logger = new Logger(AcpServerService.name);
@@ -171,7 +181,7 @@ export class AcpServerService {
 
     // If sessionId is provided, look for an existing conversation/run
     if (params.sessionId) {
-      const existingRun = await this.findActiveRunByConversationId(
+      const existingRun = await this.findSessionRun(
         params.sessionId,
         gateway.organizationId,
       );
@@ -232,7 +242,7 @@ export class AcpServerService {
 
     // Resume or start a new run
     if (params.sessionId) {
-      const existingRun = await this.findActiveRunByConversationId(
+      const existingRun = await this.findSessionRun(
         params.sessionId,
         gateway.organizationId,
       );
@@ -405,30 +415,70 @@ export class AcpServerService {
       await this.sleep(PROMPT_POLL_INTERVAL_MS);
     }
 
-    // Timeout: return current state without waiting further
+    // Timed out waiting. The run row can also disappear underneath us
+    // (the run reaper), and passing a null run into the mapper used to
+    // throw a bare TypeError that surfaced as an opaque INTERNAL_ERROR.
     const run = await this.runRepository.findOne({
       where: { id: runId, organizationId },
     });
-    const messages = run ? await this.getRunMessages(run) : [];
+    if (!run) {
+      throw Object.assign(new Error('Session not found'), {
+        code: ACP_ERROR_CODES.SESSION_NOT_FOUND,
+      });
+    }
+    const messages = await this.getRunMessages(run);
     return agentRunToSessionUpdate(run, messages);
   }
 
-  private async findActiveRunByConversationId(
-    conversationId: string,
+  /**
+   * Resolve the AgentRun behind an ACP `sessionId`.
+   *
+   * Every SessionUpdate we hand a client carries `sessionId: run.id`
+   * (see `agentRunToSessionUpdate`), so a client echoing that value back
+   * on session/prompt or session/stream means the RUN id. This used to
+   * look the value up only as a `conversationId`, which a run id never
+   * is — the lookup always missed, both resume paths fell through to
+   * "start a new run", and no ACP session could ever be continued. The
+   * caller got a perfectly valid SessionUpdate back, so the dropped
+   * session was invisible.
+   *
+   * The conversationId lookup is kept as a fallback for a client that
+   * passes a conversation id. Both columns are uuid, so a non-uuid
+   * sessionId is rejected here rather than reaching Postgres (which
+   * would turn a bad id into a 500 instead of "start a new run").
+   */
+  private async findSessionRun(
+    sessionId: string,
     organizationId: string,
   ): Promise<AgentRun | null> {
+    if (typeof sessionId !== 'string' || !UUID_RE.test(sessionId)) return null;
+
+    const byRunId = await this.runRepository.findOne({
+      where: { id: sessionId, organizationId },
+    });
+    if (byRunId) return byRunId;
+
     return this.runRepository.findOne({
-      where: { conversationId, organizationId },
+      where: { conversationId: sessionId, organizationId },
       order: { createdAt: 'DESC' },
     });
   }
 
+  /**
+   * Conversation history for a session update. Bounded: `pollForCompletion`
+   * re-reads it on every tick (up to 60 per session/prompt) and the stream
+   * handler re-reads it on every run event, so an unbounded find grows with
+   * the conversation and is re-serialized into every frame. Keep the most
+   * recent MAX_HISTORY_MESSAGES, returned oldest-first.
+   */
   private async getRunMessages(run: AgentRun): Promise<Message[]> {
-    if (!run.conversationId) return [];
-    return this.messageRepository.find({
+    if (!run?.conversationId) return [];
+    const recent = await this.messageRepository.find({
       where: { conversationId: run.conversationId },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: 'DESC' },
+      take: MAX_HISTORY_MESSAGES,
     });
+    return [...recent].reverse();
   }
 
   private writeSseEvent(res: Response, eventName: string, data: any): void {

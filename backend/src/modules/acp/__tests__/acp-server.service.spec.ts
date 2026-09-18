@@ -357,5 +357,219 @@ describe('AcpServerService', () => {
         }),
       );
     });
+
+    // ── session resumption ────────────────────────────────────────────
+    //
+    // Every SessionUpdate we hand out carries `sessionId: run.id`. These
+    // cover the round trip: the value a client got from session/new must
+    // resolve back to that run on session/prompt and session/stream.
+
+    const SESSION_UUID = '11111111-2222-4333-8444-555555555555';
+    const CONVERSATION_UUID = '99999999-8888-4777-8666-555555555555';
+
+    const waitingRun: Partial<AgentRun> = {
+      id: SESSION_UUID,
+      agentId: 'agent-1',
+      organizationId: 'org-1',
+      status: AgentRunStatus.WAITING_INPUT,
+      conversationId: CONVERSATION_UUID,
+      isDone: () => false,
+      updatedAt: new Date('2026-01-01'),
+      totalCost: 0,
+      executionTime: 10,
+    };
+
+    it('resumes a waiting run when session/prompt echoes back the sessionId we issued', async () => {
+      // The repo only answers a lookup BY RUN ID — which is what the
+      // sessionId in a SessionUpdate is. A conversationId lookup misses.
+      runRepository.findOne.mockImplementation(async (opts: any) => {
+        const where = opts?.where ?? {};
+        return where.id === SESSION_UUID && where.organizationId === 'org-1'
+          ? waitingRun
+          : null;
+      });
+
+      await service.handleJsonRpc(
+        mockGateway as Gateway,
+        mockReq,
+        {
+          jsonrpc: '2.0',
+          method: 'session/prompt',
+          id: 10,
+          params: {
+            sessionId: SESSION_UUID,
+            message: { parts: [{ type: 'text', text: 'more please' }] },
+          },
+        },
+        mockRes,
+      );
+
+      expect(agentRuntimeService.sendInput).toHaveBeenCalledWith(
+        SESSION_UUID,
+        'org-1',
+        'more please',
+      );
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 10,
+          result: expect.objectContaining({ sessionId: SESSION_UUID }),
+        }),
+      );
+    });
+
+    it('resumes a waiting run when session/stream echoes back the sessionId we issued', async () => {
+      runRepository.findOne.mockImplementation(async (opts: any) => {
+        const where = opts?.where ?? {};
+        return where.id === SESSION_UUID && where.organizationId === 'org-1'
+          ? waitingRun
+          : null;
+      });
+      agentRuntimeService.getRunEmitter.mockReturnValue(null);
+
+      await service.handleJsonRpc(
+        mockGateway as Gateway,
+        mockReq,
+        {
+          jsonrpc: '2.0',
+          method: 'session/stream',
+          id: 11,
+          params: {
+            sessionId: SESSION_UUID,
+            message: { parts: [{ type: 'text', text: 'keep going' }] },
+          },
+        },
+        mockRes,
+      );
+
+      expect(agentRuntimeService.sendInput).toHaveBeenCalledWith(
+        SESSION_UUID,
+        'org-1',
+        'keep going',
+      );
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    it('still resolves a sessionId that is a conversation id', async () => {
+      runRepository.findOne.mockImplementation(async (opts: any) => {
+        const where = opts?.where ?? {};
+        return where.conversationId === CONVERSATION_UUID ? waitingRun : null;
+      });
+
+      await service.handleJsonRpc(
+        mockGateway as Gateway,
+        mockReq,
+        {
+          jsonrpc: '2.0',
+          method: 'session/prompt',
+          id: 12,
+          params: {
+            sessionId: CONVERSATION_UUID,
+            message: { parts: [{ type: 'text', text: 'hi' }] },
+          },
+        },
+        mockRes,
+      );
+
+      expect(agentRuntimeService.sendInput).toHaveBeenCalledWith(
+        SESSION_UUID,
+        'org-1',
+        'hi',
+      );
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    it('never sends a non-uuid sessionId to a uuid column', async () => {
+      // agent_runs.id and .conversationId are both uuid; a garbage
+      // sessionId must start a new run, not raise a Postgres cast error.
+      runRepository.findOne.mockResolvedValue(mockRun);
+      agentRuntimeService.startRun.mockResolvedValue(mockRun);
+
+      await service.handleJsonRpc(
+        mockGateway as Gateway,
+        mockReq,
+        {
+          jsonrpc: '2.0',
+          method: 'session/prompt',
+          id: 13,
+          params: {
+            sessionId: 'not-a-uuid',
+            message: { parts: [{ type: 'text', text: 'hi' }] },
+          },
+        },
+        mockRes,
+      );
+
+      for (const call of runRepository.findOne.mock.calls) {
+        const where = call[0]?.where ?? {};
+        expect(where.id).not.toBe('not-a-uuid');
+        expect(where.conversationId).not.toBe('not-a-uuid');
+      }
+      expect(agentRuntimeService.startRun).toHaveBeenCalled();
+    });
+
+    it('bounds the conversation history it attaches and returns it oldest-first', async () => {
+      const older = { role: 'user', content: 'first', createdAt: new Date('2026-01-01') };
+      const newer = { role: 'assistant', content: 'second', createdAt: new Date('2026-01-02') };
+      // The repo is asked for the most recent N, so it answers newest-first.
+      messageRepository.find.mockResolvedValue([newer, older]);
+      agentRuntimeService.startRun.mockResolvedValue(mockRun);
+      runRepository.findOne.mockResolvedValue(mockRun);
+
+      await service.handleJsonRpc(
+        mockGateway as Gateway,
+        mockReq,
+        {
+          jsonrpc: '2.0',
+          method: 'session/new',
+          id: 14,
+          params: { message: { parts: [{ type: 'text', text: 'Hello' }] } },
+        },
+        mockRes,
+      );
+
+      expect(messageRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          order: { createdAt: 'DESC' },
+          take: 200,
+        }),
+      );
+      const result = mockRes.json.mock.calls[0][0].result;
+      expect(result.metadata.history.map((h: any) => h.message.parts[0].text)).toEqual([
+        'first',
+        'second',
+      ]);
+    });
+
+    it('reports SESSION_NOT_FOUND when the run vanishes while polling', async () => {
+      const running = { ...mockRun, status: AgentRunStatus.RUNNING, isDone: () => false };
+      agentRuntimeService.startRun.mockResolvedValue(running);
+      // Skip the real 30s of sleeps; the loop body is what is under test.
+      (service as any).sleep = jest.fn().mockResolvedValue(undefined);
+
+      let calls = 0;
+      runRepository.findOne.mockImplementation(async () => {
+        calls++;
+        return calls > 60 ? null : running;
+      });
+
+      await service.handleJsonRpc(
+        mockGateway as Gateway,
+        mockReq,
+        {
+          jsonrpc: '2.0',
+          method: 'session/new',
+          id: 15,
+          params: { message: { parts: [{ type: 'text', text: 'Hello' }] } },
+        },
+        mockRes,
+      );
+
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({ code: -32001, message: 'Session not found' }),
+        }),
+      );
+    });
   });
 });

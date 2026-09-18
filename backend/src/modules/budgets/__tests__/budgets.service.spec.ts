@@ -193,4 +193,46 @@ describe('BudgetsService', () => {
     expect(mail.send).toHaveBeenCalledTimes(1);
     expect(mail.send.mock.calls[0][0].to).toBe('owner@example.com');
   });
+
+  // ── Provider scope is not a measurable ceiling ───────────────────
+  //
+  // No spend table records which LLM provider a run was billed to, so a
+  // provider-scoped budget has no meter. It must not be creatable, and a
+  // row that exists anyway must not be evaluated against org-wide spend.
+
+  it('refuses to create a provider-scoped budget', async () => {
+    await expect(
+      service.create('org-1', { limitCents: 1000, llmProviderId: 'prov-1' }),
+    ).rejects.toThrow(BadRequestException);
+    expect(budgetStore).toHaveLength(0);
+  });
+
+  it('refuses to narrow an existing budget to a provider', async () => {
+    const b = await service.create('org-1', { limitCents: 1000 });
+    await expect(
+      service.update(b.id, 'org-1', { llmProviderId: 'prov-1' }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('never hard-stops a run on a provider-scoped budget', async () => {
+    // Hand-insert the row the API now refuses, with a `reject` behavior
+    // and org spend far past its limit. Enforcing it would block every
+    // run in the org on a ceiling meant for one provider.
+    budgetStore.push({
+      id: 'b-provider',
+      organizationId: 'org-1',
+      agentId: null,
+      llmProviderId: 'prov-1',
+      periodType: 'month',
+      limitCents: 1000,
+      behavior: 'reject',
+      softThresholdPct: 80,
+      active: true,
+    });
+    spend.periodToDateCents.mockResolvedValue(99999);
+
+    await expect(service.enforceForRun('org-1', 'agent-1')).resolves.toBeUndefined();
+    expect(spend.periodToDateCents).not.toHaveBeenCalled();
+    expect(alertStore).toHaveLength(0);
+  });
 });
