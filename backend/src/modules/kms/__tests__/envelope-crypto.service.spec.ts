@@ -94,6 +94,20 @@ async function provision(
   return dek;
 }
 
+/** A rotation as `setCmk` performs it: a brand-new DEK, wrapped, stored over the old blob. */
+async function rotate(
+  kms: FakeKmsClientFactory,
+  repo: FakeKmsConfigRepo,
+  organizationId: string,
+) {
+  const dek = require('crypto').randomBytes(32) as Buffer;
+  const wrapped = await kms.encrypt({ keyArn: CMK_ARN, region: 'us-east-1' }, dek);
+  const row = repo.rows.find((r) => r.organizationId === organizationId);
+  if (!row) throw new Error(`no kms config for ${organizationId}`);
+  row.wrappedDek = wrapped.toString('base64');
+  return dek;
+}
+
 describe('EnvelopeCryptoService', () => {
   let kms: FakeKmsClientFactory;
   let repo: FakeKmsConfigRepo;
@@ -153,6 +167,75 @@ describe('EnvelopeCryptoService', () => {
       await expect(service.decryptForOrg(ORG, enc)).rejects.toThrow(
         /AccessDenied|Decrypt/,
       );
+    });
+
+    /**
+     * A rotation must never be masked by a cached DEK.
+     *
+     * `invalidate()` is a process-local Map.delete, so on a multi-replica
+     * deployment every other replica went on encrypting with the DEK the
+     * config no longer wraps — and those values are undecryptable by
+     * anyone, since `decryptForOrg` unwraps whatever the row holds now
+     * and the GCM tag then fails. A fresh service is exactly what a
+     * second replica (or a restart) sees: it has no cache and only the
+     * row to go on.
+     */
+    it('picks up a rotation this process was never told about', async () => {
+      await service.encryptForOrg(ORG, 'before'); // caches the first DEK
+      await rotate(kms, repo, ORG); // another replica's setCmk; no invalidate here
+
+      const after = await service.encryptForOrg(ORG, 'after-rotation');
+
+      const otherReplica = new EnvelopeCryptoService(
+        repo as any,
+        license as any,
+        kms as unknown as KmsClientFactory,
+      );
+      expect(await otherReplica.decryptForOrg(ORG, after)).toBe('after-rotation');
+    });
+
+    /**
+     * The lost-invalidate window: the request is already inside KMS
+     * Decrypt when the rotation commits, so `invalidate()` finds nothing
+     * to delete and the request caches the superseded key afterwards.
+     */
+    it('never uses a DEK the row stopped pointing at mid-unwrap', async () => {
+      let rotatedOnce = false;
+      const realDecrypt = kms.decrypt.bind(kms);
+      const decrypt = jest
+        .spyOn(kms, 'decrypt')
+        .mockImplementation(async (ref: any, ciphertext: any) => {
+          const dek = await realDecrypt(ref, ciphertext);
+          if (!rotatedOnce) {
+            rotatedOnce = true;
+            await rotate(kms, repo, ORG); // the admin's setCmk lands here
+          }
+          return dek;
+        });
+
+      const enc = await service.encryptForOrg(ORG, 'written-during-rotation');
+
+      const otherReplica = new EnvelopeCryptoService(
+        repo as any,
+        license as any,
+        kms as unknown as KmsClientFactory,
+      );
+      expect(await otherReplica.decryptForOrg(ORG, enc)).toBe('written-during-rotation');
+      decrypt.mockRestore();
+    });
+
+    it('gives up rather than guessing when the config keeps being rewritten', async () => {
+      const realDecrypt = kms.decrypt.bind(kms);
+      const decrypt = jest
+        .spyOn(kms, 'decrypt')
+        .mockImplementation(async (ref: any, ciphertext: any) => {
+          const dek = await realDecrypt(ref, ciphertext);
+          await rotate(kms, repo, ORG);
+          return dek;
+        });
+
+      await expect(service.encryptForOrg(ORG, 'x')).rejects.toThrow(/kept changing/);
+      decrypt.mockRestore();
     });
   });
 

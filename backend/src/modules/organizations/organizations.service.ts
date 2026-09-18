@@ -6,6 +6,7 @@ import {
   ConflictException,
   Logger,
   Inject,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -16,6 +17,9 @@ import { UserOrganization, OrganizationRole } from '../../entities/user-organiza
 import { Team } from '../../entities/team.entity';
 import { UserTeam, TeamRole } from '../../entities/user-team.entity';
 import { User } from '../../entities/user.entity';
+import { CanonicalMemory } from '../memory/canonical/canonical-memory.entity';
+import { CanonicalMemoryWorkspaceConfig } from '../memory/canonical/canonical-memory-config.entity';
+import { CanonicalMemorySoftcapWarning } from '../memory/canonical/canonical-memory-softcap-warning.entity';
 
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
@@ -72,6 +76,18 @@ export class OrganizationsService {
     private readonly gatewaysService: GatewaysService,
     private readonly invitesHelper: OrganizationsInvitesHelper,
     private readonly teamMembershipHelper: TeamMembershipHelper,
+    // Canonical memory has no organizationId column, so org deletion
+    // clears it by scope_id. @Optional() keeps the unit tests that
+    // construct this service positionally working.
+    @Optional()
+    @InjectRepository(CanonicalMemory)
+    private readonly memoryRepository?: Repository<CanonicalMemory>,
+    @Optional()
+    @InjectRepository(CanonicalMemoryWorkspaceConfig)
+    private readonly memoryConfigRepository?: Repository<CanonicalMemoryWorkspaceConfig>,
+    @Optional()
+    @InjectRepository(CanonicalMemorySoftcapWarning)
+    private readonly memorySoftcapWarningRepository?: Repository<CanonicalMemorySoftcapWarning>,
   ) {}
 
   async create(createOrganizationDto: CreateOrganizationDto, ownerId: string): Promise<Organization> {
@@ -266,9 +282,26 @@ export class OrganizationsService {
     return this.organizationRepository.save(organization);
   }
 
+  /**
+   * Delete the organization and the data no database cascade can reach.
+   *
+   * Almost everything an organization owns hangs off an `organizationId`
+   * foreign key and goes with the row. Canonical memory does not: the
+   * `memories`, `memory_workspace_config` and `memory_softcap_warnings`
+   * tables are keyed by (scope_type, scope_id) with no organizationId
+   * column and no foreign key, because scope_id is polymorphic. Nothing
+   * else would ever remove those rows — the TTL sweeper only sets
+   * valid_until, and RetentionPolicy has no memory class — so a deleted
+   * tenant's memory content and embeddings would sit in the database
+   * indefinitely.
+   *
+   * scope_id is the organization id for every scope_type
+   * (scopeToOrganizationId is the identity), so one predicate covers all
+   * of them.
+   */
   async delete(id: string): Promise<void> {
     const organization = await this.findOne(id);
-    
+
     // Check if organization has any active APIs or gateways
     if (organization.apis?.length > 0) {
       throw new ForbiddenException('Cannot delete organization with active APIs');
@@ -278,7 +311,32 @@ export class OrganizationsService {
       throw new ForbiddenException('Cannot delete organization with active gateways');
     }
 
+    await this.deleteCanonicalMemory(id);
     await this.organizationRepository.remove(organization);
+  }
+
+  private async deleteCanonicalMemory(organizationId: string): Promise<void> {
+    // Softcap warnings first, then the config, then the memories
+    // themselves: the warnings name a memory_id and the memories
+    // self-reference, so the content goes last.
+    for (const repository of [
+      this.memorySoftcapWarningRepository,
+      this.memoryConfigRepository,
+      this.memoryRepository,
+    ]) {
+      if (!repository) continue;
+      try {
+        await repository.delete({ scopeId: organizationId } as any);
+      } catch (err: any) {
+        // A failed memory delete must not leave the organization row
+        // behind: a half-deleted tenant is worse than a stranded table,
+        // and the next attempt can retry this.
+        this.logger.error(
+          `Failed to delete canonical memory for organization ${organizationId}: ${err.message}`,
+        );
+        throw err;
+      }
+    }
   }
 
   async getMembers(organizationId: string, requestingUserId: string): Promise<any[]> {
