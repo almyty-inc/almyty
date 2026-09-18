@@ -66,6 +66,13 @@ export enum OrganizationPlan {
 }
 
 export interface OrganizationSettings {
+  /**
+   * Consulted by the engine when an llm_call node names neither a provider
+   * nor a policy of its own (agent-node-executor.defaultRoutingFor). The
+   * builder reads it to know whether such a node is actually incomplete or
+   * merely relying on the organization default.
+   */
+  defaultRouting?: Record<string, any>
   maxGateways: number
   maxApis: number
   maxTools: number

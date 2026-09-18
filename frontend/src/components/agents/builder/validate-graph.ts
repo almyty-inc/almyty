@@ -36,7 +36,19 @@ function branchHandle(edge: GraphEdge): string {
 }
 
 /** Every reason the graph as drawn cannot be saved, in the order a reader meets them. */
-export function validateWorkflowGraph(nodes: GraphNode[], edges: GraphEdge[]): string[] {
+/**
+ * `hasDefaultRouting` is whether the organization sets settings.defaultRouting.
+ * When it does, the engine resolves an llm_call node that names neither a
+ * provider nor a policy (agent-node-executor.callModelForNode), and the
+ * server's validator has no llm_call rule at all -- so refusing to save such
+ * a graph was the builder refusing something the API accepts and the engine
+ * runs. Every other rule here mirrors the server.
+ */
+export function validateWorkflowGraph(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  options: { hasDefaultRouting?: boolean } = {},
+): string[] {
   const errors: string[] = []
 
   const inputs = nodes.filter((n) => n.type === 'input')
@@ -78,7 +90,7 @@ export function validateWorkflowGraph(nodes: GraphNode[], edges: GraphEdge[]): s
       // the Execution tab carries `roleKey` and deliberately never a
       // provider -- that portability is the point of the layer.
       case 'llm_call':
-        if (!data.providerId && !data.routing && !data.roleKey) {
+        if (!data.providerId && !data.routing && !data.roleKey && !options.hasDefaultRouting) {
           errors.push(
             `Model Call node "${node.id}" is missing a provider, a routing policy, or a role`,
           )

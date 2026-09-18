@@ -4,7 +4,11 @@
  * JSON Schema to Zod mapping full mode depends on, prompt naming, and the
  * text a tool call answers with when almyty says no.
  */
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 import { describe, expect, it, vi } from 'vitest';
+import { EXIT, EXIT_CODE_HELP, exitCodeFor } from '../exit-codes';
 import {
   DiscoverySource,
   ToolCatalog,
@@ -266,5 +270,47 @@ describe('buildZodShape', () => {
     expect(buildZodShape({ type: 'object', properties: {} }, z)).toEqual({});
     expect(buildZodShape(undefined, z)).toEqual({});
     expect(buildZodShape({ type: 'object' }, z)).toEqual({});
+  });
+});
+
+/**
+ * This was the one CLI in the family without the shared table: a missing
+ * credential left with 1, the same code as a crash, so a supervisor
+ * restarted a server that could never start and nothing said to log in.
+ */
+describe('exit codes', () => {
+  const source = readFileSync(join(import.meta.dirname, '..', 'index.ts'), 'utf-8');
+
+  it('keeps the same six codes every other almyty CLI uses', () => {
+    expect(EXIT).toEqual({ OK: 0, ERROR: 1, USAGE: 2, AUTH: 3, NOT_FOUND: 4, FAILED: 5 });
+    expect(new Set(Object.values(EXIT)).size).toBe(Object.values(EXIT).length);
+  });
+
+  it('classifies a rejected token as not-authenticated, not as a crash', () => {
+    expect(exitCodeFor(new Error('Authentication failed. Run: npx @almyty/auth login'))).toBe(EXIT.AUTH);
+    expect(exitCodeFor(new Error('API error 401: {}'))).toBe(EXIT.AUTH);
+    expect(exitCodeFor(new Error('API error 403: {}'))).toBe(EXIT.AUTH);
+    expect(exitCodeFor(new Error('API error 404: no such gateway'))).toBe(EXIT.NOT_FOUND);
+    expect(exitCodeFor(new Error('socket hang up'))).toBe(EXIT.ERROR);
+  });
+
+  it('leaves with AUTH when there is no credential at all', () => {
+    expect(source).toMatch(/no authentication token found[\s\S]{0,200}process\.exit\(EXIT\.AUTH\)/);
+  });
+
+  it('treats the auth-subcommand redirect as a usage error', () => {
+    expect(source).toMatch(/Authentication moved to @almyty\/auth[\s\S]{0,200}process\.exit\(EXIT\.USAGE\)/);
+  });
+
+  it('never exits with a bare number again', () => {
+    // Every exit has to name a code from the table, or the table is decoration.
+    expect(source).not.toMatch(/process\.exit\(\s*\d/);
+  });
+
+  it('documents the table in --help, from the table itself', () => {
+    expect(source).toContain('Exit codes (the same in every almyty CLI)');
+    // Interpolated, not retyped, so the help text cannot drift from the codes.
+    expect(source).toContain('${EXIT_CODE_HELP}');
+    expect(EXIT_CODE_HELP).toContain('3  not authenticated');
   });
 });

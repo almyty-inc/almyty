@@ -30,6 +30,7 @@ import { z } from 'zod';
 import { resolveCredentials } from './auth.js';
 import { AlmytyProxy } from './proxy.js';
 import { ToolCatalog, searchResultText, uniquePromptNames, upstreamErrorText } from './catalog.js';
+import { EXIT, EXIT_CODE_HELP, exitCodeFor } from './exit-codes.js';
 import { buildZodShape } from './schema.js';
 import { VERSION } from './version.js';
 
@@ -70,7 +71,7 @@ async function main() {
       'no authentication token found.\n' +
       '  Set ALMYTY_TOKEN, or run: npx @almyty/auth login',
     );
-    process.exit(1);
+    process.exit(EXIT.AUTH);
   }
 
   const ALMYTY_URL = creds.url;
@@ -412,6 +413,9 @@ Configuration:
   Cursor:       .cursor/mcp.json -> { "mcpServers": { "petstore": { "command": "npx", "args": ["-y", "@almyty/mcp-server", "acme/petstore"] } } }
   Copilot:      .vscode/mcp.json -> { "servers": { "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] } } }
   Gemini:       ~/.gemini/settings.json -> { "mcpServers": { "almyty": { ... } } }
+
+Exit codes (the same in every almyty CLI):
+${EXIT_CODE_HELP}
 `);
 }
 
@@ -422,7 +426,7 @@ if (subcommand === 'login' || subcommand === 'logout' || subcommand === 'whoami'
   // Auth lives in @almyty/auth. Redirect rather than silently doing nothing.
   console.error('Authentication moved to @almyty/auth.');
   console.error(`  npx @almyty/auth ${subcommand}`);
-  process.exit(1);
+  process.exit(EXIT.USAGE);
 } else if (subcommand === '--help' || subcommand === '-h' || subcommand === 'help') {
   printHelp();
 } else if (subcommand === '--version' || subcommand === '-v') {
@@ -430,6 +434,8 @@ if (subcommand === 'login' || subcommand === 'logout' || subcommand === 'whoami'
 } else {
   main().catch((err) => {
     log(`fatal: ${upstreamErrorText(err)}`);
-    process.exit(1);
+    // A token the API rejected leaves with the same code as no token at
+    // all, so a supervisor can tell "log in again" from "restart me".
+    process.exit(exitCodeFor(err));
   });
 }
