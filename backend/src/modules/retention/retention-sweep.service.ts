@@ -16,7 +16,6 @@ import { UsageMetric } from '../../entities/usage-metric.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Notification } from '../../entities/notification.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
-import { Gateway } from '../../entities/gateway.entity';
 import { AgentApp, appPrivacyFrom } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 
@@ -79,11 +78,13 @@ export interface SweepCounts {
  *   and we never depend on the cascade being present.
  * - agent_runs.conversationId and conversations.parentConversationId are
  *   ON DELETE SET NULL — deleting conversations detaches, not deletes.
+ *   Both referencing columns are indexed, so the SET NULL a batch of
+ *   1000 deletes triggers is an index lookup and not a table scan.
  * - Nothing references agent_runs with a DB-level FK (approval_requests
  *   .runId is a soft reference), so run deletion needs no child pass.
- * - request_logs has no organizationId; rows are scoped through the
- *   org's gateways. Logs with a NULL gatewayId are unattributable and
- *   are left alone.
+ * - request_logs carries its own organizationId, so it is swept by that
+ *   column directly. gatewayId is ON DELETE SET NULL, so scoping
+ *   through the org's gateways would lose every log of a deleted one.
  */
 @Injectable()
 export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
@@ -111,8 +112,6 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     @Optional()
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
-    @InjectRepository(Gateway)
-    private readonly gatewayRepository: Repository<Gateway>,
     private readonly auditLogService: AuditLogService,
     // @Global notifications pipeline; @Optional() keeps existing unit
     // tests (constructed without it) working.
@@ -422,21 +421,17 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * request_logs has no organizationId column; scope through the org's
-   * gateways. Rows with a NULL gatewayId cannot be attributed to an org
-   * and are intentionally left alone.
+   * request_logs carries its own organizationId, so the sweep does not
+   * have to go through the org's gateways to find its rows. That matters
+   * because gatewayId is ON DELETE SET NULL: scoping through gateways
+   * meant a deleted gateway put its logs out of every policy's reach.
    */
   private async sweepRequestLogs(
     organizationId: string,
     cutoff: Date,
   ): Promise<number> {
-    const gateways = await this.gatewayRepository.find({
-      where: { organizationId },
-      select: { id: true },
-    });
-    if (gateways.length === 0) return 0;
     return this.batchDelete(this.requestLogRepository, {
-      gatewayId: In(gateways.map((g) => g.id)),
+      organizationId,
       timestamp: LessThan(cutoff),
     } as FindOptionsWhere<RequestLog>);
   }

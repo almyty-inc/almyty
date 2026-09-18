@@ -3,9 +3,13 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
 import { IsNull, MoreThan, Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 
 import { Referral, ReferralStatus } from '../../entities/referral.entity';
 import { ReferralCode } from '../../entities/referral-code.entity';
@@ -41,6 +45,9 @@ export class ReferralQualificationService implements OnModuleInit, OnModuleDestr
   private readonly logger = new Logger(ReferralQualificationService.name);
   private timer?: NodeJS.Timeout;
 
+  /** One sweep per window across every replica. */
+  private static readonly LOCK_KEY = 'referrals:qualification:lock';
+
   constructor(
     @InjectRepository(Referral)
     private readonly referralRepository: Repository<Referral>,
@@ -54,6 +61,9 @@ export class ReferralQualificationService implements OnModuleInit, OnModuleDestr
     private readonly agentRunRepository: Repository<AgentRun>,
     private readonly referralsService: ReferralsService,
     private readonly auditLogService: AuditLogService,
+    // Optional so the unit specs can construct the sweeper without Redis;
+    // its absence is logged, never silently treated as a held lock.
+    @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
   ) {}
 
   onModuleInit(): void {
@@ -72,15 +82,70 @@ export class ReferralQualificationService implements OnModuleInit, OnModuleDestr
 
   /** One full sweep — public so tests (and ops) can invoke it directly. */
   async sweep(): Promise<{ qualified: number; rewarded: number; accrualsApplied: number }> {
-    const qualified = await this.sweepPending();
-    const rewarded = await this.sweepQualified();
-    const accrualsApplied = await this.sweepAccruals();
-    if (qualified || rewarded || accrualsApplied) {
-      this.logger.log(
-        `referral sweep: qualified=${qualified} rewarded=${rewarded} accrualsApplied=${accrualsApplied}`,
-      );
+    // One replica sweeps per window. Rewards are money (free plan days)
+    // and an in-process timer runs on every replica, so two sweeps used
+    // to walk the same batch. The lease is half the fix -- it can expire
+    // mid-sweep -- so every transition below is claimed as well.
+    const lease = await this.acquireLease();
+    if (!lease.acquired) {
+      this.logger.debug('referral sweep skipped — lock held by another replica');
+      return { qualified: 0, rewarded: 0, accrualsApplied: 0 };
     }
-    return { qualified, rewarded, accrualsApplied };
+    try {
+      const qualified = await this.sweepPending();
+      const rewarded = await this.sweepQualified();
+      const accrualsApplied = await this.sweepAccruals();
+      if (qualified || rewarded || accrualsApplied) {
+        this.logger.log(
+          `referral sweep: qualified=${qualified} rewarded=${rewarded} accrualsApplied=${accrualsApplied}`,
+        );
+      }
+      return { qualified, rewarded, accrualsApplied };
+    } finally {
+      await lease.release();
+    }
+  }
+
+  /**
+   * Redis NX lock, the same pattern MetricsRetentionService uses. A Redis
+   * that is down or absent must not stop rewards: the sweep then runs
+   * unleased and says so, and the per-row claims keep it correct.
+   */
+  private async acquireLease(): Promise<{ acquired: boolean; release: () => Promise<void> }> {
+    const unleased = { acquired: true, release: async () => undefined };
+    if (!this.redis) {
+      this.logger.warn('referral sweep running unleased: no Redis client');
+      return unleased;
+    }
+    const token = randomUUID();
+    const ttlSeconds = Math.max(60, Math.ceil(SWEEP_INTERVAL_MS / 1000));
+    try {
+      const acquired = await this.redis.set(
+        ReferralQualificationService.LOCK_KEY,
+        token,
+        'EX',
+        ttlSeconds,
+        'NX',
+      );
+      if (acquired !== 'OK') return { acquired: false, release: async () => undefined };
+      return {
+        acquired: true,
+        release: async () => {
+          // Only if we still hold it, so a later holder is never dropped.
+          await this.redis!
+            .eval(
+              `if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end`,
+              1,
+              ReferralQualificationService.LOCK_KEY,
+              token,
+            )
+            .catch(() => undefined);
+        },
+      };
+    } catch (err: any) {
+      this.logger.warn(`referral sweep lock unavailable, sweeping unleased: ${err?.message || err}`);
+      return unleased;
+    }
   }
 
   /** pending -> qualified when the referred org has a gateway AND an agent run. */
@@ -100,9 +165,26 @@ export class ReferralQualificationService implements OnModuleInit, OnModuleDestr
       // a later sweep tick.
       if (!(await this.referralsService.isRefereeVerified(referral))) continue;
 
+      // Claim the transition, never assume it.
+      //
+      // The sweep runs on every replica and two of them read the same
+      // PENDING batch (after a rolling deploy their timers sit near each
+      // other). Replica B reaches this row seconds later still holding
+      // the copy it loaded, so neither the status check above nor the
+      // yearly-cap arithmetic inside awardReferrerDays -- which reads
+      // that stale `rewardDays` -- stopped it, and the referrer's plan
+      // was extended twice. Only the UPDATE that actually moved the row
+      // out of PENDING may pay out. The abuseFlag guard is here for the
+      // same reason: a row flagged since the batch was read must not
+      // reward.
+      const qualifiedAt = new Date();
+      const claim = await this.referralRepository.update(
+        { id: referral.id, status: ReferralStatus.PENDING, abuseFlag: IsNull() },
+        { status: ReferralStatus.QUALIFIED, qualifiedAt },
+      );
+      if (!claim.affected) continue;
       referral.status = ReferralStatus.QUALIFIED;
-      referral.qualifiedAt = new Date();
-      await this.referralRepository.save(referral);
+      referral.qualifiedAt = qualifiedAt;
       await this.referralsService.awardReferrerDays(
         referral,
         this.referralsService.tier1Days(),
@@ -141,9 +223,16 @@ export class ReferralQualificationService implements OnModuleInit, OnModuleDestr
       // unverified; retried on a later tick.
       if (!(await this.referralsService.isRefereeVerified(referral))) continue;
 
+      // Claim the transition (see sweepPending): the tier-2 grant is the
+      // same double-award shape, one status further along.
+      const rewardedAt = new Date();
+      const claim = await this.referralRepository.update(
+        { id: referral.id, status: ReferralStatus.QUALIFIED, abuseFlag: IsNull() },
+        { status: ReferralStatus.REWARDED, rewardedAt },
+      );
+      if (!claim.affected) continue;
       referral.status = ReferralStatus.REWARDED;
-      referral.rewardedAt = new Date();
-      await this.referralRepository.save(referral);
+      referral.rewardedAt = rewardedAt;
       await this.referralsService.awardReferrerDays(
         referral,
         this.referralsService.tier2Days(),

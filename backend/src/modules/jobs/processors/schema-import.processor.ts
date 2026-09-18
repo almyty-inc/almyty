@@ -1,7 +1,10 @@
 import { OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Job } from 'bull';
 
+import { Api } from '../../../entities/api.entity';
 import { ApisService } from '../../apis/apis.service';
 
 export interface SchemaImportJob {
@@ -28,7 +31,11 @@ export interface SchemaImportJob {
 export class SchemaImportProcessor {
   private readonly logger = new Logger(SchemaImportProcessor.name);
 
-  constructor(private readonly apisService: ApisService) {}
+  constructor(
+    private readonly apisService: ApisService,
+    @InjectRepository(Api)
+    private readonly apiRepository: Repository<Api>,
+  ) {}
 
   @Process('import')
   async handleSchemaImport(job: Job<SchemaImportJob>) {
@@ -90,18 +97,45 @@ export class SchemaImportProcessor {
    * once per failed attempt; we log a distinct, alert-friendly line only
    * once retries are exhausted so a permanently-failed import is visible
    * to ops instead of silently landing in the (capped, evicted) failed set.
+   *
+   * On the last attempt the reason is also written to the API row. It
+   * used to exist only as `job.failedReason` in Redis, which
+   * `removeOnFail: 50` evicts after fifty further failures and a Redis
+   * restart loses outright — so "why did my import fail?" had no durable
+   * answer for a minutes-long operation.
    */
   @OnQueueFailed()
-  onFailed(job: Job<SchemaImportJob>, err: Error) {
+  async onFailed(job: Job<SchemaImportJob>, err: Error): Promise<void> {
     const attempts = job.opts?.attempts ?? 1;
     if (job.attemptsMade >= attempts) {
       this.logger.error(
         `[JOB ${job.id}] PERMANENTLY FAILED after ${job.attemptsMade} attempt(s): ` +
           `schema import for API ${job.data?.apiId} (org ${job.data?.organizationId}) — ${err.message}`,
       );
+      await this.recordImportFailure(job, err);
     } else {
       this.logger.warn(
         `[JOB ${job.id}] attempt ${job.attemptsMade}/${attempts} failed, will retry: ${err.message}`,
+      );
+    }
+  }
+
+  private async recordImportFailure(job: Job<SchemaImportJob>, err: Error): Promise<void> {
+    const { apiId, organizationId } = job.data ?? ({} as SchemaImportJob);
+    if (!apiId || !organizationId) return;
+    try {
+      await this.apiRepository.update(
+        { id: apiId, organizationId },
+        {
+          lastImportError: (err?.message || 'Unknown import error').slice(0, 4000),
+          lastImportFailedAt: new Date(),
+        },
+      );
+    } catch (writeError: any) {
+      // A failure handler must never throw: that would replace a recorded
+      // failure with an unrecorded one.
+      this.logger.error(
+        `[JOB ${job.id}] could not persist the import failure for API ${apiId}: ${writeError?.message}`,
       );
     }
   }

@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, EntityManager } from 'typeorm';
 
 import { Runner, RunnerState, RunnerRuntimeInfo, RunnerConfig } from '../../entities/runner.entity';
 import { RunnerSession } from '../../entities/runner-session.entity';
@@ -173,6 +173,15 @@ export class RunnerService {
    * the FSM. Workspace count is sourced from the live count of ACTIVE
    * workspaces against the runner so it can't drift away from reality
    * over reconnects.
+   *
+   * The state write is conditional on the runner still being in the
+   * state the FSM was asked about. A heartbeat already in flight when a
+   * graceful shutdown lands used to save its loaded ONLINE straight
+   * back over the DRAINING the drain had committed, and
+   * resolveForDispatch then kept handing work to a runner whose process
+   * had exited. The FSM already refuses to revive a DRAINING or OFFLINE
+   * runner — it just never saw the drain, because it was scoring a
+   * snapshot taken before it.
    */
   async heartbeat(runnerId: string): Promise<Runner> {
     const runner = await this.runners.findOne({ where: { id: runnerId } });
@@ -183,23 +192,52 @@ export class RunnerService {
     });
 
     const now = new Date();
-    runner.lastHeartbeatAt = now;
     const transitioned = nextState(this.snapshot(runner), {
       kind: 'heartbeat',
       at: now,
       workspaceCount,
     });
-    if (transitioned !== null) runner.state = transitioned;
-    return this.runners.save(runner);
+
+    // lastHeartbeatAt is a fact about the wire and is safe to write
+    // unconditionally; the state is not.
+    await this.runners.update({ id: runner.id }, { lastHeartbeatAt: now });
+    runner.lastHeartbeatAt = now;
+
+    if (transitioned !== null) {
+      const moved = await this.transitionState(runner.id, runner.state, transitioned);
+      if (!moved) {
+        // Someone moved the runner while we were scoring. Their write
+        // wins; report the row as it now stands.
+        const fresh = await this.runners.findOne({ where: { id: runner.id } });
+        return fresh ?? runner;
+      }
+      runner.state = transitioned;
+    }
+    return runner;
   }
 
   /**
    * Sweep all runners for stale/offline transitions. Called from the
    * BullMQ tick job (configured in the runner module). Cheap query,
    * cheap loop; we run it at heartbeat interval cadence.
+   *
+   * OFFLINE runners are selected too when they still have ACTIVE
+   * workspaces. Flipping a runner offline and stranding its workspaces
+   * are two writes, and a pod that died between them (OOM, eviction,
+   * rolling deploy) left the runner OFFLINE with its workspaces ACTIVE
+   * — and the old WHERE clause only looked at ONLINE/BUSY/STALE/
+   * DRAINING, so that runner was never examined again. The workspaces
+   * stayed active forever, the heartbeat's workspace count stayed
+   * wrong, the user was never told their work was lost, and nothing
+   * short of manual SQL could fix it. Now the next tick picks the
+   * runner back up and finishes the job.
    */
-  async tick(now = new Date()): Promise<{ checked: number; transitioned: number; markStrandedFor: string[] }> {
-    const candidates = await this.runners.find({
+  async tick(
+    now = new Date(),
+    manager?: EntityManager,
+  ): Promise<{ checked: number; transitioned: number; markStrandedFor: string[] }> {
+    const runners = manager ? manager.getRepository(Runner) : this.runners;
+    const candidates = await runners.find({
       where: [
         { state: RunnerState.ONLINE },
         { state: RunnerState.BUSY },
@@ -212,11 +250,24 @@ export class RunnerService {
     for (const runner of candidates) {
       const next = nextState(this.snapshot(runner), { kind: 'tick', at: now });
       if (next === null) continue;
-      runner.state = next;
-      await this.runners.save(runner);
+      // Guarded, so a heartbeat or a drain that landed since the SELECT
+      // is not overwritten by this sweep's older view.
+      const moved = await this.transitionState(runner.id, runner.state, next, manager);
+      if (!moved) continue;
       transitioned++;
       if (next === RunnerState.OFFLINE) markStrandedFor.push(runner.id);
     }
+
+    // Self-heal the half-finished pair described above: an OFFLINE
+    // runner that still has ACTIVE workspaces gets its fan-out
+    // retried. Stranding is idempotent (it only touches ACTIVE rows),
+    // so re-listing a runner costs nothing when there is nothing left
+    // to strand.
+    const unfinished = await this.runnersWithStrandedWork(manager);
+    for (const runnerId of unfinished) {
+      if (!markStrandedFor.includes(runnerId)) markStrandedFor.push(runnerId);
+    }
+
     return { checked: candidates.length, transitioned, markStrandedFor };
   }
 
@@ -230,8 +281,12 @@ export class RunnerService {
     if (!runner) throw new NotFoundException('runner not found');
     const next = nextState(this.snapshot(runner), { kind: 'shutdown', at: new Date() });
     if (next !== null) {
+      const moved = await this.transitionState(runner.id, runner.state, next);
+      if (!moved) {
+        const fresh = await this.runners.findOne({ where: { id: runner.id } });
+        return fresh ?? runner;
+      }
       runner.state = next;
-      await this.runners.save(runner);
     }
     return runner;
   }
@@ -326,5 +381,44 @@ export class RunnerService {
 
   private snapshot(runner: Runner): RunnerSnapshot {
     return { state: runner.state, lastHeartbeatAt: runner.lastHeartbeatAt };
+  }
+
+  /**
+   * Move a runner from one state to another, but only if it is still in
+   * `from`. Returns false when it is not — some other writer moved it
+   * since we read it, and their write is the newer truth.
+   *
+   * Every FSM write goes through this. `nextState` scores a snapshot,
+   * and between the snapshot and the write a heartbeat, a drain and the
+   * tick sweep can all be in flight against the same row; an
+   * unconditional save() let the last one to finish win regardless of
+   * what it knew.
+   */
+  private async transitionState(
+    runnerId: string,
+    from: RunnerState,
+    to: RunnerState,
+    manager?: EntityManager,
+  ): Promise<boolean> {
+    const runners = manager ? manager.getRepository(Runner) : this.runners;
+    const result = await runners.update({ id: runnerId, state: from }, { state: to });
+    return (result.affected ?? 0) > 0;
+  }
+
+  /**
+   * Runners that are already OFFLINE but still have ACTIVE workspaces —
+   * the residue of a pod that died between flipping the runner and
+   * stranding its work. Returned so the next tick can finish it.
+   */
+  private async runnersWithStrandedWork(manager?: EntityManager): Promise<string[]> {
+    const workspaces = manager ? manager.getRepository(Workspace) : this.workspaces;
+    const rows = await workspaces
+      .createQueryBuilder('ws')
+      .select('DISTINCT ws."runnerId"', 'runnerId')
+      .innerJoin(Runner, 'r', 'r.id = ws."runnerId"')
+      .where('ws.status = :active', { active: WorkspaceStatus.ACTIVE })
+      .andWhere('r.state = :offline', { offline: RunnerState.OFFLINE })
+      .getRawMany();
+    return rows.map((row) => row.runnerId);
   }
 }
