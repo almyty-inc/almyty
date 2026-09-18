@@ -84,7 +84,7 @@ export function ApisPage() {
       setDeletingApi(null)
     },
     onError: (err: any) => {
-      error('Failed to delete API', err.response?.data?.message || 'Please try again.')
+      error('Failed to delete API', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -106,6 +106,9 @@ export function ApisPage() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
+      // The API detail page reads schemas from their own key, so a
+      // successful import here has to drop that cache too.
+      queryClient.invalidateQueries({ queryKey: ['api-schemas'] })
       queryClient.invalidateQueries({ queryKey: ['api-operations'] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
       queryClient.invalidateQueries({ queryKey: ['tools', currentOrganization?.id] })
@@ -123,7 +126,7 @@ export function ApisPage() {
       setUploadFile(null)
     },
     onError: (err: any) => {
-      error('Failed to import schema', err.response?.data?.message || err.message || 'Please try again.')
+      error('Failed to import schema', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -145,7 +148,7 @@ export function ApisPage() {
       }
     },
     onError: (err: any) => {
-      error('Failed to generate tools', err.response?.data?.message || 'Please try again.')
+      error('Failed to generate tools', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 

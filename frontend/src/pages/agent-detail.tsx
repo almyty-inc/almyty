@@ -40,6 +40,7 @@ import { InterfacesTab } from '@/components/agents/detail/interfaces-tab'
 import { PromotedSkillsTab } from '@/components/agents/detail/promoted-skills-tab'
 import { ConstraintsTab } from '@/components/agents/detail/constraints-tab'
 import { InvokeDialog } from '@/components/agents/detail/invoke-dialog'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 export function AgentDetailPage() {
   useEffect(() => {
@@ -72,7 +73,7 @@ export function AgentDetailPage() {
   const agent = agentData as Agent | undefined
 
   // Fetch executions
-  const { data: executionsData, error: executionsError } = useQuery({
+  const { data: executionsData, error: executionsError, refetch: refetchExecutions } = useQuery({
     queryKey: ['agent-executions', id],
     queryFn: async () => {
       const d = await agentsApi.getExecutions(id!, { limit: 20 })
@@ -147,7 +148,7 @@ export function AgentDetailPage() {
   // store via the workspace scope. We don't filter by agent_id here
   // because canonical scoping is per-workspace; the memory tab can
   // narrow client-side via tags or use search if needed.
-  const { data: memoriesData } = useQuery({
+  const { data: memoriesData, error: memoriesError, refetch: refetchMemories } = useQuery({
     queryKey: ['agent-memories', id, orgId],
     queryFn: async () => {
       if (!orgId) return []
@@ -164,7 +165,7 @@ export function AgentDetailPage() {
   const memories: Memory[] = Array.isArray(memoriesData) ? memoriesData : []
 
   // Fetch files
-  const { data: filesData } = useQuery({
+  const { data: filesData, error: filesError, refetch: refetchFiles } = useQuery({
     queryKey: ['agent-files', id],
     queryFn: async () => {
       const d = await filesApi.getAll({ agentId: id! })
@@ -227,7 +228,7 @@ export function AgentDetailPage() {
       if (copy?.id) navigate(`/agents/${copy.id}`)
     },
     onError: (err: any) => {
-      errorNotif('Duplicate Failed', err?.response?.data?.message || err?.message || 'Failed to duplicate')
+      errorNotif('Duplicate Failed', getApiErrorMessage(err, 'Failed to duplicate'))
     },
   })
 
@@ -246,7 +247,7 @@ export function AgentDetailPage() {
     onError: (err: any) => {
       errorNotif(
         'Could not activate',
-        err?.response?.data?.message || err?.message || 'Failed to activate this agent.',
+        getApiErrorMessage(err, 'Failed to activate this agent.'),
       )
     },
   })
@@ -266,7 +267,7 @@ export function AgentDetailPage() {
     onError: (err: any) => {
       errorNotif(
         'Could not deactivate',
-        err?.response?.data?.message || err?.message || 'Failed to deactivate this agent.',
+        getApiErrorMessage(err, 'Failed to deactivate this agent.'),
       )
     },
   })
@@ -383,6 +384,7 @@ export function AgentDetailPage() {
             agent={agent}
             executions={executions}
             executionsError={executionsError as Error | null}
+            onRetryExecutions={() => refetchExecutions()}
             versions={versions}
             entityVersions={entityVersions}
             auditLog={auditLog}
@@ -402,11 +404,13 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="memory" className="space-y-4">
-          <MemoryTab agentId={id!} memories={memories} />
+          {/* The tabs render QueryError when handed a failure; without
+              these props those branches were unreachable. */}
+          <MemoryTab agentId={id!} memories={memories} error={memoriesError} onRetry={() => refetchMemories()} />
         </TabsContent>
 
         <TabsContent value="files" className="space-y-4">
-          <FilesTab agentId={id!} files={files} />
+          <FilesTab agentId={id!} files={files} error={filesError} onRetry={() => refetchFiles()} />
         </TabsContent>
 
         <TabsContent value="interfaces" className="space-y-4">

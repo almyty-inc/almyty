@@ -12,6 +12,7 @@ import { toolHubApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { ToolTemplate } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface Provider {
   name: string
@@ -76,7 +77,7 @@ export function ToolHubPage() {
       success('Installed', 'Tool template installed successfully.')
     },
     onError: (err: any) => {
-      error('Install failed', err.response?.data?.message || err.message || 'Failed to install template.')
+      error('Install failed', getApiErrorMessage(err, 'Failed to install template.'))
     },
   })
 
@@ -88,7 +89,7 @@ export function ToolHubPage() {
       success('Installed', 'All tools from this provider installed successfully.')
     },
     onError: (err: any) => {
-      error('Install failed', err.response?.data?.message || err.message || 'Failed to install provider tools.')
+      error('Install failed', getApiErrorMessage(err, 'Failed to install provider tools.'))
     },
   })
 

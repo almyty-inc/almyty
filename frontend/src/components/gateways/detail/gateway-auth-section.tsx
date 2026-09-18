@@ -44,6 +44,7 @@ import {
 import { gatewaysApi } from '@/lib/api'
 import { useCopySensitive } from '@/lib/clipboard'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const AUTH_TYPE_LABELS: Record<string, string> = {
   api_key: 'API Key',
@@ -113,7 +114,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       setNewAuthConfig({})
     },
     onError: (err: any) => {
-      errorNotif('Failed to add auth config', err.response?.data?.message || 'Please try again')
+      errorNotif('Failed to add auth config', getApiErrorMessage(err, 'Please try again'))
     },
   })
 
@@ -126,7 +127,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       setDeleteAuthId(null)
     },
     onError: (err: any) => {
-      errorNotif('Failed to remove auth config', err.response?.data?.message || 'Please try again')
+      errorNotif('Failed to remove auth config', getApiErrorMessage(err, 'Please try again'))
     },
   })
 

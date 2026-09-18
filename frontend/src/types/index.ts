@@ -22,17 +22,6 @@ export enum UserRole {
   USER = 'user',
 }
 
-export interface LoginRequest {
-  email: string
-  password: string
-}
-
-export interface RegisterRequest {
-  email: string
-  password: string
-  name: string
-}
-
 export interface AuthResponse {
   user: User
   token: string
@@ -141,6 +130,15 @@ export interface Gateway {
   lastErrorAt?: string
   lastSuccessAt?: string
 
+  /**
+   * How many tools are assigned, on the LIST response only. The list used
+   * to hydrate every nested Tool -- 2,000 entities with their code and
+   * parameter schemas for a page of 20 gateways -- purely so the table
+   * could render `tools.length`. The list now returns a correlated COUNT
+   * and no `tools` array, so the count must be read from here; the detail
+   * response still carries the real `tools`.
+   */
+  toolCount?: number
   isHealthy: boolean
   isSystem?: boolean
   createdAt: string

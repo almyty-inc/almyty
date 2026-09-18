@@ -29,6 +29,7 @@ import { ExternalLink, TestTube, CheckCircle2, XCircle } from 'lucide-react'
 import { llmProvidersApi } from '@/lib/api'
 import { providerKeyUrls, providerTypeOptions, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
 import { BASE_URL_PRIVATE_HOST_HINT, structuralFieldsFor } from './schema'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface CreateProviderDialogProps {
   open: boolean
@@ -58,7 +59,7 @@ export function CreateProviderDialog({
       const res: any = await llmProvidersApi.testConnection(type, apiKey)
       setTestResult(res?.data ?? res)
     } catch (e: any) {
-      setTestResult({ ok: false, error: e?.response?.data?.message || e?.message || 'Test failed' })
+      setTestResult({ ok: false, error: getApiErrorMessage(e, 'Test failed') })
     } finally {
       setTesting(false)
     }

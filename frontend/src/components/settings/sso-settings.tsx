@@ -20,6 +20,7 @@ import { UpgradePrompt } from '@/components/plan-indicator'
 import { useNotifications } from '@/store/app'
 import { useCopySensitive } from '@/lib/clipboard'
 import { ssoApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 type Protocol = 'saml' | 'oidc'
 
@@ -102,7 +103,7 @@ function SsoSettingsForm() {
       await queryClient.invalidateQueries({ queryKey: ['sso-config'] })
     },
     onError: (err: any) =>
-      error('Failed to save', err.response?.data?.message || 'Please try again.'),
+      error('Failed to save', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const rotateTokenMutation = useMutation({
@@ -113,7 +114,7 @@ function SsoSettingsForm() {
       await queryClient.invalidateQueries({ queryKey: ['sso-config'] })
     },
     onError: (err: any) =>
-      error('Failed to generate token', err.response?.data?.message || 'Please try again.'),
+      error('Failed to generate token', getApiErrorMessage(err, 'Please try again.')),
   })
 
   if (isLoading) {

@@ -5,6 +5,8 @@ import { Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { onboardingApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
+import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { CORE_STEPS, useOnboarding } from './getting-started-card'
 
 const CORE_KEYS = CORE_STEPS.map((s) => s.key)
@@ -23,6 +25,7 @@ export function SetupPill({ collapsed }: SetupPillProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { currentOrganization } = useOrganizationStore()
+  const { error } = useNotifications()
   const orgId = currentOrganization?.id
   const { data: onboarding } = useOnboarding(orgId)
 
@@ -32,6 +35,13 @@ export function SetupPill({ collapsed }: SetupPillProps) {
       queryClient.invalidateQueries({ queryKey: ['onboarding', orgId] })
       navigate('/')
     },
+    // Without this the pill was a button that did nothing at all when
+    // the call was refused: no navigation, no card, no message.
+    onError: (err: unknown) =>
+      error(
+        'Could not reopen getting started',
+        getApiErrorMessage(err, 'Please try again.'),
+      ),
   })
 
   // Hidden once the org is really activated (criterion #6) or before data loads.

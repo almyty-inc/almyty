@@ -10,6 +10,8 @@ import {
   Combine,
   GitFork,
   Bot,
+  ShieldCheck,
+  FileSearch,
 } from 'lucide-react'
 import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
 
@@ -24,8 +26,15 @@ const ICONS: Record<PipelineNodeType, React.ElementType> = {
   merge: Combine,
   parallel: GitFork,
   sub_agent: Bot,
+  verify: ShieldCheck,
+  extract_context: FileSearch,
 }
 
+// What you can drag onto an empty canvas, which is deliberately narrower
+// than what the canvas can RENDER. `verify` and `extract_context` render
+// and carry their config — an ejected strategy graph needs that — but the
+// config panel has no editor for either yet, so offering them here would
+// hand someone a node they can add and cannot fill in.
 const NODE_ORDER: PipelineNodeType[] = [
   'input',
   'llm_call',

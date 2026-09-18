@@ -75,11 +75,16 @@ describe('canPublishHostedChat mirrors the backend', () => {
 })
 
 describe('HostedChatBuilder', () => {
+  /*
+    No costCapCents and no rateLimits on this fixture, because a Gateway
+    has neither. Passing them here is what let this suite stay green
+    while the page it covers was broken: gateway-detail read them off the
+    gateway through `as any`, got undefined both times, and Save was
+    disabled for every hosted chat app in the product.
+  */
   const gateway = (overrides: any = {}) => ({
     id: 'gw-1',
     configuration: { hostedChat: config() },
-    costCapCents: 500,
-    rateLimits: { perEndUser: 20, perIp: 60 },
     ...overrides,
   })
 
@@ -88,14 +93,21 @@ describe('HostedChatBuilder', () => {
     expect(screen.getByText('https://acme.almyty.app')).toBeInTheDocument()
   })
 
-  it('names the blocker when a public link has no cost cap', () => {
-    render(<HostedChatBuilder gateway={gateway({ costCapCents: null })} />)
-    const blockers = screen.getByRole('list', { name: 'Publish blockers' })
-    expect(blockers).toHaveTextContent(/needs a cost cap/)
+  it('does not list a blocker no screen can clear', () => {
+    render(<HostedChatBuilder gateway={gateway()} />)
+    expect(screen.queryByRole('list', { name: 'Publish blockers' })).toBeNull()
+    expect(screen.queryByText(/needs a cost cap/)).toBeNull()
+    expect(screen.queryByText(/per-visitor and a per-IP rate limit/)).toBeNull()
   })
 
-  it('will not let an unpublishable app be saved', () => {
-    render(<HostedChatBuilder gateway={gateway({ rateLimits: { perEndUser: null, perIp: null } })} />)
+  it('will not let an app be saved when the server would refuse it', () => {
+    render(
+      <HostedChatBuilder
+        gateway={gateway({ configuration: { hostedChat: config({ whiteLabel: true }) } })}
+      />,
+    )
+    const blockers = screen.getByRole('list', { name: 'Publish blockers' })
+    expect(blockers).toHaveTextContent(/white-label entitlement/)
     expect(screen.getByRole('button', { name: /Save chat app/ })).toBeDisabled()
   })
 

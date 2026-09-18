@@ -186,7 +186,7 @@ export function AgentsTab() {
         />
         <StatCard
           icon={Clock}
-          label="Avg Execution Time"
+          label="Avg Run Time"
           value={formatMs(agentStats.avgExecutionTime)}
         />
       </div>

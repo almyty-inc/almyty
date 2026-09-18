@@ -26,6 +26,7 @@ import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import type { Agent, PipelineNode, PipelineEdge } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
   { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } },
@@ -107,9 +108,13 @@ export function AgentBuilderPage() {
     enabled: isEditing,
   })
 
-  // Fetch available tools (for autonomous mode)
+  // Under the ['tools'] prefix, so a tool created or deleted on the
+  // tools page (which invalidates ['tools']) shows up here. This used
+  // to be a key of its own -- ['tools-list', orgId] -- that nothing
+  // invalidated, so a tool created with the toast "ready to assign to
+  // a gateway" was missing from this picker.
   const { data: rawTools } = useQuery({
-    queryKey: ['tools-list', currentOrganization?.id],
+    queryKey: ['tools', currentOrganization?.id, 'all'],
     queryFn: () => toolsApi.getAll(currentOrganization?.id),
     enabled: !!currentOrganization?.id,
   })
@@ -234,11 +239,22 @@ export function AgentBuilderPage() {
         errors.push('Pipeline must have at least one Output node')
       }
 
-      // Check that all LLM call nodes have a provider selected or a routing policy
+      // A model call has to say which model it uses, and there are three
+      // ways to say it: pin a provider, give a routing policy, or name a
+      // role and let the role be filled at run time.
+      //
+      // The third one was missing, and it is the one every compiled
+      // strategy uses. A graph ejected from the Execution tab carries
+      // `roleKey` and deliberately never a provider — that portability is
+      // the point of the layer — so opening one in the builder lit up an
+      // error per step and disabled Save, and the only way to clear it was
+      // to pin a provider and destroy what eject preserved. The backend
+      // accepts these nodes: the executor resolves `roleKey` and the
+      // pipeline validator has no llm_call case at all.
       const llmNodes = pipeline.nodes.filter((n) => n.type === 'llm_call')
       for (const llmNode of llmNodes) {
-        if (!llmNode.data?.providerId && !llmNode.data?.routing) {
-          errors.push(`Model Call node "${llmNode.id}" is missing a provider or a routing policy`)
+        if (!llmNode.data?.providerId && !llmNode.data?.routing && !llmNode.data?.roleKey) {
+          errors.push(`Model Call node "${llmNode.id}" is missing a provider, a routing policy, or a role`)
         }
       }
     } else {
@@ -336,7 +352,7 @@ export function AgentBuilderPage() {
       }
     },
     onError: (err: any) => {
-      errorNotif('Save Failed', err?.response?.data?.message || err?.message || 'Failed to save agent')
+      errorNotif('Save Failed', getApiErrorMessage(err, 'Failed to save agent'))
     },
   })
 

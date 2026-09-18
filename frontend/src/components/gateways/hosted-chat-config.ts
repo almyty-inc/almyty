@@ -84,9 +84,32 @@ export const HOSTED_CHAT_REFUSALS = {
   DISCLOSURE_REMOVAL_NOT_ENTITLED:
     'Removing the AI disclosure requires the white-label entitlement (EU AI Act Art. 50).',
   AUTH_MODE_NOT_ENTITLED: 'That sign-in method requires a commercial licence.',
+  WHITE_LABEL_NOT_ENTITLED:
+    'Removing the almyty mark requires the white-label entitlement.',
 } as const
 
 export type HostedChatRefusalCode = keyof typeof HOSTED_CHAT_REFUSALS
+
+/**
+ * The refusals the server actually enforces when a hosted-chat gateway is
+ * written. Mirrors ENTITLEMENT_REFUSALS in
+ * backend/src/modules/gateways/gateways.service.ts, and
+ * hosted-chat-save-gate.test.ts pins the two lists together.
+ *
+ * PUBLIC_LINK_NEEDS_COST_CAP and PUBLIC_LINK_NEEDS_RATE_LIMIT are
+ * deliberately not here. They depend on a cost cap and per-visitor /
+ * per-IP ceilings that a gateway has no field for -- costCapCents exists
+ * only on AgentApp -- so the server dropped them, and this page kept
+ * collecting them from two `as any` reads of properties that do not
+ * exist. Both were therefore permanently undefined, both refusals always
+ * fired, and Save was disabled for every hosted chat app with nothing an
+ * operator could set to clear it.
+ */
+export const SERVER_ENFORCED_REFUSALS: readonly HostedChatRefusalCode[] = [
+  'WHITE_LABEL_NOT_ENTITLED',
+  'DISCLOSURE_REMOVAL_NOT_ENTITLED',
+  'AUTH_MODE_NOT_ENTITLED',
+]
 
 export interface HostedChatPublishContext {
   costCapCents?: number | null
@@ -120,9 +143,30 @@ export function canPublishHostedChat(
 
   if (config.authMode === 'sso' && !context.hasEnterpriseAuth) refuse('AUTH_MODE_NOT_ENTITLED')
 
+  if (config.whiteLabel && !context.hasWhiteLabel) refuse('WHITE_LABEL_NOT_ENTITLED')
+
   // Null means "use the default line"; an empty string is a removal.
-  const removesDisclosure = config.aiDisclosure !== null && config.aiDisclosure.trim() === ''
+  const removesDisclosure =
+    typeof config.aiDisclosure === 'string' && config.aiDisclosure.trim() === ''
   if (removesDisclosure && !context.hasWhiteLabel) refuse('DISCLOSURE_REMOVAL_NOT_ENTITLED')
 
+  return { publishable: refusals.length === 0, refusals }
+}
+
+/**
+ * Whether this configuration can be saved, and why not.
+ *
+ * Two kinds of blocker, and nothing else: the slug, which is form
+ * validity the operator fixes in the field above, and the entitlement
+ * refusals the server enforces on write. A blocker the operator has no
+ * control over does not belong on a Save button.
+ */
+export function hostedChatSaveCheck(
+  config: HostedChatConfig,
+  context: Omit<HostedChatPublishContext, 'costCapCents' | 'perEndUserRateLimit' | 'perIpRateLimit'> = {},
+): HostedChatPublishCheck {
+  const refusals = canPublishHostedChat(config, context).refusals.filter(
+    (refusal) => refusal.code === 'SLUG_INVALID' || SERVER_ENFORCED_REFUSALS.includes(refusal.code),
+  )
   return { publishable: refusals.length === 0, refusals }
 }

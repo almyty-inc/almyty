@@ -31,6 +31,7 @@ import {
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { ApiCredential } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const CREDENTIAL_TYPE_LABELS: Record<string, string> = {
   API_KEY: 'API Key',
@@ -72,7 +73,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
       setNewCredConfig({})
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      errorNotif('Failed to add credential', err.response?.data?.message || 'Please try again')
+      errorNotif('Failed to add credential', getApiErrorMessage(err, 'Please try again'))
     },
   })
 
@@ -84,7 +85,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
       setDeleteId(null)
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      errorNotif('Failed to delete', err.response?.data?.message || 'Please try again')
+      errorNotif('Failed to delete', getApiErrorMessage(err, 'Please try again'))
     },
   })
 
@@ -94,7 +95,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
       success('Credential Valid', 'Test request succeeded')
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      errorNotif('Test Failed', err.response?.data?.message || 'Credential may be invalid')
+      errorNotif('Test Failed', getApiErrorMessage(err, 'Credential may be invalid'))
     },
   })
 

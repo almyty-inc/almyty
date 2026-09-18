@@ -485,7 +485,19 @@ function CollaborationConfig({ agentId, collaboration, onChange, availableAgents
             <Label htmlFor="autonomous-judge-agent" className="text-sm">Judge Agent</Label>
             <Select value={collaboration.judgeAgentId || ''} onValueChange={(v) => onChange({ ...collaboration, judgeAgentId: v })}>
               <SelectTrigger id="autonomous-judge-agent"><SelectValue placeholder="Select judge" /></SelectTrigger>
-              <SelectContent>{availableAgents.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}</SelectContent>
+              <SelectContent>
+                {/*
+                  Your first agent has no siblings, so on Debate/Parallel this
+                  select opened on an empty sliver. The three other selects on
+                  this card were given an empty state; this one was missed.
+                */}
+                {availableAgents.length === 0 && (
+                  <div data-testid="no-judge-agents" className="px-3 py-2 text-sm text-muted-foreground">
+                    No other agents yet — create a second agent to judge this one's output.
+                  </div>
+                )}
+                {availableAgents.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+              </SelectContent>
             </Select>
           </div>
           {collaboration.strategy === 'debate' && (

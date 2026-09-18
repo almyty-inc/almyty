@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
   Send,
   RotateCcw,
@@ -34,8 +35,10 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { llmProvidersApi, toolsApi } from '@/lib/api'
+import { formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'tool'
@@ -61,6 +64,7 @@ export function ChatPage() {
   }, [])
 
   const { currentOrganization } = useOrganizationStore()
+  const navigate = useNavigate()
   const notifications = useNotifications()
 
   // Provider state
@@ -212,7 +216,7 @@ export function ChatPage() {
     } catch (err: any) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `Error: ${err.response?.data?.message || err.message || 'Failed to get response'}`,
+        content: `Error: ${getApiErrorMessage(err, 'Failed to get response')}`,
         timestamp: new Date().toISOString(),
       }])
     } finally {
@@ -242,12 +246,18 @@ export function ChatPage() {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)]">
         <Bot className="h-16 w-16 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold mb-2">No AI Models Configured</h2>
+        <h2 className="text-xl font-semibold mb-2">No models configured</h2>
         <p className="text-muted-foreground text-center max-w-md mb-4">
-          To start chatting, configure at least one AI model provider (OpenAI, Anthropic, etc.) in the AI Models page.
+          {/* The screen this points at is called Models in the sidebar and
+              lives at /models; "the AI Models page" named a screen that does
+              not exist. */}
+          To start chatting, configure at least one model provider (OpenAI,
+          Anthropic, etc.) on the Models page.
         </p>
-        <Button onClick={() => window.location.href = '/llm-providers'}>
-          Configure AI Models
+        {/* A full page reload to /llm-providers only to be redirected to
+            /models?tab=providers threw the SPA away for no reason. */}
+        <Button onClick={() => navigate('/models?tab=providers')}>
+          Configure models
         </Button>
       </div>
     )
@@ -279,7 +289,7 @@ export function ChatPage() {
               >
                 <div className="truncate">{session.title}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                  {session.providerName} · {new Date(session.createdAt).toLocaleDateString()}
+                  {session.providerName} · {formatDate(session.createdAt)}
                 </div>
               </button>
             ))

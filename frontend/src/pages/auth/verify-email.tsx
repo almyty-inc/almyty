@@ -5,6 +5,7 @@ import { CheckCircle2, XCircle } from 'lucide-react'
 import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 type State = 'verifying' | 'success' | 'error'
 
@@ -38,8 +39,10 @@ export function VerifyEmailPage() {
         if (cancelled) return
         setState('error')
         setMessage(
-          err?.response?.data?.message ||
+          getApiErrorMessage(
+            err,
             'This verification link is invalid or has expired. Request a new one from your account.',
+          ),
         )
       })
     return () => {

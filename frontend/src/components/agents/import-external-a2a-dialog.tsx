@@ -27,6 +27,7 @@ import {
 import { externalAgentsApi, credentialsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import type { VaultCredential } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const previewSchema = z.object({
   url: z.string().url('Must be a valid URL'),
@@ -67,7 +68,7 @@ export function ImportExternalA2ADialog({ open, onOpenChange }: ImportExternalA2
       setPreviewData(data)
     },
     onError: (err: any) => {
-      errorNotif('Preview Failed', err?.response?.data?.message || err?.message || 'Could not fetch agent card')
+      errorNotif('Preview Failed', getApiErrorMessage(err, 'Could not fetch agent card'))
     },
   })
 
@@ -85,7 +86,7 @@ export function ImportExternalA2ADialog({ open, onOpenChange }: ImportExternalA2
       handleClose()
     },
     onError: (err: any) => {
-      errorNotif('Import Failed', err?.response?.data?.message || err?.message || 'Failed to import agent')
+      errorNotif('Import Failed', getApiErrorMessage(err, 'Failed to import agent'))
     },
   })
 
