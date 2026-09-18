@@ -3,6 +3,28 @@ import { vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeAll, afterAll } from 'vitest'
 
+// Node 22+ ships its own experimental `localStorage` global, and from Node 26
+// it is present by default. It THROWS unless the process was started with
+// --localstorage-file, and because it is a global it shadows the working one
+// jsdom puts on `window`. So any code writing bare `localStorage.getItem(...)`
+// -- which is most of it -- reaches Node's broken global rather than jsdom's,
+// and every suite that touches such a store dies at import.
+//
+// In a browser `globalThis.localStorage` and `window.localStorage` are the
+// same object. This restores that, so the tests exercise what ships.
+if (typeof window !== 'undefined' && globalThis.localStorage !== window.localStorage) {
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: window.localStorage,
+    configurable: true,
+    writable: true,
+  })
+  Object.defineProperty(globalThis, 'sessionStorage', {
+    value: window.sessionStorage,
+    configurable: true,
+    writable: true,
+  })
+}
+
 // Cleanup after each test
 afterEach(() => {
   cleanup()
