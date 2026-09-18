@@ -326,7 +326,6 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     RunnerModule,
     ApprovalsModule,
     AgentAppsModule,
-    RunnerModule,
     WorkspaceModule,
     LicensingModule,
     BudgetsModule,

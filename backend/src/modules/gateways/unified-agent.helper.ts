@@ -260,7 +260,23 @@ export class UnifiedAgentHelper {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    // The engine cancels cooperatively on options.signal, and
+    // agent-execution.controller has always wired one to the request. This
+    // path never did: a client that walked away -- Ctrl-C in the chat REPL,
+    // a dropped connection -- left the pipeline running to completion,
+    // writing every event into a dead socket and spending the whole way,
+    // with nobody left to read the answer.
+    const abort = new AbortController();
+    let clientAlive = true;
+    const markClosed = () => {
+      clientAlive = false;
+      if (!abort.signal.aborted) abort.abort();
+    };
+    res.req?.on('close', markClosed);
+    res.req?.on('aborted', markClosed);
+
     const onEvent = (event: StreamEvent) => {
+      if (!clientAlive) return;
       const data = JSON.stringify(event);
       res.write(`event: ${event.type}\ndata: ${data}\n\n`);
     };
@@ -273,9 +289,12 @@ export class UnifiedAgentHelper {
         input: body.input || body,
         variables: body.variables,
         metadata: body.metadata,
+        signal: abort.signal,
       },
       onEvent,
     );
+
+    if (!clientAlive) return;
 
     res.write(
       `event: done\ndata: ${JSON.stringify({ executionId: execution.id, status: execution.status })}\n\n`,

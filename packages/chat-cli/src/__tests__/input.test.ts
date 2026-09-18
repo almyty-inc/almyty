@@ -26,7 +26,7 @@ import {
   walkHistory,
 } from '../history.js';
 import { continuationOf, isSlashCommand, joinSubmission, classifyInput } from '../commands.js';
-import { columns, estimateLines, selectWindow, usableRows, MIN_COLUMNS, MIN_ROWS } from '../viewport.js';
+import { columns, displayWidth, estimateLines, selectWindow, usableRows, MIN_COLUMNS, MIN_ROWS } from '../viewport.js';
 
 describe('persistent history', () => {
   let dir: string;
@@ -184,6 +184,36 @@ describe('viewport', () => {
     const paragraph = 'x'.repeat(300);
     expect(estimateLines(paragraph, 40)).toBeGreaterThan(estimateLines(paragraph, 80));
     expect(estimateLines('one\ntwo', 80)).toBe(3);
+  });
+
+  it('measures a line in terminal columns, not UTF-16 units', () => {
+    // A transcript in Japanese or Chinese estimated half its real height,
+    // so the window packed twice what fits and ink drew a frame taller
+    // than the terminal. Every wide character is two columns.
+    expect(displayWidth('hello')).toBe(5);
+    expect(displayWidth('日本語')).toBe(6);
+    expect(displayWidth('안녕하세요')).toBe(10);
+    // An astral emoji is two UTF-16 units and two columns, not four.
+    expect(displayWidth('🚀')).toBe(2);
+    // Combining marks and variation selectors take no columns of their own.
+    expect(displayWidth('é')).toBe(1);
+    expect(displayWidth('❤️')).toBe(1);
+  });
+
+  it('costs a wide-character paragraph the rows it really takes', () => {
+    const cjk = '日'.repeat(60);
+    const latin = 'x'.repeat(60);
+    expect(estimateLines(cjk, 80)).toBe(estimateLines(latin.repeat(2), 80));
+    expect(estimateLines(cjk, 80)).toBeGreaterThan(estimateLines(latin, 80));
+  });
+
+  it('hides more of a wide-character transcript than a Latin one at the same size', () => {
+    const rows = 12;
+    const cjk = Array.from({ length: 30 }, () => ({ text: '日'.repeat(100) }));
+    const latin = Array.from({ length: 30 }, () => ({ text: 'a'.repeat(100) }));
+    const wide = selectWindow(cjk, { rows, cols: 80 });
+    const narrow = selectWindow(latin, { rows, cols: 80 });
+    expect(wide.endIdx - wide.startIdx).toBeLessThan(narrow.endIdx - narrow.startIdx);
   });
 
   it('shows the newest messages and counts what it hid', () => {

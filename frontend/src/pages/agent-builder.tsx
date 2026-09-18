@@ -235,7 +235,14 @@ export function AgentBuilderPage() {
     }
 
     if (agentMode === 'workflow') {
-      errors.push(...validateWorkflowGraph(pipeline.nodes as GraphNode[], pipeline.edges as GraphEdge[]))
+      errors.push(
+        ...validateWorkflowGraph(pipeline.nodes as GraphNode[], pipeline.edges as GraphEdge[], {
+          // An organization default makes a bare Model Call node legitimate:
+          // the engine resolves it, and the server's validator never had an
+          // llm_call rule to begin with.
+          hasDefaultRouting: Boolean(currentOrganization?.settings?.defaultRouting),
+        }),
+      )
     } else {
       // Autonomous mode validation
       if (!agentInstructions.trim()) {
@@ -247,7 +254,7 @@ export function AgentBuilderPage() {
     }
 
     return errors
-  }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes, pipeline.edges])
+  }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
 
   const canSave = validationErrors.length === 0
 
@@ -455,6 +462,9 @@ export function AgentBuilderPage() {
         />
       ) : (
         <CanvasArea
+          // Restores the position the graph was saved at. buildPipeline has
+          // always written this and nothing read it back.
+          savedViewport={agentData?.pipeline?.viewport}
           nodes={pipeline.nodes}
           edges={pipeline.edges}
           onNodesChange={pipeline.onNodesChange}
