@@ -69,9 +69,9 @@ for quick identification.
 | **LLM Call** | Sends a prompt to an LLM provider and returns the response |
 | **Tool Call** | Invokes a tool with explicit parameter mapping |
 | **Condition** | Branches the pipeline based on a boolean expression (true/false edges) |
-| **Transform** | Runs sandboxed JavaScript to reshape data |
-| **Loop** | Iterates over an array, running child nodes for each item |
-| **Parallel** | Executes multiple branches simultaneously and aggregates results |
+| **Transform** | Renders a `{{...}}` template and outputs the resulting text |
+| **Loop** | Resolves an expression to an array and outputs it, capped |
+| **Parallel** | Marks a fan-out point; the branches wired to it run together |
 | **Merge** | Combines outputs from multiple upstream nodes into a single value |
 | **Sub-Agent** | Invokes another agent as a step in this pipeline |
 

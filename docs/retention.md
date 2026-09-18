@@ -5,8 +5,7 @@ event data. One `retention_policies` row per org; each `*Days` field is a
 number of days, and **null means keep forever**, which is the default for
 every class. An org with no policy row is never swept.
 
-Configured under Settings → Data Retention, or
-`PUT /retention/:organizationId`.
+Configured under Settings → Data Retention, or over the API with `GET`/`PUT /organizations/:organizationId/retention`.
 
 ## The classes
 
@@ -29,20 +28,17 @@ need the history out of the product rather than gone, `audit_export`
 (Business and above) pulls a full window as CSV or JSON, and can stream
 to a SIEM.
 
-## Why the two newest classes matter
-
-`tool_executions` and `notifications` were the only per-event tables with
-no sweep at all while every sibling had one, so they grew for the life of
-the deployment.
+## The two classes worth setting first
 
 `tool_executions` grows fastest in bytes: a tool returning a 2MB payload
-once a minute writes roughly 2.8GB a day that nothing deleted.
-`notifications` grows slowly but relentlessly — a permanently broken
-five-minute schedule writes 288 rows a day, forever, and schedules do
-break.
+once a minute writes roughly 2.8GB a day, and nothing deletes it while the
+field is null. `notifications` grows slowly but relentlessly — a
+permanently broken five-minute schedule writes 288 rows a day, forever,
+and schedules do break.
 
-Both default to null, so nothing changes for an existing install until
-somebody sets a window.
+Like every other class, both default to null. Unlimited growth is the
+default for all seven; these two are simply the ones where it costs the
+most.
 
 ## Per-app retention
 
