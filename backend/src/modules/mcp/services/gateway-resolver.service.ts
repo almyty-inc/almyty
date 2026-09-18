@@ -182,9 +182,21 @@ export class GatewayResolverService {
       // MCP spec: include WWW-Authenticate header with resource_metadata URL on 401
       const wwwAuthenticate = this.buildWwwAuthenticateHeader(gateway, orgSlugOrId);
 
+      const reason = auth.error || 'Authentication failed';
+      const errorCode = auth.errorCode || 'AUTH_FAILED';
+
+      // `message` is not decoration. HttpException derives its own
+      // `message` from the payload and falls back to the class name when
+      // the payload has no `message` key — so this payload used to make
+      // `exception.message === 'Http Exception'`, which is the string the
+      // client was shown and the string written to
+      // `request_logs.errorMessage` for every refused gateway request.
+      // The filter also strips `error` from the forwarded details, so
+      // without this the human-readable reason existed nowhere.
       const error: any = {
-        error: auth.error || 'Authentication failed',
-        errorCode: auth.errorCode || 'AUTH_FAILED',
+        message: reason,
+        error: reason,
+        errorCode,
       };
 
       const exception = new HttpException(error, statusCode);
@@ -193,6 +205,22 @@ export class GatewayResolverService {
       if (wwwAuthenticate && statusCode === HttpStatus.UNAUTHORIZED) {
         (exception as any).wwwAuthenticate = wwwAuthenticate;
       }
+
+      // Diagnostics for the request log, deliberately NOT on the payload:
+      // which auth config refused is an answer for us, not something to
+      // hand an unauthenticated caller.
+      (exception as any).errorCode = errorCode;
+      (exception as any).authDiagnostics = {
+        authConfigId: auth.authConfigId ?? null,
+        authConfigType: auth.authConfigType ?? null,
+        triedConfigCount: auth.triedConfigCount ?? null,
+        gatewayId: gateway.id,
+      };
+
+      this.logger.warn(
+        `Gateway auth refused: org=${orgSlugOrId} gateway=${gateway.name} ` +
+          `code=${errorCode} authConfig=${auth.authConfigId ?? 'none'} status=${statusCode}`,
+      );
 
       throw exception;
     }

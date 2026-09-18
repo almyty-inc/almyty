@@ -194,7 +194,7 @@ export function ToolExecutionDialog({
 
                 {executionResult.success ? (
                   <div className="space-y-2">
-                    <div className="bg-green-50 border border-green-200 rounded p-3">
+                    <div className="bg-green-50 border border-green-200 dark:bg-green-500/10 dark:border-green-500/30 rounded p-3">
                       <pre className="text-xs overflow-x-auto">
                         {JSON.stringify(executionResult.data, null, 2)}
                       </pre>
@@ -207,9 +207,9 @@ export function ToolExecutionDialog({
                     )}
                   </div>
                 ) : (
-                  <div className="bg-red-50 border border-red-200 rounded p-3">
-                    <p className="text-sm text-red-900 font-medium">Error:</p>
-                    <p className="text-xs text-red-700 mt-1">{executionResult.error}</p>
+                  <div className="bg-red-50 border border-red-200 dark:bg-destructive/10 dark:border-destructive/30 rounded p-3">
+                    <p className="text-sm text-red-900 dark:text-red-200 font-medium">Error:</p>
+                    <p className="text-xs text-red-700 dark:text-red-300 mt-1">{executionResult.error}</p>
                   </div>
                 )}
               </div>

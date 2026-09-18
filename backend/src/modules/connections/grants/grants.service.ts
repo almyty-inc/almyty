@@ -331,11 +331,30 @@ export class GrantsService {
    * `connections:manage` may revoke (but never add) grants on a
    * user-scoped connection so an admin can stop sharing without being
    * able to hand out someone's secret.
+   *
+   * `expectedConnectionId`, when given, binds the grant to the connection it
+   * was addressed through. The controller used to check that binding AFTER
+   * calling revoke -- so a member addressing connection X could revoke a grant
+   * belonging to connection Y and have it actually removed and audited while
+   * the API answered 404. Both ids are org-checked so this was never
+   * cross-tenant, but the UI and the audit log disagreed about what happened.
+   * The check now runs before anything is removed.
    */
-  async revoke(grantId: string, actor: ConnectionPrincipal, organizationId?: string): Promise<GrantView> {
+  async revoke(
+    grantId: string,
+    actor: ConnectionPrincipal,
+    organizationId?: string,
+    expectedConnectionId?: string,
+  ): Promise<GrantView> {
     const row = await this.grants.findOne({ where: { id: grantId } });
     if (!row || (organizationId && row.organizationId !== organizationId)) {
       throw new NotFoundException({ code: 'GRANT_NOT_FOUND', message: 'grant not found' });
+    }
+    if (expectedConnectionId && row.connectionId !== expectedConnectionId) {
+      throw new NotFoundException({
+        code: 'GRANT_NOT_FOUND',
+        message: 'grant does not belong to this connection',
+      });
     }
     const connection = await this.loadConnection(row.connectionId, organizationId);
     const principal = await this.principalFor(actor, connection.organizationId);

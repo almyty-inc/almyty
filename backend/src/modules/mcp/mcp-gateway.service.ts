@@ -121,7 +121,11 @@ export class McpGatewayService {
         },
       },
       isActive: true,
-      endpoint: `/api/mcp/servers/${this.generateServerId()}`,
+      // Persisted on the server record and handed to clients, so an '/api'
+      // prefix here is wrong everywhere it is read: the api host does not
+      // strip it, and the hosts that do strip it have already stripped it
+      // before Express sees the request.
+      endpoint: `/mcp/servers/${this.generateServerId()}`,
       metadata: serverData.metadata,
     };
 

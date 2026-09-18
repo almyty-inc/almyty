@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { ModelDeployment } from '../../../entities/model-deployment.entity';
@@ -153,5 +156,36 @@ describe('ModelDeploymentsService', () => {
 
     credentialRefs.resolve.mockRejectedValueOnce(Object.assign(new Error('inactive'), { code: 'CREDENTIAL_INACTIVE' }));
     await expect(withRefs.credentialsFor(d)).rejects.toMatchObject({ code: 'CREDENTIAL_INACTIVE' });
+  });
+
+  it('refuses a catalog card that is not this organization’s, and wires the repository that checks it', async () => {
+    // `--card <id>` on `almyty models deploy` lands here as dto.modelId.
+    // It used to be saved unchecked: a typo produced a deployment that
+    // reached ready and lit nothing up, and an id from another
+    // organization went onto the row.
+    const models = { findOne: jest.fn(async ({ where }: any) => (where.id === 'm-1' && where.organizationId === 'org-1' ? { id: 'm-1' } : null)) };
+    const withCards = new ModelDeploymentsService(
+      deployments, versions, credentials, queue, registry, envelope,
+      { log: jest.fn(async () => null) } as any, undefined, undefined, models as any,
+    );
+
+    await expect(
+      withCards.create('org-1', 'u-1', { modelVersionId: 'v-1', providerType: 'stub', providerConfig: { token: 'valid' }, modelId: 'm-other' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(models.findOne).toHaveBeenCalledWith({ where: { id: 'm-other', organizationId: 'org-1' } });
+    expect(deployments.save).not.toHaveBeenCalled();
+
+    const ok = await withCards.create('org-1', 'u-1', { modelVersionId: 'v-1', providerType: 'stub', providerConfig: { token: 'valid' }, modelId: 'm-1' });
+    expect(ok.modelId).toBe('m-1');
+  });
+
+  it('the module hands the service that repository, so the card check is not dead code', () => {
+    // The parameter is @Optional() only so the positional constructions in
+    // these specs keep compiling. If the module stopped providing Model,
+    // every check above would pass while the server checked nothing.
+    const service = readFileSync(join(__dirname, '..', 'model-deployments.service.ts'), 'utf-8');
+    expect(service).toMatch(/@InjectRepository\(Model\)[^\n]*models\?: Repository<Model>/);
+    const module = readFileSync(join(__dirname, '..', 'model-deployments.module.ts'), 'utf-8');
+    expect(module).toMatch(/forFeature\(\[[^\]]*\bModel\b[^\]]*\]\)/);
   });
 });

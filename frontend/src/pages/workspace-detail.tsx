@@ -22,6 +22,7 @@ import { workspacesApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { workspaceStatusVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface Workspace {
   id: string
@@ -48,7 +49,14 @@ export function WorkspaceDetailPage() {
     queryKey: ['workspace', id],
     queryFn: () => workspacesApi.getById(id),
     enabled: !!id,
-    refetchInterval: RUNNER_HEARTBEAT_POLL_MS,
+    // released, expired and stranded are all terminal -- "stranded =
+    // stranded", there is no migration back -- so a bare interval kept
+    // polling a workspace that can never change again for as long as
+    // the tab stayed open.
+    refetchInterval: (query) =>
+      !query.state.data || query.state.data.status === 'active'
+        ? RUNNER_HEARTBEAT_POLL_MS
+        : false,
   })
 
   useEffect(() => {
@@ -64,7 +72,7 @@ export function WorkspaceDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['workspace', id] })
       queryClient.invalidateQueries({ queryKey: ['workspaces'] })
     },
-    onError: (err: any) => errNotif('Release failed', err?.response?.data?.message ?? err.message),
+    onError: (err: any) => errNotif('Release failed', getApiErrorMessage(err)),
   })
 
   if (wsQuery.isLoading) {

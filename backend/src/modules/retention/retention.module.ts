@@ -10,7 +10,6 @@ import { UsageMetric } from '../../entities/usage-metric.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { Notification } from '../../entities/notification.entity';
-import { Gateway } from '../../entities/gateway.entity';
 import { AgentApp } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 
@@ -36,7 +35,6 @@ import { RetentionController } from './retention.controller';
       // service directly with mock repos, so it could not see this.
       ToolExecution,
       Notification,
-      Gateway,
       AgentApp,
       AppDistribution,
     ]),

@@ -17,9 +17,12 @@ import {
 } from '@/components/ui/dialog'
 
 import { promotedSkillsApi } from '@/lib/api'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
 import type { PromotedSkill } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface PromotedSkillsTabProps {
   agentId: string
@@ -30,7 +33,7 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
   const { success, error: errorNotif } = useNotifications()
   const [viewing, setViewing] = useState<PromotedSkill | null>(null)
 
-  const { data, isLoading } = useQuery<PromotedSkill[]>({
+  const { data, isLoading, isError, error, refetch } = useQuery<PromotedSkill[]>({
     queryKey: ['promoted-skills'],
     queryFn: () => promotedSkillsApi.list(),
   })
@@ -43,14 +46,14 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
       success('Skill deleted')
       queryClient.invalidateQueries({ queryKey: ['promoted-skills'] })
     },
-    onError: (e: any) => errorNotif('Delete failed', e?.response?.data?.message || e?.message),
+    onError: (e: any) => errorNotif('Delete failed', getApiErrorMessage(e)),
   })
 
   const replayMutation = useMutation({
     mutationFn: (id: string) => promotedSkillsApi.replay(id),
     onSuccess: (res: any) =>
       success('Replay started', res?.runId ? `Run ${res.runId} is running` : undefined),
-    onError: (e: any) => errorNotif('Replay failed', e?.response?.data?.message || e?.message),
+    onError: (e: any) => errorNotif('Replay failed', getApiErrorMessage(e)),
   })
 
   return (
@@ -72,10 +75,17 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
           <div className="flex justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
+        ) : isError ? (
+          // Without this a failed fetch looked exactly like a brand-new agent
+          // with nothing promoted yet -- the user was told to go promote a run
+          // they had already promoted.
+          <QueryError error={error} onRetry={() => refetch()} title="Couldn't load promoted skills" />
         ) : skills.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            No promoted skills yet. Promote a completed run from the Runs tab.
-          </p>
+          <EmptyState
+            icon={Sparkles}
+            title="No promoted skills yet"
+            description="Promote a completed run from the Runs tab and it becomes a reusable skill other agents can call."
+          />
         ) : (
           <div className="overflow-x-auto">
             <Table>

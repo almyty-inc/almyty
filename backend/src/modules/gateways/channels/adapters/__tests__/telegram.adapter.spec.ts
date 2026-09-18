@@ -46,6 +46,7 @@ describe('TelegramAdapter', () => {
 
   describe('sendResponse', () => {
     it('POSTs to bot{token}/sendMessage with chat_id', async () => {
+      fetchMock.setNextResponse({ json: { ok: true, result: { message_id: 9 } } });
       await adapter.sendResponse(
         { bot_token: '123:abc' },
         { text: 'hi' },
@@ -54,9 +55,36 @@ describe('TelegramAdapter', () => {
       expect(fetchMock.calls[0].url).toBe('https://api.telegram.org/bot123:abc/sendMessage');
       expect(parseSentJson(fetchMock.calls[0])).toEqual({ chat_id: 555, text: 'hi' });
     });
-    it('swallows errors', async () => {
+
+    /**
+     * Every Bot API answer carries `ok`, and a refusal puts the reason
+     * in `description`. Discarding the body meant a bot blocked by the
+     * user, or a chat id that no longer exists, was recorded as a
+     * delivered reply.
+     */
+    it('refuses a response with ok:false and keeps Telegram\'s description', async () => {
+      fetchMock.setNextResponse({
+        ok: false,
+        status: 403,
+        json: { ok: false, error_code: 403, description: 'Forbidden: bot was blocked by the user' },
+      });
+      await expect(
+        adapter.sendResponse({ bot_token: 't' }, { text: 'x' }, { chatId: 1 }),
+      ).rejects.toThrow(/bot was blocked by the user/);
+    });
+
+    it('refuses a 200 that confirms nothing', async () => {
+      fetchMock.setNextResponse({ ok: true, status: 200, json: {} });
+      await expect(
+        adapter.sendResponse({ bot_token: 't' }, { text: 'x' }, { chatId: 1 }),
+      ).rejects.toThrow(/did not confirm/);
+    });
+
+    it('does not swallow a network failure', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('x'));
-      await expect(adapter.sendResponse({ bot_token: 't' }, { text: 'x' }, { chatId: 1 })).resolves.toBeUndefined();
+      await expect(
+        adapter.sendResponse({ bot_token: 't' }, { text: 'x' }, { chatId: 1 }),
+      ).rejects.toThrow('x');
     });
   });
 });

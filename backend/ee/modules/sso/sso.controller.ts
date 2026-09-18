@@ -7,16 +7,12 @@ import {
   Query,
   Req,
   Res,
-  UseGuards,
   Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 
 import { Public } from '../../../src/common/decorators/public.decorator';
-import { EntitlementGuard } from '../../../src/modules/licensing/guards/entitlement.guard';
-import { RequiresEntitlement } from '../../../src/modules/licensing/decorators/requires-entitlement.decorator';
-import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 import { AuthService } from '../../../src/modules/auth/auth.service';
 import { SsoService } from './sso.service';
 import { SsoConfigService } from './sso-config.service';

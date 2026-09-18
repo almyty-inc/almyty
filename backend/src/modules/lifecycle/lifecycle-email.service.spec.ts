@@ -298,4 +298,19 @@ describe('LifecycleEmailService', () => {
     expect(service.verifyUnsubToken('garbage')).toBeNull();
     expect(service.verifyUnsubToken('')).toBeNull();
   });
+
+  it('rejects a multi-byte signature instead of throwing', () => {
+    // /lifecycle/unsubscribe is @Public() and hands whatever is in the
+    // query string to this method, so a signature of the right character
+    // length but the wrong BYTE length must return null, not blow up.
+    // `timingSafeEqual` throws RangeError on mismatched byte lengths,
+    // which surfaced as a 500 on an endpoint that is supposed to render
+    // the same neutral page for every input.
+    const multiByte = 'é'.repeat(16); // 16 chars, 32 bytes
+    expect(multiByte.length).toBe(16);
+    expect(Buffer.from(multiByte, 'utf8').length).toBe(32);
+
+    expect(() => service.verifyUnsubToken(`${USER_ID}.${multiByte}`)).not.toThrow();
+    expect(service.verifyUnsubToken(`${USER_ID}.${multiByte}`)).toBeNull();
+  });
 });

@@ -113,7 +113,13 @@ export function CatalogTab() {
     return out
   }, [providers])
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: MODELS_QUERY_KEY })
+  // Invalidate the whole ['models'] prefix, not just the catalog key.
+  // ['models','selectable'] (the routing policy editor) and
+  // ['models','names'] (the agent Overview) are siblings of
+  // ['models','catalog'], not descendants, so a catalog-only invalidate
+  // never reached them -- and validation is exactly what flips a card
+  // to selectable, which the toast promises.
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['models'] })
 
   const registerEndpoint = useMutation({
     mutationFn: (body: RegisterEndpointBody) => modelsApi.registerEndpoint(body),

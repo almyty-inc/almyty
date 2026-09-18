@@ -2,6 +2,7 @@ import { A2AAgentCardService } from '../a2a-agent-card.service';
 import { Gateway, GatewayType, GatewayKind } from '../../../entities/gateway.entity';
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 import { Organization } from '../../../entities/organization.entity';
+import { A2A_PROTOCOL_VERSION } from '../types/a2a-spec.types';
 
 describe('A2AAgentCardService', () => {
   let service: A2AAgentCardService;
@@ -170,7 +171,7 @@ describe('A2AAgentCardService', () => {
     expect(card.capabilities?.pushNotifications).toBe(false);
   });
 
-  it('should include supportedInterfaces with jsonrpc binding', () => {
+  it('should include supportedInterfaces with the JSONRPC binding and a protocol version', () => {
     const card = service.buildAgentCard(
       makeGateway(),
       makeAgent(),
@@ -178,7 +179,50 @@ describe('A2AAgentCardService', () => {
       'https://api.example.com',
     );
     expect(card.supportedInterfaces).toBeDefined();
-    expect(card.supportedInterfaces![0].protocolBinding).toBe('jsonrpc');
-    expect(card.supportedInterfaces![0].url).toBe('https://api.example.com/test-org/test-a2a');
+    // A2A v1.0 AgentInterface: url + protocolBinding + protocolVersion, with
+    // the binding name drawn from the JSONRPC / GRPC / HTTP+JSON set.
+    expect(card.supportedInterfaces[0].protocolBinding).toBe('JSONRPC');
+    expect(card.supportedInterfaces[0].url).toBe('https://api.example.com/test-org/test-a2a');
+    expect(card.supportedInterfaces[0].protocolVersion).toBe(A2A_PROTOCOL_VERSION);
+  });
+
+  it('should report the agent version, not the protocol version, in `version`', () => {
+    const card = service.buildAgentCard(
+      makeGateway(),
+      makeAgent({ version: '3.7.1' } as any),
+      makeOrg(),
+      'https://api.example.com',
+    );
+    // AgentCard.version is the agent's own version. The protocol version is a
+    // separate field and from v1.0 lives on each supported interface.
+    expect(card.version).toBe('3.7.1');
+    expect(card.version).not.toBe(A2A_PROTOCOL_VERSION);
+  });
+
+  it('should always emit a description, which is required on AgentCard', () => {
+    const card = service.buildAgentCard(
+      makeGateway(),
+      makeAgent({ description: null } as any),
+      makeOrg(),
+      'https://api.example.com',
+    );
+    // An undefined description makes the whole card invalid to a conforming
+    // client, so an agent without one still gets a generated sentence.
+    expect(typeof card.description).toBe('string');
+    expect(card.description.length).toBeGreaterThan(0);
+  });
+
+  it('should emit security schemes as ProtoJSON oneof members', () => {
+    const gw = makeGateway({
+      authConfigs: [
+        { id: 'auth-1', type: 'jwt' as any, isActive: true, configuration: {} } as any,
+      ],
+    });
+    const card = service.buildAgentCard(gw, makeAgent(), makeOrg(), 'https://api.example.com');
+    const scheme: any = Object.values(card.securitySchemes!)[0];
+    // proto `SecurityScheme` is a oneof, so ProtoJSON keys it by the member
+    // that is set rather than by an OpenAPI-style `type` discriminator.
+    expect(scheme.httpAuthSecurityScheme).toEqual({ scheme: 'bearer', bearerFormat: 'JWT' });
+    expect(scheme.type).toBeUndefined();
   });
 });

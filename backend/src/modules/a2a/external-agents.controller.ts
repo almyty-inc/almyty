@@ -15,6 +15,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { ExternalAgentsService } from './external-agents.service';
 import {
   PreviewExternalAgentDto,
@@ -23,7 +25,17 @@ import {
 } from './dto/external-agent.dto';
 
 @Controller('external-agents')
-@UseGuards(JwtAuthGuard)
+// Was JwtAuthGuard-only, so a `viewer` (permissions ['read',
+// 'connections:read']) could create, repoint, refresh or delete an external
+// agent. Repointing one's URL is a data-exfiltration primitive: the org's own
+// agents then call an attacker-chosen endpoint with whatever they pass it.
+// Roles mirror the dashboard sibling agents.controller.ts -- reads at viewer+,
+// create/update/delete at member+ -- with the two routes that fetch a remote
+// URL server-side (preview, refresh) held at member+ as well.
+//
+// RolesGuard returns true when neither @Roles nor @Permissions is present, so
+// the guard is inert without the per-route decorator.
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ExternalAgentsController {
   constructor(private readonly externalAgentsService: ExternalAgentsService) {}
 
@@ -43,6 +55,7 @@ export class ExternalAgentsController {
   }
 
   @Post('preview')
+  @Roles('member', 'admin', 'owner')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async preview(@Request() req: any, @Body() body: PreviewExternalAgentDto) {
     const orgId = this.requireOrg(req);
@@ -52,6 +65,7 @@ export class ExternalAgentsController {
   }
 
   @Post()
+  @Roles('member', 'admin', 'owner')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async create(@Request() req: any, @Body() body: CreateExternalAgentDto) {
     const orgId = this.requireOrg(req);
@@ -60,6 +74,7 @@ export class ExternalAgentsController {
   }
 
   @Get()
+  @Roles('viewer', 'member', 'admin', 'owner')
   async findAll(@Request() req: any) {
     const orgId = this.requireOrg(req);
     const agents = await this.externalAgentsService.findAll(orgId);
@@ -67,6 +82,7 @@ export class ExternalAgentsController {
   }
 
   @Get(':id')
+  @Roles('viewer', 'member', 'admin', 'owner')
   async findOne(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     const orgId = this.requireOrg(req);
     const agent = await this.externalAgentsService.findById(id, orgId);
@@ -74,6 +90,7 @@ export class ExternalAgentsController {
   }
 
   @Patch(':id')
+  @Roles('member', 'admin', 'owner')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async update(
     @Request() req: any,
@@ -86,6 +103,7 @@ export class ExternalAgentsController {
   }
 
   @Delete(':id')
+  @Roles('member', 'admin', 'owner')
   async remove(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     const orgId = this.requireOrg(req);
     await this.externalAgentsService.delete(id, orgId);
@@ -93,6 +111,7 @@ export class ExternalAgentsController {
   }
 
   @Post(':id/refresh')
+  @Roles('member', 'admin', 'owner')
   async refresh(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     const orgId = this.requireOrg(req);
     const agent = await this.externalAgentsService.refreshCard(id, orgId);

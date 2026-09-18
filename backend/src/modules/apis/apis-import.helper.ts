@@ -77,11 +77,26 @@ export class ApisImportHelper {
 
       this.toolGen.logMemoryPhase('after-parse');
 
+      // Upsert the API schema row on (apiId, version) instead of
+      // inserting unconditionally. The import job is enqueued with
+      // attempts: 3 and tool generation runs after this transaction
+      // commits, so a failure there retries the whole import from the
+      // top — an unconditional insert leaves two or three copies of
+      // the raw spec (7-12 MB each on Stripe/GitHub) for one version,
+      // and every version-pinned read then resolves to an arbitrary
+      // one. `api_schemas_api_version_uq` is the database backstop.
+      const existingSchema = await queryRunner.manager.findOne(ApiSchema, {
+        where: { apiId, version: parsedSchema.version },
+        select: { id: true },
+        order: { createdAt: 'ASC' },
+      });
+
       // Create API schema record. processedSchema is no longer
       // persisted — the parsed form is rebuilt on demand from
       // rawSchema via the on-demand parse endpoint when the UI
       // asks for it.
       const apiSchema = this.apiSchemaRepository.create({
+        ...(existingSchema ? { id: existingSchema.id } : {}),
         apiId,
         version: parsedSchema.version,
         rawSchema: schemaContent,
@@ -208,6 +223,38 @@ export class ApisImportHelper {
           } catch { /* progress is best-effort */ }
         }
       }
+
+      // Resources get the same re-import identity resolution the
+      // operations above get. Without it every attempt inserted a
+      // fresh set of rows with new UUIDs, so a retried import — or a
+      // plain re-import — multiplied the resource rows and orphaned
+      // whatever pointed at the previous ids.
+      //
+      // Key on (type, name) and consume each existing row at most
+      // once. The protobuf parser walks nested messages by their
+      // short name, so one .proto legitimately yields two resources
+      // called `Options`; a multiset match maps N incoming duplicates
+      // onto the N existing rows instead of collapsing them. That is
+      // also why there is no unique index on (apiId, name, type):
+      // the schema's own identity there is positional and the
+      // database cannot express it without dropping valid rows.
+      const existingResourceIds = new Map<string, string[]>();
+      const priorResources = await queryRunner.manager.find(Resource, {
+        where: { apiId },
+        select: { id: true, name: true, type: true },
+        order: { createdAt: 'ASC' },
+      });
+      for (const res of priorResources) {
+        const key = `${res.type}:${res.name}`;
+        const bucket = existingResourceIds.get(key);
+        if (bucket) bucket.push(res.id);
+        else existingResourceIds.set(key, [res.id]);
+      }
+      for (const res of resources) {
+        const reuse = existingResourceIds.get(`${res.type}:${res.name}`)?.shift();
+        if (reuse) (res as any).id = reuse;
+      }
+
       const savedResources: Resource[] = [];
       for (let i = 0; i < resources.length; i += SAVE_CHUNK) {
         await this.toolGen.awaitHeapHeadroom();

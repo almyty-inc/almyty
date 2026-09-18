@@ -9,6 +9,7 @@ import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const resetSchema = z
   .object({
@@ -56,8 +57,10 @@ export function ResetPasswordPage() {
       setDone(true)
     } catch (err: any) {
       setSubmitError(
-        err?.response?.data?.message ||
+        getApiErrorMessage(
+          err,
           'This reset link is invalid or has expired. Request a new one below.',
+        ),
       )
     }
   }
@@ -130,7 +133,7 @@ export function ResetPasswordPage() {
               )}
             </button>
             {errors.password && (
-              <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.password.message}</p>
             )}
           </div>
         </div>
@@ -147,7 +150,7 @@ export function ResetPasswordPage() {
               className={errors.confirmPassword ? 'border-red-300' : ''}
             />
             {errors.confirmPassword && (
-              <p className="mt-2 text-sm text-red-600">
+              <p className="mt-2 text-sm text-destructive">
                 {errors.confirmPassword.message}
               </p>
             )}

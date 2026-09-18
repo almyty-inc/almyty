@@ -295,9 +295,23 @@ export class CredentialRefResolver {
   }
 
   /**
-   * Mirror a consumer's own health probe onto the credential so the
-   * connections list shows what the provider health check found.
-   * Best-effort: a missing row is ignored.
+   * Stamp the outcome of a health probe on a credential.
+   *
+   * A partial UPDATE of the four health columns, never a save() of the
+   * loaded row. The row is read at the top of the probe and written at
+   * the bottom, and `config` holds the encrypted secret in between: a
+   * key rotated inside that window was committed by the user and then
+   * overwritten by this write, because save() diffs its stale copy
+   * against the row and writes every differing column back. The entity
+   * does no @AfterLoad decryption, so the stale value is valid
+   * ciphertext and the revert is silent — a key rotated because it
+   * leaked would be quietly reinstated by a background health check.
+   * Same reason the provider row one layer up is written with a scoped
+   * update.
+   *
+   * Org-scoped in the WHERE so a probe can never touch another org's
+   * credential, and the row-missing case is a no-op rather than an
+   * error (the credential may have been deleted mid-probe).
    */
   async recordHealth(
     organizationId: string,
@@ -306,13 +320,16 @@ export class CredentialRefResolver {
     error?: string | null,
   ): Promise<void> {
     if (!credentialId) return;
-    const credential = await this.credentials.findOne({ where: { id: credentialId, organizationId } });
-    if (!credential) return;
-    credential.healthStatus = status;
-    credential.healthCheckedAt = new Date();
-    credential.healthError = error ?? null;
-    credential.lastUsedAt = new Date();
-    await this.credentials.save(credential);
+    const now = new Date();
+    await this.credentials.update(
+      { id: credentialId, organizationId },
+      {
+        healthStatus: status,
+        healthCheckedAt: now,
+        healthError: error ?? null,
+        lastUsedAt: now,
+      },
+    );
   }
 
   /** Load a row of this org or throw CREDENTIAL_NOT_FOUND. */

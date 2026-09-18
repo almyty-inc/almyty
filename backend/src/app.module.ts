@@ -69,7 +69,6 @@ import { ApisModule } from './modules/apis/apis.module';
 import { ToolsModule } from './modules/tools/tools.module';
 import { McpSourcesModule } from './modules/mcp-sources/mcp-sources.module';
 import { GatewaysModule } from './modules/gateways/gateways.module';
-// import { MonitoringModule } from './modules/monitoring/monitoring.module'; // TODO: Create this module
 import { SchemaParserModule } from './modules/schema-parser/schema-parser.module';
 import { JsonSchemaTranslatorModule } from './modules/json-schema-translator/json-schema-translator.module';
 import { LlmProvidersModule } from './modules/llm-providers/llm-providers.module';
@@ -327,7 +326,6 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     RunnerModule,
     ApprovalsModule,
     AgentAppsModule,
-    RunnerModule,
     WorkspaceModule,
     LicensingModule,
     BudgetsModule,

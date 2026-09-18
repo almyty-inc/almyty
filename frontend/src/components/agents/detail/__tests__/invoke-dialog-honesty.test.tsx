@@ -70,7 +70,7 @@ describe('the invoke dialog reports what actually happened', () => {
     await waitFor(() => expect(notify.success).toHaveBeenCalled())
     expect(await screen.findByTestId('invoke-output-text')).toHaveTextContent('Hello, I can help with that')
     // The full record is still reachable, just not presented as the answer.
-    expect(screen.getByText(/Full execution record/i)).toBeInTheDocument()
+    expect(screen.getByText(/Full run record/i)).toBeInTheDocument()
   })
 
   it('says so when a run completes having produced nothing', async () => {

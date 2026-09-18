@@ -11,9 +11,8 @@ interface OrganizationState {
   initializeFromUser: (user: User) => void
   fetchOrganizations: () => Promise<void>
   setCurrentOrganization: (org: Organization) => void
-  createOrganization: (data: { name: string; description?: string }) => Promise<Organization>
-  updateOrganization: (id: string, data: Partial<Organization>) => Promise<void>
-  deleteOrganization: (id: string) => Promise<void>
+  upsertOrganization: (org: Organization) => void
+  removeOrganization: (id: string) => void
 }
 
 export const useOrganizationStore = create<OrganizationState>()(
@@ -71,56 +70,44 @@ export const useOrganizationStore = create<OrganizationState>()(
     set({ currentOrganization: org })
   },
 
-  createOrganization: async (data: { name: string; description?: string }) => {
-    try {
-      const response = await organizationsApi.create(data)
-      const newOrg = response
-      
-      set(state => ({
-        organizations: [...state.organizations, newOrg],
-        currentOrganization: state.currentOrganization || newOrg,
-      }))
-      
-      return newOrg
-    } catch (error) {
-      throw error
-    }
+  // Reconcilers, not request makers. React Query owns the HTTP call and
+  // the server cache; this store owns the user's selection, which is
+  // persisted to localStorage and read back by the axios interceptor to
+  // stamp X-Organization-Id on every request. A rename or a delete that
+  // only invalidates a query key therefore leaves the switcher, this
+  // page's own heading and that header pointing at the old -- or a
+  // deleted -- organization, so every mutation has to push the result
+  // in here as well.
+  upsertOrganization: (org: Organization) => {
+    set(state => {
+      const exists = state.organizations.some(o => o.id === org.id)
+      const organizations = exists
+        ? state.organizations.map(o => (o.id === org.id ? { ...o, ...org } : o))
+        : [...state.organizations, org]
+
+      let currentOrganization = state.currentOrganization
+      if (currentOrganization?.id === org.id) {
+        currentOrganization = { ...currentOrganization, ...org }
+      } else if (!currentOrganization && !exists) {
+        currentOrganization = org
+      }
+
+      return { organizations, currentOrganization }
+    })
   },
 
-  updateOrganization: async (id: string, data: Partial<Organization>) => {
-    try {
-      const response = await organizationsApi.update(id, data)
-      const updatedOrg = response
-      
-      set(state => ({
-        organizations: state.organizations.map(org =>
-          org.id === id ? updatedOrg : org
-        ),
+  removeOrganization: (id: string) => {
+    set(state => {
+      const remainingOrgs = state.organizations.filter(org => org.id !== id)
+      return {
+        organizations: remainingOrgs,
+        // Never leave the selection on an organization the server no
+        // longer has: the interceptor would keep talking to it.
         currentOrganization: state.currentOrganization?.id === id
-          ? updatedOrg
+          ? remainingOrgs[0] || null
           : state.currentOrganization,
-      }))
-    } catch (error) {
-      throw error
-    }
-  },
-
-  deleteOrganization: async (id: string) => {
-    try {
-      await organizationsApi.delete(id)
-
-      set(state => {
-        const remainingOrgs = state.organizations.filter(org => org.id !== id)
-        return {
-          organizations: remainingOrgs,
-          currentOrganization: state.currentOrganization?.id === id
-            ? remainingOrgs[0] || null
-            : state.currentOrganization,
-        }
-      })
-    } catch (error) {
-      throw error
-    }
+      }
+    })
   },
     }),
     {

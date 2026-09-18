@@ -7,6 +7,7 @@ import { AgentTemplateResolver, ExecutionContext } from './agent-template-resolv
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
+import { partsToText } from '../a2a/a2a-part.mapper';
 import { NodeExecutionOptions, NodeExecutionResult } from './agent-node-executor';
 
 /**
@@ -47,10 +48,27 @@ export class AgentSubAgentExecutors {
       throw new Error(`Max nesting depth (${maxDepth}) exceeded at node '${node.id}'`);
     }
 
-    // Resolve input mapping
+    // Resolve the input mapping.
+    //
+    // The builder writes this as an array of {key, value} rows; a pipeline
+    // written by hand against the API may use a plain object. Reading it
+    // with Object.entries alone turned an array into ["0", {key, value}]:
+    // the child agent was invoked with a numeric key whose value was the
+    // row object itself, so the template never reached the resolver and
+    // arrived at the child as the literal text "{{input.message}}".
+    // tool_call's parameterMapping has always accepted both shapes; this
+    // reads the same way.
     const subInput: Record<string, any> = {};
-    if (inputMapping) {
-      for (const [key, template] of Object.entries(inputMapping)) {
+    const mappingEntries: Array<[string, any]> = !inputMapping
+      ? []
+      : Array.isArray(inputMapping)
+        ? inputMapping.map((m: any) => [m?.key, m?.value])
+        : Object.entries(inputMapping);
+    // A row added in the builder and left blank is not a mapping.
+    const usableEntries = mappingEntries.filter(([key]) => typeof key === 'string' && key !== '');
+
+    if (usableEntries.length > 0) {
+      for (const [key, template] of usableEntries) {
         if (typeof template === 'string') {
           subInput[key] = this.templateResolver.resolve(template, context);
         } else {
@@ -165,23 +183,18 @@ export class AgentSubAgentExecutors {
 
     const rpcResponse = await this.a2aClientService.sendMessage(externalAgent, text);
     const executionTime = Date.now() - startTime;
-
-    // Extract text from A2A response
+    // Extract text from A2A response. `p.type` was the v0.1.x draft
+    // discriminator and matches no released version of the spec: v0.2/v0.3
+    // use `kind`, v1.0 discriminates by which member of the `content` oneof
+    // is present. Reading it meant every remote agent's answer fell through
+    // to the raw JSON-RPC envelope. partsToText handles all three dialects.
     let output: any = rpcResponse;
     if (rpcResponse?.result) {
       const task = rpcResponse.result;
-      // Try to extract text from artifacts or status message
       if (task.artifacts?.length) {
-        const textParts = task.artifacts
-          .flatMap((a: any) => a.parts || [])
-          .filter((p: any) => p.type === 'text')
-          .map((p: any) => p.text);
-        output = textParts.length === 1 ? textParts[0] : textParts.join('\n');
+        output = partsToText(task.artifacts.flatMap((a: any) => a.parts || []));
       } else if (task.status?.message?.parts?.length) {
-        const textParts = task.status.message.parts
-          .filter((p: any) => p.type === 'text')
-          .map((p: any) => p.text);
-        output = textParts.length === 1 ? textParts[0] : textParts.join('\n');
+        output = partsToText(task.status.message.parts);
       }
     } else if (rpcResponse?.error) {
       throw new Error(`A2A call failed: ${rpcResponse.error.message || JSON.stringify(rpcResponse.error)}`);

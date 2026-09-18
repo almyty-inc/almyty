@@ -121,12 +121,9 @@ describe('ChatLayout', () => {
   });
 
   it('should not merge palette descriptions across lines', () => {
+    const commands = ['agents', 'tools', 'help', 'clear', 'quit'];
     const { lastFrame } = render(
-      <ChatLayout
-        messages={[]}
-        showPalette
-        paletteCommands={['agents', 'tools', 'help', 'clear', 'quit']}
-      />
+      <ChatLayout messages={[]} showPalette paletteCommands={commands} />
     );
     const frame = lastFrame()!;
 
@@ -136,12 +133,11 @@ describe('ChatLayout', () => {
     expect(frame).not.toContain('exitar');
     expect(frame).not.toContain('quitr');
 
-    // Each description should be intact
-    expect(frame).toContain('browse and switch agents');
-    expect(frame).toContain('show available tools');
-    expect(frame).toContain('show commands');
-    expect(frame).toContain('clear conversation');
-    expect(frame).toContain('exit');
+    // Each description should be intact. Read from the table rather
+    // than copied, so rewording a description does not fail this.
+    for (const cmd of commands) {
+      expect(frame, `/${cmd} description garbled`).toContain(COMMAND_DESCS[cmd]!);
+    }
   });
 
   it('should wrap long agent text instead of truncating', () => {

@@ -1,7 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -9,7 +8,6 @@ import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity
 import { Gateway } from '../../entities/gateway.entity';
 import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
-import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 import { compileSafeRegex, boundRegexInput } from '../../common/security/regex-safety';
 
 import { GatewayAuthValidators } from './gateway-auth-validators.helper';
@@ -95,6 +93,20 @@ export interface AuthenticationResult {
   organizationId?: string;
   error?: string;
   errorCode?: string;
+  /**
+   * Which gateway_auths row decided this outcome — the config that
+   * accepted the request, or on a refusal the one whose rejection is
+   * being reported. A gateway commonly has several required configs and
+   * only the last error used to survive, so a support ticket ("my key
+   * stopped working") had no way to say *which* of the gateway's auth
+   * methods refused. Never forwarded to the client; it goes to the log
+   * line and `request_logs.metadata`.
+   */
+  authConfigId?: string;
+  /** Auth type of `authConfigId` (api_key, oauth2, jwt, ...). */
+  authConfigType?: string;
+  /** How many required configs were tried before giving up. */
+  triedConfigCount?: number;
   metadata?: Record<string, any>;
 }
 
@@ -120,13 +132,8 @@ export class GatewayAuthService {
     private gatewayAuthRepository: Repository<GatewayAuth>,
     @InjectRepository(Gateway)
     private gatewayRepository: Repository<Gateway>,
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
     @InjectRepository(ApiKey)
     private apiKeyRepository: Repository<ApiKey>,
-    @InjectRepository(OAuthAccessToken)
-    private oauthAccessTokenRepository: Repository<OAuthAccessToken>,
-    private jwtService: JwtService,
     private readonly validators: GatewayAuthValidators,
   ) {}
 
@@ -296,28 +303,48 @@ export class GatewayAuthService {
         };
       }
 
-      // Try each required auth method — any one succeeding is enough
+      // Try each required auth method — any one succeeding is enough.
+      // Which config decided is carried out with the result: keeping only
+      // `lastError` answered "it was refused" but never "by what", which
+      // is the first question on an auth support ticket.
       let lastError = 'No valid authentication provided';
       let lastErrorCode = 'NO_AUTH';
+      let decidingConfigId: string | undefined;
+      let decidingConfigType: string | undefined;
 
       for (const authConfig of requiredConfigs) {
         const result = await this.validators.validateAuthConfig(authConfig, headers, query, body, clientIp);
 
         if (result.isValid) {
-          return result;
+          return {
+            ...result,
+            authConfigId: result.authConfigId ?? authConfig.id,
+            authConfigType: result.authConfigType ?? authConfig.type,
+            triedConfigCount: requiredConfigs.length,
+          };
         }
 
         if (result.error) {
           lastError = result.error;
           lastErrorCode = result.errorCode || 'AUTH_FAILED';
+          decidingConfigId = authConfig.id;
+          decidingConfigType = authConfig.type;
         }
       }
 
       // All required auth methods failed
+      this.logger.warn(
+        `Gateway ${gatewayId} auth refused: ${lastErrorCode} by config ` +
+          `${decidingConfigId ?? 'none'} (${decidingConfigType ?? 'n/a'}) ` +
+          `after ${requiredConfigs.length} required config(s)`,
+      );
       return {
         isValid: false,
         error: lastError,
         errorCode: lastErrorCode,
+        authConfigId: decidingConfigId,
+        authConfigType: decidingConfigType,
+        triedConfigCount: requiredConfigs.length,
       };
 
     } catch (error) {

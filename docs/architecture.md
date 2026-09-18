@@ -1,717 +1,297 @@
-# LLM Tool Gateway - Technical Architecture & Implementation Plan
+# almyty — system architecture
 
-## Technology Stack
+How the system is put together: the layers, what lives in each, and the paths a
+request takes through them. This is a map, not a tutorial and not a plan. Where
+a subsystem has its own design doc, this page says what it is and where it sits
+and then points there rather than restating it.
 
-### Backend (NestJS + TypeScript)
-- **Framework**: NestJS 10+ with TypeScript
-- **Database**: PostgreSQL with TypeORM
-- **Caching**: Redis for session management and caching
-- **Authentication**: Passport.js with JWT + OAuth strategies
-- **Validation**: class-validator with JSON Schema integration
-- **API Documentation**: Swagger/OpenAPI
-- **Monitoring**: Prometheus + Grafana
-- **Message Queue**: Bull/BullMQ with Redis
+The authoritative answer to any specific number or list is the code. Module
+lists and counts here are the kind of thing that drifts, so each one names the
+file you can count it in.
 
-### Frontend (React + shadcn/ui)
-- **Framework**: React 18+ with TypeScript
-- **UI Library**: shadcn/ui + Tailwind CSS
-- **State Management**: Zustand or Redux Toolkit
-- **Forms**: React Hook Form with Zod validation
-- **Data Fetching**: TanStack Query (React Query)
-- **Routing**: React Router v6
-- **Charts**: Recharts or Chart.js
+## Shape
 
-### Infrastructure & DevOps
-- **Containerization**: Docker + Docker Compose
-- **Orchestration**: Kubernetes (optional for production)
-- **CI/CD**: GitHub Actions
-- **Testing**: Jest + Supertest (backend), Vitest + Testing Library (frontend)
-- **Code Quality**: ESLint, Prettier, Husky
-
-## Core System Architecture
+Two deployables and two stateful services.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    LLM Tool Gateway                         │
-├─────────────────────────────────────────────────────────────┤
-│  Frontend (React + shadcn/ui)                              │
-├─────────────────────────────────────────────────────────────┤
-│  API Gateway Layer                                          │
-│  ├─ Authentication & Authorization                          │
-│  ├─ Rate Limiting & Throttling                             │
-│  └─ Request/Response Logging                               │
-├─────────────────────────────────────────────────────────────┤
-│  Business Logic Layer (NestJS)                             │
-│  ├─ User Management Service                                │
-│  ├─ Organization Management Service                        │
-│  ├─ API Schema Processing Service                          │
-│  ├─ JSON Schema Translation Service                        │
-│  ├─ Tool Generation Service                                │
-│  ├─ Gateway Management Service                             │
-│  ├─ LLM Provider Integration Service                       │
-│  └─ Monitoring & Analytics Service                         │
-├─────────────────────────────────────────────────────────────┤
-│  Data Access Layer                                         │
-│  ├─ Repository Pattern (TypeORM)                           │
-│  └─ Database Migrations                                     │
-├─────────────────────────────────────────────────────────────┤
-│  External Integrations                                      │
-│  ├─ Schema Parsers (OpenAPI, GraphQL, SOAP, Protobuf)     │
-│  ├─ LLM Providers (OpenAI, Anthropic, etc.)               │
-│  └─ External APIs (user-configured)                        │
-├─────────────────────────────────────────────────────────────┤
-│  Infrastructure Layer                                       │
-│  ├─ PostgreSQL Database                                    │
-│  ├─ Redis Cache                                            │
-│  └─ Message Queue                                          │
-└─────────────────────────────────────────────────────────────┘
+                    +------------------------------------+
+   browser  ------>  |  frontend (React + Vite)          |
+                    |  nginx in production                |
+                    +------------------------------------+
+                                   | JSON over HTTPS
+                                   | httpOnly cookie auth
+                                   v
+  MCP / A2A / UTCP  +------------------------------------+
+  Skills / OpenAI   |  backend (NestJS)                  |
+  clients  ------>  |                                     |
+                    |  controllers -> services -> TypeORM |
+                    |  BullMQ producers + processors      |
+                    +------------------------------------+
+                        |                |            |
+                        v                v            v
+                  PostgreSQL 16      Redis 7     outbound:
+                  (+ pgvector)    (cache+queue)  LLM vendors,
+                                                 user APIs,
+                                                 runners
 ```
 
-## Phase 1: Foundation & Authentication (Weeks 1-2)
+The backend is the only thing that talks to the database, the queue, LLM
+vendors and user-configured APIs. The frontend holds no secrets and no tokens:
+it calls the backend with `withCredentials: true` and the browser carries an
+httpOnly cookie. Nothing writes a token to `localStorage` — the Zustand persist
+`partialize` config deliberately omits the token field, and
+`store/__tests__/auth.logout.test.ts` asserts it is absent from the persisted
+payload, because anything in `localStorage` is readable by any script that gets
+onto the page.
 
-### 1.1 Project Setup
-```bash
-# Backend setup
-npx @nestjs/cli new llm-tool-gateway-backend
-cd llm-tool-gateway-backend
+## Stack, as it is
 
-# Add core dependencies
-npm install @nestjs/typeorm typeorm pg
-npm install @nestjs/passport passport passport-jwt passport-local
-npm install @nestjs/jwt @nestjs/config
-npm install class-validator class-transformer
-npm install bcryptjs uuid
-npm install @nestjs/swagger swagger-ui-express
+Read from `backend/package.json`, `frontend/package.json` and the Dockerfiles
+rather than from memory; the majors below are what those files pin today.
 
-# Frontend setup
-npx create-react-app llm-tool-gateway-frontend --template typescript
-cd llm-tool-gateway-frontend
+**Backend** — NestJS 11, TypeScript, TypeORM against PostgreSQL 16 (the
+`pgvector/pgvector:pg16` image, because the memory module stores embeddings),
+Redis 7 for cache and as the BullMQ backing store. Auth is Passport JWT over an
+httpOnly cookie with bcrypt password hashing. Validation is class-validator
+through a global `ValidationPipe` with `whitelist` and `forbidNonWhitelisted`
+both on, so an unknown field in a request body is a 400 rather than something
+silently dropped — which is why adding a field to an entity means adding it to
+the DTO too. `helmet` and `cookie-parser` are installed globally in
+`backend/src/main.ts`, and CORS is explicit. Swagger serves at `/docs` but is **fail-closed**: the route is not mounted at all unless `SWAGGER_ENABLED` is exactly `true`, so a deployment that forgets the variable does not publish its full route and DTO surface to anonymous callers. Health
+lives at `/health`, `/health/live` and `/health/ready` via
+`@nestjs/terminus`. The container listens on 3000.
 
-# Add frontend dependencies
-npm install @tanstack/react-query react-router-dom
-npm install @hookform/resolvers react-hook-form zod
-npm install zustand axios
-npx shadcn-ui@latest init
-```
+**Frontend** — React with Vite, TypeScript, shadcn/ui over Radix primitives
+with Tailwind, Zustand for client state and TanStack Query for server state,
+TanStack Table for tables, react-hook-form with zod resolvers for forms,
+`@xyflow/react` for the agent builder canvas, Recharts for analytics. Dev
+server on 3002; production is a static build served by nginx on 8080.
 
-### 1.2 Database Setup & Core Entities
-- Set up PostgreSQL with Docker Compose
-- Implement User, Organization, UserOrganization entities
-- Create database migrations
-- Set up TypeORM configuration
+**Infrastructure** — multi-stage Dockerfiles on `node:*-alpine` with an
+nginx-alpine stage for the frontend, `docker-compose.yml` for local (postgres,
+redis, backend, frontend, nginx), a Kustomize base under `k8s/base`, and
+GitHub Actions for CI.
 
-### 1.3 Authentication System
-```typescript
-// auth.module.ts
-@Module({
-  imports: [
-    JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '24h' },
-    }),
-    PassportModule,
-    UsersModule,
-  ],
-  providers: [AuthService, LocalStrategy, JwtStrategy],
-  controllers: [AuthController],
-  exports: [AuthService],
-})
-export class AuthModule {}
+Ports, in one place:
 
-// jwt.strategy.ts
-@Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(
-    @InjectRepository(User)
-    private usersRepository: Repository<User>,
-  ) {
-    super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET,
-    });
-  }
+| Service | Host (dev) | Container |
+|---|---|---|
+| Backend | 4000 | 3000 |
+| Frontend | 3002 | 8080 (nginx) |
+| PostgreSQL | 5432 | 5432 |
+| Redis | 6379 | 6379 |
 
-  async validate(payload: any) {
-    const user = await this.usersRepository.findOne({
-      where: { id: payload.sub },
-      relations: ['organizationMemberships', 'organizationMemberships.organization'],
-    });
-    return user;
-  }
-}
-```
+## The domain, in one line
 
-### 1.4 RBAC System
-```typescript
-// Role-based access control decorators
-export const RequirePermissions = (...permissions: Permission[]) =>
-  SetMetadata('permissions', permissions);
+almyty turns **APIs into tools**, composes tools into **agents** that are not
+tied to one model, and serves those agents out over **protocols and chat
+channels**. The last link is the one that matters: an agent is reachable from
+an MCP client, a coding harness, a Slack thread and an HTTP call without being
+rebuilt for each.
 
-@Injectable()
-export class PermissionsGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const requiredPermissions = this.reflector.get<Permission[]>('permissions', context.getHandler());
-    if (!requiredPermissions) return true;
+That yields the four nouns everything else hangs off:
 
-    const request = context.switchToHttp().getRequest();
-    const user = request.user;
-    
-    return this.hasPermissions(user, requiredPermissions);
-  }
-}
-```
+- **API** — an imported schema (OpenAPI, GraphQL, SOAP, Protobuf, SDK). Parsing
+  lives in `modules/schema-parser`, one parser per format.
+- **Tool** — one callable operation. Generated from an API operation, or
+  authored directly as HTTP, JavaScript, GraphQL, LLM-backed or SDK. Execution
+  and the sandbox are in `modules/tools`; JavaScript tools run in a
+  `worker_threads` sandbox, not in the request process.
+- **Agent** — a graph of nodes, or an autonomous loop. `modules/agents`.
+- **Gateway** — a published surface. `modules/gateways`.
 
-## Phase 2: API Schema Processing (Weeks 3-4)
+## Backend module map
 
-### 2.1 Schema Parser Architecture
-```typescript
-// schema-parser.interface.ts
-export interface SchemaParser {
-  parseSchema(rawSchema: string): Promise<ParsedSchema>;
-  validateSchema(schema: string): Promise<boolean>;
-  extractOperations(schema: ParsedSchema): Promise<Operation[]>;
-  extractModels(schema: ParsedSchema): Promise<ResourceModel[]>;
-}
+`backend/src/modules/` is the unit of organization; `backend/src/entities/`
+holds the TypeORM entities (count them there — it is well past what any doc has
+claimed). Grouped by what they are for:
 
-// parsers/openapi.parser.ts
-@Injectable()
-export class OpenAPIParser implements SchemaParser {
-  async parseSchema(rawSchema: string): Promise<ParsedSchema> {
-    const swaggerParser = new SwaggerParser();
-    const api = await swaggerParser.validate(JSON.parse(rawSchema));
-    
-    return {
-      version: api.openapi || api.swagger,
-      info: api.info,
-      servers: api.servers,
-      paths: api.paths,
-      components: api.components,
-    };
-  }
-}
+**Identity and tenancy** — `auth` (JWT, registration, login, OAuth), `users`,
+`organizations` (multi-tenancy and RBAC), `approvals`, `audit-log`,
+`licensing`, `kms`, `referrals`, `onboarding`.
 
-// parsers/graphql.parser.ts
-@Injectable() 
-export class GraphQLParser implements SchemaParser {
-  async parseSchema(rawSchema: string): Promise<ParsedSchema> {
-    const schema = buildSchema(rawSchema);
-    const typeMap = schema.getTypeMap();
-    
-    return {
-      types: this.extractTypes(typeMap),
-      queries: this.extractQueries(schema.getQueryType()),
-      mutations: this.extractMutations(schema.getMutationType()),
-      subscriptions: this.extractSubscriptions(schema.getSubscriptionType()),
-    };
-  }
-}
-```
+**Building blocks** — `apis`, `schema-parser`, `json-schema-translator`,
+`tools`, `tool-hub` (catalog and discovery), `files`, `versions` (universal
+entity versioning), `promoted-skills`.
 
-### 2.2 JSON Schema Translation Layer
-```typescript
-// json-schema-translator.service.ts
-@Injectable()
-export class JsonSchemaTranslatorService {
-  translateOpenAPIToJsonSchema(openApiSchema: any): JSONSchema7 {
-    // Convert OpenAPI schema to JSON Schema
-    return {
-      type: 'object',
-      properties: this.convertProperties(openApiSchema.properties),
-      required: openApiSchema.required || [],
-      additionalProperties: false,
-    };
-  }
+**Agents** — `agents` (CRUD, the DAG execution engine, the autonomous step
+processor, scheduler, webhooks, and the OpenAI- and Anthropic-compatible
+endpoints), `agent-constraints`, `memory` (agent memory and embeddings),
+`agent-apps` (the `/apps` factory: products, builds, signing, distributions).
 
-  translateGraphQLToJsonSchema(graphqlType: GraphQLType): JSONSchema7 {
-    // Convert GraphQL type to JSON Schema
-    if (isScalarType(graphqlType)) {
-      return this.convertScalarType(graphqlType);
-    }
-    if (isObjectType(graphqlType)) {
-      return this.convertObjectType(graphqlType);
-    }
-    // ... handle other GraphQL types
-  }
+**Serving** — `gateways` (CRUD, auth enforcement, protocol serving, the unified
+endpoint, and the chat channel adapters), `mcp` (MCP and UTCP controllers, the
+MCP OAuth 2.1 server, transports), `a2a`, `acp`, `mcp-sources`.
 
-  translateProtobufToJsonSchema(protobufMessage: any): JSONSchema7 {
-    // Convert Protobuf message to JSON Schema
-    const properties = {};
-    protobufMessage.fields.forEach(field => {
-      properties[field.name] = this.convertProtobufField(field);
-    });
+**Models** — `llm-providers` (per-vendor dispatch), `model-catalog` (model
+cards, the router, the automatic price feed), `model-registry` (weights and
+manifests), `model-deployments` (provider adapters, reconcile loop, budgets).
 
-    return {
-      type: 'object',
-      properties,
-      required: protobufMessage.fields
-        .filter(f => f.rule === 'required')
-        .map(f => f.name),
-    };
-  }
-}
-```
+**Execution elsewhere** — `runner` (registration, state machine, dispatch
+resolution, capability publication), `workspace` (workspace lifecycle and the
+TTL sweep).
 
-## Phase 3: Tool Generation Engine (Weeks 5-6)
+**Operations** — `jobs` (BullMQ queues and processors), `monitoring`,
+`notifications`, `mail`, `health`, `plugins`, `budgets`, `provider-usage`,
+`retention`, `lifecycle`, `credentials`, `connections`.
 
-### 3.1 Tool Generator Service
-```typescript
-// tool-generator.service.ts
-@Injectable()
-export class ToolGeneratorService {
-  async generateToolsFromApi(api: Api): Promise<Tool[]> {
-    const tools: Tool[] = [];
-    
-    for (const operation of api.operations) {
-      const tool = await this.generateToolFromOperation(operation);
-      tools.push(tool);
-    }
-    
-    return tools;
-  }
+### Two rules about where things live
 
-  private async generateToolFromOperation(operation: Operation): Promise<Tool> {
-    const inputSchema = await this.jsonSchemaTranslator
-      .translateOperationToJsonSchema(operation);
-      
-    const tool = new Tool();
-    tool.name = this.generateToolName(operation);
-    tool.description = operation.description || `Execute ${operation.method} ${operation.endpoint}`;
-    tool.type = this.determineToolType(operation);
-    tool.parameters = inputSchema;
-    tool.operation = operation;
-    
-    return await this.toolRepository.save(tool);
-  }
+Both of these get guessed wrong:
 
-  private generateToolName(operation: Operation): string {
-    // Generate semantic tool names
-    const pathParts = operation.endpoint.split('/').filter(Boolean);
-    const resourceName = pathParts[pathParts.length - 1];
-    const action = this.methodToAction(operation.method);
-    
-    return `${action}_${resourceName}`;
-  }
-}
-```
+- The **chat channel adapters are in `gateways/channels/adapters/`**, not in an
+  `interfaces` module. There is no `interfaces` module.
+- Every third-party secret lives in **`credentials`**, and only there. No module
+  adds a secret column of its own; a test ratchets that. See
+  `docs/connections.md`.
 
-### 3.2 Tool Execution Engine
-```typescript
-// tool-executor.service.ts
-@Injectable()
-export class ToolExecutorService {
-  async executeTool(
-    toolId: string, 
-    parameters: Record<string, any>,
-    context: ExecutionContext
-  ): Promise<ToolExecutionResult> {
-    const tool = await this.toolRepository.findOne({
-      where: { id: toolId },
-      relations: ['operation', 'operation.api'],
-    });
+## Frontend structure
 
-    // Validate parameters against JSON Schema
-    const isValid = await this.validateParameters(tool.parameters, parameters);
-    if (!isValid) {
-      throw new BadRequestException('Invalid parameters');
-    }
+`frontend/src/`:
 
-    // Execute the tool
-    const result = await this.executeApiOperation(
-      tool.operation,
-      parameters,
-      context
-    );
+- `pages/` — thin shells. A page wires routing and data and delegates the
+  rendering to components; the substantial screens (agent builder, agent
+  detail, analytics) are assembled from extracted pieces rather than written
+  inline.
+- `components/ui/` — the shadcn primitives plus the shared states every list
+  screen needs: skeleton, empty-state, query-error, data-table.
+- `components/<domain>/` — per-domain components: `agents/` (with `nodes/`,
+  `builder/`, `detail/`), `apis/`, `gateways/`, `tools/`, `analytics/`,
+  `settings/`, `llm-providers/`, and `layout/` for the dashboard and auth
+  shells.
+- `lib/` — the axios client (`withCredentials` on every call) and helpers.
+- `store/` — Zustand stores: auth, organization, app.
+- `types/` — shared types, including the enums mirrored from backend entities.
 
-    // Log execution
-    await this.logToolExecution(tool, parameters, result, context);
+The sidebar order in `components/layout/dashboard-layout.tsx` follows the pipeline narrative and then configuration, with a divider between: Dashboard → APIs → Tools → Gateways → Agents → Apps → Runners → Workspaces → Credentials → Approvals, then Models → Memory → Analytics → Settings. Apps sits directly after Agents deliberately — shipping an agent as a product is the last link of the chain, so it stays above the fold.
 
-    return result;
-  }
+## Request paths
 
-  private async executeApiOperation(
-    operation: Operation,
-    parameters: Record<string, any>,
-    context: ExecutionContext
-  ): Promise<any> {
-    const api = operation.api;
-    const credentials = await this.getApiCredentials(api);
-    
-    const httpConfig = {
-      method: operation.method,
-      url: `${api.baseUrl}${operation.endpoint}`,
-      headers: this.buildHeaders(credentials),
-      data: operation.method !== 'GET' ? parameters : undefined,
-      params: operation.method === 'GET' ? parameters : undefined,
-    };
+Five paths cover almost everything.
 
-    const response = await this.httpService.request(httpConfig);
-    return response.data;
-  }
-}
-```
+### 1. A dashboard call
 
-## Phase 4: Gateway Management System (Weeks 7-8)
+Browser → nginx → backend controller → `JwtAuthGuard` reads the httpOnly
+cookie → `RolesGuard` checks the role on the current organization →
+`ValidationPipe` (whitelisting) → service → TypeORM. Anything sensitive also
+writes an `audit-log` entry.
 
-### 4.1 Gateway Types Implementation
-```typescript
-// gateway-types/mcp.gateway.ts
-@Injectable()
-export class MCPGatewayService extends BaseGatewayService {
-  async handleMCPRequest(request: MCPRequest): Promise<MCPResponse> {
-    switch (request.method) {
-      case 'tools/list':
-        return this.listTools(request.params);
-      case 'tools/call':
-        return this.callTool(request.params);
-      case 'resources/list':
-        return this.listResources(request.params);
-      default:
-        throw new Error(`Unsupported MCP method: ${request.method}`);
-    }
-  }
+In dev the frontend runs on Vite with a proxy, and **the proxy needs a rule per
+backend controller prefix**. A new top-level prefix that works in production
+and 404s locally is almost always a missing proxy rule, not a routing bug.
 
-  private async listTools(params: any): Promise<MCPResponse> {
-    const gateway = await this.getGatewayFromContext();
-    const tools = await this.getGatewayTools(gateway.id);
-    
-    return {
-      result: {
-        tools: tools.map(tool => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.parameters,
-        })),
-      },
-    };
-  }
-}
+### 2. A tool call arriving over a protocol
 
-// gateway-types/a2a.gateway.ts
-@Injectable()
-export class A2AGatewayService extends BaseGatewayService {
-  async handleA2ARequest(request: A2ARequest): Promise<A2AResponse> {
-    // Handle Agent-to-Agent requests
-    const agent = await this.authenticateAgent(request.headers);
-    const result = await this.executeToolForAgent(request.tool, request.parameters, agent);
-    
-    return {
-      success: true,
-      data: result,
-      metadata: {
-        timestamp: new Date(),
-        executionTime: Date.now() - request.startTime,
-      },
-    };
-  }
-}
-```
+An external client (MCP, A2A, UTCP, Skills, or the OpenAI-compatible surface)
+hits the unified endpoint — `unified-endpoint.controller.ts`, which catches
+`/:orgSlug/:resourceSlug` and everything beneath it, plus
+`/.well-known/agent-card.json`. It resolves the org and the gateway from the
+slugs, enforces the gateway's own auth, and delegates to the protocol handler
+for that gateway type. The handler resolves the named tool, and
+`modules/tools` executes it: an API or HTTP tool makes the outbound call with
+credentials resolved through a grant, a JavaScript tool runs in the worker
+sandbox, an LLM tool goes back out through the provider layer.
 
-### 4.2 Gateway Router & Middleware
-```typescript
-// gateway.controller.ts
-@Controller('gateways')
-export class GatewayController {
-  @Post(':gatewayId/mcp')
-  async handleMCPRequest(
-    @Param('gatewayId') gatewayId: string,
-    @Body() request: MCPRequest,
-    @Req() req: Request
-  ) {
-    const gateway = await this.gatewayService.findById(gatewayId);
-    if (gateway.type !== GatewayType.MCP) {
-      throw new BadRequestException('Not an MCP gateway');
-    }
-    
-    return this.mcpGatewayService.handleMCPRequest(request);
-  }
+One endpoint, every protocol: the gateway type decides the dialect, not the URL
+shape.
 
-  @Post(':gatewayId/a2a')
-  async handleA2ARequest(
-    @Param('gatewayId') gatewayId: string,
-    @Body() request: A2ARequest
-  ) {
-    const gateway = await this.gatewayService.findById(gatewayId);
-    if (gateway.type !== GatewayType.A2A) {
-      throw new BadRequestException('Not an A2A gateway');
-    }
-    
-    return this.a2aGatewayService.handleA2ARequest(request);
-  }
-}
-```
+### 3. An agent run
 
-## Phase 5: Frontend Development (Weeks 9-11)
+`modules/agents` compiles the agent into a graph and walks it.
+`agent-execution.engine.ts` drives the run and `agent-node-executor.ts`
+dispatches each node by type — its `switch` is the definitive list of node
+types, so count it there rather than trusting a number in a doc. Nodes cover
+input and output, LLM calls, tool calls, control flow (condition, transform,
+loop, parallel, merge), composition (sub-agent) and the compiled-strategy steps
+(verify, extract_context).
 
-### 5.1 React Application Structure
-```
-frontend/src/
-├── components/
-│   ├── ui/                 # shadcn/ui components
-│   ├── layout/            # Layout components
-│   ├── forms/             # Form components
-│   └── charts/            # Analytics components
-├── pages/
-│   ├── dashboard/
-│   ├── apis/
-│   ├── tools/
-│   ├── gateways/
-│   └── analytics/
-├── hooks/                 # Custom React hooks
-├── services/              # API service layer
-├── stores/                # Zustand stores
-├── types/                 # TypeScript types
-└── utils/                 # Utility functions
-```
+Every LLM call inside a run goes through the router rather than naming a model
+directly, and a routed call stamps `routing` attribution onto the response, the
+node result and the audit log — so "which model actually answered" is always
+recoverable. Roles, strategies and the per-agent orchestrator sit above this;
+see `docs/roles.md`, `docs/strategies.md`, `docs/orchestrator.md` and
+`docs/routing.md`.
 
-### 5.2 Key Frontend Components
-```typescript
-// components/api/ApiSchemaUpload.tsx
-export function ApiSchemaUpload() {
-  const [file, setFile] = useState<File | null>(null);
-  const uploadMutation = useMutation({
-    mutationFn: (data: FormData) => apiService.uploadSchema(data),
-    onSuccess: () => {
-      toast.success('Schema uploaded successfully');
-      router.push('/apis');
-    },
-  });
+Long or scheduled runs move to BullMQ: `agent-runtime.processor.ts` executes,
+`agent-scheduler.service.ts` triggers, `agent-run-reaper.service.ts` cleans up
+runs whose worker died.
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Upload API Schema</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <Select>
-            <SelectTrigger>
-              <SelectValue placeholder="Select schema type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="openapi">OpenAPI</SelectItem>
-              <SelectItem value="graphql">GraphQL</SelectItem>
-              <SelectItem value="soap">SOAP/WSDL</SelectItem>
-              <SelectItem value="protobuf">Protobuf</SelectItem>
-            </SelectContent>
-          </Select>
-          
-          <FileUpload
-            accept=".json,.yaml,.yml,.proto,.wsdl"
-            onFileSelect={setFile}
-          />
-          
-          <Button 
-            onClick={() => uploadMutation.mutate(createFormData(file))}
-            disabled={!file || uploadMutation.isPending}
-          >
-            {uploadMutation.isPending ? 'Uploading...' : 'Upload Schema'}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+### 4. A message from a chat channel
 
-// components/tools/ToolEditor.tsx
-export function ToolEditor({ tool }: { tool: Tool }) {
-  const form = useForm<ToolFormData>({
-    resolver: zodResolver(toolSchema),
-    defaultValues: tool,
-  });
+A platform webhook (or, for Discord, a held Gateway websocket) reaches the
+channel's adapter in `gateways/channels/adapters/`. The adapter does three
+things and nothing else: verify the signature, normalize the inbound payload,
+and later format and send the reply. Everything shared — resolving the gateway,
+starting or continuing the run, and applying the EU AI Act Art. 50 AI
+disclosure — lives once in `channel-gateway.service.ts`, so a new channel
+inherits it. Replies are dispatched fire-and-forget from a run-completion
+listener. Inventory and per-adapter detail: `docs/interface-adapters-audit.md`.
 
-  return (
-    <Form {...form}>
-      <div className="space-y-6">
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Tool Name</FormLabel>
-              <FormControl>
-                <Input {...field} />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-        
-        <FormField
-          control={form.control}
-          name="parameters"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Parameters (JSON Schema)</FormLabel>
-              <FormControl>
-                <JsonEditor
-                  value={field.value}
-                  onChange={field.onChange}
-                  schema={jsonSchemaSchema}
-                />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-        
-        <Button type="submit">Save Tool</Button>
-      </div>
-    </Form>
-  );
-}
-```
+### 5. Work on someone else's machine
 
-## Phase 6: LLM Provider Integration (Weeks 12-13)
+A runner-backed tool resolves to a live runner session and dispatches a worker
+envelope over Streamable HTTP; the runner executes locally and streams results
+back. The backend never spawns a process itself and the runner never calls an
+LLM vendor. `docs/runner.md`.
 
-### 6.1 LLM Provider Abstraction
-```typescript
-// providers/base.provider.ts
-export abstract class BaseLLMProvider {
-  abstract async generateResponse(
-    prompt: string,
-    tools: Tool[],
-    options: LLMOptions
-  ): Promise<LLMResponse>;
-  
-  abstract async streamResponse(
-    prompt: string,
-    tools: Tool[],
-    options: LLMOptions
-  ): AsyncIterable<LLMStreamChunk>;
-}
+## Background work
 
-// providers/openai.provider.ts
-@Injectable()
-export class OpenAIProvider extends BaseLLMProvider {
-  private client: OpenAI;
+BullMQ on Redis, with the queues registered in `modules/jobs`. The pattern is
+consistent: a producer enqueues, a `@Processor` consumes, and the work is
+idempotent because a job can be retried. Schema import and tool generation run
+here (a large OpenAPI document is not a request-lifetime job), as do the model
+price feed and catalog sync, provider health checks, provider usage pulls,
+deployment reconciliation, agent runs and schedules, and the retention sweep.
 
-  constructor() {
-    super();
-    this.client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-  }
+A rule worth stating: **only the reconcile processor mutates a model
+deployment's provider.** Anything else reads it.
 
-  async generateResponse(
-    prompt: string,
-    tools: Tool[],
-    options: LLMOptions
-  ): Promise<LLMResponse> {
-    const response = await this.client.chat.completions.create({
-      model: options.model || 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-      tools: this.convertToolsToOpenAIFormat(tools),
-      tool_choice: 'auto',
-    });
+## Data
 
-    return this.convertOpenAIResponse(response);
-  }
-}
+TypeORM against PostgreSQL, connected with discrete parameters
+(`DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`,
+`DATABASE_NAME`, plus `DB_SSL` for managed databases) rather than a single
+URL.
 
-// providers/anthropic.provider.ts
-@Injectable()
-export class AnthropicProvider extends BaseLLMProvider {
-  private client: Anthropic;
+**Every schema change ships a migration.** `synchronize` is never used. New
+enum-ish columns are TEXT with a CHECK constraint rather than a Postgres ENUM
+type, which is what the gateway, agent and runner tables already do, and it is
+what keeps adding a value from being a type migration.
 
-  constructor() {
-    super();
-    this.client = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
-  }
+`modules/versions` gives any entity marked versioned a full serialized snapshot
+on each update — that is what the Change History panel reads. Retention is
+per-organization and per data class, swept hourly; `docs/retention.md`.
 
-  async generateResponse(
-    prompt: string,
-    tools: Tool[],
-    options: LLMOptions
-  ): Promise<LLMResponse> {
-    const response = await this.client.messages.create({
-      model: options.model || 'claude-3-sonnet-20240229',
-      max_tokens: options.maxTokens || 1024,
-      messages: [{ role: 'user', content: prompt }],
-      tools: this.convertToolsToAnthropicFormat(tools),
-    });
+## Cross-cutting invariants
 
-    return this.convertAnthropicResponse(response);
-  }
-}
-```
+The things that quietly break if you do not know them:
 
-## Phase 7: Monitoring & Analytics (Week 14)
+- **Tokens live in httpOnly cookies only.** Never `localStorage`. Tests
+  enforce it.
+- **Secrets live in `credentials` only**, reached through grants, and every
+  resolve is audited. `docs/connections.md`.
+- **Model support is registry data, never a list in code.** A card is usable
+  only through `Model.isSelectable()` — active, callable, and with at least one
+  passed validation run. Pricing comes from a live feed; the table in
+  `llm-models.helper.ts` is an offline seed. `docs/models.md`.
+- **Deployment adapters never import one another**, and `providerConfig` is
+  opaque to everything except its own adapter.
+- **No hardcoded model ids.** A blank model resolves against the vendor's live
+  list.
+- **Validation whitelists.** A field the DTO does not declare is rejected, so
+  an entity field with no DTO field is unreachable through the product.
 
-### 7.1 Metrics Collection
-```typescript
-// monitoring/metrics.service.ts
-@Injectable()
-export class MetricsService {
-  private requestCounter = new Counter({
-    name: 'gateway_requests_total',
-    help: 'Total number of gateway requests',
-    labelNames: ['gateway_id', 'tool_name', 'status'],
-  });
+## Where to read next
 
-  private responseTime = new Histogram({
-    name: 'gateway_response_duration_seconds',
-    help: 'Response time in seconds',
-    labelNames: ['gateway_id', 'tool_name'],
-  });
-
-  recordRequest(gatewayId: string, toolName: string, status: string) {
-    this.requestCounter.inc({ gateway_id: gatewayId, tool_name: toolName, status });
-  }
-
-  recordResponseTime(gatewayId: string, toolName: string, duration: number) {
-    this.responseTime.observe({ gateway_id: gatewayId, tool_name: toolName }, duration / 1000);
-  }
-}
-```
-
-## Deployment Strategy
-
-### Development Environment
-```yaml
-# docker-compose.dev.yml
-version: '3.8'
-services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: llm_gateway
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    ports:
-      - "5432:5432"
-    
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-      
-  backend:
-    build: ./backend
-    ports:
-      - "3000:3000"
-    depends_on:
-      - postgres
-      - redis
-    environment:
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/llm_gateway
-      REDIS_URL: redis://redis:6379
-      
-  frontend:
-    build: ./frontend
-    ports:
-      - "3001:3000"
-    depends_on:
-      - backend
-```
-
-### Production Considerations
-- **Kubernetes deployment** with Helm charts
-- **PostgreSQL with read replicas** for scalability
-- **Redis Cluster** for high availability
-- **Nginx ingress** with SSL termination
-- **Horizontal Pod Autoscaling** based on CPU/memory
-- **Persistent volumes** for file storage
-- **Backup strategies** for database and Redis
-
+- `docs/models.md` — catalog, routing, pricing, deployments
+- `docs/routing.md` — how a model gets chosen, and the honest limits
+- `docs/strategies.md`, `docs/roles.md`, `docs/orchestrator.md` — the execution
+  layers above a single call
+- `docs/connections.md` — connectors, connections, grants
+- `docs/runner.md` — runners and workspaces
+- `docs/agent-factory.md` — `/apps`: builds, signing, distributions
+- `docs/interface-adapters-audit.md` — the chat channels, adapter by adapter
+- `docs/retention.md`, `docs/budgets.md`, `docs/enterprise.md` — operational
+  and commercial surfaces
+- `docs/design/` — per-subsystem design notes (`models-layer.md`, `connections*.md`, `call-only-vendors.md`, and the adapter notes)
 This comprehensive architecture provides a solid foundation for building your LLM tool gateway system with enterprise-grade capabilities, scalability, and maintainability.

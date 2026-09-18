@@ -13,6 +13,7 @@ import { UserOrganization, OrganizationRole } from '../../entities/user-organiza
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditAction } from '../../entities/audit-log.entity';
 import { MailService } from '../mail/mail.service';
 import { ReferralsService } from '../referrals/referrals.service';
 import { CaptchaService } from './captcha.service';
@@ -30,6 +31,7 @@ describe('AuthService', () => {
   let jwtService: jest.Mocked<JwtService>;
   let referralsService: any;
   let captchaService: any;
+  let auditLogService: any;
 
   beforeEach(async () => {
     // register() now wraps user + org + membership in a DB transaction,
@@ -61,6 +63,7 @@ describe('AuthService', () => {
       create: jest.fn(),
       save: jest.fn(),
       find: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
       manager: mockManager,
     };
 
@@ -159,6 +162,7 @@ describe('AuthService', () => {
     mailService = module.get(MailService);
     referralsService = module.get(ReferralsService);
     captchaService = module.get(CaptchaService);
+    auditLogService = module.get(AuditLogService);
 
     // Reset repository mocks but not bcrypt mocks
     userRepository.findOne.mockReset();
@@ -571,7 +575,48 @@ describe('AuthService', () => {
         where: { email: loginDto.email },
         relations: { organizationMemberships: { organization: true } },
       });
-      expect(userRepository.save).toHaveBeenCalled(); // For updating lastLoginAt
+      // lastLoginAt goes in as a scoped UPDATE of that one column, not a
+      // save() of the row read before the password check.
+      expect(userRepository.update).toHaveBeenCalledWith(
+        { id: 'user-123' },
+        expect.objectContaining({ lastLoginAt: expect.any(Date) }),
+      );
+    });
+
+    /**
+     * The HTTP route authenticates through LocalAuthGuard and then only
+     * wanted tokens, so it called generateTokens() directly and this
+     * method was reached by nothing. Two things silently never happened
+     * on any sign-in as a result: lastLoginAt was never written (the
+     * users screen reads it and showed every account as never having
+     * signed in) and no AuditAction.LOGIN row was ever recorded, so the
+     * audit trail held no sign-in events at all.
+     */
+    it('records the sign-in: lastLoginAt plus an audit row', async () => {
+      const mockUser = {
+        id: 'user-123',
+        email: 'test@example.com',
+        organizationMemberships: [
+          { organizationId: 'org-1', role: 'owner', organization: { id: 'org-1', name: 'Org' } },
+        ],
+      } as any;
+
+      jwtService.sign.mockReturnValue('mock-token');
+      userRepository.findOne.mockResolvedValue(mockUser);
+
+      await service.completeLogin(mockUser);
+
+      expect(userRepository.update).toHaveBeenCalledWith(
+        { id: 'user-123' },
+        expect.objectContaining({ lastLoginAt: expect.any(Date) }),
+      );
+      expect(auditLogService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: 'org-1',
+          userId: 'user-123',
+          action: AuditAction.LOGIN,
+        }),
+      );
     });
 
     it('should throw error for invalid credentials', async () => {
@@ -1206,6 +1251,7 @@ describe('AuthService email verification', () => {
       findOne: jest.fn(),
       create: jest.fn((d: any) => d),
       save: jest.fn(async (u: any) => u),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
       manager: { transaction: jest.fn() },
     };
     const orgRepo: any = { findOne: jest.fn().mockResolvedValue(null), create: jest.fn(), save: jest.fn() };
@@ -1511,4 +1557,89 @@ describe('AuthService email verification', () => {
     });
   });
 });
+
+  describe('updateProfile email change', () => {
+    const currentUser = () => ({
+      id: 'user-123',
+      email: 'old@gmail.com',
+      normalizedEmail: 'old@gmail.com',
+      firstName: 'Old',
+      lastName: 'Name',
+      isVerified: true,
+      verifiedAt: new Date('2025-01-01'),
+      verificationToken: null,
+      organizationMemberships: [],
+    });
+
+    /**
+     * `normalizedEmail` is the identity key register() dedupes on and
+     * the unique index is built on. Moving `email` and leaving it behind
+     * meant an account could change address without changing identity,
+     * so the alias dedupe stopped describing the row it belonged to.
+     */
+    it('moves normalizedEmail with the address', async () => {
+      const user = currentUser();
+      userRepository.findOne
+        .mockResolvedValueOnce(user as any) // load self
+        .mockResolvedValueOnce(null); // nobody holds the new address
+      userRepository.save.mockImplementation(async (u: any) => u);
+
+      const saved: any = await service.updateProfile('user-123', {
+        email: 'N.e.w+tag@gmail.com',
+      } as any);
+
+      expect(saved.email).toBe('N.e.w+tag@gmail.com');
+      expect(saved.normalizedEmail).toBe('new@gmail.com');
+    });
+
+    /**
+     * A changed address is an UNPROVEN address. Keeping isVerified set
+     * let anyone repoint their account at a mailbox they do not control
+     * and stay "verified" on it -- and verified identity is exactly what
+     * acceptInvite's caller-email check and the referral payout gate
+     * read to decide who somebody is.
+     */
+    it('drops verification so the new address has to prove itself', async () => {
+      const user = currentUser();
+      userRepository.findOne
+        .mockResolvedValueOnce(user as any)
+        .mockResolvedValueOnce(null);
+      userRepository.save.mockImplementation(async (u: any) => u);
+
+      const saved: any = await service.updateProfile('user-123', {
+        email: 'new@example.com',
+      } as any);
+
+      expect(saved.isVerified).toBe(false);
+      expect(saved.verifiedAt).toBeNull();
+    });
+
+    it('refuses an address already taken under its canonical form', async () => {
+      const user = currentUser();
+      userRepository.findOne
+        .mockResolvedValueOnce(user as any)
+        .mockResolvedValueOnce({ id: 'someone-else' } as any);
+
+      await expect(
+        service.updateProfile('user-123', { email: 'taken@gmail.com' } as any),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(userRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('leaves verification alone when the address is unchanged', async () => {
+      const user = currentUser();
+      userRepository.findOne.mockResolvedValueOnce(user as any);
+      userRepository.save.mockImplementation(async (u: any) => u);
+
+      const saved: any = await service.updateProfile('user-123', {
+        name: 'New Name',
+        email: 'old@gmail.com',
+      } as any);
+
+      expect(saved.isVerified).toBe(true);
+      expect(saved.verifiedAt).not.toBeNull();
+      expect(saved.firstName).toBe('New');
+    });
+  });
 });

@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { DollarSign, RefreshCw, Scale } from 'lucide-react'
+import { DollarSign, RefreshCw, Scale, Wallet } from 'lucide-react'
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Button } from '@/components/ui/button'
 import { budgetsApi, agentsApi, providerUsageApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 import { TABLE_HEAD_CLASS as TH } from './constants'
 
@@ -95,6 +97,18 @@ export function CostTab() {
             {p === 'day' ? 'Today' : 'This month'}
           </Button>
         ))}
+        {/* The meter is here; the ceiling is one tab away. Without this
+            link a spend budget was a thing you could only reach by URL. */}
+        <Button
+          asChild
+          variant="outline"
+          size="sm"
+          className="h-6 text-xs px-2 ml-auto"
+        >
+          <Link to="/analytics/budgets">
+            <Wallet className="h-3 w-3 mr-1" /> Budgets
+          </Link>
+        </Button>
       </div>
 
       {isLoading ? (
@@ -239,6 +253,14 @@ function ReconciliationSection({
           {sync.isPending ? 'Syncing…' : 'Sync now'}
         </Button>
       </div>
+
+      {sync.isError && (
+        // A refused sync used to stop the spinner and say nothing, so the
+        // numbers below silently stayed the ones from before.
+        <p data-testid="cost-sync-error" className="px-4 py-2 text-xs text-red-600 dark:text-red-400">
+          {getApiErrorMessage(sync.error, 'The providers were not re-read.')}
+        </p>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center h-24">

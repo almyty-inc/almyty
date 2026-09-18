@@ -56,6 +56,24 @@ export function makeRepo(prefix: string, seed: any[] = []) {
       Promise.resolve(store.filter((row) => matchesWhere(row, where)).length),
     ),
     create: jest.fn((data: any) => ({ ...data })),
+    /**
+     * Column-scoped, predicate-guarded write — what the sweeps use to
+     * claim a transition. `affected` is 0 when the stored row no longer
+     * matches the criteria, which is how a second replica is turned
+     * away. A SQL-expression value (`() => '"col" + 1'`) is the
+     * database's business: the mock leaves the in-memory value the
+     * caller already set.
+     */
+    update: jest.fn((criteria: any, patch: Record<string, any>) => {
+      const where = typeof criteria === 'object' && criteria !== null ? criteria : { id: criteria };
+      const row = store.find((r) => matchesWhere(r, where));
+      if (!row) return Promise.resolve({ affected: 0 });
+      for (const [key, value] of Object.entries(patch)) {
+        if (typeof value === 'function') continue;
+        row[key] = value;
+      }
+      return Promise.resolve({ affected: 1 });
+    }),
     save: jest.fn((entity: any) => {
       if (!entity.id) entity.id = `${prefix}-${++idCounter}`;
       const idx = store.findIndex((row) => row.id === entity.id);

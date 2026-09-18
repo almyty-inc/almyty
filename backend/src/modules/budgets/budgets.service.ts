@@ -110,6 +110,16 @@ export class BudgetsService {
         throw new BadRequestException('limitCents must be a positive integer');
       }
     }
+    // Spend is recorded per org and per agent only — nothing records the
+    // LLM provider a run was billed to — so a provider-scoped budget is a
+    // ceiling nothing can measure. Refused at the edge instead of being
+    // silently evaluated against org-wide spend (see enforceForRun).
+    if (dto.llmProviderId) {
+      throw new BadRequestException(
+        'Provider-scoped budgets are not supported: spend is not attributed per LLM provider. ' +
+          'Scope the budget to the organization (agentId and llmProviderId both null) or to a single agent.',
+      );
+    }
     if (dto.periodType !== undefined && !PERIODS.includes(dto.periodType)) {
       throw new BadRequestException(`periodType must be one of: ${PERIODS.join(', ')}`);
     }
@@ -157,6 +167,24 @@ export class BudgetsService {
     for (const budget of budgets) {
       // Skip agent-scoped budgets that don't target this agent.
       if (budget.agentId && budget.agentId !== agentId) continue;
+
+      // A provider-scoped budget cannot be evaluated here: neither spend
+      // table (agent_runs / agent_executions) records which LLM provider
+      // was billed, so SpendService has no provider dimension to filter
+      // on and `periodToDateCents` below would return ORG-WIDE spend.
+      // Comparing that to a single provider's limit is a ceiling firing
+      // on the wrong meter: an "OpenAI, $10/month, reject" budget would
+      // block every run in the org once $10 of Anthropic spend landed.
+      // `validate()` now refuses to create one; a row inserted before
+      // that guard is skipped loudly rather than mis-enforced.
+      if (budget.llmProviderId) {
+        this.logger.warn(
+          `Skipping provider-scoped budget ${budget.id}: spend is not attributed per LLM ` +
+            'provider, so this budget cannot be enforced. Re-scope it to the organization ' +
+            'or to a single agent.',
+        );
+        continue;
+      }
 
       const periodStart = startOfPeriod(budget.periodType, now);
       const spentCents = await this.spend.periodToDateCents({

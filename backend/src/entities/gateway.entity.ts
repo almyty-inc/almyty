@@ -225,6 +225,15 @@ export class Gateway {
   })
   tools: GatewayTool[];
 
+  /**
+   * Virtual — populated by the list query as a correlated COUNT so the
+   * table can show an assignment count without hydrating the relation.
+   * A page of 20 gateways averaging 100 tools is 2,000 nested Tool
+   * entities, each carrying `code`, `parameters` and `examples`, sent to
+   * render one integer per row.
+   */
+  toolCount?: number;
+
   @OneToMany(() => GatewayAuth, gatewayAuth => gatewayAuth.gateway, {
     cascade: true,
   })
@@ -351,7 +360,10 @@ export class Gateway {
       case GatewayType.A2A:
         return {
           ...baseConfig,
-          a2aVersion: this.configuration.a2aVersion || '0.3.0',
+          // Keep this in step with A2A_PROTOCOL_VERSION in
+          // modules/a2a/types/a2a-spec.types.ts. An entity must not import a
+          // module, so the value is duplicated rather than referenced.
+          a2aVersion: this.configuration.a2aVersion || '1.0',
         };
 
       case GatewayType.ACP:

@@ -225,6 +225,123 @@ describe('ReferralQualificationService', () => {
       expect(codeRepo.store[0].accruedRewardDays).toBe(28);
     });
   });
+
+  /**
+   * Two replicas, one batch.
+   *
+   * The sweep is an in-process timer, so it runs on every replica, and
+   * after a rolling deploy the timers sit near each other: both read the
+   * same batch. Replica B then holds the copy it loaded across A's whole
+   * sweep -- several DB round trips per row -- so neither B's own status
+   * check nor the yearly-cap arithmetic in awardReferrerDays (which
+   * reads that copy's `rewardDays`) saw A's payout, and the referrer's
+   * plan was extended twice for one referral. A lease alone would not
+   * settle it: a lease can expire mid-sweep, so each transition is
+   * claimed with a status-guarded UPDATE and only the claim pays out.
+   */
+  describe('two replicas on the same batch', () => {
+    const otherReplica = (redis?: any) =>
+      new ReferralQualificationService(
+        referralRepo as any,
+        codeRepo as any,
+        orgRepo as any,
+        gatewayRepo as any,
+        agentRunRepo as any,
+        referralsService,
+        makeAudit() as any,
+        redis,
+      );
+
+    it('cannot award tier 1 twice for one referral', async () => {
+      const referral = await seedReferral();
+      activateReferredOrg();
+      const before = referrerOrg().planExpiresAt.getTime();
+
+      expect((await sweeper.sweep()).qualified).toBe(1);
+      const afterOne = new Date(referrerOrg().planExpiresAt).getTime();
+      expect(afterOne).toBe(before + 14 * DAY_MS);
+
+      // The copy the second replica loaded before any of that happened.
+      const stale = { ...referral, status: ReferralStatus.PENDING, qualifiedAt: null, rewardDays: 0 };
+      referralRepo.find.mockResolvedValueOnce([stale]);
+
+      const second = await otherReplica().sweep();
+
+      expect(second.qualified).toBe(0);
+      expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(afterOne);
+      expect(referralRepo.store.find((r) => r.id === referral.id).rewardDays).toBe(14);
+    });
+
+    it('cannot award tier 2 twice for one referral', async () => {
+      const referral = await seedReferral({
+        status: ReferralStatus.QUALIFIED,
+        qualifiedAt: new Date(),
+        rewardDays: 14,
+      });
+      referredOrg().plan = 'pro';
+      referredOrg().billingInfo = { stripeSubscriptionId: 'sub_123' };
+
+      expect((await sweeper.sweep()).rewarded).toBe(1);
+      const afterOne = new Date(referrerOrg().planExpiresAt).getTime();
+
+      const stale = { ...referral, status: ReferralStatus.QUALIFIED, rewardedAt: null, rewardDays: 14 };
+      // The pending pass finds nothing; the qualified pass gets the copy.
+      referralRepo.find.mockResolvedValueOnce([]).mockResolvedValueOnce([stale]);
+
+      const second = await otherReplica().sweep();
+
+      expect(second.rewarded).toBe(0);
+      expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(afterOne);
+    });
+
+    it('cannot apply the same banked days twice', async () => {
+      const code = await codeRepo.save({
+        userId: 'user-referrer',
+        organizationId: 'org-referrer',
+        code: 'CODE2345',
+        active: true,
+        accruedRewardDays: 28,
+      });
+      const before = referrerOrg().planExpiresAt.getTime();
+
+      expect((await sweeper.sweep()).accrualsApplied).toBe(1);
+      const afterOne = new Date(referrerOrg().planExpiresAt).getTime();
+      expect(afterOne).toBe(before + 28 * DAY_MS);
+
+      codeRepo.find.mockResolvedValueOnce([{ ...code, accruedRewardDays: 28 }]);
+      const second = await otherReplica().sweep();
+
+      expect(second.accrualsApplied).toBe(0);
+      expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(afterOne);
+    });
+
+    it('a replica that cannot take the lease does not read a single row', async () => {
+      const redis = { set: jest.fn(async () => null), eval: jest.fn(async () => 1) };
+      await seedReferral();
+      activateReferredOrg();
+      referralRepo.find.mockClear();
+
+      const result = await otherReplica(redis).sweep();
+
+      expect(result).toEqual({ qualified: 0, rewarded: 0, accrualsApplied: 0 });
+      expect(referralRepo.find).not.toHaveBeenCalled();
+      expect(redis.set).toHaveBeenCalledWith(
+        'referrals:qualification:lock',
+        expect.any(String),
+        'EX',
+        expect.any(Number),
+        'NX',
+      );
+    });
+
+    it('releases the lease it took, so the next window is not blocked', async () => {
+      const redis = { set: jest.fn(async () => 'OK'), eval: jest.fn(async () => 1) };
+
+      await otherReplica(redis).sweep();
+
+      expect(redis.eval).toHaveBeenCalled();
+    });
+  });
 });
 
 /**

@@ -58,7 +58,25 @@ export interface InstallResult {
   installed: number;
   /** How many were refused (unsafe name, or a path outside skillsDir). */
   skipped: number;
+  /**
+   * How many of the written files replaced an existing SKILL.md.
+   * Installing is a write into someone's editor config, so the count of
+   * files it overwrote is part of the answer, not a detail.
+   */
+  overwritten: number;
+  /** True when nothing was written because this was a dry run. */
+  dryRun: boolean;
   files: string[];
+}
+
+export interface InstallOptions {
+  /**
+   * Report what would be written and touch nothing. `install` writes
+   * into directories an editor reads on every session; being able to
+   * see the exact paths first is the difference between a tool you
+   * trust and one you run in a scratch clone.
+   */
+  dryRun?: boolean;
 }
 
 /**
@@ -90,14 +108,20 @@ function isAlmytyInstall(skillsDir: string, dirName: string): boolean {
 /**
  * Install skill files into an agent's skills directory.
  * Each skill lives at `<skillsDir>/<skill-name>/SKILL.md`.
+ *
+ * With `dryRun`, resolves and validates every path and reports what it
+ * would write, without creating a directory or touching a file.
  */
 export function installSkills(
   skills: SkillFile[],
   target: AgentTarget,
+  options: InstallOptions = {},
 ): InstallResult {
+  const dryRun = options.dryRun === true;
   const files: string[] = [];
+  let overwritten = 0;
 
-  mkdirSync(target.skillsDir, { recursive: true });
+  if (!dryRun) mkdirSync(target.skillsDir, { recursive: true });
 
   for (const skill of skills) {
     // Reject backend-supplied names that aren't a single safe path
@@ -121,6 +145,14 @@ export function installSkills(
       console.warn(`Skipping skill whose path escapes the skills directory: ${skill.name}`);
       continue;
     }
+
+    if (existsSync(skillFile)) overwritten++;
+
+    if (dryRun) {
+      files.push(skillFile);
+      continue;
+    }
+
     if (legacyDir !== skillDir && existsSync(legacyDir)) {
       rmSync(legacyDir, { recursive: true, force: true });
     }
@@ -139,6 +171,8 @@ export function installSkills(
     // on disk -- the two that were refused were reported as installed.
     installed: files.length,
     skipped: skills.length - files.length,
+    overwritten,
+    dryRun,
     files,
   };
 }

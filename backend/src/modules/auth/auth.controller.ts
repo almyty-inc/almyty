@@ -180,7 +180,7 @@ export class AuthController {
     @Request() req: any,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const tokens = await this.authService.generateTokens(req.user);
+    const tokens = await this.authService.completeLogin(req.user);
 
     // Set httpOnly cookie for web UI security
     res.cookie('access_token', tokens.accessToken, ACCESS_TOKEN_COOKIE_OPTIONS);

@@ -111,6 +111,51 @@ describe('WorkspaceService', () => {
         };
       }),
       save: jest.fn(async (ws: Workspace) => { workspaces._store.set(ws.id, ws); return ws; }),
+      /**
+       * Conditional column update, modelled rather than stubbed. The
+       * `status: ACTIVE` in the criteria IS the fix — a mock that
+       * ignored the guard and always reported a hit would let a lost
+       * terminal transition back in without a test going red.
+       */
+      update: jest.fn(async (criteria: any, patch: any) => {
+        let affected = 0;
+        for (const ws of workspaces._store.values()) {
+          if (!Object.entries(criteria).every(([k, v]: any) => (ws as any)[k] === v)) continue;
+          Object.assign(ws, patch);
+          affected += 1;
+        }
+        return { affected };
+      }),
+      /** UPDATE ... WHERE "runnerId" IN (...) AND status = 'active'. */
+      createQueryBuilder: jest.fn(() => {
+        let patch: Record<string, any> = {};
+        let runnerIds: string[] = [];
+        let requiredStatus: string | undefined;
+        const qb: any = {
+          update: () => qb,
+          set: (values: Record<string, any>) => { patch = values; return qb; },
+          where: (_clause: string, params: any) => { runnerIds = params?.runnerIds ?? []; return qb; },
+          andWhere: (_clause: string, params: any) => { requiredStatus = params?.active; return qb; },
+          execute: async () => {
+            let affected = 0;
+            for (const ws of workspaces._store.values()) {
+              if (!runnerIds.includes((ws as any).runnerId)) continue;
+              if (requiredStatus && (ws as any).status !== requiredStatus) continue;
+              for (const [k, v] of Object.entries(patch)) {
+                // A raw-SQL value in set() is the json_build_object that
+                // stamps closeReason from the row's own runnerId.
+                (ws as any)[k] =
+                  typeof v === 'function'
+                    ? { kind: 'stranded', detail: (ws as any).runnerId }
+                    : v;
+              }
+              affected += 1;
+            }
+            return { affected };
+          },
+        };
+        return qb;
+      }),
     };
 
     const moduleRef = await Test.createTestingModule({

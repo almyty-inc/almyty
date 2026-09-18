@@ -553,7 +553,7 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
                       {entry.chain.length > 0 ? `${entry.chain.join('.')}.` : ''}{entry.method.name}()
                     </span>
                     {entry.method.isAsync && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700">async</Badge>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 dark:bg-green-500/20 dark:text-green-300">async</Badge>
                     )}
                   </div>
                 </SelectItem>

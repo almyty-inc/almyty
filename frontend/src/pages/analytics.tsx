@@ -10,6 +10,7 @@ import {
   Receipt,
   Route,
   ScrollText,
+  Wallet,
   Wrench,
   Zap,
 } from 'lucide-react'
@@ -27,6 +28,7 @@ import {
 import { AgentsTab } from '@/components/analytics/agents-tab'
 import { AuditTab } from '@/components/analytics/audit-tab'
 import { CostTab } from '@/components/analytics/cost-tab'
+import { BudgetsTab } from '@/components/analytics/budgets-tab'
 import { GatewaysTab } from '@/components/analytics/gateways-tab'
 import { LlmTab } from '@/components/analytics/llm-tab'
 import { OverviewTab } from '@/components/analytics/overview-tab'
@@ -48,6 +50,7 @@ const TAB_DEFINITIONS: Array<{
   { key: 'routing', label: 'Routing', icon: Route },
   { key: 'agents', label: 'Agents', icon: Bot },
   { key: 'cost', label: 'Cost', icon: DollarSign },
+  { key: 'budgets', label: 'Budgets', icon: Wallet },
   { key: 'chargeback', label: 'Chargeback', icon: Receipt },
   { key: 'audit', label: 'Audit Trail', icon: ScrollText },
 ]
@@ -129,6 +132,7 @@ export function AnalyticsPage() {
       {tab === 'chargeback' && <ChargebackTab />}
       {tab === 'agents' && <AgentsTab />}
       {tab === 'cost' && <CostTab />}
+      {tab === 'budgets' && <BudgetsTab />}
       {tab === 'audit' && <AuditTab />}
     </div>
   )

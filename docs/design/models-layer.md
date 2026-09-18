@@ -28,7 +28,9 @@ Status: ACCEPTED per Frane. Owner: teal-goat (lead), Codex builds under assignme
 
 3. ModelDeployment (model_deployments): modelVersionId, providerType (adapter key), desired jsonb { hardware, replicas, minScale, maxScale, quantization, region, privacyTier }, providerConfig jsonb (opaque, validated by adapter, encrypted fields via field-crypto), externalRef jsonb (adapter-owned), actual jsonb (last reconcile read), state enum pending|deploying|ready|degraded|scaling|tearing_down|orphaned|failed, lastReconcileAt, budgetId (FK budgets). Invariant: nothing vendor-specific outside providerConfig/externalRef.
 
-4. EvalScore (interim, model_eval_scores): modelVersionId, suite, score numeric, passed bool, runRef, createdAt. Written by the verifier panel today; replaced by the observability scores API when it ships (keep the table, swap the writer).
+4. EvalScore (interim, model_eval_scores): modelVersionId, suite, score numeric, passed bool, runRef, createdAt. Migration `1750760000000-ModelsLayer` creates the table and `ModelEvalScore` maps it.
+
+   **Nothing writes it.** `ModelEvalScore` appears nowhere in `backend/src` outside its own entity file and that migration, and it is in no module's `TypeOrmModule.forFeature`, so a writer added today would resolve an undefined repository before it wrote a row. The verifier panel (`AgentVerifierHelper.runPanel`) produces exactly the shape this table wants — verdict, pass/fail, per-checker results, cost — and does not persist it. Wiring that up is the outstanding work; the replacement by an observability scores API is the step after.
 
 ### Pricing feed (decided by Frane, 2026-09-08)
 

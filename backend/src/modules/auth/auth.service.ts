@@ -302,11 +302,33 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Update last login
-    user.lastLoginAt = new Date();
-    await this.userRepository.save(user);
+    return this.completeLogin(user);
+  }
 
-    // Audit log (fire-and-forget) — log to user's first organization
+  /**
+   * Everything a successful sign-in has to record, for a caller that has
+   * already proven the credentials.
+   *
+   * The HTTP route authenticates through LocalAuthGuard and then only
+   * wanted tokens, so it called generateTokens() directly and login()
+   * above was reached by nothing at all. Two things therefore silently
+   * never happened on any sign-in: `lastLoginAt` was never written --
+   * the users screen reads that column and showed every account as
+   * having never signed in -- and no AuditAction.LOGIN row was ever
+   * recorded, so the audit trail, and the audit export built on it, held
+   * no sign-in events despite the action existing in the enum.
+   *
+   * The timestamp goes in as a scoped UPDATE of the one column rather
+   * than a save() of the loaded row: the row arrives here with its
+   * organization memberships hydrated, and a save() would diff and write
+   * back every column of a copy that was read before the password check.
+   */
+  async completeLogin(user: User): Promise<AuthTokens> {
+    const now = new Date();
+    await this.userRepository.update({ id: user.id }, { lastLoginAt: now });
+    user.lastLoginAt = now;
+
+    // Audit log (fire-and-forget) - log to user's first organization
     const orgId = user.organizationMemberships?.[0]?.organizationId;
     if (orgId) {
       this.auditLogService.log({ organizationId: orgId, userId: user.id, userEmail: user.email, action: AuditAction.LOGIN, resourceType: AuditResource.USER, resourceId: user.id, resourceName: user.email });
@@ -745,11 +767,24 @@ export class AuthService {
       }
     }
 
-    // Update email if provided
-    if (updateProfileDto.email) {
-      // Check if email is already in use by another user
+    // Update email if provided.
+    //
+    // Three things have to happen together here, and only the first
+    // used to. `normalizedEmail` is the identity key register() dedupes
+    // on and the unique index is built on; leaving it pointing at the
+    // old address meant an account could move its address without ever
+    // moving its identity, so the alias dedupe stopped describing the
+    // row. And a changed address is an UNPROVEN address: keeping
+    // `isVerified` set let anyone repoint their account at a mailbox
+    // they do not control and stay verified on it, which is exactly
+    // what acceptInvite's caller-email check and the referral payout
+    // gate read to decide who somebody is.
+    if (updateProfileDto.email && updateProfileDto.email !== user.email) {
+      const normalized = normalizeEmail(updateProfileDto.email);
+
+      // Taken on either spelling - the raw address or its canonical form.
       const existingUser = await this.userRepository.findOne({
-        where: { email: updateProfileDto.email },
+        where: [{ email: updateProfileDto.email }, { normalizedEmail: normalized }],
       });
 
       if (existingUser && existingUser.id !== userId) {
@@ -757,10 +792,23 @@ export class AuthService {
       }
 
       user.email = updateProfileDto.email;
+      user.normalizedEmail = normalized;
+      // Back to unproven until the new address answers.
+      user.isVerified = false;
+      user.verifiedAt = null;
+      user.verificationToken = null;
     }
 
     // Save and return updated user
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+
+    // Send the new address its verification link. Best-effort: the
+    // profile change is already committed and mail must not fail it.
+    if (!saved.verifiedAt && !saved.isVerified) {
+      this.requestEmailVerification(saved.id).catch(() => {});
+    }
+
+    return saved;
   }
 
   // Check if organization name is available

@@ -469,7 +469,14 @@ export class LlmChatHelper {
             rejected: routed.rejected,
           }
         : undefined;
-      if (routing) this.runner.recordRoute(organizationId, routing, { userId, conversationId: session.id });
+      if (routing) {
+        this.runner.recordRoute(organizationId, routing, {
+          userId,
+          conversationId: session.id,
+          cost: response.cost,
+          tokens: response.usage?.totalTokens,
+        });
+      }
       return {
         ...response,
         conversationId: session.id,

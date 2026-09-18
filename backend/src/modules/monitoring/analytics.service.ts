@@ -63,11 +63,17 @@ export class AnalyticsService {
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // RequestLog has no direct organizationId column. Scope via the gateway
-    // join where a gateway was attributed, falling back to the org id the
-    // logging interceptor stores in metadata — org-wide protocol routes
-    // (e.g. POST /mcp) have no single gateway, and an inner join silently
-    // dropped every such request from the tiles.
+    // RequestLog carries its own `organizationId` (added by
+    // 1750796000000-RequestLogOrganization, backfilled from the gateway and
+    // from the interceptor's `metadata.organizationId`, written on every
+    // insert since). Scope on that column: the older
+    // `(gw.organizationId = ... OR log.metadata->>'organizationId' = ...)`
+    // spanned two tables, so no index could serve it and every tile scanned
+    // the whole timestamp range for EVERY tenant and then hash-joined the
+    // other orgs away. `IDX_request_logs_organizationId_timestamp` matches
+    // (organizationId, timestamp) directly, which is what these four tiles
+    // and the timeline ask for.
+    //
     // RequestLog only ever holds genuine gateway/protocol/tool-execution
     // traffic: the request-logging interceptor early-returns for anything
     // that is neither a resolved-gateway request (ProtocolContext) nor a
@@ -91,15 +97,13 @@ export class AnalyticsService {
     ] = await Promise.all([
       this.requestLogRepository
         .createQueryBuilder('log')
-        .leftJoin('log.gateway', 'gw')
-        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
+        .where('log.organizationId = :orgId', { orgId: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .getCount()
         .catch(() => 0),
       this.requestLogRepository
         .createQueryBuilder('log')
-        .leftJoin('log.gateway', 'gw')
-        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
+        .where('log.organizationId = :orgId', { orgId: organizationId })
         .andWhere('log.timestamp >= :since', { since: last7d })
         .getCount()
         .catch(() => 0),
@@ -111,17 +115,15 @@ export class AnalyticsService {
       }).catch(() => 0),
       this.requestLogRepository
         .createQueryBuilder('log')
-        .leftJoin('log.gateway', 'gw')
         .select('AVG(log.responseTime)', 'avg')
-        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
+        .where('log.organizationId = :orgId', { orgId: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .getRawOne()
         .then(r => Math.round(r?.avg || 0))
         .catch(() => 0),
       this.requestLogRepository
         .createQueryBuilder('log')
-        .leftJoin('log.gateway', 'gw')
-        .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
+        .where('log.organizationId = :orgId', { orgId: organizationId })
         .andWhere('log.timestamp >= :since', { since: last24h })
         .andWhere('log.statusCode >= 500')
         .getCount()
@@ -156,22 +158,43 @@ export class AnalyticsService {
   }
 
   async getRequestLogs(query: RequestLogQuery) {
-    // CRITICAL: RequestLog has no direct `organizationId` column — the
-    // links are the `gateway` relation and the org id the logging
-    // interceptor stores in metadata. The original query was unscoped,
-    // so any authenticated caller could see every request log in the
-    // database across every organization.
+    // CRITICAL: scope every read on `log.organizationId`. The original query
+    // was unscoped, so any authenticated caller could see every request log
+    // in the database across every organization.
     //
-    // Scope on (gateway org OR metadata org) so logs only show up for
-    // members of that org. Org-wide protocol routes (e.g. POST /mcp)
-    // have no gateway row, so a bare gateway join dropped them.
+    // The scope predicate is the column itself, not
+    // `(gw.organizationId = ... OR log.metadata->>'organizationId' = ...)`:
+    // an OR spanning two tables is unindexable, so Postgres fell back to the
+    // plain timestamp index and read every tenant's logs in the window before
+    // hash-joining them away. `IDX_request_logs_organizationId_timestamp`
+    // covers (organizationId, timestamp) exactly.
     if (!query.organizationId) {
       throw new Error('getRequestLogs requires organizationId');
     }
     const qb = this.requestLogRepository
       .createQueryBuilder('log')
-      .leftJoin('log.gateway', 'gw')
-      .andWhere("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: query.organizationId, orgIdText: query.organizationId })
+      // Project only the columns the mapper below emits. `requestBody` and
+      // `responseBody` are text columns the interceptor truncates at 10,000
+      // chars each, so a default 50-row page dragged up to ~1 MB of bodies
+      // across the wire only for the mapper to drop them.
+      .select([
+        'log.id',
+        'log.method',
+        'log.path',
+        'log.statusCode',
+        'log.responseTime',
+        'log.metadata',
+        'log.gatewayId',
+        'log.toolId',
+        'log.userId',
+        'log.userAgent',
+        'log.ipAddress',
+        'log.errorMessage',
+        'log.requestSize',
+        'log.responseSize',
+        'log.timestamp',
+      ])
+      .where('log.organizationId = :orgId', { orgId: query.organizationId })
       .orderBy('log.timestamp', 'DESC')
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
@@ -302,7 +325,7 @@ export class AnalyticsService {
       .addSelect('SUM(session.messageCount)', 'totalMessages')
       .addSelect('SUM(session.totalInputTokens)', 'totalInputTokens')
       .addSelect('SUM(session.totalOutputTokens)', 'totalOutputTokens')
-      .addSelect('SUM(session.totalCost)', 'totalCostCents')
+      .addSelect('SUM(session.totalCost)', 'totalCostDollars')
       .addSelect('SUM(session.toolCalls)', 'totalToolCalls')
       .where('session.organizationId = :orgId', { orgId: organizationId })
       .andWhere('session.createdAt >= :since', { since })
@@ -315,7 +338,11 @@ export class AnalyticsService {
       totalMessages: parseInt(s.totalMessages, 10),
       totalInputTokens: parseInt(s.totalInputTokens, 10),
       totalOutputTokens: parseInt(s.totalOutputTokens, 10),
-      totalCostCents: Math.round(parseFloat(s.totalCostCents) * 100) / 100,
+      // Conversation.totalCost is dollars (SpendService documents the
+      // same for AgentRun.totalCost and multiplies by 100 to get cents).
+      // The field is named cents and the LLM analytics tab divides by
+      // 100 before rendering, so cents is what it has to carry.
+      totalCostCents: Math.round(parseFloat(s.totalCostDollars || '0') * 100),
       totalToolCalls: parseInt(s.totalToolCalls, 10),
     }));
   }
@@ -331,12 +358,11 @@ export class AnalyticsService {
 
     const results = await this.requestLogRepository
       .createQueryBuilder('log')
-      .leftJoin('log.gateway', 'gw')
       .select(`date_trunc('${truncInterval}', log.timestamp)`, 'bucket')
       .addSelect('COUNT(*)', 'requests')
       .addSelect('SUM(CASE WHEN log.statusCode >= 400 THEN 1 ELSE 0 END)', 'errors')
       .addSelect('AVG(log.responseTime)', 'avgResponseTime')
-      .where("(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)", { orgId: organizationId, orgIdText: organizationId })
+      .where('log.organizationId = :orgId', { orgId: organizationId })
       .andWhere('log.timestamp >= :since', { since })
       .groupBy('bucket')
       .orderBy('bucket', 'ASC')

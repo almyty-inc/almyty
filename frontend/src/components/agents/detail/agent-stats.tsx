@@ -1,6 +1,10 @@
 /**
  * Summary stat cards displayed at the top of the agent detail page:
- * total executions, success rate, avg execution time, total cost.
+ * total runs, success rate, avg run time, total cost.
+ *
+ * "Run" is the one word for what a user starts and for the record it
+ * leaves. The page used to say executions here, runs one tab over and
+ * invocations in the dialog, for the same thing.
  */
 import React from 'react'
 import {
@@ -28,7 +32,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Total Executions</span>
+            <span className="text-sm text-muted-foreground">Total Runs</span>
           </div>
           <div className="text-2xl font-bold mt-1">{agent.totalExecutions}</div>
         </CardContent>
@@ -46,7 +50,7 @@ export function AgentStats({ agent }: AgentStatsProps) {
         <CardContent className="pt-4 pb-4">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Avg Execution Time</span>
+            <span className="text-sm text-muted-foreground">Avg Run Time</span>
           </div>
           <div className="text-2xl font-bold mt-1">
             {agent.averageExecutionTime > 0

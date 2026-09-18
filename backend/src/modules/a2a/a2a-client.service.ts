@@ -60,14 +60,20 @@ export class A2AClientService {
 
     const headers = await this.buildHeaders(externalAgent);
 
+    // This client speaks the v0.2.x / v0.3.x dialect: slash-cased method names,
+    // lowercase `role`, and Parts discriminated by `kind`. That is what the
+    // overwhelming majority of deployed A2A agents (a2a-js / a2a-python SDKs)
+    // still serve. `{ type: 'text' }` matches no released version of the spec
+    // and leaves the remote agent with an empty message.
     const payload = {
       jsonrpc: '2.0',
       id: uuid(),
       method: 'message/send',
       params: {
         message: {
+          messageId: uuid(),
           role: 'user',
-          parts: [{ type: 'text', text }],
+          parts: [{ kind: 'text', text }],
         },
       },
     };

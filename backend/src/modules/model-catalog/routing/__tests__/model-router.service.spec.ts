@@ -107,6 +107,69 @@ describe('ModelRouterService', () => {
     }));
   });
 
+
+  /** Last audit.log() payload. Array.prototype.at is past this tsconfig's lib. */
+  const lastAuditCall = () => {
+    const calls = (audit.log as jest.Mock).mock.calls;
+    return calls[calls.length - 1];
+  };
+  it('records what the routed call cost, and which run and node made it', async () => {
+    // The row carried a model and a rationale but no cost, no tokens, no
+    // run and no node — while audit_logs has had a `cost` column all
+    // along that this writer left null. So the one table recording a
+    // per-call model decision could not answer "spend by model last
+    // week", and a routed call could not be tied back to its run.
+    const { runWithRequestContext } = require('../../../../common/request-context');
+
+    runWithRequestContext({ requestId: 'req-1', runId: 'run-42', nodeId: 'llm_1' }, () => {
+      svc.recordRoute(
+        'org',
+        {
+          modelId: 'a', modelVersionId: 'v1', vendorModelId: 'x', providerId: 'p1',
+          rationale: 'cheapest', attempt: 1, tried: [], rejected: [],
+        },
+        { userId: 'u', conversationId: 'c', cost: 0.0123, tokens: 850 },
+      );
+    });
+
+    const call = lastAuditCall()[0];
+    // The dedicated column, so spend-by-model is a SUM not a json dig.
+    expect(call.cost).toBeCloseTo(0.0123);
+    expect(call.details).toMatchObject({
+      cost: 0.0123,
+      tokens: 850,
+      runId: 'run-42',
+      nodeId: 'llm_1',
+      requestId: 'req-1',
+    });
+  });
+
+  it('takes the run and node from the correlation scope, not a parameter', async () => {
+    const { runWithRequestContext } = require('../../../../common/request-context');
+
+    runWithRequestContext({ requestId: 'req-2', runId: 'run-7' }, () => {
+      svc.recordRoute('org', {
+        modelId: 'a', modelVersionId: null, vendorModelId: 'x', providerId: 'p1',
+        rationale: 'fastest', attempt: 1, tried: [], rejected: [],
+      });
+    });
+
+    expect(lastAuditCall()[0].details).toMatchObject({
+      runId: 'run-7',
+    });
+  });
+
+  it('omits cost entirely when the caller has none, rather than writing 0', async () => {
+    svc.recordRoute('org', {
+      modelId: 'a', modelVersionId: null, vendorModelId: 'x', providerId: 'p1',
+      rationale: 'only candidate', attempt: 1, tried: [], rejected: [],
+    });
+
+    const call = lastAuditCall()[0];
+    expect('cost' in call).toBe(false);
+    expect('cost' in call.details).toBe(false);
+  });
+
   describe('recordLatency', () => {
     const T0 = 1_700_000_000_000;
 

@@ -9,6 +9,7 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
+  Bot,
 } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/table'
 
 import { formatDateTime } from '@/lib/utils'
+import { EmptyState } from '@/components/ui/empty-state'
 import { runStatusVariant, formatDuration } from './constants'
 import type { AgentRun } from '@/types'
 import { VerifyStepCard, VerifySummary } from './verify-step'
@@ -46,20 +48,25 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
           <Badge variant="outline">{runs.length} run{runs.length !== 1 ? 's' : ''}</Badge>
         </div>
         <CardDescription className="text-xs">
-          Autonomous agent runs with step-by-step execution details
+          Runs this agent made in autonomous mode, step by step
         </CardDescription>
       </CardHeader>
       <CardContent>
         {runs.length === 0 ? (
-          // A tab called "Runs" that never shows the run you just made is
-          // a trap. This one only ever lists autonomous runs; workflow
-          // invocations land in Recent Executions on Overview, so say so.
-          <p className="text-sm text-muted-foreground text-center py-6">
-            No autonomous runs yet. Runs appear here once this agent runs in autonomous mode.
-            <br />
-            Invoking a workflow agent records it under <span className="font-medium">Recent Executions</span> on the
-            Overview tab instead.
-          </p>
+          // A tab called "Runs" that never shows the run you just made is a
+          // trap. This one only ever lists autonomous runs; a workflow agent's
+          // runs land under Recent Runs on Overview, so say so.
+          <EmptyState
+            icon={Bot}
+            title="No autonomous runs yet"
+            description={
+              <>
+                Runs appear here once this agent runs in autonomous mode. A workflow agent&rsquo;s runs
+                are listed under <span className="font-medium">Recent Runs</span> on the Overview tab
+                instead.
+              </>
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <Table>

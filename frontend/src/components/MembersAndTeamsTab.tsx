@@ -81,7 +81,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       setNewTeamDescription('')
     },
     onError: (err: any) => {
-      error('Failed to create team', err.response?.data?.message || 'Please try again.')
+      error('Failed to create team', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -126,7 +126,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       setNewMemberRole('member')
     },
     onError: (err: any) => {
-      error('Failed to invite member', err.response?.data?.message || 'Please try again.')
+      error('Failed to invite member', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -140,7 +140,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       success('Invite revoked', 'The pending invite has been revoked.')
     },
     onError: (err: any) => {
-      error('Failed to revoke invite', err.response?.data?.message || 'Please try again.')
+      error('Failed to revoke invite', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -156,7 +156,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       setSelectedMemberRole('member')
     },
     onError: (err: any) => {
-      error('Failed to add member to team', err.response?.data?.message || 'Please try again.')
+      error('Failed to add member to team', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -173,7 +173,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       setEditTeamDialogOpen(false)
     },
     onError: (err: any) => {
-      error('Failed to update team', err.response?.data?.message || 'Please try again.')
+      error('Failed to update team', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -186,7 +186,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       success('Role updated', 'Team member role has been updated successfully.')
     },
     onError: (err: any) => {
-      error('Failed to update role', err.response?.data?.message || 'Please try again.')
+      error('Failed to update role', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -200,7 +200,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       success('Team deleted', 'Team has been deleted successfully.')
     },
     onError: (err: any) => {
-      error('Failed to delete team', err.response?.data?.message || 'Please try again.')
+      error('Failed to delete team', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -213,7 +213,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       success('Member removed', 'Member has been removed from the team.')
     },
     onError: (err: any) => {
-      error('Failed to remove member', err.response?.data?.message || 'Please try again.')
+      error('Failed to remove member', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 

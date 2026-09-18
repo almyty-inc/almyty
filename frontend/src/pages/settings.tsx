@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { MembersAndTeamsTab } from '@/components/MembersAndTeamsTab'
@@ -26,6 +26,7 @@ import { ConnectionsTab } from '@/components/connections/connections-tab'
 import { BillingTab } from '@/components/BillingTab'
 import { PlanBadge } from '@/components/plan-indicator'
 import { authApi, organizationsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const SETTINGS_TABS = ['organization', 'members', 'connections', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso', 'rbac', 'approvals', 'compliance', 'audit-streams', 'encryption'] as const
 type SettingsTab = typeof SETTINGS_TABS[number]
@@ -121,6 +122,7 @@ export function SettingsPage() {
 function OrganizationTab({ organization }: { organization: any }) {
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
+  const { upsertOrganization } = useOrganizationStore()
   const [isEditing, setIsEditing] = useState(false)
   const [orgName, setOrgName] = useState('')
   const [orgDescription, setOrgDescription] = useState('')
@@ -162,14 +164,24 @@ function OrganizationTab({ organization }: { organization: any }) {
   const updateOrgMutation = useMutation({
     mutationFn: (data: { name: string; description?: string }) =>
       organizationsApi.update(organization.id, data),
-    onSuccess: async () => {
+    onSuccess: async (updated: any, variables) => {
       success('Organization updated', 'Organization details have been updated.')
       setIsEditing(false)
+      // The heading below this card, the sidebar switcher and the
+      // X-Organization-Id header all read the store, not a query, so
+      // invalidating alone left the toast claiming a rename the page
+      // still showed the old name for -- across a reload, because the
+      // persisted copy wins whenever its id is still a membership.
+      upsertOrganization({
+        ...organization,
+        ...variables,
+        ...(updated && updated.id ? updated : {}),
+      })
       await queryClient.invalidateQueries({ queryKey: ['organizations'] })
       await queryClient.invalidateQueries({ queryKey: ['organization-details'] })
     },
     onError: (err: any) => {
-      error('Failed to update organization', err.response?.data?.message || 'Please try again.')
+      error('Failed to update organization', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -181,7 +193,7 @@ function OrganizationTab({ organization }: { organization: any }) {
       await queryClient.invalidateQueries({ queryKey: ['organization-details'] })
     },
     onError: (err: any) => {
-      error('Failed to save agent defaults', err.response?.data?.message || 'Please try again.')
+      error('Failed to save agent defaults', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -294,7 +306,7 @@ function OrganizationTab({ organization }: { organization: any }) {
           <div>
             <label className="text-sm font-medium text-muted-foreground">Created</label>
             <div className="text-sm mt-1">
-              {(fullOrg.createdAt || fullOrg.created_at) ? new Date(fullOrg.createdAt || fullOrg.created_at).toLocaleDateString() : <span className="inline-block w-20 h-4 bg-muted animate-pulse rounded" />}
+              {(fullOrg.createdAt || fullOrg.created_at) ? formatDate(fullOrg.createdAt || fullOrg.created_at) : <span className="inline-block w-20 h-4 bg-muted animate-pulse rounded" />}
             </div>
           </div>
         </CardContent>
@@ -402,7 +414,7 @@ function ProfileTab() {
       await queryClient.invalidateQueries({ queryKey: ['user-profile'] })
     },
     onError: (err: any) => {
-      error('Failed to update profile', err.response?.data?.message || 'Please try again.')
+      error('Failed to update profile', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -498,7 +510,7 @@ function ProfileTab() {
                   className="mt-1"
                 />
                 {validationErrors.firstName && (
-                  <p className="text-sm text-red-600 mt-1">{validationErrors.firstName}</p>
+                  <p className="text-sm text-destructive mt-1">{validationErrors.firstName}</p>
                 )}
               </>
             ) : (
@@ -521,7 +533,7 @@ function ProfileTab() {
                   className="mt-1"
                 />
                 {validationErrors.lastName && (
-                  <p className="text-sm text-red-600 mt-1">{validationErrors.lastName}</p>
+                  <p className="text-sm text-destructive mt-1">{validationErrors.lastName}</p>
                 )}
               </>
             ) : (
@@ -547,7 +559,7 @@ function ProfileTab() {
                 className="mt-1"
               />
               {validationErrors.email && (
-                <p className="text-sm text-red-600 mt-1">{validationErrors.email}</p>
+                <p className="text-sm text-destructive mt-1">{validationErrors.email}</p>
               )}
             </>
           ) : (
@@ -559,7 +571,7 @@ function ProfileTab() {
           <div>
             <label className="text-sm font-medium text-muted-foreground">Account Created</label>
             <div className="text-sm mt-1">
-              {new Date(userProfile.createdAt).toLocaleDateString()}
+              {formatDate(userProfile.createdAt)}
             </div>
           </div>
           <div>

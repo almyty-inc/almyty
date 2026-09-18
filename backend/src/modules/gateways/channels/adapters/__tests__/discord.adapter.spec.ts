@@ -56,9 +56,27 @@ describe('DiscordAdapter', () => {
       expect(parseSentJson(fetchMock.calls[0])).toEqual({ content: 'reply' });
     });
 
-    it('swallows errors silently', async () => {
+    /**
+     * Discord refuses with an HTTP status and a `{code, message}` body.
+     * Discarding both is what let "the bot cannot see that channel" be
+     * filed as a delivered reply.
+     */
+    it('refuses a non-2xx and keeps Discord\'s message and code', async () => {
+      fetchMock.setNextResponse({
+        ok: false,
+        status: 403,
+        json: { message: 'Missing Access', code: 50001 },
+      });
+      await expect(
+        adapter.sendResponse({ bot_token: 't' }, { content: 'x' }, { channelId: '1' }),
+      ).rejects.toThrow(/Missing Access.*50001/);
+    });
+
+    it('does not swallow a network failure', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('boom'));
-      await expect(adapter.sendResponse({ bot_token: 't' }, { content: 'x' }, { channelId: '1' })).resolves.toBeUndefined();
+      await expect(
+        adapter.sendResponse({ bot_token: 't' }, { content: 'x' }, { channelId: '1' }),
+      ).rejects.toThrow('boom');
     });
   });
 });

@@ -53,6 +53,9 @@ export function OAuthConsentPage() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<ConsentInfo | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Kept apart from `error`: a rejected approval must leave the consent UI
+  // (scopes + Approve/Deny) on screen so the user can retry or deny.
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -96,22 +99,26 @@ export function OAuthConsentPage() {
   }, [org, gateway, clientId, redirectUri, scope])
 
   // Build a redirect back to the client, preserving `state`. Used for both
-  // the approved (code) and denied (error) outcomes.
-  function redirectToClient(extra: Record<string, string>) {
+  // the approved (code) and denied (error) outcomes. Returns false when the
+  // client's redirect URI is unusable so the caller can re-enable the buttons.
+  function redirectToClient(extra: Record<string, string>): boolean {
     let url: URL
     try {
       url = new URL(redirectUri)
     } catch {
-      setError('The client supplied an invalid redirect URI.')
-      return
+      setSubmitError('The client supplied an invalid redirect URI.')
+      setSubmitting(false)
+      return false
     }
     for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v)
     if (state) url.searchParams.set('state', state)
     window.location.href = url.toString()
+    return true
   }
 
   async function approve() {
     setSubmitting(true)
+    setSubmitError(null)
     try {
       const res = await apiPost<{ code: string }>(
         `/${encodeURIComponent(org)}/${encodeURIComponent(gateway)}/authorize`,
@@ -128,7 +135,10 @@ export function OAuthConsentPage() {
       redirectToClient({ code: res.code })
     } catch (err: any) {
       setSubmitting(false)
-      setError(
+      // A failed approval is recoverable, so it must not land in `error`:
+      // that flag hides the scopes and both buttons, which would strand the
+      // user and leave the MCP client waiting on a redirect forever.
+      setSubmitError(
         err?.response?.data?.error_description ||
           'Authorization failed. Please try again.',
       )
@@ -162,13 +172,32 @@ export function OAuthConsentPage() {
           )}
 
           {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+            >
               {error}
             </div>
           )}
 
           {info && !error && (
             <div className="space-y-3">
+              {/*
+                A rejected approval (expired PKCE, revoked client, any 5xx) is
+                recoverable: it is reported through `submitError`, never through
+                the fatal `error` that gates this block and the footer below.
+                Folding the two together used to strip the scope list AND both
+                buttons, leaving "Please try again." with nothing to try and the
+                MCP client hanging on a redirect that never carried access_denied.
+              */}
+              {submitError && (
+                <div
+                  role="alert"
+                  className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  {submitError}
+                </div>
+              )}
               <p className="text-sm font-medium text-foreground">
                 This will allow it to:
               </p>
@@ -193,7 +222,7 @@ export function OAuthConsentPage() {
               Deny
             </Button>
             <Button className="flex-1" onClick={approve} disabled={submitting}>
-              {submitting ? 'Authorizing…' : 'Approve'}
+              {submitting ? 'Authorizing…' : submitError ? 'Try again' : 'Approve'}
             </Button>
           </CardFooter>
         )}

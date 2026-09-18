@@ -64,6 +64,7 @@ describe('CredentialsService', () => {
           provide: getRepositoryToken(Gateway),
           useValue: {
             find: jest.fn(),
+            findOne: jest.fn(),
           },
         },
         {
@@ -564,6 +565,7 @@ describe('CredentialsService', () => {
 
       apiKeyRepository.create.mockReturnValue(mockSaved);
       apiKeyRepository.save.mockResolvedValue(mockSaved);
+      gatewayRepository.findOne.mockResolvedValue({ id: 'gw-1', organizationId: 'org-1' });
 
       const result = await service.createAccessKey(createData, 'org-1', 'user-1');
 
@@ -579,6 +581,44 @@ describe('CredentialsService', () => {
           isActive: true,
         }),
       );
+    });
+
+    /**
+     * The unified endpoint resolves the gateway straight off the key --
+     * `where: { id: apiKey.gatewayId, status: ACTIVE }`, no organization
+     * predicate -- so a key stamped with a foreign gateway id reaches
+     * that tenant's gateway. Both ids arrive on the request body, so the
+     * only place that can refuse them is here.
+     */
+    it('refuses a gateway that belongs to another organization', async () => {
+      gatewayRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.createAccessKey(
+          { name: 'sneaky', gatewayId: 'gw-of-another-org' },
+          'org-1',
+          'user-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(gatewayRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'gw-of-another-org', organizationId: 'org-1' },
+      });
+      expect(apiKeyRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('refuses an agent that belongs to another organization', async () => {
+      agentRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.createAccessKey(
+          { name: 'sneaky', agentId: 'agent-of-another-org' },
+          'org-1',
+          'user-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(apiKeyRepository.save).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when name is missing', async () => {

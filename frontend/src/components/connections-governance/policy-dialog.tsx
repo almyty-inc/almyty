@@ -211,7 +211,7 @@ export function PolicyDialog({ open, onOpenChange, policy, initialKind, onSaved 
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
             <Button type="submit" disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-              {editing ? 'Save policy' : 'Add policy'}
+              {busy ? 'Saving...' : editing ? 'Save policy' : 'Add policy'}
             </Button>
           </DialogFooter>
         </form>

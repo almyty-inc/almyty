@@ -23,6 +23,7 @@ function mockFetch(status: number, body: unknown) {
   });
 }
 
+/** `cancel` is what closes the socket; the mock records it so a leak shows up. */
 function mockSSEResponse(chunks: string[]) {
   let idx = 0;
   const reader = {
@@ -31,13 +32,16 @@ function mockSSEResponse(chunks: string[]) {
       const value = new TextEncoder().encode(chunks[idx++]);
       return Promise.resolve({ done: false, value });
     }),
+    cancel: vi.fn().mockResolvedValue(undefined),
     releaseLock: vi.fn(),
   };
-  return vi.fn().mockResolvedValue({
+  const fetchMock: any = vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
     body: { getReader: () => reader },
   });
+  fetchMock.reader = reader;
+  return fetchMock;
 }
 
 describe('AlmytyClient coding bridge', () => {
@@ -145,5 +149,8 @@ describe('AlmytyClient coding bridge', () => {
     // Terminates on coding.exit; 'extra' never delivered.
     expect(events.map((e) => e.type)).toEqual(['coding.output', 'coding.exit']);
     expect((events[0].data as any).data).toBe('hello\n');
+    // The coding stream ends on coding.exit with the socket still open
+    // unless the body is cancelled; the REPL opens one per session.
+    expect((globalThis.fetch as any).reader.cancel).toHaveBeenCalled();
   });
 });

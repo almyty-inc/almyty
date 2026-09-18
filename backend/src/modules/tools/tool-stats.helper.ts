@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { Tool } from '../../entities/tool.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
 import { ToolExecutionOptions, ToolExecutionResult } from './tool-execution.types';
+import { getRequestContext } from '../../common/request-context';
 
 @Injectable()
 export class ToolStatsHelper {
@@ -52,10 +53,27 @@ export class ToolStatsHelper {
     metadata: { cached: boolean; executionTime: number; retryCount: number },
   ): Promise<void> {
     try {
+      // Correlation, from the scope rather than from the signature.
+      //
+      // `gatewayId` has been a column on this table all along and nothing
+      // populated it; `runId` had no column at all, so an agent run's
+      // step and the tool_executions row it produced could not be joined
+      // — "the agent said the lookup failed" had no path to the row with
+      // the parameters, the upstream status and the error. Both are known
+      // by the code that opened the scope (the unified endpoint resolves
+      // the gateway, the execution engine opens the run), so neither has
+      // to be threaded through every signature in between. An explicit
+      // option still wins where a caller has better information.
+      const scope = getRequestContext();
+      const gatewayId = options.gatewayId ?? scope?.gatewayId ?? null;
+      const runId = options.runId ?? scope?.runId ?? null;
+
       const execution = this.toolExecutionRepository.create({
         toolId: tool.id,
         userId: options.userId,
         organizationId: options.organizationId,
+        gatewayId,
+        runId,
         parameters,
         result: result.data,
         success: result.success,
@@ -65,8 +83,11 @@ export class ToolStatsHelper {
         retryCount: metadata.retryCount,
         metadata: {
           httpStatus: result.metadata?.httpStatus,
-          requestId: result.metadata?.requestId,
+          // The upstream API's own request id when it returned one, else
+          // ours — so a row always has something to correlate on.
+          requestId: result.metadata?.requestId ?? scope?.requestId,
           rateLimited: result.rateLimited,
+          ...(scope?.nodeId ? { nodeId: scope.nodeId } : {}),
         },
       });
 
@@ -144,25 +165,54 @@ export class ToolStatsHelper {
 
     const since = new Date(Date.now() - timeframeDurations[timeframe]);
 
-    const executions = await this.toolExecutionRepository.find({
-      where: { toolId, organizationId, createdAt: MoreThanOrEqual(since) },
-    });
+    // Counted and averaged by the database, not in heap.
+    //
+    // This used to `find()` every matching row with no `select` and no
+    // `take`. A ToolExecution carries `parameters` and `result` as
+    // untruncated json and the HTTP executor allows 10MB responses, so
+    // the six scalars below cost the full window in memory. One tool at
+    // 1 req/s over a month is ~2.6M rows, reached by opening that tool's
+    // detail page -- and `timeframe` is caller-supplied up to `month`.
+    //
+    // A sample cap is not available here the way it is for a top-N list:
+    // these are totals, and a capped sample would quietly answer a
+    // different question. All six are single-pass aggregates over
+    // IDX(toolId, organizationId, createdAt), so the database computes
+    // them without materialising a row.
+    const row = await this.toolExecutionRepository
+      .createQueryBuilder('execution')
+      .select('COUNT(*)', 'total')
+      .addSelect('COUNT(*) FILTER (WHERE execution.success)', 'successful')
+      .addSelect('AVG(execution.executionTime)', 'avgTime')
+      .addSelect('COUNT(*) FILTER (WHERE execution.cached)', 'cachedCount')
+      .addSelect(
+        "COUNT(*) FILTER (WHERE execution.metadata->>'rateLimited' = 'true')",
+        'rateLimited',
+      )
+      .where('execution.toolId = :toolId', { toolId })
+      .andWhere('execution.organizationId = :organizationId', { organizationId })
+      .andWhere('execution.createdAt >= :since', { since })
+      .getRawOne<{
+        total: string;
+        successful: string;
+        avgTime: string | null;
+        cachedCount: string;
+        rateLimited: string;
+      }>();
 
-    const total = executions.length;
-    const successful = executions.filter(e => e.success).length;
-    const failed = total - successful;
-    const avgTime = total > 0 ? executions.reduce((sum, e) => sum + e.executionTime, 0) / total : 0;
-    const cached = executions.filter(e => e.cached).length;
+    const total = Number(row?.total ?? 0);
+    const successful = Number(row?.successful ?? 0);
+    const cached = Number(row?.cachedCount ?? 0);
+    const avgTime = row?.avgTime ? Number(row.avgTime) : 0;
     const cacheHitRate = total > 0 ? (cached / total) * 100 : 0;
-    const rateLimited = executions.filter(e => (e.metadata as any)?.rateLimited).length;
 
     return {
       totalExecutions: total,
       successfulExecutions: successful,
-      failedExecutions: failed,
+      failedExecutions: total - successful,
       averageExecutionTime: Math.round(avgTime),
       cacheHitRate: Math.round(cacheHitRate * 100) / 100,
-      rateLimitedExecutions: rateLimited,
+      rateLimitedExecutions: Number(row?.rateLimited ?? 0),
     };
   }
 }

@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { agentAppsApi, type AgentApp } from '@/lib/agent-apps'
 
 export interface AppAgentsPanelProps {
@@ -48,7 +49,7 @@ export function AppAgentsPanel({ app, agents, onSaved }: AppAgentsPanelProps) {
       onSaved()
     },
     onError: (err: any) =>
-      errorNotif('Could not save', err?.response?.data?.message || 'Something went wrong.'),
+      errorNotif('Could not save the agent list', getApiErrorMessage(err, 'Please try again.')),
   })
 
   return (

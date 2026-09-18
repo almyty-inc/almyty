@@ -10,7 +10,9 @@ import { cn } from '@/lib/utils'
 import { billingApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { PlanComparison } from '@/components/plan-comparison'
+import { QueryError } from '@/components/ui/query-error'
 import { PLANS, toPlanKey } from '@/lib/plan-catalog'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface BillingStatus {
   plan: string
@@ -73,7 +75,13 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
   const { error } = useNotifications()
   const [interval, setInterval] = useState<BillingInterval>('month')
 
-  const { data: status, isLoading } = useQuery<BillingStatus>({
+  const {
+    data: status,
+    isLoading,
+    isError: statusFailed,
+    error: statusError,
+    refetch: refetchStatus,
+  } = useQuery<BillingStatus>({
     queryKey: ['billing-status', organizationId],
     queryFn: () => billingApi.getStatus(organizationId!),
     enabled: !!organizationId,
@@ -90,20 +98,36 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
       captureEvent('checkout_started', { plan, interval })
       return billingApi.createCheckout(organizationId!, { plan, interval })
     },
-    onSuccess: (res: { url: string }) => {
-      if (res?.url) window.location.assign(res.url)
+    // A resolved response with no url used to end the same way as a
+    // dead button: the spinner stopped and nothing happened.
+    onSuccess: (res: { url?: string }) => {
+      if (res?.url) {
+        window.location.assign(res.url)
+        return
+      }
+      error(
+        'Checkout could not be opened',
+        'The billing provider did not return a checkout link. Please try again.',
+      )
     },
-    onError: (err: any) =>
-      error('Checkout failed', err.response?.data?.message || 'Could not start checkout. Please try again.'),
+    onError: (err: unknown) =>
+      error('Checkout failed', getApiErrorMessage(err, 'Could not start checkout. Please try again.')),
   })
 
   const portalMutation = useMutation({
     mutationFn: () => billingApi.createPortal(organizationId!),
-    onSuccess: (res: { url: string }) => {
-      if (res?.url) window.location.assign(res.url)
+    onSuccess: (res: { url?: string }) => {
+      if (res?.url) {
+        window.location.assign(res.url)
+        return
+      }
+      error(
+        'Billing portal could not be opened',
+        'The billing provider did not return a portal link. Please try again.',
+      )
     },
-    onError: (err: any) =>
-      error('Could not open billing portal', err.response?.data?.message || 'Please try again.'),
+    onError: (err: unknown) =>
+      error('Could not open billing portal', getApiErrorMessage(err, 'Please try again.')),
   })
 
   if (!organizationId) {
@@ -113,6 +137,29 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
           <div className="text-muted-foreground">No organization selected</div>
         </CardContent>
       </Card>
+    )
+  }
+
+  // The status query had no error branch, so a failed fetch left `status`
+  // undefined and the render fell through to plan='free' plus
+  // "Hosted billing is not configured" — a fabricated answer on both counts.
+  // GET /billing/:organizationId is admin/owner-only while Settings shows this
+  // tab to every role, so the common failure is a 403 from a member of a
+  // *paying* org, who would otherwise be told their org is unpaid.
+  if (statusFailed) {
+    const forbidden = (statusError as any)?.response?.status === 403
+    return (
+      <QueryError
+        error={statusError}
+        // Retrying a 403 just fails again; only offer it for transient errors.
+        onRetry={forbidden ? undefined : () => void refetchStatus()}
+        title={forbidden ? 'Billing is restricted to admins and owners' : "We couldn't load your billing details"}
+        description={
+          forbidden
+            ? 'Your role cannot view this organization’s plan or invoices. Ask an owner or admin if you need them.'
+            : undefined
+        }
+      />
     )
   }
 

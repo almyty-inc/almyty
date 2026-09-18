@@ -8,7 +8,7 @@
  */
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { CREDENTIALS_DIR } from './credentials';
+import { CREDENTIALS_DIR } from './credentials.js';
 
 export const CONFIG_FILE = join(CREDENTIALS_DIR, 'config.json');
 

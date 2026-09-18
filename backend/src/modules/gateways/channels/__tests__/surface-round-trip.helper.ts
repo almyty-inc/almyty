@@ -44,8 +44,14 @@ export interface RoundTripResult {
   calls: CapturedFetch[];
   /** The first outbound call, which is the reply on all push surfaces. */
   reply: CapturedFetch;
-  /** Rows the adapter persisted instead of pushing (chat widget). */
+  /** Rows the pipeline and the adapters inserted. */
   savedEvents: any[];
+  /** Outcome writes onto a row that already existed (the inbound claim). */
+  eventUpdates: Array<{ where: any; patch: any }>;
+  /** The inbound row as it stands after any outcome write. */
+  inboundEvent: any;
+  /** The outbound row the dispatch path filed for the reply. */
+  outboundEvent: any;
   /** The run row as it stood when the reply was sent. */
   run: any;
 }
@@ -61,9 +67,28 @@ export interface RoundTripOptions {
   rawBody?: string;
   /** What the agent produced. */
   agentOutput?: string;
-  /** Response the captured fetch should return to the adapter. */
+  /**
+   * Response the captured fetch should return to the adapter. Omitted,
+   * the surface's own "the platform accepted it" answer is used — see
+   * PLATFORM_ACCEPTED, which exists because half these platforms
+   * confirm in the body rather than the status.
+   */
   platformResponse?: Partial<{ ok: boolean; status: number; json: any; text: string }>;
 }
+
+/**
+ * What each platform says when it took the message.
+ *
+ * Only the surfaces whose confirmation is NOT the HTTP status need an
+ * entry: Slack and Telegram answer 200 either way and put the verdict
+ * in `ok`, and the Teams reply needs a token issued first. The rest
+ * are confirmed by the 200 the mock returns by default.
+ */
+const PLATFORM_ACCEPTED: Partial<Record<GatewayType, RoundTripOptions['platformResponse']>> = {
+  [GatewayType.SLACK]: { json: { ok: true, channel: 'C42', ts: '1700000000.200' } },
+  [GatewayType.TELEGRAM]: { json: { ok: true, result: { message_id: 7 } } },
+  [GatewayType.MICROSOFT_TEAMS]: { json: { access_token: 'round-trip-token' } },
+};
 
 const ORG_ID = 'org-round-trip';
 const AGENT_ID = 'agent-round-trip';
@@ -76,9 +101,11 @@ const RUN_ID = 'run-round-trip';
  */
 export async function roundTrip(options: RoundTripOptions): Promise<RoundTripResult> {
   const fetchMock = installFetchMock();
-  if (options.platformResponse) fetchMock.setNextResponse(options.platformResponse);
+  const accepted = options.platformResponse ?? PLATFORM_ACCEPTED[options.type];
+  if (accepted) fetchMock.setNextResponse(accepted);
 
   const savedEvents: any[] = [];
+  const eventUpdates: Array<{ where: any; patch: any }> = [];
   const run: any = {
     id: RUN_ID,
     organizationId: ORG_ID,
@@ -106,11 +133,25 @@ export async function roundTrip(options: RoundTripOptions): Promise<RoundTripRes
     },
   };
 
+  // The real table hands back a generated id, which is what the
+  // pipeline addresses when it writes the delivery's outcome onto the
+  // inbound row. A fake that returned no id would quietly skip that
+  // write and the round trip would stop proving anything about it.
+  let nextEventId = 1;
   const eventRepository = {
     create: (row: any) => row,
     save: async (row: any) => {
-      savedEvents.push(row);
-      return row;
+      const stored = { id: `evt-${nextEventId++}`, ...row };
+      savedEvents.push(stored);
+      return stored;
+    },
+    update: async (where: any, patch: any) => {
+      eventUpdates.push({ where, patch });
+      const target = savedEvents.find((e) =>
+        where.id ? e.id === where.id : e.gatewayId === where.gatewayId && e.deliveryId === where.deliveryId,
+      );
+      if (target) Object.assign(target, patch);
+      return { affected: target ? 1 : 0 };
     },
   };
 
@@ -164,13 +205,17 @@ export async function roundTrip(options: RoundTripOptions): Promise<RoundTripRes
     // The reply is sent from a run-completion listener, so emit and let
     // the async handler settle before inspecting what went out.
     emitter.emit('event', { type: 'run.completed' });
-    await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
+    for (let i = 0; i < 6; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
 
     return {
       calls: fetchMock.calls,
       reply: fetchMock.calls[0],
       savedEvents,
+      eventUpdates,
+      inboundEvent: savedEvents.find((e) => e.direction === 'inbound'),
+      outboundEvent: savedEvents.find((e) => e.direction === 'outbound'),
       run,
     };
   } finally {
