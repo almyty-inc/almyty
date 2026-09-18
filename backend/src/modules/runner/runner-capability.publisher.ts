@@ -105,7 +105,19 @@ export class RunnerCapabilityPublisher {
   async publish(runner: Runner): Promise<Tool[]> {
     return this.tools.manager.transaction(async (mgr) => {
       const repo = mgr.getRepository(Tool);
-      await repo.delete({ runnerConfig: { runnerId: runner.id } as any });
+      // `runnerConfig` is a json column, so a criteria object cannot reach
+      // into it -- `repo.delete({ runnerConfig: { runnerId } })` matched
+      // nothing and the previous rows survived. Republishing the same
+      // runner then re-inserted `runner.<name>.<method>`, which silently
+      // produced duplicate tools until tools_org_name_uq existed and now
+      // fails outright. `unpublish` in this same file has always used the
+      // json-path form; this is that form.
+      await repo
+        .createQueryBuilder()
+        .delete()
+        .from(Tool)
+        .where(`"runnerConfig"->>'runnerId' = :runnerId`, { runnerId: runner.id })
+        .execute();
       const rows: Tool[] = [];
       for (const cap of RunnerCapabilityPublisher.CAPABILITIES) {
         const row = repo.create({
