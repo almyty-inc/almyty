@@ -161,6 +161,26 @@ export function extractData<T = any>(response: AxiosResponse): T {
   return body as T
 }
 
+/**
+ * Message for the permission-denied toast the response interceptor
+ * emits. The global exception filter answers every error as
+ * `{ error: { code, message, ... } }`; this used to read a flat
+ * `data.message` the backend never sends, so the toast always said the
+ * generic sentence and never the backend's reason -- an access policy's
+ * decision.reason, a 402 entitlement refusal, a publish blocker.
+ *
+ * Exported as a pure function because the interceptor itself cannot be
+ * exercised under the global axios mock, the same reason the retry
+ * decision lives in shouldRetryRequest.
+ */
+export function forbiddenToastMessage(data: unknown): string {
+  const body = data as any
+  const message = body?.error?.message ?? body?.message
+  return typeof message === 'string' && message.length > 0
+    ? message
+    : "You don't have permission to perform this action."
+}
+
 // Convenience: api call + extract in one step
 export const apiGet = <T = any>(url: string, config?: any): Promise<T> =>
   api.get(url, config).then(extractData)
@@ -216,21 +236,18 @@ api.interceptors.response.use(
     // swallow 403s on queries (no mutation onError handler fires for
     // a GET), leaving the user staring at a blank screen wondering
     // what they did wrong. Emit a window event the top-level layout
-    // picks up and surfaces as a toast. We deliberately keep the
-    // message user-facing — "You don't have permission" instead of
-    // exposing the raw backend error shape.
+    // picks up and surfaces as a toast, carrying the backend's own
+    // reason when it sent one (see forbiddenToastMessage) and the
+    // generic sentence otherwise.
     // EMAIL_NOT_VERIFIED is a 403 the login page handles inline (verify-email
     // prompt + resend). Suppress the generic "no permission" toast for it so
     // the two don't fight.
     const errCode = (error.response?.data as any)?.error?.code ?? (error.response?.data as any)?.code
     if (error.response?.status === 403 && errCode !== 'EMAIL_NOT_VERIFIED') {
-      const backendMsg = (error.response.data as any)?.message
       const detail = {
         url: config?.url as string | undefined,
         method: (config?.method as string | undefined)?.toUpperCase(),
-        message: typeof backendMsg === 'string' && backendMsg.length > 0
-          ? backendMsg
-          : "You don't have permission to perform this action.",
+        message: forbiddenToastMessage(error.response.data),
       }
       // Only dispatch from a browser context — the unit tests mount
       // this module in jsdom, which has window, so this is safe.
@@ -396,6 +413,8 @@ export const organizationsApi = {
       requestLogsDays: number | null
       usageMetricsDays: number | null
       auditLogDays: number | null
+      toolExecutionsDays: number | null
+      notificationsDays: number | null
     }>,
   ) => apiPut(`/organizations/${id}/retention`, data),
 }
@@ -1260,11 +1279,6 @@ export const approvalPoliciesApi = {
   update: (id: string, data: Partial<UpsertApprovalPolicy>) =>
     apiPatch<ApprovalPolicy>(`/approval-policies/${id}`, data),
   delete: (id: string) => apiDel(`/approval-policies/${id}`),
-}
-
-export const teamsApi = {
-  list: (organizationId: string) =>
-    apiGet(`/organizations/${organizationId}/teams`),
 }
 
 export interface OnboardingState {

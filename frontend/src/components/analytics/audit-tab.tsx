@@ -50,7 +50,7 @@ function AuditExportButtons({
       if (action) params.action = action
       await auditExportApi.download(format, params)
     } catch (err: any) {
-      error('Export failed', err?.response?.data?.message || 'Could not export the audit log.')
+      error('Export failed', getApiErrorMessage(err, 'Could not export the audit log.'))
     } finally {
       setBusy(null)
     }
@@ -73,6 +73,7 @@ function AuditExportButtons({
 import { TABLE_HEAD_CLASS as TH } from './constants'
 import { formatMs, formatNumber } from './format'
 import { StatCard } from './stat-card'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 /** A figure, or a dash when the query behind it did not answer. */
 function auditFigure(summary: any, key: string, value: number | undefined): string {

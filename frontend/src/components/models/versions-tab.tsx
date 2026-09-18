@@ -67,6 +67,9 @@ export function VersionsTab() {
     mutationFn: (id: string) => modelVersionsApi.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['model-versions', orgId] })
+      // This page derives its "N deployments" count from the
+      // deployments rows, and deleting a version releases them.
+      qc.invalidateQueries({ queryKey: ['model-deployments', orgId] })
       setSelectedId(null)
       notify.success('Version deleted', 'The weights stay in the registry.')
     },

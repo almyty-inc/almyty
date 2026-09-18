@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug } from 'lucide-react'
+import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,6 +16,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -73,6 +74,7 @@ import { useMemo } from 'react'
 
 // Form Schema for manual tool creation
 import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface Tool {
   id: string
@@ -243,7 +245,63 @@ export function ToolsPage() {
       setDeletingTool(null)
     },
     onError: (error: any) => {
-      notifications.error('Error', error.message || 'Failed to delete tool')
+      notifications.error('Could not delete the tool', getApiErrorMessage(error, 'The tool is still there.'))
+    },
+  })
+
+  const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(new Set())
+
+  /*
+    Bulk activation, by loop rather than by a new endpoint.
+
+    There is no bulk activate route: POST /organizations/:org/tools/:id/activate
+    is the only one. The MCP control plane's `activate_tool` already
+    handles `toolIds` the same way -- it loops the single-tool service
+    method and reports each id -- so looping here keeps one server-side
+    code path, one authorization check per tool and per-tool reasons,
+    instead of adding a second route that would have to re-derive all of
+    that. An 18-operation import is 18 short requests, which is fine; if
+    imports ever run to hundreds, a real bulk route is the change to make.
+  */
+  const activateToolsMutation = useMutation({
+    mutationFn: async (toolIds: string[]) => {
+      const orgId = currentOrganization?.id || ''
+      const results = await Promise.allSettled(
+        toolIds.map((toolId) => toolsApi.activate(toolId, orgId)),
+      )
+      return {
+        activated: results.filter((r) => r.status === 'fulfilled').length,
+        failed: results
+          .map((r, index) => ({ r, toolId: toolIds[index] }))
+          .filter(({ r }) => r.status === 'rejected')
+          .map(({ r, toolId }) => ({
+            toolId,
+            reason: getApiErrorMessage((r as PromiseRejectedResult).reason, 'Activation failed.'),
+          })),
+      }
+    },
+    onSuccess: ({ activated, failed }) => {
+      queryClient.invalidateQueries({ queryKey: ['tools'] })
+      setSelectedToolIds(new Set())
+      if (failed.length === 0) {
+        notifications.success(
+          activated === 1 ? 'Tool activated' : `${activated} tools activated`,
+          'Active tools can be assigned to a gateway.',
+        )
+        return
+      }
+      const detail = [...new Set(failed.map((f) => f.reason))].slice(0, 2).join(' ')
+      if (activated === 0) {
+        notifications.error('Could not activate', detail)
+      } else {
+        notifications.warning(
+          `${activated} of ${activated + failed.length} tools activated`,
+          detail,
+        )
+      }
+    },
+    onError: (error: any) => {
+      notifications.error('Could not activate', getApiErrorMessage(error, 'Please try again.'))
     },
   })
 
@@ -391,10 +449,7 @@ return new Promise((resolve, reject) => {
       setExecutionMethod('http')
     },
     onError: (error: any) => {
-      const msg = error.response?.data?.error?.message
-        ?? error.response?.data?.message
-        ?? error.message
-        ?? 'Failed to create tool'
+      const msg = getApiErrorMessage(error, 'Failed to create tool')
       notifications.error('Error', msg)
     },
   })
@@ -460,7 +515,58 @@ return new Promise((resolve, reject) => {
     navigate(`/tools/${tool.id}`)
   }
 
+  /*
+    Selection is held here rather than inside DataTable because DataTable
+    keeps its row selection private and exposes no way to read it, and a
+    bulk action needs the ids.
+  */
+  const visibleSelectedIds = filteredTools
+    .filter((tool: Tool) => selectedToolIds.has(tool.id))
+    .map((tool: Tool) => tool.id)
+  const selectableDraftIds = filteredTools
+    .filter((tool: Tool) => tool.status !== 'active')
+    .map((tool: Tool) => tool.id)
+
+  const toggleToolSelected = (toolId: string, selected: boolean) =>
+    setSelectedToolIds((current) => {
+      const next = new Set(current)
+      if (selected) next.add(toolId)
+      else next.delete(toolId)
+      return next
+    })
+
   const columns = [
+    {
+      id: 'select',
+      header: () => (
+        <Checkbox
+          checked={
+            visibleSelectedIds.length > 0 && visibleSelectedIds.length === filteredTools.length
+              ? true
+              : visibleSelectedIds.length > 0
+                ? 'indeterminate'
+                : false
+          }
+          onCheckedChange={(value) =>
+            setSelectedToolIds(
+              value ? new Set(filteredTools.map((tool: Tool) => tool.id)) : new Set<string>(),
+            )
+          }
+          aria-label="Select all tools"
+        />
+      ),
+      cell: ({ row }: any) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedToolIds.has(row.original.id)}
+            onCheckedChange={(value) => toggleToolSelected(row.original.id, !!value)}
+            aria-label={`Select ${row.original.name}`}
+          />
+        </div>
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
     {
       accessorKey: 'name',
       header: 'Name',
@@ -509,25 +615,73 @@ return new Promise((resolve, reject) => {
         return <Badge variant={variant}>{status === 'active' ? 'Active' : 'Inactive'}</Badge>
       },
     },
-    createActionsColumn<Tool>(
-      (tool) => handleViewDetails(tool),
-      (tool) => setDeletingTool(tool),
-      [
-        {
-          label: 'View Details',
-          onClick: (tool) => handleViewDetails(tool),
-        },
-        {
-          label: 'Test Tool',
-          onClick: (tool) => {
-            setToolForExecution(tool)
-            setExecutionParameters({})
-            setExecutionResult(null)
-            setIsExecutionDialogOpen(true)
-          },
-        },
-      ]
-    ),
+    createActionsColumn<Tool>({
+      cell: ({ row }: any) => {
+        const tool: Tool = row.original
+        const isActive = tool.status === 'active'
+
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
+                <span className="sr-only">Actions</span>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleViewDetails(tool)
+                }}
+              >
+                View Details
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setToolForExecution(tool)
+                  setExecutionParameters({})
+                  setExecutionResult(null)
+                  setIsExecutionDialogOpen(true)
+                }}
+              >
+                Test Tool
+              </DropdownMenuItem>
+              {/*
+                Activate, here, on the row.
+
+                Every tool generated from a schema is a draft, and a
+                gateway only serves active tools -- so this was the one
+                action a new user had to take, and the only place in the
+                product that offered it was a toggle on a single tool's
+                detail page. An eighteen-operation import meant eighteen
+                page visits, and nothing said so.
+              */}
+              {!isActive && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    activateToolsMutation.mutate([tool.id])
+                  }}
+                >
+                  Activate
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setDeletingTool(tool)
+                }}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
+    }),
   ]
 
   if (!currentOrganization) {
@@ -595,17 +749,77 @@ return new Promise((resolve, reject) => {
             <p className="text-muted-foreground mb-6 text-center max-w-md">
               Generate tools from API schemas automatically. Create your first tool by importing an API.
             </p>
-            <Button size="lg" asChild>
-              <a href="/apis">
-                <Plus className="mr-2 h-4 w-4" />
-                Go to APIs
-              </a>
-            </Button>
+            {/*
+              The sample offer belongs here, on the branch that actually
+              renders. It was only on the DataTable's emptyState, which
+              this `tools.length === 0` branch pre-empts -- so on the one
+              page where a new user has no tools at all, the button was
+              unreachable.
+            */}
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button size="lg" asChild>
+                <a href="/apis">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Go to APIs
+                </a>
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                onClick={() => seedSample.mutate()}
+                disabled={seedSample.isPending || !currentOrganization}
+              >
+                {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
+            {/*
+              Bulk activation bar. Drafts are the normal state of a fresh
+              import, so the count of drafts on screen is shown even
+              before anything is selected -- that is the fact the product
+              used to keep to itself.
+            */}
+            {(visibleSelectedIds.length > 0 || selectableDraftIds.length > 0) && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3">
+                <p className="text-sm text-muted-foreground">
+                  {visibleSelectedIds.length > 0
+                    ? `${visibleSelectedIds.length} selected.`
+                    : `${selectableDraftIds.length} tool${selectableDraftIds.length === 1 ? ' is a draft' : 's are drafts'}. A gateway only serves active tools.`}
+                </p>
+                <div className="flex items-center gap-2">
+                  {visibleSelectedIds.length === 0 ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedToolIds(new Set(selectableDraftIds))}
+                    >
+                      Select the drafts
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedToolIds(new Set())}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    disabled={visibleSelectedIds.length === 0 || activateToolsMutation.isPending}
+                    onClick={() => activateToolsMutation.mutate(visibleSelectedIds)}
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    {activateToolsMutation.isPending ? 'Activating…' : 'Activate selected'}
+                  </Button>
+                </div>
+              </div>
+            )}
             <DataTable
               columns={columns}
               data={filteredTools}

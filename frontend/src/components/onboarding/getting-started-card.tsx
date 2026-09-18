@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { onboardingApi, type OnboardingState } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
+import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 /**
  * The three steps that make up the progress ring, in fixed order — the
@@ -50,9 +52,9 @@ export const CORE_STEPS: {
   },
   {
     key: 'first_call',
-    label: 'See it work',
-    description: 'Use your tools from Claude Code, live.',
-    cta: 'Try it',
+    label: 'Put an agent in front of it',
+    description: 'One agent, your tools, reachable from chat, a channel, or a coding harness.',
+    cta: 'Build an agent',
     to: '/agents',
   },
 ]
@@ -127,7 +129,7 @@ export function GettingStartedCard({
           <div>
             <CardTitle className="text-lg">Getting started</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Three steps from an API schema to a live, AI-ready gateway. Open any step and we&apos;ll walk you through.
+              Three steps from an API schema to an agent your users can reach. Open any step and we&apos;ll walk you through.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -295,15 +297,33 @@ export function useOnboarding(orgId: string | undefined) {
  */
 export function useSeedSampleWorkspace(orgId: string | undefined) {
   const queryClient = useQueryClient()
+  const { success, error: notifyError } = useNotifications()
   return useMutation({
     mutationFn: () => onboardingApi.seedSample(orgId as string),
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       captureEvent('sample_workspace_loaded')
       queryClient.invalidateQueries({ queryKey: ['onboarding', orgId] })
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       queryClient.invalidateQueries({ queryKey: ['tools', orgId] })
       queryClient.invalidateQueries({ queryKey: ['gateways', orgId] })
       queryClient.invalidateQueries({ queryKey: ['agents', orgId] })
+      success(
+        result?.created === false ? 'Sample workspace already loaded' : 'Sample workspace loaded',
+        'A Petstore API, its tools, an MCP gateway and a demo agent are ready.',
+      )
+    },
+    /*
+      The button had no onError at all. The seed 400s -- it did so on
+      every single attempt, because it tried to put draft tools on a
+      gateway -- and the only thing the user saw was the label going back
+      from "Loading…" to "Load sample workspace". Four screens offer this
+      action; all four were silent.
+    */
+    onError: (error: any) => {
+      notifyError(
+        "Couldn't load the sample workspace",
+        getApiErrorMessage(error, 'Nothing was left behind — try again.'),
+      )
     },
   })
 }

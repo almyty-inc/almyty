@@ -122,7 +122,7 @@ export function BuildPanel({
       window.open(url, '_blank', 'noopener')
     },
     onError: (err: any) =>
-      errorNotif('Could not download', err?.response?.data?.message || 'Link unavailable.'),
+      errorNotif('Could not download', getApiErrorMessage(err, 'Link unavailable.')),
   })
 
   // What the chosen platform would need signed, and whether this

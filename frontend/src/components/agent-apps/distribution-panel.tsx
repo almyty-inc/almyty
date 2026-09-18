@@ -114,9 +114,17 @@ export function DistributionPanel({
       })
       onSaved()
     },
-    onError: (err: any) =>
+    // The backend throws the joined list of every blocker it found --
+    // missing cost cap, white label not entitled, no agents, no signing
+    // credential. Throwing that away left the one refusal in the app
+    // that goes out of its way to be actionable as a bare title.
+    onError: (err: unknown) =>
       errorNotif(
         live ? 'Could not unpublish' : 'Could not publish',
+        getApiErrorMessage(
+          err,
+          live ? 'It is still answering.' : 'It is not answering yet.',
+        ),
       ),
   })
 

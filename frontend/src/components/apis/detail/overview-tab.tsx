@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { Api, ApiOperation, Tool } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface OverviewTabProps {
   api: Api
@@ -162,7 +163,7 @@ export function OverviewTab({
                   success('Tools generated', `${generated} tools created successfully`)
                 }
               } catch (err: any) {
-                error('Failed to generate tools', err.response?.data?.message || 'Please try again.')
+                error('Failed to generate tools', getApiErrorMessage(err, 'Please try again.'))
               }
             }}
           >
@@ -188,8 +189,8 @@ export function OverviewTab({
                 success('Test completed', 'API connection test successful')
               }
             } catch (err: any) {
-              setTestResults({ success: false, error: err.response?.data?.message || 'Connection failed' })
-              error('Test failed', err.response?.data?.message || 'Please try again.')
+              setTestResults({ success: false, error: getApiErrorMessage(err, 'Connection failed') })
+              error('Test failed', getApiErrorMessage(err, 'Please try again.'))
             } finally {
               setTesting(false)
             }

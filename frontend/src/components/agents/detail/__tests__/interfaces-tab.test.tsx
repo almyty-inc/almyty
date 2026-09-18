@@ -202,3 +202,28 @@ describe('InterfacesTab channel connections', () => {
     })
   })
 })
+
+describe('InterfacesTab channel list states', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // Rendering the empty state over a failed read told the operator this agent
+  // has no channels. Acting on that means deploying a second gateway on top of
+  // one that is already live.
+  it('shows the retryable error state, not the empty state, when the gateway list fails', async () => {
+    ;(gatewaysApi.getAll as any).mockRejectedValue(new Error('boom'))
+    renderWithProviders(<InterfacesTab agentId="agent-1" interfaces={[]} />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load this agent's channels")
+    expect(screen.queryByText(/No channels deployed yet/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Try again/ })).toBeInTheDocument()
+  })
+
+  it('offers a deploy action from the empty state', async () => {
+    ;(gatewaysApi.getAll as any).mockResolvedValue({ gateways: [] })
+    renderWithProviders(<InterfacesTab agentId="agent-1" interfaces={[]} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /^List$/ }))
+    expect(await screen.findByText('No channels deployed yet')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Deploy channel/ })).toBeInTheDocument()
+  })
+})

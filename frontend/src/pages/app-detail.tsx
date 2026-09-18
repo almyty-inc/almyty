@@ -42,6 +42,7 @@ import { AppAgentsPanel } from '@/components/agent-apps/app-agents-panel'
 import { AppSettingsPanel } from '@/components/agent-apps/app-settings-panel'
 import { AddDistributionDialog } from '@/components/agent-apps/add-distribution-dialog'
 import { DistributionPanel } from '@/components/agent-apps/distribution-panel'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 /** How each distribution status reads and colours in a badge. */
 const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | 'secondary' | 'warning' | 'outline' | 'destructive' }> = {
@@ -112,7 +113,7 @@ export function AppDetailPage() {
     },
     onError: (err: any) => {
       setDistributionToRemove(null)
-      errorNotif('Could not remove', err?.response?.data?.message || 'Something went wrong.')
+      errorNotif('Could not remove', getApiErrorMessage(err, 'Something went wrong.'))
     },
   })
 

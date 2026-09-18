@@ -7,6 +7,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { Button } from '@/components/ui/button'
 import { budgetsApi, agentsApi, providerUsageApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 import { TABLE_HEAD_CLASS as TH } from './constants'
 
@@ -239,6 +240,14 @@ function ReconciliationSection({
           {sync.isPending ? 'Syncing…' : 'Sync now'}
         </Button>
       </div>
+
+      {sync.isError && (
+        // A refused sync used to stop the spinner and say nothing, so the
+        // numbers below silently stayed the ones from before.
+        <p data-testid="cost-sync-error" className="px-4 py-2 text-xs text-red-600 dark:text-red-400">
+          {getApiErrorMessage(sync.error, 'The providers were not re-read.')}
+        </p>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center h-24">

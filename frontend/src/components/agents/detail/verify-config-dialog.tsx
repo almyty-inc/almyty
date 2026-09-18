@@ -23,6 +23,7 @@ import {
 import { agentsApi, llmProvidersApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 type Policy = 'all_pass' | 'majority' | 'any_fail_blocks'
 type Trigger = 'on_final_output' | 'every_n_steps' | 'on_tool_result'
@@ -106,7 +107,7 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
       queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
       setOpen(false)
     },
-    onError: (e: any) => errorNotif('Save failed', e?.response?.data?.message || e?.message),
+    onError: (e: any) => errorNotif('Save failed', getApiErrorMessage(e)),
   })
 
   return (

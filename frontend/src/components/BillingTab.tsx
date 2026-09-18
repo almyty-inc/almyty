@@ -12,6 +12,7 @@ import { useNotifications } from '@/store/app'
 import { PlanComparison } from '@/components/plan-comparison'
 import { QueryError } from '@/components/ui/query-error'
 import { PLANS, toPlanKey } from '@/lib/plan-catalog'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface BillingStatus {
   plan: string
@@ -97,20 +98,36 @@ export function BillingTab({ organizationId }: { organizationId?: string }) {
       captureEvent('checkout_started', { plan, interval })
       return billingApi.createCheckout(organizationId!, { plan, interval })
     },
-    onSuccess: (res: { url: string }) => {
-      if (res?.url) window.location.assign(res.url)
+    // A resolved response with no url used to end the same way as a
+    // dead button: the spinner stopped and nothing happened.
+    onSuccess: (res: { url?: string }) => {
+      if (res?.url) {
+        window.location.assign(res.url)
+        return
+      }
+      error(
+        'Checkout could not be opened',
+        'The billing provider did not return a checkout link. Please try again.',
+      )
     },
-    onError: (err: any) =>
-      error('Checkout failed', err.response?.data?.message || 'Could not start checkout. Please try again.'),
+    onError: (err: unknown) =>
+      error('Checkout failed', getApiErrorMessage(err, 'Could not start checkout. Please try again.')),
   })
 
   const portalMutation = useMutation({
     mutationFn: () => billingApi.createPortal(organizationId!),
-    onSuccess: (res: { url: string }) => {
-      if (res?.url) window.location.assign(res.url)
+    onSuccess: (res: { url?: string }) => {
+      if (res?.url) {
+        window.location.assign(res.url)
+        return
+      }
+      error(
+        'Billing portal could not be opened',
+        'The billing provider did not return a portal link. Please try again.',
+      )
     },
-    onError: (err: any) =>
-      error('Could not open billing portal', err.response?.data?.message || 'Please try again.'),
+    onError: (err: unknown) =>
+      error('Could not open billing portal', getApiErrorMessage(err, 'Please try again.')),
   })
 
   if (!organizationId) {

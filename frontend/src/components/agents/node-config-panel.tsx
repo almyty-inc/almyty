@@ -85,7 +85,10 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
         {/* Type-specific configs */}
         {nodeType === 'input' && <InputConfig node={node} updateData={updateData} />}
         {nodeType === 'output' && <OutputConfig node={node} nodes={nodes} updateData={updateData} />}
-        {nodeType === 'llm_call' && <LlmCallConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
+        {/* Keyed by node id: the panel is not remounted when you click a
+            different node, so without this the custom-model mode picked on
+            one node would carry over to the next one. */}
+        {nodeType === 'llm_call' && <LlmCallConfig key={node.id} node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
         {nodeType === 'tool_call' && <ToolCallConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
         {nodeType === 'condition' && <ConditionConfig node={node} nodes={nodes} updateData={updateData} />}
         {nodeType === 'transform' && <TransformConfig node={node} updateData={updateData} />}
@@ -134,19 +137,36 @@ function InputConfig({ node, updateData }: { node: Node; updateData: UpdateDataF
 // --- Output Node Config ---
 function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; updateData: UpdateDataFn }) {
   const availableNodes = nodes.filter(n => n.id !== node.id && n.type !== 'input' && n.type !== 'output')
+  const mapping = (node.data.mapping as string) || ''
+  // The picker and the box below edit one field, not two. Binding the
+  // picker's value to that same field is what makes it visible: choose a
+  // node and the box fills in, write a template of your own and the picker
+  // falls back to its placeholder instead of showing a stale choice that
+  // overwrites what you typed the next time you open it.
+  const pickedNode = availableNodes.some(n => `{{nodes.${n.id}.output}}` === mapping)
 
   return (
     <div className="space-y-3">
       <div>
-        <Label htmlFor="node-output-source">Output Source</Label>
+        <Label htmlFor="node-output-source">Output Template</Label>
         <Select
-          value={(node.data.mapping as string) || ''}
+          value={pickedNode ? mapping : ''}
           onValueChange={(v) => updateData('mapping', v)}
         >
           <SelectTrigger id="node-output-source" className="mt-1">
-            <SelectValue placeholder="Select output source" />
+            <SelectValue placeholder="Pick an upstream node" />
           </SelectTrigger>
           <SelectContent>
+            {/*
+              Same dead end as the provider select above: delete the middle
+              node and there is nothing left to map an output from, so the
+              select opened on a 4px sliver that explained nothing.
+            */}
+            {availableNodes.length === 0 && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">
+                No upstream nodes yet — add a node between Input and Output.
+              </div>
+            )}
             {availableNodes.map(n => (
               <SelectItem key={n.id} value={`{{nodes.${n.id}.output}}`}>
                 {NODE_TYPE_CONFIG[n.type as PipelineNodeType]?.label || n.type}: {n.id}
@@ -155,22 +175,24 @@ function OutputConfig({ node, nodes, updateData }: { node: Node; nodes: Node[]; 
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground mt-1">
-          Select which node's output becomes the pipeline result.
+          A shortcut: picking a node writes its output reference into the template below.
         </p>
       </div>
 
       <div>
-        <Label htmlFor="output-mapping-custom">Custom Mapping</Label>
+        <Label htmlFor="output-mapping-custom">Template</Label>
         <Textarea
           id="output-mapping-custom"
           className="mt-1 font-mono text-xs"
           rows={3}
-          value={(node.data.mapping as string) || ''}
+          value={mapping}
           onChange={(e) => updateData('mapping', e.target.value)}
           placeholder="{{nodes.llm_1.output}}"
         />
         <p className="text-xs text-muted-foreground mt-1">
-          Or write a custom template using {'{{nodes.<id>.output}}'} syntax.
+          The pipeline result, written with {'{{nodes.<id>.output}}'} syntax. It is
+          rendered as text, so a node whose output is an object or an array arrives here
+          as JSON text.
         </p>
       </div>
     </div>
@@ -189,7 +211,11 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   const { currentOrganization } = useOrganizationStore()
   const [toolSearch, setToolSearch] = useState('')
   const [showAllTools, setShowAllTools] = useState(false)
-  const [useCustomModel, setUseCustomModel] = useState(false)
+  // `null` means "the user has not picked a mode on this panel yet", so the
+  // mode is derived from the saved value below instead of defaulting to the
+  // suggestion list. Plain `useState(false)` made a saved custom model open
+  // on a Select that could not represent it.
+  const [customModelOverride, setCustomModelOverride] = useState<boolean | null>(null)
   const VISIBLE_TOOLS_LIMIT = 8
 
   const { data: providers } = useQuery({
@@ -233,6 +259,21 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   })
 
   const modelSuggestions: string[] = dynamicModels || []
+
+  const savedModel = (node.data.model as string) || ''
+  // Radix renders the placeholder whenever `value` matches no SelectItem, and
+  // it does so silently: a node holding a dated snapshot id, a fine-tune or a
+  // retired model -- none of which the provider's list endpoint returns --
+  // read as "Select model" while still executing the saved value. Two guards,
+  // because either alone leaves a hole: default this node to the free-text
+  // input when the saved model is not in the list, and keep the saved value in
+  // the list so the Select can never drop it even if the user switches back.
+  const savedModelIsCustom =
+    !!savedModel && modelSuggestions.length > 0 && !modelSuggestions.includes(savedModel)
+  const useCustomModel = customModelOverride ?? savedModelIsCustom
+  const modelOptions = savedModel && !modelSuggestions.includes(savedModel)
+    ? [savedModel, ...modelSuggestions]
+    : modelSuggestions
 
   // Filter tools by search
   const toolList = (Array.isArray(tools) ? tools : (tools as any)?.tools || []) as Array<Pick<Tool, 'id' | 'name'>>
@@ -279,7 +320,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
               if (routed) return
               const { providerId: _providerId, providerName: _providerName, providerType: _providerType, model: _model, ...rest } = node.data
               onUpdateNode(node.id, { ...rest, routing: { objective: 'cheapest' } })
-              setUseCustomModel(false)
+              setCustomModelOverride(null)
             }}
           >
             Routed by policy
@@ -313,7 +354,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
               providerType: provider?.type || '',
               model: '',
             })
-            setUseCustomModel(false)
+            setCustomModelOverride(null)
           }}
         >
           <SelectTrigger id="node-provider" className="mt-1">
@@ -346,7 +387,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
             <button
               type="button"
               className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setUseCustomModel(!useCustomModel)}
+              onClick={() => setCustomModelOverride(!useCustomModel)}
             >
               {useCustomModel ? 'Use suggested' : 'Custom model'}
             </button>
@@ -361,8 +402,13 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
               <SelectValue placeholder="Select model" />
             </SelectTrigger>
             <SelectContent>
-              {modelSuggestions.map((model) => (
-                <SelectItem key={model} value={model}>{model}</SelectItem>
+              {modelOptions.map((model) => (
+                <SelectItem key={model} value={model}>
+                  {model}
+                  {model === savedModel && savedModelIsCustom && (
+                    <span className="text-muted-foreground ml-1">(saved)</span>
+                  )}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -828,18 +874,22 @@ function TransformConfig({ node, updateData }: { node: Node; updateData: UpdateD
   return (
     <div className="space-y-3">
       <div>
-        <Label htmlFor="transform-expr">Transform Expression</Label>
+        <Label htmlFor="transform-expr">Transform Template</Label>
         <div className="mt-1">
           <CodeEditor
             value={(node.data.expression as string) || ''}
             onChange={(value) => updateData('expression', value)}
-            language="javascript"
+            language="text"
             height="140px"
-            placeholder={'{\n  "summary": "{{nodes.llm_1.output}}",\n  "timestamp": "{{Date.now()}}"\n}'}
+            placeholder={'{\n  "summary": "{{nodes.llm_1.output}}",\n  "source": "{{input.url}}"\n}'}
           />
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          JavaScript/template expression to transform input data. Result becomes this node's output.
+          A template, not JavaScript. Each {'{{...}}'} is replaced by a value read out of{' '}
+          <code>input</code>, <code>nodes</code> or <code>variables</code> by dot path.
+          There are no function calls, arithmetic or indexing. The node outputs the
+          rendered text, so a template shaped like JSON produces a JSON string
+          downstream, not an object.
         </p>
       </div>
     </div>
@@ -869,17 +919,29 @@ function MergeConfig({ node, updateData }: { node: Node; updateData: UpdateDataF
       </div>
 
       {node.data.strategy === 'best_of_n' && (
-        <div>
-          <Label htmlFor="judge-prompt">Judge Prompt</Label>
-          <Textarea
-            id="judge-prompt"
-            className="mt-1 text-xs"
-            rows={4}
-            value={(node.data.judgePrompt as string) || ''}
-            onChange={(e) => updateData('judgePrompt', e.target.value)}
-            placeholder="Pick the best response considering quality and accuracy..."
-          />
-        </div>
+        <>
+          <div>
+            <Label htmlFor="judge-prompt">Judge Prompt</Label>
+            <Textarea
+              id="judge-prompt"
+              className="mt-1 text-xs"
+              rows={4}
+              value={(node.data.judgePrompt as string) || ''}
+              onChange={(e) => updateData('judgePrompt', e.target.value)}
+              placeholder="Pick the best response considering quality and accuracy..."
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Leave empty to ask for the best option and nothing else. The judge must answer
+              with just the option number.
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            The judging call uses this node&apos;s own provider or routing policy, and
+            falls back to the organization&apos;s default routing policy. With none of
+            the three set, the run fails at this node. One incoming branch is returned
+            as-is, without a judging call.
+          </p>
+        </>
       )}
 
       {node.data.strategy === 'consensus' && (
@@ -892,9 +954,14 @@ function MergeConfig({ node, updateData }: { node: Node; updateData: UpdateDataF
             min={0}
             max={1}
             step={0.1}
-            value={(node.data.consensusThreshold as number) || 0.5}
+            value={(node.data.consensusThreshold as number) ?? 0.5}
             onChange={(e) => updateData('consensusThreshold', parseFloat(e.target.value))}
           />
+          <p className="mt-1 text-xs text-muted-foreground">
+            The share of branches that have to agree. The node outputs the combined answer
+            plus <code>agreement</code> and <code>consensusReached</code>, so a Condition
+            node downstream can branch on disagreement.
+          </p>
         </div>
       )}
     </div>
@@ -1027,7 +1094,10 @@ function LoopConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn
           />
         </div>
         <p className="text-xs text-muted-foreground mt-1">
-          Template expression that resolves to an array. Use {'{{loop.item}}'} and {'{{loop.index}}'} in downstream nodes.
+          Template expression that resolves to an array. This node outputs that array,
+          capped at Max Iterations. It does not run the nodes downstream of it once per
+          item — read the whole list with <code>{'{{nodes.<id>.output}}'}</code>, or fan
+          it out through a Parallel node.
         </p>
       </div>
       <div>

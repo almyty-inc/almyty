@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, fireEvent } from '@testing-library/react'
 
 import { render } from '../../test/setup'
 
@@ -36,6 +36,11 @@ vi.mock('react-router-dom', async () => {
 
 import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi } from '@/lib/api'
 import { DashboardPage } from '../dashboard'
+
+// testing-library's 1s default for findBy* is not enough for a react-query
+// round trip when this file shares a worker with the rest of the suite. The
+// budget only bounds how long a genuine failure takes to report.
+const WAIT = { timeout: 10000 }
 
 /**
  * The dashboard waits for every count before printing any of them.
@@ -121,5 +126,59 @@ describe('the dashboard loading gate', () => {
     expect(
       screen.getByRole('link', { name: /have no generated tools/ }),
     ).toHaveAttribute('href', '/apis')
+  })
+})
+
+/**
+ * A failed count is not a count of zero.
+ *
+ * The `&&` -> `||` loading gate above fixed the warm-cache case, but none of
+ * the four queries exposed `isError`. On a failure `isLoading` was false and
+ * `data` undefined, so the extraction produced empty arrays and the page told
+ * a fully populated org it had "0 APIs · 0 Tools · 0 Gateways · 0 Agents",
+ * Getting-Started card and all -- a made-up dashboard for real data.
+ */
+describe('the dashboard when a count fails to load', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const populated = () => {
+    ;(toolsApi.getAll as any).mockResolvedValue({ tools: [{ id: 't1' }], total: 1 })
+    ;(apisApi.getAll as any).mockResolvedValue({ apis: [{ id: 'a1' }], total: 1 })
+    ;(agentsApi.getAll as any).mockResolvedValue({ agents: [] })
+    ;(analyticsApi.getRequestLogs as any).mockResolvedValue({ logs: [] })
+  }
+
+  it('says it could not load rather than printing zeros', async () => {
+    ;(gatewaysApi.getAll as any).mockRejectedValue(new Error('gateways unavailable'))
+    populated()
+
+    render(<DashboardPage />)
+
+    expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent(
+      "We couldn't load your dashboard",
+    )
+    // The pipeline row must not appear at all: a zero here is a lie about
+    // the org, not a fact about the request.
+    expect(
+      screen.queryByText((_t, el) => el?.tagName === 'DIV' && /Serving$/.test(el?.textContent ?? '')),
+    ).not.toBeInTheDocument()
+  })
+
+  it('surfaces the backend message and offers a retry that refetches', async () => {
+    ;(gatewaysApi.getAll as any).mockRejectedValue({
+      response: { data: { message: 'Gateway service is down.' } },
+    })
+    populated()
+
+    render(<DashboardPage />)
+
+    expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('Gateway service is down.')
+
+    const callsBefore = (gatewaysApi.getAll as any).mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    await waitFor(
+      () => expect((gatewaysApi.getAll as any).mock.calls.length).toBeGreaterThan(callsBefore),
+      WAIT,
+    )
   })
 })

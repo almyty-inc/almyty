@@ -65,6 +65,7 @@ import { ImportExternalA2ADialog } from '@/components/agents/import-external-a2a
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Agent, ExternalAgent } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface AgentTemplate {
   id: string
@@ -181,6 +182,17 @@ export function AgentsPage() {
     defaultValues: { name: '', description: '' },
   })
 
+
+  // The same four keys the detail page drops for these operations. A
+  // list-page activate used to invalidate ['agents'] only, so the
+  // detail page -- and its version list and audit log, both of which
+  // gain a row from the operation -- kept serving the old answer.
+  const invalidateAgent = async (agentId: string) => {
+    await queryClient.invalidateQueries({ queryKey: ['agent', agentId] })
+    await queryClient.invalidateQueries({ queryKey: ['agents'] })
+    await queryClient.invalidateQueries({ queryKey: ['entity-versions', 'Agent', agentId] })
+    await queryClient.invalidateQueries({ queryKey: ['agent-audit-log', agentId] })
+  }
   // Create agent mutation
   const createAgentMutation = useMutation({
     mutationFn: async (data: CreateAgentForm) => {
@@ -201,7 +213,7 @@ export function AgentsPage() {
       setCreateDialogOpen(false)
     },
     onError: (err: any) => {
-      errorNotif('Error', err?.response?.data?.message || err?.message || 'Failed to create agent')
+      errorNotif('Error', getApiErrorMessage(err, 'Failed to create agent'))
     },
   })
 
@@ -210,50 +222,57 @@ export function AgentsPage() {
     mutationFn: async (agentId: string) => {
       return await agentsApi.delete(agentId)
     },
-    onSuccess: async () => {
+    onSuccess: async (_result, agentId) => {
       success('Agent Deleted', 'Agent has been deleted successfully.')
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      // The detail page's caches for this agent would otherwise be
+      // served to whoever navigated to it next. agent-detail.tsx does
+      // the same four keys for the same operations; the list page only
+      // ever dropped ['agents'].
+      queryClient.removeQueries({ queryKey: ['agent', agentId] })
+      queryClient.removeQueries({ queryKey: ['entity-versions', 'Agent', agentId] })
+      queryClient.removeQueries({ queryKey: ['agent-audit-log', agentId] })
       setDeleteDialogOpen(false)
       setAgentToDelete(null)
     },
     onError: (err: any) => {
-      errorNotif('Failed to delete agent', err?.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to delete agent', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
   // Activate mutation
   const activateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.activate(id),
-    onSuccess: async () => {
+    onSuccess: async (_result, id) => {
       success('Agent Activated', 'Agent is now active.')
-      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      await invalidateAgent(id)
     },
     onError: (err: any) => {
-      errorNotif('Error', err?.response?.data?.message || 'Failed to activate agent')
+      errorNotif('Error', getApiErrorMessage(err, 'Failed to activate agent'))
     },
   })
 
   // Deactivate mutation
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.deactivate(id),
-    onSuccess: async () => {
+    onSuccess: async (_result, id) => {
       success('Agent Deactivated', 'Agent is now inactive.')
-      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      await invalidateAgent(id)
     },
     onError: (err: any) => {
-      errorNotif('Error', err?.response?.data?.message || 'Failed to deactivate agent')
+      errorNotif('Error', getApiErrorMessage(err, 'Failed to deactivate agent'))
     },
   })
 
   // Duplicate mutation
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.duplicate(id),
-    onSuccess: async () => {
+    onSuccess: async (_result, id) => {
       success('Agent Duplicated', 'A copy of the agent has been created.')
-      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      await invalidateAgent(id)
     },
     onError: (err: any) => {
-      errorNotif('Error', err?.response?.data?.message || 'Failed to duplicate agent')
+      errorNotif('Error', getApiErrorMessage(err, 'Failed to duplicate agent'))
     },
   })
 

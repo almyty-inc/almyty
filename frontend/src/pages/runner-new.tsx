@@ -206,7 +206,7 @@ export function RunnerNewPage() {
             <div className="space-y-4">
               <CommandBlock label="Install the runner once" command="npm i -g @almyty/runner" />
               <CommandBlock label="Make sure you're authenticated" command="npx @almyty/auth login" hint="One-time browser login. The runner picks up credentials automatically; no token in the start command." />
-              <CommandBlock label="Start it" command={command} />
+              <CommandBlock label="Start it" command={command} hint="Commands your agents dispatch run as the user who starts this, on that machine — package installs are refused by default, and allowedCwdRoots / denyPatterns in ~/.almyty/config.json narrow it further. The daemon prints its posture at boot." />
             </div>
           </Step>
         )}
