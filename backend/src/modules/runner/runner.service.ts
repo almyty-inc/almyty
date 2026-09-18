@@ -10,6 +10,14 @@ import { RunnerCapabilityPublisher } from './runner-capability.publisher';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 /**
+ * Runner ids are uuids. Checked before an id that arrived over the wire
+ * reaches a query, because Postgres raises on a malformed uuid rather
+ * than returning no rows, and a membership question should answer "no"
+ * instead of throwing.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * Input shape for POST /runners/register. The runner CLI sends this
  * once at daemon startup. Detected fields (runtimeInfo) come from the
  * runner's own probing; user fields (name, labels, config) come from
@@ -258,11 +266,11 @@ export class RunnerService {
       if (next === RunnerState.OFFLINE) markStrandedFor.push(runner.id);
     }
 
-    // Self-heal the half-finished pair described above: an OFFLINE
-    // runner that still has ACTIVE workspaces gets its fan-out
-    // retried. Stranding is idempotent (it only touches ACTIVE rows),
-    // so re-listing a runner costs nothing when there is nothing left
-    // to strand.
+    // Self-heal the leftovers: a runner that is OFFLINE, or that has
+    // re-registered after a crash, but still has ACTIVE workspaces
+    // pinned to it gets its fan-out retried. Stranding is idempotent
+    // (it only touches ACTIVE rows), so re-listing a runner costs
+    // nothing when there is nothing left to strand.
     const unfinished = await this.runnersWithStrandedWork(manager);
     for (const runnerId of unfinished) {
       if (!markStrandedFor.includes(runnerId)) markStrandedFor.push(runnerId);
@@ -303,6 +311,21 @@ export class RunnerService {
       throw new BadRequestException(`runner ${runner.name} is ${runner.state}; cannot accept dispatch`);
     }
     return runner;
+  }
+
+  /**
+   * Does `runnerId` name a runner inside `organizationId`?
+   *
+   * For the envelope handlers, and deliberately non-throwing: the id
+   * they pass is whatever the daemon wrote into its `runner.hello`
+   * payload, not something read back from a row we wrote, so a
+   * malformed or unknown id is an answer ("no") rather than an error.
+   * The organization is the one the session's bearer token proved.
+   */
+  async belongsToOrganization(runnerId: string, organizationId: string): Promise<boolean> {
+    if (!organizationId || !UUID_RE.test(runnerId ?? '')) return false;
+    const count = await this.runners.count({ where: { id: runnerId, organizationId } });
+    return count > 0;
   }
 
   /** The active Streamable HTTP session for a runner, or null. */
@@ -406,9 +429,27 @@ export class RunnerService {
   }
 
   /**
-   * Runners that are already OFFLINE but still have ACTIVE workspaces —
-   * the residue of a pod that died between flipping the runner and
-   * stranding its work. Returned so the next tick can finish it.
+   * Runners that still have ACTIVE workspaces but can no longer be
+   * running them. Returned so the next tick strands the leftovers.
+   *
+   * Two ways to get here, and both used to end in workspaces that
+   * stayed ACTIVE for ever:
+   *
+   *   OFFLINE     the residue of a pod that died between flipping the
+   *               runner and stranding its work.
+   *   REGISTERED  a runner that crashed and re-registered. register()
+   *               resets the row to REGISTERED with no heartbeat, and
+   *               the tick's candidate list only looks at ONLINE,
+   *               BUSY, STALE and DRAINING -- so the previous
+   *               incarnation's workspaces were never examined again,
+   *               even though the machine they were pinned to is gone.
+   *               The header on register() says the spec is
+   *               "stranded = stranded"; nothing was doing the
+   *               stranding.
+   *
+   * An ACTIVE workspace against a REGISTERED runner is always residue:
+   * WorkspaceService.create refuses any runner that is not ONLINE or
+   * BUSY, so one cannot legitimately be created in this state.
    */
   private async runnersWithStrandedWork(manager?: EntityManager): Promise<string[]> {
     const workspaces = manager ? manager.getRepository(Workspace) : this.workspaces;
@@ -417,7 +458,9 @@ export class RunnerService {
       .select('DISTINCT ws."runnerId"', 'runnerId')
       .innerJoin(Runner, 'r', 'r.id = ws."runnerId"')
       .where('ws.status = :active', { active: WorkspaceStatus.ACTIVE })
-      .andWhere('r.state = :offline', { offline: RunnerState.OFFLINE })
+      .andWhere('r.state IN (:...gone)', {
+        gone: [RunnerState.OFFLINE, RunnerState.REGISTERED],
+      })
       .getRawMany();
     return rows.map((row) => row.runnerId);
   }

@@ -119,18 +119,18 @@ describe('runner FSM writes are guarded', () => {
       ),
       createQueryBuilder: jest.fn(() => {
         let activeStatus: string | undefined;
-        let offlineState: string | undefined;
+        let goneStates: string[] | undefined;
         const qb: any = {
           select: () => qb,
           innerJoin: () => qb,
           where: (_c: string, p: any) => { activeStatus = p?.active; return qb; },
-          andWhere: (_c: string, p: any) => { offlineState = p?.offline; return qb; },
+          andWhere: (_c: string, p: any) => { goneStates = p?.gone; return qb; },
           getRawMany: async () => {
             const ids = new Set<string>();
             for (const ws of workspaceRows.values()) {
               if (activeStatus && ws.status !== activeStatus) continue;
               const runner = runnerRows.get(ws.runnerId);
-              if (!runner || (offlineState && runner.state !== offlineState)) continue;
+              if (!runner || !goneStates || !goneStates.includes(runner.state)) continue;
               ids.add(ws.runnerId);
             }
             return [...ids].map((runnerId) => ({ runnerId }));
@@ -247,6 +247,38 @@ describe('runner FSM writes are guarded', () => {
     const result = await service.tick(new Date());
 
     expect(result.markStrandedFor).toEqual([]);
+  });
+
+  /**
+   * The other way a runner leaves ONLINE without passing through
+   * OFFLINE: it crashed and the daemon came back inside the stale
+   * window. register() resets the row to REGISTERED with no heartbeat,
+   * and the tick's candidate list only covers ONLINE, BUSY, STALE and
+   * DRAINING -- so the workspaces pinned to the machine that died were
+   * never looked at again. They stayed ACTIVE, the heartbeat counted
+   * them and put the fresh runner straight into BUSY, and the user was
+   * never told the work was lost.
+   *
+   * An ACTIVE workspace against a REGISTERED runner is always residue:
+   * WorkspaceService.create refuses any runner that is not ONLINE or
+   * BUSY, so this pair cannot be created legitimately.
+   */
+  it('a re-registered runner still holding ACTIVE workspaces is returned for stranding', async () => {
+    seedRunner({ state: RunnerState.REGISTERED, lastHeartbeatAt: null });
+    seedWorkspace({ status: WorkspaceStatus.ACTIVE });
+
+    const result = await service.tick(new Date());
+
+    expect(result.markStrandedFor).toEqual(['r-1']);
+  });
+
+  it('a freshly registered runner with no workspaces is left alone', async () => {
+    seedRunner({ state: RunnerState.REGISTERED, lastHeartbeatAt: null });
+
+    const result = await service.tick(new Date());
+
+    expect(result.markStrandedFor).toEqual([]);
+    expect(result.transitioned).toBe(0);
   });
 
   it('a runner flipped OFFLINE by this tick is reported once, not twice', async () => {

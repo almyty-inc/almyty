@@ -283,20 +283,20 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       } as FindOptionsWhere<Notification>);
     }
 
-    const total =
-      counts.agentRuns +
-      counts.conversations +
-      counts.messages +
-      counts.requestLogs +
-      counts.usageMetrics +
-      counts.auditLogs;
+    // Every class the sweep can delete, not a hand-maintained subset.
+    // toolExecutions and notifications were added to SweepCounts but
+    // never to this sum, so a sweep that deleted only those two saw
+    // total === 0 and skipped the audit row, the admin notification and
+    // the log line entirely: rows vanished with no trace anywhere.
+    const total = (Object.values(counts) as number[]).reduce((sum, n) => sum + n, 0);
 
     if (total > 0) {
       this.logger.log(
         `Retention sweep for org ${organizationId}: deleted ` +
           `${counts.agentRuns} run(s), ${counts.conversations} conversation(s), ` +
           `${counts.messages} message(s), ${counts.requestLogs} request log(s), ` +
-          `${counts.usageMetrics} usage metric(s), ${counts.auditLogs} audit log(s)`,
+          `${counts.usageMetrics} usage metric(s), ${counts.auditLogs} audit log(s), ` +
+          `${counts.toolExecutions} tool execution(s), ${counts.notifications} notification(s)`,
       );
       // Deleting records is itself a sensitive action — leave a trace.
       await this.auditLogService.log({
@@ -455,7 +455,8 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       const summary =
         `${counts.agentRuns} runs, ${counts.conversations} conversations, ` +
         `${counts.messages} messages, ${counts.requestLogs} request logs, ` +
-        `${counts.usageMetrics} usage metrics, ${counts.auditLogs} audit logs`;
+        `${counts.usageMetrics} usage metrics, ${counts.auditLogs} audit logs, ` +
+        `${counts.toolExecutions} tool executions, ${counts.notifications} notifications`;
       await this.notifications.emit({
         type: 'retention.sweep',
         organizationId,

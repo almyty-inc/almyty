@@ -40,7 +40,7 @@ export const SUBCOMMANDS: Record<string, Subcommand> = {
   auth: { pkg: '@almyty/auth', group: 'Auth', help: 'Auth subcommands', subcommands: ['login', 'logout', 'whoami'] },
 
   // Domain CLIs
-  agents: { pkg: '@almyty/agents', group: 'Agents', help: 'List, run, and inspect agents', subcommands: ['list', 'get', 'run', 'runs', 'cancel'] },
+  agents: { pkg: '@almyty/agents', group: 'Agents', help: 'List, run, and inspect agents', subcommands: ['list', 'get', 'run', 'runs', 'inspect', 'executions', 'trace', 'cancel'] },
   chat: { pkg: '@almyty/chat', group: 'Agents', help: 'Interactive chat REPL with an agent' },
   skills: { pkg: '@almyty/skills', group: 'Skills', help: 'Install API skills into AI coding agents', subcommands: ['install', 'list', 'search', 'run', 'installed', 'remove', 'gateways', 'daemon', 'watch'] },
   models: { pkg: '@almyty/models', group: 'Platform', help: 'Model catalog: cards, validation, deployments' },

@@ -110,6 +110,27 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
     expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'model.deployment.budget_stop' }));
   });
 
+  it('never prices a catalog card that belongs to another organization', async () => {
+    // A deployment carries whatever modelId its creator sent, so the card
+    // read in chargeBudget has to be organization-scoped like the two in
+    // fillCard/clearCard. Unscoped, one org's reconcile loop rewrote the
+    // pricing on another org's card.
+    stub.costSnapshot = async () => ({
+      spentCents: 5,
+      ratePerHourCents: 10,
+      observedAt: new Date(),
+      perToken: { inPerMTok: 1, outPerMTok: 2, currency: 'USD' },
+    });
+    models.findOne.mockImplementation(async ({ where }: any) =>
+      where.organizationId === 'org-1' ? null : { id: 'm-1', organizationId: 'org-2', pricingOverride: null },
+    );
+
+    await processor.reconcile('d-1');
+
+    expect(models.findOne).toHaveBeenCalledWith({ where: { id: 'm-1', organizationId: 'org-1' } });
+    expect(models.save).not.toHaveBeenCalled();
+  });
+
   it('marks a deployment orphaned when the provider forgot it', async () => {
     await processor.reconcile('d-1');
     stub.vanish(row.externalRef!.id);

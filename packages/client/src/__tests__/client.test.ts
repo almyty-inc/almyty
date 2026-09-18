@@ -365,6 +365,7 @@ describe('AlmytyClient', () => {
           const value = new TextEncoder().encode(chunks[idx++]);
           return Promise.resolve({ done: false, value });
         }),
+        cancel: vi.fn().mockResolvedValue(undefined),
         releaseLock: vi.fn(),
       };
       return vi.fn().mockResolvedValue({
@@ -501,6 +502,7 @@ describe('GatewayClient', () => {
             done: false,
             value: new TextEncoder().encode('event: run.completed\ndata: {"type":"run.completed","data":{"output":"streamed"}}\n\n'),
           }).mockResolvedValue({ done: true, value: undefined }),
+          cancel: vi.fn().mockResolvedValue(undefined),
           releaseLock: vi.fn(),
         };
         return Promise.resolve({ ok: true, status: 200, body: { getReader: () => reader } });
@@ -580,14 +582,21 @@ describe('parseSseFrame', () => {
   });
 });
 
-/** A ReadableStream of the given chunks, so frame splitting can be forced. */
+/**
+ * A ReadableStream of the given chunks, so frame splitting can be forced.
+ * `cancelled` records whether the body was closed, which is the only thing
+ * that returns the socket: releasing the lock alone leaves it open.
+ */
 function sseBody(chunks: string[]) {
   const encoder = new TextEncoder();
   let i = 0;
+  const state = { cancelled: false };
   return {
+    state,
     getReader() {
       return {
         read: async () => (i < chunks.length ? { value: encoder.encode(chunks[i++]), done: false } : { value: undefined, done: true }),
+        cancel: async () => { state.cancelled = true; },
         releaseLock: () => {},
       };
     },
@@ -663,6 +672,29 @@ describe('AlmytyClient.streamSSE', () => {
       ok: false, status: 403, text: () => Promise.resolve('{"error":"AGENT_AUTH_FORBIDDEN"}'),
     }) as any;
     await expect(client.streamSSE('/x', () => {})).rejects.toMatchObject({ status: 403 });
+  });
+
+  // Returning from the read loop on a terminal event left the response
+  // body unread and the socket open. An SSE endpoint holds its end open
+  // too, so the handle kept Node's event loop alive and `almyty chat`
+  // hung on exit after a streamed turn, one leaked connection per answer.
+  it('closes the body after a terminal event, not just the reader lock', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    const body = sseBody([
+      'data: {"type":"run.completed","data":{"output":"done"}}\n\n',
+      'data: {"type":"llm.chunk","data":{"content":"late"}}\n\n',
+    ]);
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, body }) as any;
+    await client.streamSSE('/x', () => {});
+    expect(body.state.cancelled).toBe(true);
+  });
+
+  it('closes the body when the stream ends on its own', async () => {
+    const client = new AlmytyClient(BASE, TOKEN);
+    const body = sseBody(['data: {"type":"llm.chunk","data":{"content":"tail"}}\n\n']);
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, body }) as any;
+    await client.streamSSE('/x', () => {});
+    expect(body.state.cancelled).toBe(true);
   });
 });
 

@@ -181,3 +181,55 @@ describe('README matches the code', () => {
     }
   });
 });
+
+/**
+ * The completion table is a hand-written copy of what each sibling CLI
+ * dispatches, so it goes stale silently: `almyty agents <TAB>` offered
+ * five of the eight commands, and inspect, executions and trace — the
+ * three you need when a run went wrong — completed to nothing.
+ *
+ * These read the sibling's source rather than importing it, because a
+ * sibling's entry point runs main() on import.
+ */
+describe('completion offers the subcommands each sibling CLI really has', () => {
+  const sibling = (path: string) =>
+    readFileSync(join(import.meta.dirname, '../../..', path), 'utf-8');
+
+  /** The literal list in a CLI's "Unknown command" message. */
+  function commandsFromUnknownMessage(source: string): string[] {
+    const match = source.match(/'Commands: ([^.']+)\./);
+    expect(match, 'the CLI prints a literal Commands: line').not.toBeNull();
+    return match![1].split(',').map((s) => s.trim()).filter(Boolean);
+  }
+
+  it('covers every command @almyty/agents dispatches', () => {
+    const source = sibling('agents-cli/src/index.ts');
+    const start = source.indexOf('const COMMANDS');
+    expect(start).toBeGreaterThan(-1);
+    const table = source.slice(start, source.indexOf('};', start));
+    const dispatched = [...table.matchAll(/^ {2}([a-z][a-z-]*):/gm)].map((m) => m[1]);
+    expect(dispatched.length).toBeGreaterThan(5);
+    expect(SUBCOMMANDS.agents.subcommands ?? []).toEqual(expect.arrayContaining(dispatched));
+  });
+
+  it('covers every command @almyty/skills dispatches', () => {
+    const dispatched = commandsFromUnknownMessage(sibling('skills-cli/src/index.ts'));
+    expect(dispatched.length).toBeGreaterThan(5);
+    expect(SUBCOMMANDS.skills.subcommands ?? []).toEqual(expect.arrayContaining(dispatched));
+  });
+
+  it('covers every command @almyty/auth dispatches', () => {
+    const dispatched = commandsFromUnknownMessage(sibling('auth-cli/src/index.ts'));
+    expect(dispatched).toEqual(['login', 'logout', 'whoami']);
+    expect(SUBCOMMANDS.auth.subcommands ?? []).toEqual(expect.arrayContaining(dispatched));
+  });
+
+  it('claims no subcommand that is not dispatched anywhere', () => {
+    // The other direction: a completion entry for a command that does not
+    // exist is a suggestion that fails when you press enter.
+    const source = sibling('agents-cli/src/index.ts');
+    for (const name of SUBCOMMANDS.agents.subcommands ?? []) {
+      expect(source, name).toContain(`  ${name}: cmd`);
+    }
+  });
+});

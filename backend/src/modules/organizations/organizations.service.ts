@@ -31,6 +31,8 @@ import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import * as crypto from 'crypto';
 
+import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
+
 /** Fields on a User row that must never reach another user. */
 export const USER_SECRET_FIELDS = [
   'passwordHash',
@@ -237,7 +239,12 @@ export class OrganizationsService {
       throw new NotFoundException('Organization not found');
     }
 
-    return organization;
+    // Same deny-list as findOne. This loads whole User rows through
+    // `members: { user: true }` and returned them raw -- every member's
+    // bcrypt hash and, worse, their live resetPasswordToken. No route
+    // reaches this today, which is exactly why it is worth closing now:
+    // the next caller inherits the leak silently.
+    return stripMemberSecrets(organization);
   }
 
   async update(id: string, updateOrganizationDto: UpdateOrganizationDto): Promise<Organization> {
@@ -377,13 +384,34 @@ export class OrganizationsService {
   listPendingInvites(...args: Parameters<OrganizationsInvitesHelper['listPendingInvites']>) { return this.invitesHelper.listPendingInvites(...args); }
   revokePendingInvite(...args: Parameters<OrganizationsInvitesHelper['revokePendingInvite']>) { return this.invitesHelper.revokePendingInvite(...args); }
 
-  async removeMember(organizationId: string, userId: string): Promise<void> {
+  async removeMember(organizationId: string, userId: string, actorUserId: string): Promise<void> {
     const membership = await this.userOrganizationRepository.findOne({
       where: { organizationId, userId },
     });
 
     if (!membership) {
       throw new NotFoundException('User is not a member of this organization');
+    }
+
+    // An actor may not evict somebody who outranks them.
+    //
+    // updateMemberRole states this rule and this sibling did not, so the
+    // route reached by `@Roles('admin','owner')` let an admin delete the
+    // organization's owners outright -- everything the rank check on the
+    // role route prevents, reached by removing the owner instead of
+    // demoting them. The last-owner floor below was the only thing in the
+    // way, and it stops at one.
+    const actorMembership = await this.userOrganizationRepository.findOne({
+      where: { organizationId, userId: actorUserId, isActive: true },
+    });
+    if (!actorMembership) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+    if (
+      userId !== actorUserId &&
+      ORGANIZATION_ROLE_RANK[membership.role] < ORGANIZATION_ROLE_RANK[actorMembership.role]
+    ) {
+      throw new ForbiddenException('Cannot remove a member who outranks you');
     }
 
     // Check if user is the last owner
@@ -410,13 +438,8 @@ export class OrganizationsService {
     role: OrganizationRole,
     actorUserId: string,
   ): Promise<void> {
-    // Lower rank value = more privilege.
-    const RANK: Record<OrganizationRole, number> = {
-      [OrganizationRole.OWNER]: 0,
-      [OrganizationRole.ADMIN]: 1,
-      [OrganizationRole.MEMBER]: 2,
-      [OrganizationRole.VIEWER]: 3,
-    };
+    // Lower rank value = more privilege. See ORGANIZATION_ROLE_RANK.
+    const RANK = ORGANIZATION_ROLE_RANK;
 
     const actorMembership = await this.userOrganizationRepository.findOne({
       where: { organizationId, userId: actorUserId, isActive: true },

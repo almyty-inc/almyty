@@ -22,7 +22,7 @@ import {
   SearchMemoryDto,
   SupersedeMemoryDto,
 } from './canonical-memory.dto';
-import { MemoryError, Mode, ScopeType } from './canonical.types';
+import { MemoryError, Mode, ScopeType, SCOPE_TYPE_VALUES } from './canonical.types';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -111,7 +111,26 @@ export class CanonicalMemoryController {
     scope: { scope_type?: ScopeType; scope_id?: string } | undefined,
   ): { scope_type: ScopeType; scope_id: string } {
     this.assertScope(req, scope);
-    return { scope_type: (scope?.scope_type ?? 'org') as ScopeType, scope_id: this.orgId(req) };
+    // The fallback here used to be `'org' as ScopeType` -- a value that
+    // is not a ScopeType at all. Most routes pre-check scope_type and
+    // never reached it, but `POST transfer` and `POST document/import`
+    // do not: omitting scope_type made transfer query
+    // `scope_type = 'org'`, match nothing, and report a successful
+    // migration of zero items, while document/import tried to insert
+    // rows the `scope_type IN (...)` CHECK constraint rejects with a
+    // raw 500. A scope_type outside the enum is a client error; say so.
+    const scopeType = scope?.scope_type;
+    if (!scopeType || !(SCOPE_TYPE_VALUES as readonly string[]).includes(scopeType)) {
+      throw new HttpException(
+        {
+          success: false,
+          error: 'BAD_REQUEST',
+          message: `scope_type is required and must be one of ${SCOPE_TYPE_VALUES.join('|')}`,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return { scope_type: scopeType, scope_id: this.orgId(req) };
   }
 
   constructor(

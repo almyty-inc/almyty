@@ -429,7 +429,10 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     const snapshot = await adapter.costSnapshot(d.externalRef, creds);
     d.actual = { ...(d.actual ?? {}), spentCents: snapshot.spentCents, ratePerHourCents: snapshot.ratePerHourCents, costObservedAt: snapshot.observedAt };
     if (snapshot.perToken && d.modelId) {
-      const card = await this.models.findOne({ where: { id: d.modelId } });
+      // Org-scoped like every other card read here. A deployment carries
+      // whatever modelId its creator sent, so an unscoped lookup would let
+      // one organization overwrite the pricing on another organization's card.
+      const card = await this.models.findOne({ where: { id: d.modelId, organizationId: d.organizationId } });
       if (card && !card.pricingOverride) {
         card.pricing = { inPerMTok: snapshot.perToken.inPerMTok, outPerMTok: snapshot.perToken.outPerMTok, currency: snapshot.perToken.currency };
         card.pricingSource = 'adapter';

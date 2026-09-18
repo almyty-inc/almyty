@@ -12,47 +12,9 @@
 
 import { RunnerDaemon, readStatus, stopDaemon } from './daemon.js';
 import { RUNNER_VERSION } from './runtime-info.js';
+import { parseArgs } from './cli-args.js';
 
-interface ParsedFlags {
-  command: 'start' | 'status' | 'stop' | 'help' | 'version';
-  name?: string;
-  url?: string;
-  configPath?: string;
-  labels?: Record<string, string>;
-}
-
-function parseArgs(argv: string[]): ParsedFlags {
-  const args = argv.slice(2);
-  if (args.length === 0) return { command: 'help' };
-  const command = args[0];
-  if (command === '--version' || command === '-v') return { command: 'version' };
-  if (command === '--help' || command === '-h') return { command: 'help' };
-
-  if (!['start', 'status', 'stop', 'help', 'version'].includes(command)) {
-    return { command: 'help' };
-  }
-
-  const flags: ParsedFlags = { command: command as ParsedFlags['command'] };
-  for (let i = 1; i < args.length; i++) {
-    const a = args[i];
-    if (a === '--name' && args[i + 1]) { flags.name = args[++i]; continue; }
-    if (a === '--config' && args[i + 1]) { flags.configPath = args[++i]; continue; }
-    if (a === '--url' && args[i + 1]) { flags.url = args[++i]; continue; }
-    if (a === '--label' && args[i + 1]) {
-      const kv = args[++i];
-      const eq = kv.indexOf('=');
-      if (eq <= 0) {
-        process.stderr.write(`--label expects key=value, got: ${kv}\n`);
-        process.exit(2);
-      }
-      flags.labels = flags.labels ?? {};
-      flags.labels[kv.slice(0, eq)] = kv.slice(eq + 1);
-      continue;
-    }
-    if (a === '--help' || a === '-h') { flags.command = 'help'; return flags; }
-  }
-  return flags;
-}
+export { parseArgs, COMMANDS, type ParsedFlags } from './cli-args.js';
 
 function printHelp(): void {
   process.stdout.write(`almyty-runner v${RUNNER_VERSION}
@@ -68,6 +30,15 @@ Options for start:
   --config <path>         Path to a JSON config file (overrides global+project)
   --url <backend-url>     Override backend URL (e.g. https://api.almyty.com)
 
+Other:
+  -h, --help              Show this help
+  -v, --version           Print the version
+
+Exit codes:
+  0  success
+  1  the command ran and failed (no daemon running, start refused)
+  2  usage error (unknown command, bad flags)
+
 Auth:
   ALMYTY_TOKEN env or ~/.almyty/credentials.json (\`npx @almyty/auth login\`).
 `);
@@ -75,6 +46,10 @@ Auth:
 
 async function main(): Promise<void> {
   const flags = parseArgs(process.argv);
+  if (flags.error) {
+    process.stderr.write(`${flags.error}\n`);
+    process.exit(2);
+  }
   switch (flags.command) {
     case 'version': process.stdout.write(`${RUNNER_VERSION}\n`); return;
     case 'help': printHelp(); return;
