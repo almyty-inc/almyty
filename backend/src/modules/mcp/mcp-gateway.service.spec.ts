@@ -181,7 +181,11 @@ describe('McpGatewayService - Real Business Logic', () => {
           toolIds: ['tool-1'],
         });
 
-        expect(server.endpoint).toMatch(/^\/api\/mcp\/servers\/[a-f0-9]{32}$/);
+        // Not '/api/mcp/...': BASE_URL is the api host, whose ingress routes
+        // '/' through with no rewrite, and the hosts that do use an '/api'
+        // prefix strip it before Express sees the request. This endpoint is
+        // persisted and handed to clients, so the prefix 404s either way.
+        expect(server.endpoint).toMatch(/^\/mcp\/servers\/[a-f0-9]{32}$/);
       });
 
       it('should broadcast notification to organization', async () => {

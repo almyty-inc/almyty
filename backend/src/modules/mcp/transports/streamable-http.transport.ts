@@ -127,12 +127,17 @@ export class StreamableHttpTransport extends EventEmitter {
 
   /**
    * Handle POST /mcp/streamable. The request body is either a single
-   * JSON-RPC message, a JSON-RPC batch, or a worker envelope.
+   * JSON-RPC message, a JSON-RPC batch (an array of them), or a worker
+   * envelope.
    *
    * Response shape per the MCP spec:
+   *   - 404, when `Mcp-Session-Id` names a session this server does not
+   *     know. That is the client's signal to re-initialise, and it is the
+   *     only honest answer after a pod restart or a session GC.
    *   - 202 Accepted, empty body, when the message is a notification or
    *     a response (nothing to return inline).
-   *   - 200 application/json, a single JSON value, for a unary request.
+   *   - 200 application/json, a single JSON value, for a unary request;
+   *     a JSON array for a batch that contained at least one request.
    *
    * Batch SSE responses (200 text/event-stream) are not implemented in
    * this cluster; they are not needed by the runner subsystem and would
@@ -146,24 +151,62 @@ export class StreamableHttpTransport extends EventEmitter {
     userId?: string,
   ): Promise<void> {
     const sessionId = (req.header('Mcp-Session-Id') || '').trim() || null;
+
+    let session: StreamableSession;
     if (sessionId) {
-      const existing = this.sessions.get(sessionId);
-      if (existing && existing.organizationId !== organizationId) {
+      // Local first, then the cross-pod registry: on multi-replica the POST
+      // can round-robin to a pod that did not mint the session, exactly as
+      // handleStream already handles.
+      const known =
+        this.sessions.get(sessionId) ?? (await this.adoptSession(sessionId, organizationId));
+      if (!known) {
+        // MCP 2025-03-26 Streamable HTTP: an Mcp-Session-Id the server does
+        // not recognise MUST be answered 404, so the client knows to start a
+        // new session. This used to MINT a session under whatever id was
+        // asked for, so after a restart or a GC sweep a client kept POSTing
+        // its dead id, kept getting 200, and silently lost all its state
+        // while believing the session was alive. handleStream has always
+        // 404ed here; the two halves now agree.
+        this.sendErrorResponse(res, WORKER_ERROR_CODES.UNKNOWN_SESSION, 'unknown session');
+        return;
+      }
+      if (known.organizationId !== organizationId) {
         // Cross-tenant attempt: refuse rather than reuse the prior session
         // or silently mint a new one with the attacker's claimed id.
         this.sendErrorResponse(res, WORKER_ERROR_CODES.UNKNOWN_SESSION, 'session not in this org');
         return;
       }
+      session = known;
+    } else {
+      session = this.createSession(organizationId, userId);
     }
-    const session = sessionId
-      ? this.sessions.get(sessionId) ?? this.createSession(organizationId, userId, sessionId)
-      : this.createSession(organizationId, userId);
 
     session.lastActivity = new Date();
     this.registerSession(session); // refresh cross-pod registry TTL on activity
     res.setHeader('Mcp-Session-Id', session.id);
 
     const body = req.body;
+
+    // JSON-RPC batch. The revision this transport negotiates (2025-03-26)
+    // requires a server to accept one; an array used to fall through to the
+    // malformed-envelope error. Batching was removed again in 2025-06-18,
+    // but a client asking for that version is answered 2025-03-26, so the
+    // obligation stands.
+    if (Array.isArray(body)) {
+      const responses = await this.mcpService.handleJsonRpcMessage(
+        body,
+        organizationId,
+        userId,
+      );
+      // Every member was a notification: JSON-RPC 2.0 §6 says the server
+      // returns nothing at all.
+      if (responses === null) {
+        res.status(202).end();
+      } else {
+        res.status(200).json(responses);
+      }
+      return;
+    }
 
     // Worker envelope path. The envelope-shaped check runs first so a
     // body that happens to set both `v` and `jsonrpc` (a misconfigured
@@ -222,7 +265,12 @@ export class StreamableHttpTransport extends EventEmitter {
       return;
     }
 
-    this.sendErrorResponse(res, WORKER_ERROR_CODES.MALFORMED_ENVELOPE, 'unrecognized message shape');
+    // Neither an envelope nor JSON-RPC. This used to answer with a worker
+    // envelope, which an MCP client cannot parse — it saw a 400 with an
+    // opaque body. A JSON-RPC error is readable by both kinds of client,
+    // and -32600 Invalid Request is exactly what an unrecognised message
+    // shape is.
+    this.sendJsonRpcError(res, 400, -32600, 'Invalid Request: unrecognized message shape');
   }
 
   /**
@@ -543,12 +591,33 @@ export class StreamableHttpTransport extends EventEmitter {
     });
   }
 
+  /**
+   * A real JSON-RPC 2.0 error response, for the paths an MCP client can
+   * reach. `id: null` is what JSON-RPC prescribes when the offending
+   * message could not be correlated to a request id.
+   */
+  private sendJsonRpcError(res: Response, status: number, code: number, message: string): void {
+    const body: JsonRpcResponse = {
+      jsonrpc: '2.0',
+      id: null as any,
+      error: { code, message },
+    };
+    res.status(status).json(body);
+  }
+
+  /**
+   * Worker-shaped: carries a protocol version field at all. A `v` this
+   * server does not speak is still a worker client and gets a worker
+   * MALFORMED_ENVELOPE error rather than a JSON-RPC one — which is why
+   * this is `'v' in body` and not `v === WORKER_PROTOCOL_VERSION`; the
+   * exact-version check is `isWorkerEnvelope`.
+   */
   private looksLikeEnvelope(body: unknown): boolean {
-    return !!body && typeof body === 'object' && (body as any).v === WORKER_PROTOCOL_VERSION;
+    return !!body && typeof body === 'object' && !Array.isArray(body) && 'v' in (body as any);
   }
 
   private looksLikeJsonRpc(body: unknown): boolean {
-    return !!body && typeof body === 'object' && (body as any).jsonrpc === '2.0';
+    return !!body && typeof body === 'object' && !Array.isArray(body) && (body as any).jsonrpc === '2.0';
   }
 
   /**

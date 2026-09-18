@@ -243,6 +243,61 @@ describe('GatewayResolverService', () => {
       }
     });
 
+    it('carries the refusal reason on the exception message, not "Http Exception"', async () => {
+      jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
+      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(mockGateway as Gateway);
+      jest.spyOn(gatewayAuthService, 'authenticateRequest').mockResolvedValue({
+        isValid: false,
+        error: 'Invalid API key',
+        errorCode: 'API_KEY_INVALID',
+        authConfigId: 'auth-cfg-7',
+        authConfigType: 'api_key',
+        triedConfigCount: 2,
+      });
+
+      const e: any = await service
+        .resolveAndAuthenticate('test-org', '/my-gateway', mockReq)
+        .catch((err: any) => err);
+
+      // Nest derives the exception's own message from the payload and
+      // falls back to the class name when the payload has no `message`
+      // key. This is the string the client is shown and the string
+      // written to request_logs.errorMessage.
+      expect(e.message).toBe('Invalid API key');
+      expect(e.message).not.toBe('Http Exception');
+      expect(e.getResponse()).toMatchObject({
+        message: 'Invalid API key',
+        errorCode: 'API_KEY_INVALID',
+      });
+    });
+
+    it('attaches which auth config refused as diagnostics, off the client payload', async () => {
+      jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
+      jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(mockGateway as Gateway);
+      jest.spyOn(gatewayAuthService, 'authenticateRequest').mockResolvedValue({
+        isValid: false,
+        error: 'Invalid API key',
+        errorCode: 'API_KEY_INVALID',
+        authConfigId: 'auth-cfg-7',
+        authConfigType: 'api_key',
+        triedConfigCount: 2,
+      });
+
+      const e: any = await service
+        .resolveAndAuthenticate('test-org', '/my-gateway', mockReq)
+        .catch((err: any) => err);
+
+      expect(e.authDiagnostics).toEqual({
+        authConfigId: 'auth-cfg-7',
+        authConfigType: 'api_key',
+        triedConfigCount: 2,
+        gatewayId: 'gw-1',
+      });
+      // Which of our auth configs refused is an answer for us, not
+      // something to hand an unauthenticated caller.
+      expect(JSON.stringify(e.getResponse())).not.toContain('auth-cfg-7');
+    });
+
     it('should throw 403 for invalid auth', async () => {
       jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(mockOrganization as Organization);
       jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(mockGateway as Gateway);

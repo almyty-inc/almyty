@@ -115,16 +115,17 @@ export class McpContentHandler {
     };
   }
 
-  async handlePromptsList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
-    let tools: Tool[];
-
-    if (gatewayId) {
-      tools = await this.toolHandler.getToolsForScope(organizationId, gatewayId);
-    } else {
-      tools = await this.toolRepository.find({
-        where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
-      });
-    }
+  async handlePromptsList(
+    params: any,
+    organizationId: string,
+    gatewayId?: string,
+    caller?: { id: string },
+  ): Promise<any> {
+    // Both branches go through getToolsForScope so the gateway-less path is
+    // team-scoped to the caller. The old else-branch read the tool table
+    // directly on organizationId alone, which is the same unscoped org-wide
+    // read the bypass produced.
+    const tools: Tool[] = await this.toolHandler.getToolsForScope(organizationId, gatewayId, caller);
 
     const prompts: McpPrompt[] = [];
 
@@ -220,13 +221,18 @@ export class McpContentHandler {
     throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Prompt '${params.name}' not found`);
   }
 
-  async handleSkillsList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
+  async handleSkillsList(
+    params: any,
+    organizationId: string,
+    gatewayId?: string,
+    caller?: { id: string },
+  ): Promise<any> {
     if (gatewayId) {
       const skill = await this.skillGeneratorService.generateGatewaySkills(gatewayId, organizationId);
       return { skills: [skill] };
     }
 
-    const tools = await this.toolHandler.getToolsForScope(organizationId);
+    const tools = await this.toolHandler.getToolsForScope(organizationId, undefined, caller);
 
     const skills = await batchAsync(tools.slice(0, params?.limit || 50), 5, async (tool) => {
       try {

@@ -49,9 +49,74 @@ export class McpService {
     @Optional() private readonly metrics?: MetricsRecorderService,
   ) {}
 
+  /**
+   * Entry point for a POSTed MCP *message*, which — in the 2025-03-26
+   * revision this server negotiates for modern clients — may be a single
+   * JSON-RPC message or an array batching several of them.
+   *
+   * An array used to be rejected outright with -32600 even though the
+   * transport docstring claimed batch support and the negotiated revision
+   * requires a server to accept one. (2025-06-18 removed batching again,
+   * but a client asking for that version is answered 2025-03-26, so the
+   * obligation stands.)
+   *
+   * Returns `null` when there is nothing to send back at all — a lone
+   * notification, or a batch made up entirely of notifications. Callers
+   * turn that into an empty 202 Accepted.
+   */
+  async handleJsonRpcMessage(
+    message: any,
+    organizationId: string,
+    userId?: string,
+    gatewayId?: string,
+  ): Promise<JsonRpcResponse | JsonRpcResponse[] | null> {
+    if (!Array.isArray(message)) {
+      return this.handleJsonRpc(message, organizationId, userId, gatewayId);
+    }
+
+    // JSON-RPC 2.0 §6: an empty array is itself an Invalid Request, and is
+    // answered with a single (non-array) error response.
+    if (message.length === 0) {
+      return {
+        jsonrpc: '2.0',
+        id: null,
+        error: {
+          code: JsonRpcErrorCode.INVALID_REQUEST,
+          message: 'Invalid Request: empty batch',
+        },
+      };
+    }
+
+    const responses: JsonRpcResponse[] = [];
+    for (const member of message) {
+      const response = await this.handleJsonRpc(member, organizationId, userId, gatewayId);
+      if (response !== null) {
+        responses.push(response);
+      }
+    }
+
+    // A batch of nothing but notifications gets no response document.
+    return responses.length > 0 ? responses : null;
+  }
+
   async handleJsonRpc(requestBody: any, organizationId: string, userId?: string, gatewayId?: string): Promise<JsonRpcResponse> {
+    // JSON-RPC 2.0 §4.1: a Notification is any message with no `id`, and it
+    // MUST NOT be answered. Captured before validation so that a malformed
+    // notification is dropped rather than answered with an error — which
+    // would itself be a reply to a notification.
+    const isNotification = requestBody && typeof requestBody === 'object' && requestBody.id === undefined;
     try {
       const request = this.validateJsonRpcRequest(requestBody);
+
+      // `bypassTeamFilter: true` on the tool-listing paths is documented as
+      // safe because gateway-tool resolution gates access by gateway
+      // membership. On the gateway-less path there is no gateway -- gatewayId
+      // is undefined on every call from McpController and from the transports
+      // -- so nothing compensated, AccessPolicyService.applyListFilter was
+      // skipped, and the listing fell back to an org-only filter that exposed
+      // team-scoped tools the caller holds no membership for. Hand the
+      // handlers the real caller so they can scope properly.
+      const caller = userId ? { id: userId } : undefined;
 
       this.logger.debug(`Handling MCP method: ${request.method} for org: ${organizationId}`);
 
@@ -68,15 +133,15 @@ export class McpService {
 
         // Tool methods
         case 'tools/list':
-          result = await this.toolHandler.handleToolsList(request.params, organizationId, gatewayId);
+          result = await this.toolHandler.handleToolsList(request.params, organizationId, gatewayId, caller);
           break;
 
         case 'tools/discover':
-          result = await this.toolHandler.handleToolsDiscover(request.params, organizationId, gatewayId);
+          result = await this.toolHandler.handleToolsDiscover(request.params, organizationId, gatewayId, caller);
           break;
 
         case 'tools/search':
-          result = await this.toolHandler.handleToolsSearch(request.params, organizationId, gatewayId);
+          result = await this.toolHandler.handleToolsSearch(request.params, organizationId, gatewayId, caller);
           break;
 
         case 'tools/get':
@@ -111,7 +176,7 @@ export class McpService {
 
         // Prompt methods
         case 'prompts/list':
-          result = await this.contentHandler.handlePromptsList(request.params, organizationId, gatewayId);
+          result = await this.contentHandler.handlePromptsList(request.params, organizationId, gatewayId, caller);
           break;
 
         case 'prompts/get':
@@ -120,7 +185,7 @@ export class McpService {
 
         // Skills methods
         case 'skills/list':
-          result = await this.contentHandler.handleSkillsList(request.params, organizationId, gatewayId);
+          result = await this.contentHandler.handleSkillsList(request.params, organizationId, gatewayId, caller);
           break;
 
         case 'skills/get':
@@ -157,17 +222,31 @@ export class McpService {
         await this.bumpGatewayMetrics(gatewayId, organizationId, true);
       }
 
-      return response;
+      // The method ran — a notification is allowed side effects — but a
+      // message with no `id` gets no reply. `{"jsonrpc":"2.0","method":"ping"}`
+      // used to come back as a -32600 error, which was both wrong and itself
+      // a reply to a notification.
+      return isNotification ? null : response;
 
     } catch (error) {
       if (gatewayId) {
         await this.bumpGatewayMetrics(gatewayId, organizationId, false);
       }
 
+      // Same rule on the error path: never answer a notification, not even
+      // to complain about it.
+      if (isNotification) {
+        this.logger.debug(`Dropping error for notification: ${error?.message}`);
+        return null;
+      }
+
+      // `?? null`, not `|| null`: id `0` is a legal JSON-RPC id, and
+      // rewriting it to null left the client unable to correlate the error
+      // with its request — the call just hung.
       if (error && typeof error === 'object' && 'code' in error && 'message' in error) {
         return {
           jsonrpc: '2.0',
-          id: requestBody?.id || null,
+          id: requestBody?.id ?? null,
           error,
         };
       }
@@ -175,7 +254,7 @@ export class McpService {
       this.logger.error(`MCP JSON-RPC error: ${error.message}`, error.stack);
       return {
         jsonrpc: '2.0',
-        id: requestBody?.id || null,
+        id: requestBody?.id ?? null,
         error: {
           code: JsonRpcErrorCode.INTERNAL_ERROR,
           message: 'Internal server error',
@@ -290,7 +369,7 @@ export class McpService {
   }
 
   private validateJsonRpcRequest(body: any): JsonRpcRequest {
-    if (!body || typeof body !== 'object') {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
       throw this.createJsonRpcError(JsonRpcErrorCode.INVALID_REQUEST, 'Invalid request body');
     }
 
@@ -302,11 +381,12 @@ export class McpService {
       throw this.createJsonRpcError(JsonRpcErrorCode.INVALID_REQUEST, 'Missing or invalid method');
     }
 
-    const isNotification = body.method.startsWith('notifications/');
-    if (!isNotification && body.id === undefined) {
-      throw this.createJsonRpcError(JsonRpcErrorCode.INVALID_REQUEST, 'Missing request ID');
-    }
-
+    // A JSON-RPC notification is any message with no `id` — the method name
+    // has nothing to do with it. Keying off a `notifications/` prefix made
+    // `{"jsonrpc":"2.0","method":"ping"}` a -32600 "Missing request ID",
+    // which is both wrong and a reply to a notification. There is no
+    // "missing id" error to raise: an absent id simply means notification,
+    // and handleJsonRpc drops the reply.
     return body as JsonRpcRequest;
   }
 
@@ -343,20 +423,6 @@ export class McpService {
     for (const session of sessions) {
       this.logger.debug(`Broadcasting notification ${method} to session ${session.id}`);
     }
-  }
-
-  async getToolsAsMcp(organizationId: string): Promise<McpTool[]> {
-    const { tools } = await this.toolsService.getTools({ organizationId, bypassTeamFilter: true });
-
-    return tools.map(tool => ({
-      name: tool.name,
-      description: tool.description || `AI tool generated from ${tool.metadata?.sourceApi?.name || 'API'}`,
-      inputSchema: tool.parameters || {
-        type: 'object',
-        properties: {},
-        description: tool.description,
-      },
-    }));
   }
 
   // Server-to-client requests
