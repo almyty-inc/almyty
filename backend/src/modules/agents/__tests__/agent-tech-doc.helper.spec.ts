@@ -388,8 +388,6 @@ describe('AgentManagementController — GET :id/technical-documentation', () => 
   const makeController = (techDocHelper: any) =>
     new AgentManagementController(
       {} as any, // agentsService — unused by this endpoint
-      {} as any, // runtimeService
-      {} as any, // schedulerService
       {} as any, // auditService
       techDocHelper,
     );

@@ -180,7 +180,7 @@ describe('OpenAI Compatibility', () => {
       expect(body.usage.prompt_tokens + body.usage.completion_tokens).toBeLessThanOrEqual(body.usage.total_tokens + 1);
     });
 
-    it('should set finish_reason to error when execution fails', async () => {
+    it('should report a failed execution as an error, not a 200 with finish_reason error', async () => {
       const res = makeRes();
       const req = makeReq();
 
@@ -190,6 +190,7 @@ describe('OpenAI Compatibility', () => {
         id: 'exec-fail',
         output: null,
         status: AgentExecutionStatus.FAILED,
+        error: 'the llm_call node failed',
         totalTokens: 0,
       });
 
@@ -203,8 +204,16 @@ describe('OpenAI Compatibility', () => {
         res,
       );
 
-      const body = res.json.mock.calls[0][0];
-      expect(body.choices[0].finish_reason).toBe('error');
+      // finish_reason "error" is not an OpenAI value (stop, length,
+      // tool_calls, content_filter, function_call), so a consumer switching
+      // on it fell through to its default and read an empty answer as a
+      // finished one. A failure is reported as a failure instead, in the
+      // same shape and with the same status the Anthropic sibling uses.
+      expect(res.status).toHaveBeenCalledWith(502);
+      const body = res.json.mock.calls[res.json.mock.calls.length - 1][0];
+      expect(body.error.type).toBe('api_error');
+      expect(body.error.code).toBe('agent_execution_failed');
+      expect(body.error.message).toContain('the llm_call node failed');
     });
 
     it('should handle zero tokens gracefully in usage field', async () => {
@@ -319,7 +328,7 @@ describe('OpenAI Compatibility', () => {
       expect(res.end).toHaveBeenCalled();
     });
 
-    it('should handle streaming error gracefully', async () => {
+    it('should end a failed stream with an error frame, not like a successful one', async () => {
       const res = makeRes();
       const req = makeReq();
 
@@ -352,14 +361,24 @@ describe('OpenAI Compatibility', () => {
           return JSON.parse(raw);
         });
 
-      // Should still send [DONE] to close the stream cleanly
+      // Still closes the stream cleanly.
       expect(sseData[sseData.length - 1]).toBe('[DONE]');
 
-      // Should have a chunk with finish_reason: "error"
+      // The headers were flushed long before the failure, so the SSE body is
+      // the only place left to say so. The real OpenAI API sends a frame
+      // carrying an `error` object; what this used to send was a chunk with
+      // finish_reason "error" and then [DONE], which reads to an SDK as a
+      // normally-terminated stream holding a truncated answer.
+      const errorFrame = sseData.find((d: any) => d !== '[DONE]' && d.error);
+      expect(errorFrame).toBeDefined();
+      expect(errorFrame.error.message).toContain('LLM provider crashed');
+      expect(errorFrame.error.type).toBe('api_error');
+
+      // "error" is not one of the OpenAI finish_reason values.
       const errorChunk = sseData.find(
         (d: any) => d !== '[DONE]' && d.choices?.[0]?.finish_reason === 'error',
       );
-      expect(errorChunk).toBeDefined();
+      expect(errorChunk).toBeUndefined();
 
       expect(res.end).toHaveBeenCalled();
     });
@@ -721,7 +740,7 @@ describe('OpenAI Compatibility', () => {
   // ── Input mapping ─────────────────────────────────────────────────────
 
   describe('input mapping', () => {
-    it('should map last user message to agent input', async () => {
+    it('should hand the whole conversation to the agent, not just the last user message', async () => {
       const res = makeRes();
       const req = makeReq();
 
@@ -729,7 +748,9 @@ describe('OpenAI Compatibility', () => {
       agentsService.getAgent.mockResolvedValue(makeAgent());
 
       let capturedInput: any;
+      let capturedAgent: any;
       executionEngine.execute.mockImplementation(async (agent, orgId, userId, opts) => {
+        capturedAgent = agent;
         capturedInput = opts.input;
         return {
           id: 'exec-1',
@@ -756,16 +777,26 @@ describe('OpenAI Compatibility', () => {
         res,
       );
 
-      // Should map the last user message
-      expect(capturedInput.message).toBe('Follow up question');
+      // `input.message` is what every stock agent prompt binds, and
+      // /v1/chat/completions is stateless: the messages array IS the
+      // conversation. Sending only the last user line made the agent
+      // amnesiac with no error and nothing to diagnose it from.
+      expect(capturedInput.message).toContain('You are helpful.');
+      expect(capturedInput.message).toContain('First question');
+      expect(capturedInput.message).toContain('First answer');
+      expect(capturedInput.message).toContain('Follow up question');
+
+      // The final turn stays available on its own for a prompt that wants it.
+      expect(capturedInput.latestMessage).toBe('Follow up question');
 
       // Should pass all messages
       expect(capturedInput.messages).toHaveLength(4);
-
-      // Should pass model parameters
-      expect(capturedInput.temperature).toBe(0.7);
-      expect(capturedInput.max_tokens).toBe(500);
       expect(capturedInput.model).toBe('agent:agent-abc-123');
+
+      // Sampling is honoured where the engine actually reads it, rather than
+      // parked on an input field nothing consumes.
+      expect(capturedAgent.modelConfig.temperature).toBe(0.7);
+      expect(capturedAgent.modelConfig.maxTokens).toBe(500);
     });
   });
 

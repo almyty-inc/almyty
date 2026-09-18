@@ -11,8 +11,17 @@
  */
 
 export interface BudgetPolicy {
+  /**
+   * Cents. Covers the whole run, nested sub-agent runs included: a
+   * sub-agent node reports its run's total as its own cost, so the
+   * caller's total already carries everything it set off.
+   *
+   * There is deliberately no per-task ceiling. A task spanning several
+   * runs would need a task identity to accumulate against, and nothing
+   * in the product has one — a field for it would be a gate that never
+   * closes, which is worse than no field.
+   */
   ceilingPerRun?: number;
-  ceilingPerTask?: number;
   stopWhen?: {
     /** Stop as soon as the verifier passes, rather than using the rest of the budget. */
     verifierPasses?: boolean;

@@ -27,7 +27,16 @@ export class AgentValidationHelper {
     // Check that node IDs are unique
     const nodeIds = new Set(pipeline.nodes.map(n => n.id));
     if (nodeIds.size !== pipeline.nodes.length) {
-      throw new BadRequestException('Pipeline node IDs must be unique');
+      const seen = new Set<string>();
+      const duplicates = new Set<string>();
+      for (const node of pipeline.nodes) {
+        if (seen.has(node.id)) duplicates.add(node.id);
+        seen.add(node.id);
+      }
+      throw new BadRequestException(
+        `Pipeline node IDs must be unique, but ${[...duplicates].map(id => `'${id}'`).join(', ')} ` +
+          `${duplicates.size === 1 ? 'is used' : 'are used'} more than once.`,
+      );
     }
 
     // Check that all edges reference existing nodes
@@ -129,10 +138,18 @@ export class AgentValidationHelper {
               `Verify node '${node.id}' must have a non-empty 'checkers' array in config`,
             );
           }
+          // A checker says which model does the refuting, and there are two
+          // ways to say it: pin a provider, or name a role and let the role
+          // be filled at run time. Demanding a pinned provider made every
+          // compiled strategy unsaveable — the compiler names roles and
+          // never providers, on purpose — so a graph ejected from `cascade`
+          // or `explore_extract_patch` could not be saved or activated at
+          // all without pinning a provider and throwing away the
+          // portability eject exists to preserve.
           checkers.forEach((checker: any, i: number) => {
-            if (!checker || !checker.providerId) {
+            if (!checker || (!checker.providerId && !checker.roleKey)) {
               throw new BadRequestException(
-                `Verify node '${node.id}' checker #${i + 1} must have a 'providerId'`,
+                `Verify node '${node.id}' checker #${i + 1} must have a 'providerId' or a 'roleKey'`,
               );
             }
           });
@@ -157,6 +174,114 @@ export class AgentValidationHelper {
     // Without this, a disconnected output silently survives validation and
     // the engine completes "successfully" with no output captured.
     this.checkOutputReachable(pipeline, inputNodes[0].id, outputNodes);
+
+    // Check that no two output nodes can both run in the same execution.
+    this.checkOutputsCannotCollide(pipeline, inputNodes[0].id, outputNodes);
+  }
+
+  /**
+   * Two output nodes that can both run in one execution make the run's answer
+   * depend on node order: the engine assigns `finalOutput` as it walks a
+   * layer's results, so the last one written wins -- and "last" is wherever
+   * the nodes happen to sit inside the persisted pipeline JSON.
+   *
+   * Two output nodes on opposite branches of a condition are not that: the
+   * engine skips the untaken branch, so exactly one of them ever runs. So this
+   * refuses only the pairs that no condition keeps apart, rather than banning
+   * a second output node outright.
+   *
+   * Runs after `checkForCycles`, so the graph is known to be acyclic.
+   */
+  checkOutputsCannotCollide(
+    pipeline: AgentPipeline,
+    inputNodeId: string,
+    outputNodes: AgentPipelineNode[],
+  ): void {
+    if (outputNodes.length < 2) return;
+
+    const typeById = new Map(pipeline.nodes.map(n => [n.id, n.type]));
+    const outgoing = new Map<string, AgentPipelineEdge[]>();
+    for (const edge of pipeline.edges) {
+      if (!outgoing.has(edge.source)) outgoing.set(edge.source, []);
+      outgoing.get(edge.source)!.push(edge);
+    }
+
+    /**
+     * Which branch of a condition an edge sits on, or null when the engine
+     * would never skip it. The handles the engine recognises are the only
+     * ones that make two outputs exclusive.
+     */
+    const branchOf = (edge: AgentPipelineEdge): string | null => {
+      const handle = edge.sourceHandle || (edge as any).label || '';
+      if (handle === 'true' || handle === 'yes') return 'true';
+      if (handle === 'false' || handle === 'no') return 'false';
+      return null;
+    };
+
+    // For each output node, the condition decisions under which it is reached.
+    const decisionsFor = new Map<string, Array<Map<string, string>>>();
+    const seen = new Set<string>();
+    let steps = 0;
+    const MAX_STEPS = 5000;
+
+    const walk = (nodeId: string, decisions: Map<string, string>): void => {
+      if (++steps > MAX_STEPS) return;
+
+      const key = `${nodeId}|${[...decisions.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => `${k}=${v}`)
+        .join(',')}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      if (typeById.get(nodeId) === 'output') {
+        const paths = decisionsFor.get(nodeId) || [];
+        paths.push(new Map(decisions));
+        decisionsFor.set(nodeId, paths);
+        return;
+      }
+
+      const isCondition = typeById.get(nodeId) === 'condition';
+      for (const edge of outgoing.get(nodeId) || []) {
+        const branch = isCondition ? branchOf(edge) : null;
+        if (branch === null) {
+          walk(edge.target, decisions);
+          continue;
+        }
+        const next = new Map(decisions);
+        next.set(nodeId, branch);
+        walk(edge.target, next);
+      }
+    };
+
+    walk(inputNodeId, new Map());
+
+    /** Two decision sets can hold at once unless they disagree about a condition. */
+    const canHoldTogether = (a: Map<string, string>, b: Map<string, string>): boolean => {
+      for (const [condition, branch] of a) {
+        const other = b.get(condition);
+        if (other !== undefined && other !== branch) return false;
+      }
+      return true;
+    };
+
+    for (let i = 0; i < outputNodes.length; i++) {
+      for (let j = i + 1; j < outputNodes.length; j++) {
+        const left = decisionsFor.get(outputNodes[i].id) || [];
+        const right = decisionsFor.get(outputNodes[j].id) || [];
+        for (const a of left) {
+          for (const b of right) {
+            if (!canHoldTogether(a, b)) continue;
+            throw new BadRequestException(
+              `Output nodes '${outputNodes[i].id}' and '${outputNodes[j].id}' can both run in ` +
+                'the same execution, so which one becomes the run\'s answer depends on the ' +
+                'order the nodes happen to be stored in. Put them on opposite branches of a ' +
+                'condition, or merge them into a single output node.',
+            );
+          }
+        }
+      }
+    }
   }
 
   checkOutputReachable(
@@ -183,8 +308,29 @@ export class AgentValidationHelper {
 
     const reachableOutput = outputNodes.some(o => visited.has(o.id));
     if (!reachableOutput) {
+      // Naming them: the old message said only 'check your edges', on a
+      // canvas that draws no warning markers, so there was nothing to
+      // check against.
       throw new BadRequestException(
-        'Pipeline output node(s) are not reachable from the input node — check your edges',
+        `Pipeline output node(s) ${outputNodes.map(o => `'${o.id}'`).join(', ')} are not reachable ` +
+          `from the input node '${inputNodeId}'. Connect them with an edge.`,
+      );
+    }
+
+    // An unconnected node is not inert. computeLayers seeds layer 0 with
+    // every node of in-degree 0, so a dangling llm_call runs FIRST, before
+    // anything else, and is billed -- while contributing nothing, because
+    // no edge carries its output anywhere. That is a graph nobody meant to
+    // draw, and the only evidence of it was the invoice.
+    //
+    // Refusal rather than a warning: it matches what the docs already
+    // promise, and none of the built-in templates has an orphan node.
+    const unreachable = pipeline.nodes.filter(n => !visited.has(n.id));
+    if (unreachable.length) {
+      throw new BadRequestException(
+        `Node(s) ${unreachable.map(n => `'${n.id}'`).join(', ')} are not reachable from the input ` +
+          `node '${inputNodeId}'. Connect them with an edge, or delete them — an unconnected node ` +
+          `still runs, in the first layer, before anything else.`,
       );
     }
   }
@@ -212,9 +358,15 @@ export class AgentValidationHelper {
       }
     }
 
+    // Tracked by id, not just counted: the nodes the sort never dequeues
+    // are exactly the ones in the cycle, so the message can name them
+    // instead of leaving someone to find a loop by eye on a canvas with no
+    // warning markers.
+    const sorted = new Set<string>();
     let visited = 0;
     while (queue.length > 0) {
       const nodeId = queue.shift()!;
+      sorted.add(nodeId);
       visited++;
       const neighbors = adjacencyList.get(nodeId) || [];
       for (const neighbor of neighbors) {
@@ -227,7 +379,12 @@ export class AgentValidationHelper {
     }
 
     if (visited !== pipeline.nodes.length) {
-      throw new BadRequestException('Pipeline contains a cycle');
+      const inCycle = pipeline.nodes.filter(n => !sorted.has(n.id)).map(n => `'${n.id}'`);
+      throw new BadRequestException(
+        `Pipeline contains a cycle through node(s) ${inCycle.join(', ')}. A pipeline runs ` +
+          `each node once, in dependency order, so it cannot contain a loop back to an ` +
+          `earlier node — remove one of the edges between them.`,
+      );
     }
   }
 }

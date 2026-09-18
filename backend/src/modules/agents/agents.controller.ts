@@ -25,10 +25,7 @@ import { Type } from 'class-transformer';
 import { Response } from 'express';
 
 import { AgentsService, AgentSearchFilters } from './agents.service';
-import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
 import { AgentRuntimeService } from './agent-runtime.service';
-import { AgentSchedulerService } from './agent-scheduler.service';
-import { AgentAuditService } from './agent-audit.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
@@ -78,10 +75,7 @@ export class AgentsController {
 
   constructor(
     private readonly agentsService: AgentsService,
-    private readonly executionEngine: AgentExecutionEngine,
     private readonly runtimeService: AgentRuntimeService,
-    private readonly schedulerService: AgentSchedulerService,
-    private readonly auditService: AgentAuditService,
     @InjectRepository(AgentRole) private readonly agentRoles: Repository<AgentRole>,
   ) {}
 
