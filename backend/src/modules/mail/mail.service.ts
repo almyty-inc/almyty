@@ -52,15 +52,47 @@ export class MailService {
     if (apiKey) {
       this.resend = new Resend(apiKey);
       this.logger.log('Mail service initialized with Resend');
+    } else if (MailService.isProduction()) {
+      // A production deploy with no mail provider cannot be allowed to
+      // look like one that works. Every password reset and every invite
+      // would report success and go nowhere, and the only clue would be
+      // one warning at boot.
+      this.logger.error(
+        'RESEND_API_KEY is not set. Outbound email is DISABLED and every send will fail.',
+      );
     } else {
-      this.logger.warn('RESEND_API_KEY not set — emails will be logged to console only');
+      this.logger.warn(
+        'RESEND_API_KEY not set — outbound email is disabled. Recipients and subjects ' +
+          'are logged; bodies are not, because they carry password-reset and invite tokens.',
+      );
     }
+  }
+
+  private static isProduction(): boolean {
+    return (process.env.NODE_ENV ?? '').toLowerCase() === 'production';
   }
 
   async send(options: SendEmailOptions): Promise<boolean> {
     if (!this.resend) {
-      this.logger.log(`[MAIL-DEV] To: ${options.to} | Subject: ${options.subject}`);
-      this.logger.log(`[MAIL-DEV] Body: ${options.text || options.html.substring(0, 200)}`);
+      // The body is never logged.
+      //
+      // `options.text` for a password reset is literally
+      // "Reset your almyty password: <url>?token=<live token>", and the
+      // same shape carries org invite tokens. Logging it put single-use
+      // credential material into stdout — readable by anyone with log
+      // access, and valid for an hour — while `send()` returned true, so
+      // nothing upstream ever failed. "I never got the email" then
+      // looked like a delivery problem rather than a token on disk.
+      this.logger.log(
+        `[MAIL-DISABLED] Not sent (no RESEND_API_KEY). To: ${options.to} | Subject: ${options.subject}`,
+      );
+
+      // Outside production this is the ordinary local-dev path and
+      // reporting success keeps the flow usable. In production it is a
+      // misconfiguration, and a caller that believes the mail went out
+      // will tell the user to check their inbox.
+      if (MailService.isProduction()) return false;
+
       this.recordSend(options.to, options.subject, null);
       return true;
     }

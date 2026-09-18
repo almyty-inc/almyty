@@ -25,6 +25,7 @@ describe('OrganizationsInvitesHelper — listing + revocation', () => {
     organizationRepository = {
       findOne: jest.fn(),
       update: jest.fn().mockResolvedValue(undefined),
+      query: jest.fn().mockResolvedValue(undefined),
     };
 
     userOrganizationRepository = {
@@ -167,13 +168,15 @@ describe('OrganizationsInvitesHelper — listing + revocation', () => {
       const result = await helper.revokePendingInvite('org-1', `set:${settingsHash}`);
 
       expect(result.revoked).toBe(true);
-      expect(organizationRepository.update).toHaveBeenCalledWith('org-1', {
-        settings: {
-          pendingInvites: [
-            { email: 'b@example.com', role: 'admin', inviteToken: 'other-token', inviteExpiresAt: futureExpiry.toISOString() },
-          ],
-        },
-      });
+      // Removed in the database, by token. The read above only resolves
+      // the opaque `set:` handle; rewriting the whole settings column
+      // from that snapshot is what used to resurrect other invites.
+      expect(organizationRepository.update).not.toHaveBeenCalled();
+      const [sql, params] = organizationRepository.query.mock.calls[0];
+      expect(sql).toMatch(/UPDATE organizations/);
+      expect(sql).toMatch(/'\{pendingInvites\}'/);
+      expect(sql).toMatch(/inviteToken/);
+      expect(params).toEqual(['org-1', settingsToken]);
     });
 
     it('throws NotFoundException when no settings invite matches the hash', async () => {
