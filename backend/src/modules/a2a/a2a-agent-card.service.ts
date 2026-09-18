@@ -12,6 +12,9 @@ import type {
 } from './types/a2a-spec.types';
 import { A2A_PROTOCOL_VERSION } from './types/a2a-spec.types';
 
+/** Fallback for the required `version` when an agent carries none. */
+const DEFAULT_AGENT_VERSION = '1.0.0';
+
 @Injectable()
 export class A2AAgentCardService {
   /**
@@ -33,20 +36,31 @@ export class A2AAgentCardService {
 
     return {
       name: agent.name,
-      description: agent.description || undefined,
-      url,
-      provider,
-      version: A2A_PROTOCOL_VERSION,
+      // `description` is REQUIRED on AgentCard. An agent without one would
+      // otherwise yield a card a conforming client rejects outright, so fall
+      // back to a generated sentence rather than emitting undefined.
+      description: agent.description || `The ${agent.name} agent.`,
+      // The AGENT's own version. The protocol version is a separate field and
+      // from v1.0 lives on each entry of supportedInterfaces.
+      version: agent.version || DEFAULT_AGENT_VERSION,
+      supportedInterfaces: [
+        {
+          url,
+          protocolBinding: 'JSONRPC',
+          protocolVersion: A2A_PROTOCOL_VERSION,
+        },
+      ],
+      capabilities,
       skills,
+      defaultInputModes: ['text'],
+      defaultOutputModes: ['text'],
+      provider,
       securitySchemes:
         Object.keys(securitySchemes).length > 0 ? securitySchemes : undefined,
       security: security.length > 0 ? security : undefined,
-      capabilities,
-      supportedInterfaces: [
-        { protocolBinding: 'jsonrpc', url },
-      ],
-      defaultInputModes: ['text'],
-      defaultOutputModes: ['text'],
+      // Not a v1.0 field; kept so v0.2.x / v0.3.x clients, which require a
+      // top-level `url`, can still find the endpoint.
+      url,
     };
   }
 
@@ -70,7 +84,7 @@ export class A2AAgentCardService {
     return {
       streaming: true,
       pushNotifications: false,
-      stateTransitionHistory: true,
+      // v1.0 home of what v0.x called `supportsAuthenticatedExtendedCard`.
       extendedAgentCard: true,
     };
   }
@@ -83,10 +97,12 @@ export class A2AAgentCardService {
   }
 
   /**
-   * Map GatewayAuth configs to OpenAPI-style security schemes.
+   * Map GatewayAuth configs to A2A SecurityScheme objects.
    *
-   * This mirrors the logic previously in the deleted
-   * gateway-a2a.controller, ported here for the new module.
+   * proto `SecurityScheme` is a `oneof`, and ProtoJSON keys a oneof by the
+   * member that is set — hence the `httpAuthSecurityScheme` / `oauth2SecurityScheme`
+   * wrapper objects rather than OpenAPI's `{ "type": "http" }` discriminator.
+   * (v0.2.x / v0.3.x used the OpenAPI form; v1.0 does not.)
    */
   private buildSecurityInfo(authConfigs: GatewayAuth[]): {
     securitySchemes: Record<string, SecurityScheme>;
@@ -98,7 +114,7 @@ export class A2AAgentCardService {
     for (const auth of authConfigs) {
       if (!auth.isActive) continue;
 
-      // A2A v1.0 uses typed scheme objects, not OpenAPI format
+      // Each case sets exactly one oneof member (see the note above).
       switch (auth.type) {
         case GatewayAuthType.API_KEY: {
           // Declare as httpAuth/bearer in the A2A card — clients send the key

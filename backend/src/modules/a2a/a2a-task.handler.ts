@@ -136,7 +136,7 @@ export class A2ATaskHandler {
   /**
    * List tasks (agent runs) with optional filtering and pagination.
    *
-   * A2A v0.3.0 section 7.4: tasks/list
+   * ListTasks. New in A2A v1.0 (there is no tasks/list in 0.2.x or 0.3.x);
    *
    * Params:
    *   - contextId?: string -- filter by conversation
