@@ -1,6 +1,6 @@
 /**
  * Agent detail page header: breadcrumb, title, status badge,
- * and action buttons (export, duplicate, activate, invoke, edit).
+ * and action buttons (export, duplicate, activate, run, edit).
  */
 import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -98,7 +98,7 @@ export function AgentHeader({
           )}
           <Button variant="outline" onClick={onInvoke}>
             <Play className="h-4 w-4 mr-2" />
-            Invoke
+            Run
           </Button>
           <Button onClick={() => navigate(`/agents/${agent.id}/edit`)}>
             <Pencil className="h-4 w-4 mr-2" />

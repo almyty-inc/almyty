@@ -52,82 +52,8 @@ export enum MetricStatus {
   UNAUTHORIZED = 'unauthorized',
 }
 
-// Additional utility types
-export interface PaginatedResponse<T> {
-  data: T[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-// Entity-specific paginated responses matching backend shapes
-export interface PaginatedTools {
-  tools: Tool[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-export interface PaginatedGateways {
-  gateways: Gateway[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-export interface PaginatedApis {
-  apis: Api[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-export interface PaginatedAgents {
-  data: Agent[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-export interface PaginatedAgentExecutions {
-  data: AgentExecution[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-export interface PaginatedLlmProviders {
-  providers: LlmProvider[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
 export interface PaginatedUsers {
   users: User[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-export interface PaginatedGatewayTools {
-  gatewayTools: GatewayTool[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-export interface PaginatedSessions {
-  sessions: LlmSession[]
   total: number
   page: number
   limit: number
@@ -237,7 +163,7 @@ export interface AgentPipeline {
 
 export interface PipelineNode {
   id: string
-  type: 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'transform' | 'merge' | 'parallel' | 'sub_agent'
+  type: 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'loop' | 'transform' | 'merge' | 'parallel' | 'sub_agent' | 'verify' | 'extract_context'
   position: { x: number; y: number }
   data: Record<string, any>
 }
@@ -459,22 +385,6 @@ export interface TimelineEntry {
   count?: number
 }
 
-// Analytics overview
-export interface AnalyticsOverview {
-  last24h: {
-    requests: number
-    toolExecutions: number
-    avgResponseTime: number
-    errors: number
-    llmSessions: number
-  }
-  last7d: {
-    requests: number
-    toolExecutions: number
-    llmCostCents: number
-  }
-}
-
 // Gateway tool association (for tool-detail page)
 export interface GatewayToolAssociation {
   id: string
@@ -492,19 +402,6 @@ export interface AgentVersionSnapshot {
   pipeline: AgentPipeline
   savedAt: string
   changelog: string
-}
-
-// Agent cost estimate
-export interface AgentCostEstimate {
-  estimatedLlmCalls: number
-  estimatedToolCalls: number
-  hasParallelExecution: boolean
-  estimatedCostRange: {
-    low: number
-    high: number
-  }
-  nodeCount: number
-  edgeCount: number
 }
 
 export interface VaultCredential {

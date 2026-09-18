@@ -91,12 +91,31 @@ export class CanonicalSearchHelper {
     }));
   }
 
+  /**
+   * Lexical-only search.
+   *
+   * This is not a debug path: it is what `fts_only: true` asks for, what
+   * runs when no embedding provider is reachable, and what `search()`
+   * falls back to whenever the vector half returns nothing. It applied
+   * `mode` but silently dropped `tier` and `tags`, so a caller asking
+   * for `{ tier: 'short', tags: ['pii'] }` got every tier and every tag
+   * back and could not tell the filter had been ignored from a filter
+   * that simply matched everything.
+   */
   async ftsSearch(query: SearchQuery, topK: number): Promise<RankedItem[]> {
     const params: any[] = [query.scope.scope_type, query.scope.scope_id, query.query, topK];
     let where = `m.scope_type = $1 AND m.scope_id = $2 AND m.deleted_at IS NULL AND m.valid_until IS NULL AND m.content_tsv @@ plainto_tsquery('english', $3)`;
     if (query.mode) {
       params.push(query.mode);
       where += ` AND m.mode = $${params.length}`;
+    }
+    if (query.tier) {
+      params.push(query.tier);
+      where += ` AND m.tier = $${params.length}`;
+    }
+    if (query.tags && query.tags.length > 0) {
+      params.push(query.tags);
+      where += ` AND m.tags && $${params.length}`;
     }
 
     const rows = await this.dataSource.query(

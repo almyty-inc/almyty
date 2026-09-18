@@ -31,6 +31,11 @@ const SUPPORTED_ENTITIES: Record<string, new () => any> = {
   Agent,
 };
 
+/** Page size used when the caller does not ask for one. */
+export const DEFAULT_VERSION_PAGE_SIZE = 50;
+/** Hard ceiling on a single page of version snapshots. */
+export const MAX_VERSION_PAGE_SIZE = 200;
+
 @Injectable()
 export class VersionsService {
   constructor(private dataSource: DataSource) {}
@@ -57,15 +62,40 @@ export class VersionsService {
     }
   }
 
+  /**
+   * The `version` table is one of the fastest-growing in the schema — the
+   * version subscriber writes a full serialized entity on every save of a
+   * @VersionedEntity, and the model reconcile loop saves several per
+   * deployment every couple of minutes. Returning every snapshot an entity
+   * has ever had makes the response size scale with tenant age rather than
+   * with anything the caller asked for, so this is paged with the same
+   * ceiling convention the audit log uses (`Math.min(limit ?? 50, 200)`).
+   *
+   * `object` stays in the projection: the Change History view diffs each
+   * snapshot against the one below it, so metadata alone is not enough.
+   */
   async getVersions(
     entityType: string,
     entityId: string,
     organizationId: string,
+    options: { limit?: number; offset?: number } = {},
   ): Promise<Version[]> {
     await this.assertEntityBelongsToOrg(entityType, entityId, organizationId);
+    const take = Math.min(
+      Number.isFinite(options.limit as number) && (options.limit as number) > 0
+        ? (options.limit as number)
+        : DEFAULT_VERSION_PAGE_SIZE,
+      MAX_VERSION_PAGE_SIZE,
+    );
+    const skip =
+      Number.isFinite(options.offset as number) && (options.offset as number) > 0
+        ? Math.floor(options.offset as number)
+        : 0;
     return this.dataSource.getRepository(Version).find({
       where: { itemType: entityType, itemId: entityId },
       order: { timestamp: 'DESC' },
+      skip,
+      take,
     });
   }
 

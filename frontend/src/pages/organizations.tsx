@@ -44,7 +44,7 @@ type CreateOrgFormData = z.infer<typeof createOrgSchema>
 type InviteMemberFormData = z.infer<typeof inviteMemberSchema>
 
 export function OrganizationsPage() {
-  const { currentOrganization, organizations, setCurrentOrganization } = useOrganizationStore()
+  const { currentOrganization, organizations, setCurrentOrganization, upsertOrganization, removeOrganization } = useOrganizationStore()
   const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
 
@@ -85,6 +85,7 @@ export function OrganizationsPage() {
       queryClient.invalidateQueries({ queryKey: ['organizations'] })
       success('Organization created', 'Your new organization has been created successfully.')
       setCreateDialogOpen(false)
+      upsertOrganization(response)
       setCurrentOrganization(response)
     },
     onError: (err: any) => {
@@ -111,7 +112,7 @@ export function OrganizationsPage() {
       setInviteDialogOpen(false)
     },
     onError: (err: any) => {
-      error('Failed to invite member', err.response?.data?.message || 'Please try again.')
+      error('Failed to invite member', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -123,7 +124,7 @@ export function OrganizationsPage() {
       success('Member role updated', 'Role has been updated successfully.')
     },
     onError: (err: any) => {
-      error('Failed to update role', err.response?.data?.message || 'Please try again.')
+      error('Failed to update role', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -135,7 +136,7 @@ export function OrganizationsPage() {
       success('Member removed', 'Member has been removed from the organization.')
     },
     onError: (err: any) => {
-      error('Failed to remove member', err.response?.data?.message || 'Please try again.')
+      error('Failed to remove member', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -145,24 +146,36 @@ export function OrganizationsPage() {
   const updateOrgMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: { name: string; description: string } }) =>
       organizationsApi.update(id, data),
-    onSuccess: () => {
+    onSuccess: (updated: any, { id, data }) => {
       queryClient.invalidateQueries({ queryKey: ['organizations'] })
+      queryClient.invalidateQueries({ queryKey: ['organization-details', id] })
+      // The store is the other owner of this entity and its
+      // currentOrganization is persisted, so a rename that only
+      // invalidated a query key survived a reload as the old name.
+      upsertOrganization(
+        updated && updated.id ? updated : ({ id, ...data } as Organization),
+      )
       success('Organization updated', 'Settings saved successfully.')
     },
     onError: (err: any) => {
-      error('Failed to update organization', err.response?.data?.message || 'Please try again.')
+      error('Failed to update organization', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
   const deleteOrgMutation = useMutation({
     mutationFn: organizationsApi.delete,
-    onSuccess: () => {
+    onSuccess: (_result, id: string) => {
       queryClient.invalidateQueries({ queryKey: ['organizations'] })
+      queryClient.removeQueries({ queryKey: ['organization-details', id] })
+      // Without this the deleted org stayed selected, and the axios
+      // interceptor kept stamping its id on X-Organization-Id for
+      // every request the app made afterwards.
+      removeOrganization(id)
       success('Organization deleted', 'Organization has been deleted successfully.')
       setOrgDetailsOpen(false)
     },
     onError: (err: any) => {
-      error('Failed to delete organization', err.response?.data?.message || 'Please try again.')
+      error('Failed to delete organization', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 

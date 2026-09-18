@@ -456,7 +456,8 @@ describe('AgentOpenAICompatController', () => {
     it('does not grow past MAX_TRACKED_KEYS even with key churn', async () => {
       // Reach into the private map and pre-populate it past the cap. Then
       // hit the controller with a fresh key id and assert eviction kicked in.
-      const map: Map<string, { count: number; resetAt: number }> = (controller as any).requestCounts;
+      const map: Map<string, { count: number; resetAt: number }> = (controller as any)
+        .rateLimiter.counts;
       map.clear();
 
       // Fill with already-expired entries — these should be cleared on next call

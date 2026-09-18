@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { teamsApi } from '@/lib/api'
+import { organizationsApi } from '@/lib/api'
 
 export type TeamFilterValue = 'all' | 'org' | string // string = teamId
 
@@ -26,18 +26,21 @@ interface TeamLookupResult {
 
 /**
  * Shared hook for fetching the org's team list and providing an id→team
- * lookup table. Cached via react-query under ['teams', orgId] so the
- * page filter and per-row badges share one fetch.
+ * lookup table. Cached under ['organization-teams', orgId] -- the same
+ * key Settings -> Members & Teams writes through, so a team created or
+ * deleted there shows up in the page filters and per-row badges. This
+ * used to have a key of its own over the same endpoint that no mutation
+ * ever invalidated.
  */
 export function useTeamLookup(organizationId?: string | null): TeamLookupResult {
   const teamsQuery = useQuery<Team[]>({
-    queryKey: ['teams', organizationId],
-    queryFn: () => teamsApi.list(organizationId as string),
+    queryKey: ['organization-teams', organizationId],
+    queryFn: () => organizationsApi.getTeams(organizationId as string),
     enabled: !!organizationId,
   })
 
-  // teamsApi.list goes through apiGet → extractData, so teamsQuery.data
-  // is already the flat array.
+  // organizationsApi.getTeams goes through apiGet → extractData, so
+  // teamsQuery.data is already the flat array.
   const teams: Team[] = Array.isArray(teamsQuery.data) ? teamsQuery.data : []
 
   const byId: Record<string, Team> = {}

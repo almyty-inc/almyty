@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Badge } from '@/components/ui/badge'
+import { formatDateTime } from '@/lib/utils'
 import {
   AUTH_MODE_LABELS,
   DISTRIBUTION_LABELS,
@@ -113,7 +114,7 @@ export function AppsPage() {
                         <Badge
                           variant="outline"
                           className="border-red-400 text-red-600"
-                          title={`${app.health.agentName}: ${app.health.message} (${new Date(app.health.at).toLocaleString()})`}
+                          title={`${app.health.agentName}: ${app.health.message} (${formatDateTime(app.health.at)})`}
                         >
                           Last run failed
                         </Badge>

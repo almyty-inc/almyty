@@ -47,6 +47,7 @@ import {
 } from '@/components/llm-providers/schema'
 import { buildProviderColumns } from '@/components/llm-providers/columns'
 import { providerTypeOptions } from '@/components/llm-providers/provider-type-config'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface LlmProvidersPageProps {
   /** Rendered inside the Models page: no page title, the tab already names it. */
@@ -56,7 +57,9 @@ interface LlmProvidersPageProps {
 export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {}) {
   useEffect(() => {
     if (embedded) return
-    document.title = 'AI Models | almyty'
+    // The screen is called Models everywhere else (sidebar, /models);
+    // "AI Models" was a name nothing in the app actually uses.
+    document.title = 'Models | almyty'
     return () => { document.title = 'almyty' }
   }, [embedded])
 
@@ -139,11 +142,11 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
     },
     onError: (error: any) => {
       setTestResult({
-        error: error.response?.data?.message || error.message,
+        error: getApiErrorMessage(error),
         timestamp: new Date().toISOString()
       })
       setTestLoading(false)
-      notifications.error('Test Failed', error.response?.data?.message || 'Provider connection failed')
+      notifications.error('Test Failed', getApiErrorMessage(error, 'Provider connection failed'))
     }
   })
 
@@ -152,12 +155,18 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
       await llmProvidersApi.delete(providerId)
       return providerId
     },
-    onSuccess: () => {
+    onSuccess: (providerId) => {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
+      // ['llm-provider', id] is the detail page's own key, not a
+      // descendant of ['llm-providers'], so none of these mutations
+      // ever reached it and the detail page kept the pre-change
+      // provider.
+      queryClient.removeQueries({ queryKey: ['llm-provider', providerId] })
+      queryClient.removeQueries({ queryKey: ['provider-metrics', providerId] })
       notifications.success('Deleted', 'Provider removed successfully')
     },
     onError: (error: any) => {
-      notifications.error('Error', error.response?.data?.message || 'Failed to delete provider')
+      notifications.error('Error', getApiErrorMessage(error, 'Failed to delete provider'))
     }
   })
 
@@ -165,12 +174,13 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
     mutationFn: async ({ providerId, status }: { providerId: string; status: string }) => {
       return llmProvidersApi.update(providerId, { status })
     },
-    onSuccess: () => {
+    onSuccess: (_result, { providerId }) => {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
+      queryClient.invalidateQueries({ queryKey: ['llm-provider', providerId] })
       notifications.success('Updated', 'Provider status changed')
     },
     onError: (error: any) => {
-      notifications.error('Error', error.response?.data?.message || 'Failed to update provider')
+      notifications.error('Error', getApiErrorMessage(error, 'Failed to update provider'))
     }
   })
 
@@ -212,15 +222,18 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
         throw error
       }
     },
-    onSuccess: () => {
+    onSuccess: (created: any) => {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
+      if (created?.id) {
+        queryClient.invalidateQueries({ queryKey: ['llm-provider', created.id] })
+      }
       setIsCreateDialogOpen(false)
       createForm.reset()
       notifications.success('Provider added', 'AI model provider connected successfully')
     },
     onError: (error: any) => {
       console.error('Create provider mutation error:', error)
-      notifications.error('Error', error.response?.data?.message || 'Failed to add provider')
+      notifications.error('Error', getApiErrorMessage(error, 'Failed to add provider'))
     }
   })
 
@@ -228,14 +241,15 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       return llmProvidersApi.update(id, buildProviderUpdateBody(data))
     },
-    onSuccess: () => {
+    onSuccess: (_result, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
+      queryClient.invalidateQueries({ queryKey: ['llm-provider', id] })
       setIsEditDialogOpen(false)
       setProviderToEdit(null)
       notifications.success('Updated', 'Provider configuration updated successfully')
     },
     onError: (error: any) => {
-      notifications.error('Error', error.response?.data?.message || 'Failed to update provider')
+      notifications.error('Error', getApiErrorMessage(error, 'Failed to update provider'))
     }
   })
 
@@ -278,7 +292,7 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
           {embedded ? (
             <h2 className="text-lg font-semibold">Providers</h2>
           ) : (
-            <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">AI Models</h1>
+            <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Models</h1>
           )}
           <p className="text-muted-foreground">
             {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) · $${totalCost.toFixed(2)} total cost · ${pluralized(totalRequests, 'request')}`}

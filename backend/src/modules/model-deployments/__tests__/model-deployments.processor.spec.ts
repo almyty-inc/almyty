@@ -33,6 +33,8 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
     deployments = {
       findOne: jest.fn(async () => row),
       save: jest.fn(async (r: any) => r),
+      // Column-scoped write: the reconcile loop writes only what it owns.
+      update: jest.fn(async (_criteria: any, patch: Record<string, any>) => { Object.assign(row, patch); return { affected: 1 }; }),
       find: jest.fn(async () => [row]),
       // The claim the processor takes before a minutes-long deploy, so
       // the sweep and a retry cannot both deploy the same model.
@@ -106,6 +108,27 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
     expect(out?.desired.replicas).toBe(0);
     expect(service.audit).toHaveBeenCalledWith(expect.anything(), 'model_deployment_budget_stop', null, expect.objectContaining({ limitCents: 1 }));
     expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'model.deployment.budget_stop' }));
+  });
+
+  it('never prices a catalog card that belongs to another organization', async () => {
+    // A deployment carries whatever modelId its creator sent, so the card
+    // read in chargeBudget has to be organization-scoped like the two in
+    // fillCard/clearCard. Unscoped, one org's reconcile loop rewrote the
+    // pricing on another org's card.
+    stub.costSnapshot = async () => ({
+      spentCents: 5,
+      ratePerHourCents: 10,
+      observedAt: new Date(),
+      perToken: { inPerMTok: 1, outPerMTok: 2, currency: 'USD' },
+    });
+    models.findOne.mockImplementation(async ({ where }: any) =>
+      where.organizationId === 'org-1' ? null : { id: 'm-1', organizationId: 'org-2', pricingOverride: null },
+    );
+
+    await processor.reconcile('d-1');
+
+    expect(models.findOne).toHaveBeenCalledWith({ where: { id: 'm-1', organizationId: 'org-1' } });
+    expect(models.save).not.toHaveBeenCalled();
   });
 
   it('marks a deployment orphaned when the provider forgot it', async () => {

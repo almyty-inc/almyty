@@ -42,6 +42,18 @@ export interface CodingEvent {
  * to keep the map from growing for the life of the pod.
  */
 const SESSION_RUNNER_CACHE_MAX = 10_000;
+
+/**
+ * The transport hands each envelope the session it arrived on. `id` is
+ * the streamable session id; `organizationId` is the tenant the bearer
+ * token on that POST proved, and is the only trustworthy thing in the
+ * pair -- everything inside the envelope payload was written by
+ * whoever is holding the session.
+ */
+interface EnvelopeSession {
+  id: string;
+  organizationId: string;
+}
 @Injectable()
 export class CodingRelayService implements OnModuleDestroy {
   private readonly logger = new Logger(CodingRelayService.name);
@@ -71,7 +83,7 @@ export class CodingRelayService implements OnModuleDestroy {
   }
   private readonly envelopeListener: (
     env: WorkerEnvelope,
-    session?: { id: string },
+    session?: EnvelopeSession,
   ) => void;
 
   constructor(
@@ -108,7 +120,7 @@ export class CodingRelayService implements OnModuleDestroy {
     return this.emitter.listenerCount(`coding:${runnerId}`);
   }
 
-  private async onEnvelope(env: WorkerEnvelope, session?: { id: string }): Promise<void> {
+  private async onEnvelope(env: WorkerEnvelope, session?: EnvelopeSession): Promise<void> {
     if (env.type !== 'event') return;
     const payload = env.payload as
       | { kind?: string; runnerId?: string; sessionId?: string }
@@ -117,7 +129,25 @@ export class CodingRelayService implements OnModuleDestroy {
 
     // Piggyback on runner.hello to learn the session -> runner mapping
     // without a DB round trip per event.
+    //
+    // The claimed runner id is checked against the organization the
+    // session's bearer token proved, the same as in RunnerCallService.
+    // Caching the claim unverified let a session in one organization
+    // bind itself to another tenant's runner, and every coding.output
+    // it then posted was relayed onto that runner's SSE channel -- so
+    // the victim's chat window showed output the victim's machine
+    // never produced.
     if (payload.kind === 'runner.hello' && payload.runnerId && session) {
+      const owned = await this.runners.belongsToOrganization(
+        payload.runnerId,
+        session.organizationId,
+      );
+      if (!owned) {
+        this.logger.warn(
+          `runner.hello claiming runner ${payload.runnerId} refused: not in session's organization`,
+        );
+        return;
+      }
       this.rememberSession(session.id, payload.runnerId);
       return;
     }

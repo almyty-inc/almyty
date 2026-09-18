@@ -117,4 +117,30 @@ describe('DefaultModelResolver', () => {
     await expect(resolver.resolve(p)).rejects.toThrow(/could not list its models \(Request failed with status code 404\)/);
     await expect(resolver.resolve(p)).rejects.toThrow(/Set a model on the provider/);
   });
+
+  /**
+   * The vendor retiring a model mid-listing.
+   *
+   * `invalidate()` is called from the chat paths the moment a vendor
+   * answers model_not_found, but it can only delete what is cached — a
+   * resolution already waiting on the vendor's model list has cached
+   * nothing yet, and then installed its pre-retirement pick for the
+   * whole hour. Every call on this replica failed for that hour.
+   */
+  it('does not cache a pick made before an invalidate that arrived mid-listing', async () => {
+    const p = provider(LlmProviderType.ANTHROPIC);
+    fetchModels
+      .mockImplementationOnce(async () => {
+        // The vendor rejects the current default while we are listing.
+        resolver.invalidate('p1');
+        return [{ id: 'claude-sonnet-4-5' }];
+      })
+      .mockResolvedValue([{ id: 'claude-sonnet-5' }]);
+
+    await expect(resolver.resolve(p)).resolves.toBe('claude-sonnet-4-5');
+    // The next call re-asks instead of serving the pick that was already
+    // known to be stale when it was made.
+    await expect(resolver.resolve(p)).resolves.toBe('claude-sonnet-5');
+    expect(fetchModels).toHaveBeenCalledTimes(2);
+  });
 });

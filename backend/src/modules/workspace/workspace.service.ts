@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, LessThanOrEqual } from 'typeorm';
+import { Repository, LessThanOrEqual, EntityManager } from 'typeorm';
 
 import { Runner, RunnerIsolationTier, RunnerState } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
@@ -101,9 +101,18 @@ export class WorkspaceService {
 
   /**
    * Mark a workspace released. Idempotent: calling release on an
-   * already-terminal workspace is a no-op (returns the existing row).
+   * already-terminal workspace is a no-op and returns the existing row.
    * The actual kill of workspace-scoped processes on the runner is
    * the caller's job; this service only updates the DB record.
+   *
+   * The transition is conditional on the row still being ACTIVE, so a
+   * release that races the TTL sweep or the stranding fan-out loses
+   * cleanly instead of overwriting the terminal state and `closeReason`
+   * the other one committed. A plain save() of the loaded row wrote its
+   * own view of every column back, so whichever of the three finished
+   * last decided what the record said had happened — and a lost
+   * `stranded` is the one that matters, because that state exists to
+   * tell the user their work was on a machine that went away.
    */
   async release(
     id: string,
@@ -112,10 +121,17 @@ export class WorkspaceService {
   ): Promise<Workspace> {
     const ws = await this.getOne(id, ownerUserId, organizationId);
     if (ws.status !== WorkspaceStatus.ACTIVE) return ws;
-    ws.status = WorkspaceStatus.RELEASED;
-    ws.closedAt = new Date();
-    ws.closeReason = { kind: 'released', detail: ownerUserId };
-    return this.workspaces.save(ws);
+
+    const claimed = await this.transitionFromActive(ws.id, WorkspaceStatus.RELEASED, {
+      closedAt: new Date(),
+      closeReason: { kind: 'released', detail: ownerUserId },
+    });
+    if (!claimed) {
+      // Something else reached a terminal state first; report what the
+      // row actually says rather than what this call intended.
+      return this.getOne(id, ownerUserId, organizationId);
+    }
+    return this.getOne(id, ownerUserId, organizationId);
   }
 
   /** List active workspaces for a runner. Used by the heartbeat path. */
@@ -137,19 +153,31 @@ export class WorkspaceService {
    * periodically; runner-side cleanup of any processes the workspace
    * owned is the caller's responsibility (the routing layer hooks the
    * release envelope dispatch in).
+   *
+   * Each flip is conditional on the row still being ACTIVE, and only
+   * the rows this sweep actually claimed come back — a workspace the
+   * owner released, or the stranding fan-out took, in the window
+   * between the SELECT and the write stays theirs, and the caller is
+   * not told this sweep expired something it did not.
    */
   async sweepExpired(now = new Date()): Promise<Workspace[]> {
-    const expired = await this.workspaces.find({
+    const candidates = await this.workspaces.find({
       where: {
         status: WorkspaceStatus.ACTIVE,
         ttlAt: LessThanOrEqual(now),
       },
     });
-    for (const ws of expired) {
+    const expired: Workspace[] = [];
+    for (const ws of candidates) {
+      const claimed = await this.transitionFromActive(ws.id, WorkspaceStatus.EXPIRED, {
+        closedAt: now,
+        closeReason: { kind: 'expired', detail: ws.ttlAt?.toISOString() ?? '' },
+      });
+      if (!claimed) continue;
       ws.status = WorkspaceStatus.EXPIRED;
       ws.closedAt = now;
       ws.closeReason = { kind: 'expired', detail: ws.ttlAt?.toISOString() ?? '' };
-      await this.workspaces.save(ws);
+      expired.push(ws);
     }
     if (expired.length > 0) {
       this.logger.log(`expired ${expired.length} workspace(s)`);
@@ -163,23 +191,52 @@ export class WorkspaceService {
    * stranded a one-way state: there is no migration to a different
    * runner in v1.0, and even when the runner comes back, the original
    * workspaces stay stranded so the user can audit what was lost.
+   *
+   * One conditional UPDATE, so the count returned is the number of
+   * workspaces this call actually stranded. `manager` lets the caller
+   * run the fan-out inside the same transaction as the runner's flip to
+   * OFFLINE: without that, a pod dying between the two writes left the
+   * runner offline and its workspaces ACTIVE forever.
    */
-  async markStrandedForRunners(runnerIds: string[]): Promise<number> {
+  async markStrandedForRunners(runnerIds: string[], manager?: EntityManager): Promise<number> {
     if (runnerIds.length === 0) return 0;
-    const active = await this.workspaces.find({
-      where: { runnerId: In(runnerIds), status: WorkspaceStatus.ACTIVE },
-    });
+    const repo = manager ? manager.getRepository(Workspace) : this.workspaces;
     const now = new Date();
-    for (const ws of active) {
-      ws.status = WorkspaceStatus.STRANDED;
-      ws.closedAt = now;
-      ws.closeReason = { kind: 'stranded', detail: ws.runnerId };
-      await this.workspaces.save(ws);
+    const result = await repo
+      .createQueryBuilder()
+      .update(Workspace)
+      .set({
+        status: WorkspaceStatus.STRANDED,
+        closedAt: now,
+        closeReason: () => `json_build_object('kind', 'stranded', 'detail', "runnerId")`,
+      })
+      .where('"runnerId" IN (:...runnerIds)', { runnerIds })
+      .andWhere('status = :active', { active: WorkspaceStatus.ACTIVE })
+      .execute();
+    const stranded = result.affected ?? 0;
+    if (stranded > 0) {
+      this.logger.warn(`stranded ${stranded} workspace(s) across ${runnerIds.length} runner(s)`);
     }
-    if (active.length > 0) {
-      this.logger.warn(`stranded ${active.length} workspace(s) across ${runnerIds.length} runner(s)`);
-    }
-    return active.length;
+    return stranded;
+  }
+
+  /**
+   * Move one workspace out of ACTIVE into a terminal state, but only if
+   * it is still ACTIVE. Returns false when someone else got there
+   * first, which is the whole point: terminal states are one-way, and
+   * whichever transition committed first is the true story of what
+   * happened to that workspace.
+   */
+  private async transitionFromActive(
+    id: string,
+    to: WorkspaceStatus,
+    fields: { closedAt: Date; closeReason: Workspace['closeReason'] },
+  ): Promise<boolean> {
+    const result = await this.workspaces.update(
+      { id, status: WorkspaceStatus.ACTIVE },
+      { status: to, closedAt: fields.closedAt, closeReason: fields.closeReason },
+    );
+    return (result.affected ?? 0) > 0;
   }
 
   // ── internals ───────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ import { render } from '../../../test/setup'
 import { KmsSettings } from '../kms-settings'
 import { api } from '@/lib/api'
 
-vi.mock('@/lib/api', () => ({ api: { get: vi.fn(), put: vi.fn() } }))
+vi.mock('@/lib/api', () => ({ api: { get: vi.fn(), put: vi.fn(), post: vi.fn() } }))
 vi.mock('@/hooks/use-entitlement', () => ({ useEntitlement: () => ({ enabled: true, isLoading: false }) }))
 
 /**
@@ -86,5 +86,83 @@ describe('customer-managed key settings', () => {
 
     fireEvent.click(await screen.findByLabelText('Use this key'))
     await waitFor(() => expect(api.put).toHaveBeenCalledWith('/kms/enabled', { enabled: false }))
+  })
+
+  /**
+   * Rotation has to be reachable, and it must not be the attach call.
+   *
+   * Attaching twice minted a second data key over the first, which made
+   * every secret sealed under the old one unreadable — silently. The
+   * button read "Replace key" while calling attach, so the UI offered
+   * exactly the destructive operation. The server refuses a re-attach
+   * now; these pin that the UI asks for the right thing rather than
+   * relying on that refusal.
+   */
+  describe('rotating an attached key', () => {
+    beforeEach(() => {
+      ;(api.get as any).mockResolvedValue({
+        data: { data: config({ provisioned: true, enabled: true, cmkArn: 'arn:aws:kms:eu-central-1:1:key/a' }) },
+      })
+      ;(api.post as any).mockResolvedValue({
+        data: { data: config({ provisioned: true, enabled: true, cmkArn: 'arn:aws:kms:eu-central-1:1:key/b' }) },
+      })
+    })
+
+    it('offers Rotate, not Replace, once a key is attached', async () => {
+      render(<KmsSettings />)
+      expect(await screen.findByTestId('rotate-cmk')).toHaveTextContent(/rotate key/i)
+      expect(screen.queryByTestId('attach-cmk')).toBeNull()
+      expect(screen.queryByText(/replace key/i)).toBeNull()
+    })
+
+    it('rotates through the rotate endpoint and never through attach', async () => {
+      render(<KmsSettings />)
+      fireEvent.click(await screen.findByTestId('rotate-cmk'))
+      await waitFor(() => expect(api.post).toHaveBeenCalledWith('/kms/rotate', expect.anything()))
+      // The destructive call. It must not happen from this screen.
+      expect(api.put).not.toHaveBeenCalledWith('/kms', expect.anything())
+    })
+
+    it('rotates under the key the form is showing', async () => {
+      // The form prefills from the saved config, so the ordinary rotation
+      // is "same CMK, fresh data key" and sends the ARN already on screen.
+      // Clearing the field is what asks the server to keep its configured
+      // one, and an empty string must not reach it as an ARN.
+      render(<KmsSettings />)
+      fireEvent.click(await screen.findByTestId('rotate-cmk'))
+      await waitFor(() =>
+        expect(api.post).toHaveBeenCalledWith('/kms/rotate', {
+          cmkArn: 'arn:aws:kms:eu-central-1:1:key/a',
+          awsRegion: undefined,
+        }),
+      )
+    })
+
+    it('sends no ARN at all when the field is cleared', async () => {
+      render(<KmsSettings />)
+      // Wait for the button, not the input: the ARN field renders before
+      // the config query settles, so awaiting it proves nothing about
+      // whether the provisioned branch is on screen yet.
+      const button = await screen.findByTestId('rotate-cmk')
+      fireEvent.change(screen.getByLabelText('CMK ARN'), { target: { value: '' } })
+      fireEvent.click(button)
+      await waitFor(() =>
+        expect(api.post).toHaveBeenCalledWith('/kms/rotate', { cmkArn: undefined, awsRegion: undefined }),
+      )
+    })
+    it('says older secrets stay readable, because that is the whole point', async () => {
+      render(<KmsSettings />)
+      await screen.findByTestId('rotate-cmk')
+      expect(screen.getByText(/stay\s+readable/i)).toBeInTheDocument()
+    })
+
+    it('surfaces a refused rotation', async () => {
+      ;(api.post as any).mockRejectedValue({
+        response: { data: { error: { message: 'That key could not be used to wrap a new data key.' } } },
+      })
+      render(<KmsSettings />)
+      fireEvent.click(await screen.findByTestId('rotate-cmk'))
+      expect(await screen.findByTestId('kms-error')).toHaveTextContent(/could not be used to wrap/i)
+    })
   })
 })

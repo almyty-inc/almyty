@@ -41,6 +41,8 @@ vi.mock('../../store/organization', () => ({
     currentOrganization: { id: 'current-org', name: 'Current' },
     organizations: [],
     setCurrentOrganization: vi.fn(),
+    upsertOrganization: vi.fn(),
+    removeOrganization: vi.fn(),
   }),
 }))
 

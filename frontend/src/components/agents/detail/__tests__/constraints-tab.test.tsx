@@ -38,4 +38,17 @@ describe('ConstraintsTab', () => {
     expect(await screen.findByText(/No constraints yet/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Add/ })).toBeInTheDocument()
   })
+
+  // A failed list read used to render the empty state, which here says the
+  // agent has no constraints -- the one claim the screen cannot make when it
+  // does not know. The agent may well be running under rules it just failed
+  // to fetch.
+  it('shows the retryable error state, not the empty state, when the list fails', async () => {
+    ;(agentConstraintsApi.list as any).mockRejectedValue(new Error('boom'))
+    renderWithProviders(<ConstraintsTab agentId="agent-1" />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load constraints")
+    expect(screen.queryByText(/No constraints yet/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Try again/ })).toBeInTheDocument()
+  })
 })

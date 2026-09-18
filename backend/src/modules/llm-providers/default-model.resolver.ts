@@ -112,6 +112,11 @@ const CACHE_TTL_MS = 60 * 60 * 1000;
 export class DefaultModelResolver {
   private readonly logger = new Logger(DefaultModelResolver.name);
   private readonly cache = new Map<string, { model: string; expiresAt: number }>();
+  /**
+   * When each provider's pick was last invalidated, so a resolution that
+   * started before the vendor retired a model cannot re-cache it.
+   */
+  private readonly invalidatedAt = new Map<string, number>();
 
   constructor(private readonly modelsHelper: LlmModelsHelper) {}
 
@@ -134,8 +139,9 @@ export class DefaultModelResolver {
     }
 
     const key = provider.id ?? `${provider.type}:${provider.getApiUrl?.() ?? ''}`;
+    const startedAt = Date.now();
     const hit = this.cache.get(key);
-    if (hit && hit.expiresAt > Date.now()) return hit.model;
+    if (hit && hit.expiresAt > startedAt) return hit.model;
 
     // A listing failure (no /models on this base, network, auth) is the
     // same "nothing to choose from" as an empty list: report it under
@@ -155,14 +161,29 @@ export class DefaultModelResolver {
     if (!picked) {
       throw new NoModelAvailableError(provider, `none of the ${ids.length} models the vendor lists is a chat model we recognise`);
     }
-    this.cache.set(key, { model: picked, expiresAt: Date.now() + CACHE_TTL_MS });
+    // Do not cache over an invalidate that arrived while the vendor was
+    // answering: `invalidate()` had nothing to delete then, and this
+    // pick can be exactly the id the vendor has just retired -- which
+    // would be an hour of model_not_found per replica.
+    if ((this.invalidatedAt.get(key) ?? 0) < startedAt) {
+      this.cache.set(key, { model: picked, expiresAt: Date.now() + CACHE_TTL_MS });
+    }
     this.logger.log(`Resolved default model for provider ${provider.id ?? provider.type}: ${picked}`);
     return picked;
   }
 
-  /** Drop the cached choice, e.g. after the vendor said the model is gone. */
+  /**
+   * Drop the cached choice, e.g. after the vendor said the model is gone.
+   * Also records WHEN, so a resolution already waiting on the vendor's
+   * model list cannot install its pre-retirement pick afterwards.
+   */
   invalidate(providerId: string): void {
     this.cache.delete(providerId);
+    const now = Date.now();
+    for (const [id, at] of this.invalidatedAt) {
+      if (at + CACHE_TTL_MS < now) this.invalidatedAt.delete(id);
+    }
+    this.invalidatedAt.set(providerId, now);
   }
 }
 

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
+import { ForbiddenException, BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
@@ -6,11 +6,13 @@ import * as crypto from 'crypto';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization } from '../../entities/user-organization.entity';
+import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { TeamMembershipHelper } from './team-membership.helper';
+import { isUniqueViolation } from '../../common/utils/unique-violation';
 /**
  * Invitation flow extracted from OrganizationsService:
  * inviteUser, acceptInvite, getInviteDetails. The original service
@@ -41,6 +43,24 @@ export class OrganizationsInvitesHelper {
   async inviteUser(organizationId: string, inviteUserDto: InviteUserDto, invitedBy: string): Promise<{ inviteSent: boolean }> {
     const org = await this.organizationRepository.findOne({ where: { id: organizationId } });
     if (!org) throw new NotFoundException('Organization not found');
+
+    // An inviter may not hand out a role more privileged than their own.
+    //
+    // The route is open to `admin` as well as `owner`, and the role came
+    // straight off the body, so an admin could invite an address they
+    // control as OWNER and hold the organization outright -- the same
+    // self-escalation updateMemberRole refuses ("Cannot assign a role
+    // higher than your own"), reached through the invite door instead of
+    // the role door.
+    const inviterMembership = await this.userOrganizationRepository.findOne({
+      where: { organizationId, userId: invitedBy, isActive: true },
+    });
+    if (!inviterMembership) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+    if (ORGANIZATION_ROLE_RANK[inviteUserDto.role] < ORGANIZATION_ROLE_RANK[inviterMembership.role]) {
+      throw new ForbiddenException('Cannot invite a user at a role higher than your own');
+    }
 
     const inviter = await this.userRepository.findOne({ where: { id: invitedBy } });
     const inviterName = inviter ? `${inviter.firstName} ${inviter.lastName}`.trim() : 'A team member';
@@ -252,14 +272,19 @@ export class OrganizationsInvitesHelper {
           inviteAccepted: true,
           isActive: true,
         });
-        await this.userOrganizationRepository.save(newMembership);
+        try {
+          await this.userOrganizationRepository.save(newMembership);
+        } catch (err: any) {
+          // The membership unique index on (userId, organizationId) is
+          // the backstop for a token accepted twice. Say so, rather
+          // than letting the driver error out as a 500.
+          if (!isUniqueViolation(err)) throw err;
+          throw new ConflictException('You are already a member of this organization');
+        }
         await this.teamMembershipHelper.joinDefaultTeam(org.id, userId, invite.role);
 
-        // Remove from pending
-        const updated = pendingInvites.filter((i: any) => i.inviteToken !== token);
-        await this.organizationRepository.update(org.id, {
-          settings: { ...(org.settings as any || {}), pendingInvites: updated },
-        });
+        // Remove from pending, in the database.
+        await this.removePendingInvite(org.id, token);
 
         return { organizationId: org.id, organizationName: org.name };
       }
@@ -432,12 +457,49 @@ export class OrganizationsInvitesHelper {
     if (matchIdx === -1) {
       throw new NotFoundException('Invite not found');
     }
-    const updated = pendingInvites.filter((_, idx) => idx !== matchIdx);
-    await this.organizationRepository.update(organizationId, {
-      settings: { ...(org.settings as any || {}), pendingInvites: updated },
-    });
+    // The read above only resolves the opaque handle to a token; the
+    // removal itself happens in the database, for the same reason as
+    // in acceptInvite.
+    await this.removePendingInvite(organizationId, pendingInvites[matchIdx].inviteToken);
     this.logger.log(`Revoked settings invite ${targetHash} in org ${organizationId}`);
     return { revoked: true };
+  }
+
+  /**
+   * Drop one invite from `settings.pendingInvites`, matching on its
+   * token, without rewriting the rest of the column.
+   *
+   * Both callers used to filter their own in-memory copy of the array
+   * and write `settings: { ...org.settings, pendingInvites: filtered }`
+   * — the whole json column, from a snapshot read earlier. Two
+   * invitees accepting different invites at the same time each wrote
+   * their own full array, so the one the other had just removed came
+   * back; a second accept of a resurrected token then hit the
+   * membership unique index. An admin editing org settings alongside
+   * an accept had their edit reverted wholesale for the same reason.
+   *
+   * The column is jsonb (see the JsonbAndKmsFk migration), so the
+   * jsonb operators below apply to it.
+   */
+  private async removePendingInvite(organizationId: string, inviteToken: string): Promise<void> {
+    await this.organizationRepository.query(
+      `UPDATE organizations
+          SET settings = jsonb_set(
+            COALESCE(settings, '{}'::jsonb),
+            '{pendingInvites}',
+            COALESCE(
+              (SELECT jsonb_agg(invite)
+                 FROM jsonb_array_elements(
+                   COALESCE(settings->'pendingInvites', '[]'::jsonb)
+                 ) AS invite
+                WHERE invite->>'inviteToken' IS DISTINCT FROM $2
+              ),
+              '[]'::jsonb
+            )
+          )
+        WHERE id = $1`,
+      [organizationId, inviteToken],
+    );
   }
 
 }

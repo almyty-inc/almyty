@@ -8,8 +8,8 @@ import { ResolvedConfig, RunnerConfig, RunnerIsolationTier } from './types.js';
 /**
  * Config layering, lowest precedence first:
  *
- *   1. Built-in defaults (most restrictive: container isolation,
- *      no network, no installs)
+ *   1. Built-in defaults (host isolation, network allowed, installs
+ *      blocked)
  *   2. ~/.almyty/config.json                                  (global user)
  *   3. ./.almyty/config.json                                  (project-local)
  *   4. Environment variables (ALMYTY_*)
@@ -39,23 +39,90 @@ export const DEFAULT_BINARY_PROBE_LIST = [
 export const DEFAULT_BACKEND_URL = 'https://api.almyty.com';
 
 export const DEFAULTS: ResolvedConfig = {
-  name: '',
-  labels: {},
   config: {
-    // Most-restrictive defaults: container isolation, no installs,
-    // no network. Users opt out of any of these explicitly in config
-    // or via flags; the design point is that an unconfigured runner
-    // is the safest one.
-    defaultIsolation: 'container',
+    /**
+     * Host isolation, by default.
+     *
+     * This is the one default where the restrictive choice is not the
+     * right one, because container isolation is not implemented in this
+     * build. `policy.ts` knows that and fails closed: with
+     * `defaultIsolation: 'container'` every spawn and every shell exec is
+     * refused before it starts. So a container default does not produce a
+     * sandboxed runner — it produces a runner that denies every command
+     * the backend sends it, after the documented quick start said it was
+     * ready. A default nobody can use is not a safe default, it is a
+     * broken one.
+     *
+     * So the default is what actually runs, and the exposure is stated
+     * rather than implied: a host-isolation runner executes
+     * backend-dispatched commands as the user who started it, on their
+     * machine. `describeIsolationPosture()` prints that at boot, the
+     * README says it in the quick start, and the ways to narrow it
+     * (`allowedCwdRoots`, `denyPatterns`, `installBlocked`) are listed
+     * next to it.
+     *
+     * Choosing `container` explicitly still refuses rather than quietly
+     * running on the host, which keeps the setting honest for whoever
+     * turns it on before the runtime exists.
+     */
+    defaultIsolation: 'host',
     maxConcurrent: 4,
     allowedCwdRoots: [],
     denyPatterns: [],
-    networkBlocked: true,
+    /**
+     * Network is not blocked, for the same reason: it cannot be enforced
+     * under host isolation, and `policy.ts` refuses every command when it
+     * is asked for. Requesting it remains a refusal rather than a lie.
+     */
+    networkBlocked: false,
+    /**
+     * Installs stay blocked. This one is enforceable — it is a pattern
+     * match on the command, not a sandbox — so it costs nothing to keep
+     * and it stops a dispatched payload from mutating the machine's
+     * global package state. Narrow enough that a runner still works with
+     * it on.
+     */
     installBlocked: true,
   },
+  name: '',
+  labels: {},
   binaryProbeList: DEFAULT_BINARY_PROBE_LIST,
   backendUrl: DEFAULT_BACKEND_URL,
 };
+
+/**
+ * One line describing what this config lets the runner do, for the boot
+ * banner. Pure, so a test can assert the wording without starting a
+ * daemon.
+ *
+ * Host isolation is the default and it means real execution on this
+ * machine. Saying so at boot is the trade for the default working: the
+ * posture is a choice the user can see, not one buried in a file they
+ * never opened.
+ */
+export function describeIsolationPosture(config: RunnerConfig): string {
+  if (config.defaultIsolation === 'container') {
+    return (
+      'isolation=container — NOT IMPLEMENTED in this build; every command will be refused. ' +
+      "Set config.defaultIsolation to 'host' (or ALMYTY_RUNNER_ISOLATION=host) to run commands."
+    );
+  }
+  if (config.networkBlocked) {
+    return (
+      'networkBlocked=true cannot be enforced under host isolation; every command will be refused. ' +
+      'Set networkBlocked to false to run commands.'
+    );
+  }
+  const guards: string[] = [];
+  guards.push(config.installBlocked ? 'installs blocked' : 'installs allowed');
+  guards.push(
+    config.allowedCwdRoots.length > 0
+      ? `cwd limited to ${config.allowedCwdRoots.length} root(s)`
+      : 'cwd unrestricted',
+  );
+  if (config.denyPatterns.length > 0) guards.push(`${config.denyPatterns.length} deny pattern(s)`);
+  return `isolation=host — commands run on this machine as you (${guards.join(', ')})`;
+}
 
 export const GLOBAL_CONFIG_PATH = join(homedir(), '.almyty', 'config.json');
 export const PROJECT_CONFIG_PATH = join(process.cwd(), '.almyty', 'config.json');

@@ -9,6 +9,8 @@ import { AppModule } from './app.module';
 import { createSpaRootMiddleware } from './common/frontend/frontend-static';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
+import { CorrelatedConsoleLogger } from './common/logging/correlated-console.logger';
+import { requestContextMiddleware } from './common/middleware/request-context.middleware';
 // No global response interceptor — each controller is responsible for consistent {success, data} format
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RequestLog } from './entities/request-log.entity';
@@ -40,7 +42,12 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   
   const app = await NestFactory.create(AppModule, {
-    logger: ['log', 'error', 'warn', 'debug', 'verbose'],
+    // Every log line carries the correlation fields of the request (or
+    // job) it happened in — see CorrelatedConsoleLogger. Same console
+    // format, same levels, with ` | req=… org=… run=…` appended.
+    logger: new CorrelatedConsoleLogger({
+      logLevels: ['log', 'error', 'warn', 'debug', 'verbose'],
+    }),
     // Preserve the raw request body so the Stripe billing webhook can verify
     // its signature over the exact bytes Stripe signed (JSON re-serialization
     // would break the HMAC). Nest still parses JSON for every other route.
@@ -49,6 +56,12 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 3000);
+
+  // Correlation id — FIRST, before every other middleware, so the whole
+  // request (guards, interceptors, handler, exception filter) runs inside
+  // the AsyncLocalStorage scope and the id is on the response header even
+  // for a request that never reaches a handler.
+  app.use(requestContextMiddleware);
 
   // Security middleware
   app.use(helmet({

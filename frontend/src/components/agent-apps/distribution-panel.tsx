@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import {
   CHANNEL_CREDENTIAL_FIELDS,
   DISTRIBUTION_BLURBS,
@@ -113,9 +114,17 @@ export function DistributionPanel({
       })
       onSaved()
     },
-    onError: (err: any) =>
+    // The backend throws the joined list of every blocker it found --
+    // missing cost cap, white label not entitled, no agents, no signing
+    // credential. Throwing that away left the one refusal in the app
+    // that goes out of its way to be actionable as a bare title.
+    onError: (err: unknown) =>
       errorNotif(
         live ? 'Could not unpublish' : 'Could not publish',
+        getApiErrorMessage(
+          err,
+          live ? 'It is still answering.' : 'It is not answering yet.',
+        ),
       ),
   })
 
@@ -139,7 +148,7 @@ export function DistributionPanel({
       onSaved()
     },
     onError: (err: any) =>
-      errorNotif('Could not save', err?.response?.data?.message || 'Something went wrong.'),
+      errorNotif('Could not save the distribution', getApiErrorMessage(err, 'Please try again.')),
   })
 
   return (

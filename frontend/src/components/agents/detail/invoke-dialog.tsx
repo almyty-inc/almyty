@@ -1,6 +1,10 @@
 /**
- * Modal dialog for invoking an agent with custom JSON input.
- * Displays the execution result or error after invocation.
+ * Modal dialog for running an agent with custom JSON input.
+ * Displays the run's output or the reason it failed.
+ *
+ * Copy here says "run" throughout -- the same word the header button,
+ * the Runs tab and the stat cards use. It used to be titled "Invoke
+ * Agent" over a "Run Agent" button, reporting an "Invocation Failed".
  */
 import React, { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -54,7 +58,7 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
     onSuccess: async (result: any) => {
       setInvokeResult(result)
       if (result?.status === 'completed') {
-        success('Agent ran', 'The run finished.')
+        success('Run finished', 'The agent finished this run.')
       } else {
         errorNotif(
           result?.status === 'cancelled' ? 'Run cancelled' : 'Run failed',
@@ -68,10 +72,14 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
         // The list's run count is read from this key, and it went on
         // saying the old number until a reload.
         queryClient.invalidateQueries({ queryKey: ['agents'] }),
+        // The run-failure banner at the top of this page reads its own
+        // key with a 15s staleTime, so a run that just failed here did
+        // not raise the banner until that window passed.
+        queryClient.invalidateQueries({ queryKey: ['agent-latest-run', agent.id] }),
       ])
     },
     onError: (err: unknown) => {
-      errorNotif('Invocation Failed', getApiErrorMessage(err, 'Failed to invoke agent'))
+      errorNotif('Run failed', getApiErrorMessage(err, 'Failed to start the run'))
     },
   })
 
@@ -82,7 +90,7 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Invoke Agent</DialogTitle>
+          <DialogTitle>Run Agent</DialogTitle>
           <DialogDescription>
             Provide input JSON to run "{agent.name}".
           </DialogDescription>
@@ -151,7 +159,7 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
               )}
               <details>
                 <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-                  Full execution record
+                  Full run record
                 </summary>
                 <div className="mt-1">
                   <CodeBlock value={JSON.stringify(invokeResult, null, 2)} language="json" maxHeight="200px" />
@@ -162,7 +170,7 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
 
           {invokeMutation.isError && (
             <div role="alert" className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-              {getApiErrorMessage(invokeMutation.error, 'Execution failed')}
+              {getApiErrorMessage(invokeMutation.error, 'The run failed.')}
             </div>
           )}
         </div>

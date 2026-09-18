@@ -1,117 +1,131 @@
 # Pipeline Validation
 
-A broken pipeline never reaches production: almyty validates every workflow agent
-before it can be activated or invoked. Validation runs automatically when you
-save in the builder and surfaces errors directly on the canvas, so you fix them
-in place.
+A workflow agent's graph is validated on the server every time it is saved.
+Validation is all-or-nothing: the first problem it finds is refused with a 400,
+and the agent is not written. There is no "saved with warnings" state — an
+invalid graph cannot be stored, as a draft or otherwise.
 
-![Validation errors on the canvas](/screenshots/agent-builder.png)
+![The agent builder canvas](/screenshots/agent-builder.png)
 
 ## In the UI
 
-When you save a pipeline in the builder:
+The builder runs a short list of its own checks as you work, and shows them in a
+red banner above the canvas: the agent needs a name, the pipeline needs an Input
+node and an Output node, and every Model Call node needs a provider, a routing
+policy or a role. **Save** stays disabled until that banner is empty.
 
-- Nodes with configuration errors display a **red border**
-- Edges with expression issues show a **warning icon**
-- An **error panel** at the bottom lists all validation problems with clickable links to the affected nodes
+That list is not the server's. None of the rules below about edges — a
+Condition's two branches, a Merge's two inputs, a Parallel's two outputs — and
+none of the per-node config rules are checked before the request goes out, and
+the canvas gives no sign: nodes keep their normal border and edges have no
+warning markers. You draw whatever you like, press Save, and the first you hear
+of a problem is a toast carrying the one message the server returned.
 
-Fix all issues before activating the agent. Draft agents can be saved with
-validation warnings but cannot be activated or invoked.
+The message names the node id, so:
 
-1. Click **Save** in the builder top bar
-2. Review any errors highlighted on the canvas and in the error panel
-3. Click a node with a red border to open its config panel and fix the issue
-4. Save again: the error panel clears when all issues are resolved
+1. Press **Save** in the builder top bar
+2. Read the node id in the toast
+3. Find that node on the canvas, open its config panel, and fix what the message asks for
+4. Save again — and expect one message at a time, since validation stops at the first failure
 
-## Validation Rules
+## What is Validated
 
-### Structural Rules
+### Structure
 
 | Rule | Description |
 |------|-------------|
-| **Single Input** | Exactly one Input node must exist |
-| **Single Output** | Exactly one Output node must exist |
-| **No Cycles** | The pipeline must be a directed acyclic graph (DAG) |
-| **Connected Graph** | All nodes must be reachable from the Input node |
-| **Output Reachable** | The Output node must be reachable from at least one path |
+| **Exactly one Input** | Anything other than one Input node is refused |
+| **At least one Output** | A pipeline with no Output node is refused |
+| **One Output per run** | Two Output nodes that could both run in the same execution are refused: which one became the answer would come down to the order the nodes are stored in. Put them on opposite branches of a Condition, or merge them into one |
+| **Unique node ids** | Two nodes may not share an id |
+| **Edges reference real nodes** | Every edge's source and target must be a node in the graph |
+| **No cycles** | The graph must be a DAG |
+| **An Output is reachable** | At least one Output node must be reachable from the Input node by following edges |
 
-### Node Configuration Rules
+### Per Node Type
 
 | Node Type | Requirement |
 |-----------|-------------|
-| **Input** | Must have a valid JSON Schema in `data.schema` |
-| **Output** | Must have a non-empty `data.mapping` expression |
-| **LLM Call** | Must have `providerId` and `userPromptTemplate` |
-| **Tool Call** | Must have `toolId` referencing an existing tool |
-| **Condition** | Must have a non-empty `expression` |
-| **Transform** | Must have non-empty `code` |
-| **Loop** | Must have `iterableExpression` |
-| **Parallel** | Must have at least one branch |
-| **Merge** | Must have at least one source |
-| **Sub-Agent** | Must have `agentId` referencing an existing agent |
+| **Condition** | Exactly 2 outgoing edges, and their `sourceHandle` (or `label`) must be `true`/`false` or `yes`/`no` |
+| **Merge** | At least 2 incoming edges |
+| **Parallel** | At least 2 outgoing edges |
+| **Tool Call** | `data.toolId` must be set |
+| **Sub-Agent** | `data.agentId` must be set, and may not be this agent |
+| **Verify** | A non-empty `checkers` array, each entry with a `providerId` or a `roleKey`; `policy`, if set, must be `all_pass`, `majority` or `any_fail_blocks` |
 
-### Expression Validation
+Nothing else is checked. In particular, a save succeeds when an LLM Call node
+has no provider, an Output node has no mapping, a Transform node has no
+expression, a Loop node has no iterable, a `toolId` names a tool that no longer
+exists, or a template expression points at a node id that is not in the graph.
+Those surface at run time instead, on the node that hit them.
 
-Template expressions (`{{...}}`) are checked for:
+## What a Refusal Looks Like
 
-- **Valid syntax**: properly closed double curly braces
-- **Valid references**: referenced node IDs must exist in the pipeline
-- **Upstream dependency**: referenced nodes must be upstream (executed before) the current node
-- **No self-reference**: a node cannot reference its own output
-
-## Validation errors
-
-Validation happens automatically on save, whether you save from the builder or
-update the agent through the API. When a pipeline fails, the response lists each
-problem by node and field:
+The validator raises one message, not a list. The response body is the standard
+error envelope:
 
 ```json
 {
   "success": false,
-  "message": "Pipeline validation failed",
-  "errors": [
-    {
-      "nodeId": "llm_1",
-      "field": "providerId",
-      "message": "LLM provider is required"
-    },
-    {
-      "nodeId": null,
-      "field": "structure",
-      "message": "No Output node found in pipeline"
-    }
-  ]
+  "message": "Condition node 'cond_1' must have exactly 2 outgoing edges, found 3",
+  "error": {
+    "code": "BAD_REQUEST",
+    "message": "Condition node 'cond_1' must have exactly 2 outgoing edges, found 3",
+    "statusCode": 400,
+    "timestamp": "2026-01-01T00:00:00.000Z",
+    "path": "/agents/<id>"
+  }
 }
 ```
 
-## Common Issues
+## When It Runs
 
-### Disconnected Nodes
+Whenever a workflow agent's pipeline is written — on create and on update — and
+again when the agent is activated. Autonomous agents have no graph, so it is
+skipped for them, and a create or update that carries no pipeline at all is not
+validated either.
 
-A node added to the canvas but not connected with edges is reported as
-unreachable. Fix by dragging an edge from an upstream node to the disconnected
-node.
+## Common Refusals
 
-### Circular Dependencies
+### A Condition node with three outgoing edges
 
-Pipelines must be acyclic. If node A depends on node B and node B depends on
-node A, validation fails. Use a Loop node instead for iterative processing.
+"On true, do A and B" is a reasonable thing to draw, and the canvas lets you
+draw it — but a Condition node must have exactly two outgoing edges, one
+labelled `true` and one `false`. Send the `true` branch into a **Parallel**
+node and fan out from there.
 
-### Missing Provider
+### A Merge or Parallel node with too few edges
 
-LLM Call nodes require a valid `providerId`. If the referenced provider has been
-deleted or is inactive, validation flags it. Navigate to **Models** in the
-sidebar to configure a provider first.
+A Merge node needs two or more incoming edges and a Parallel node two or more
+outgoing ones. A node still being wired up fails this until the second edge is
+drawn.
 
-### Invalid Template Expressions
+### A disconnected node
+
+Every node must be reachable from the Input node. A node with no edges is
+refused:
 
 ```
-// Bad: references a non-existent node
-{{nodes.nonexistent.output}}
-
-// Bad: references a downstream node (not yet executed)
-{{nodes.output_1.output}}
-
-// Good: references an upstream node
-{{nodes.llm_1.output}}
+Node(s) 'llm_2' are not reachable from the input node 'input_1'. Connect them
+with an edge, or delete them — an unconnected node still runs, in the first
+layer, before anything else.
 ```
+
+The refusal exists because such a node is not inert. The engine starts by
+running every node that has no incoming edge, so a stray LLM Call node left on
+the canvas runs first, and bills for it, while contributing nothing — no edge
+carries its output anywhere. The only evidence was the invoice.
+
+### A cycle
+
+The graph must be acyclic. If A depends on B and B depends on A, the save is
+refused, and the message names the nodes the loop runs through: `Pipeline contains
+a cycle through node(s) 'llm_1', 'llm_2'`. A **Loop** node does not help here —
+it resolves an array in a single pass rather than running a branch repeatedly.
+
+### A template expression that points nowhere
+
+Not caught. `{{nodes.nonexistent.output}}` saves, runs, and resolves to an
+empty string, so the prompt goes out with a hole in it and the model answers
+anyway. Use the builder's **Test** panel to see what each expression resolved
+to before activating.

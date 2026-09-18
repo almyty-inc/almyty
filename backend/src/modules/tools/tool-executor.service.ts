@@ -22,7 +22,9 @@
  * path. Types are re-exported below so no caller needs to update
  * its import path.
  */
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional, ForbiddenException } from '@nestjs/common';
+import { PluginManagerService } from '../plugins/plugin-manager.service';
+import { PluginHookType } from '../plugins/types/plugin.types';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 import * as Redis from 'ioredis';
@@ -82,6 +84,10 @@ export class ToolExecutorService {
     private readonly runnerCalls: RunnerCallService,
     private readonly memoryService: CanonicalMemoryService,
     private readonly mcpSources: McpSourcesService,
+    // Optional and last: PluginsModule is @Global(), but the spec harnesses
+    // for this service construct it positionally, and a plugin pipeline that
+    // is absent must not stop a tool running.
+    @Optional() private readonly pluginManager?: PluginManagerService,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -162,6 +168,45 @@ export class ToolExecutorService {
         this.logger.warn(
           `Parameter warnings for tool ${tool.name}: ${sanitization.warnings.join('; ')}`,
         );
+      }
+
+      // Plugins. Every built-in plugin -- pii-filter, security-scanner,
+      // rate-limiter, request-logger, performance-monitor -- was registered
+      // and then invoked by nothing: executeHook had no callers anywhere in
+      // src or ee, so the EE compliance pack's "enforced org-wide" plugins
+      // never ran on a single request and the security counters documented
+      // as emitted here were always zero.
+      //
+      // A disabled plugin is still skipped inside executeHook, so wiring
+      // this changes nothing until an organization enables one or a
+      // compliance policy enforces it.
+      if (this.pluginManager) {
+        const hooked = await this.pluginManager.executeHook(PluginHookType.PRE_TOOL_EXECUTION, {
+          hookType: PluginHookType.PRE_TOOL_EXECUTION,
+          organizationId: options.organizationId,
+          userId: options.userId,
+          requestId: `tool-${tool.id}-${startTime}`,
+          data: parameters,
+          metadata: {
+            timestamp: new Date().toISOString(),
+            plugin: { id: '', name: '', version: '' },
+            execution: { attempt: 1, timeout: 0, startTime },
+            tool: { id: tool.id, name: tool.name },
+          },
+        });
+        const halted = hooked.metadata.halted as
+          | { pluginName: string; code: string; message: string }
+          | undefined;
+        if (halted) {
+          // A plugin that stops the chain is refusing the call. Throwing is
+          // the only honest response: returning a success result with the
+          // original parameters would run the tool the plugin just blocked.
+          throw new ForbiddenException({ code: halted.code, message: halted.message });
+        }
+        // A filter plugin's whole purpose is to rewrite what gets sent, so
+        // the rewritten parameters have to be what the tool, the cache key
+        // and the execution record all see -- not just a local copy.
+        if (hooked.data !== undefined) parameters = hooked.data;
       }
 
       // Tool integrity: refuse to execute if the stored definitionHash

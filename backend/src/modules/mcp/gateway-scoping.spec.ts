@@ -131,11 +131,13 @@ describe('MCP Gateway Scoping', () => {
       expect(result.tools[0].name).toBe('open_meteo_forecast');
     });
 
-    it('should return all organization tools when no gatewayId', async () => {
+    it('should return all organization tools the caller can see when no gatewayId', async () => {
       const toolsService = module.get(ToolsService);
       (toolsService.getTools as jest.Mock).mockResolvedValue({ tools: mockAllOrgTools });
 
-      const result = await toolHandler.handleToolsList({}, 'org-1');
+      // The gateway-less path is team-scoped to the caller now, so it needs
+      // one; with neither a gateway nor a caller the listing is refused.
+      const result = await toolHandler.handleToolsList({}, 'org-1', undefined, { id: 'u-1' });
 
       expect(result.tools).toHaveLength(3);
     });
@@ -196,10 +198,11 @@ describe('MCP Gateway Scoping', () => {
       expect(names).not.toContain('use-httpbin_get');
     });
 
-    it('should return all org prompts when no gatewayId', async () => {
-      toolRepository.find.mockResolvedValue(mockAllOrgTools);
+    it('should return all org prompts the caller can see when no gatewayId', async () => {
+      const toolsService = module.get(ToolsService);
+      (toolsService.getTools as jest.Mock).mockResolvedValue({ tools: mockAllOrgTools });
 
-      const result = await contentHandler.handlePromptsList({}, 'org-1');
+      const result = await contentHandler.handlePromptsList({}, 'org-1', undefined, { id: 'u-1' });
 
       // 3 tool prompts + 1 discovery prompt
       expect(result.prompts).toHaveLength(4);

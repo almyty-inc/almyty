@@ -30,6 +30,14 @@ export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
 @Entity('approval_requests')
 @Index(['organizationId', 'status', 'createdAt'])
 @Index(['runId'])
+// `create` is idempotent on (runId, toolCallId) by a read, and the
+// EE policy hook between that read and the insert holds the window
+// open. Partial because the service only dedupes rows that carry a
+// toolCallId — gates without one are distinct by construction.
+@Index('approval_requests_run_toolcall_uq', ['runId', 'toolCallId'], {
+  unique: true,
+  where: '"toolCallId" IS NOT NULL',
+})
 export class ApprovalRequest {
   @PrimaryGeneratedColumn('uuid')
   id: string;

@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 
 import { ModelDeployment, ModelDeploymentDesired, ModelDeploymentState } from '../../entities/model-deployment.entity';
 import { ModelVersion } from '../../entities/model-version.entity';
+import { Model } from '../../entities/model.entity';
 import { Credential } from '../../entities/credential.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -37,6 +38,12 @@ export interface CreateDeploymentDto {
   /** Credential in the vault whose decrypted config is handed to the adapter. */
   credentialId?: string | null;
   budgetId?: string | null;
+  /**
+   * The catalog card this endpoint will fill once it is ready. Checked
+   * against the organization at create: a card id that is a typo, or
+   * belongs to somebody else, is refused rather than saved onto a
+   * deployment that then reaches ready and lights nothing up.
+   */
   modelId?: string | null;
 }
 
@@ -59,6 +66,11 @@ export class ModelDeploymentsService {
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly registry?: ModelRegistryService,
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
+    // Last and optional only so the positional constructions in the specs
+    // keep working; the module always provides it (Model is in forFeature)
+    // and a guard test asserts that, so the card check below is never a
+    // silent no-op in a running server.
+    @Optional() @InjectRepository(Model) private readonly models?: Repository<Model>,
   ) {}
 
   async list(organizationId: string): Promise<ModelDeployment[]> {
@@ -80,6 +92,14 @@ export class ModelDeploymentsService {
       ? await this.versions.findOne({ where: { id: dto.modelVersionId, organizationId } })
       : null;
     if (dto.modelVersionId && !version) throw new NotFoundException('Model version not found');
+    // Same rule for the catalog card the endpoint will fill: it has to be
+    // this organization's. Unchecked, a typo saved quietly and the
+    // deployment reached ready with nothing to light up, and a card id
+    // belonging to another organization was written onto the row.
+    if (dto.modelId && this.models) {
+      const card = await this.models.findOne({ where: { id: dto.modelId, organizationId } });
+      if (!card) throw new NotFoundException('Model card not found');
+    }
     const reference = version?.registryUri ?? dto.model;
     if (!reference) {
       throw new BadRequestException({ code: 'MODEL_REQUIRED', message: 'Name the model to run with `model`, or point at a registered version with `modelVersionId`' });

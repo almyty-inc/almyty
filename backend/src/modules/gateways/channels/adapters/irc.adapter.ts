@@ -49,36 +49,44 @@ export class IrcAdapter extends BaseAdapter {
     return { text: response.text };
   }
 
+  /**
+   * Relay the reply through the bridge.
+   *
+   * The bridge contract at the top of this file is HTTP and nothing
+   * else: a 2xx means the bridge took the line, anything else means it
+   * did not, and the body is whatever that particular bridge (or the
+   * proxy in front of it) chose to say. So the status is the verdict
+   * and the body is kept as text.
+   */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
-    try {
-      const webhookUrl = config.webhook_url;
-      if (!webhookUrl) {
-        this.logger.warn('IRC: webhook_url not configured');
-        return;
-      }
+    const webhookUrl = config.webhook_url;
+    if (!webhookUrl) {
+      this.sendFailed('webhook_url is not configured, so there is no bridge to relay the reply to');
+    }
 
-      const body: any = {
-        text: formattedResponse.text,
-        channel: threadContext?.threadId || config.channel,
-        username: config.nick || 'bot',
-      };
+    const body: any = {
+      text: formattedResponse.text,
+      channel: threadContext?.threadId || config.channel,
+      username: config.nick || 'bot',
+    };
 
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (config.bridge_token) {
-        headers['Authorization'] = `Bearer ${config.bridge_token}`;
-      }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.bridge_token) {
+      headers['Authorization'] = `Bearer ${config.bridge_token}`;
+    }
 
-      const fetch = globalThis.fetch || (await import('node-fetch')).default;
-      const res = await (fetch as any)(webhookUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-      });
-      if (res && res.ok === false) {
-        this.logger.error(`IRC send failed: bridge returned HTTP ${res.status}`);
-      }
-    } catch (error) {
-      this.logger.error(`IRC send failed: ${error.message}`);
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)(webhookUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (this.httpRejected(res)) {
+      const detail = await this.readTextBody(res);
+      this.sendFailed(
+        `the bridge refused the reply: HTTP ${this.httpStatus(res)}${detail ? ` — ${detail}` : ''}`,
+      );
     }
   }
 

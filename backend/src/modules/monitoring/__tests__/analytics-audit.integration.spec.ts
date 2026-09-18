@@ -25,7 +25,7 @@ import { MoreThanOrEqual } from 'typeorm';
 
 function chainQb(overrides: Record<string, any> = {}) {
   const qb: any = {};
-  const chain = ['select', 'addSelect', 'where', 'andWhere', 'orWhere', 'orderBy', 'groupBy', 'addGroupBy', 'skip', 'take', 'limit', 'leftJoinAndSelect', 'innerJoinAndSelect', 'update', 'set'];
+  const chain = ['select', 'addSelect', 'where', 'andWhere', 'orWhere', 'orderBy', 'groupBy', 'addGroupBy', 'skip', 'take', 'limit', 'leftJoinAndSelect', 'innerJoinAndSelect', 'update', 'set', 'setParameters', 'distinctOn', 'addOrderBy'];
   for (const m of chain) {
     qb[m] = jest.fn().mockReturnValue(qb);
   }
@@ -119,11 +119,14 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
 
   describe('getAuditSummary — resource type & action counts', () => {
     it('should correctly parse count strings into integers from byResourceType query', async () => {
-      // count() calls for totals
-      auditRepo.count
-        .mockResolvedValueOnce(15)   // totalToday
-        .mockResolvedValueOnce(42)   // totalWeek
-        .mockResolvedValueOnce(100); // totalMonth
+      // Totals now come from ONE conditional-sum query, not three COUNTs.
+      const totalsQb = chainQb({
+        getRawOne: jest.fn().mockResolvedValue({
+          today: '15',
+          thisWeek: '42',
+          thisMonth: '100',
+        }),
+      });
 
       // byResourceType raw query
       const byResourceTypeQb = chainQb({
@@ -160,6 +163,7 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
       });
 
       auditRepo.createQueryBuilder
+        .mockReturnValueOnce(totalsQb)
         .mockReturnValueOnce(byResourceTypeQb)
         .mockReturnValueOnce(byActionQb)
         .mockReturnValueOnce(topUsersQb)
@@ -204,10 +208,7 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
 
   describe('getAuditSummary — hourly timeline bucketing', () => {
     it('should preserve bucket timestamps and parse counts', async () => {
-      auditRepo.count
-        .mockResolvedValueOnce(0)
-        .mockResolvedValueOnce(0)
-        .mockResolvedValueOnce(0);
+      // The totals query is the first query builder the summary asks for.
 
       const now = new Date();
       const hour1 = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() - 2).toISOString();
@@ -223,6 +224,7 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
       });
 
       auditRepo.createQueryBuilder
+        .mockReturnValueOnce(chainQb({ getRawOne: jest.fn().mockResolvedValue(null) })) // totals
         .mockReturnValueOnce(chainQb()) // byResourceType
         .mockReturnValueOnce(chainQb()) // byAction
         .mockReturnValueOnce(chainQb()) // topUsers
@@ -275,12 +277,14 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
 
   describe('getAgentRunsSummary — counts & math', () => {
     it('should compute correct totals, average duration, and cost', async () => {
-      // count() calls: total, completed, failed, cancelled
-      agentRunRepo.count
-        .mockResolvedValueOnce(50)   // total
-        .mockResolvedValueOnce(35)   // completed
-        .mockResolvedValueOnce(10)   // failed
-        .mockResolvedValueOnce(5);   // cancelled
+      // Totals come from ONE `GROUP BY status` rollup, not four COUNTs.
+      const statusQb = chainQb({
+        getRawMany: jest.fn().mockResolvedValue([
+          { status: 'completed', count: '35' },
+          { status: 'failed', count: '10' },
+          { status: 'cancelled', count: '5' },
+        ]),
+      });
 
       // avgDuration
       const avgQb = chainQb({
@@ -310,6 +314,7 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
       });
 
       agentRunRepo.createQueryBuilder
+        .mockReturnValueOnce(statusQb)
         .mockReturnValueOnce(avgQb)
         .mockReturnValueOnce(costQb)
         .mockReturnValueOnce(byAgentQb)
@@ -317,7 +322,9 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
 
       const result = await service.getAgentRunsSummary(ORG_ID);
 
-      // Totals
+      // Totals — `total` is the sum of the groups, which is what the
+      // unfiltered COUNT used to answer.
+      expect(agentRunRepo.count).not.toHaveBeenCalled();
       expect(result.totals.total).toBe(50);
       expect(result.totals.completed).toBe(35);
       expect(result.totals.failed).toBe(10);
@@ -362,14 +369,14 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
 
   describe('getAgentRunsSummary — cost rounding', () => {
     it('should round totalCost to 4 decimal places correctly', async () => {
-      agentRunRepo.count.mockResolvedValue(1);
-
+      const statusQb = chainQb();
       const avgQb = chainQb({ getRawOne: jest.fn().mockResolvedValue({ avg: '100' }) });
       const costQb = chainQb({ getRawOne: jest.fn().mockResolvedValue({ total: '0.999999' }) });
       const byAgentQb = chainQb();
       const timelineQb = chainQb();
 
       agentRunRepo.createQueryBuilder
+        .mockReturnValueOnce(statusQb)
         .mockReturnValueOnce(avgQb)
         .mockReturnValueOnce(costQb)
         .mockReturnValueOnce(byAgentQb)
@@ -384,12 +391,14 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
     it('should handle zero cost', async () => {
       agentRunRepo.count.mockResolvedValue(0);
 
+      const statusQb = chainQb();
       const avgQb = chainQb({ getRawOne: jest.fn().mockResolvedValue({ avg: '0' }) });
       const costQb = chainQb({ getRawOne: jest.fn().mockResolvedValue({ total: '0' }) });
       const byAgentQb = chainQb();
       const timelineQb = chainQb();
 
       agentRunRepo.createQueryBuilder
+        .mockReturnValueOnce(statusQb)
         .mockReturnValueOnce(avgQb)
         .mockReturnValueOnce(costQb)
         .mockReturnValueOnce(byAgentQb)
@@ -459,33 +468,37 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
   // =========================================================================
 
   describe('Organization scoping', () => {
-    it('getAuditSummary should pass orgId to all count() and query builder calls', async () => {
+    it('getAuditSummary should scope every query to the org and use no COUNTs', async () => {
       await service.getAuditSummary('org-specific-123');
 
-      // All count calls should include organizationId (count is called with { where: { organizationId, ... } })
-      for (const call of auditRepo.count.mock.calls) {
-        expect(call[0].where.organizationId).toBe('org-specific-123');
-      }
+      // The three separate COUNTs are gone — the totals come from one scan.
+      expect(auditRepo.count).not.toHaveBeenCalled();
 
-      // All createQueryBuilder chains should include where() with orgId
-      for (const call of auditRepo.createQueryBuilder.mock.calls) {
-        const qb = auditRepo.createQueryBuilder.mock.results[
-          auditRepo.createQueryBuilder.mock.calls.indexOf(call)
-        ].value;
-        // Verify .where() was called with orgId parameter
+      expect(auditRepo.createQueryBuilder.mock.calls.length).toBeGreaterThan(0);
+      for (const result of auditRepo.createQueryBuilder.mock.results) {
+        const qb = result.value;
         const whereCalls = qb.where.mock.calls;
         if (whereCalls.length > 0) {
-          const whereArgs = whereCalls[0];
-          // The where clause should reference orgId
-          expect(whereArgs[1]).toHaveProperty('orgId', 'org-specific-123');
+          expect(whereCalls[0][1]).toHaveProperty('orgId', 'org-specific-123');
         }
       }
+
+      // The totals query carries the two extra lower bounds as parameters.
+      const totalsQb = auditRepo.createQueryBuilder.mock.results[0].value;
+      expect(totalsQb.setParameters).toHaveBeenCalledWith(
+        expect.objectContaining({
+          todayStart: expect.any(Date),
+          weekStart: expect.any(Date),
+        }),
+      );
     });
 
-    it('getAgentRunsSummary should pass orgId to all count() calls', async () => {
+    it('getAgentRunsSummary should scope the status rollup to the org and use no COUNTs', async () => {
+      const statusQb = chainQb();
       const avgQb = chainQb({ getRawOne: jest.fn().mockResolvedValue({ avg: '0' }) });
       const costQb = chainQb({ getRawOne: jest.fn().mockResolvedValue({ total: '0' }) });
       agentRunRepo.createQueryBuilder
+        .mockReturnValueOnce(statusQb)
         .mockReturnValueOnce(avgQb)
         .mockReturnValueOnce(costQb)
         .mockReturnValueOnce(chainQb())
@@ -493,9 +506,12 @@ describe('AnalyticsService — Audit & Agent Runs Integration', () => {
 
       await service.getAgentRunsSummary('org-xyz');
 
-      for (const call of agentRunRepo.count.mock.calls) {
-        expect(call[0].where.organizationId).toBe('org-xyz');
-      }
+      expect(agentRunRepo.count).not.toHaveBeenCalled();
+      expect(statusQb.where).toHaveBeenCalledWith(
+        'run.organizationId = :orgId',
+        { orgId: 'org-xyz' },
+      );
+      expect(statusQb.groupBy).toHaveBeenCalledWith('run.status');
     });
   });
 });

@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { Job } from 'bull';
 import { SchemaImportProcessor, SchemaImportJob } from './schema-import.processor';
 import { ApisService } from '../../apis/apis.service';
@@ -11,6 +12,7 @@ import { Tool } from '../../../entities/tool.entity';
 describe('SchemaImportProcessor', () => {
   let processor: SchemaImportProcessor;
   let apisService: jest.Mocked<ApisService>;
+  let apiRepository: { update: jest.Mock };
 
   const mockApisService: Partial<jest.Mocked<ApisService>> = {
     importSchema: jest.fn(),
@@ -26,12 +28,17 @@ describe('SchemaImportProcessor', () => {
   }
 
   beforeEach(async () => {
+    apiRepository = { update: jest.fn().mockResolvedValue({ affected: 1 }) };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SchemaImportProcessor,
         {
           provide: ApisService,
           useValue: mockApisService,
+        },
+        {
+          provide: getRepositoryToken(Api),
+          useValue: apiRepository,
         },
       ],
     }).compile();
@@ -390,26 +397,69 @@ describe('SchemaImportProcessor', () => {
     const makeJob = (attemptsMade: number, attempts: number) =>
       ({ id: 'j1', attemptsMade, opts: { attempts }, data: { apiId: 'api-1', organizationId: 'org-1' } }) as any;
 
-    it('logs a permanent failure once retries are exhausted', () => {
+    it('logs a permanent failure once retries are exhausted', async () => {
       const err = (processor as any).logger;
       const errorSpy = jest.spyOn(err, 'error').mockImplementation(() => {});
       const warnSpy = jest.spyOn(err, 'warn').mockImplementation(() => {});
 
-      processor.onFailed(makeJob(3, 3), new Error('boom'));
+      await processor.onFailed(makeJob(3, 3), new Error('boom'));
 
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('PERMANENTLY FAILED'));
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
-    it('logs a retry warning while attempts remain', () => {
+    it('logs a retry warning while attempts remain', async () => {
       const err = (processor as any).logger;
       const errorSpy = jest.spyOn(err, 'error').mockImplementation(() => {});
       const warnSpy = jest.spyOn(err, 'warn').mockImplementation(() => {});
 
-      processor.onFailed(makeJob(1, 3), new Error('blip'));
+      await processor.onFailed(makeJob(1, 3), new Error('blip'));
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('will retry'));
       expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('persists the failure reason on the API row, not only in Redis', async () => {
+      // The reason used to exist only as `job.failedReason`. Imports are
+      // enqueued with removeOnFail: 50, so it is evicted by the next
+      // fifty failures and lost outright on a Redis restart — for a
+      // minutes-long operation with a dozen legible failure modes.
+      jest.spyOn((processor as any).logger, 'error').mockImplementation(() => {});
+
+      await processor.onFailed(makeJob(3, 3), new Error('OpenAPI 3.1 webhooks are not supported'));
+
+      expect(apiRepository.update).toHaveBeenCalledTimes(1);
+      const [where, patch] = apiRepository.update.mock.calls[0];
+      // Scoped by organization, like every other write in this module.
+      expect(where).toEqual({ id: 'api-1', organizationId: 'org-1' });
+      expect(patch.lastImportError).toBe('OpenAPI 3.1 webhooks are not supported');
+      expect(patch.lastImportFailedAt).toBeInstanceOf(Date);
+    });
+
+    it('writes nothing while a retry is still coming', async () => {
+      jest.spyOn((processor as any).logger, 'warn').mockImplementation(() => {});
+
+      await processor.onFailed(makeJob(1, 3), new Error('blip'));
+
+      expect(apiRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when the row write itself fails', async () => {
+      jest.spyOn((processor as any).logger, 'error').mockImplementation(() => {});
+      apiRepository.update.mockRejectedValue(new Error('db gone'));
+
+      await expect(processor.onFailed(makeJob(3, 3), new Error('boom'))).resolves.toBeUndefined();
+    });
+
+    it('skips the write for a payload with no api or organization', async () => {
+      jest.spyOn((processor as any).logger, 'error').mockImplementation(() => {});
+
+      await processor.onFailed(
+        { id: 'j1', attemptsMade: 3, opts: { attempts: 3 }, data: {} } as any,
+        new Error('rejected payload'),
+      );
+
+      expect(apiRepository.update).not.toHaveBeenCalled();
     });
   });
 });

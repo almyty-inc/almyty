@@ -124,4 +124,46 @@ describe('OrgLicenseResolver', () => {
     expect(snap.edition).toBe(EDITION_COMMUNITY);
     expect(snap.entitlements).toContain('agents');
   });
+
+  /**
+   * A plan change that lands while the org row is being read.
+   *
+   * `invalidate()` only deletes what is cached, and a resolution already
+   * waiting on the repository has cached nothing yet — so it installed
+   * its pre-change snapshot afterwards and every entitlement check for
+   * the next 30 seconds saw the old plan. An upgrade the customer has
+   * paid for, or a downgrade that must take effect, is not something to
+   * serve from a cache written after the fact.
+   */
+  it('does not cache a snapshot read before a plan change that landed mid-read', async () => {
+    const { publicPem, privatePem } = keypair();
+    process.env[PUBLIC_KEY_ENV] = publicPem;
+    const upgraded = signLicense(
+      { entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null },
+      privatePem,
+    );
+    const tokens: Record<string, string | null> = { 'org-up': null };
+    let resolver: OrgLicenseResolver;
+    const repo = {
+      findOne: jest.fn(async ({ where: { id } }: any) => {
+        const org = new Organization();
+        org.id = id;
+        org.billingInfo = tokens[id] ? { licenseToken: tokens[id] } : {};
+        // Billing commits the upgrade while this read is in flight.
+        if (!tokens[id]) {
+          tokens[id] = upgraded;
+          resolver.invalidate(id);
+        }
+        return org;
+      }),
+    } as unknown as Repository<Organization>;
+    resolver = new OrgLicenseResolver(repo, new LicenseService());
+
+    // This resolution predates the upgrade, so it still answers community.
+    const before = await resolver.entitlementsForOrg('org-up');
+    expect(before.edition).toBe(EDITION_COMMUNITY);
+
+    // The very next check must see the plan the customer is on.
+    await expect(resolver.hasForOrg('org-up', EE_ENTITLEMENTS.SSO)).resolves.toBe(true);
+  });
 });

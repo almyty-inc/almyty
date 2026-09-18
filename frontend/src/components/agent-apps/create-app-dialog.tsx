@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { agentAppsApi } from '@/lib/agent-apps'
 
 /** Names an app cannot take, mirroring the backend list. */
@@ -87,7 +88,7 @@ export function CreateAppDialog({ open, onOpenChange }: CreateAppDialogProps) {
       navigate(`/apps/${app.slug}`)
     },
     onError: (err: any) =>
-      errorNotif('Could not create', err?.response?.data?.message || 'Something went wrong.'),
+      errorNotif('Could not create the app', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const canSubmit = !!name.trim() && !!effectiveSlug && !slugMessage && !create.isPending

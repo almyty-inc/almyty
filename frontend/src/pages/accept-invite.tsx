@@ -5,6 +5,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useAuthStore } from '@/store/auth'
 import { apiGet, apiPost } from '@/lib/api'
 import { CheckCircle, XCircle, LogIn } from 'lucide-react'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface InviteDetails {
   organizationName: string
@@ -34,7 +35,7 @@ export function AcceptInvitePage() {
 
     apiGet<InviteDetails>(`/invites/${token}`)
       .then((data) => setDetails(data))
-      .catch((err) => setError(err?.response?.data?.message || 'Invalid invitation'))
+      .catch((err) => setError(getApiErrorMessage(err, 'Invalid invitation')))
       .finally(() => setLoading(false))
   }, [token])
 
@@ -52,7 +53,7 @@ export function AcceptInvitePage() {
       await apiPost(`/invites/${token}/accept`, {})
       setAccepted(true)
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to accept invitation')
+      setError(getApiErrorMessage(err, 'Failed to accept invitation'))
     } finally {
       setAccepting(false)
     }

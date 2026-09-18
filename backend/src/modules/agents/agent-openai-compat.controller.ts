@@ -25,6 +25,16 @@ import { Agent } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
 import { AgentOpenAIStreamHelper } from './agent-openai-stream.helper';
+import {
+  CompatRateLimiter,
+  COMPAT_RATE_LIMIT_RPM,
+  type CompatRateLimitInfo,
+} from './compat-rate-limit.helper';
+import {
+  renderConversation,
+  unsupportedOpenAIField,
+  withSamplingOverrides,
+} from './compat-conversation.helper';
 
 /** Maximum request body size in bytes (1 MB). */
 const MAX_BODY_SIZE_BYTES = 1 * 1024 * 1024;
@@ -34,12 +44,6 @@ const MAX_MESSAGES = 100;
 
 /** Maximum content length per message (100 KB). */
 const MAX_MESSAGE_CONTENT_LENGTH = 100 * 1024;
-
-/** Placeholder rate limits (per-key enforcement is done externally; these are informational headers). */
-const RATE_LIMIT_RPM = 60;
-
-/** Cap on the in-memory request-count map. Prevents unbounded growth from key churn. */
-const MAX_TRACKED_KEYS = 10_000;
 
 /**
  * Throttle window for `lastUsedAt` writes, in milliseconds. Without this we issue
@@ -53,8 +57,8 @@ const LAST_USED_THROTTLE_MS = 60_000;
 export class AgentOpenAICompatController {
   private readonly logger = new Logger(AgentOpenAICompatController.name);
 
-  /** Simple per-key request counter for rate limit headers. Resets each minute. */
-  private readonly requestCounts = new Map<string, { count: number; resetAt: number }>();
+  /** Per-key fixed-window limiter, shared with the Anthropic-compatible route. */
+  private readonly rateLimiter: CompatRateLimiter;
 
   constructor(
     private readonly agentsService: AgentsService,
@@ -66,7 +70,9 @@ export class AgentOpenAICompatController {
     // fall back to the per-pod in-memory counter. In production Redis is
     // wired by RedisModule, giving a window shared across replicas.
     @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
-  ) {}
+  ) {
+    this.rateLimiter = new CompatRateLimiter('openai_rl', this.logger, this.redis);
+  }
 
   @Post('chat/completions')
   @ApiOperation({ summary: 'Create chat completion (OpenAI-compatible)' })
@@ -113,11 +119,36 @@ export class AgentOpenAICompatController {
       // 3. Validate messages
       this.validateMessages(body);
 
-      const agent = await this.resolveAgent(body.model, apiKey.organizationId);
-      agentId = agent.id;
+      // 3b. Refuse, by name, the fields this endpoint cannot honour. The
+      //     Anthropic sibling already settled the principle for client-declared
+      //     tools: a field accepted and then dropped leaves a caller with a
+      //     silently different answer and nothing to debug, which is worse than
+      //     a refusal that says which field and why.
+      const unsupported = unsupportedOpenAIField(body);
+      if (unsupported) {
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 400, `unsupported=${unsupported.param}`);
+        return this.sendOpenAIError(
+          res,
+          400,
+          unsupported.message,
+          'invalid_request_error',
+          'unsupported_parameter',
+          unsupported.param,
+        );
+      }
+
+      const resolved = await this.resolveAgent(body.model, apiKey.organizationId);
+      agentId = resolved.id;
 
       // 4. Map OpenAI messages to agent input
       const input = this.mapOpenAIToAgentInput(body);
+
+      // 4b. The caller's sampling, on a throwaway copy of the agent. Nothing
+      //     is persisted; see withSamplingOverrides.
+      const agent = withSamplingOverrides(resolved, {
+        temperature: typeof body.temperature === 'number' ? body.temperature : undefined,
+        maxTokens: typeof body.max_tokens === 'number' ? body.max_tokens : undefined,
+      });
 
       // 5. Touch lastUsedAt (throttled, partial UPDATE — see notes on
       //    LAST_USED_THROTTLE_MS for the race we're avoiding)
@@ -129,10 +160,13 @@ export class AgentOpenAICompatController {
           agent, input, apiKey, res,
           { req, apiKeyLast4, requestStartTime },
           (...args) => this.logRequest(...args),
+          { includeUsage: body.stream_options?.include_usage === true },
         );
       } else {
         const result = await this.stream.handleSync(agent, input, apiKey, res);
-        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, 200);
+        // handleSync answers 502 when the run did not complete, so read the
+        // status back rather than logging every sync request as a 200.
+        this.logRequest(req, apiKeyLast4, agentId, requestStartTime, res.statusCode || 200);
         return result;
       }
     } catch (error) {
@@ -242,89 +276,17 @@ export class AgentOpenAICompatController {
   }
 
   // ─── Rate Limiting ──────────────────────────────────────────────────
+  //
+  // The implementation moved to CompatRateLimiter so /v1/messages shares it
+  // instead of running with only the global 100/60s throttler default. These
+  // stay as thin delegations.
 
-  /**
-   * Per-key fixed-window rate limit. Uses Redis (atomic INCR + EXPIRE) so
-   * the 60 rpm window is shared across replicas; falls back to a per-pod
-   * in-memory counter when Redis is absent or unreachable so a transient
-   * Redis blip degrades to local limiting rather than removing the limit
-   * or failing the request.
-   */
-  private async trackRequestCount(
-    apiKeyId: string,
-  ): Promise<{ remaining: number; limit: number; resetAt: number }> {
-    if (!this.redis) {
-      return this.trackRequestCountInMemory(apiKeyId);
-    }
-    const windowMs = 60_000;
-    const now = Date.now();
-    const windowId = Math.floor(now / windowMs);
-    const resetAt = (windowId + 1) * windowMs;
-    try {
-      const key = `openai_rl:${apiKeyId}:${windowId}`;
-      const count = await this.redis.incr(key);
-      // Set the TTL once, on the first increment of the window. A slightly
-      // longer TTL than the window absorbs clock skew without leaking keys.
-      if (count === 1) {
-        await this.redis.expire(key, 70);
-      }
-      const remaining = Math.max(0, RATE_LIMIT_RPM - count);
-      return { remaining, limit: RATE_LIMIT_RPM, resetAt };
-    } catch (err: any) {
-      this.logger.warn(
-        `Rate-limit Redis unavailable, falling back to per-pod counter: ${err?.message}`,
-      );
-      return this.trackRequestCountInMemory(apiKeyId);
-    }
+  private trackRequestCount(apiKeyId: string): Promise<CompatRateLimitInfo> {
+    return this.rateLimiter.track(apiKeyId);
   }
 
-  private trackRequestCountInMemory(apiKeyId: string): {
-    remaining: number;
-    limit: number;
-    resetAt: number;
-  } {
-    const now = Date.now();
-    const existing = this.requestCounts.get(apiKeyId);
-
-    if (!existing || now >= existing.resetAt) {
-      this.evictIfFull(now);
-      const resetAt = now + 60_000; // 1 minute window
-      this.requestCounts.set(apiKeyId, { count: 1, resetAt });
-      return { remaining: RATE_LIMIT_RPM - 1, limit: RATE_LIMIT_RPM, resetAt };
-    }
-
-    existing.count++;
-    const remaining = Math.max(0, RATE_LIMIT_RPM - existing.count);
-    return { remaining, limit: RATE_LIMIT_RPM, resetAt: existing.resetAt };
-  }
-
-  /**
-   * Bound the request-count map. Without this it grows one entry per unique
-   * api-key id seen, with no eviction — a slow memory leak that's bad in any
-   * deployment that rotates keys, and easy to weaponise on a public endpoint.
-   *
-   * Strategy: drop expired entries first; if we're still at capacity, drop
-   * the oldest insertion (Map iteration order is insertion order in JS).
-   */
-  private evictIfFull(now: number): void {
-    if (this.requestCounts.size < MAX_TRACKED_KEYS) return;
-
-    for (const [k, v] of this.requestCounts) {
-      if (now >= v.resetAt) this.requestCounts.delete(k);
-    }
-    if (this.requestCounts.size < MAX_TRACKED_KEYS) return;
-
-    const oldest = this.requestCounts.keys().next().value;
-    if (oldest !== undefined) this.requestCounts.delete(oldest);
-  }
-
-  private setRateLimitHeaders(
-    res: Response,
-    info: { remaining: number; limit: number; resetAt: number },
-  ): void {
-    res.setHeader('X-RateLimit-Limit', String(info.limit));
-    res.setHeader('X-RateLimit-Remaining', String(info.remaining));
-    res.setHeader('X-RateLimit-Reset', String(Math.ceil(info.resetAt / 1000)));
+  private setRateLimitHeaders(res: Response, info: CompatRateLimitInfo): void {
+    this.rateLimiter.setHeaders(res, info);
   }
 
   // ─── Request Logging ────────────────────────────────────────────────
@@ -430,32 +392,47 @@ export class AgentOpenAICompatController {
     return agent;
   }
 
-  // ─── Input Mapping ───────────────────────────────────────────────────
-
+  /**
+   * The request, in the shape the agent engine takes.
+   *
+   * `/v1/chat/completions` is stateless: the `messages` array IS the
+   * conversation, resent whole on every turn. Handing the engine only the
+   * last user line -- which is what this did -- made every multi-turn client
+   * (the SDK's own chat loop, LangChain's ChatOpenAI, any web chat UI) talk to
+   * an agent that could not see what had already been said, with no error and
+   * no header to notice it from. The conversation is rendered into `message`
+   * because that is the field every stock agent prompt binds; see
+   * compat-conversation.helper for why a sibling field would not have worked.
+   */
   private mapOpenAIToAgentInput(body: any): Record<string, any> {
     const messages = body.messages || [];
-    const lastUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
+    const conversation = renderConversation(messages);
 
     return {
-      message: lastUserMessage?.content || '',
+      message: conversation.message,
+      latestMessage: conversation.latestMessage,
+      ...(conversation.systemPrompt ? { systemPrompt: conversation.systemPrompt } : {}),
       messages,
       model: body.model,
       temperature: body.temperature,
       max_tokens: body.max_tokens,
     };
   }
+
   private sendOpenAIError(
     res: Response,
     statusCode: number,
     message: string,
     type: string,
     code: string,
+    param?: string,
   ) {
     return res.status(statusCode).json({
       error: {
         message,
         type,
         code,
+        param: param ?? null,
       },
     });
   }

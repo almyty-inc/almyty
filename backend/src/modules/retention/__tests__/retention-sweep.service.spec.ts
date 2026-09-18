@@ -41,7 +41,6 @@ describe('RetentionSweepService', () => {
   let auditLogRepo: any;
   let toolExecutionRepo: any;
   let notificationRepo: any;
-  let gatewayRepo: any;
   let auditLogService: any;
   let service: RetentionSweepService;
 
@@ -55,7 +54,6 @@ describe('RetentionSweepService', () => {
     auditLogRepo = mockRepo();
     toolExecutionRepo = mockRepo();
     notificationRepo = mockRepo();
-    gatewayRepo = mockRepo();
     auditLogService = { log: jest.fn().mockResolvedValue(null) };
     service = new RetentionSweepService(
       policyRepo,
@@ -67,7 +65,6 @@ describe('RetentionSweepService', () => {
       auditLogRepo,
       toolExecutionRepo,
       notificationRepo,
-      gatewayRepo,
       auditLogService,
     );
   });
@@ -221,21 +218,31 @@ describe('RetentionSweepService', () => {
     );
   });
 
-  it('scopes request logs through the org gateways and skips orgs without gateways', async () => {
-    gatewayRepo.find.mockResolvedValueOnce([]);
-    let counts = await service.sweepOrganization(policy({ requestLogsDays: 14 }));
-    expect(counts.requestLogs).toBe(0);
-    expect(requestLogRepo.find).not.toHaveBeenCalled();
-
-    gatewayRepo.find.mockResolvedValueOnce([{ id: 'gw1' }, { id: 'gw2' }]);
+  it('scopes request logs by their own organizationId, not through the gateways', async () => {
+    // request_logs.gatewayId is ON DELETE SET NULL. Scoping the sweep
+    // through the org's gateways meant deleting a gateway put every log
+    // it wrote out of reach of every retention policy, forever. The
+    // service no longer takes a gateway repository at all, so the hop
+    // cannot come back without changing its signature.
     requestLogRepo.find.mockResolvedValueOnce([{ id: 'log1' }]);
     requestLogRepo.delete.mockResolvedValueOnce({ affected: 1 });
-    counts = await service.sweepOrganization(policy({ requestLogsDays: 14 }));
+
+    const counts = await service.sweepOrganization(policy({ requestLogsDays: 14 }));
 
     expect(counts.requestLogs).toBe(1);
     const where = requestLogRepo.find.mock.calls[0][0].where;
-    expect(where.gatewayId).toEqual(In(['gw1', 'gw2']));
+    expect(where.organizationId).toBe('org-1');
+    expect(where.gatewayId).toBeUndefined();
     expect(where.timestamp).toBeDefined();
+  });
+
+  it('still sweeps request logs for an org that has no gateways left', async () => {
+    requestLogRepo.find.mockResolvedValueOnce([{ id: 'log1' }, { id: 'log2' }]);
+    requestLogRepo.delete.mockResolvedValueOnce({ affected: 2 });
+
+    const counts = await service.sweepOrganization(policy({ requestLogsDays: 14 }));
+
+    expect(counts.requestLogs).toBe(2);
   });
 
   it('deletes old usage metrics and audit logs by org + cutoff', async () => {
@@ -280,6 +287,30 @@ describe('RetentionSweepService', () => {
       toolExecutions: 0,
       notifications: 0,
     });
+  });
+
+  /**
+   * The audit row is the only record that a sweep destroyed anything.
+   * `total` was a hand-written sum of six of the eight SweepCounts keys,
+   * so a sweep that deleted only tool executions and notifications --
+   * the two newest classes, and the two biggest tables -- saw total 0
+   * and wrote no audit row, no notification and no log line at all.
+   */
+  it('audits a sweep that only deleted tool executions and notifications', async () => {
+    toolExecutionRepo.find.mockResolvedValueOnce([{ id: 'e1' }, { id: 'e2' }]).mockResolvedValue([]);
+    toolExecutionRepo.delete.mockResolvedValue({ affected: 2 });
+    notificationRepo.find.mockResolvedValueOnce([{ id: 'n1' }]).mockResolvedValue([]);
+    notificationRepo.delete.mockResolvedValue({ affected: 1 });
+
+    await service.sweepOrganization(
+      policy({ toolExecutionsDays: 30, notificationsDays: 30 }),
+    );
+
+    expect(auditLogService.log).toHaveBeenCalledTimes(1);
+    const entry = auditLogService.log.mock.calls[0][0];
+    expect(entry.action).toBe(AuditAction.RETENTION_SWEEP);
+    expect(entry.details.toolExecutions).toBe(2);
+    expect(entry.details.notifications).toBe(1);
   });
 
   it('writes no audit entry when the sweep deleted nothing', async () => {
@@ -338,7 +369,6 @@ describe('RetentionSweepService', () => {
         auditLogRepo,
         toolExecutionRepo,
         notificationRepo,
-        gatewayRepo,
         auditLogService,
         undefined,
         appRepo,
@@ -460,7 +490,6 @@ describe('RetentionSweepService notifications', () => {
       auditLogRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       toolExecutionRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       notificationRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
-      gatewayRepo: { find: jest.fn().mockResolvedValue([]) },
     };
     const notifications = {
       emit: jest.fn().mockResolvedValue(undefined),
@@ -476,7 +505,6 @@ describe('RetentionSweepService notifications', () => {
       repos.auditLogRepo as any,
       repos.toolExecutionRepo as any,
       repos.notificationRepo as any,
-      repos.gatewayRepo as any,
       { log: jest.fn().mockResolvedValue(null) } as any,
       notifications as any,
     );

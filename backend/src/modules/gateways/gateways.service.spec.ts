@@ -464,23 +464,39 @@ describe('GatewaysService', () => {
   });
 
   describe('getGateways', () => {
+    /**
+     * A page of 20 gateways averaging 100 tools was 2,000 nested Tool
+     * entities -- each carrying `code`, `parameters` and `examples` --
+     * serialized so the table could print one integer per row, with the
+     * authConfigs join row-multiplying on top. Same fix as
+     * `ApisService.getApis`: a correlated COUNT read back through
+     * getRawAndEntities.
+     */
+    const listQueryBuilder = (entities: any[], raw: any[]) => ({
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(entities.length),
+      getRawAndEntities: jest.fn().mockResolvedValue({ entities, raw }),
+      getMany: jest.fn(() => {
+        throw new Error('the list must read the count back through getRawAndEntities');
+      }),
+    });
+
     it('should return paginated gateways', async () => {
       const mockGateways = [
         { id: 'gateway-1', name: 'Gateway 1' },
         { id: 'gateway-2', name: 'Gateway 2' },
       ];
 
-      const mockQueryBuilder = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([mockGateways, 2]),
-        getCount: jest.fn().mockResolvedValue(2),
-        getMany: jest.fn().mockResolvedValue(mockGateways),
-      };
+      const mockQueryBuilder = listQueryBuilder(mockGateways, [
+        { gateway_id: 'gateway-1', gateway_toolCount: '7' },
+        { gateway_id: 'gateway-2', gateway_toolCount: '0' },
+      ]);
 
       gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
@@ -495,6 +511,60 @@ describe('GatewaysService', () => {
       expect(result.total).toBe(2);
       expect(result.page).toBe(1);
       expect(result.totalPages).toBe(1);
+    });
+
+    it('counts the tools instead of joining them, and never joins gatewayTool.tool', async () => {
+      const mockGateways: any[] = [{ id: 'gateway-1', name: 'Gateway 1' }];
+      const mockQueryBuilder = listQueryBuilder(mockGateways, [
+        { gateway_id: 'gateway-1', gateway_toolCount: '137' },
+      ]);
+      gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+
+      const result = await service.getGateways({
+        organizationId: 'org-1',
+        page: 1,
+        limit: 20,
+        caller: { id: 'user-1' },
+      });
+
+      // The number the list needs, without the entities behind it.
+      expect(result.gateways[0].toolCount).toBe(137);
+      expect(result.gateways[0].tools).toBeUndefined();
+
+      // The correlated subquery is attached as a raw alias.
+      expect(mockQueryBuilder.addSelect).toHaveBeenCalledTimes(1);
+      expect(mockQueryBuilder.addSelect.mock.calls[0][1]).toBe('gateway_toolCount');
+
+      const joined = mockQueryBuilder.leftJoinAndSelect.mock.calls.map((c: any[]) => c[0]);
+      expect(joined).not.toContain('gateway.tools');
+      expect(joined).not.toContain('gatewayTool.tool');
+    });
+
+    it('reads the count by gateway id, not by raw-row position', async () => {
+      // The authConfigs join still emits one raw row per (gateway,
+      // authConfig) pair while `entities` is deduped, so raw[i] lines up
+      // with entities[i] only when every gateway has exactly one auth
+      // config. Two configs on the first gateway used to shift every
+      // count by one row.
+      const mockGateways: any[] = [
+        { id: 'gateway-1', name: 'Gateway 1' },
+        { id: 'gateway-2', name: 'Gateway 2' },
+      ];
+      const mockQueryBuilder = listQueryBuilder(mockGateways, [
+        { gateway_id: 'gateway-1', gateway_toolCount: '11' },
+        { gateway_id: 'gateway-1', gateway_toolCount: '11' },
+        { gateway_id: 'gateway-2', gateway_toolCount: '4' },
+      ]);
+      gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+
+      const result = await service.getGateways({
+        organizationId: 'org-1',
+        page: 1,
+        limit: 20,
+        caller: { id: 'user-1' },
+      });
+
+      expect(result.gateways.map((g: any) => g.toolCount)).toEqual([11, 4]);
     });
   });
 
@@ -838,17 +908,20 @@ describe('GatewaysService', () => {
   });
 
   describe('getGateways - filter branches', () => {
+    const filterQueryBuilder = () => ({
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      leftJoinAndSelect: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getCount: jest.fn().mockResolvedValue(1),
+      getRawAndEntities: jest.fn().mockResolvedValue({ entities: [], raw: [] }),
+    });
+
     it('should filter by search term', async () => {
-      const mockQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getCount: jest.fn().mockResolvedValue(1),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
+      const mockQueryBuilder = filterQueryBuilder();
 
       gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
@@ -865,16 +938,7 @@ describe('GatewaysService', () => {
     });
 
     it('should filter by type', async () => {
-      const mockQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getCount: jest.fn().mockResolvedValue(1),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
+      const mockQueryBuilder = filterQueryBuilder();
 
       gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
@@ -888,16 +952,7 @@ describe('GatewaysService', () => {
     });
 
     it('should filter by status', async () => {
-      const mockQueryBuilder = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getCount: jest.fn().mockResolvedValue(1),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
+      const mockQueryBuilder = filterQueryBuilder();
 
       gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
@@ -1230,34 +1285,116 @@ describe('GatewaysService', () => {
   });
 
   describe('searchSkillsAcrossGateways', () => {
-    it('should return matching tools with skillRef in org/gateway/skill format', async () => {
-      const mockOrganization = {
-        id: 'org-1',
-        name: 'Test Org',
-        slug: 'test-org',
+    /**
+     * The match belongs in SQL.
+     *
+     * This loaded every active gateway with `relations: { tools: { tool:
+     * true } }` -- every Tool entity in the organization, `code`,
+     * `parameters` and `examples` included -- and then ran
+     * `toLowerCase().includes()` over them in JS.
+     *
+     * The fake below evaluates the predicates the query builder is given
+     * against in-memory rows, so the scenarios still read as scenarios
+     * while proving the filtering, the active-only scoping and the bound
+     * are expressed as SQL rather than as array work.
+     */
+    interface FakeRow {
+      gatewayId: string;
+      gatewayName: string;
+      gatewayEndpoint: string | null;
+      gatewayStatus: string;
+      gatewayOrgId: string;
+      toolId: string;
+      toolName: string;
+      toolDescription: string | null;
+      gatewayToolActive: boolean;
+    }
+
+    let qbCalls: { joins: string[]; wheres: string[]; limit: number | null; params: Record<string, any> };
+
+    const useRows = (rows: FakeRow[]) => {
+      qbCalls = { joins: [], wheres: [], limit: null, params: {} };
+      let orgId: string | null = null;
+      let status: string | null = null;
+      let activeOnly = false;
+      let pattern: string | null = null;
+
+      const qb: any = {
+        innerJoin: (rel: string) => {
+          qbCalls.joins.push(rel);
+          return qb;
+        },
+        innerJoinAndSelect: (rel: string) => {
+          qbCalls.joins.push(rel);
+          return qb;
+        },
+        select: () => qb,
+        addSelect: () => qb,
+        orderBy: () => qb,
+        addOrderBy: () => qb,
+        limit: (n: number) => {
+          qbCalls.limit = n;
+          return qb;
+        },
+        where: (clause: string, params?: any) => apply(clause, params),
+        andWhere: (clause: string, params?: any) => apply(clause, params),
+        getRawMany: async () => {
+          const like = pattern
+            ? new RegExp(
+                `^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*')}$`,
+                'i',
+              )
+            : null;
+          return rows
+            .filter((r) => !orgId || r.gatewayOrgId === orgId)
+            .filter((r) => !status || r.gatewayStatus === status)
+            .filter((r) => !activeOnly || r.gatewayToolActive)
+            .filter(
+              (r) =>
+                !like || like.test(r.toolName) || (r.toolDescription != null && like.test(r.toolDescription)),
+            )
+            .map((r) => ({
+              gatewayId: r.gatewayId,
+              gatewayName: r.gatewayName,
+              gatewayEndpoint: r.gatewayEndpoint,
+              toolId: r.toolId,
+              toolName: r.toolName,
+              toolDescription: r.toolDescription,
+            }));
+        },
       };
 
-      const mockGateways = [
-        {
-          id: 'gateway-1',
-          name: 'My Gateway',
-          endpoint: '/my-gateway',
-          status: 'active',
-          tools: [
-            {
-              isActive: true,
-              tool: {
-                id: 'tool-1',
-                name: 'Get Users',
-                description: 'Fetches all users from the API',
-              },
-            },
-          ],
-        },
-      ];
+      const apply = (clause: string, params?: any) => {
+        qbCalls.wheres.push(clause);
+        Object.assign(qbCalls.params, params ?? {});
+        if (clause.includes('gateway.organizationId')) orgId = params.organizationId;
+        else if (clause.includes('gateway.status')) status = params.status;
+        else if (clause.includes('gatewayTool.isActive')) activeOnly = true;
+        else if (clause.includes('ILIKE')) pattern = params.q;
+        return qb;
+      };
 
-      organizationRepository.findOne.mockResolvedValue(mockOrganization);
-      gatewayRepository.find.mockResolvedValue(mockGateways);
+      gatewayRepository.createQueryBuilder.mockReturnValue(qb);
+    };
+
+    const org = { id: 'org-1', name: 'Test Org', slug: 'test-org' };
+
+    const row = (over: Partial<FakeRow>): FakeRow => ({
+      gatewayId: 'gateway-1',
+      gatewayName: 'My Gateway',
+      gatewayEndpoint: '/my-gateway',
+      gatewayStatus: 'active',
+      gatewayOrgId: 'org-1',
+      toolId: 'tool-1',
+      toolName: 'Get Users',
+      toolDescription: 'Fetches all users from the API',
+      gatewayToolActive: true,
+      ...over,
+    });
+
+    it('should return matching tools with skillRef in org/gateway/skill format', async () => {
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([row({})]);
 
       const results = await service.searchSkillsAcrossGateways('org-1', 'users');
 
@@ -1275,41 +1412,11 @@ describe('GatewaysService', () => {
     });
 
     it('should match by tool name (case insensitive)', async () => {
-      const mockOrganization = {
-        id: 'org-1',
-        name: 'Test Org',
-        slug: 'test-org',
-      };
-
-      const mockGateways = [
-        {
-          id: 'gateway-1',
-          name: 'API Gateway',
-          endpoint: '/api-gateway',
-          status: 'active',
-          tools: [
-            {
-              isActive: true,
-              tool: {
-                id: 'tool-1',
-                name: 'Create Invoice',
-                description: 'Creates a new invoice',
-              },
-            },
-            {
-              isActive: true,
-              tool: {
-                id: 'tool-2',
-                name: 'List Orders',
-                description: 'Lists all orders',
-              },
-            },
-          ],
-        },
-      ];
-
-      organizationRepository.findOne.mockResolvedValue(mockOrganization);
-      gatewayRepository.find.mockResolvedValue(mockGateways);
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([
+        row({ toolId: 'tool-1', toolName: 'Create Invoice', toolDescription: 'Creates a new invoice' }),
+        row({ toolId: 'tool-2', toolName: 'List Orders', toolDescription: 'Lists all orders' }),
+      ]);
 
       const results = await service.searchSkillsAcrossGateways('org-1', 'INVOICE');
 
@@ -1318,33 +1425,10 @@ describe('GatewaysService', () => {
     });
 
     it('should match by tool description', async () => {
-      const mockOrganization = {
-        id: 'org-1',
-        name: 'Test Org',
-        slug: 'test-org',
-      };
-
-      const mockGateways = [
-        {
-          id: 'gateway-1',
-          name: 'API Gateway',
-          endpoint: '/api-gateway',
-          status: 'active',
-          tools: [
-            {
-              isActive: true,
-              tool: {
-                id: 'tool-1',
-                name: 'Send Email',
-                description: 'Sends a notification email to the user',
-              },
-            },
-          ],
-        },
-      ];
-
-      organizationRepository.findOne.mockResolvedValue(mockOrganization);
-      gatewayRepository.find.mockResolvedValue(mockGateways);
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([
+        row({ toolName: 'Send Email', toolDescription: 'Sends a notification email to the user' }),
+      ]);
 
       const results = await service.searchSkillsAcrossGateways('org-1', 'notification');
 
@@ -1353,110 +1437,86 @@ describe('GatewaysService', () => {
     });
 
     it('should return empty array when no matches', async () => {
-      const mockOrganization = {
-        id: 'org-1',
-        name: 'Test Org',
-        slug: 'test-org',
-      };
-
-      const mockGateways = [
-        {
-          id: 'gateway-1',
-          name: 'API Gateway',
-          endpoint: '/api-gateway',
-          status: 'active',
-          tools: [
-            {
-              isActive: true,
-              tool: {
-                id: 'tool-1',
-                name: 'Get Users',
-                description: 'Fetches users',
-              },
-            },
-          ],
-        },
-      ];
-
-      organizationRepository.findOne.mockResolvedValue(mockOrganization);
-      gatewayRepository.find.mockResolvedValue(mockGateways);
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([row({ toolName: 'Get Users', toolDescription: 'Fetches users' })]);
 
       const results = await service.searchSkillsAcrossGateways('org-1', 'nonexistent');
 
       expect(results).toEqual([]);
     });
 
-    it('should only search active gateways', async () => {
-      const mockOrganization = {
-        id: 'org-1',
-        name: 'Test Org',
-        slug: 'test-org',
-      };
+    it('should only search active gateways, in SQL and not in JS', async () => {
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([
+        row({ toolId: 'tool-1', toolName: 'Live Tool', gatewayStatus: 'active' }),
+        row({ toolId: 'tool-2', toolName: 'Dead Tool', gatewayStatus: 'inactive' }),
+      ]);
 
-      organizationRepository.findOne.mockResolvedValue(mockOrganization);
-      gatewayRepository.find.mockResolvedValue([]);
+      const results = await service.searchSkillsAcrossGateways('org-1', 'tool');
 
-      await service.searchSkillsAcrossGateways('org-1', 'test');
-
-      expect(gatewayRepository.find).toHaveBeenCalledWith({
-        where: { organizationId: 'org-1', status: 'active' },
-        relations: { tools: { tool: true } },
-      });
+      expect(results.map((r) => r.toolName)).toEqual(['Live Tool']);
+      expect(qbCalls.wheres).toContain('gateway.organizationId = :organizationId');
+      expect(qbCalls.wheres).toContain('gateway.status = :status');
+      // The relation load that used to pull every Tool into heap is gone.
+      expect(gatewayRepository.find).not.toHaveBeenCalled();
     });
 
     it('should only include active tools', async () => {
-      const mockOrganization = {
-        id: 'org-1',
-        name: 'Test Org',
-        slug: 'test-org',
-      };
-
-      const mockGateways = [
-        {
-          id: 'gateway-1',
-          name: 'API Gateway',
-          endpoint: '/api-gateway',
-          status: 'active',
-          tools: [
-            {
-              isActive: true,
-              tool: {
-                id: 'tool-1',
-                name: 'Active Tool',
-                description: 'This tool is active',
-              },
-            },
-            {
-              isActive: false,
-              tool: {
-                id: 'tool-2',
-                name: 'Inactive Tool',
-                description: 'This tool is inactive',
-              },
-            },
-          ],
-        },
-      ];
-
-      organizationRepository.findOne.mockResolvedValue(mockOrganization);
-      gatewayRepository.find.mockResolvedValue(mockGateways);
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([
+        row({ toolId: 'tool-1', toolName: 'Active Tool', toolDescription: 'This tool is active' }),
+        row({
+          toolId: 'tool-2',
+          toolName: 'Inactive Tool',
+          toolDescription: 'This tool is inactive',
+          gatewayToolActive: false,
+        }),
+      ]);
 
       const results = await service.searchSkillsAcrossGateways('org-1', 'tool');
 
       expect(results).toHaveLength(1);
       expect(results[0].toolName).toBe('Active Tool');
+      expect(qbCalls.wheres).toContain('gatewayTool.isActive = true');
+    });
+
+    it('matches with ILIKE over the joined tool and bounds the answer', async () => {
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([row({})]);
+
+      await service.searchSkillsAcrossGateways('org-1', 'users');
+
+      expect(qbCalls.joins).toEqual(['gateway.tools', 'gatewayTool.tool']);
+      expect(qbCalls.wheres).toContain('(tool.name ILIKE :q OR tool.description ILIKE :q)');
+      expect(qbCalls.limit).toBe(200);
+    });
+
+    it('treats LIKE wildcards in the query as literal characters', async () => {
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([row({})]);
+
+      await service.searchSkillsAcrossGateways('org-1', '100%');
+
+      // `%` typed by a user is a character to find, not "match anything".
+      expect(qbCalls.wheres).toContain('(tool.name ILIKE :q OR tool.description ILIKE :q)');
+      expect(qbCalls.params.q).toBe('%100\\%%');
     });
   });
-
   describe('getAllUserGateways', () => {
-    it('should return all active gateways with tools and organization loaded', async () => {
+    /**
+     * Neither caller reads `gateway.tools`: gateway-info's all-skills route
+     * uses id/name/endpoint and `gateway.organization` and then asks the
+     * skill generator (which loads what it needs itself), and gateway-skills
+     * no longer goes through this method at all. Loading every Tool of every
+     * active gateway to satisfy that was pure over-fetch.
+     */
+    it('loads the organization and NOT every tool of every gateway', async () => {
       const mockGateways = [
         {
           id: 'gateway-1',
           name: 'Gateway One',
           organizationId: 'org-1',
           status: 'active',
-          tools: [{ id: 'gt-1', tool: { id: 'tool-1', name: 'Tool 1' } }],
           organization: { id: 'org-1', name: 'Test Org' },
         },
         {
@@ -1464,7 +1524,6 @@ describe('GatewaysService', () => {
           name: 'Gateway Two',
           organizationId: 'org-1',
           status: 'active',
-          tools: [],
           organization: { id: 'org-1', name: 'Test Org' },
         },
       ];
@@ -1477,8 +1536,10 @@ describe('GatewaysService', () => {
       expect(result).toHaveLength(2);
       expect(gatewayRepository.find).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', status: 'active' },
-        relations: { tools: { tool: true }, organization: true },
+        relations: { organization: true },
       });
+      const [args] = gatewayRepository.find.mock.calls[0];
+      expect(args.relations).not.toHaveProperty('tools');
     });
 
     it('should return empty array when no gateways', async () => {
@@ -1489,8 +1550,21 @@ describe('GatewaysService', () => {
       expect(result).toEqual([]);
       expect(gatewayRepository.find).toHaveBeenCalledWith({
         where: { organizationId: 'org-1', status: 'active' },
-        relations: { tools: { tool: true }, organization: true },
+        relations: { organization: true },
       });
+    });
+  });
+
+  describe('getSkillContextOrganization', () => {
+    it('reads the organization by id instead of through every active gateway', async () => {
+      const org = { id: 'org-1', name: 'Test Org', slug: 'test-org' };
+      organizationRepository.findOne.mockResolvedValue(org);
+
+      const result = await service.getSkillContextOrganization('org-1');
+
+      expect(result).toBe(org);
+      expect(organizationRepository.findOne).toHaveBeenCalledWith({ where: { id: 'org-1' } });
+      expect(gatewayRepository.find).not.toHaveBeenCalled();
     });
   });
 });

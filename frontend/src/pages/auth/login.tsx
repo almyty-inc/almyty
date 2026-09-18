@@ -165,7 +165,7 @@ export function LoginPage() {
               className={errors.email ? 'border-red-300' : ''}
             />
             {errors.email && (
-              <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
             )}
           </div>
         </div>
@@ -193,7 +193,7 @@ export function LoginPage() {
               )}
             </button>
             {errors.password && (
-              <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.password.message}</p>
             )}
           </div>
         </div>

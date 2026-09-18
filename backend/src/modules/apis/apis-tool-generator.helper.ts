@@ -18,6 +18,7 @@ import { Tool } from '../../entities/tool.entity';
 
 import { ToolsService } from '../tools/tools.service';
 import { ApisService } from './apis.service';
+import { isUniqueViolation } from '../../common/utils/unique-violation';
 
 /** What a generation run produced, including what it could not. */
 export interface ToolGenerationResult {
@@ -112,8 +113,25 @@ export class ApisToolGeneratorHelper {
                 description: toolDescription,
                 organizationId: api.organizationId,
               });
-            } else {
+            }
+            try {
               return await this.toolsService.createFromOperation(operation, {
+                name: toolName,
+                description: toolDescription,
+                organizationId: api.organizationId,
+              });
+            } catch (error) {
+              // `tools_org_name_uq` fired: another writer created this
+              // tool between our findByName and this insert. The batch
+              // runs its lookups through Promise.all and a re-run of
+              // POST /apis/:id/generate-tools can overlap a schema
+              // import's tool-gen phase, so the window is real. Treat
+              // it as "someone else got there first" and update the
+              // row they wrote rather than failing the operation.
+              if (!isUniqueViolation(error)) throw error;
+              const raced = await this.toolsService.findByName(toolName, api.organizationId);
+              if (!raced) throw error;
+              return await this.toolsService.updateFromOperation(raced.id, operation, {
                 name: toolName,
                 description: toolDescription,
                 organizationId: api.organizationId,

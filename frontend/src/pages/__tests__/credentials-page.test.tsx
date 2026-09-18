@@ -23,7 +23,7 @@ vi.mock('../../lib/api', () => ({
   },
   gatewaysApi: { getAll: vi.fn() },
   agentsApi: { getAll: vi.fn() },
-  teamsApi: { list: vi.fn() },
+  organizationsApi: { getTeams: vi.fn() },
 }))
 
 const notifySuccess = vi.fn()

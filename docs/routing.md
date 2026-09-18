@@ -74,13 +74,34 @@ Three, stated because they bound what routing can be worth.
 
 **The co-failure ceiling.** When every eligible model fails the same
 request, no routing policy helps. That rate is the mathematical ceiling on
-any routing gain, and it is measured rather than assumed by the nightly
-co-failure job. On screen it is **All-model failure rate**, and it binds
-to `coFailureRate`. The neighbouring `routingHeadroomRate` is a different
-number, the share a better policy could have won, and the two must never
-appear under one label: a chart bound to the wrong field reads perfectly
-plausibly and nobody catches it by looking. Without these numbers, work
-on routing is unfalsifiable.
+any routing gain, and it is measured rather than assumed. The measurement
+is a query, not a background number: `GET /analytics/routing/failure-rate`
+computes it inline from the runs already recorded. There is no cron and no
+processor behind it, so the number is as fresh as the request that asked
+for it and nothing is precomputed.
+
+It reads `agent_executions` for the organization over a 30-day window by
+default — `?days=` overrides that and is clamped to 90, with anything
+nonsensical falling back to 30 rather than to one day — and takes at most
+5000 rows. A busier org than that is answered from a slice of its history,
+not all of it. Attempts are reconstructed from each row's `nodeResults`,
+and the result is per agent.
+
+The endpoint returns every agent, each with a `reportable` flag, rather
+than answering with only the ones that qualify: a response that omits the
+thin classes cannot tell a person why their agent is missing from the
+chart. `reportable` is true once an agent has 30 comparable requests
+(`MIN_COMPARABLE_REQUESTS`); below that the rate is noise wearing a
+percentage sign, and the Routing tab hides those rows rather than drawing
+them.
+
+On screen it is **All-model failure rate**, bound to the response's
+`allModelFailureRate` (`coFailureRate` in the co-failure maths). The
+neighbouring `recoverableRate` (`routingHeadroomRate` internally) is a
+different number, the share a better policy could have won, and the two
+must never appear under one label: a chart bound to the wrong field reads
+perfectly plausibly and nobody catches it by looking. Without these
+numbers, work on routing is unfalsifiable.
 
 **Cascade overhead inside agent loops.** Trying a cheaper model first
 saves money on the requests it handles and costs latency plus a wasted

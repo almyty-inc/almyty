@@ -14,11 +14,11 @@ import { WORKER_PROTOCOL_VERSION, WORKER_ERROR_CODES } from '../types/worker-pro
  */
 describe('StreamableHttpTransport', () => {
   let transport: StreamableHttpTransport;
-  let mcpService: { handleJsonRpc: jest.Mock };
+  let mcpService: { handleJsonRpc: jest.Mock; handleJsonRpcMessage: jest.Mock };
   let sessionService: { createSession: jest.Mock };
 
   beforeEach(async () => {
-    mcpService = { handleJsonRpc: jest.fn() };
+    mcpService = { handleJsonRpc: jest.fn(), handleJsonRpcMessage: jest.fn() };
     sessionService = {
       createSession: jest.fn().mockReturnValue({ id: 'mcp-session', organizationId: 'org', transport: 'streamable-http' }),
     };
@@ -148,11 +148,19 @@ describe('StreamableHttpTransport', () => {
     expect(res._jsonBody.payload.code).toBe(WORKER_ERROR_CODES.MALFORMED_ENVELOPE);
   });
 
-  it('POST with an unrecognized body returns malformed-envelope error', async () => {
+  // MCP clients reach this path too, and a worker envelope is not something
+  // they can parse. -32600 Invalid Request in a real JSON-RPC error body is
+  // readable by both kinds of client.
+  it('POST with an unrecognized body returns a JSON-RPC error, not a worker envelope', async () => {
     const res = mockRes();
     await transport.handlePost(mockReq({}, { hello: 'world' }), res, 'org', 'user');
     expect(res._statusCode).toBe(400);
-    expect(res._jsonBody.payload.code).toBe(WORKER_ERROR_CODES.MALFORMED_ENVELOPE);
+    expect(res._jsonBody).toEqual({
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32600, message: expect.stringContaining('Invalid Request') },
+    });
+    expect(res._jsonBody.payload).toBeUndefined();
   });
 
   // ── Sessions ─────────────────────────────────────────────────────────
@@ -191,6 +199,86 @@ describe('StreamableHttpTransport', () => {
     // The original session must NOT be hijacked or re-orged.
     expect(mcpService.handleJsonRpc).toHaveBeenCalledTimes(1);
     expect(mcpService.handleJsonRpc.mock.calls[0][1]).toBe('org-a');
+  });
+
+  // MCP 2025-03-26 Streamable HTTP: an unrecognised Mcp-Session-Id is a 404,
+  // which is how a client learns its session is gone and it must
+  // re-initialise. Minting a session under the requested id instead meant a
+  // client kept a dead id alive forever, losing all state behind a 200.
+  it('POST with an unknown Mcp-Session-Id returns 404 and does NOT invent the session', async () => {
+    mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: 'ok' });
+    const res = mockRes();
+
+    await transport.handlePost(
+      mockReq({ 'Mcp-Session-Id': 'sh_totally-unknown-session' }, { jsonrpc: '2.0', id: 1, method: 'ping' }),
+      res, 'org', 'user',
+    );
+
+    expect(res._statusCode).toBe(404);
+    expect(res._jsonBody.payload.code).toBe(WORKER_ERROR_CODES.UNKNOWN_SESSION);
+    expect(transport.getStats().sessions).toBe(0);
+    expect(transport.getSession('sh_totally-unknown-session')).toBeUndefined();
+    // The request itself must not have been executed under a phantom session.
+    expect(mcpService.handleJsonRpc).not.toHaveBeenCalled();
+  });
+
+  it('POST and GET agree: a session id neither half knows is 404 on both', async () => {
+    const post = mockRes();
+    await transport.handlePost(
+      mockReq({ 'Mcp-Session-Id': 'sh_gc-swept-me' }, { jsonrpc: '2.0', id: 1, method: 'ping' }),
+      post, 'org', 'user',
+    );
+    const get = mockRes();
+    await transport.handleStream(mockReq({ 'Mcp-Session-Id': 'sh_gc-swept-me' }), get, 'org');
+
+    expect(post._statusCode).toBe(404);
+    expect(get._statusCode).toBe(404);
+  });
+
+  // ── JSON-RPC batch (required by the 2025-03-26 revision) ────────────
+
+  it('POST with a JSON-RPC batch answers with an array of the responses', async () => {
+    mcpService.handleJsonRpcMessage.mockResolvedValue([
+      { jsonrpc: '2.0', id: 1, result: 'a' },
+      { jsonrpc: '2.0', id: 2, result: 'b' },
+    ]);
+    const batch = [
+      { jsonrpc: '2.0', id: 1, method: 'ping' },
+      { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+    ];
+    const res = mockRes();
+
+    await transport.handlePost(mockReq({}, batch), res, 'org', 'user');
+
+    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(batch, 'org', 'user');
+    expect(res._statusCode).toBe(200);
+    expect(res._jsonBody).toEqual([
+      { jsonrpc: '2.0', id: 1, result: 'a' },
+      { jsonrpc: '2.0', id: 2, result: 'b' },
+    ]);
+  });
+
+  it('POST with a batch of nothing but notifications returns 202 with no body', async () => {
+    mcpService.handleJsonRpcMessage.mockResolvedValue(null);
+    const res = mockRes();
+
+    await transport.handlePost(
+      mockReq({}, [{ jsonrpc: '2.0', method: 'notifications/initialized' }]),
+      res, 'org', 'user',
+    );
+
+    expect(res._statusCode).toBe(202);
+    expect(res._ended).toBe(true);
+    expect(res._jsonBody).toBeUndefined();
+  });
+
+  it('a batch is never mistaken for a malformed message shape', async () => {
+    mcpService.handleJsonRpcMessage.mockResolvedValue([{ jsonrpc: '2.0', id: 1, result: 'a' }]);
+    const res = mockRes();
+
+    await transport.handlePost(mockReq({}, [{ jsonrpc: '2.0', id: 1, method: 'ping' }]), res, 'org', 'user');
+
+    expect(res._statusCode).not.toBe(400);
   });
 
   // ── GET stream + Last-Event-ID replay ───────────────────────────────

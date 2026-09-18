@@ -17,9 +17,6 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request } from 'express';
 
 import { Public } from '../../../src/common/decorators/public.decorator';
-import { EntitlementGuard } from '../../../src/modules/licensing/guards/entitlement.guard';
-import { RequiresEntitlement } from '../../../src/modules/licensing/decorators/requires-entitlement.decorator';
-import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 import { ScimAuthGuard } from './guards/scim-auth.guard';
 import {
   ScimService,

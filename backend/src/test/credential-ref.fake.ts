@@ -17,6 +17,7 @@ export interface FakeCredentialStore {
     find: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
+    update: jest.Mock;
     remove: jest.Mock;
   };
   /** Insert a row directly (already-encrypted or plaintext config). */
@@ -37,6 +38,21 @@ export function makeCredentialRefFake(policy?: ConnectionUsePolicy, envelope?: E
       if (!row.id) row.id = `cred-${++counter}`;
       if (!rows.includes(row)) rows.push(row);
       return row;
+    }),
+    /**
+     * Scoped column update: writes ONLY the columns in the patch, and
+     * only to rows matching the criteria. Modelled rather than stubbed,
+     * because the difference between this and save() is the whole
+     * reason recordHealth stopped reverting a rotated secret.
+     */
+    update: jest.fn(async (criteria: any, patch: Record<string, any>) => {
+      let affected = 0;
+      for (const row of rows) {
+        if (!matches(row, criteria)) continue;
+        for (const [k, v] of Object.entries(patch)) (row as any)[k] = v;
+        affected += 1;
+      }
+      return { affected };
     }),
     remove: jest.fn(async (row: Credential) => {
       const at = rows.indexOf(row);

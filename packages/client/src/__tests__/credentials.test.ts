@@ -12,7 +12,7 @@ vi.mock('node:fs', () => ({
   existsSync: vi.fn(),
 }));
 
-import { loadCredentials, resolveCredentials, CREDENTIALS_FILE } from '../credentials.js';
+import { loadCredentials, resolveCredentials, credentialsExpired, CREDENTIALS_FILE } from '../credentials.js';
 import { readFileSync, existsSync } from 'node:fs';
 
 describe('credentials', () => {
@@ -115,6 +115,58 @@ describe('credentials', () => {
       (readFileSync as any).mockReturnValue(JSON.stringify(creds));
 
       expect(resolveCredentials()).toBeNull();
+    });
+  });
+
+  /**
+   * `@almyty/auth` writes `expiresAt` from the JWT's own `exp` claim.
+   * This reader did not carry the field, so every CLI other than `auth`
+   * treated a long-dead credential as live and found out on its first
+   * API call — as a 401 from whatever the user was actually trying to
+   * do, rather than a sentence telling them to log in again.
+   */
+  describe('an expired credential is not a credential', () => {
+    const hour = 60 * 60 * 1000;
+    const stored = (expiresAt?: string) => {
+      (existsSync as any).mockReturnValue(true);
+      (readFileSync as any).mockReturnValue(
+        JSON.stringify({ url: 'https://api.almyty.com', token: 'stored-token', expiresAt }),
+      );
+    };
+
+    it('resolves a credential whose expiry is still ahead', () => {
+      stored(new Date(Date.now() + hour).toISOString());
+      expect(resolveCredentials()?.token).toBe('stored-token');
+    });
+
+    it('resolves nothing once the expiry has passed', () => {
+      stored(new Date(Date.now() - hour).toISOString());
+      expect(resolveCredentials()).toBeNull();
+    });
+
+    it('assumes live when there is no expiry to check', () => {
+      // Written by an older login, or by hand. Refusing it would be a
+      // worse guess than trying it.
+      stored(undefined);
+      expect(resolveCredentials()?.token).toBe('stored-token');
+    });
+
+    it('assumes live when the expiry is unparseable', () => {
+      stored('whenever');
+      expect(resolveCredentials()?.token).toBe('stored-token');
+      expect(credentialsExpired({ expiresAt: 'whenever' })).toBe(false);
+    });
+
+    it('never expiry-checks ALMYTY_TOKEN', () => {
+      // It did not come from `auth login`: there is no claim to check
+      // and no file to correct.
+      process.env.ALMYTY_TOKEN = 'env-token';
+      stored(new Date(Date.now() - hour).toISOString());
+      expect(resolveCredentials()?.token).toBe('env-token');
+    });
+
+    it('treats the moment of expiry as expired', () => {
+      expect(credentialsExpired({ expiresAt: new Date(Date.now() - 1).toISOString() })).toBe(true);
     });
   });
 });

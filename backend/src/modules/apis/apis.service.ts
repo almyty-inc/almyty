@@ -28,6 +28,10 @@ import { hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../cr
 import { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions } from './dto/apis.dto';
 export type { CreateApiData, UpdateApiData, FindApisOptions, ImportSchemaOptions };
 
+/** Page size for GET /apis when the caller does not ask for one. */
+export const DEFAULT_APIS_PAGE_SIZE = 10;
+/** Hard ceiling on one page of APIs. */
+export const MAX_APIS_PAGE_SIZE = 100;
 @Injectable()
 export class ApisService {
   private readonly logger = new Logger(ApisService.name);
@@ -196,7 +200,16 @@ export class ApisService {
     organizationId: string,
     options: FindApisOptions = {},
   ): Promise<{ apis: Api[]; total: number }> {
-    const { type, status, page = 1, limit = 10 } = options;
+    const { type, status, page = 1 } = options;
+    // `limit` is parsed straight off the query string by the controller, with
+    // no ceiling: `?limit=100000` asked for 100,000 API rows plus a
+    // correlated COUNT each. Same ceiling the other list endpoints use.
+    const limit = Math.min(
+      Number.isFinite(options.limit as number) && (options.limit as number) > 0
+        ? Math.floor(options.limit as number)
+        : DEFAULT_APIS_PAGE_SIZE,
+      MAX_APIS_PAGE_SIZE,
+    );
 
     const qb = this.apiRepository.createQueryBuilder('api');
     await this.accessPolicy.applyListFilter(qb, caller, organizationId, 'api');

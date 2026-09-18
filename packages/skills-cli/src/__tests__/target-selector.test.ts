@@ -226,23 +226,26 @@ describe('selectInstallTargetsAuto', () => {
     expect(names).toContain('Universal (.agents/skills)');
   });
 
-  it('returns null (interactive picker required) when TTY + no flags', () => {
-    // Skipped if not running under a TTY (CI or piped stdin) — in
-    // that case the function returns the auto fallback list, which
-    // is also the right behavior.
-    if (!process.stdin.isTTY) {
-      const targets = selectInstallTargetsAuto({
-        projectDir: tmpDir,
-        config: {},
-      });
-      expect(targets).not.toBeNull();
-      return;
-    }
+  it('asks for the picker when prompting is possible and no flag resolved a target', () => {
+    // Deterministic now that interactivity is an input rather than a
+    // read of process.stdin.isTTY, which differs between a developer's
+    // terminal and CI and made this test assert two different things.
     const targets = selectInstallTargetsAuto({
       projectDir: tmpDir,
       config: {},
+      interactive: true,
     });
     expect(targets).toBeNull();
+  });
+
+  it('never asks for the picker when prompting is impossible', () => {
+    const targets = selectInstallTargetsAuto({
+      projectDir: tmpDir,
+      config: {},
+      interactive: false,
+    });
+    expect(targets).not.toBeNull();
+    expect(targets!.map((t) => t.name)).toContain('Universal (.agents/skills)');
   });
 
   it('dedupes targets that map to the same skillsDir', () => {

@@ -1,6 +1,6 @@
 /**
  * Overview tab for the agent detail page. Contains Try-It panel,
- * integration snippets, webhook/schedule config, recent executions,
+ * integration snippets, webhook/schedule config, recent runs,
  * pipeline info, version history, change history, and audit log.
  */
 import React, { useState } from 'react'
@@ -48,6 +48,8 @@ import {
 } from '@/components/ui/alert-dialog'
 
 import { agentsApi } from '@/lib/api'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
@@ -62,6 +64,11 @@ interface OverviewTabProps {
   agent: Agent
   executions: AgentExecution[]
   executionsError: Error | null
+  /**
+   * The executions query lives on the agent detail page, so the retry has to
+   * be handed down. Without it the error state can only report, not recover.
+   */
+  onRetryExecutions?: () => void
   versions: AgentVersionSnapshot[]
   entityVersions: Array<{
     id: number
@@ -87,6 +94,7 @@ export function OverviewTab({
   agent,
   executions,
   executionsError,
+  onRetryExecutions,
   versions,
   entityVersions,
   auditLog,
@@ -117,6 +125,9 @@ export function OverviewTab({
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [rollbackIndex, setRollbackIndex] = useState<number | null>(null)
   const [expandedVersionId, setExpandedVersionId] = useState<number | null>(null)
+  // The Recent Runs empty state sends the user to Try It rather than telling
+  // them to go find it; the input is the only way to start a run from here.
+  const testInputRef = React.useRef<HTMLInputElement>(null)
 
   // Rollback mutation (inline, matching original)
   const handleRollback = async (versionIndex: number) => {
@@ -130,7 +141,7 @@ export function OverviewTab({
       queryClient.invalidateQueries({ queryKey: ['agent-audit-log', agent.id] })
       setRollbackIndex(null)
     } catch (err: any) {
-      errorNotif('Rollback Failed', err?.response?.data?.message || err?.message || 'Failed to rollback')
+      errorNotif('Rollback Failed', getApiErrorMessage(err, 'Failed to rollback'))
     }
   }
 
@@ -145,9 +156,9 @@ export function OverviewTab({
         setTestInput('')
       })
       .catch((err: unknown) => {
-        const msg = getApiErrorMessage(err, 'Invocation failed')
+        const msg = getApiErrorMessage(err, 'The run failed')
         setTestError(msg)
-        errorNotif('Invocation Failed', msg)
+        errorNotif('Run failed', msg)
       })
       .finally(() => setTestLoading(false))
   }
@@ -167,6 +178,7 @@ export function OverviewTab({
             <div className="space-y-3">
               <div className="flex gap-2">
                 <Input
+                  ref={testInputRef}
                   placeholder="Type a message to test this agent..."
                   value={testInput}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTestInput(e.target.value)}
@@ -196,7 +208,7 @@ export function OverviewTab({
                 </div>
               )}
               {!testOutput && !testError && (
-                <p className="text-xs text-muted-foreground">Send a message to invoke this agent and see the response.</p>
+                <p className="text-xs text-muted-foreground">Send a message to run this agent and see the response.</p>
               )}
             </div>
           </CardContent>
@@ -241,7 +253,7 @@ export function OverviewTab({
                     queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
                     success('Saved', 'Webhook URL updated.')
                   } catch (err: any) {
-                    errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to save webhook URL')
+                    errorNotif('Failed', getApiErrorMessage(err, 'Failed to save webhook URL'))
                   } finally {
                     setWebhookSaving(false)
                   }
@@ -281,7 +293,7 @@ export function OverviewTab({
                         queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
                         success('Unscheduled', 'Agent schedule removed.')
                       } catch (err: any) {
-                        errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to unschedule')
+                        errorNotif('Failed', getApiErrorMessage(err, 'Failed to unschedule'))
                         setScheduleEnabled(true)
                       } finally {
                         setScheduleSaving(false)
@@ -330,7 +342,7 @@ export function OverviewTab({
                         queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
                         success('Scheduled', `Agent will run every ${scheduleInterval} minute(s).`)
                       } catch (err: any) {
-                        errorNotif('Failed', err?.response?.data?.message || err?.message || 'Failed to schedule')
+                        errorNotif('Failed', getApiErrorMessage(err, 'Failed to schedule'))
                       } finally {
                         setScheduleSaving(false)
                       }
@@ -351,23 +363,33 @@ export function OverviewTab({
         </Card>
       </div>
 
-      {/* Recent Executions */}
+      {/* Recent Runs */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Recent Executions</CardTitle>
+          <CardTitle className="text-base">Recent Runs</CardTitle>
         </CardHeader>
         <CardContent>
           {executionsError ? (
-            <div className="text-center py-6">
-              <p className="text-sm text-destructive">Failed to load executions</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {(executionsError as Error)?.message || 'An error occurred while fetching execution history.'}
-              </p>
-            </div>
+            // The shared error state, so a failed read looks like a failed
+            // read everywhere and carries a retry instead of a dead sentence.
+            <QueryError error={executionsError} onRetry={onRetryExecutions} title="Couldn't load recent runs" />
           ) : executions.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              No executions yet. Click "Invoke" to run this agent.
-            </p>
+            <EmptyState
+              icon={Play}
+              title="No runs yet"
+              description="Every time this agent runs — from Try It, the Run button, a webhook or a schedule — it is recorded here."
+              action={
+                <Button
+                  onClick={() => {
+                    testInputRef.current?.scrollIntoView?.({ block: 'center' })
+                    testInputRef.current?.focus()
+                  }}
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Run this agent
+                </Button>
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -469,9 +491,12 @@ export function OverviewTab({
           </CardHeader>
           <CardContent>
             {versions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No version snapshots yet. Versions are saved automatically when the pipeline is updated.
-              </p>
+              <EmptyState
+                icon={History}
+                title="No version snapshots yet"
+                description="A snapshot is saved automatically every time you update the pipeline, and you can roll back to any of them."
+                className="py-6"
+              />
             ) : (
               <div className="space-y-2 max-h-[200px] overflow-y-auto">
                 {versions.map((v, index) => (
@@ -513,9 +538,12 @@ export function OverviewTab({
           </CardHeader>
           <CardContent>
             {entityVersions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No changes recorded yet.
-              </p>
+              <EmptyState
+                icon={Clock}
+                title="No changes recorded yet"
+                description="Every edit to this agent is tracked automatically and shows up here."
+                className="py-6"
+              />
             ) : (
               <div className="space-y-1 max-h-[300px] overflow-y-auto">
                 {entityVersions.map((ev, index) => {
@@ -587,9 +615,12 @@ export function OverviewTab({
         </CardHeader>
         <CardContent>
           {auditLog.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No audit entries yet.
-            </p>
+            <EmptyState
+              icon={History}
+              title="No audit entries yet"
+              description="Activating, editing or rolling back this agent is recorded here."
+              className="py-6"
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>

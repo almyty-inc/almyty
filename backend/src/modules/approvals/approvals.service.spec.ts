@@ -1,6 +1,7 @@
 import { ApprovalsService } from './approvals.service';
 import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
+import { FakePolicyApprovalsRepo } from './__tests__/fake-policy-approvals';
 
 class FakeApprovalsRepo {
   rows: ApprovalRequest[] = [];
@@ -92,8 +93,14 @@ function makeService() {
   const approvals = new FakeApprovalsRepo();
   const runs = new FakeRunsRepo();
   const policy = new FakePolicy();
-  const svc = new ApprovalsService(approvals as any, runs as any, policy as any);
-  return { svc, approvals, runs, policy };
+  const policyApprovals = new FakePolicyApprovalsRepo();
+  const svc = new ApprovalsService(
+    approvals as any,
+    runs as any,
+    policyApprovals as any,
+    policy as any,
+  );
+  return { svc, approvals, runs, policy, policyApprovals };
 }
 
 describe('ApprovalsService', () => {
@@ -234,6 +241,7 @@ describe('ApprovalsService notifications', () => {
     const svc = new ApprovalsService(
       approvals as any,
       runs as any,
+      new FakePolicyApprovalsRepo() as any,
       policy as any,
       undefined,
       notifications as any,

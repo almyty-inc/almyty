@@ -43,6 +43,17 @@ describe('PromotedSkillsTab', () => {
 
     expect(await screen.findByText(/No promoted skills yet/)).toBeInTheDocument()
   })
+
+  // A failed fetch used to look exactly like an agent with nothing promoted,
+  // and sent the user off to promote a run they had already promoted.
+  it('shows the retryable error state, not the empty state, when the list fails', async () => {
+    ;(promotedSkillsApi.list as any).mockRejectedValue(new Error('boom'))
+    renderWithProviders(<PromotedSkillsTab agentId="agent-1" />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load promoted skills")
+    expect(screen.queryByText(/No promoted skills yet/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Try again/ })).toBeInTheDocument()
+  })
 })
 
 describe('PromoteRunDialog', () => {

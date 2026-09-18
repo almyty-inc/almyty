@@ -13,7 +13,8 @@ import {
 } from '@nestjs/common';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { WorkspaceService, CreateWorkspaceInput } from './workspace.service';
+import { WorkspaceService } from './workspace.service';
+import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 
 @Controller('workspaces')
 @UseGuards(JwtAuthGuard)
@@ -21,7 +22,7 @@ export class WorkspaceController {
   constructor(private readonly service: WorkspaceService) {}
 
   @Post()
-  async create(@Request() req: any, @Body() body: CreateWorkspaceInput) {
+  async create(@Request() req: any, @Body() body: CreateWorkspaceDto) {
     const { ownerUserId, organizationId } = ctx(req);
     const data = await this.service.create(body, ownerUserId, organizationId);
     return { success: true, data };

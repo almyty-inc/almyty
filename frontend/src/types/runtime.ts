@@ -46,14 +46,6 @@ export interface AgentRun {
   updatedAt: string
 }
 
-export interface PaginatedAgentRuns {
-  data: AgentRun[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
 export interface PromotedSkill {
   id: string
   organizationId: string
@@ -109,14 +101,6 @@ export interface Memory {
   similarity?: number
 }
 
-export interface PaginatedMemories {
-  data: Memory[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
 // ── File Store ──
 
 export interface AgentFile {
@@ -135,34 +119,6 @@ export interface AgentFile {
   metadata?: Record<string, any>
   createdAt: string
   downloadUrl?: string
-}
-
-export interface PaginatedFiles {
-  data: AgentFile[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
-}
-
-// ── Interfaces (Deployment Channels) ──
-
-export type InterfaceType = 'chat_widget' | 'slack' | 'whatsapp' | 'discord' | 'email' | 'telegram' | 'webhook' | 'google_chat' | 'microsoft_teams' | 'signal' | 'matrix' | 'irc'
-export type InterfaceStatus = 'active' | 'inactive' | 'error'
-
-export interface AgentInterface {
-  id: string
-  agentId: string
-  organizationId: string
-  type: InterfaceType
-  name: string
-  status: InterfaceStatus
-  configuration: Record<string, any>
-  metadata?: Record<string, any>
-  totalMessages: number
-  lastMessageAt?: string
-  createdAt: string
-  updatedAt: string
 }
 
 // ── Comprehensive Audit Log ──
@@ -203,14 +159,6 @@ export interface AuditLogEntry {
   cost?: number
   metadata?: Record<string, any>
   createdAt: string
-}
-
-export interface PaginatedAuditLogs {
-  data: AuditLogEntry[]
-  total: number
-  page: number
-  limit: number
-  totalPages: number
 }
 
 // ── SDK Map Types ──

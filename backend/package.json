@@ -6,7 +6,7 @@
   "private": true,
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=24.0.0 <25"
+    "node": ">=26.0.0"
   },
   "scripts": {
     "build": "nest build",
@@ -25,6 +25,11 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:db": "RUN_DB_INTEGRATION=1 jest src/test/integration",
     "test:e2e:staging": "npx tsx test/e2e/agent-runtime.e2e.ts",
+    "verify:ee-di": "node scripts/ee-di-smoke.js",
+    "verify:boot": "npm run build:ee && node scripts/boot-probe.js",
+    "verify:openai-sdk": "npx tsx scripts/test-openai-sdk.ts",
+    "load-test": "npx tsx scripts/load-test.ts",
+    "seed:tool-templates": "npx tsx src/scripts/seed-public-tool-templates.ts",
     "typeorm": "typeorm-ts-node-commonjs",
     "typeorm:migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/config/database.config.ts",
     "typeorm:migration:run": "typeorm-ts-node-commonjs migration:run -d src/config/database.config.ts",
