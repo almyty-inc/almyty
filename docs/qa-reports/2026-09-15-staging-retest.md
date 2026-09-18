@@ -37,7 +37,7 @@ mergeability. Fresh backend, frontend, typecheck and audit checks passed.
 migrations, rolled out API and frontend, and passed its smoke checks. API readiness
 was 2/2. No production deployment was made.
 
-## Confirmed remaining gap
+## Gap recorded September 15
 
 [Issue #621](https://github.com/almyty-inc/almyty/issues/621): Anthropic Messages
 inbound support is not connected to an HTTP controller. At `8ed062c3`, the
@@ -133,5 +133,64 @@ and Settings → Encryption each rendered the corresponding upgrade prompt.
 This verifies the unentitled path only; it does not test a paid configuration,
 audit delivery, or live KMS provisioning.
 
-Promotion #629 merged into staging at `b9b995b6`; its rollout and a fresh
-create/reload selection check remain to be verified.
+Promotion #629 merged into staging at `b9b995b6`; at the end of the September 17
+session, its rollout and fresh create/reload check were still unverified.
+
+## September 18 deployed verification
+
+Staging is now `c3086d07541d436a5088b89104b34aee782d6929` (#643), which includes
+the organization-selection fix from #628/#629 and the first runtime wiring
+patch #631. [Image build 35250558320](https://github.com/almyty-inc/almyty/actions/runs/35250558320)
+succeeded. [Infrastructure run 35251321775](https://github.com/almyty-inc/infra/actions/runs/35251321775)
+explicitly targeted staging, completed migrations, rolled out API and frontend,
+and passed smoke checks. This report does not certify the separate uncommitted
+runtime changes described by the implementing peer on September 18.
+
+### Organization-selection regression: PASS
+
+Created a fresh `QA Reload Verify 20260918` organization using only its name.
+It became current. Immediately navigated the browser to the same organizations
+URL (a full document reload, not an SPA route transition); after authentication
+and membership hydration settled, the new organization remained selected and
+present in the list. No profile refresh or manual organization switch was
+performed between creation and reload.
+[Post-reload evidence](2026-09-18-org-selection-after-reload.png).
+This completes the previously pending live check for #628/#629; the
+revoked-membership fallback remains covered by the automated regression tests.
+
+### Hosted chat: PASS for the tested turn
+
+A new conversation answered the product/account-context question and identified
+itself as an unconnected customer-support demo without account access.
+No busy/no-response error occurred in this turn.
+[Reply evidence](2026-09-18-chat-reply.png).
+This is a functional smoke check, not a load, provider-matrix, or legal-quality test.
+
+### Role wiring: improved failure path, successful model run still unverified
+
+The existing disposable `QA Strategy Runtime 20260915` agent retained its
+`principal` role, single-call strategy and enabled orchestrator. Preview now
+reports **no models are registered for this organization**, with a suggestion
+to add or pin a model, instead of **routing is not available on this install**.
+[Preview evidence](2026-09-18-role-preview.png).
+
+Activated only this test agent and invoked it once through the UI. The run at
+11:30:03 Europe/Berlin on September 18 failed with **Role 'principal' could not
+be filled: no models are registered for this organization**. This replaces the
+September 17 false claim that the visible role was undefined and confirms the
+execution path reaches role resolution. It does not prove a successful pinned
+or routed model run, nor orchestration decisions with a working decider model.
+The agent was deactivated again after this check; no schedule or provider
+credential was added. [Invocation evidence](2026-09-18-role-invocation.png).
+Issue #632 remains open for the remaining acceptance checks.
+
+### Compatibility follow-up remains open
+
+Issue #621 is still open. On the deployed revision, the node executor builds
+messages from configured prompt templates, forwards `config.toolIds`, and does
+not consume the compatibility controller's input tool definitions, tool choice,
+or conversation history. Its output is reduced to message content. A controller
+test with a mocked engine cannot establish the provider round trip. The peer
+owns the in-flight executor/compatibility fixes; no duplicate runtime edit was
+made in this QA pass. No authenticated Anthropic SDK/tool-loop success is
+claimed here.
