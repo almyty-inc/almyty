@@ -204,6 +204,14 @@ export class AlmytyProxy {
   // These let LLMs control the almyty platform itself — create APIs,
   // tools, gateways, agents — not just call existing tools.
 
+  /**
+   * The REST leg, for the management tools. Same timeout discipline as the
+   * JSON-RPC leg: a hung backend must not hold a tool call open forever, and
+   * an abort is reported as a timeout rather than as a bare AbortError.
+   *
+   * almyty answers an error as `{ success: false, message }`, so that is what
+   * is read first; the nested `error.message` shape is the fallback.
+   */
   private async rest(method: string, path: string, body?: object): Promise<any> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.toolTimeoutMs);
@@ -218,8 +226,16 @@ export class AlmytyProxy {
         signal: controller.signal,
       });
       const data: any = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data?.error?.message || `${resp.status}`);
+      if (!resp.ok) {
+        const detail = data?.message || data?.error?.message || data?.error || '';
+        throw new Error(`${method} ${path} failed (${resp.status})${detail ? `: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}` : ''}`);
+      }
       return data;
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new Error(`almyty ${method} ${path} timed out after ${Math.round(this.toolTimeoutMs / 1000)}s`);
+      }
+      throw err;
     } finally {
       clearTimeout(timer);
     }
