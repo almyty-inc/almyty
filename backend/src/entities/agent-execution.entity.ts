@@ -60,6 +60,20 @@ export class AgentExecution {
   @Column({ default: 0 })
   totalTokens: number;
 
+  /**
+   * The prompt/completion split of totalTokens, summed over the run's llm
+   * nodes. Recorded because the OpenAI-compatible route has to answer with
+   * prompt_tokens/completion_tokens and had nothing but zeros to give:
+   * providers return the split and every layer above discarded it. Nodes
+   * without a split (tool, transform) contribute to totalTokens only, so
+   * these two sum to at most totalTokens rather than exactly to it.
+   */
+  @Column({ default: 0 })
+  inputTokens: number;
+
+  @Column({ default: 0 })
+  outputTokens: number;
+
   @Column({ type: 'text', nullable: true })
   error: string;
 
