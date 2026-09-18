@@ -16,6 +16,7 @@ import { LlmModelsHelper } from '../llm-providers/llm-models.helper';
 import { EndpointProviderHelper } from '../llm-providers/endpoint-provider.helper';
 import { PriceFeedService } from './pricing/price-feed.service';
 import { ModelRouterService } from './routing/model-router.service';
+import { isUniqueViolation } from '../../common/utils/unique-violation';
 
 /** Override as the API accepts it; currency defaults to USD when omitted. */
 export type ModelPricingInput = Omit<ModelPricing, 'currency'> & { currency?: string };
@@ -181,7 +182,22 @@ export class ModelCatalogService {
       metadata: input.metadata ?? null,
     });
     this.applyFeedPrice(card);
-    const saved = await this.models.save(card);
+    let saved: Model;
+    try {
+      saved = await this.models.save(card);
+    } catch (err: any) {
+      // The duplicate check above is a read; a second POST for the same
+      // card can land between it and this insert. The unique indexes
+      // (models_org_provider_vendor_uq for a provider-backed card,
+      // models_org_name_endpoint_uq for an endpoint-only one) catch it,
+      // and the caller gets the same MODEL_EXISTS it would have got had
+      // its read seen the other row.
+      if (!isUniqueViolation(err)) throw err;
+      throw new BadRequestException({
+        code: 'MODEL_EXISTS',
+        message: `A model for ${input.vendorModelId} already exists`,
+      });
+    }
     this.audit(saved, AuditAction.MODEL_REGISTERED, userId, { providerId: saved.providerId, endpoint: Boolean(saved.endpointRef?.url) });
     return saved;
   }
@@ -271,7 +287,7 @@ export class ModelCatalogService {
         // sweep covers the same provider is the common case, and the
         // in-process dedup guard does not span the two call sites (or
         // two pods). The row exists, which is all we wanted.
-        if (err?.code !== '23505') throw err;
+        if (!isUniqueViolation(err)) throw err;
         skipped++;
       }
     }

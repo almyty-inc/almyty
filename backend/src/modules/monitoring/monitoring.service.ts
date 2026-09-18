@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
 import * as crypto from 'crypto';
+import { hostname } from 'os';
 import { EventEmitter } from 'events';
 
 import { UsageMetric } from '../../entities/usage-metric.entity';
@@ -11,11 +12,17 @@ import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { Api, ApiStatus } from '../../entities/api.entity';
 import { Organization } from '../../entities/organization.entity';
 import { MonitoringRedisStatsHelper } from './monitoring-redis-stats.helper';
-import { DEFAULT_ALERT_RULES } from './default-alert-rules';
+import { DEFAULT_ALERT_RULES, DefaultAlertRule } from './default-alert-rules';
 import { formatPrometheusMetrics, computeSystemHealth } from './monitoring-prometheus';
 
 export interface SystemMetrics {
   timestamp: string;
+  /**
+   * The replica that took this sample. The `system` block below is one
+   * process's memory, CPU and uptime, so a sample without a name for
+   * that process is not interpretable in a multi-replica deployment.
+   */
+  instance: string;
   system: {
     uptime: number;
     memoryUsage: NodeJS.MemoryUsage;
@@ -119,6 +126,24 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
   private metricsInterval?: NodeJS.Timeout;
   private alertsInterval?: NodeJS.Timeout;
 
+  private static readonly METRICS_INTERVAL_MS = 15_000;
+  /**
+   * Just under the interval, so a replica that dies holding the lease
+   * costs one sample rather than stalling collection: the next tick is
+   * contested again and whoever wins takes over.
+   */
+  private static readonly COLLECT_LOCK_TTL_SECONDS = 13;
+  private static readonly COLLECT_LOCK_KEY = 'metrics:collect:lock';
+  private static readonly ALERT_INDEX_KEY = 'monitoring:alerts:active';
+
+  /**
+   * Which process this is. Every replica arms the collection timer but
+   * only the lease holder samples, and the `system` block it writes is
+   * that process's own memory and CPU — so each sample records whose.
+   */
+  private readonly instanceId =
+    process.env.POD_NAME || process.env.HOSTNAME || `${hostname()}:${process.pid}`;
+
   constructor(
     @InjectRepository(UsageMetric)
     private usageMetricRepository: Repository<UsageMetric>,
@@ -165,16 +190,46 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
   private startMetricsCollection(): void {
     this.metricsInterval = setInterval(async () => {
       try {
-        const metrics = await this.collectSystemMetrics();
-        await this.storeMetrics(metrics);
-        this.emit('metricsCollected', metrics);
+        await this.collectOnce();
       } catch (error) {
         this.logger.error(`Failed to collect metrics: ${error.message}`);
       }
-    }, 15000); // Every 15 seconds
+    }, MonitoringService.METRICS_INTERVAL_MS);
     // .unref() so the metrics poll doesn't keep the event loop
     // alive during graceful shutdown or in test runs.
     this.metricsInterval.unref?.();
+  }
+
+  /**
+   * One collection window, taken by whichever replica wins the lease.
+   *
+   * The sample lands in shared Redis keys: `metrics:latest`, plus a
+   * `metrics:history` list trimmed to 1440 entries. Every replica arms
+   * the timer, so unleased, N replicas pushed N samples per window —
+   * the "24 hours at 15-second resolution" the history promises was
+   * really 24/N hours, and `metrics:latest` was whichever pod wrote
+   * last. One sampler per window makes the series mean what it says,
+   * and cuts the per-tick count queries from N to 1.
+   *
+   * Returns null when another replica holds the window.
+   */
+  async collectOnce(): Promise<SystemMetrics | null> {
+    const acquired = await this.redis.set(
+      MonitoringService.COLLECT_LOCK_KEY,
+      this.instanceId,
+      'EX',
+      MonitoringService.COLLECT_LOCK_TTL_SECONDS,
+      'NX',
+    );
+    if (acquired !== 'OK') {
+      this.logger.debug('Metrics collection skipped — this window belongs to another replica');
+      return null;
+    }
+
+    const metrics = await this.collectSystemMetrics();
+    await this.storeMetrics(metrics);
+    this.emit('metricsCollected', metrics);
+    return metrics;
   }
 
   private async collectSystemMetrics(): Promise<SystemMetrics> {
@@ -204,6 +259,7 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
 
     const metrics: SystemMetrics = {
       timestamp: new Date().toISOString(),
+      instance: this.instanceId,
       system: {
         uptime: process.uptime(),
         memoryUsage,
@@ -338,7 +394,24 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     // POST /monitoring/alerts/:alertId/resolve (see controller) so a
     // weak id directly feeds cross-tenant resolve attacks.
     const alertId = `alert_${crypto.randomBytes(16).toString('hex')}`;
-    
+
+    // One alert per rule per cooldown, across every replica.
+    //
+    // The cooldown the caller checked lives in `rule.lastTriggered` on a
+    // per-process Map, while the metrics it was evaluated against come
+    // from shared Redis — so every replica saw the same breach, none saw
+    // the others' cooldown, and one breach produced N alerts with N
+    // different ids. This claim is the real cooldown: whoever sets the
+    // key mints the alert, everyone else stands down.
+    const cooldownSeconds = Math.max(1, Math.round((rule.cooldownMinutes || 0) * 60));
+    const claimed = await this.claimAlertCooldown(rule.id, alertId, cooldownSeconds);
+    if (!claimed) {
+      this.logger.debug(
+        `Alert for rule ${rule.id} skipped — another replica is inside its cooldown`,
+      );
+      return;
+    }
+
     const alert: Alert = {
       id: alertId,
       ruleId: rule.id,
@@ -356,13 +429,16 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     };
 
     this.activeAlerts.set(alertId, alert);
-    
-    // Update rule last triggered
+
+    // Local cooldown cache, so the common case short-circuits before
+    // the round trip above. The Redis claim is the authority.
     rule.lastTriggered = new Date().toISOString();
     this.alertRules.set(rule.id, rule);
 
-    // Store alert in Redis
+    // Store alert in Redis, and index it so the replicas that did not
+    // mint it can still list and resolve it.
     await this.redis.setex(`alert:${alertId}`, 86400, JSON.stringify(alert));
+    await this.indexAlert(alertId);
 
     // Emit alert event
     this.emit('alert', alert);
@@ -370,14 +446,99 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     this.logger.warn(`Alert triggered: ${rule.name} (${rule.severity})`);
   }
 
+  /**
+   * Take the window for one rule's alert. Returns false when another
+   * replica already alerted inside the cooldown.
+   *
+   * Redis being unreachable must not silence alerting altogether, so a
+   * failed claim falls back to this process's own cooldown — which is
+   * the pre-lease behaviour, and the best available when the only shared
+   * state is down.
+   */
+  private async claimAlertCooldown(
+    ruleId: string,
+    alertId: string,
+    cooldownSeconds: number,
+  ): Promise<boolean> {
+    try {
+      const claimed = await this.redis.set(
+        `monitoring:alert-cooldown:${ruleId}`,
+        alertId,
+        'EX',
+        cooldownSeconds,
+        'NX',
+      );
+      return claimed === 'OK';
+    } catch (error: any) {
+      this.logger.warn(
+        `Alert cooldown claim for rule ${ruleId} could not be taken (${error?.message ?? error}); ` +
+          `falling back to this replica's own cooldown`,
+      );
+      return true;
+    }
+  }
+
+  /** Add an alert to the shared index of unresolved alerts. */
+  private async indexAlert(alertId: string): Promise<void> {
+    try {
+      await this.redis.sadd(MonitoringService.ALERT_INDEX_KEY, alertId);
+    } catch (error: any) {
+      this.logger.warn(`Failed to index alert ${alertId}: ${error?.message ?? error}`);
+    }
+  }
+
+  /**
+   * The unresolved alerts recorded in Redis by any replica. Errors are
+   * swallowed: a listing that is missing the shared half is still more
+   * useful than a 500, and the caller merges in what it holds locally.
+   */
+  private async indexedAlerts(): Promise<Alert[]> {
+    try {
+      const ids: string[] = (await this.redis.smembers(MonitoringService.ALERT_INDEX_KEY)) ?? [];
+      if (ids.length === 0) return [];
+      const raw: (string | null)[] = (await this.redis.mget(...ids.map((id) => `alert:${id}`))) ?? [];
+      const alerts: Alert[] = [];
+      const expired: string[] = [];
+      ids.forEach((id, i) => {
+        const payload = raw[i];
+        // The alert key has a 24h TTL and the index does not, so an
+        // entry can outlive its payload. Drop it rather than carrying
+        // an id nothing can be read for.
+        if (!payload) { expired.push(id); return; }
+        try { alerts.push(JSON.parse(payload)); } catch { expired.push(id); }
+      });
+      if (expired.length) {
+        await this.redis.srem(MonitoringService.ALERT_INDEX_KEY, ...expired).catch(() => undefined);
+      }
+      return alerts;
+    } catch (error: any) {
+      this.logger.warn(`Failed to read the shared alert index: ${error?.message ?? error}`);
+      return [];
+    }
+  }
+
   // Setup Default Alert Rules
   private async setupDefaultAlertRules(): Promise<void> {
     for (const ruleData of DEFAULT_ALERT_RULES) {
-      const ruleId = `rule_${crypto.randomBytes(16).toString('hex')}`;
+      const ruleId = MonitoringService.defaultRuleId(ruleData);
       const rule: AlertRule = { ...ruleData, id: ruleId };
       this.alertRules.set(ruleId, rule);
     }
     this.logger.log(`Setup ${DEFAULT_ALERT_RULES.length} default alert rules`);
+  }
+
+  /**
+   * A default rule's id is derived from the rule, not minted per boot.
+   * Every replica seeds the same list, so a random id per process gave
+   * the same rule N identities and nothing keyed on a rule id — the
+   * cross-replica cooldown above first of all — could agree.
+   */
+  private static defaultRuleId(rule: DefaultAlertRule): string {
+    const fingerprint = crypto
+      .createHash('sha256')
+      .update(`${rule.name}|${rule.metric}|${rule.condition}|${JSON.stringify(rule.threshold)}`)
+      .digest('hex');
+    return `rule_${fingerprint.slice(0, 32)}`;
   }
 
   private async loadAlertRules(): Promise<void> {
@@ -418,10 +579,22 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     }
   }
 
+  /**
+   * Every unresolved alert, not just the ones this process minted.
+   *
+   * The in-process map is the local half; the shared index is what the
+   * other replicas wrote. Without the union, which alerts a request saw
+   * depended on which pod answered it.
+   */
   async getActiveAlerts(organizationId?: string): Promise<Alert[]> {
-    const alerts = Array.from(this.activeAlerts.values())
-      .filter(alert => !alert.isResolved);
-    
+    const byId = new Map<string, Alert>();
+    for (const alert of await this.indexedAlerts()) byId.set(alert.id, alert);
+    // Local last: a resolve this process just made has not necessarily
+    // been read back yet, and the fresher copy should win.
+    for (const alert of this.activeAlerts.values()) byId.set(alert.id, alert);
+
+    const alerts = Array.from(byId.values()).filter(alert => !alert.isResolved);
+
     if (organizationId) {
       return alerts.filter(alert => 
         alert.organizationId === organizationId || !alert.organizationId
@@ -444,7 +617,10 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
      */
     callerOrganizationId: string | null,
   ): Promise<boolean> {
-    const alert = this.activeAlerts.get(alertId);
+    // Read through to Redis when this process did not mint the alert.
+    // The map alone meant resolving an alert worked or 404'd depending
+    // on which replica the request happened to reach.
+    const alert = this.activeAlerts.get(alertId) ?? (await this.readAlert(alertId));
     if (!alert) {
       return false;
     }
@@ -464,12 +640,33 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
     alert.isResolved = true;
     alert.resolvedAt = new Date().toISOString();
     alert.resolvedBy = resolvedBy;
+    this.activeAlerts.set(alertId, alert);
 
     // Update in Redis
     await this.redis.setex(`alert:${alertId}`, 86400, JSON.stringify(alert));
+    try {
+      await this.redis.srem(MonitoringService.ALERT_INDEX_KEY, alertId);
+    } catch (error: any) {
+      this.logger.warn(`Failed to de-index resolved alert ${alertId}: ${error?.message ?? error}`);
+    }
 
     this.logger.log(`Alert resolved: ${alertId} by ${resolvedBy}`);
     return true;
+  }
+
+  /** One alert as another replica stored it, or null. */
+  private async readAlert(alertId: string): Promise<Alert | null> {
+    try {
+      const payload = await this.redis.get(`alert:${alertId}`);
+      if (!payload) return null;
+      const alert = JSON.parse(payload);
+      // Guard against reading something that is not an alert: the key
+      // namespace is ours, but a parse result without an id would make
+      // the cross-tenant check below meaningless.
+      return alert && typeof alert === 'object' && alert.id === alertId ? alert : null;
+    } catch {
+      return null;
+    }
   }
 
   async getSystemHealth() {

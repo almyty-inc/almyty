@@ -12,6 +12,10 @@ import { tap, catchError } from 'rxjs/operators';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric, MetricType, MetricStatus } from '../../entities/usage-metric.entity';
 import { getProtocolContext } from './protocol-context';
+import { getRequestId, updateRequestContext } from '../request-context';
+
+/** Characters of a request/response body kept in the request log. */
+export const REQUEST_LOG_BODY_LIMIT = 10000;
 
 @Injectable()
 export class RequestLoggingInterceptor implements NestInterceptor {
@@ -84,6 +88,12 @@ export class RequestLoggingInterceptor implements NestInterceptor {
         request.user?.currentOrganizationId || protocolContext?.organizationId || null;
       const protocol = protocolContext?.protocol || this.detectProtocol(path);
 
+      // Feed what the handler resolved back into the correlation scope.
+      // The middleware could only mint the id; who the caller is and
+      // which gateway answered are known only now, and every log line
+      // emitted for the rest of this request picks them up.
+      updateRequestContext({ organizationId, userId, gatewayId });
+
       // Create request log
       const log = new RequestLog();
       log.method = request.method;
@@ -93,20 +103,42 @@ export class RequestLoggingInterceptor implements NestInterceptor {
       log.statusCode = statusCode;
       log.responseTime = responseTime;
       log.gatewayId = gatewayId;
+      log.organizationId = organizationId;
       log.toolId = toolId;
       log.userId = userId;
+      // Serialize each body exactly once. This used to run `JSON.stringify`
+      // three times per body — `truncateBody` once and `estimateSize` twice
+      // (the request log's `*Size` columns and the metric's identical
+      // `metadata.*Size`) — so a 10 MB tool result cost six full
+      // serialization passes on the response path, on the event loop, before
+      // being truncated to 10,000 characters anyway.
+      const requestPayload = this.serializeOnce(request.body);
+      const responsePayload = this.serializeOnce(responseBody);
+
       log.requestHeaders = this.sanitizeHeaders(request.headers);
-      log.requestBody = this.truncateBody(request.body);
-      log.responseBody = this.truncateBody(responseBody);
-      log.errorMessage = error?.message || null;
-      log.requestId = request.headers?.['x-request-id'] || null;
-      log.requestSize = this.estimateSize(request.body);
-      log.responseSize = this.estimateSize(responseBody);
+      log.requestBody = requestPayload.truncated;
+      log.responseBody = responsePayload.truncated;
+      log.errorMessage = this.errorMessageOf(error);
+      log.errorCode = this.errorCodeOf(error);
+      // The minted correlation id, not whatever the caller happened to
+      // send. The header is still honoured upstream (the middleware
+      // adopts a well-formed inbound `x-request-id`), so this is the same
+      // value the caller sees in `X-Request-Id` either way — but it is
+      // never null now, which is what made this column unjoinable.
+      log.requestId = getRequestId() || request.requestId || null;
+      log.requestSize = requestPayload.size;
+      log.responseSize = responsePayload.size;
       log.timestamp = new Date();
       log.metadata = {
         protocol,
         organizationId,
         controller: this.extractController(path),
+        // Which gateway auth config refused, when one did. Diagnostics
+        // the resolver attached to the exception rather than to its
+        // payload: this belongs in our record, not in the answer to an
+        // unauthenticated caller.
+        ...(error?.authDiagnostics ? { auth: error.authDiagnostics } : {}),
+        ...(this.rateLimitBucketOf(error) ? { rateLimit: this.rateLimitBucketOf(error) } : {}),
       };
 
       // Save async — don't block the response
@@ -132,17 +164,13 @@ export class RequestLoggingInterceptor implements NestInterceptor {
         method: request.method,
         protocol,
         statusCode,
-        responseSize: this.estimateSize(responseBody),
-        requestSize: this.estimateSize(request.body),
+        responseSize: responsePayload.size,
+        requestSize: requestPayload.size,
         userAgent: request.headers?.['user-agent'],
         ipAddress: request.ip,
       };
 
-      this.usageMetricRepository.save(metric).catch(err => {
-        this.logger.warn(`Failed to save usage metric: ${err.message}`);
-      });
-
-      // Record response time metric separately
+      // Record response time alongside the request count.
       const timeMetric = new UsageMetric();
       timeMetric.type = MetricType.RESPONSE_TIME;
       timeMetric.value = responseTime;
@@ -153,12 +181,64 @@ export class RequestLoggingInterceptor implements NestInterceptor {
       timeMetric.organizationId = organizationId;
       timeMetric.timestamp = new Date();
 
-      this.usageMetricRepository.save(timeMetric).catch(err => {
-        this.logger.warn(`Failed to save response time metric: ${err.message}`);
+      // One round trip for both metrics rather than two. Neither depends on
+      // the other and they land in the same table, so TypeORM batches them
+      // into a single multi-row INSERT.
+      this.usageMetricRepository.save([metric, timeMetric]).catch(err => {
+        this.logger.warn(`Failed to save usage metrics: ${err.message}`);
       });
     } catch (err) {
       this.logger.warn(`Request logging error: ${err.message}`);
     }
+  }
+
+  /**
+   * The human-readable reason a request was refused.
+   *
+   * `error.message` alone is not it: Nest derives an HttpException's
+   * message from its payload and falls back to the class name when the
+   * payload has no `message` key, so a payload like
+   * `{ error, errorCode }` produced the literal string
+   * "Http Exception" — which is what this column held for every refused
+   * gateway request. Read the payload first and only then fall back.
+   */
+  private errorMessageOf(error: any): string | null {
+    if (!error) return null;
+    const payload =
+      typeof error.getResponse === 'function' ? error.getResponse() : undefined;
+    if (typeof payload === 'string' && payload.trim()) return payload;
+    if (payload && typeof payload === 'object') {
+      const candidate = (payload as any).message ?? (payload as any).error;
+      if (Array.isArray(candidate) && candidate.length) return candidate.join('; ');
+      if (typeof candidate === 'string' && candidate.trim()) return candidate;
+    }
+    const message = error.message;
+    if (typeof message === 'string' && message.trim() && message !== 'Http Exception') {
+      return message;
+    }
+    return message || null;
+  }
+
+  /** Stable refusal code, from the payload or from the exception itself. */
+  private errorCodeOf(error: any): string | null {
+    if (!error) return null;
+    const payload =
+      typeof error.getResponse === 'function' ? error.getResponse() : undefined;
+    const fromPayload =
+      payload && typeof payload === 'object'
+        ? (payload as any).errorCode ?? (payload as any).code
+        : undefined;
+    const raw = fromPayload ?? error.errorCode ?? error.code;
+    return typeof raw === 'string' && raw.trim() ? raw.slice(0, 64) : null;
+  }
+
+  /** The rate-limit bucket that tripped, when the refusal was a 429. */
+  private rateLimitBucketOf(error: any): Record<string, any> | null {
+    const payload =
+      error && typeof error.getResponse === 'function' ? error.getResponse() : undefined;
+    if (!payload || typeof payload !== 'object') return null;
+    const bucket = (payload as any).bucket;
+    return bucket && typeof bucket === 'object' ? bucket : null;
   }
 
   private sanitizeHeaders(headers: Record<string, any>): Record<string, any> {
@@ -172,29 +252,30 @@ export class RequestLoggingInterceptor implements NestInterceptor {
     return sanitized;
   }
 
-  private truncateBody(body: any): string | null {
-    if (!body) return null;
-    let str: string;
-    try {
-      str = typeof body === 'string' ? body : JSON.stringify(body);
-    } catch {
-      return '[unserializable]';
-    }
-    if (str === undefined || str === null) return null;
-    if (str.length > 10000) return str.substring(0, 10000) + '... [truncated]';
-    return str;
-  }
-
-  private estimateSize(data: any): number {
-    if (!data) return 0;
+  /**
+   * One serialization pass per body, yielding both things the log needs:
+   * the truncated text for the `*Body` column and the byte size for the
+   * `*Size` column (and for the metric metadata, which records the same
+   * number). Previously `truncateBody` and `estimateSize` each did their own
+   * `JSON.stringify`, and `estimateSize` was called twice per body.
+   */
+  private serializeOnce(data: any): { truncated: string | null; size: number } {
+    if (!data) return { truncated: null, size: 0 };
     let str: string;
     try {
       str = typeof data === 'string' ? data : JSON.stringify(data);
     } catch {
-      return 0;
+      return { truncated: '[unserializable]', size: 0 };
     }
-    if (!str) return 0;
-    return Buffer.byteLength(str, 'utf8');
+    if (str === undefined || str === null || str === '') {
+      return { truncated: str === '' ? '' : null, size: 0 };
+    }
+    const size = Buffer.byteLength(str, 'utf8');
+    const truncated =
+      str.length > REQUEST_LOG_BODY_LIMIT
+        ? str.substring(0, REQUEST_LOG_BODY_LIMIT) + '... [truncated]'
+        : str;
+    return { truncated, size };
   }
 
   private extractToolId(path: string): string | null {

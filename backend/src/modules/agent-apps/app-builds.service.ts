@@ -113,17 +113,34 @@ export class AppBuildsService {
       }),
     );
 
-    await this.queue.add(
-      { buildId: build.id, macPackaging: dto.macPackaging ?? 'zip' },
-      {
-        // A failed build is rarely fixed by running it again: the usual
-        // causes are a bad certificate or a missing tool. Retrying would
-        // burn minutes of build time to reach the same answer.
-        attempts: 1,
-        removeOnComplete: true,
-        removeOnFail: true,
-      },
-    );
+    try {
+      await this.queue.add(
+        { buildId: build.id, macPackaging: dto.macPackaging ?? 'zip' },
+        {
+          // A failed build is rarely fixed by running it again: the usual
+          // causes are a bad certificate or a missing tool. Retrying would
+          // burn minutes of build time to reach the same answer.
+          attempts: 1,
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
+    } catch (error: any) {
+      // The row has to exist before the job, because the job is
+      // addressed by its id — so if the enqueue fails, the row is left
+      // QUEUED with nothing to run it and nothing to reap it (the
+      // artifact sweep only touches SUCCEEDED builds). Fail it here so
+      // it stops claiming to be waiting.
+      build.status = BuildStatus.FAILED;
+      build.error = `Could not be queued: ${error?.message ?? error}`;
+      build.finishedAt = new Date();
+      await this.buildRepository.save(build).catch((saveErr: any) =>
+        this.logger.error(
+          `Build ${build.id} could not be queued and could not be marked failed: ${saveErr?.message ?? saveErr}`,
+        ),
+      );
+      throw error;
+    }
 
     return build;
   }
