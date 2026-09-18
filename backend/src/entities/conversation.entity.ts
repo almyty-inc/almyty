@@ -28,6 +28,7 @@ export enum ConversationStatus {
 @Index(['gatewayId', 'status'])
 @Index(['organizationId', 'createdAt'])
 @Index(['userId', 'createdAt'])
+@Index('IDX_conversations_parentConversationId', ['parentConversationId'])
 export class Conversation {
   @PrimaryGeneratedColumn('uuid')
   id: string;

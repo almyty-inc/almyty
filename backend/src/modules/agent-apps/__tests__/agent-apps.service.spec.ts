@@ -57,6 +57,7 @@ describe('AgentAppsService', () => {
     };
     gateways = {
       upsertForDistribution: jest.fn(async () => ({ id: 'gw-1' })),
+      activateGateway: jest.fn(async () => ({ id: 'gw-1', status: 'active' })),
       deactivateGateway: jest.fn(async () => ({ id: 'gw-1' })),
     };
     executionRepository = { findOne: jest.fn(async () => null) };
@@ -364,9 +365,42 @@ describe('AgentAppsService', () => {
         expect.objectContaining({ endpoint: '/apps/acme-support/slack', agentId: 'agent-1' }),
         ORG,
         'user-1',
+        { activate: false },
       );
       expect(result.gatewayId).toBe('gw-1');
       expect(result.status).toBe(DistributionStatus.LIVE);
+    });
+
+    it('records the gateway on the distribution before the surface answers', async () => {
+      // The gateway used to be created ACTIVE and the distribution row
+      // saved afterwards, so a pod evicted between the two left a live
+      // Slack surface the product had no gatewayId for -- and
+      // unpublishDistribution resolves the gateway through that id.
+      // The order is the fix, so the order is what is asserted.
+      const order: string[] = [];
+      distributionRepository.findOne.mockResolvedValueOnce({
+        id: 'd-1',
+        appId: 'h-1',
+        configuration: SLACK_CREDS,
+      });
+      distributionRepository.save.mockImplementationOnce(async (d: any) => {
+        order.push(`save:${d.gatewayId}:${d.status}`);
+        return d;
+      });
+      gateways.activateGateway.mockImplementationOnce(async () => {
+        order.push('activate');
+        return { id: 'gw-1', status: 'active' };
+      });
+
+      await service.publishDistribution(ORG, 'acme-support', DistributionTarget.SLACK, 'user-1');
+
+      expect(gateways.upsertForDistribution).toHaveBeenCalledWith(
+        expect.anything(),
+        ORG,
+        'user-1',
+        { activate: false },
+      );
+      expect(order).toEqual([`save:gw-1:${DistributionStatus.LIVE}`, 'activate']);
     });
 
     it('gives the surface the product branding rather than a copy to keep in step', async () => {
@@ -420,6 +454,7 @@ describe('AgentAppsService', () => {
         expect.objectContaining({ agentId: 'agent-2' }),
         ORG,
         'user-1',
+        { activate: false },
       );
     });
 

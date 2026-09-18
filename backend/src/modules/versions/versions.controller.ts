@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Param,
+  Query,
   Request,
   UseGuards,
   HttpException,
@@ -41,11 +42,16 @@ export class VersionsController {
   async getVersions(
     @Param('entityType') entityType: string,
     @Param('entityId') entityId: string,
+    @Query('limit') limit: string,
+    @Query('offset') offset: string,
     @Request() req: any,
   ) {
     try {
       const orgId = this.requireOrg(req);
-      const versions = await this.versionsService.getVersions(entityType, entityId, orgId);
+      const versions = await this.versionsService.getVersions(entityType, entityId, orgId, {
+        limit: limit !== undefined ? parseInt(limit, 10) : undefined,
+        offset: offset !== undefined ? parseInt(offset, 10) : undefined,
+      });
       return { success: true, data: versions };
     } catch (error) {
       if (error instanceof HttpException) throw error;

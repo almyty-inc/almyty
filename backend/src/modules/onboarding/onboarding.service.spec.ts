@@ -195,4 +195,60 @@ describe('OnboardingService', () => {
       );
     });
   });
+
+  /**
+   * The checklist must not read every tenant's request logs.
+   *
+   * Both request_logs reads carried
+   * `(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)`,
+   * an OR across `gateways` and `request_logs` that no index can serve --
+   * and `firstSuccessfulCall` has no time bound at all, so the checklist
+   * on the dashboard scanned the whole table. `request_logs` has carried
+   * its own `organizationId` since 1750796000000-RequestLogOrganization,
+   * covered by IDX(organizationId, timestamp).
+   */
+  describe('request_logs org scope is index-shaped', () => {
+    const clausesFrom = (qb: any) => [
+      ...qb.where.mock.calls.map((c: any[]) => c[0]),
+      ...qb.andWhere.mock.calls.map((c: any[]) => c[0]),
+    ];
+
+    it('scopes both request-log reads on log.organizationId, with no gateway join', async () => {
+      stubEmpty();
+      const logQbs: any[] = [];
+      requestLogRepo.createQueryBuilder.mockImplementation(() => {
+        const qb = makeQb({ count: 0, one: null });
+        logQbs.push(qb);
+        return qb;
+      });
+
+      await service.getState(ORG, USER);
+
+      expect(logQbs.length).toBeGreaterThanOrEqual(2);
+      for (const qb of logQbs) {
+        const clauses = clausesFrom(qb);
+        expect(clauses).toContain('log.organizationId = :orgId');
+        expect(
+          clauses.some(
+            (c: string) =>
+              c.includes('gw.organizationId') || c.includes("metadata->>'organizationId'"),
+          ),
+        ).toBe(false);
+        expect(qb.leftJoin).not.toHaveBeenCalled();
+      }
+    });
+
+    it('binds the org id as a single parameter', async () => {
+      stubEmpty();
+      const qb = makeQb({ count: 0, one: null });
+      requestLogRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getState(ORG, USER);
+
+      expect(qb.where).toHaveBeenCalledWith('log.organizationId = :orgId', { orgId: ORG });
+      // `orgIdText`, the text-typed twin the OR predicate needed, is gone.
+      const params = qb.where.mock.calls.map((c: any[]) => c[1]);
+      expect(params.every((p: any) => !p || !('orgIdText' in p))).toBe(true);
+    });
+  });
 });

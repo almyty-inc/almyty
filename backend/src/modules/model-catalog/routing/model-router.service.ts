@@ -9,6 +9,7 @@ import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { RouteCandidate, RoutingPolicy, selectCandidates } from './model-router';
+import { getRequestContext } from '../../../common/request-context';
 
 /** Weight of a new sample in the p50 average. */
 const LATENCY_P50_ALPHA = 0.2;
@@ -225,9 +226,36 @@ export class ModelRouterService {
     }
   }
 
-  /** Fire-and-forget audit row: which card answered and why. */
-  recordRoute(organizationId: string, attribution: RouteAttribution, context?: { userId?: string; conversationId?: string }): void {
+  /**
+   * Fire-and-forget audit row: which card answered, why, and what it
+   * cost.
+   *
+   * The row used to carry a model and a rationale but no cost, no
+   * tokens, no run and no node — while `audit_logs` has had a `cost`
+   * column all along that this writer left null. So the one table that
+   * records a per-call model decision could not answer "spend by model
+   * last week", and a routed call could not be tied back to the run that
+   * made it. `runId`/`nodeId` come from the correlation scope rather than
+   * from a parameter: the engine opens that scope around the run and
+   * around each node, so this is correct at every call site instead of
+   * at the ones someone remembered to thread.
+   */
+  recordRoute(
+    organizationId: string,
+    attribution: RouteAttribution,
+    context?: {
+      userId?: string;
+      conversationId?: string;
+      cost?: number;
+      tokens?: number;
+      runId?: string;
+      nodeId?: string;
+    },
+  ): void {
     if (!this.auditLog) return;
+    const scope = getRequestContext();
+    const runId = context?.runId ?? scope?.runId ?? undefined;
+    const nodeId = context?.nodeId ?? scope?.nodeId ?? undefined;
     void this.auditLog
       .log({
         organizationId,
@@ -236,6 +264,9 @@ export class ModelRouterService {
         resourceType: AuditResource.MODEL,
         resourceId: attribution.modelId,
         resourceName: attribution.vendorModelId,
+        // The dedicated column, so spend-by-model is a SUM and not a
+        // json extraction.
+        ...(typeof context?.cost === 'number' ? { cost: context.cost } : {}),
         details: {
           modelVersionId: attribution.modelVersionId,
           providerId: attribution.providerId,
@@ -244,6 +275,11 @@ export class ModelRouterService {
           tried: attribution.tried,
           rejected: attribution.rejected.length,
           conversationId: context?.conversationId,
+          ...(typeof context?.cost === 'number' ? { cost: context.cost } : {}),
+          ...(typeof context?.tokens === 'number' ? { tokens: context.tokens } : {}),
+          ...(runId ? { runId } : {}),
+          ...(nodeId ? { nodeId } : {}),
+          ...(scope?.requestId ? { requestId: scope.requestId } : {}),
         },
       })
       .catch((err) => this.logger.warn(`route audit failed: ${err?.message ?? err}`));

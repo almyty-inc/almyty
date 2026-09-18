@@ -14,7 +14,9 @@ describe('MonitoringService', () => {
   beforeEach(async () => {
     mockRedis = {
       get: jest.fn(),
-      set: jest.fn(),
+      // The collection lease and the alert cooldown are both `SET NX`,
+      // and 'OK' is "this replica won the window".
+      set: jest.fn().mockResolvedValue('OK'),
       setex: jest.fn(),
       lpush: jest.fn(),
       ltrim: jest.fn(),
@@ -22,6 +24,10 @@ describe('MonitoringService', () => {
       del: jest.fn(),
       incr: jest.fn(),
       expire: jest.fn(),
+      sadd: jest.fn().mockResolvedValue(1),
+      srem: jest.fn().mockResolvedValue(1),
+      smembers: jest.fn().mockResolvedValue([]),
+      mget: jest.fn().mockResolvedValue([]),
       keys: jest.fn().mockResolvedValue([]),
       ping: jest.fn().mockResolvedValue('PONG'),
     };
@@ -74,7 +80,7 @@ describe('MonitoringService', () => {
   describe('getLatestMetrics', () => {
     it('should return parsed metrics from Redis', async () => {
       const mockMetrics: SystemMetrics = {
-        timestamp: '2024-01-01T00:00:00.000Z',
+        timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
         system: {
           uptime: 1000,
           memoryUsage: { rss: 100, heapTotal: 200, heapUsed: 150, external: 50, arrayBuffers: 10 },
@@ -134,7 +140,7 @@ describe('MonitoringService', () => {
 
   describe('getMetricsHistory', () => {
     it('should return parsed metrics array from Redis', async () => {
-      const mockMetric1 = { timestamp: '2024-01-01T00:00:00.000Z', system: { uptime: 1000 } } as any;
+      const mockMetric1 = { timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica', system: { uptime: 1000 } } as any;
       const mockMetric2 = { timestamp: '2024-01-01T00:00:15.000Z', system: { uptime: 1015 } } as any;
 
       mockRedis.lrange.mockResolvedValue([
@@ -386,7 +392,7 @@ describe('MonitoringService', () => {
 
     beforeEach(() => {
       mockMetrics = {
-        timestamp: '2024-01-01T00:00:00.000Z',
+        timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
         system: {
           uptime: 1000,
           memoryUsage: { rss: 100000000, heapTotal: 200000000, heapUsed: 150000000, external: 50000000, arrayBuffers: 10000000 },
@@ -931,7 +937,7 @@ describe('MonitoringService', () => {
     describe('storeMetrics', () => {
       it('should store metrics in Redis with TTL', async () => {
         const metrics: SystemMetrics = {
-          timestamp: '2024-01-01T00:00:00.000Z',
+          timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
           system: {
             uptime: 1000,
             memoryUsage: { rss: 100, heapTotal: 200, heapUsed: 150, external: 50, arrayBuffers: 10 },
@@ -1004,7 +1010,7 @@ describe('MonitoringService', () => {
         service['alertRules'].set('rule-1', inactiveRule);
 
         mockRedis.get.mockResolvedValue(JSON.stringify({
-          timestamp: '2024-01-01T00:00:00.000Z',
+          timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
           system: { uptime: 1000, memoryUsage: {}, cpuUsage: {}, loadAverage: [] },
           application: { activeConnections: {}, requests: {}, tools: {}, apis: {} },
           protocols: {},
@@ -1035,7 +1041,7 @@ describe('MonitoringService', () => {
         service['alertRules'].set('rule-1', rule);
 
         mockRedis.get.mockResolvedValue(JSON.stringify({
-          timestamp: '2024-01-01T00:00:00.000Z',
+          timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
           system: { uptime: 1000, memoryUsage: {}, cpuUsage: {}, loadAverage: [] },
           application: { activeConnections: {}, requests: {}, tools: {}, apis: {} },
           protocols: {},
@@ -1065,7 +1071,7 @@ describe('MonitoringService', () => {
         service['alertRules'].set('rule-1', rule);
 
         mockRedis.get.mockResolvedValue(JSON.stringify({
-          timestamp: '2024-01-01T00:00:00.000Z',
+          timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
           system: { uptime: 1000, memoryUsage: {}, cpuUsage: {}, loadAverage: [] },
           application: { activeConnections: {}, requests: {}, tools: {}, apis: {} },
           protocols: {},
@@ -1149,7 +1155,7 @@ describe('MonitoringService', () => {
     describe('getPrometheusMetrics with real metrics', () => {
       it('should format metrics in Prometheus format', async () => {
         const mockMetrics: SystemMetrics = {
-          timestamp: '2024-01-01T00:00:00.000Z',
+          timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
           system: {
             uptime: 1000,
             memoryUsage: { rss: 100, heapTotal: 200, heapUsed: 150, external: 50, arrayBuffers: 10 },
@@ -1236,7 +1242,7 @@ describe('MonitoringService', () => {
 
       it('should evaluate alert condition with eq operator', async () => {
         const metrics: SystemMetrics = {
-          timestamp: '2024-01-01T00:00:00.000Z',
+          timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
           system: {
             uptime: 1000,
             memoryUsage: { rss: 100, heapTotal: 200, heapUsed: 150, external: 50, arrayBuffers: 10 },
@@ -1286,7 +1292,7 @@ describe('MonitoringService', () => {
 
       it('should evaluate alert condition with contains operator', async () => {
         const metrics: SystemMetrics = {
-          timestamp: '2024-01-01T00:00:00.000Z',
+          timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
           system: {
             uptime: 1000,
             memoryUsage: { rss: 100, heapTotal: 200, heapUsed: 150, external: 50, arrayBuffers: 10 },
@@ -1336,7 +1342,7 @@ describe('MonitoringService', () => {
 
       it('should return false for unknown condition operator', async () => {
         const metrics: SystemMetrics = {
-          timestamp: '2024-01-01T00:00:00.000Z',
+          timestamp: '2024-01-01T00:00:00.000Z', instance: 'test-replica',
           system: {
             uptime: 1000,
             memoryUsage: { rss: 100, heapTotal: 200, heapUsed: 150, external: 50, arrayBuffers: 10 },

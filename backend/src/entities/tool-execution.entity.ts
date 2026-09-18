@@ -37,6 +37,20 @@ export class ToolExecution {
   @Index()
   gatewayId: string | null;
 
+  /**
+   * The agent run this tool call belongs to, when it was made by a
+   * pipeline node rather than by a direct gateway or API call.
+   *
+   * Without it an `agent_runs` step and its `tool_executions` row could
+   * not be joined at all: "the agent said the lookup failed" had no path
+   * to the row holding the parameters, the upstream status and the error.
+   * Nullable because plenty of tool calls have no run (a gateway
+   * invocation, a manual test from the dashboard).
+   */
+  @Column('uuid', { nullable: true })
+  @Index()
+  runId: string | null;
+
   @Column('json')
   parameters: Record<string, any>;
 

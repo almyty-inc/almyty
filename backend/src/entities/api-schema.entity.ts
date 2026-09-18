@@ -24,7 +24,7 @@ export enum SchemaFormat {
 
 @Entity('api_schemas')
 @Index(['apiId'])
-@Index(['apiId', 'version'])
+@Index('api_schemas_api_version_uq', ['apiId', 'version'], { unique: true })
 export class ApiSchema {
   @PrimaryGeneratedColumn('uuid')
   id: string;

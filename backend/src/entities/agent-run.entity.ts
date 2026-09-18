@@ -28,6 +28,7 @@ export enum AgentMode {
 @Index(['agentId', 'createdAt'])
 @Index(['organizationId', 'createdAt'])
 @Index(['status'])
+@Index('IDX_agent_runs_conversationId', ['conversationId'])
 export class AgentRun {
   @PrimaryGeneratedColumn('uuid')
   id: string;
