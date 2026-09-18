@@ -102,8 +102,8 @@ export class ToolTemplate {
 
   /**
    * The tool this template was published from, kept for provenance.
-   * SET NULL on delete: deleting the source tool does not retract a
-   * template other organizations may already have installed.
+   * Deliberately not a foreign key: deleting the source tool must not
+   * retract a template other organizations may already have installed.
    */
   @Column({ type: 'uuid', nullable: true })
   sourceToolId: string | null;
