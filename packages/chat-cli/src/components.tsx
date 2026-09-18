@@ -3,6 +3,8 @@ import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import type { AgentInfo } from '@almyty/client';
 
+import { columns, estimateLines as estimateMessageLines, selectWindow } from './viewport.js';
+
 // ── Types ───────────────────────────────────────────────────────
 
 export interface Message {
@@ -115,60 +117,52 @@ export function boldify(text: string): React.ReactElement {
   return <>{parts}</>;
 }
 
-// ── Message window (manual scroll) ──────────────────────────────
+// ── Message window (bounded to the terminal) ────────────────────
 
+/**
+ * Re-exported so callers do not have to know the arithmetic moved.
+ * Takes a message rather than text, which is how it has always read.
+ */
 export function estimateLines(msg: Message, cols: number): number {
-  const textWidth = Math.max(cols - 10, 20);
-  const lines = msg.text.split('\n');
-  let total = 1; // margin
-  for (const line of lines) {
-    total += Math.max(1, Math.ceil(Math.max(line.length, 1) / textWidth));
-  }
-  return total;
+  return estimateMessageLines(msg.text, cols);
 }
 
-export function MessageWindow({ messages, loading, loadingLabel, maxRows, scrollOffset = 0 }: {
+export function MessageWindow({ messages, loading, loadingLabel, maxRows, scrollOffset = 0, streaming }: {
   messages: Message[];
   loading: boolean;
   loadingLabel: string;
   maxRows: number;
   scrollOffset?: number;
+  /** Assistant text arriving right now, drawn below the transcript. */
+  streaming?: string;
 }) {
-  const cols = process.stdout.columns || 80;
-  const available = Math.max(maxRows, 5);
-
-  // Calculate the end of the visible window (shifted by scrollOffset)
-  const endIdx = Math.max(0, messages.length - scrollOffset);
-
-  // Walk backwards from endIdx to find how many messages fit
-  let usedRows = loading && scrollOffset === 0 ? 2 : 0;
-  let startIdx = endIdx;
-
-  for (let i = endIdx - 1; i >= 0; i--) {
-    const est = estimateLines(messages[i], cols);
-    if (usedRows + est > available && i < endIdx - 1) break;
-    usedRows += est;
-    startIdx = i;
-  }
+  const cols = columns(process.stdout.columns);
+  const streamRows = streaming ? estimateMessageLines(streaming, cols) : 0;
+  const { startIdx, endIdx, hiddenBefore, hiddenAfter } = selectWindow(messages, {
+    rows: maxRows,
+    cols,
+    // The spinner and the text still arriving both need room.
+    reservedRows: (loading && scrollOffset === 0 ? 2 : 0) + streamRows,
+    scrollOffset,
+  });
 
   const visible = messages.slice(startIdx, endIdx);
-  const hasEarlier = startIdx > 0;
-  const hasLater = endIdx < messages.length;
 
   return (
     <Box flexDirection="column">
-      {hasEarlier && (
+      {hiddenBefore > 0 && (
         <Box paddingLeft={2}>
-          <Text dimColor>↑ {startIdx} earlier · scroll to see more</Text>
+          <Text dimColor>↑ {hiddenBefore} earlier · scroll to see more</Text>
         </Box>
       )}
       {visible.map((msg, i) => (
         <MessageView key={startIdx + i} msg={msg} />
       ))}
+      {streaming && scrollOffset === 0 && <MessageView msg={{ role: 'agent', text: streaming }} />}
       {loading && scrollOffset === 0 && <LoadingIndicator label={loadingLabel} />}
-      {hasLater && (
+      {hiddenAfter > 0 && (
         <Box paddingLeft={2}>
-          <Text dimColor>↓ {messages.length - endIdx} newer · scroll to see more</Text>
+          <Text dimColor>↓ {hiddenAfter} newer · scroll to see more</Text>
         </Box>
       )}
     </Box>

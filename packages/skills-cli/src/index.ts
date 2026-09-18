@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { resolveAuth } from './auth.js';
+import { resolveCredentials } from './auth.js';
 import { AlmytyClient, parseRef } from './client.js';
-import { detectAgents, getDefaultTargets, getAllTargets } from './agents.js';
+import { getAllTargets } from './agents.js';
 import { installSkills, removeSkills, listInstalledSkills } from './installer.js';
 import { loadConfig, resolveTargets } from './config.js';
 import { generateMetaSkill } from './meta-skill.js';
@@ -10,176 +10,24 @@ import {
   selectInstallTargetsAuto,
   selectInstallTargetsInteractive,
 } from './target-selector.js';
+import { EXIT } from './exit-codes.js';
+import { VERSION } from './version.js';
+import { isInteractive } from './tty.js';
+import { printHelp } from './help.js';
+import {
+  getRef,
+  parseArgs,
+  parseRunParams,
+  type ParsedArgs,
+} from './cli-args.js';
 
-const VERSION = '1.0.12';
-
-function printHelp(): void {
-  console.log(`
-almyty Skills CLI v${VERSION}
-
-Usage:
-  npx @almyty/skills <command> [options]
-
-Commands:
-  daemon                         Start skill daemon (syncs all skills)
-  install <ref>                  Install skills
-  list [ref]                     List available skills
-  search <query>                 Search for skills
-  run <ref> [--key value ...]    Execute a skill
-  installed                      Show locally installed skills
-  remove                         Remove all installed skills
-  gateways                       List your gateways
-
-Authentication:
-  Run \`npx @almyty/auth login\` once. Credentials at ~/.almyty/credentials.json
-  are shared across every almyty CLI.
-
-References:
-  org/gateway                   All skills from a gateway
-  org/gateway/skill             A specific skill
-  skill-name                     Search by name
-  <uuid>                         Direct ID reference
-
-Config:
-  .almytyrc                      JSON config file (project or home dir)
-  ALMYTY_SKILLS_DIR              Override skill installation directory
-  ALMYTY_URL                     Override API URL
-  ALMYTY_TOKEN                   Override auth token
-
-Options:
-  --agent, -a <name>             Install target by name (repeatable; e.g.
-                                 -a codex -a claude). Accepts '*' or 'all'
-                                 for every known agent regardless of
-                                 detection. Partial match.
-  --path, -p <dir>               Custom skills dir, repeatable. Bypasses
-                                 agent detection.
-  --all                          Install to every PROJECT-detected agent
-                                 (plus the universal .agents/skills/).
-                                 Combine with --global to also include
-                                 home-detected. Skips the picker.
-  --global, -G                   Use home-scope (~/.codex/skills/, etc.)
-                                 instead of project-scope. With --all,
-                                 includes home-detected agents alongside
-                                 project-detected. With --agent <name>,
-                                 prefers home-scope when the agent is
-                                 detected at $HOME.
-  --yes, -y                      Skip the interactive picker. Falls back
-                                 to detected agents (or defaults).
-  --interval, -i <seconds>       Daemon poll interval in seconds (default: 60)
-  --url <url>                    almyty API URL (default: https://api.almyty.com)
-  --dir <path>                   Project directory (default: current directory)
-  --help, -h                     Show help
-  --version, -v                  Show version
-
-Target selection (install):
-  Without flags in a TTY, install shows a multi-select picker of all
-  known agents (detected ones pre-checked) plus a "custom path…" option.
-  In a non-TTY, the picker is skipped: install writes to detected agents
-  and the universal .agents/skills/ directory.
-
-Examples:
-  npx @almyty/skills daemon
-  npx @almyty/skills install myorg/petstore/get-pet
-  npx @almyty/skills install acme/petstore -a codex -a claude
-  npx @almyty/skills install acme/petstore --path ./tmp/skills --yes
-  npx @almyty/skills install acme/petstore --all
-  npx @almyty/skills search "weather"
-  npx @almyty/skills run myorg/petstore/get-pet --petId 123
-`);
+function emitJson(value: unknown): void {
+  console.log(JSON.stringify(value, null, 2));
 }
 
-interface ParsedArgs {
-  command?: string;
-  ref?: string;
-  positional: string[];
-  flags: Record<string, string | string[] | boolean>;
-}
-
-/**
- * Repeatable flags accumulate into a string[] when supplied more
- * than once. Used by `--agent` and `--path` so callers can pick
- * multiple targets without inventing comma syntax (the selector
- * also splits on comma/space, so both styles work).
- */
-const REPEATABLE_FLAGS = new Set(['agent', 'path']);
-
-function appendRepeatable(
-  flags: Record<string, string | string[] | boolean>,
-  key: string,
-  value: string,
-): void {
-  const existing = flags[key];
-  if (existing === undefined || existing === true || existing === false) {
-    flags[key] = value;
-  } else if (typeof existing === 'string') {
-    flags[key] = [existing, value];
-  } else {
-    existing.push(value);
-  }
-}
-
-function parseArgs(argv: string[]): ParsedArgs {
-  const result: ParsedArgs = { positional: [], flags: {} };
-  let i = 0;
-
-  while (i < argv.length) {
-    const arg = argv[i];
-
-    if (arg === '--gateway' || arg === '-g') {
-      result.flags.gateway = argv[++i] || '';
-    } else if (arg === '--url') {
-      result.flags.url = argv[++i] || '';
-    } else if (arg === '--dir') {
-      result.flags.dir = argv[++i] || '';
-    } else if (arg === '--interval' || arg === '-i') {
-      result.flags.interval = argv[++i] || '60';
-    } else if (arg === '--agent' || arg === '-a') {
-      appendRepeatable(result.flags, 'agent', argv[++i] || '');
-    } else if (arg === '--path' || arg === '-p') {
-      appendRepeatable(result.flags, 'path', argv[++i] || '');
-    } else if (arg === '--all') {
-      result.flags.all = true;
-    } else if (arg === '--yes' || arg === '-y') {
-      result.flags.yes = true;
-    } else if (arg === '--global' || arg === '-G') {
-      // --global / -G installs at home scope (~/.codex/skills/, etc.)
-      // -g remains aliased to --gateway for back-compat.
-      result.flags.global = true;
-    } else if (arg === '--help' || arg === '-h') {
-      result.flags.help = true;
-    } else if (arg === '--version' || arg === '-v') {
-      result.flags.version = true;
-    } else if (arg.includes('/')) {
-      result.ref = arg;
-    } else if (arg.startsWith('--')) {
-      const key = arg.slice(2);
-      const next = argv[i + 1];
-      if (next && !next.startsWith('--')) {
-        if (REPEATABLE_FLAGS.has(key)) {
-          appendRepeatable(result.flags, key, next);
-        } else {
-          result.flags[key] = next;
-        }
-        i++;
-      } else {
-        result.flags[key] = true;
-      }
-    } else if (!result.command) {
-      result.command = arg;
-    } else {
-      result.positional.push(arg);
-    }
-    i++;
-  }
-
-  return result;
-}
-
-function getRef(args: ParsedArgs): string | null {
-  if (args.ref) return args.ref;
-  if (args.flags.gateway) return args.flags.gateway as string;
-  if (args.positional.length > 0) return args.positional[0];
-  return null;
+function fail(message: string, code: number): never {
+  console.error(message);
+  process.exit(code);
 }
 
 function requireRef(args: ParsedArgs, command: string): string {
@@ -188,22 +36,46 @@ function requireRef(args: ParsedArgs, command: string): string {
     console.error('Error: reference required');
     console.error(`  npx @almyty/skills ${command} <org>/<gateway>`);
     console.error(`  npx @almyty/skills ${command} <skill-name>`);
-    process.exit(1);
+    process.exit(EXIT.USAGE);
   }
   return ref;
 }
 
-function parseRunParams(args: ParsedArgs): Record<string, any> {
-  const params: Record<string, any> = {};
-  const reserved = new Set([
-    'url', 'dir', 'help', 'version', 'interval', 'gateway',
-    'agent', 'path', 'all', 'yes', 'global',
-  ]);
-  for (const [key, value] of Object.entries(args.flags)) {
-    if (reserved.has(key)) continue;
-    params[key] = value;
+/**
+ * The credential, or the one instruction that fixes it.
+ *
+ * This used to call the shared resolver, which exits 1 — the same code
+ * as an unexpected crash. Every almyty CLI answers a missing credential
+ * with 3 so a script can retry the login instead of guessing.
+ */
+function requireAuth(args: ParsedArgs): { url: string; token: string } {
+  const creds = resolveCredentials();
+  if (!creds?.token) {
+    if (args.flags.json) {
+      emitJson({
+        error: 'NOT_AUTHENTICATED',
+        message: 'Run `npx @almyty/auth login`, or set ALMYTY_TOKEN.',
+      });
+    }
+    console.error('Not authenticated. Run one of:');
+    console.error('  npx @almyty/auth login');
+    console.error('  export ALMYTY_TOKEN=<your-token>');
+    process.exit(EXIT.AUTH);
   }
-  return params;
+  return { url: creds.url, token: creds.token };
+}
+
+function newClient(args: ParsedArgs, urlOverride?: string): AlmytyClient {
+  const { url, token } = requireAuth(args);
+  return new AlmytyClient(urlOverride || url, token);
+}
+
+/** `org/gateway/skill — description`, the label used everywhere. */
+function skillLabel(skill: any): string {
+  if (skill.orgSlug && skill.gatewaySlug) {
+    return `${skill.orgSlug}/${skill.gatewaySlug}/${skill.name}`;
+  }
+  return skill.skillRef || skill.name || skill.toolName;
 }
 
 async function main(): Promise<void> {
@@ -223,6 +95,7 @@ async function main(): Promise<void> {
   const projectDir = (args.flags.dir as string) || process.cwd();
   const config = loadConfig(projectDir);
   const urlOverride = (args.flags.url as string) || config.url;
+  const json = args.flags.json === true;
 
   switch (command) {
     case 'login':
@@ -231,16 +104,19 @@ async function main(): Promise<void> {
       // Auth has moved to its own dedicated package. Redirect rather
       // than silently doing nothing — users typing the old commands
       // should see the new entry point.
-      console.error(`Authentication moved to @almyty/auth.`);
+      console.error('Authentication moved to @almyty/auth.');
       console.error(`  npx @almyty/auth ${command}`);
-      process.exit(1);
+      process.exit(EXIT.USAGE);
     }
 
     case 'gateways': {
-      const { url, token } = resolveAuth();
-      const client = new AlmytyClient(urlOverride || url, token);
+      const client = newClient(args, urlOverride);
       const gateways = await client.listGateways();
 
+      if (json) {
+        emitJson(gateways);
+        return;
+      }
       if (gateways.length === 0) {
         console.log('No gateways found. Create one at https://app.almyty.com/gateways');
         return;
@@ -259,48 +135,49 @@ async function main(): Promise<void> {
 
     case 'list': {
       const ref = getRef(args);
-      const { url, token } = resolveAuth();
-      const client = new AlmytyClient(urlOverride || url, token);
+      const client = newClient(args, urlOverride);
+      const parsed = ref ? parseRef(ref) : null;
 
-      if (!ref) {
-        const allSkills = await client.fetchAllSkills();
-        if (!allSkills || (allSkills as any[]).length === 0) {
-          console.log('No skills available. Assign tools to your gateways first.');
+      if (parsed && (parsed.type === 'gateway' || parsed.type === 'uuid')) {
+        const skills = await client.fetchSkills(ref!);
+        if (json) {
+          emitJson(skills.map((s) => ({ name: s.name, fileName: s.fileName })));
           return;
         }
-        console.log(`\n${(allSkills as any[]).length} skills available:\n`);
-        for (const skill of allSkills as any[]) {
-          const label = skill.gateway ? `${skill.orgSlug}/${skill.gatewaySlug}/${skill.name}` : skill.name;
-          const desc = skill.description ? ` — ${skill.description}` : '';
-          console.log(`  ${label}${desc}`);
-        }
-        return;
-      }
-
-      const parsed = parseRef(ref);
-      if (parsed.type === 'gateway' || parsed.type === 'uuid') {
-        const skills = await client.fetchSkills(ref);
         if (skills.length === 0) {
           console.log('No skills available. Assign tools to your gateway first.');
           return;
         }
         console.log(`\n${skills.length} skills available:\n`);
-        for (const skill of skills) {
-          console.log(`  ${skill.name}`);
-        }
+        for (const skill of skills) console.log(`  ${skill.name}`);
         console.log(`\nInstall: npx @almyty/skills install ${ref}`);
-      } else {
-        const allSkills = await client.fetchAllSkills();
-        if (!allSkills || (allSkills as any[]).length === 0) {
-          console.log('No skills available.');
-          return;
-        }
-        console.log(`\n${(allSkills as any[]).length} skills available:\n`);
-        for (const skill of allSkills as any[]) {
-          const label = skill.gateway ? `${skill.orgSlug}/${skill.gatewaySlug}/${skill.name}` : skill.name;
-          const desc = skill.description ? ` — ${skill.description}` : '';
-          console.log(`  ${label}${desc}`);
-        }
+        break;
+      }
+
+      // No ref, or a name that is not a gateway ref: list everything.
+      const allSkills = (await client.fetchAllSkills()) as any[];
+      if (json) {
+        emitJson(
+          allSkills.map((s) => ({
+            ref: skillLabel(s),
+            name: s.name,
+            description: s.description ?? null,
+            gateway: s.gateway ?? null,
+            gatewayId: s.gatewayId ?? null,
+            orgSlug: s.orgSlug ?? null,
+            gatewaySlug: s.gatewaySlug ?? null,
+          })),
+        );
+        return;
+      }
+      if (allSkills.length === 0) {
+        console.log('No skills available. Assign tools to your gateways first.');
+        return;
+      }
+      console.log(`\n${allSkills.length} skills available:\n`);
+      for (const skill of allSkills) {
+        const desc = skill.description ? ` — ${skill.description}` : '';
+        console.log(`  ${skillLabel(skill)}${desc}`);
       }
       break;
     }
@@ -310,13 +187,28 @@ async function main(): Promise<void> {
       if (!query) {
         console.error('Error: search query required');
         console.error('  npx @almyty/skills search <query>');
-        process.exit(1);
+        process.exit(EXIT.USAGE);
       }
 
-      const { url, token } = resolveAuth();
-      const client = new AlmytyClient(urlOverride || url, token);
+      // Search is org-scoped: it looks through the gateways YOUR
+      // account can see, so it needs a credential. There is no public
+      // skill index to search without one.
+      const client = newClient(args, urlOverride);
       const results = await client.searchSkills(query);
 
+      if (json) {
+        emitJson(
+          (results ?? []).map((r: any) => ({
+            ref: r.skillRef ?? null,
+            name: r.toolName ?? r.name ?? null,
+            description: r.toolDescription ?? null,
+            gatewayId: r.gatewayId ?? null,
+            gatewayName: r.gatewayName ?? null,
+            toolId: r.toolId ?? null,
+          })),
+        );
+        return;
+      }
       if (!results || results.length === 0) {
         console.log(`No skills found for "${query}".`);
         return;
@@ -328,22 +220,22 @@ async function main(): Promise<void> {
         const desc = skill.toolDescription ? ` — ${skill.toolDescription}` : '';
         console.log(`  ${label}${desc}`);
       }
-      console.log(`\nInstall: npx @almyty/skills install <ref>`);
-      console.log(`Run:     npx @almyty/skills run <ref>`);
+      console.log('\nInstall: npx @almyty/skills install <ref>');
+      console.log('Run:     npx @almyty/skills run <ref>');
       break;
     }
 
     case 'install': {
       const ref = requireRef(args, 'install');
-      const { url, token } = resolveAuth();
-      const client = new AlmytyClient(urlOverride || url, token);
+      const client = newClient(args, urlOverride);
       const parsed = parseRef(ref);
+      const dryRun = args.flags['dry-run'] === true;
 
       let skills: { name: string; fileName: string; content: string }[] = [];
       let gwName = ref;
 
       if (parsed.type === 'gateway' || parsed.type === 'uuid') {
-        console.log('Fetching skills...');
+        if (!json) console.log('Fetching skills...');
         const [gateway, fetched] = await Promise.all([
           client.fetchGateway(ref).catch(() => null),
           client.fetchSkills(ref),
@@ -351,34 +243,39 @@ async function main(): Promise<void> {
         skills = fetched;
         gwName = gateway?.name || ref;
       } else if (parsed.type === 'skill') {
-        console.log('Fetching skill...');
+        if (!json) console.log('Fetching skill...');
         const gatewayRef = `${parsed.orgSlug}/${parsed.gatewaySlug}`;
         const fetched = await client.fetchSkills(gatewayRef);
-        const match = fetched.find(s =>
-          s.name === parsed.skillName ||
-          s.fileName === `almyty-${parsed.skillName}` ||
-          s.fileName === parsed.skillName
+        const match = fetched.find(
+          (s) =>
+            s.name === parsed.skillName ||
+            s.fileName === `almyty-${parsed.skillName}` ||
+            s.fileName === parsed.skillName,
         );
         if (!match) {
           console.error(`Skill "${parsed.skillName}" not found in ${gatewayRef}`);
-          const available = fetched.map(s => s.name).join(', ');
+          const available = fetched.map((s) => s.name).join(', ');
           if (available) console.error(`Available: ${available}`);
-          process.exit(1);
+          process.exit(EXIT.NOT_FOUND);
         }
         skills = [match];
         gwName = `${gatewayRef}/${parsed.skillName}`;
       } else if (parsed.type === 'search') {
-        console.log(`Searching for "${ref}"...`);
+        if (!json) console.log(`Searching for "${ref}"...`);
         const results = await client.searchSkills(ref);
         if (!results || results.length === 0) {
-          console.error(`No skills found for "${ref}".`);
-          process.exit(1);
+          fail(`No skills found for "${ref}".`, EXIT.NOT_FOUND);
         }
         if (results.length === 1) {
           const match = results[0];
           const fetched = await client.fetchSkills(match.gatewayId);
-          const toolSlug = match.toolName?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          const skill = fetched.find((s: any) => s.name === toolSlug || s.name === match.toolName);
+          const toolSlug = match.toolName
+            ?.toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '');
+          const skill = fetched.find(
+            (s: any) => s.name === toolSlug || s.name === match.toolName,
+          );
           if (skill) {
             skills = [skill];
             gwName = match.skillRef || match.toolName;
@@ -387,32 +284,42 @@ async function main(): Promise<void> {
             gwName = match.gatewayName;
           }
         } else {
-          console.log(`\nMultiple matches for "${ref}":\n`);
-          for (const r of results) {
-            const label = r.skillRef || r.toolName;
-            const desc = r.toolDescription ? ` — ${r.toolDescription}` : '';
-            console.log(`  ${label}${desc}`);
+          // Ambiguous: refuse rather than guess, and exit non-zero so a
+          // script does not treat "installed nothing" as success.
+          if (json) {
+            emitJson({
+              error: 'AMBIGUOUS_REF',
+              query: ref,
+              matches: results.map((r: any) => r.skillRef || r.toolName),
+            });
+          } else {
+            console.error(`\nMultiple matches for "${ref}":\n`);
+            for (const r of results) {
+              const label = r.skillRef || r.toolName;
+              const desc = r.toolDescription ? ` — ${r.toolDescription}` : '';
+              console.error(`  ${label}${desc}`);
+            }
+            console.error('\nBe more specific: npx @almyty/skills install org/gateway/skill');
           }
-          console.log(`\nBe more specific: npx @almyty/skills install org/gateway/skill`);
-          return;
+          process.exit(EXIT.USAGE);
         }
       }
 
       if (skills.length === 0) {
-        console.log('No skills found.');
-        return;
+        fail('No skills found.', EXIT.NOT_FOUND);
       }
-
-      console.log(`\n${gwName} (${skills.length} skill(s))`);
 
       const selection = {
         projectDir,
         config,
         agentFlag: args.flags.agent as string | string[] | undefined,
         pathFlag: args.flags.path as string | string[] | undefined,
-        all: !!args.flags.all,
-        yes: !!args.flags.yes,
-        global: !!args.flags.global,
+        all: args.flags.all === true,
+        // A dry run must never sit on a picker in a pipe, and --json has
+        // no way to render one.
+        yes: args.flags.yes === true || json,
+        global: args.flags.global === true,
+        interactive: isInteractive(),
       };
       let targets = selectInstallTargetsAuto(selection);
       if (targets === null) {
@@ -421,33 +328,85 @@ async function main(): Promise<void> {
       }
 
       if (targets.length === 0) {
-        console.error('No install targets resolved. Pass --agent / --path / --all or run without flags in a TTY.');
-        process.exit(1);
+        fail(
+          'No install targets resolved. Pass --agent / --path / --all, or run without flags in a terminal.',
+          EXIT.USAGE,
+        );
       }
 
-      const results = targets.map(target => installSkills(skills, target));
+      // Say where, before writing. Installing edits directories an
+      // editor reads on every session, so the paths belong on screen
+      // whether or not the user asked for a dry run.
+      if (!json) {
+        console.log('');
+        console.log(
+          dryRun
+            ? `${gwName} (${skills.length} skill(s)) — dry run, nothing will be written:`
+            : `${gwName} (${skills.length} skill(s)) — installing to:`,
+        );
+        for (const target of targets) {
+          console.log(`  ${target.name}: ${target.skillsDir}`);
+        }
+      }
 
-      console.log('');
-      for (const result of results) {
-        console.log(`  ${result.agent}: ${result.installed} skills -> ${result.skillsDir}`);
+      const results = targets.map((target) => installSkills(skills, target, { dryRun }));
+
+      if (json) {
+        emitJson({
+          ref,
+          gateway: gwName,
+          dryRun,
+          skills: skills.map((s) => s.name),
+          targets: results.map((r) => ({
+            agent: r.agent,
+            skillsDir: r.skillsDir,
+            installed: r.installed,
+            skipped: r.skipped,
+            overwritten: r.overwritten,
+            files: r.files,
+          })),
+        });
+        return;
       }
 
       const totalInstalled = results.reduce((sum, r) => sum + r.installed, 0);
       const totalSkipped = results.reduce((sum, r) => sum + r.skipped, 0);
-      console.log(`\nInstalled ${totalInstalled} skill files across ${results.length} agent(s).`);
+      const totalOverwritten = results.reduce((sum, r) => sum + r.overwritten, 0);
+
+      console.log('');
+      for (const result of results) {
+        console.log(
+          `  ${result.agent}: ${result.installed} skill file(s) ${dryRun ? 'would go to' : '->'} ${result.skillsDir}`,
+        );
+        if (dryRun) for (const file of result.files) console.log(`      ${file}`);
+      }
+
+      console.log('');
+      if (dryRun) {
+        console.log(
+          `Dry run: ${totalInstalled} skill file(s) across ${results.length} target(s), ${totalOverwritten} of them replacing an existing file.`,
+        );
+        console.log('Re-run without --dry-run to write them.');
+      } else {
+        console.log(
+          `Installed ${totalInstalled} skill file(s) across ${results.length} target(s).`,
+        );
+        if (totalOverwritten > 0) {
+          console.log(`${totalOverwritten} replaced a SKILL.md that was already there.`);
+        }
+        console.log('Your AI coding agent picks them up on its next session.');
+      }
       // Said out loud: a skill refused for an unsafe name used to be
       // counted as installed, so the total was the number offered.
       if (totalSkipped > 0) {
         console.log(`${totalSkipped} skill(s) were skipped — see the warnings above.`);
       }
-      console.log('Skills will be automatically loaded by your AI coding agent.');
       break;
     }
 
     case 'run': {
       const ref = requireRef(args, 'run');
-      const { url, token } = resolveAuth();
-      const client = new AlmytyClient(urlOverride || url, token);
+      const client = newClient(args, urlOverride);
       const parsed = parseRef(ref);
 
       let gatewayId: string;
@@ -460,176 +419,148 @@ async function main(): Promise<void> {
       } else if (parsed.type === 'search') {
         const results = await client.searchSkills(ref);
         if (!results || results.length === 0) {
-          console.error(`No skill found for "${ref}".`);
-          process.exit(1);
+          fail(`No skill found for "${ref}".`, EXIT.NOT_FOUND);
         }
         if (results.length > 1) {
           console.error(`Multiple matches for "${ref}". Be more specific:`);
-          for (const r of results) {
-            console.error(`  ${r.skillRef || r.toolName}`);
-          }
-          process.exit(1);
+          for (const r of results) console.error(`  ${r.skillRef || r.toolName}`);
+          process.exit(EXIT.USAGE);
         }
         gatewayId = results[0].gatewayId;
         toolId = results[0].toolId;
       } else {
-        console.error('Error: run requires a skill reference (org/gateway/skill or skill-name)');
-        process.exit(1);
+        fail(
+          'Error: run needs a skill reference (org/gateway/skill, or a skill name)',
+          EXIT.USAGE,
+        );
       }
 
       const params = parseRunParams(args);
       const result = await client.executeSkill(gatewayId, toolId, params);
+      // A skill's result IS data, so JSON is the default here rather
+      // than an opt-in. --json is accepted and means the same thing.
       console.log(JSON.stringify(result, null, 2));
-      break;
-    }
-
-    case 'daemon': {
-      const intervalSec = parseInt(args.flags.interval as string, 10) || config.interval || 60;
-      const { url, token } = resolveAuth();
-      const client = new AlmytyClient(urlOverride || url, token);
-
-      const targets = resolveTargets(projectDir, config);
-      if (targets.length === 0) {
-        console.error('No agent targets found.');
-        process.exit(1);
+      // The gateway answers 200 with a body that reports the tool's own
+      // failure, so the body decides the exit code.
+      if (result && typeof result === 'object') {
+        const body: any = result;
+        const failed =
+          body.success === false ||
+          body.status === 'failed' ||
+          body.status === 'error' ||
+          (body.data && body.data.success === false);
+        if (failed) process.exitCode = EXIT.FAILED;
       }
-
-      console.log(`almyty skill daemon (every ${intervalSec}s)`);
-      console.log(`Syncing to ${targets.length} agent target(s):`);
-      for (const t of targets) {
-        console.log(`  ${t.name}: ${t.skillsDir}`);
-      }
-      console.log('\nPress Ctrl+C to stop.\n');
-
-      let lastHash = '';
-
-      const sync = async () => {
-        try {
-          const allSkills = await client.fetchAllSkills();
-          const metaSkill = generateMetaSkill();
-          const skills = [metaSkill, ...(allSkills || [])];
-
-          const currentHash = skills.map(s => `${s.name}:${s.content.length}`).join('|');
-
-          if (currentHash !== lastHash) {
-            const ts = new Date().toLocaleTimeString();
-
-            let written = 0;
-            for (const target of targets) {
-              written += installSkills(skills, target).installed;
-            }
-            // Only once the install actually happened. Stamping the hash
-            // first meant a throw inside installSkills logged one "Sync
-            // error" and then every later tick matched the hash and
-            // printed nothing -- indistinguishable from "up to date".
-            lastHash = currentHash;
-            console.log(`[${ts}] Synced ${written} skill files to ${targets.length} agent(s).`);
-          }
-        } catch (err: any) {
-          const ts = new Date().toLocaleTimeString();
-          console.error(`[${ts}] Sync error: ${err.message}`);
-        }
-      };
-
-      await sync();
-
-      const interval = setInterval(sync, intervalSec * 1000);
-
-      const shutdown = () => {
-        clearInterval(interval);
-        console.log('\nDaemon stopped.');
-        process.exit(0);
-      };
-      process.on('SIGINT', shutdown);
-      process.on('SIGTERM', shutdown);
-
-      await new Promise(() => {});
       break;
     }
 
     case 'installed': {
       const targets = resolveTargets(projectDir, config);
+      const found: Array<{ agent: string; skillsDir: string; skills: string[] }> = [];
 
-      let totalFound = 0;
       for (const target of targets) {
         const installed = listInstalledSkills(target);
         if (installed.length > 0) {
-          console.log(`\n${target.name} (${target.skillsDir}):`);
-          for (const name of installed) {
-            console.log(`  ${name}`);
-          }
-          totalFound += installed.length;
+          found.push({ agent: target.name, skillsDir: target.skillsDir, skills: installed });
         }
       }
 
-      if (totalFound === 0) {
+      if (json) {
+        emitJson(found);
+        return;
+      }
+      if (found.length === 0) {
         console.log('No almyty skills installed in this directory.');
         console.log('Install: npx @almyty/skills install <org>/<gateway>');
+        return;
+      }
+      for (const entry of found) {
+        console.log(`\n${entry.agent} (${entry.skillsDir}):`);
+        for (const name of entry.skills) console.log(`  ${name}`);
       }
       break;
     }
 
     case 'remove': {
       const targets = resolveTargets(projectDir, config);
+      const removedPer: Array<{ agent: string; skillsDir: string; removed: number }> = [];
 
-      let totalRemoved = 0;
       for (const target of targets) {
         const removed = removeSkills(target);
         if (removed > 0) {
-          console.log(`  Removed ${removed} skills from ${target.skillsDir}`);
-          totalRemoved += removed;
+          removedPer.push({ agent: target.name, skillsDir: target.skillsDir, removed });
         }
       }
+      const totalRemoved = removedPer.reduce((sum, r) => sum + r.removed, 0);
 
+      if (json) {
+        emitJson({ removed: totalRemoved, targets: removedPer });
+        return;
+      }
       if (totalRemoved === 0) {
         console.log('No almyty skills found to remove.');
-      } else {
-        console.log(`\nRemoved ${totalRemoved} skill(s) total.`);
+        return;
       }
+      for (const entry of removedPer) {
+        console.log(`  Removed ${entry.removed} skill(s) from ${entry.skillsDir}`);
+      }
+      console.log(`\nRemoved ${totalRemoved} skill(s) total.`);
       break;
     }
 
+    case 'daemon':
     case 'watch': {
-      const ref = requireRef(args, 'watch');
-      const intervalSec = parseInt(args.flags.interval as string, 10) || config.interval || 60;
-      const { url, token } = resolveAuth();
-      const client = new AlmytyClient(urlOverride || url, token);
+      const intervalSec =
+        parseInt(args.flags.interval as string, 10) || config.interval || 60;
+      const client = newClient(args, urlOverride);
+      const watchRef = command === 'watch' ? requireRef(args, 'watch') : null;
 
-      const gateway = await client.fetchGateway(ref).catch(() => null);
-      const gwName = gateway?.name || ref;
-
-      const targets = getAllTargets(projectDir);
-
-      console.log(`Watching ${gwName} (every ${intervalSec}s)`);
-      console.log(`Syncing to ${targets.length} agent target(s):`);
-      for (const t of targets) {
-        console.log(`  ${t.name}: ${t.skillsDir}`);
+      const targets = watchRef
+        ? getAllTargets(projectDir)
+        : resolveTargets(projectDir, config);
+      if (targets.length === 0) {
+        fail('No agent targets found. Pass --agent or --path.', EXIT.USAGE);
       }
+
+      let label = 'every skill';
+      if (watchRef) {
+        const gateway = await client.fetchGateway(watchRef).catch(() => null);
+        label = gateway?.name || watchRef;
+      }
+
+      console.log(`almyty skill sync: ${label}, every ${intervalSec}s`);
+      console.log(`Syncing to ${targets.length} target(s):`);
+      for (const t of targets) console.log(`  ${t.name}: ${t.skillsDir}`);
       console.log('\nPress Ctrl+C to stop.\n');
 
       let lastHash = '';
 
       const sync = async () => {
         try {
-          const skills = await client.fetchSkills(ref);
-          const currentHash = skills.map(s => `${s.name}:${s.content.length}`).join('|');
+          const fetched = watchRef
+            ? await client.fetchSkills(watchRef)
+            : [generateMetaSkill(), ...((await client.fetchAllSkills()) || [])];
+          const currentHash = fetched
+            .map((s) => `${s.name}:${s.content.length}`)
+            .join('|');
+          if (currentHash === lastHash) return;
 
-          if (currentHash !== lastHash) {
-            const ts = new Date().toLocaleTimeString();
-
-            if (skills.length === 0) {
-              console.log(`[${ts}] No skills available.`);
-              return;
-            }
-
-            let written = 0;
-            for (const target of targets) {
-              written += installSkills(skills, target).installed;
-            }
-            // After the install, not before -- see the watch loop above.
-            lastHash = currentHash;
-            console.log(`[${ts}] Synced ${written} skill files to ${targets.length} agent(s).`);
+          const ts = new Date().toLocaleTimeString();
+          if (fetched.length === 0) {
+            console.log(`[${ts}] No skills available.`);
+            return;
           }
+
+          let written = 0;
+          for (const target of targets) {
+            written += installSkills(fetched, target).installed;
+          }
+          // Only once the install actually happened. Stamping the hash
+          // first meant a throw inside installSkills logged one "Sync
+          // error" and then every later tick matched the hash and
+          // printed nothing -- indistinguishable from "up to date".
+          lastHash = currentHash;
+          console.log(`[${ts}] Synced ${written} skill file(s) to ${targets.length} target(s).`);
         } catch (err: any) {
           const ts = new Date().toLocaleTimeString();
           console.error(`[${ts}] Sync error: ${err.message}`);
@@ -637,13 +568,12 @@ async function main(): Promise<void> {
       };
 
       await sync();
-
       const interval = setInterval(sync, intervalSec * 1000);
 
       const shutdown = () => {
         clearInterval(interval);
-        console.log('\nWatch stopped.');
-        process.exit(0);
+        console.log('\nStopped.');
+        process.exit(EXIT.OK);
       };
       process.on('SIGINT', shutdown);
       process.on('SIGTERM', shutdown);
@@ -654,12 +584,15 @@ async function main(): Promise<void> {
 
     default:
       console.error(`Unknown command: ${command}`);
-      printHelp();
-      process.exit(1);
+      console.error(
+        'Commands: install, list, search, run, installed, remove, gateways, daemon, watch. Run --help for detail.',
+      );
+      process.exit(EXIT.USAGE);
   }
 }
 
 main().catch((err) => {
   console.error(`Error: ${err.message}`);
-  process.exit(1);
+  const authFailure = /Authentication failed|\(401\)|API error 401/.test(err.message ?? '');
+  process.exit(authFailure ? EXIT.AUTH : EXIT.ERROR);
 });
