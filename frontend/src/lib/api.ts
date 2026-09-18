@@ -1208,6 +1208,19 @@ export const versionsApi = {
 }
 
 // Tool Hub API
+export interface PublishToolTemplatePayload {
+  toolId: string
+  category: string
+  provider?: string
+  providerIcon?: string
+  name?: string
+  description?: string
+  tags?: string[]
+  version?: string
+}
+
+export type UpdateToolTemplatePayload = Omit<Partial<PublishToolTemplatePayload>, 'toolId'>
+
 export const toolHubApi = {
   getTemplates: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
@@ -1218,6 +1231,13 @@ export const toolHubApi = {
   getCategories: () => apiGet('/tool-hub/categories'),
   installTemplate: (id: string, data?: any) => apiPost(`/tool-hub/templates/${id}/install`, data || {}),
   installProvider: (provider: string, data?: any) => apiPost(`/tool-hub/providers/${provider}/install`, data || {}),
+  // Publishing takes no organization id: the backend stamps the caller's
+  // current organization on the template and never accepts one from the
+  // body, so a template can only ever be published into your own hub.
+  publishTemplate: (data: PublishToolTemplatePayload) => apiPost('/tool-hub/templates', data),
+  updateTemplate: (id: string, data: UpdateToolTemplatePayload) =>
+    apiPatch(`/tool-hub/templates/${id}`, data),
+  deleteTemplate: (id: string) => apiDel(`/tool-hub/templates/${id}`),
 }
 
 export const approvalsApi = {

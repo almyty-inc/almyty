@@ -67,9 +67,9 @@ Run options:
   --watch                       Autonomous: stream steps until the run ends
   --timeout <s>                 Autonomous --watch: give up waiting after this long (default 300)
 
-List options (list, runs, executions):
-  --limit <n>                   Rows per page (runs, executions; default 20)
-  --page <n>                    Page number (runs, executions; default 1)
+List options (runs, executions):
+  --limit <n>                   Rows per page (default 20)
+  --page <n>                    Page number (default 1)
 
 Inspect options:
   --steps                       run: also print per-node detail for a workflow run
