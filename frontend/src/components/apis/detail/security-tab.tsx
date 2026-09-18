@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { Api, ApiAuthType } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface SecurityTabProps {
   api: Api
@@ -49,7 +50,7 @@ export function SecurityTab({ api, open, onOpenChange }: SecurityTabProps) {
       success('Authentication updated', 'API authentication settings saved')
       onOpenChange(false)
     } catch (err: any) {
-      error('Failed to update', err.response?.data?.message || 'Please try again.')
+      error('Failed to update', getApiErrorMessage(err, 'Please try again.'))
     }
   }
 

@@ -3,13 +3,16 @@ import { AuthHelper } from './helpers/auth.helper'
 
 test.describe('LLM Providers - Configuration', () => {
   test.beforeEach(async ({ authenticatedPage: page }) => {
-    await page.goto('/llm-providers')
+    // /llm-providers is a redirect; go where it lands.
+    await page.goto('/models?tab=providers')
     await page.waitForLoadState('networkidle')
   })
 
-  test('should display LLM providers page', async ({ authenticatedPage: page }) => {
-    // Page heading is "AI Models"
-    await expect(page.getByRole('heading', { name: 'AI Models', level: 1 })).toBeVisible()
+  test('should display the models page', async ({ authenticatedPage: page }) => {
+    // The page is "Models". It was called "AI Models" and this spec was
+    // still asserting the old heading after the rename -- against a URL
+    // that is now only a <Navigate>.
+    await expect(page.getByRole('heading', { name: 'Models', level: 1 })).toBeVisible()
 
     // Empty state shows "Add First Provider" button, non-empty shows "Add Provider"
     const addButton = page.getByRole('button', { name: /add.*provider/i })

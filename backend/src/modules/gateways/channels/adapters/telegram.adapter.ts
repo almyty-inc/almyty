@@ -17,23 +17,57 @@ export class TelegramAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * `update_id` is Telegram's per-bot delivery counter and is repeated
+   * verbatim until the update is acknowledged, which makes it the exact
+   * key for the retry case. `message_id` alone is only unique within a
+   * chat, so the fallback pairs it with the chat id.
+   */
+  deliveryId(rawPayload: any): string | undefined {
+    if (rawPayload?.update_id !== undefined && rawPayload?.update_id !== null) {
+      return `telegram:${rawPayload.update_id}`;
+    }
+    const message = rawPayload?.message ?? rawPayload;
+    if (message?.message_id !== undefined && message?.message_id !== null) {
+      return `telegram:${message.chat?.id ?? 'nochat'}:${message.message_id}`;
+    }
+    return undefined;
+  }
+
   formatOutbound(response: AdapterResponse): any {
     return { text: response.text };
   }
 
+  /**
+   * Bot API sendMessage.
+   *
+   * Every Bot API response is `{ok: boolean}` — `{ok: true, result: {...}}`
+   * on success, `{ok: false, error_code, description: "Bad Request: chat
+   * not found" | "Forbidden: bot was blocked by the user" | ...}` on
+   * failure — so `ok` is the verdict and `description` is the wording
+   * to keep. Same pair `testConnection` reads off getMe.
+   */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
-    try {
-      const fetch = globalThis.fetch || (await import('node-fetch')).default;
-      await (fetch as any)(`https://api.telegram.org/bot${config.bot_token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: threadContext?.chatId,
-          text: formattedResponse.text,
-        }),
-      });
-    } catch (error) {
-      this.logger.error(`Telegram send failed: ${error.message}`);
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)(`https://api.telegram.org/bot${config.bot_token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: threadContext?.chatId,
+        text: formattedResponse.text,
+      }),
+    });
+
+    const body = await this.readJsonBody(res);
+    if (body?.ok !== true) {
+      const detail =
+        body?.description ??
+        (this.httpRejected(res)
+          ? `HTTP ${this.httpStatus(res)}`
+          : 'sendMessage did not confirm the message');
+      this.sendFailed(
+        `sendMessage refused the reply: ${detail}${body?.error_code ? ` (error_code ${body.error_code})` : ''}`,
+      );
     }
   }
 

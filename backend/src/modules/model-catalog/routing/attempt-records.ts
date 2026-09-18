@@ -69,3 +69,58 @@ export function failedAttemptsFrom(executions: RunLikeExecution[]): AttemptRecor
 
   return records;
 }
+
+/**
+ * One node of one run, as the database hands it back.
+ *
+ * `agent_executions.nodeResults` is a json blob holding every node's full
+ * output; node payloads are capped at 32KB each, so a ten-node run is
+ * ~320KB and a 5,000-run window is up to 1.6GB if the column is selected
+ * whole. The three things the co-failure maths actually reads --
+ * `routing.modelId`, `routing.tried[].modelId` and `triedModels[]` -- are
+ * a few dozen bytes per node, so they are extracted server-side and the
+ * outputs never leave Postgres.
+ */
+export interface RoutingAttemptRow {
+  executionId: string;
+  agentId: string;
+  nodeId: string;
+  modelId: string | null;
+  tried: Array<{ modelId?: string }> | null;
+  triedModels: Array<{ modelId?: string }> | null;
+  hasError: boolean;
+}
+
+/**
+ * Rebuild the minimal run shape the two readers above expect.
+ *
+ * Deliberately not a second copy of the traversal: `attemptsFrom` and
+ * `failedAttemptsFrom` keep their single definition of what an attempt is,
+ * and this only restores the handful of fields they look at.
+ */
+export function executionsFromRoutingRows(rows: RoutingAttemptRow[]): RunLikeExecution[] {
+  const byExecution = new Map<string, RunLikeExecution>();
+
+  for (const row of rows) {
+    let execution = byExecution.get(row.executionId);
+    if (!execution) {
+      execution = { id: row.executionId, agentId: row.agentId, nodeResults: {} };
+      byExecution.set(row.executionId, execution);
+    }
+
+    const node: Record<string, any> = {};
+    if (row.modelId) {
+      node.routing = { modelId: row.modelId, tried: row.tried ?? [] };
+    }
+    if (row.hasError) {
+      node.error = true;
+    }
+    if (row.triedModels?.length) {
+      node.triedModels = row.triedModels;
+    }
+
+    (execution.nodeResults as Record<string, any>)[row.nodeId] = node;
+  }
+
+  return [...byExecution.values()];
+}

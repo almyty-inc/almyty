@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
@@ -42,10 +42,31 @@ export class AnalyticsSummariesHelper {
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     const failures: string[] = [];
-    const [totalToday, totalWeek, totalMonth, byResourceType, byAction, topUsers, hourlyTimeline] = await Promise.all([
-      this.auditLogRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(todayStart) } }).catch(recorded(failures, 'today', 0)),
-      this.auditLogRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(weekStart) } }).catch(recorded(failures, 'thisWeek', 0)),
-      this.auditLogRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(monthStart) } }).catch(recorded(failures, 'thisMonth', 0)),
+    const [totals, byResourceType, byAction, topUsers, hourlyTimeline] = await Promise.all([
+      // One scan of the widest window with conditional sums, instead of
+      // three COUNTs over the same table differing only in their lower
+      // bound. `thisMonth` is the widest, so COUNT(*) under that predicate
+      // is exactly what the third COUNT used to answer.
+      this.auditLogRepository
+        .createQueryBuilder('audit')
+        .select('SUM(CASE WHEN audit.createdAt >= :todayStart THEN 1 ELSE 0 END)', 'today')
+        .addSelect('SUM(CASE WHEN audit.createdAt >= :weekStart THEN 1 ELSE 0 END)', 'thisWeek')
+        .addSelect('COUNT(*)', 'thisMonth')
+        .where('audit.organizationId = :orgId', { orgId: organizationId })
+        .andWhere('audit.createdAt >= :monthStart', { monthStart })
+        .setParameters({ todayStart, weekStart })
+        .getRawOne()
+        .then((r) => ({
+          today: parseInt(r?.today ?? '0', 10) || 0,
+          thisWeek: parseInt(r?.thisWeek ?? '0', 10) || 0,
+          thisMonth: parseInt(r?.thisMonth ?? '0', 10) || 0,
+        }))
+        .catch(() => {
+          // Keep naming each figure the caller asked about, so the surface
+          // still says which numbers it could not read.
+          failures.push('today', 'thisWeek', 'thisMonth');
+          return { today: 0, thisWeek: 0, thisMonth: 0 };
+        }),
       this.auditLogRepository
         .createQueryBuilder('audit')
         .select('audit.resourceType', 'resourceType')
@@ -97,7 +118,7 @@ export class AnalyticsSummariesHelper {
       // read, so the surface can say so rather than print a zero.
       partial: failures.length > 0,
       unavailable: failures,
-      totals: { today: totalToday, thisWeek: totalWeek, thisMonth: totalMonth },
+      totals,
       byResourceType: byResourceType.map(r => ({ resourceType: r.resourceType, count: parseInt(r.count, 10) })),
       byAction: byAction.map(r => ({ action: r.action, count: parseInt(r.count, 10) })),
       topUsers: topUsers.map(r => ({ userId: r.userId, userEmail: r.userEmail, count: parseInt(r.count, 10) })),
@@ -112,11 +133,32 @@ export class AnalyticsSummariesHelper {
     const now = new Date();
     const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const [totalRuns, completedRuns, failedRuns, cancelledRuns, avgDuration, totalCost, runsByAgent, runsTimeline] = await Promise.all([
-      this.agentRunRepository.count({ where: { organizationId, createdAt: MoreThanOrEqual(last7d) } }).catch(() => 0),
-      this.agentRunRepository.count({ where: { organizationId, status: 'completed' as any, createdAt: MoreThanOrEqual(last7d) } }).catch(() => 0),
-      this.agentRunRepository.count({ where: { organizationId, status: 'failed' as any, createdAt: MoreThanOrEqual(last7d) } }).catch(() => 0),
-      this.agentRunRepository.count({ where: { organizationId, status: 'cancelled' as any, createdAt: MoreThanOrEqual(last7d) } }).catch(() => 0),
+    const [runTotals, avgDuration, totalCost, runsByAgent, runsTimeline] = await Promise.all([
+      // One GROUP BY status instead of four COUNTs over the identical
+      // window. `total` is the sum of the groups, which is what the
+      // unfiltered COUNT answered.
+      this.agentRunRepository
+        .createQueryBuilder('run')
+        .select('run.status', 'status')
+        .addSelect('COUNT(*)', 'count')
+        .where('run.organizationId = :orgId', { orgId: organizationId })
+        .andWhere('run.createdAt >= :since', { since: last7d })
+        .groupBy('run.status')
+        .getRawMany()
+        .then((rows) => {
+          const byStatus = new Map<string, number>(
+            rows.map((r) => [r.status, parseInt(r.count, 10) || 0]),
+          );
+          let total = 0;
+          for (const n of byStatus.values()) total += n;
+          return {
+            total,
+            completed: byStatus.get('completed') ?? 0,
+            failed: byStatus.get('failed') ?? 0,
+            cancelled: byStatus.get('cancelled') ?? 0,
+          };
+        })
+        .catch(() => ({ total: 0, completed: 0, failed: 0, cancelled: 0 })),
       this.agentRunRepository
         .createQueryBuilder('run')
         .select('AVG(run.executionTime)', 'avg')
@@ -164,7 +206,7 @@ export class AnalyticsSummariesHelper {
     ]);
 
     return {
-      totals: { total: totalRuns, completed: completedRuns, failed: failedRuns, cancelled: cancelledRuns },
+      totals: runTotals,
       avgDuration,
       totalCost: Math.round(totalCost * 10000) / 10000,
       byAgent: runsByAgent.map(r => ({

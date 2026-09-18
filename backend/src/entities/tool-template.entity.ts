@@ -14,6 +14,18 @@ import { Organization } from './organization.entity';
 @Index(['provider'])
 @Index(['category'])
 @Index(['organizationId'])
+// One name per owner. The two partial indexes are deliberate: Postgres
+// treats NULLs as distinct, so a single (organizationId, name) index
+// would leave public templates -- the rows every tenant sees -- with no
+// uniqueness at all.
+@Index('tool_templates_org_name_uq', ['organizationId', 'name'], {
+  unique: true,
+  where: '"organizationId" IS NOT NULL',
+})
+@Index('tool_templates_public_name_uq', ['name'], {
+  unique: true,
+  where: '"organizationId" IS NULL',
+})
 export class ToolTemplate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -72,11 +84,29 @@ export class ToolTemplate {
   @Column({ default: false })
   isBuiltIn: boolean;
 
+  /**
+   * Owning organization, and the only thing that decides who can see
+   * this template. NULL means public: visible to every tenant. A row
+   * with an organizationId is visible to that tenant alone.
+   *
+   * Nothing reachable over HTTP writes NULL here -- publishing always
+   * stamps the caller's current organization -- so a public template
+   * can only be created by an operator with database access.
+   */
   @Column({ nullable: true })
   organizationId: string;
 
-  @Column({ default: 'public', length: 20 })
-  visibility: string;
+  /** The user who published this template. */
+  @Column({ type: 'uuid', nullable: true })
+  createdBy: string | null;
+
+  /**
+   * The tool this template was published from, kept for provenance.
+   * Deliberately not a foreign key: deleting the source tool must not
+   * retract a template other organizations may already have installed.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  sourceToolId: string | null;
 
   @Column({ default: '1.0.0', length: 20 })
   version: string;

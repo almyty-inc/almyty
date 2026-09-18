@@ -16,6 +16,7 @@ import {
 import { approvalsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface ApprovalRequest {
   id: string
@@ -68,7 +69,7 @@ export function ApprovalsPage() {
       setDecisionFor(null)
       setDecisionReason('')
     },
-    onError: (err: any) => errNotif('Approve failed', err?.response?.data?.message ?? err?.message ?? 'Unknown'),
+    onError: (err: any) => errNotif('Approve failed', getApiErrorMessage(err, 'Unknown')),
   })
 
   const rejectMutation = useMutation({
@@ -79,7 +80,7 @@ export function ApprovalsPage() {
       setDecisionFor(null)
       setDecisionReason('')
     },
-    onError: (err: any) => errNotif('Reject failed', err?.response?.data?.message ?? err?.message ?? 'Unknown'),
+    onError: (err: any) => errNotif('Reject failed', getApiErrorMessage(err, 'Unknown')),
   })
 
   if (query.isLoading) {

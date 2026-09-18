@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { AgentRun } from '../../entities/agent-run.entity';
+import { AgentExecution } from '../../entities/agent-execution.entity';
 import { SpendGranularity, normalizeGranularity } from './spend-period.util';
 
 export interface SpendScope {
@@ -50,16 +51,34 @@ export interface SpendForecast {
 }
 
 /**
- * Read-side spend aggregation (T2.1). The single source of truth is
- * `AgentRun.totalCost`, which is stored in **dollars** — the per-run
- * cap converts it with `totalCost * 100 >= maxCostCents`, so we do the
- * same *100 here to return integer cents everywhere.
+ * Read-side spend aggregation (T2.1). Cost is stored in **dollars** —
+ * the per-run cap converts it with `totalCost * 100 >= maxCostCents`, so
+ * we do the same *100 here to return integer cents everywhere.
+ *
+ * An agent spends money in one of two shapes and this service has to
+ * cover both. An autonomous agent runs on the step processor and writes
+ * `agent_runs`; a workflow agent runs on the pipeline engine and writes
+ * `agent_executions` and never an AgentRun. Reading only `agent_runs`
+ * meant every workflow agent showed nothing on the Cost tab, reported a
+ * period-to-date of 0, could never trip `enforceForRun`, and never sent
+ * a spend-alert email.
+ *
+ * Covered on the READ side, by unioning the two tables here, rather than
+ * by having the pipeline engine write an AgentRun shell. A shell would
+ * have to carry steps, limits, a conversation and a status enum the
+ * workflow path has no meaning for; it would show up in every run list
+ * and in `a2a-task.handler`'s queries, and the run reaper would sweep
+ * it. This service already documents itself as the single read-side
+ * aggregation point, so one place changes and every surface above it —
+ * Cost tab, forecast, budget enforcement, alerts — is covered at once.
  */
 @Injectable()
 export class SpendService {
   constructor(
     @InjectRepository(AgentRun)
     private readonly runRepo: Repository<AgentRun>,
+    @InjectRepository(AgentExecution)
+    private readonly executionRepo: Repository<AgentExecution>,
   ) {}
 
   private toCents(dollars: string | number | null | undefined): number {
@@ -67,20 +86,43 @@ export class SpendService {
   }
 
   /**
+   * Both spend tables have the same four columns this service needs
+   * (organizationId, agentId, totalCost, createdAt), so each aggregation
+   * runs the same query twice under a shared alias and merges. Missing
+   * repo = the autonomous half only, which keeps a caller that predates
+   * the workflow half working rather than throwing.
+   */
+  private spendSources(): Array<{ repo: Repository<any>; alias: string }> {
+    const sources: Array<{ repo: Repository<any>; alias: string }> = [
+      { repo: this.runRepo, alias: 'run' },
+    ];
+    if (this.executionRepo) sources.push({ repo: this.executionRepo, alias: 'run' });
+    return sources;
+  }
+
+  /**
    * Period-to-date spend for a scope, in integer cents. Used by the
    * enforcement hook to compare against a budget's `limitCents`.
+   *
+   * Sums BOTH execution shapes. Reading only `agent_runs` meant a
+   * workflow agent's budget could never trip, however much it spent.
    */
   async periodToDateCents(scope: SpendScope): Promise<number> {
-    const qb = this.runRepo
-      .createQueryBuilder('run')
-      .select('COALESCE(SUM(run.totalCost), 0)', 'total')
-      .where('run.organizationId = :orgId', { orgId: scope.organizationId })
-      .andWhere('run.createdAt >= :from', { from: scope.from });
-    if (scope.to) qb.andWhere('run.createdAt < :to', { to: scope.to });
-    if (scope.agentId) qb.andWhere('run.agentId = :agentId', { agentId: scope.agentId });
+    const totals = await Promise.all(
+      this.spendSources().map(async ({ repo, alias }) => {
+        const qb = repo
+          .createQueryBuilder(alias)
+          .select(`COALESCE(SUM(${alias}.totalCost), 0)`, 'total')
+          .where(`${alias}.organizationId = :orgId`, { orgId: scope.organizationId })
+          .andWhere(`${alias}.createdAt >= :from`, { from: scope.from });
+        if (scope.to) qb.andWhere(`${alias}.createdAt < :to`, { to: scope.to });
+        if (scope.agentId) qb.andWhere(`${alias}.agentId = :agentId`, { agentId: scope.agentId });
 
-    const row = await qb.getRawOne<{ total: string }>();
-    return this.toCents(row?.total);
+        const row = await qb.getRawOne<{ total: string }>();
+        return this.toCents(row?.total);
+      }),
+    );
+    return totals.reduce((a, b) => a + b, 0);
   }
 
   /**
@@ -107,24 +149,40 @@ export class SpendService {
     to: Date | undefined,
     bucket: SpendGranularity,
   ): Promise<SpendBucket[]> {
-    const qb = this.runRepo
-      .createQueryBuilder('run')
-      .select('date_trunc(:bucket, run.createdAt)', 'periodStart')
-      .addSelect('COALESCE(SUM(run.totalCost), 0)', 'total')
-      .addSelect('COUNT(*)', 'count')
-      .where('run.organizationId = :orgId', { orgId: organizationId })
-      .andWhere('run.createdAt >= :from', { from })
-      .setParameter('bucket', bucket)
-      .groupBy('date_trunc(:bucket, run.createdAt)')
-      .orderBy('date_trunc(:bucket, run.createdAt)', 'ASC');
-    if (to) qb.andWhere('run.createdAt < :to', { to });
+    const perSource = await Promise.all(
+      this.spendSources().map(async ({ repo, alias }) => {
+        const qb = repo
+          .createQueryBuilder(alias)
+          .select(`date_trunc(:bucket, ${alias}.createdAt)`, 'periodStart')
+          .addSelect(`COALESCE(SUM(${alias}.totalCost), 0)`, 'total')
+          .addSelect('COUNT(*)', 'count')
+          .where(`${alias}.organizationId = :orgId`, { orgId: organizationId })
+          .andWhere(`${alias}.createdAt >= :from`, { from })
+          .setParameter('bucket', bucket)
+          .groupBy(`date_trunc(:bucket, ${alias}.createdAt)`)
+          .orderBy(`date_trunc(:bucket, ${alias}.createdAt)`, 'ASC');
+        if (to) qb.andWhere(`${alias}.createdAt < :to`, { to });
 
-    const rows = await qb.getRawMany<{ periodStart: Date; total: string; count: string }>();
-    return rows.map((r) => ({
-      periodStart: new Date(r.periodStart).toISOString(),
-      spentCents: this.toCents(r.total),
-      runCount: parseInt(r.count, 10),
-    }));
+        return qb.getRawMany<{ periodStart: Date; total: string; count: string }>();
+      }),
+    );
+
+    // Merge the two shapes' buckets: a period with both an autonomous run
+    // and a workflow execution is one bucket, not two.
+    const merged = new Map<string, { spentCents: number; runCount: number }>();
+    for (const rows of perSource) {
+      for (const r of rows) {
+        const key = new Date(r.periodStart).toISOString();
+        const acc = merged.get(key) ?? { spentCents: 0, runCount: 0 };
+        acc.spentCents += this.toCents(r.total);
+        acc.runCount += parseInt(r.count, 10);
+        merged.set(key, acc);
+      }
+    }
+
+    return [...merged.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([periodStart, v]) => ({ periodStart, ...v }));
   }
 
   private async byAgent(
@@ -132,24 +190,40 @@ export class SpendService {
     from: Date,
     to: Date | undefined,
   ): Promise<SpendByAgent[]> {
-    const qb = this.runRepo
-      .createQueryBuilder('run')
-      .select('run.agentId', 'agentId')
-      .addSelect('COALESCE(SUM(run.totalCost), 0)', 'total')
-      .addSelect('COUNT(*)', 'count')
-      .where('run.organizationId = :orgId', { orgId: organizationId })
-      .andWhere('run.createdAt >= :from', { from })
-      .groupBy('run.agentId')
-      .orderBy('COALESCE(SUM(run.totalCost), 0)', 'DESC')
-      .limit(50);
-    if (to) qb.andWhere('run.createdAt < :to', { to });
+    const perSource = await Promise.all(
+      this.spendSources().map(async ({ repo, alias }) => {
+        const qb = repo
+          .createQueryBuilder(alias)
+          .select(`${alias}.agentId`, 'agentId')
+          .addSelect(`COALESCE(SUM(${alias}.totalCost), 0)`, 'total')
+          .addSelect('COUNT(*)', 'count')
+          .where(`${alias}.organizationId = :orgId`, { orgId: organizationId })
+          .andWhere(`${alias}.createdAt >= :from`, { from })
+          .groupBy(`${alias}.agentId`)
+          .orderBy(`COALESCE(SUM(${alias}.totalCost), 0)`, 'DESC')
+          .limit(50);
+        if (to) qb.andWhere(`${alias}.createdAt < :to`, { to });
 
-    const rows = await qb.getRawMany<{ agentId: string; total: string; count: string }>();
-    return rows.map((r) => ({
-      agentId: r.agentId,
-      spentCents: this.toCents(r.total),
-      runCount: parseInt(r.count, 10),
-    }));
+        return qb.getRawMany<{ agentId: string; total: string; count: string }>();
+      }),
+    );
+
+    // An agent can be run in both modes over its life, so the two halves
+    // are summed per agent before the top-50 cut is applied.
+    const merged = new Map<string, { spentCents: number; runCount: number }>();
+    for (const rows of perSource) {
+      for (const r of rows) {
+        const acc = merged.get(r.agentId) ?? { spentCents: 0, runCount: 0 };
+        acc.spentCents += this.toCents(r.total);
+        acc.runCount += parseInt(r.count, 10);
+        merged.set(r.agentId, acc);
+      }
+    }
+
+    return [...merged.entries()]
+      .map(([agentId, v]) => ({ agentId, ...v }))
+      .sort((a, b) => b.spentCents - a.spentCents)
+      .slice(0, 50);
   }
 
   /**
@@ -162,24 +236,38 @@ export class SpendService {
     from: Date,
     to?: Date,
   ): Promise<SpendByTeam[]> {
-    const qb = this.runRepo
-      .createQueryBuilder('run')
-      .leftJoin('agents', 'agent', 'agent.id = run.agentId')
-      .select('agent.teamId', 'teamId')
-      .addSelect('COALESCE(SUM(run.totalCost), 0)', 'total')
-      .addSelect('COUNT(*)', 'count')
-      .where('run.organizationId = :orgId', { orgId: organizationId })
-      .andWhere('run.createdAt >= :from', { from })
-      .groupBy('agent.teamId')
-      .orderBy('COALESCE(SUM(run.totalCost), 0)', 'DESC');
-    if (to) qb.andWhere('run.createdAt < :to', { to });
+    const perSource = await Promise.all(
+      this.spendSources().map(async ({ repo, alias }) => {
+        const qb = repo
+          .createQueryBuilder(alias)
+          .leftJoin('agents', 'agent', `agent.id = ${alias}.agentId`)
+          .select('agent.teamId', 'teamId')
+          .addSelect(`COALESCE(SUM(${alias}.totalCost), 0)`, 'total')
+          .addSelect('COUNT(*)', 'count')
+          .where(`${alias}.organizationId = :orgId`, { orgId: organizationId })
+          .andWhere(`${alias}.createdAt >= :from`, { from })
+          .groupBy('agent.teamId')
+          .orderBy(`COALESCE(SUM(${alias}.totalCost), 0)`, 'DESC');
+        if (to) qb.andWhere(`${alias}.createdAt < :to`, { to });
 
-    const rows = await qb.getRawMany<{ teamId: string | null; total: string; count: string }>();
-    return rows.map((r) => ({
-      teamId: r.teamId ?? null,
-      spentCents: this.toCents(r.total),
-      runCount: parseInt(r.count, 10),
-    }));
+        return qb.getRawMany<{ teamId: string | null; total: string; count: string }>();
+      }),
+    );
+
+    const merged = new Map<string | null, { spentCents: number; runCount: number }>();
+    for (const rows of perSource) {
+      for (const r of rows) {
+        const key = r.teamId ?? null;
+        const acc = merged.get(key) ?? { spentCents: 0, runCount: 0 };
+        acc.spentCents += this.toCents(r.total);
+        acc.runCount += parseInt(r.count, 10);
+        merged.set(key, acc);
+      }
+    }
+
+    return [...merged.entries()]
+      .map(([teamId, v]) => ({ teamId, ...v }))
+      .sort((a, b) => b.spentCents - a.spentCents);
   }
 
   /**

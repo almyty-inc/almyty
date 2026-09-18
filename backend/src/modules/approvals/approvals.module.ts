@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { ApprovalRequest } from '../../entities/approval-request.entity';
+import { ApprovalPolicyApprovalRecord } from '../../entities/approval-policy-approval.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
@@ -10,7 +11,7 @@ import { ApprovalsController } from './approvals.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ApprovalRequest, AgentRun]),
+    TypeOrmModule.forFeature([ApprovalRequest, ApprovalPolicyApprovalRecord, AgentRun]),
     AuthorizationModule,
   ],
   providers: [ApprovalsService],

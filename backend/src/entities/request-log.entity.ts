@@ -10,11 +10,13 @@ import {
 import { Gateway } from './gateway.entity';
 import { Tool } from './tool.entity';
 import { User } from './user.entity';
+import { Organization } from './organization.entity';
 
 @Entity('request_logs')
 @Index(['timestamp'])
 @Index(['gatewayId', 'timestamp'])
 @Index(['statusCode'])
+@Index('IDX_request_logs_organizationId_timestamp', ['organizationId', 'timestamp'])
 export class RequestLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -40,6 +42,17 @@ export class RequestLog {
   @Column({ nullable: true })
   gatewayId: string;
 
+  /**
+   * The organization this request belonged to.
+   *
+   * Its own column rather than a hop through `gatewayId`: that foreign
+   * key is ON DELETE SET NULL, so a deleted gateway would otherwise
+   * leave its logs with no tenant and no retention policy able to
+   * reach them.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  organizationId: string;
+
   @Column({ nullable: true })
   toolId: string;
 
@@ -61,6 +74,22 @@ export class RequestLog {
   @Column({ nullable: true })
   errorMessage: string;
 
+  /**
+   * Machine-readable reason a request was refused (NO_AUTH,
+   * SURFACE_RATE_LIMITED, INVALID_API_KEY, ...). The codes existed on the
+   * thrown exception and were answered to the client, but had no column
+   * here, so "how often is this gateway refusing on a missing key?" had
+   * to be guessed from free-text `errorMessage`.
+   */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  @Index()
+  errorCode: string | null;
+
+  /**
+   * Correlation id for this request — minted by
+   * `requestContextMiddleware`, echoed to the caller as `X-Request-Id`,
+   * and appended to every log line emitted while serving it.
+   */
   @Column({ nullable: true })
   requestId: string;
 
@@ -85,6 +114,13 @@ export class RequestLog {
   })
   @JoinColumn({ name: 'gatewayId' })
   gateway: Gateway;
+
+  @ManyToOne(() => Organization, {
+    nullable: true,
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'organizationId' })
+  organization: Organization;
 
   @ManyToOne(() => Tool, {
     nullable: true,

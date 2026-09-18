@@ -143,10 +143,15 @@ export class LifecycleEmailService {
       .update(`lifecycle-unsub:${userId}`)
       .digest('base64url')
       .slice(0, 16);
-    if (
-      sig.length !== expected.length ||
-      !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
-    ) {
+    // Compare as bytes. `timingSafeEqual` THROWS on a byte-length
+    // mismatch, and two strings of equal length can differ in bytes the
+    // moment one carries a multi-byte character — so a token whose
+    // signature was 16 characters including e.g. "é" escaped this
+    // function as a RangeError and turned the public unsubscribe
+    // endpoint into a 500 instead of the neutral confirmation page.
+    const sigBuf = Buffer.from(sig, 'utf8');
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
       return null;
     }
     return userId;

@@ -3,7 +3,7 @@ import { Globe, Users } from 'lucide-react'
 
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { teamsApi } from '@/lib/api'
+import { organizationsApi } from '@/lib/api'
 
 export interface VisibilityValue {
   visibility: 'org' | 'team'
@@ -35,19 +35,21 @@ interface Props {
  * - Org-wide → teamId=null, visibility='org'.
  * - Team    → teamId required; pickable from team list.
  *
- * Listens on the org's teams via teamsApi.list (cached by react-query
- * with key ['teams', organizationId] so multiple instances on a page
- * share one fetch).
+ * Reads the org's teams under ['organization-teams', organizationId] --
+ * the same key Settings -> Members & Teams writes through, so creating
+ * or deleting a team there shows up in every picker. It used to have a
+ * second key of its own over the same endpoint, which no mutation
+ * invalidated, so a team you had just created was missing here.
  */
 export function VisibilityField({ organizationId, value, onChange, teamAdminOf, disabled }: Props) {
   const teamsQuery = useQuery<Team[]>({
-    queryKey: ['teams', organizationId],
-    queryFn: () => teamsApi.list(organizationId),
+    queryKey: ['organization-teams', organizationId],
+    queryFn: () => organizationsApi.getTeams(organizationId),
     enabled: !!organizationId,
   })
 
-  // teamsApi.list goes through apiGet → extractData, so teamsQuery.data
-  // is already the flat array.
+  // organizationsApi.getTeams goes through apiGet → extractData, so
+  // teamsQuery.data is already the flat array.
   const allTeams: Team[] = Array.isArray(teamsQuery.data) ? teamsQuery.data : []
 
   const pickableTeams = teamAdminOf

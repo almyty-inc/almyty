@@ -47,6 +47,13 @@ export interface SelectionInput {
   yes?: boolean;
   /** `--global` / `-G`: include / prefer home-scope installs. */
   global?: boolean;
+  /**
+   * Whether prompting is allowed. The caller decides (see tty.ts):
+   * reading `process.stdin.isTTY` here meant a CI runner's pseudo-tty
+   * counted as interactive, and a scripted install could hang on a
+   * picker with nobody to answer it.
+   */
+  interactive?: boolean;
   /** Override $HOME (test seam). */
   home?: string;
 }
@@ -232,12 +239,14 @@ export function selectInstallTargetsAuto(
     }
   }
 
-  // 6. `--yes` / non-TTY: pick a sensible default WITHOUT prompting.
-  //    Project-detected + universal first; if nothing project-side,
-  //    show home-detected as a hint (the user probably wants the
-  //    interactive picker for this; here we just return defaults
-  //    so scripted use doesn't hang).
-  if (yes || !process.stdin.isTTY) {
+  // 6. `--yes`, or nowhere to prompt: pick a sensible default WITHOUT
+  //    prompting. Project-detected + universal first; if nothing
+  //    project-side, fall back to the defaults so scripted use never
+  //    hangs on a picker.
+  //
+  //    `interactive` comes from the caller rather than from
+  //    process.stdin.isTTY, which is true inside most CI runners.
+  if (yes || input.interactive === false) {
     const projectDetected = detectAgents(projectDir);
     if (projectDetected.length > 0) {
       return dedupeBySkillsDir([

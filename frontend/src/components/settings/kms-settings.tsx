@@ -70,9 +70,27 @@ function Kms() {
     }
   }, [config.data])
 
+  /**
+   * First attach only. The server answers a re-attach with 409 and tells
+   * you to rotate, because attaching twice used to mint a second data
+   * key and overwrite the first — leaving every secret sealed under the
+   * old one unreadable, silently.
+   */
   const attach = useMutation({
     mutationFn: async () =>
       (await api.put('/kms', { cmkArn: cmkArn.trim(), awsRegion: awsRegion.trim(), enabled: true })).data.data as KmsConfig,
+    onSuccess: (data) => queryClient.setQueryData(['kms-config'], data),
+  })
+
+  /**
+   * Rotation is its own operation, and this is the only way to reach it.
+   * It retains the outgoing wrapped key, so everything sealed under it
+   * stays readable — which is the whole difference from re-attaching.
+   */
+  const rotate = useMutation({
+    mutationFn: async () =>
+      (await api.post('/kms/rotate', { cmkArn: cmkArn.trim() || undefined, awsRegion: awsRegion.trim() || undefined }))
+        .data.data as KmsConfig,
     onSuccess: (data) => queryClient.setQueryData(['kms-config'], data),
   })
 
@@ -85,7 +103,11 @@ function Kms() {
   // An ARN, not a key. Checked here so a mistyped value is caught before
   // it becomes a failed wrap with a less obvious message.
   const arnLooksWrong = cmkArn.trim().length > 0 && !/^arn:aws[a-z-]*:kms:/.test(cmkArn.trim())
-  const canAttach = cmkArn.trim().length > 0 && awsRegion.trim().length > 0 && !arnLooksWrong && !attach.isPending
+  const busy = attach.isPending || rotate.isPending
+  const canAttach = cmkArn.trim().length > 0 && awsRegion.trim().length > 0 && !arnLooksWrong && !busy
+  // Rotating to the key already configured is valid: a fresh data key
+  // under the same CMK. So an empty ARN is allowed here, unlike attach.
+  const canRotate = !arnLooksWrong && !busy
 
   return (
     <Card>
@@ -138,15 +160,36 @@ function Kms() {
           The key never leaves your account. almyty stores the ARN and a data key wrapped under it, never the key itself.
         </p>
 
-        {attach.isError && (
+        {(attach.isError || rotate.isError) && (
           <p data-testid="kms-error" className="text-xs text-red-600 dark:text-red-400">
-            {getApiErrorMessage(attach.error, 'Could not attach that key')}
+            {attach.isError
+              ? getApiErrorMessage(attach.error, 'Could not attach that key')
+              : getApiErrorMessage(rotate.error, 'Could not rotate the key')}
           </p>
         )}
 
-        <Button data-testid="attach-cmk" disabled={!canAttach} onClick={() => attach.mutate()}>
-          {attach.isPending ? 'Attaching...' : data?.provisioned ? 'Replace key' : 'Attach key'}
-        </Button>
+        {/* Attach and rotate are different operations and the button says
+            which one it is. It used to read "Replace key" once a key was
+            attached while still calling the attach endpoint — which minted
+            a second data key over the first and made every secret sealed
+            under the old one unreadable. "Replace" was the wrong word for
+            what it did and for what anybody wanted. */}
+        {data?.provisioned ? (
+          <div className="space-y-2">
+            <Button data-testid="rotate-cmk" disabled={!canRotate} onClick={() => rotate.mutate()}>
+              {rotate.isPending ? 'Rotating...' : 'Rotate key'}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Generates a fresh data key. Give an ARN above to move to a different key, or leave it
+              blank to rotate under the one you have. Secrets stored before the rotation stay
+              readable — almyty keeps the wrapped key they were sealed with.
+            </p>
+          </div>
+        ) : (
+          <Button data-testid="attach-cmk" disabled={!canAttach} onClick={() => attach.mutate()}>
+            {attach.isPending ? 'Attaching...' : 'Attach key'}
+          </Button>
+        )}
 
         {data?.provisioned && (
           <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-3">
@@ -169,6 +212,15 @@ function Kms() {
               onCheckedChange={(v) => setEnabled.mutate(Boolean(v))}
             />
           </div>
+        )}
+
+        {setEnabled.isError && (
+          // A refused toggle left the switch snapping back with no reason
+          // given, on the one setting that decides where secrets are
+          // wrapped.
+          <p data-testid="kms-enabled-error" className="text-xs text-red-600 dark:text-red-400">
+            {getApiErrorMessage(setEnabled.error, 'The setting was not changed.')}
+          </p>
         )}
       </CardContent>
     </Card>

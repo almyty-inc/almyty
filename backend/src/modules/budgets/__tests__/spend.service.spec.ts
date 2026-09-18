@@ -7,12 +7,18 @@ import { startOfPeriod, normalizeGranularity } from '../spend-period.util';
  * the dollars→cents conversion and result-shape mapping over a stubbed
  * query builder, plus the period-boundary math the enforcement hook and
  * dedup key both rely on.
+ *
+ * Both execution shapes are stubbed separately: an autonomous agent
+ * writes `agent_runs`, a workflow agent writes `agent_executions` and
+ * never an AgentRun. Reading only the first meant every workflow agent's
+ * spend was invisible to the Cost tab, to period-to-date, to budget
+ * enforcement and to spend alerts.
  */
 describe('SpendService', () => {
   function makeQb(rawOne: any, rawMany: any[]) {
     const qb: any = {};
     for (const m of [
-      'select', 'addSelect', 'where', 'andWhere', 'groupBy', 'orderBy', 'limit', 'setParameter',
+      'select', 'addSelect', 'where', 'andWhere', 'groupBy', 'orderBy', 'limit', 'setParameter', 'leftJoin',
     ]) {
       qb[m] = jest.fn(() => qb);
     }
@@ -21,10 +27,13 @@ describe('SpendService', () => {
     return qb;
   }
 
+  const repoOf = (qb: any) => ({ createQueryBuilder: jest.fn(() => qb) }) as any;
+  /** A workflow half that contributes nothing, for the run-only cases. */
+  const emptyExecRepo = () => repoOf(makeQb({ total: '0' }, []));
+
   it('converts summed dollars to integer cents in periodToDateCents', async () => {
     const qb = makeQb({ total: '1.2345' }, []);
-    const repo: any = { createQueryBuilder: jest.fn(() => qb) };
-    const service = new SpendService(repo);
+    const service = new SpendService(repoOf(qb), emptyExecRepo());
 
     const cents = await service.periodToDateCents({
       organizationId: 'org-1',
@@ -38,8 +47,7 @@ describe('SpendService', () => {
 
   it('applies the agent filter when agentId is provided', async () => {
     const qb = makeQb({ total: '0' }, []);
-    const repo: any = { createQueryBuilder: jest.fn(() => qb) };
-    const service = new SpendService(repo);
+    const service = new SpendService(repoOf(qb), emptyExecRepo());
 
     await service.periodToDateCents({
       organizationId: 'org-1',
@@ -49,13 +57,37 @@ describe('SpendService', () => {
     expect(qb.andWhere).toHaveBeenCalledWith('run.agentId = :agentId', { agentId: 'agent-9' });
   });
 
+  it('counts a workflow agent that never wrote an AgentRun', async () => {
+    // agent_runs has nothing for this org; agent_executions has $4.
+    const runQb = makeQb({ total: '0' }, []);
+    const execQb = makeQb({ total: '4.00' }, []);
+    const service = new SpendService(repoOf(runQb), repoOf(execQb));
+
+    const cents = await service.periodToDateCents({
+      organizationId: 'org-1',
+      from: new Date('2026-06-01T00:00:00Z'),
+    });
+
+    // 0 before the fix — so a workflow agent's budget could never trip.
+    expect(cents).toBe(400);
+  });
+
+  it('sums both execution shapes for one organization', async () => {
+    const service = new SpendService(
+      repoOf(makeQb({ total: '1.50' }, [])),
+      repoOf(makeQb({ total: '2.50' }, [])),
+    );
+    expect(
+      await service.periodToDateCents({ organizationId: 'org-1', from: new Date() }),
+    ).toBe(400);
+  });
+
   it('maps timeseries + byAgent rows with cents conversion', async () => {
     const rows = [
       { periodStart: '2026-06-01T00:00:00.000Z', agentId: 'agent-1', total: '2.00', count: '3' },
     ];
     const qb = makeQb({ total: '5.00' }, rows);
-    const repo: any = { createQueryBuilder: jest.fn(() => qb) };
-    const service = new SpendService(repo);
+    const service = new SpendService(repoOf(qb), emptyExecRepo());
 
     const summary = await service.getSummary('org-1', {
       from: new Date('2026-06-01T00:00:00Z'),
@@ -68,6 +100,30 @@ describe('SpendService', () => {
     ]);
     expect(summary.byAgent).toEqual([
       { agentId: 'agent-1', spentCents: 200, runCount: 3 },
+    ]);
+  });
+
+  it('merges the two shapes into one bucket per period and one row per agent', async () => {
+    // The same agent, the same day, run in both modes: one bucket, one row.
+    const runQb = makeQb({ total: '2.00' }, [
+      { periodStart: '2026-06-01T00:00:00.000Z', agentId: 'agent-1', total: '2.00', count: '1' },
+    ]);
+    const execQb = makeQb({ total: '3.00' }, [
+      { periodStart: '2026-06-01T00:00:00.000Z', agentId: 'agent-1', total: '3.00', count: '2' },
+    ]);
+    const service = new SpendService(repoOf(runQb), repoOf(execQb));
+
+    const summary = await service.getSummary('org-1', {
+      from: new Date('2026-06-01T00:00:00Z'),
+      granularity: 'day',
+    });
+
+    expect(summary.totalCents).toBe(500);
+    expect(summary.timeseries).toEqual([
+      { periodStart: '2026-06-01T00:00:00.000Z', spentCents: 500, runCount: 3 },
+    ]);
+    expect(summary.byAgent).toEqual([
+      { agentId: 'agent-1', spentCents: 500, runCount: 3 },
     ]);
   });
 
@@ -90,13 +146,8 @@ describe('SpendService', () => {
       { teamId: 'team-1', total: '6.00', count: '2' },
       { teamId: null, total: '3.00', count: '1' },
     ];
-    const qb: any = {};
-    for (const m of ['leftJoin', 'select', 'addSelect', 'where', 'andWhere', 'groupBy', 'orderBy']) {
-      qb[m] = jest.fn(() => qb);
-    }
-    qb.getRawMany = jest.fn().mockResolvedValue(rows);
-    const repo: any = { createQueryBuilder: jest.fn(() => qb) };
-    const service = new SpendService(repo);
+    const qb = makeQb(null, rows);
+    const service = new SpendService(repoOf(qb), repoOf(makeQb(null, [])));
 
     const byTeam = await service.byTeam('org-1', new Date('2026-06-01T00:00:00Z'));
     expect(qb.leftJoin).toHaveBeenCalledWith('agents', 'agent', 'agent.id = run.agentId');
@@ -106,8 +157,19 @@ describe('SpendService', () => {
     ]);
   });
 
+  it('rolls a team up across both execution shapes', async () => {
+    const service = new SpendService(
+      repoOf(makeQb(null, [{ teamId: 'team-1', total: '1.00', count: '1' }])),
+      repoOf(makeQb(null, [{ teamId: 'team-1', total: '2.00', count: '1' }])),
+    );
+
+    expect(await service.byTeam('org-1', new Date())).toEqual([
+      { teamId: 'team-1', spentCents: 300, runCount: 2 },
+    ]);
+  });
+
   describe('forecast', () => {
-    const service = new SpendService({} as any);
+    const service = new SpendService({} as any, {} as any);
     const bucket = (spentCents: number) => ({ periodStart: 'x', spentCents, runCount: 1 });
 
     it('projects a rising linear series', () => {

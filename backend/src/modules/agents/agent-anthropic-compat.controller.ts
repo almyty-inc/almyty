@@ -5,6 +5,7 @@ import {
   Headers,
   Logger,
   NotFoundException,
+  Optional,
   Post,
   Req,
   Res,
@@ -14,6 +15,8 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Request, Response } from 'express';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
 import * as crypto from 'crypto';
 
 import { Agent } from '../../entities/agent.entity';
@@ -27,6 +30,9 @@ import {
   toAnthropicResponse,
   type AnthropicMessagesRequest,
 } from './protocols/anthropic-messages';
+import { CompatRateLimiter } from './compat-rate-limit.helper';
+import { renderConversation, withSamplingOverrides } from './compat-conversation.helper';
+import { USAGE_SPLIT_HEADER, usageSplitState } from './agent-openai-stream.helper';
 
 /**
  * `POST /v1/messages`: point an Anthropic client at an almyty agent.
@@ -47,11 +53,24 @@ import {
 export class AgentAnthropicCompatController {
   private readonly logger = new Logger(AgentAnthropicCompatController.name);
 
+  /**
+   * Per-key fixed-window limiter, the same one /v1/chat/completions uses.
+   * Without it this route had no per-key counter at all: only the global
+   * 100/60s ThrottlerGuard default stood between a valid key and unbounded
+   * agent runs on the org's account, far past what the OpenAI sibling permits.
+   */
+  private readonly rateLimiter: CompatRateLimiter;
+
   constructor(
     private readonly agentsService: AgentsService,
     private readonly executionEngine: AgentExecutionEngine,
     @InjectRepository(ApiKey) private readonly apiKeys: Repository<ApiKey>,
-  ) {}
+    // Optional so unit tests (and any Redis-less boot) construct cleanly and
+    // fall back to the per-pod in-memory counter.
+    @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
+  ) {
+    this.rateLimiter = new CompatRateLimiter('anthropic_rl', this.logger, this.redis);
+  }
 
   @Post('messages')
   @ApiOperation({ summary: 'Create a message (Anthropic-compatible)' })
@@ -72,6 +91,23 @@ export class AgentAnthropicCompatController {
       // Anthropic clients send x-api-key; accepting Bearer as well means a
       // caller that already has an almyty key does not need a second shape.
       const apiKey = await this.authenticate(auth, xApiKey);
+
+      // Per-key rate limit, at parity with /v1/chat/completions. Headers go
+      // out on every response, and 429 is the Anthropic error shape so a
+      // client can branch on it.
+      const rateLimit = await this.rateLimiter.track(apiKey.id);
+      this.rateLimiter.setHeaders(res, rateLimit);
+      if (rateLimit.remaining <= 0) {
+        return res
+          .status(429)
+          .json(
+            toAnthropicError(
+              429,
+              'Rate limit exceeded. Please retry after a moment.',
+              'rate_limit_error',
+            ),
+          );
+      }
 
       const internal = fromAnthropicRequest(body);
 
@@ -111,12 +147,26 @@ export class AgentAnthropicCompatController {
           );
       }
 
-      const agent = await this.resolveAgent(internal.model, apiKey.organizationId);
+      const resolved = await this.resolveAgent(internal.model, apiKey.organizationId);
+
+      // The caller's sampling, on a throwaway copy of the agent. `temperature`
+      // and `max_tokens` were carried out of the request correctly and then
+      // never read by anything, so a client asking for temperature 0 got the
+      // agent's own sampling and non-deterministic output with nothing saying
+      // the field had been ignored. Nothing here is persisted.
+      const agent = withSamplingOverrides(resolved, {
+        temperature: typeof internal.temperature === 'number' ? internal.temperature : undefined,
+        maxTokens: typeof internal.maxTokens === 'number' ? internal.maxTokens : undefined,
+      });
 
       const execution = await this.executionEngine.execute(agent, apiKey.organizationId, apiKey.userId || null, {
         input: this.toAgentInput(internal),
         metadata: { triggerType: 'api', protocol: 'anthropic_messages' },
       });
+
+      // Set after the run, not before it: whether the split was measured is
+      // only knowable once the run has recorded its nodes.
+      res.setHeader(USAGE_SPLIT_HEADER, usageSplitState(execution));
 
       if (execution.status !== 'completed') {
         return res
@@ -148,17 +198,23 @@ export class AgentAnthropicCompatController {
   /**
    * The conversation, the way the agent engine takes input.
    *
-   * The tools and the tool choice have to travel with it. Dropping them
-   * here was the bug: the translator carried them, the engine never saw
-   * them, and a client that declared tools got an answer that could never
-   * call one -- its loop simply ended.
+   * `/v1/messages` is stateless: the `messages` array IS the conversation and
+   * an Anthropic client resends it whole every turn. The engine takes a flat
+   * input object and an `llm_call` node renders one user message from a prompt
+   * template that binds `{{input.message}}`, so anything not in `message` does
+   * not reach a model. Passing only the last user line left prior turns -- and
+   * the `system` prompt, the most load-bearing field an Anthropic client sends
+   * -- carried correctly out of the request and then dropped on the floor.
+   * renderConversation folds both into `message`; the structured fields stay
+   * alongside for a prompt that binds them deliberately.
    */
   private toAgentInput(internal: ReturnType<typeof fromAnthropicRequest>): Record<string, any> {
-    const last = [...internal.messages].reverse().find((m) => m.role === 'user');
+    const conversation = renderConversation(internal.messages as any, internal.systemPrompt);
     return {
-      message: last?.content ?? '',
+      message: conversation.message,
+      latestMessage: conversation.latestMessage,
       messages: internal.messages,
-      ...(internal.systemPrompt ? { systemPrompt: internal.systemPrompt } : {}),
+      ...(conversation.systemPrompt ? { systemPrompt: conversation.systemPrompt } : {}),
       ...(internal.tools?.length ? { tools: internal.tools } : {}),
       ...(internal.toolChoice ? { toolChoice: internal.toolChoice } : {}),
       ...(internal.maxTokens ? { maxTokens: internal.maxTokens } : {}),
@@ -197,7 +253,14 @@ export class AgentAnthropicCompatController {
       // The translator turns this into stop_reason, and a turn carrying
       // tool uses must report tool_use or the client never runs them.
       finishReason: 'stop',
-      usage: { outputTokens: execution.totalTokens ?? 0 },
+      // The run records the provider's input/output split, so these are
+      // measured rather than apportioned. A pipeline with no llm_call in it
+      // reports 0/0 against a real total; the x-almyty-usage-split header
+      // distinguishes that case from a measured split.
+      usage: {
+        inputTokens: execution.inputTokens ?? 0,
+        outputTokens: execution.outputTokens ?? 0,
+      },
     };
   }
 

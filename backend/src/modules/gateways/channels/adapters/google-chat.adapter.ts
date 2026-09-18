@@ -21,31 +21,55 @@ export class GoogleChatAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * The message's resource name ("spaces/AAA/messages/BBB"), which
+   * Google Chat repeats on a redelivery of the same event.
+   */
+  deliveryId(rawPayload: any): string | undefined {
+    const message = rawPayload?.message ?? rawPayload;
+    return message?.name ? `google_chat:${message.name}` : undefined;
+  }
+
   formatOutbound(response: AdapterResponse): any {
     return { text: response.text };
   }
 
+  /**
+   * Post the reply to the space's incoming webhook.
+   *
+   * Google Chat's REST surface is HTTP-shaped: 200 with the created
+   * Message resource on success, and a 4xx carrying
+   * `{error: {code, message, status}}` on failure — 404
+   * `NOT_FOUND` for a deleted space, 400 `INVALID_ARGUMENT` for a
+   * thread name from another space, 403 once the webhook is revoked. So
+   * the status is the verdict and `error.message`/`error.status` are
+   * the wording to keep.
+   */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
-    try {
-      const webhookUrl = config.webhook_url;
-      if (!webhookUrl) {
-        this.logger.warn('Google Chat webhook URL not configured');
-        return;
-      }
+    const webhookUrl = config.webhook_url;
+    if (!webhookUrl) {
+      this.sendFailed('webhook_url is not configured, so there is nowhere to send the reply');
+    }
 
-      const body: any = { text: formattedResponse.text };
-      if (threadContext?.threadId) {
-        body.thread = { name: threadContext.threadId };
-      }
+    const body: any = { text: formattedResponse.text };
+    if (threadContext?.threadId) {
+      body.thread = { name: threadContext.threadId };
+    }
 
-      const fetch = globalThis.fetch || (await import('node-fetch')).default;
-      await (fetch as any)(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-    } catch (error) {
-      this.logger.error(`Google Chat send failed: ${error.message}`);
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    const answer = await this.readJsonBody(res);
+    const error = answer?.error;
+    if (this.httpRejected(res) || error) {
+      const detail = error?.message ?? `HTTP ${this.httpStatus(res)}`;
+      this.sendFailed(
+        `the space webhook refused the reply: ${detail}${error?.status ? ` (${error.status})` : ''}`,
+      );
     }
   }
 

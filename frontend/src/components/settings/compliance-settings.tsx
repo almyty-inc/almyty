@@ -61,6 +61,7 @@ import {
   type EffectiveCompliancePolicy,
   type EnforceablePlugin,
 } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 /** PII categories the built-in pii-filter can mask (from the OSS plugin). */
 const PII_CATEGORIES: Array<{ value: string; label: string }> = [
@@ -168,7 +169,7 @@ function CompliancePolicyForm() {
       await queryClient.invalidateQueries({ queryKey: ['compliance-report'] })
     },
     onError: (err: any) =>
-      error('Failed to save', err.response?.data?.message || 'Please try again.'),
+      error('Failed to save', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const piiFilter = watch('piiFilter')

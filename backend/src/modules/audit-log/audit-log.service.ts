@@ -188,19 +188,42 @@ export class AuditLogService {
   }
 
   /**
+   * Maximum rows a single resource-history read may return.
+   *
+   * `findAll` has always clamped its caller-supplied `limit` to 200;
+   * this path took the number straight from `?limit=` on
+   * `GET /audit-logs/resource` and handed it to `take`, so a single
+   * request could ask for the org's entire audit table (and a
+   * non-numeric value produced `take: NaN`, which TypeORM drops —
+   * an unbounded read).
+   */
+  private static readonly MAX_RESOURCE_HISTORY_LIMIT = 200;
+  private static readonly DEFAULT_RESOURCE_HISTORY_LIMIT = 50;
+
+  /**
    * Get audit log for a specific resource
    */
   async getResourceHistory(
     organizationId: string,
     resourceType: AuditResource,
     resourceId: string,
-    limit: number = 50,
+    limit: number = AuditLogService.DEFAULT_RESOURCE_HISTORY_LIMIT,
   ): Promise<AuditLog[]> {
+    const take = AuditLogService.clampHistoryLimit(limit);
     return this.auditLogRepository.find({
       where: { organizationId, resourceType, resourceId },
       order: { createdAt: 'DESC' },
-      take: limit,
+      take,
     });
+  }
+
+  /** Clamp a caller-supplied limit into [1, MAX_RESOURCE_HISTORY_LIMIT]. */
+  static clampHistoryLimit(limit: unknown): number {
+    const n = Math.floor(Number(limit));
+    if (!Number.isFinite(n) || n < 1) {
+      return AuditLogService.DEFAULT_RESOURCE_HISTORY_LIMIT;
+    }
+    return Math.min(n, AuditLogService.MAX_RESOURCE_HISTORY_LIMIT);
   }
 
   /**

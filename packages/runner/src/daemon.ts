@@ -5,7 +5,7 @@ import { join } from 'path';
 import { resolveCredentialsOrExit } from '@almyty/client';
 
 import { ResolvedConfig } from './types.js';
-import { loadConfig } from './config.js';
+import { describeIsolationPosture, loadConfig } from './config.js';
 import { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
 import { createDefaultAdapterFactory, ProcessManager } from './process-manager.js';
 import { StreamableClient, envelope } from './streamable-client.js';
@@ -77,6 +77,11 @@ export class RunnerDaemon {
 
     process.stdout.write(`almyty-runner v${RUNNER_VERSION} starting\n`);
     process.stdout.write(`name=${resolved.name} url=${backendUrl}\n`);
+    // Say what this runner will let the backend do on this machine, at
+    // the top of the log rather than in a config file nobody opened. A
+    // config that refuses everything says so here too, instead of
+    // registering happily and denying each command later.
+    process.stdout.write(`${describeIsolationPosture(resolved.config)}\n`);
 
     // Detect runtime info before anything else; if a probe hangs (e.g.
     // a misbehaving node-pty install) we want to fail fast here rather

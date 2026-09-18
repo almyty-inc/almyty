@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useCopy } from '@/lib/clipboard'
 import { credentialsApi } from '@/lib/api'
 import { SigningCredentialDialog } from './signing-credential-dialog'
@@ -110,7 +111,7 @@ export function BuildPanel({
       queryClient.invalidateQueries({ queryKey: ['app-builds', app.slug] })
     },
     onError: (err: any) =>
-      errorNotif('Could not start', err?.response?.data?.message || 'Something went wrong.'),
+      errorNotif('Could not start the build', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const download = useMutation({
@@ -121,7 +122,7 @@ export function BuildPanel({
       window.open(url, '_blank', 'noopener')
     },
     onError: (err: any) =>
-      errorNotif('Could not download', err?.response?.data?.message || 'Link unavailable.'),
+      errorNotif('Could not download', getApiErrorMessage(err, 'Link unavailable.')),
   })
 
   // What the chosen platform would need signed, and whether this

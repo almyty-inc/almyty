@@ -207,6 +207,30 @@ describe('GrantsService.list and revoke', () => {
     await expect(h.service.revoke(g.id, h.admin, OTHER_ORG)).rejects.toMatchObject({ response: { code: 'GRANT_NOT_FOUND' } });
     await expect(h.service.revoke(g.id, h.outsider)).rejects.toMatchObject({ response: { code: 'CONNECTION_GRANT_FORBIDDEN' } });
   });
+  // The controller used to call revoke() -- which removes the row and writes
+  // the audit entry -- and only THEN compare the grant's connectionId to the
+  // one on the path, throwing 404. Both ids are org-checked, so this was never
+  // cross-tenant; but a member addressing connection X could revoke a grant
+  // belonging to connection Y for real while the API reported it had not
+  // happened, leaving the UI and the audit log disagreeing. The binding is now
+  // asserted before anything is removed.
+  it('revoke refuses a grant addressed through the wrong connection before removing it', async () => {
+    const h = harness();
+    const g = await h.service.grant(h.orgConn.id, { principalType: 'user', principalId: U_MEMBER }, h.admin);
+    h.audit.log.mockClear();
+
+    await expect(
+      h.service.revoke(g.id, h.admin, ORG, h.userConn.id),
+    ).rejects.toMatchObject({ response: { code: 'GRANT_NOT_FOUND' } });
+
+    // Still there, and nothing was audited as revoked.
+    expect(h.grants.rows.map((r: any) => r.id)).toContain(g.id);
+    expect(h.audit.log).not.toHaveBeenCalled();
+
+    // Addressed through its own connection it revokes normally.
+    await expect(h.service.revoke(g.id, h.admin, ORG, h.orgConn.id)).resolves.toMatchObject({ id: g.id });
+    expect(h.grants.rows.map((r: any) => r.id)).not.toContain(g.id);
+  });
 });
 
 describe('GrantsService.assertCanUse and the resolve audit', () => {

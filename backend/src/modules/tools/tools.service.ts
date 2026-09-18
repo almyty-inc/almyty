@@ -1,5 +1,5 @@
 import { Inject, forwardRef } from '@nestjs/common';
-import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, Like, In, MoreThanOrEqual } from 'typeorm';
 
@@ -19,6 +19,7 @@ import { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats } from 
 import { ToolsOperationHelper } from './tools-operation.helper';
 import { ToolsStatsHelper } from './tools-stats.helper';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { isUniqueViolation } from '../../common/utils/unique-violation';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -164,6 +165,15 @@ export class ToolsService {
       return savedTool;
 
     } catch (error) {
+      // `tools_org_name_uq` keeps one live tool per (org, name) so
+      // that name-based resolution in the gateways and the skill
+      // renderer has a single answer. Report the collision instead
+      // of letting the driver error out as a 500.
+      if (isUniqueViolation(error)) {
+        throw new ConflictException(
+          `A tool named '${createToolDto.name}' already exists in this organization`,
+        );
+      }
       this.logger.error(`Failed to create tool: ${error.message}`);
       throw error;
     }

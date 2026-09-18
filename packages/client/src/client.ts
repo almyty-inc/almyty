@@ -92,7 +92,73 @@ export interface CodingSession {
 export type StreamEventHandler = (event: StreamEvent) => void;
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled', 'timeout']);
-const TERMINAL_EVENT_TYPES = new Set(['run.completed', 'run.failed', 'run.cancelled', 'coding.exit']);
+const TERMINAL_EVENT_TYPES = new Set([
+  'run.completed',
+  'run.failed',
+  'run.cancelled',
+  'coding.exit',
+  // The workflow pipeline stream's own terminators.
+  'execution.completed',
+  'execution.failed',
+  'done',
+]);
+
+/** Whether a rejection is a caller-requested abort rather than a failure. */
+export function isAbortError(err: unknown): boolean {
+  const e = err as { name?: string; code?: string } | null;
+  return !!e && (e.name === 'AbortError' || e.code === 'ABORT_ERR');
+}
+
+/**
+ * Turn one SSE frame's lines into a StreamEvent, or null when the frame
+ * carries nothing usable (a keep-alive comment, or malformed JSON).
+ *
+ * Server frames are not uniform. Run events arrive wrapped as
+ * `{type, data, timestamp}`; coding and pipeline events put their
+ * fields at the top level and may also carry a `data` object. So the
+ * envelope's own `data` object is flattened onto the result and the
+ * top-level fields are kept. Reading `event.data.content` off an
+ * `llm.chunk` returned undefined before this, which is why a streaming
+ * reply used to arrive as one block once the run had already finished.
+ */
+export function parseSseFrame(lines: string[]): StreamEvent | null {
+  let eventType = 'message';
+  const dataLines: string[] = [];
+
+  for (const line of lines) {
+    // A line starting with ':' is a comment. The server sends
+    // ': keep-alive' every 15s on the coding stream.
+    if (line.startsWith(':')) continue;
+    if (line.startsWith('event:')) {
+      eventType = line.slice(6).trim();
+    } else if (line.startsWith('data:')) {
+      const value = line.slice(5);
+      dataLines.push(value.startsWith(' ') ? value.slice(1) : value);
+    }
+  }
+
+  if (!dataLines.length) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(dataLines.join('\n'));
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+
+  const envelope = parsed as Record<string, unknown>;
+  const inner = envelope.data;
+  const flat =
+    inner && typeof inner === 'object' && !Array.isArray(inner)
+      ? { ...envelope, ...(inner as Record<string, unknown>) }
+      : envelope;
+
+  return {
+    type: typeof envelope.type === 'string' ? envelope.type : eventType,
+    data: flat,
+  };
+}
 
 export class AlmytyClient {
   private readonly baseUrl: string;
@@ -118,13 +184,31 @@ export class AlmytyClient {
       ...this.headers(),
       ...((init.headers as Record<string, string>) || {}),
     };
-    const res = await fetch(url, { ...init, headers });
+    let res: Response;
+    try {
+      res = await fetch(url, { ...init, headers });
+    } catch (err: any) {
+      // A transport failure carries no status, so callers that want to
+      // say something useful about it need the cause and the host.
+      throw Object.assign(new Error(err?.message || 'Network request failed'), {
+        url,
+        cause: err,
+        networkError: true,
+      });
+    }
     if (!res.ok) {
-      if (res.status === 401) {
-        throw new Error('Authentication failed. Run: npx @almyty/auth login');
-      }
       const text = await res.text().catch(() => '');
-      throw new Error(`API error ${res.status}: ${text}`);
+      // Status and body ride on the error. A CLI cannot turn
+      // "API error 400: {...}" into a sentence a user can act on without
+      // them, and parsing the message string back apart is worse.
+      throw Object.assign(
+        new Error(
+          res.status === 401
+            ? 'Authentication failed. Run: npx @almyty/auth login'
+            : `API error ${res.status}: ${text}`,
+        ),
+        { status: res.status, body: text, url },
+      );
     }
     if (res.status === 204) return null;
     return res.json();
@@ -133,16 +217,29 @@ export class AlmytyClient {
   /**
    * Connect to an SSE endpoint and call handler for each event.
    * Returns when the stream ends or a terminal event is received.
+   *
+   * `init` lets a caller POST (the workflow pipeline stream does);
+   * omitted, this is a GET.
    */
-  async streamSSE(path: string, handler: StreamEventHandler, signal?: AbortSignal): Promise<void> {
+  async streamSSE(
+    path: string,
+    handler: StreamEventHandler,
+    signal?: AbortSignal,
+    init: RequestInit = {},
+  ): Promise<void> {
     const url = `${this.baseUrl}${path}`;
     const res = await fetch(url, {
-      headers: { ...this.headers(), Accept: 'text/event-stream' },
+      ...init,
+      headers: { ...this.headers(), Accept: 'text/event-stream', ...((init.headers as Record<string, string>) || {}) },
       signal,
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new Error(`SSE ${res.status}: ${text}`);
+      throw Object.assign(new Error(`SSE ${res.status}: ${text}`), {
+        status: res.status,
+        body: text,
+        url,
+      });
     }
     const body = res.body;
     if (!body) return;
@@ -150,41 +247,51 @@ export class AlmytyClient {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    // Frame state lives outside the read loop. It used to be declared
+    // per chunk, so any frame whose terminating blank line arrived in
+    // the next chunk was dropped -- which is most of them on a busy
+    // stream, and is why streamed tokens never reached the CLI.
+    let frame: string[] = [];
 
     try {
-      while (true) {
+      for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
 
-        // Parse SSE frames
-        const lines = buffer.split('\n');
-        buffer = lines.pop()!; // keep incomplete line
-        let eventType = 'message';
-        let dataLines: string[] = [];
-
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            eventType = line.slice(7).trim();
-          } else if (line.startsWith('data: ')) {
-            dataLines.push(line.slice(6));
-          } else if (line === '') {
-            // End of frame
-            if (dataLines.length) {
-              const raw = dataLines.join('\n');
-              try {
-                const data = JSON.parse(raw);
-                const event: StreamEvent = { type: data.type || eventType, data };
-                handler(event);
-                if (TERMINAL_EVENT_TYPES.has(event.type)) return;
-              } catch { /* skip malformed */ }
-              dataLines = [];
-              eventType = 'message';
+        let nl = buffer.indexOf('\n');
+        while (nl !== -1) {
+          // CRLF is legal in SSE and a proxy may rewrite to it. Without
+          // stripping the carriage return, no line ever compares equal
+          // to '' and not one frame is ever dispatched.
+          const line = buffer.slice(0, nl).replace(/\r$/, '');
+          buffer = buffer.slice(nl + 1);
+          if (line === '') {
+            const event = parseSseFrame(frame);
+            frame = [];
+            if (event) {
+              handler(event);
+              if (TERMINAL_EVENT_TYPES.has(event.type)) return;
             }
+          } else {
+            frame.push(line);
           }
+          nl = buffer.indexOf('\n');
         }
       }
+      // A server that closes without a trailing blank line still sent a
+      // frame worth reading.
+      if (buffer) frame.push(buffer.replace(/\r$/, ''));
+      const tail = parseSseFrame(frame);
+      if (tail) handler(tail);
     } finally {
+      // Releasing the lock does not close the connection. A terminal
+      // event returns from the loop above with the body unread and the
+      // socket still open, and an SSE endpoint holds its end open too,
+      // so the handle keeps Node's event loop alive: `almyty chat` would
+      // not exit after a streamed turn, and a REPL leaked one connection
+      // per answer. Cancelling the body is what actually closes it.
+      await reader.cancel().catch(() => undefined);
       reader.releaseLock();
     }
   }
@@ -483,12 +590,34 @@ export class GatewayClient {
       output: run.output,
       error: run.error,
       steps: run.steps,
+      totalCost: run.totalCost,
+      totalTokens: run.totalTokens,
     };
   }
 
   async getRun(runId: string): Promise<AgentRun> {
     const data = await this.client.request(`${this.prefix}/runs/${encodeURIComponent(runId)}`);
     return (data?.data ?? data) as AgentRun;
+  }
+
+  /**
+   * Stream a workflow agent's pipeline as it executes.
+   *
+   * The unified endpoint answers POST /:org/:agent/stream with SSE:
+   * execution.started, node.started, node.output, node.completed,
+   * node.skipped, then execution.completed or execution.failed. Without
+   * this a multi-node pipeline is a blocking POST with nothing to show
+   * while it runs.
+   */
+  async streamInvoke(
+    input: Record<string, any>,
+    handler: StreamEventHandler,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.client.streamSSE(`${this.prefix}/stream`, handler, signal, {
+      method: 'POST',
+      body: JSON.stringify({ input }),
+    });
   }
 
   /**
@@ -507,9 +636,13 @@ export class GatewayClient {
       );
       // Stream ended — get final state
       return this.getRun(runId);
-    } catch {
+    } catch (err) {
+      // An abort is what the caller asked for, not a transport failure.
+      // Falling back to polling here kept a cancelled run under watch
+      // for the full five-minute poll window.
+      if (signal?.aborted || isAbortError(err)) throw err;
       // SSE failed — fall back to polling until completion
-      return this.pollRun(runId);
+      return this.pollRun(runId, { signal });
     }
   }
 
@@ -538,6 +671,7 @@ export class GatewayClient {
       intervalMs?: number;
       timeoutMs?: number;
       onStep?: (run: AgentRun) => void;
+      signal?: AbortSignal;
     } = {},
   ): Promise<AgentRun> {
     const intervalMs = options.intervalMs ?? 1500;
@@ -546,6 +680,9 @@ export class GatewayClient {
     let lastStepCount = -1;
 
     while (Date.now() < deadline) {
+      if (options.signal?.aborted) {
+        throw Object.assign(new Error('Aborted'), { name: 'AbortError' });
+      }
       const run = await this.getRun(runId);
       if (Array.isArray(run.steps) && run.steps.length !== lastStepCount) {
         lastStepCount = run.steps.length;
@@ -556,6 +693,9 @@ export class GatewayClient {
       }
       await new Promise((r) => setTimeout(r, intervalMs));
     }
-    throw new Error(`Run ${runId} did not finish within ${Math.round(timeoutMs / 1000)}s`);
+    throw Object.assign(
+      new Error(`Run ${runId} did not finish within ${Math.round(timeoutMs / 1000)}s`),
+      { runId, pollTimeout: true },
+    );
   }
 }

@@ -172,4 +172,50 @@ describe('BillingTab', () => {
     await waitFor(() => expect(screen.getByText('Payment issue')).toBeInTheDocument())
     expect(screen.getByText('Manage billing')).toBeInTheDocument()
   })
+
+  /* GET /billing/:organizationId is @Roles('admin','owner'), but Settings
+   * renders the Billing tab for every role. The status query had no error
+   * branch, so a 403 left `status` undefined and the component fell through
+   * to `plan = 'free'` plus `!status?.stripeConfigured` — telling a member of
+   * a *paying* org that their org is unpaid and that hosted billing is not
+   * set up. Both statements were fabricated from a missing response. These
+   * two cases pin the real message down, and assert the invented Free-plan
+   * copy is gone: showing the error while still claiming "you're on Free"
+   * would be the same lie in a new place.
+   */
+  it('tells a member their role cannot see billing instead of claiming the org is on Free', async () => {
+    const forbidden = Object.assign(new Error('Request failed with status code 403'), {
+      response: { status: 403, data: { message: 'Forbidden resource' } },
+    })
+    mocked.getStatus.mockRejectedValue(forbidden)
+
+    render(<BillingTab organizationId={ORG} />)
+
+    await waitFor(() =>
+      expect(screen.getByText(/Billing is restricted to admins and owners/)).toBeInTheDocument(),
+    )
+    expect(screen.queryByText(/You're on the Free plan/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Hosted billing is not configured for this deployment/),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Upgrade to Pro')).not.toBeInTheDocument()
+    // A 403 will not resolve on retry, so no retry affordance is offered.
+    expect(screen.queryByRole('button', { name: /Try again/ })).not.toBeInTheDocument()
+  })
+
+  it('shows the server message and a retry for a transient status failure', async () => {
+    const boom = Object.assign(new Error('boom'), {
+      response: { status: 500, data: { message: 'Billing service unavailable' } },
+    })
+    mocked.getStatus.mockRejectedValue(boom)
+
+    render(<BillingTab organizationId={ORG} />)
+
+    await waitFor(() =>
+      expect(screen.getByText('Billing service unavailable')).toBeInTheDocument(),
+    )
+    expect(screen.queryByText(/You're on the Free plan/)).not.toBeInTheDocument()
+    // Unlike a 403 this may well succeed on a second attempt.
+    expect(screen.getByRole('button', { name: /Try again/ })).toBeInTheDocument()
+  })
 })

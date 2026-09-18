@@ -314,7 +314,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
   const createMut = useMutation({
     mutationFn: (data: any) => accessKeysApi.create(data),
     onSuccess: (data: any) => { qc.invalidateQueries({ queryKey: ['access-keys'] }); setGeneratedKey(data?.key || data?.accessKey || 'Key generated'); notify.success('Access key created', 'Copy it now -- it is not shown again.') },
-    onError: () => notify.error('Error', 'Failed to generate key'),
+    onError: (err) => notify.error('Could not generate the key', getApiErrorMessage(err, 'No key was created.')),
   })
   const revokeMut = useMutation({
     mutationFn: (id: string) => accessKeysApi.revoke(id),

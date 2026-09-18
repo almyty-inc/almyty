@@ -24,6 +24,7 @@ import { SchemaTab } from '@/components/apis/detail/schema-tab'
 import { SecurityTab } from '@/components/apis/detail/security-tab'
 
 import { apisApi, toolsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { ApiType, ApiOperation, Tool } from '@/types'
@@ -93,6 +94,11 @@ export function ApiDetailPage() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['api', id] })
+      // The overview panel's "Schema" row reads this separate query, not
+      // api.schemas (which the detail endpoint no longer eager-loads), so
+      // leaving it out made a successful import read as "Not uploaded" on
+      // the one panel meant to confirm it.
+      queryClient.invalidateQueries({ queryKey: ['api-schemas', id] })
       queryClient.invalidateQueries({ queryKey: ['api-operations', id] })
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
@@ -104,8 +110,8 @@ export function ApiDetailPage() {
       setUploadDialogOpen(false)
       setUploadFile(null)
     },
-    onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      error('Failed to import schema', err.response?.data?.message || err.message || 'Please try again.')
+    onError: (err: unknown) => {
+      error('Failed to import schema', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 

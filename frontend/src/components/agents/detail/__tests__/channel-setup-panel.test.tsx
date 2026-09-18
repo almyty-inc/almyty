@@ -116,4 +116,32 @@ describe('ChannelSetupPanel', () => {
     })
     expect(screen.getByText('invalid_auth')).toBeInTheDocument()
   })
+
+  it('repeats the backend reason when the test request itself is refused', async () => {
+    // The mutation rejecting (rather than resolving ok:false) used to
+    // render a fixed 'Test request failed', dropping the one thing that
+    // tells you what to fix.
+    ;(gatewaysApi.testChannelConnection as any).mockRejectedValue({
+      response: {
+        status: 400,
+        data: {
+          error: {
+            code: 'CHANNEL_CREDENTIAL_MISSING',
+            message: 'No Slack bot token is attached to this gateway.',
+          },
+        },
+      },
+    })
+    renderWithProviders(<ChannelSetupPanel gateway={makeGateway()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Test connection/ }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('test-connection-result')).toHaveTextContent('Failed')
+    })
+    expect(
+      screen.getByText('No Slack bot token is attached to this gateway.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Test request failed')).not.toBeInTheDocument()
+  })
 })

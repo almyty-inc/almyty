@@ -11,7 +11,6 @@ import * as crypto from 'crypto';
 
 import { OAuthClient } from '../../../entities/oauth-client.entity';
 import { OAuthAuthorizationCode } from '../../../entities/oauth-authorization-code.entity';
-import { OAuthAccessToken } from '../../../entities/oauth-access-token.entity';
 import { Gateway } from '../../../entities/gateway.entity';
 import {
   hashValue,
@@ -116,10 +115,6 @@ export class McpOAuthService {
     private oauthClientRepository: Repository<OAuthClient>,
     @InjectRepository(OAuthAuthorizationCode)
     private oauthCodeRepository: Repository<OAuthAuthorizationCode>,
-    @InjectRepository(OAuthAccessToken)
-    private oauthTokenRepository: Repository<OAuthAccessToken>,
-    @InjectRepository(Gateway)
-    private gatewayRepository: Repository<Gateway>,
     private readonly tokens: McpOAuthTokensHelper,
   ) {}
 

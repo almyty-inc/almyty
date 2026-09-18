@@ -72,7 +72,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-purple-500" />
+              <BookOpen className="h-5 w-5 text-violet-500" />
               Skills Installation
             </CardTitle>
             <CardDescription>

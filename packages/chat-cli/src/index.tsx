@@ -2,71 +2,100 @@
 
 import React from 'react';
 import { render, Box, Text } from 'ink';
-import { AlmytyClient, resolveCredentialsOrExit, getOrgSlugFromToken } from '@almyty/client';
-import type { AgentInfo } from '@almyty/client';
+import { AlmytyClient, resolveCredentials, getOrgSlugFromToken } from '@almyty/client';
+import type { AgentInfo, RunLimits } from '@almyty/client';
 
 import { AgentSelector } from './components.js';
 import { ChatApp, exitMessage } from './app.js';
+import { helpText, isNonInteractive, parseArgs, resolveRef, splitRef, useColor, type ChatArgs } from './args.js';
+import { explainError, DEFAULT_APP_URL, type ErrorContext } from './errors.js';
+import { EXIT, exitCodeForError } from './exit-codes.js';
+import { readStdin, runHeadless } from './headless.js';
+import { VERSION } from './version.js';
 
-export const VERSION = '0.2.0';
+export { VERSION };
+
+function limitsFrom(args: ChatArgs): RunLimits | undefined {
+  if (args.maxSteps === undefined && args.maxCostCents === undefined) return undefined;
+  return {
+    ...(args.maxSteps !== undefined ? { maxSteps: args.maxSteps } : {}),
+    ...(args.maxCostCents !== undefined ? { maxCostCents: args.maxCostCents } : {}),
+  };
+}
 
 // ── Entry point ─────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
+  const args = parseArgs(process.argv.slice(2));
 
-  if (argv.includes('--version') || argv.includes('-v')) {
+  if (args.error) {
+    console.error(args.error);
+    process.exit(EXIT.USAGE);
+  }
+  if (args.version) {
     console.log(VERSION);
     return;
   }
-  if (argv.includes('--help') || argv.includes('-h')) {
-    console.log(`almyty chat v${VERSION}\n\nUsage:\n  npx @almyty/chat <org>/<agent-slug>\n  npx @almyty/chat <org>/<agent-slug> --resume <conversation-id>\n\nExamples:\n  npx @almyty/chat acme/support-bot\n  npx @almyty/chat myorg/my-agent --resume 60d93c85-...\n\nCommands:\n  /help /agents /clear /quit\n\nAuth:\n  npx @almyty/auth login`);
+  if (args.help) {
+    console.log(helpText(VERSION));
     return;
   }
 
-  const creds = resolveCredentialsOrExit();
-  const client = new AlmytyClient(creds.url, creds.token);
-
-  let resumeId: string | undefined;
-  const ri = Math.max(argv.indexOf('--resume'), argv.indexOf('-resume'));
-  if (ri !== -1) {
-    resumeId = argv[ri + 1];
-    if (!resumeId || resumeId.startsWith('-')) {
-      console.error('--resume requires a conversation id');
-      process.exit(1);
-    }
+  const creds = resolveCredentials();
+  if (!creds) {
+    // Said once, in full, rather than as a 401 three calls later.
+    console.error('Not authenticated. Run one of:');
+    console.error('  npx @almyty/auth login');
+    console.error('  export ALMYTY_TOKEN=<your-token>');
+    process.exit(EXIT.AUTH);
   }
+  const client = new AlmytyClient(creds.url, creds.token);
+  const appUrl = process.env.ALMYTY_APP_URL || creds.frontendUrl || DEFAULT_APP_URL;
+  const headless = isNonInteractive(args, {
+    stdinTty: process.stdin.isTTY === true,
+    stdoutTty: process.stdout.isTTY === true,
+  });
 
-  const ref = argv.find(arg => !arg.startsWith('-') && arg !== resumeId);
-
-  // Resolve org slug — from ref (org/slug) or JWT token
+  const ref = resolveRef(args);
   const defaultOrg = getOrgSlugFromToken(creds.token);
 
   let orgSlug: string;
   let agentSlug: string;
 
-  if (ref && ref.includes('/')) {
-    [orgSlug, agentSlug] = ref.split('/', 2);
-  } else if (ref) {
-    // Bare slug — use org from JWT
-    if (!defaultOrg) {
-      console.error('Cannot determine org. Use org/agent-slug format or log in: npx @almyty/auth login');
-      process.exit(1);
+  if (ref) {
+    const parts = splitRef(ref);
+    if (parts.orgSlug) {
+      orgSlug = parts.orgSlug;
+      agentSlug = parts.agentSlug;
+    } else {
+      if (!defaultOrg) {
+        console.error('Cannot tell which organization to use. Pass <org>/<agent-slug>, or log in again: npx @almyty/auth login');
+        process.exit(EXIT.USAGE);
+      }
+      orgSlug = defaultOrg;
+      agentSlug = parts.agentSlug;
     }
-    orgSlug = defaultOrg;
-    agentSlug = ref;
+  } else if (headless) {
+    // There is nobody to answer a picker on a pipe.
+    console.error('No agent given. Pass <org>/<agent-slug>, or set ALMYTY_AGENT.');
+    process.exit(EXIT.USAGE);
   } else {
-    // No arg — interactive picker
     if (!defaultOrg) {
-      console.error('Usage: npx @almyty/chat <org>/<agent-slug>');
-      process.exit(1);
+      console.error('Usage: almyty chat <org>/<agent-slug>');
+      process.exit(EXIT.USAGE);
     }
     orgSlug = defaultOrg;
 
-    const agents = await client.listAgents();
+    let agents: AgentInfo[];
+    try {
+      agents = await client.listAgents();
+    } catch (err) {
+      console.error(explainError(err, { apiUrl: creds.url, appUrl }));
+      process.exit(exitCodeForError(err));
+    }
     if (!agents.length) {
-      console.error('No agents found. Create one at https://app.almyty.com/agents');
-      process.exit(1);
+      console.error(`No agents in this organization yet. Create one at ${appUrl}/agents`);
+      process.exit(EXIT.NOT_FOUND);
     }
     if (agents.length === 1) {
       agentSlug = agents[0].slug || agents[0].name.toLowerCase().replace(/\s+/g, '-');
@@ -89,18 +118,66 @@ async function main(): Promise<void> {
   }
 
   const gw = client.gateway(orgSlug, agentSlug);
+  const errorContext: ErrorContext = { agentRef: `${orgSlug}/${agentSlug}`, apiUrl: creds.url, appUrl };
 
   let agent: AgentInfo;
   try {
     agent = await gw.getInfo();
-  } catch {
-    console.error(`Agent not found: ${orgSlug}/${agentSlug}`);
-    process.exit(1);
+  } catch (err) {
+    // "Agent not found" used to be printed for a bad login, a wrong
+    // org, a draft agent and an unreachable API alike.
+    console.error(explainError(err, { ...errorContext, what: 'info' }));
+    process.exit(exitCodeForError(err));
+  }
+
+  if (headless) {
+    const message = args.message ?? (await readStdin(process.stdin as unknown as AsyncIterable<Buffer>));
+    if (!message) {
+      console.error('Nothing to ask. Pass --message "<question>", or pipe it in.');
+      process.exit(EXIT.USAGE);
+    }
+
+    // Ctrl-C on a pipe cancels the run rather than orphaning it.
+    const ac = new AbortController();
+    const onSigint = () => ac.abort();
+    process.on('SIGINT', onSigint);
+
+    const code = await runHeadless({
+      message,
+      agent,
+      target: gw,
+      json: args.json,
+      stream: args.stream && !args.json,
+      conversationId: args.resume,
+      limits: limitsFrom(args),
+      signal: ac.signal,
+      errorContext,
+      io: {
+        out: (text) => process.stdout.write(text),
+        err: (text) => process.stderr.write(text),
+      },
+    });
+    process.off('SIGINT', onSigint);
+    process.exit(code);
+  }
+
+  // Colour is decided once, here, so NO_COLOR reaches ink's own
+  // detection rather than being re-derived per component.
+  if (!useColor(args, process.env, process.stdout.isTTY === true)) {
+    process.env.FORCE_COLOR = '0';
   }
 
   const { waitUntilExit } = render(
-    <ChatApp client={client} initialAgent={agent} gw={gw} resumeConversationId={resumeId} />,
-    { exitOnCtrlC: true },
+    <ChatApp
+      client={client}
+      initialAgent={agent}
+      gw={gw}
+      resumeConversationId={args.resume}
+      errorContext={errorContext}
+    />,
+    // Ctrl-C is handled inside the app: the first press cancels the
+    // run server-side, and only then does a second one exit.
+    { exitOnCtrlC: false },
   );
 
   await waitUntilExit();
@@ -111,6 +188,6 @@ async function main(): Promise<void> {
 }
 
 main().catch(err => {
-  console.error(err.message);
-  process.exit(1);
+  console.error(explainError(err));
+  process.exit(exitCodeForError(err));
 });

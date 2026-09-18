@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 
 import { CreateGrantDto } from '../dto/grants.dto';
@@ -39,7 +40,14 @@ describe('GrantsController', () => {
   const service = () => ({
     list: jest.fn(async () => [{ id: GRANT }]),
     grant: jest.fn(async (_id: string, input: any) => ({ id: GRANT, connectionId: CONNECTION, ...input })),
-    revoke: jest.fn(async (grantId: string) => ({ id: grantId, connectionId: CONNECTION })),
+    // Mirrors the real service: the grant/connection binding is checked
+    // inside revoke(), before the row is removed.
+    revoke: jest.fn(async (grantId: string, _actor: any, _org: any, expectedConnectionId?: string) => {
+      if (expectedConnectionId && expectedConnectionId !== CONNECTION) {
+        throw new NotFoundException({ code: 'GRANT_NOT_FOUND', message: 'grant does not belong to this connection' });
+      }
+      return { id: grantId, connectionId: CONNECTION };
+    }),
   });
   const req = (currentOrganizationId?: string) => ({ user: { id: 'u-1', currentOrganizationId, organizationMemberships: [] } });
 
@@ -54,7 +62,7 @@ describe('GrantsController', () => {
     expect(svc.grant).toHaveBeenCalledWith(CONNECTION, body, req('org-1').user, 'org-1');
 
     expect(await controller.revoke(req('org-1'), CONNECTION, GRANT)).toMatchObject({ success: true, data: { id: GRANT } });
-    expect(svc.revoke).toHaveBeenCalledWith(GRANT, req('org-1').user, 'org-1');
+    expect(svc.revoke).toHaveBeenCalledWith(GRANT, req('org-1').user, 'org-1', CONNECTION);
   });
 
   it('requires an organization context', async () => {
@@ -64,8 +72,11 @@ describe('GrantsController', () => {
     await expect(controller.revoke(req(), CONNECTION, GRANT)).rejects.toMatchObject({ response: { error: 'NO_ORGANIZATION' } });
   });
 
-  it('a grant id that belongs to another connection on the path is reported as not found', async () => {
-    const controller = new GrantsController(service() as any);
-    await expect(controller.revoke(req('org-1'), randomUUID(), GRANT)).rejects.toMatchObject({ response: { error: 'GRANT_NOT_FOUND' } });
+  it('hands the addressed connection id to revoke, so the binding is checked before the delete', async () => {
+    const svc = service();
+    const controller = new GrantsController(svc as any);
+    const other = randomUUID();
+    await expect(controller.revoke(req('org-1'), other, GRANT)).rejects.toMatchObject({ response: { code: 'GRANT_NOT_FOUND' } });
+    expect(svc.revoke).toHaveBeenCalledWith(GRANT, req('org-1').user, 'org-1', other);
   });
 });

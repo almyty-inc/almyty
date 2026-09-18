@@ -179,7 +179,10 @@ describe('OrganizationsController', () => {
       const result = await controller.removeMember('org-1', 'user-2', mockRequest);
 
       expect(result).toEqual({ success: true, data: undefined, message: 'Member removed successfully' });
-      expect(organizationsService.removeMember).toHaveBeenCalledWith('org-1', 'user-2');
+      // The acting user goes with it: the service refuses to evict a
+      // member who outranks the caller, and it can only do that if the
+      // route actually tells it who is calling.
+      expect(organizationsService.removeMember).toHaveBeenCalledWith('org-1', 'user-2', 'user-1');
     });
   });
 

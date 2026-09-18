@@ -63,7 +63,7 @@ describe('POST /v1/messages', () => {
 
   beforeEach(() => {
     agent = { id: 'a1', name: 'Helper', status: 'active' };
-    execution = { id: 'e1', status: 'completed', output: 'hello back', totalTokens: 12 };
+    execution = { id: 'e1', status: 'completed', output: 'hello back', totalTokens: 12, inputTokens: 9, outputTokens: 3 };
     jest.clearAllMocks();
   });
 
@@ -141,10 +141,13 @@ describe('POST /v1/messages', () => {
     expect(res.error.message).toContain('the model refused');
   });
 
-  it('never claims a token split it does not have', async () => {
+  it('reports the split the run recorded, not the whole run as output', async () => {
     const { body: res } = await post(body()).expect(200);
-    expect(res.usage.output_tokens).toBe(12);
-    expect(res.usage.input_tokens).toBe(0);
+    // output_tokens used to carry the entire run, which made the completion
+    // look ~4x its real size to anyone attributing cost from it.
+    expect(res.usage.input_tokens).toBe(9);
+    expect(res.usage.output_tokens).toBe(3);
+    expect(res.usage.output_tokens).not.toBe(12);
   });
 
   it('refuses a streaming request plainly instead of answering the wrong shape', async () => {

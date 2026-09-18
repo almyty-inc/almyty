@@ -75,10 +75,10 @@ export class GrantsController {
   @ApiOperation({ summary: 'Revoke a grant' })
   async revoke(@Request() req: any, @Param('id', ParseUUIDPipe) id: string, @Param('grantId', ParseUUIDPipe) grantId: string) {
     const organizationId = requireOrg(req);
-    const data = await this.grants.revoke(grantId, req.user, organizationId);
-    if (data.connectionId !== id) {
-      throw new HttpException({ success: false, message: 'grant does not belong to this connection', error: 'GRANT_NOT_FOUND' }, HttpStatus.NOT_FOUND);
-    }
+    // The grant/connection binding is asserted inside revoke(), before the row
+    // is removed. It used to be checked here, after -- which revoked a grant
+    // belonging to another connection for real while answering 404.
+    const data = await this.grants.revoke(grantId, req.user, organizationId, id);
     return { success: true, data, message: 'Grant revoked successfully' };
   }
 }

@@ -4,11 +4,33 @@ This doc captures the load-bearing decisions behind the runner and workspace sub
 
 ## Why this exists
 
-Every coding agent CLI on the market is single-vendor: Claude Code calls Anthropic models, Codex calls OpenAI's, gemini-cli calls Google's, aider lets you pick but each subagent is still locked to one provider per turn. The wedge: let an almyty workflow orchestrate any CLI coding agent with any model, on the user's machine, in one coherent workspace. PM agent (any model) plans, dispatches subtasks to specialist agents (different CLIs, different models), all editing the same codebase on the same runner.
+A runner is remote execution on **any machine you control**: your laptop, a
+build box, a GPU host, a server inside your own network. It registers that
+machine with almyty and runs process, shell and workspace work there, so the
+code, the credentials and the output stay on the machine while almyty sends the
+command and reads the result. The backend never spawns anything itself, and the
+runner never calls an LLM provider — that asymmetry is what keeps the machine
+the user's and the model choice almyty's.
 
-**v1 limit:** one runner per account. Multi-machine registration is not available yet.
+That general capability is the point. Anything that needs to run *where the
+data is* — against a private repo, behind a VPN, on a box with a GPU or a
+licensed binary or a VPN-only database — is a runner job, and most of them have
+nothing to do with coding agents.
 
-Every load-bearing decision below serves that wedge.
+One case it happens to be unusually good at is orchestrating coding-agent CLIs.
+Every such CLI on the market is single-vendor: Claude Code calls Anthropic
+models, Codex calls OpenAI's, gemini-cli calls Google's, aider lets you pick but
+each subagent is still locked to one provider per turn. Because the runner
+exposes a generic process surface rather than per-tool wrappers, one almyty
+workflow can drive any of them with any model, in one coherent workspace: a PM
+agent plans, dispatches subtasks to specialist agents on different CLIs and
+different models, all editing the same checkout on the same runner.
+
+**v1 limit:** one runner per account. Multi-machine registration is not
+available yet.
+
+Every load-bearing decision below serves that: a generic surface on a machine
+the user owns.
 
 ## Topology
 
@@ -120,12 +142,51 @@ Cluster 1 lands a Streamable HTTP transport on the backend. A natural follow-up 
 - No "create runner from UI" — the UI generates the command, the user runs it on their own machine.
 - No new toast/notification system, dep, theming, or analytics.
 
+## Dispatch and capability publication
+
+Both of these are in place, and they are the two halves of "an agent calls a
+runner tool".
+
+- **Dispatch**: `backend/src/modules/runner/runner-call.service.ts` resolves a
+  runner-backed call to the runner's live Streamable HTTP session and pushes a
+  worker envelope over it. `coding-relay.service.ts` sits on top for the
+  `coding.*` surface, relaying a coding-CLI session's input and output between
+  the agent and the runner.
+- **Capability publication**: `runner-capability.publisher.ts` registers a
+  runner's detected capabilities as catalog tools on registration. `publish()`
+  stamps each with `source: runner:<runner_name>` and the capability's own
+  `requiresWorkspace` flag (true for the workspace-scoped surfaces, false for
+  the informational ones), owner-scoped. `unpublish()` removes them when the
+  runner goes away.
+
+## Isolation: host is what runs
+
+The workspace entity stores an isolation tier, and `WorkspaceService` records
+one per workspace. But **no container runtime is wired into any build**, so
+host isolation is what actually executes:
+
+- The runner's built-in default is `defaultIsolation: 'host'`, and the daemon
+  prints what that permits at boot (`describeIsolationPosture` in
+  `packages/runner/src/config.ts`).
+- Asking for `container` is refused rather than silently downgraded:
+  `packages/runner/src/policy.ts` throws `COMMAND_DENIED` from
+  `assertIsolationSupported()` before any spawn. The same is true of
+  `networkBlocked: true`, which cannot be enforced on the host.
+- So a container tier is a *refusal*, not a sandbox. The honest guards that do
+  work today are `allowedCwdRoots` (realpath-canonicalized, so symlinks and
+  `..` cannot escape), `denyPatterns`, `installBlocked` and `maxConcurrent`,
+  plus the backend's constrain-only overrides at registration.
+
+Container enforcement via podman is still a follow-up; WASM and firejail tiers
+are explicit anti-goals. Until then, treat a runner as a machine that runs the
+commands you send it.
+
 ## What's deferred to follow-up clusters
 
-- **Routing layer**: the integration point that translates a runner-backed tool call from `tool-executor.service.ts` into a Streamable HTTP envelope dispatch via `transport.push(streamableSessionId, ...)`. The data model + state machine + REST CRUD are in place; this cluster wires the existing tool dispatch path through.
-- **Capability publication into the tool catalog**: on runner registration, register the runner's capabilities as tools with `source: runner:<runner_name>`, `requires_workspace: true`, owner-scoped visibility.
-- **Container isolation enforcement**: the workspace entity stores the isolation tier; the runner's process manager honors it. v1.0 is host-only; container support via podman lands as a follow-up. (WASM and firejail are explicit anti-goals.)
-- **Multi-runner scheduling**: the data model supports it; the picker in `WorkspaceService.pickRunner` returns the user's single runner today and throws if there's more than one. Scheduler logic is v1.x.
+- **Container isolation enforcement**: see above — the tier is stored and
+  refused, not enforced.
+- **Multi-runner scheduling**: the data model supports it; the picker in `WorkspaceService.pickRunner` returns the user's single runner today, and throws `multiple runners present but no scheduler in v1.0` if there is more than one and no explicit `runnerId`. Scheduler logic is v1.x.
+- **Real-time runner state in the UI**: the polling-vs-subscription question described under the UI cluster above.
 
 ## Anti-goals reaffirmed
 
@@ -134,7 +195,6 @@ Cluster 1 lands a Streamable HTTP transport on the backend. A natural follow-up 
 - No drain mode beyond "refuse new on shutdown signal."
 - No workspace migration across runners. Stranded = stranded.
 - No per-tool wrappers.
-- No web UI for runners (separate ticket).
 - No WASM or firejail isolation tiers.
 
 If a future change contradicts these, surface the contradiction in the PR description rather than silently working around it.

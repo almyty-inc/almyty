@@ -35,6 +35,8 @@
     "@almyty/agents": "^1.2.0",
     "@almyty/chat": "^1.2.0",
     "@almyty/skills": "^1.2.0",
+    "@almyty/models": "^1.2.0",
+    "@almyty/connections": "^1.2.0",
     "@almyty/mcp-server": "^1.2.0",
     "@almyty/acp-server": "^1.2.0",
     "@almyty/runner": "^1.2.0"

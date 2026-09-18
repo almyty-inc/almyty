@@ -24,6 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { memoriesApi, type MemoryTier, type MemoryMode } from '@/lib/api'
+import { formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
@@ -134,6 +135,9 @@ export function MemoriesPage() {
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
+      // The soft-cap warning list is a sibling key, not a descendant,
+      // and storing is exactly what trips a soft cap.
+      qc.invalidateQueries({ queryKey: ['memories', 'softcap-warnings', orgId] })
       setPutOpen(false)
       setDraft({ content: '', tier: 'short', tags: '', mode: 'memory', source_uri: '' })
       notify.success('Memory stored')
@@ -149,6 +153,9 @@ export function MemoriesPage() {
     mutationFn: ({ id, mode }: { id: string; mode: 'soft' | 'hard' }) => memoriesApi.remove(id, mode),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
+      // Removing frees capacity, so the soft-cap warnings the sibling
+      // key holds are stale too.
+      qc.invalidateQueries({ queryKey: ['memories', 'softcap-warnings', orgId] })
       setMemoryToDelete(null)
       notify.success('Memory deleted')
     },
@@ -334,7 +341,7 @@ export function MemoriesPage() {
                         </div>
                         <p className="text-sm whitespace-pre-wrap">{m.content}</p>
                         <p className="text-xs text-muted-foreground mt-2">
-                          {new Date(m.created_at).toLocaleString()} • id {m.id.slice(0, 8)}
+                          {formatDateTime(m.created_at)} • id {m.id.slice(0, 8)}
                         </p>
                       </div>
                       <Button
@@ -886,7 +893,7 @@ function SoftcapAuditList({ orgId, enabled }: { orgId: string; enabled: boolean 
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                memory {w.memoryId.slice(0, 8)} • {new Date(w.at).toLocaleString()}
+                memory {w.memoryId.slice(0, 8)} • {formatDateTime(w.at)}
               </p>
             </div>
           </CardContent>

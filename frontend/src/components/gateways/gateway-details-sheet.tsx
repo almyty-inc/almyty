@@ -125,10 +125,25 @@ export function GatewayDetailsSheet({
                     }
                     return filtered.map((tool: any) => {
                       const isAssigned = assignedToolIds.has(tool.id)
+                      // A gateway only serves active tools, and generated
+                      // tools are drafts. Same treatment as the gateway
+                      // detail picker: badge it, say where it is fixed,
+                      // do not offer an Assign that is going to 400.
+                      const assignable = !tool.status || tool.status === 'active'
                       return (
                         <div key={tool.id} className={`flex items-center justify-between py-2 px-3 rounded-md border ${isAssigned ? 'border-primary/30 bg-primary/5' : ''}`}>
                           <div className="min-w-0 flex-1">
-                            <div className="font-medium text-sm truncate">{tool.name}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm truncate">{tool.name}</span>
+                              {!assignable && (
+                                <Badge
+                                  variant="outline"
+                                  className="shrink-0 border-amber-400/50 text-amber-600 dark:text-amber-400"
+                                >
+                                  {tool.status === 'draft' ? 'Draft' : tool.status}
+                                </Badge>
+                              )}
+                            </div>
                             {tool.description && (
                               <div className="text-xs text-muted-foreground truncate">{tool.description}</div>
                             )}
@@ -137,7 +152,16 @@ export function GatewayDetailsSheet({
                             variant={isAssigned ? 'destructive' : 'outline'}
                             size="sm"
                             className="ml-2 shrink-0"
-                            disabled={assignToolMutation.isPending || removeToolMutation.isPending}
+                            disabled={
+                              assignToolMutation.isPending ||
+                              removeToolMutation.isPending ||
+                              (!isAssigned && !assignable)
+                            }
+                            title={
+                              !isAssigned && !assignable
+                                ? `This tool is ${tool.status}. Activate it on the Tools page — select it there and use "Activate selected" — then assign it here.`
+                                : undefined
+                            }
                             onClick={() => {
                               if (isAssigned) {
                                 removeToolMutation.mutate(tool.id)

@@ -210,7 +210,7 @@ export function RegisterModelDialog({ open, onOpenChange, providers, onSubmit, s
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={submitting || providers.length === 0}>
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Register model
+              {submitting ? 'Registering...' : 'Register model'}
             </Button>
           </DialogFooter>
         </form>

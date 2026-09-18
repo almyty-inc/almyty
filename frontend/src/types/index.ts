@@ -22,17 +22,6 @@ export enum UserRole {
   USER = 'user',
 }
 
-export interface LoginRequest {
-  email: string
-  password: string
-}
-
-export interface RegisterRequest {
-  email: string
-  password: string
-  name: string
-}
-
 export interface AuthResponse {
   user: User
   token: string
@@ -77,6 +66,13 @@ export enum OrganizationPlan {
 }
 
 export interface OrganizationSettings {
+  /**
+   * Consulted by the engine when an llm_call node names neither a provider
+   * nor a policy of its own (agent-node-executor.defaultRoutingFor). The
+   * builder reads it to know whether such a node is actually incomplete or
+   * merely relying on the organization default.
+   */
+  defaultRouting?: Record<string, any>
   maxGateways: number
   maxApis: number
   maxTools: number
@@ -141,6 +137,15 @@ export interface Gateway {
   lastErrorAt?: string
   lastSuccessAt?: string
 
+  /**
+   * How many tools are assigned, on the LIST response only. The list used
+   * to hydrate every nested Tool -- 2,000 entities with their code and
+   * parameter schemas for a page of 20 gateways -- purely so the table
+   * could render `tools.length`. The list now returns a correlated COUNT
+   * and no `tools` array, so the count must be read from here; the detail
+   * response still carries the real `tools`.
+   */
+  toolCount?: number
   isHealthy: boolean
   isSystem?: boolean
   createdAt: string
@@ -381,8 +386,18 @@ export interface ToolTemplate {
   examples: Array<{ name: string; input: any; expectedOutput?: any }>
   apiConfig?: { name: string; baseUrl: string; headers?: Record<string, string>; authRequirements?: { type: string; scopes?: string[]; setupInstructions?: string } }
   isBuiltIn: boolean
+  /**
+   * Null means public -- visible to every organization. A value means the
+   * template belongs to that organization and only it can see, edit or
+   * retract it.
+   */
+  organizationId: string | null
+  sourceToolId?: string | null
+  createdBy?: string | null
   version: string
   installCount: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 export enum ToolType {

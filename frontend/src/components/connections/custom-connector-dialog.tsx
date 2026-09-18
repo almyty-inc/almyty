@@ -202,7 +202,7 @@ export function CustomConnectorDialog({ open, onOpenChange, onCreated }: CustomC
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={create.isPending}>Cancel</Button>
             <Button type="submit" disabled={create.isPending}>
               {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-              Add connector
+              {create.isPending ? 'Adding...' : 'Add connector'}
             </Button>
           </DialogFooter>
         </form>

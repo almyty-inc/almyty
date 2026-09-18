@@ -24,6 +24,13 @@ import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';
 import { ModelNotFoundError, isModelNotFoundResponse, vendorMessage } from './model-errors';
+import { batchAsync } from '../../common/utils/batch-async';
+
+/**
+ * How many of one model turn's tool calls run at once. Matches the bound the
+ * agent runtime uses, so neither path can exhaust the connection pool.
+ */
+const TOOL_CALL_CONCURRENCY = 3;
 import { ModelRouterService, NoRouteError, ResolvedCandidate, RouteAttribution } from '../model-catalog/routing/model-router.service';
 
 
@@ -106,7 +113,12 @@ export class LlmChatRunnerHelper {
           tried,
           rejected: plan.rejected,
         };
-        this.router.recordRoute(organizationId, response.routing, { userId: session.userId ?? undefined, conversationId: session.id });
+        this.router.recordRoute(organizationId, response.routing, {
+          userId: session.userId ?? undefined,
+          conversationId: session.id,
+          cost: response.cost,
+          tokens: response.usage?.totalTokens,
+        });
         if (typeof response.responseTime === 'number') void this.router.recordLatency(candidate.card, response.responseTime);
         return response;
       } catch (error) {
@@ -136,7 +148,11 @@ export class LlmChatRunnerHelper {
   }
 
   /** Audit + latency bookkeeping for a routed answer produced outside the walk (the streaming head). */
-  recordRoute(organizationId: string, attribution: RouteAttribution, context: { userId?: string; conversationId?: string }): void {
+  recordRoute(
+    organizationId: string,
+    attribution: RouteAttribution,
+    context: { userId?: string; conversationId?: string; cost?: number; tokens?: number },
+  ): void {
     this.router?.recordRoute(organizationId, attribution, context);
   }
 
@@ -353,23 +369,39 @@ export class LlmChatRunnerHelper {
     organizationId: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    for (const toolCall of toolCalls) {
+    if (!toolCalls.length) return;
+
+    // Resolve every requested tool in ONE org-scoped query rather than a
+    // findOne per call. `prepareTools` ten lines above already had this
+    // shape; the loop was issuing N of them for one model turn.
+    //
+    // CRITICAL: the lookup stays scoped to the caller's organization. An
+    // unscoped `{ name }` query let an LLM in org A resolve and execute
+    // org B's tool of the same name — the downstream `use_tools` check was
+    // satisfied trivially because the user does have that permission in
+    // their OWN org, not in the org that owns the tool.
+    const requested = [...new Set(toolCalls.map((c) => c.name))];
+    const rows = await this.toolRepository.find({
+      where: requested.map((name) => ({ name, organizationId })),
+    });
+    const byName = new Map<string, Tool>();
+    for (const tool of rows) {
+      // Defense in depth: re-check the org on every row before it can be
+      // matched to a call.
+      if (tool.organizationId === organizationId) byName.set(tool.name, tool);
+    }
+
+    // Bounded concurrency, the same shape the agent runtime uses for a
+    // turn's tool calls. Strictly serial round trips made N parallel calls
+    // from one model turn take N times as long for no ordering guarantee
+    // the model asked for.
+    await batchAsync(toolCalls, TOOL_CALL_CONCURRENCY, async (toolCall) => {
       try {
-        // CRITICAL: scope the lookup to the caller's organization. The
-        // previous query was `{ name: toolCall.name }` with NO org filter,
-        // so an LLM in org A asking for a tool named e.g. `send_email`
-        // could resolve and execute org B's `send_email` tool. The
-        // downstream tool-executor permission check (`use_tools` in
-        // organizationId) was satisfied trivially because the user does
-        // have that permission in their OWN org — not in the org that
-        // owns the tool.
-        const tool = await this.toolRepository.findOne({
-          where: { name: toolCall.name, organizationId },
-        });
+        const tool = byName.get(toolCall.name);
 
         if (!tool) {
           toolCall.error = `Tool '${toolCall.name}' not found`;
-          continue;
+          return;
         }
 
         // Execute the tool. Forward the caller's cancellation
@@ -396,7 +428,7 @@ export class LlmChatRunnerHelper {
       } catch (error) {
         toolCall.error = error.message;
       }
-    }
+    });
   }
 
   validateProviderConfiguration(type: LlmProviderType, config: LlmProviderConfig): void {
