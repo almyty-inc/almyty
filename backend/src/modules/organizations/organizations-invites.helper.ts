@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
+import { ForbiddenException, BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization } from '../../entities/user-organization.entity';
+import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GatewaysService } from '../gateways/gateways.service';
@@ -42,6 +43,24 @@ export class OrganizationsInvitesHelper {
   async inviteUser(organizationId: string, inviteUserDto: InviteUserDto, invitedBy: string): Promise<{ inviteSent: boolean }> {
     const org = await this.organizationRepository.findOne({ where: { id: organizationId } });
     if (!org) throw new NotFoundException('Organization not found');
+
+    // An inviter may not hand out a role more privileged than their own.
+    //
+    // The route is open to `admin` as well as `owner`, and the role came
+    // straight off the body, so an admin could invite an address they
+    // control as OWNER and hold the organization outright -- the same
+    // self-escalation updateMemberRole refuses ("Cannot assign a role
+    // higher than your own"), reached through the invite door instead of
+    // the role door.
+    const inviterMembership = await this.userOrganizationRepository.findOne({
+      where: { organizationId, userId: invitedBy, isActive: true },
+    });
+    if (!inviterMembership) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+    if (ORGANIZATION_ROLE_RANK[inviteUserDto.role] < ORGANIZATION_ROLE_RANK[inviterMembership.role]) {
+      throw new ForbiddenException('Cannot invite a user at a role higher than your own');
+    }
 
     const inviter = await this.userRepository.findOne({ where: { id: invitedBy } });
     const inviterName = inviter ? `${inviter.firstName} ${inviter.lastName}`.trim() : 'A team member';

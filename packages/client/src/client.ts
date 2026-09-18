@@ -285,6 +285,13 @@ export class AlmytyClient {
       const tail = parseSseFrame(frame);
       if (tail) handler(tail);
     } finally {
+      // Releasing the lock does not close the connection. A terminal
+      // event returns from the loop above with the body unread and the
+      // socket still open, and an SSE endpoint holds its end open too,
+      // so the handle keeps Node's event loop alive: `almyty chat` would
+      // not exit after a streamed turn, and a REPL leaked one connection
+      // per answer. Cancelling the body is what actually closes it.
+      await reader.cancel().catch(() => undefined);
       reader.releaseLock();
     }
   }

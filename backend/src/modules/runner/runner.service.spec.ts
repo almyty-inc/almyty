@@ -123,24 +123,25 @@ describe('RunnerService', () => {
       ),
       /**
        * SELECT DISTINCT ws."runnerId" ... JOIN runners r ... WHERE
-       * ws.status = 'active' AND r.state = 'offline' — the self-heal
-       * lookup for a runner flipped offline whose workspaces were never
-       * stranded.
+       * ws.status = 'active' AND r.state IN ('offline','registered') —
+       * the self-heal lookup for a runner that can no longer be running
+       * the workspaces still pinned to it: flipped offline without its
+       * fan-out, or re-registered after a crash.
        */
       createQueryBuilder: jest.fn(() => {
         let activeStatus: string | undefined;
-        let offlineState: string | undefined;
+        let goneStates: string[] | undefined;
         const qb: any = {
           select: () => qb,
           innerJoin: () => qb,
           where: (_clause: string, params: any) => { activeStatus = params?.active; return qb; },
-          andWhere: (_clause: string, params: any) => { offlineState = params?.offline; return qb; },
+          andWhere: (_clause: string, params: any) => { goneStates = params?.gone; return qb; },
           getRawMany: async () => {
             const ids = new Set<string>();
             for (const ws of workspaces._store.values() as Iterable<Workspace>) {
               if (activeStatus && ws.status !== activeStatus) continue;
               const runner = runners._store.get(ws.runnerId);
-              if (!runner || (offlineState && runner.state !== offlineState)) continue;
+              if (!runner || !goneStates || !goneStates.includes(runner.state)) continue;
               ids.add(ws.runnerId);
             }
             return [...ids].map((runnerId) => ({ runnerId }));

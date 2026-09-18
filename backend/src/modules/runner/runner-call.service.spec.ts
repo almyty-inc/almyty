@@ -37,7 +37,14 @@ class FakeRunnerService {
     id: 'runner-1',
     name: 'laptop',
     state: RunnerState.ONLINE,
+    organizationId: 'org-1',
   } as any;
+  /** Which (runnerId, organizationId) pairs this fake considers real. */
+  membershipChecks: Array<{ runnerId: string; organizationId: string }> = [];
+  async belongsToOrganization(runnerId: string, organizationId: string): Promise<boolean> {
+    this.membershipChecks.push({ runnerId, organizationId });
+    return runnerId === this.runner.id && organizationId === (this.runner as any).organizationId;
+  }
   session: RunnerSession | null = {
     id: 'session-row-1',
     runnerId: 'runner-1',
@@ -282,5 +289,44 @@ describe('RunnerCallService', () => {
     await flush();
     expect(runners.heartbeats).toEqual([]);
     expect(runners.sessionConnects).toEqual([]);
+  });
+
+  /**
+   * The runner id travels inside the hello payload, which the holder of
+   * the session writes; the organization travels on the session, which
+   * the bearer token proved. A session in org-2 claiming org-1's runner
+   * must not be linked to it: getActiveSession picks the most recently
+   * connected session, so the link would immediately redirect every
+   * dispatch for that runner -- agent.spawn, coding.start, shell
+   * commands -- to the claimant's machine.
+   */
+  it('refuses a runner.hello claiming a runner in another organization', async () => {
+    const { runners, transport } = makeService();
+    transport.emitEnvelope(
+      {
+        v: WORKER_PROTOCOL_VERSION,
+        type: 'event',
+        id: 'e1',
+        ts: Date.now(),
+        payload: { kind: 'runner.hello', runnerId: 'runner-1' },
+      },
+      { id: 'sh_attacker', organizationId: 'org-2' },
+    );
+    await flush();
+
+    expect(runners.membershipChecks).toEqual([
+      { runnerId: 'runner-1', organizationId: 'org-2' },
+    ]);
+    expect(runners.sessionConnects).toEqual([]);
+
+    // And the refused claim leaves no cached mapping behind, so a
+    // heartbeat on the same session cannot keep the victim's runner
+    // looking alive either.
+    transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: {} },
+      { id: 'sh_attacker', organizationId: 'org-2' },
+    );
+    await flush();
+    expect(runners.heartbeats).toEqual([]);
   });
 });

@@ -121,8 +121,14 @@ export class UnifiedEndpointController {
 
     // Find the gateway this key belongs to
     const gateway = await this.gatewayRepository.findOne({
+      // organizationId on BOTH branches. The key carries a gatewayId that
+      // was stamped on it at mint time, and without this predicate a key
+      // naming another tenant's gateway id resolved that tenant's gateway --
+      // auth configs loaded and its agent addressed. The sibling below
+      // survived only because it re-scopes the agent afterwards; this path
+      // had no such second check.
       where: apiKey.gatewayId
-        ? { id: apiKey.gatewayId, status: GatewayStatus.ACTIVE }
+        ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE }
         : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
       relations: { authConfigs: true },
     });
@@ -211,8 +217,14 @@ export class UnifiedEndpointController {
     }
 
     const gateway = await this.gatewayRepository.findOne({
+      // organizationId on BOTH branches. The key carries a gatewayId that
+      // was stamped on it at mint time, and without this predicate a key
+      // naming another tenant's gateway id resolved that tenant's gateway --
+      // auth configs loaded and its agent addressed. The sibling below
+      // survived only because it re-scopes the agent afterwards; this path
+      // had no such second check.
       where: apiKey.gatewayId
-        ? { id: apiKey.gatewayId, status: GatewayStatus.ACTIVE }
+        ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE }
         : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
       relations: { authConfigs: true },
     });

@@ -90,12 +90,19 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
             one node would carry over to the next one. */}
         {nodeType === 'llm_call' && <LlmCallConfig key={node.id} node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
         {nodeType === 'tool_call' && <ToolCallConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
-        {nodeType === 'condition' && <ConditionConfig node={node} nodes={nodes} updateData={updateData} />}
+        {/* Keyed by node id for the same reason as the Model Call editor:
+            the visual builder holds source/operator/value in state seeded
+            from the node it first rendered for, and clicking a second
+            condition node would otherwise rebuild that node's expression
+            around the previous node's source. */}
+        {nodeType === 'condition' && <ConditionConfig key={node.id} node={node} nodes={nodes} updateData={updateData} />}
         {nodeType === 'transform' && <TransformConfig node={node} updateData={updateData} />}
         {nodeType === 'merge' && <MergeConfig node={node} updateData={updateData} />}
         {nodeType === 'parallel' && <ParallelConfig />}
-        {nodeType === 'sub_agent' && <SubAgentConfig node={node} updateData={updateData} />}
+        {nodeType === 'sub_agent' && <SubAgentConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
         {nodeType === 'loop' && <LoopConfig node={node} updateData={updateData} />}
+        {nodeType === 'verify' && <VerifyConfig node={node} updateData={updateData} />}
+        {nodeType === 'extract_context' && <ExtractContextConfig node={node} updateData={updateData} />}
       </div>
 
       {/* Footer: delete */}
@@ -985,7 +992,7 @@ function ParallelConfig() {
 }
 
 // --- Sub-Agent Config ---
-function SubAgentConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+function SubAgentConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const { data: agents } = useQuery({
     queryKey: ['agents-for-subagent'],
     queryFn: async () => {
@@ -1020,10 +1027,15 @@ function SubAgentConfig({ node, updateData }: { node: Node; updateData: UpdateDa
           value={(node.data.agentId as string) || ''}
           onValueChange={(v) => {
             const agent = agentList.find((a) => a.id === v)
-            updateData('agentId', v)
-            if (agent) {
-              updateData('agentName', agent.name)
-            }
+            // One write, not two. Both `updateData` calls spread the same
+            // `node.data` prop -- React has not re-rendered between them --
+            // and onUpdateNode replaces `data` wholesale, so writing the
+            // name second used to drop the id written first.
+            onUpdateNode(node.id, {
+              ...node.data,
+              agentId: v,
+              agentName: agent?.name || '',
+            })
           }}
         >
           <SelectTrigger className="mt-1">
@@ -1110,6 +1122,317 @@ function LoopConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn
           value={(node.data.maxIterations as number) || 100}
           onChange={(e) => updateData('maxIterations', parseInt(e.target.value) || 100)}
         />
+      </div>
+    </div>
+  )
+}
+
+// --- Verify Config ---
+
+interface VerifyChecker {
+  name?: string
+  providerId?: string
+  model?: string
+  roleKey?: string
+  instructions?: string
+}
+
+const VERIFY_POLICIES = [
+  { value: 'any_fail_blocks', label: 'Any checker fails -> fail' },
+  { value: 'majority', label: 'Majority of checkers' },
+  { value: 'all_pass', label: 'All checkers must pass' },
+] as const
+
+function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+  const { data: providers } = useQuery({
+    queryKey: ['llm-providers'],
+    queryFn: async () => {
+      const res = await llmProvidersApi.getAll()
+      return Array.isArray(res) ? res : res?.providers || []
+    },
+  })
+  const providerList = (Array.isArray(providers) ? providers : (providers as any)?.providers || []) as Array<
+    Pick<LlmProvider, 'id' | 'name' | 'type'>
+  >
+
+  const checkers: VerifyChecker[] = Array.isArray(node.data.checkers)
+    ? (node.data.checkers as VerifyChecker[])
+    : []
+
+  // Every write goes through the whole list, so a checker that names a role
+  // and nothing else -- what the strategy compiler emits, and what keeps an
+  // ejected graph portable -- keeps its roleKey when any other field is
+  // edited.
+  const patchChecker = (index: number, patch: Partial<VerifyChecker>) => {
+    updateData('checkers', checkers.map((c, i) => (i === index ? { ...c, ...patch } : c)))
+  }
+  const addChecker = () => {
+    updateData('checkers', [...checkers, { name: '', providerId: '', model: '', instructions: '' }])
+  }
+  const removeChecker = (index: number) => {
+    updateData('checkers', checkers.filter((_, i) => i !== index))
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label htmlFor="verify-target">Target</Label>
+        <Textarea
+          id="verify-target"
+          className="mt-1 font-mono text-xs"
+          rows={2}
+          value={(node.data.target as string) || ''}
+          onChange={(e) => updateData('target', e.target.value || undefined)}
+          placeholder="{{nodes.draft.output}}"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          What gets checked. Leave it empty to check the output of the step(s) wired into
+          this node.
+        </p>
+      </div>
+
+      <div>
+        <Label htmlFor="verify-spec">Spec</Label>
+        <Textarea
+          id="verify-spec"
+          className="mt-1 text-xs"
+          rows={4}
+          value={(node.data.spec as string) || ''}
+          onChange={(e) => updateData('spec', e.target.value)}
+          placeholder="The answer must cite a source for every figure."
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          The rules every checker holds the target to. {'{{...}}'} values are resolved before
+          the checkers see it.
+        </p>
+      </div>
+
+      <div>
+        <Label htmlFor="verify-policy">Merge policy</Label>
+        <Select
+          value={(node.data.policy as string) || 'any_fail_blocks'}
+          onValueChange={(v) => updateData('policy', v)}
+        >
+          <SelectTrigger id="verify-policy" className="mt-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {VERIFY_POLICIES.map((p) => (
+              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between">
+          <Label>Checkers</Label>
+          <span className="text-xs text-muted-foreground">{checkers.length}</span>
+        </div>
+
+        {checkers.length === 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            At least one checker is required. Point each one at a different provider to get a
+            cross-vendor panel.
+          </p>
+        )}
+
+        <div className="mt-2 space-y-2">
+          {checkers.map((checker, i) => (
+            <div key={i} className="rounded-lg border p-2 space-y-2 bg-background">
+              <div className="flex items-center gap-1">
+                <Input
+                  className="text-xs"
+                  aria-label={`Checker ${i + 1} name`}
+                  placeholder="name"
+                  value={checker.name || ''}
+                  onChange={(e) => patchChecker(i, { name: e.target.value })}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label={`Remove checker ${i + 1}`}
+                  onClick={() => removeChecker(i)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+
+              {checker.roleKey && !checker.providerId && (
+                <p className="text-[11px] text-muted-foreground">
+                  Filled at run time by role <code>{checker.roleKey}</code>. Pick a provider
+                  below to pin it instead.
+                </p>
+              )}
+
+              <Select
+                value={checker.providerId || ''}
+                onValueChange={(v) => patchChecker(i, { providerId: v })}
+              >
+                <SelectTrigger className="text-xs" aria-label={`Checker ${i + 1} provider`}>
+                  <SelectValue placeholder="Select provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {providerList.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      No model providers connected yet — add one under Models.
+                    </div>
+                  )}
+                  {providerList.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} <span className="text-muted-foreground ml-1">({p.type})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Input
+                className="text-xs"
+                aria-label={`Checker ${i + 1} model`}
+                placeholder="model (optional)"
+                value={checker.model || ''}
+                onChange={(e) => patchChecker(i, { model: e.target.value })}
+              />
+
+              <Textarea
+                className="text-xs"
+                rows={2}
+                aria-label={`Checker ${i + 1} instructions`}
+                placeholder="What this checker looks for (optional)"
+                value={checker.instructions || ''}
+                onChange={(e) => patchChecker(i, { instructions: e.target.value })}
+              />
+            </div>
+          ))}
+
+          <Button variant="outline" size="sm" className="w-full" onClick={addChecker}>
+            Add Checker
+          </Button>
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        A checker only tries to refute. This node never fails the run on a bad verdict — it
+        outputs <code>verdict</code>, <code>passed</code> and <code>failures</code>, so a
+        Condition node downstream is what decides to retry, escalate or stop.
+      </p>
+    </div>
+  )
+}
+
+// --- Extract Context Config ---
+function ExtractContextConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+  const { data: providers } = useQuery({
+    queryKey: ['llm-providers'],
+    queryFn: async () => {
+      const res = await llmProvidersApi.getAll()
+      return Array.isArray(res) ? res : res?.providers || []
+    },
+  })
+  const providerList = (Array.isArray(providers) ? providers : (providers as any)?.providers || []) as Array<
+    Pick<LlmProvider, 'id' | 'name' | 'type'>
+  >
+  const roleKey = node.data.roleKey as string | undefined
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label htmlFor="extract-task">Task</Label>
+        <Textarea
+          id="extract-task"
+          className="mt-1 font-mono text-xs"
+          rows={2}
+          value={(node.data.task as string) || ''}
+          onChange={(e) => updateData('task', e.target.value || undefined)}
+          placeholder="{{input.message}}"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          What the brief is for. Leave it empty to use the run input.
+        </p>
+      </div>
+
+      <div>
+        <Label htmlFor="extract-sources">Sources</Label>
+        <Textarea
+          id="extract-sources"
+          className="mt-1 font-mono text-xs"
+          rows={2}
+          value={(node.data.sources as string) || ''}
+          onChange={(e) => updateData('sources', e.target.value || undefined)}
+          placeholder="{{nodes.explore_1.output}}"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          What gets compressed. Leave it empty to use the output of the step(s) wired into this
+          node. With neither, the node fails rather than passing the transcripts through.
+        </p>
+      </div>
+
+      {roleKey ? (
+        <div>
+          <Label>Model</Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            Filled at run time by role <code>{roleKey}</code>.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div>
+            <Label htmlFor="extract-provider">Provider</Label>
+            <Select
+              value={(node.data.providerId as string) || ''}
+              onValueChange={(v) => updateData('providerId', v)}
+            >
+              <SelectTrigger id="extract-provider" className="mt-1">
+                <SelectValue placeholder="Organization default routing policy" />
+              </SelectTrigger>
+              <SelectContent>
+                {providerList.length === 0 && (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">
+                    No model providers connected yet — add one under Models.
+                  </div>
+                )}
+                {providerList.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name} <span className="text-muted-foreground ml-1">({p.type})</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              Leave it unset and the organization's default routing policy answers. With no
+              default set either, the run fails at this node.
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="extract-model">Model</Label>
+            <Input
+              id="extract-model"
+              className="mt-1"
+              value={(node.data.model as string) || ''}
+              onChange={(e) => updateData('model', e.target.value)}
+              placeholder="Enter model name"
+            />
+          </div>
+        </>
+      )}
+
+      <div>
+        <Label htmlFor="extract-instruction">Instruction</Label>
+        <Textarea
+          id="extract-instruction"
+          className="mt-1 text-xs"
+          rows={3}
+          value={(node.data.instruction as string) || ''}
+          onChange={(e) => updateData('instruction', e.target.value || undefined)}
+          placeholder="Leave empty to use the built-in extraction instruction"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          The brief has to come back in the structured format this node parses. Replace the
+          built-in instruction only if the replacement still asks for that format — a brief
+          that does not parse fails the node.
+        </p>
       </div>
     </div>
   )

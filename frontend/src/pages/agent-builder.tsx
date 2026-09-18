@@ -20,6 +20,7 @@ import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
+import { validateWorkflowGraph, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 
 import { agentsApi, llmProvidersApi, toolsApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
@@ -222,6 +223,10 @@ export function AgentBuilderPage() {
   }, [isEditing, agentData, pipeline.initialized, pipeline.setNodes, pipeline.setEdges, pipeline.setInitialized, templateId, templatesData])
 
   // ── Validation ──────────────────────────────────────────────────────────
+  // The graph rules live in validateWorkflowGraph, which mirrors the server's
+  // AgentValidationHelper: everything it reports is a reason the save would
+  // 400 anyway, so it costs no valid graph a save and earns the user the
+  // answer before the round trip instead of after it.
   const validationErrors = useMemo(() => {
     const errors: string[] = []
 
@@ -230,33 +235,7 @@ export function AgentBuilderPage() {
     }
 
     if (agentMode === 'workflow') {
-      const hasInput = pipeline.nodes.some((n) => n.type === 'input')
-      const hasOutput = pipeline.nodes.some((n) => n.type === 'output')
-      if (!hasInput) {
-        errors.push('Pipeline must have at least one Input node')
-      }
-      if (!hasOutput) {
-        errors.push('Pipeline must have at least one Output node')
-      }
-
-      // A model call has to say which model it uses, and there are three
-      // ways to say it: pin a provider, give a routing policy, or name a
-      // role and let the role be filled at run time.
-      //
-      // The third one was missing, and it is the one every compiled
-      // strategy uses. A graph ejected from the Execution tab carries
-      // `roleKey` and deliberately never a provider — that portability is
-      // the point of the layer — so opening one in the builder lit up an
-      // error per step and disabled Save, and the only way to clear it was
-      // to pin a provider and destroy what eject preserved. The backend
-      // accepts these nodes: the executor resolves `roleKey` and the
-      // pipeline validator has no llm_call case at all.
-      const llmNodes = pipeline.nodes.filter((n) => n.type === 'llm_call')
-      for (const llmNode of llmNodes) {
-        if (!llmNode.data?.providerId && !llmNode.data?.routing && !llmNode.data?.roleKey) {
-          errors.push(`Model Call node "${llmNode.id}" is missing a provider, a routing policy, or a role`)
-        }
-      }
+      errors.push(...validateWorkflowGraph(pipeline.nodes as GraphNode[], pipeline.edges as GraphEdge[]))
     } else {
       // Autonomous mode validation
       if (!agentInstructions.trim()) {
@@ -268,7 +247,7 @@ export function AgentBuilderPage() {
     }
 
     return errors
-  }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes])
+  }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes, pipeline.edges])
 
   const canSave = validationErrors.length === 0
 
@@ -438,7 +417,10 @@ export function AgentBuilderPage() {
         <div className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 shrink-0">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-            <ul className="text-xs text-destructive space-y-0.5">
+            {/* Capped: mirroring the server means a badly wired graph can
+                report several problems at once, and an uncapped list pushed
+                the canvas off the screen. */}
+            <ul className="text-xs text-destructive space-y-0.5 max-h-24 overflow-y-auto">
               {validationErrors.map((err, i) => (
                 <li key={i}>{err}</li>
               ))}

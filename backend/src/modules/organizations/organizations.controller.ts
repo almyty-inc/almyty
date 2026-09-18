@@ -161,7 +161,7 @@ export class OrganizationsController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Request() req: any
   ) {
-    const data = await this.organizationsService.removeMember(organizationId, userId);
+    const data = await this.organizationsService.removeMember(organizationId, userId, req.user.id);
     return { success: true, data, message: 'Member removed successfully' };
   }
 

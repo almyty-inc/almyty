@@ -289,6 +289,30 @@ describe('RetentionSweepService', () => {
     });
   });
 
+  /**
+   * The audit row is the only record that a sweep destroyed anything.
+   * `total` was a hand-written sum of six of the eight SweepCounts keys,
+   * so a sweep that deleted only tool executions and notifications --
+   * the two newest classes, and the two biggest tables -- saw total 0
+   * and wrote no audit row, no notification and no log line at all.
+   */
+  it('audits a sweep that only deleted tool executions and notifications', async () => {
+    toolExecutionRepo.find.mockResolvedValueOnce([{ id: 'e1' }, { id: 'e2' }]).mockResolvedValue([]);
+    toolExecutionRepo.delete.mockResolvedValue({ affected: 2 });
+    notificationRepo.find.mockResolvedValueOnce([{ id: 'n1' }]).mockResolvedValue([]);
+    notificationRepo.delete.mockResolvedValue({ affected: 1 });
+
+    await service.sweepOrganization(
+      policy({ toolExecutionsDays: 30, notificationsDays: 30 }),
+    );
+
+    expect(auditLogService.log).toHaveBeenCalledTimes(1);
+    const entry = auditLogService.log.mock.calls[0][0];
+    expect(entry.action).toBe(AuditAction.RETENTION_SWEEP);
+    expect(entry.details.toolExecutions).toBe(2);
+    expect(entry.details.notifications).toBe(1);
+  });
+
   it('writes no audit entry when the sweep deleted nothing', async () => {
     runRepo.find.mockResolvedValueOnce([]);
 

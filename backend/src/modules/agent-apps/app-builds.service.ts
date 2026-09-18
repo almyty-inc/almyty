@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
-import { LessThan, Not, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
 import { createHash } from 'crypto';
 
 import { AppBuild, BuildStatus } from '../../entities/app-build.entity';
@@ -34,6 +34,15 @@ export const ARTIFACT_TTL_DAYS = 30;
 
 /** How long a download link stays valid once minted. */
 export const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
+
+/**
+ * How long a build may sit in QUEUED or RUNNING before the sweep
+ * declares it dead. Generously above the slowest real build (a
+ * multi-platform Electron package is minutes, not hours), because the
+ * cost of waiting is a stale row and the cost of being wrong is
+ * failing a build that was about to succeed.
+ */
+export const BUILD_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 
 export interface RequestBuildDto {
   target: DistributionTarget;
@@ -402,13 +411,21 @@ export class AppBuildsService {
    * Deletes the file but keeps the row: the history of what was built,
    * and whether it was signed, is what a later support question needs,
    * and it costs nothing to keep.
+   *
+   * The "still has a file" clause is `Not(IsNull())`, not `Not(null)`.
+   * The second compiles and reads the same, and TypeORM renders it as
+   * `"artifactKey" != $1` with $1 bound to NULL, which in SQL is never
+   * true -- so this swept nothing at all. The hourly job ran, found
+   * zero rows every time and logged nothing, while every artifact this
+   * deployment ever built (60-200MB each) stayed in object storage for
+   * ever.
    */
   async sweepExpiredArtifacts(now: Date = new Date()): Promise<number> {
     const expired = await this.buildRepository.find({
       where: {
         status: BuildStatus.SUCCEEDED,
         artifactExpiresAt: LessThan(now),
-        artifactKey: Not(null as any),
+        artifactKey: Not(IsNull()),
       },
       take: 200,
     });
@@ -427,6 +444,51 @@ export class AppBuildsService {
       removed += 1;
     }
     return removed;
+  }
+
+  /**
+   * Give up on builds whose job is never coming back.
+   *
+   * Nothing else ever moves a build out of QUEUED or RUNNING except the
+   * worker that owns it, and there are several ways for that worker to
+   * stop existing: the pod is evicted or OOM-killed mid-compile, Redis
+   * drops the queue, or the job is delivered and the process dies
+   * before `fail()` runs. `attempts: 1` means Bull will not hand the
+   * job to anyone else, and the artifact sweep only looks at SUCCEEDED
+   * rows -- so the build sat at "Building..." in the panel for ever and
+   * the operator had no way to tell a dead build from a slow one.
+   *
+   * Conditional on the row still being un-finished, so a build that
+   * completes between the SELECT and the write keeps its own outcome
+   * rather than being overwritten with a failure that did not happen.
+   */
+  async failStaleBuilds(now: Date = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - BUILD_STALE_AFTER_MS);
+    const stuck = await this.buildRepository.find({
+      where: [
+        { status: BuildStatus.QUEUED, createdAt: LessThan(cutoff) },
+        { status: BuildStatus.RUNNING, createdAt: LessThan(cutoff) },
+      ],
+      take: 200,
+    });
+
+    let failed = 0;
+    for (const build of stuck) {
+      const result = await this.buildRepository.update(
+        { id: build.id, status: In([BuildStatus.QUEUED, BuildStatus.RUNNING]) },
+        {
+          status: BuildStatus.FAILED,
+          error:
+            'The build never finished. The machine running it stopped before it reported an outcome; build it again.',
+          finishedAt: now,
+        },
+      );
+      if ((result.affected ?? 0) > 0) failed += 1;
+    }
+    if (failed > 0) {
+      this.logger.warn(`Gave up on ${failed} build(s) that never reported an outcome`);
+    }
+    return failed;
   }
 
   /** What the operator will get, for showing before they commit. */

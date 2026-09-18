@@ -19,6 +19,11 @@ describe('AuthController', () => {
     const mockAuthService = {
       register: jest.fn(),
       generateTokens: jest.fn(),
+      // The route has to go through completeLogin, not generateTokens:
+      // that is the method that stamps lastLoginAt and writes the
+      // AuditAction.LOGIN row, and calling tokens directly left both
+      // undone on every single sign-in.
+      completeLogin: jest.fn(),
       refreshToken: jest.fn(),
       createApiKey: jest.fn(),
       getUserApiKeys: jest.fn(),
@@ -185,9 +190,12 @@ describe('AuthController', () => {
         expiresIn: 86400,
       };
 
-      authService.generateTokens.mockResolvedValue(mockTokens);
+      authService.completeLogin.mockResolvedValue(mockTokens);
 
       const result = await controller.login(mockRequest, mockResponse);
+
+      expect(authService.completeLogin).toHaveBeenCalledWith(mockRequest.user);
+      expect(authService.generateTokens).not.toHaveBeenCalled();
 
       expect(result).toEqual({
         success: true,
