@@ -39,6 +39,7 @@ describe('GatewaysController', () => {
       getGatewayStats: jest.fn(),
       searchSkillsAcrossGateways: jest.fn(),
       getAllUserGateways: jest.fn(),
+      getSkillContextOrganization: jest.fn(),
     };
 
     const mockGatewayAuthService = {
@@ -591,6 +592,42 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { organizations: [] } };
 
       await expect(infoController.getAllSkills(mockRequest)).rejects.toThrow();
+    });
+  });
+
+  describe('getGatewayIndividualSkills', () => {
+    /**
+     * The skillRef's `orgSlug` needs one organization row. This used to
+     * call getAllUserGateways(organizationId) -- every active gateway of
+     * the org, with every Tool on each -- and then read
+     * `gateways[0]?.organization` off the result.
+     */
+    it('reads the organization directly instead of listing every gateway', async () => {
+      const mockRequest = { user: { currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
+
+      gatewaysService.getGateway.mockResolvedValue({
+        id: 'gw-1',
+        name: 'User API',
+        endpoint: '/user-api',
+      } as any);
+      gatewaysService.getSkillContextOrganization.mockResolvedValue({
+        id: 'org-1',
+        slug: 'test-org',
+        name: 'Test Org',
+      } as any);
+      skillGeneratorService.generateIndividualSkills.mockResolvedValue([
+        { name: 'list-users', content: '# list-users' },
+      ] as any);
+
+      const result = await skillsController.getGatewayIndividualSkills('gw-1', mockRequest);
+
+      expect(result.success).toBe(true);
+      expect(gatewaysService.getSkillContextOrganization).toHaveBeenCalledWith('org-1');
+      expect(gatewaysService.getAllUserGateways).not.toHaveBeenCalled();
+      expect(skillGeneratorService.generateIndividualSkills).toHaveBeenCalledWith('gw-1', 'org-1', {
+        orgSlug: 'test-org',
+        gatewaySlug: 'user-api',
+      });
     });
   });
 

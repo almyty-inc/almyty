@@ -17,28 +17,61 @@ export class SlackAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * Slack's `event_id` is the envelope id and is identical on every
+   * retry of the same event (the retry also carries
+   * X-Slack-Retry-Num). `channel:ts` is the message's own identity and
+   * covers the socket-mode shape, which has no envelope.
+   */
+  deliveryId(rawPayload: any): string | undefined {
+    if (rawPayload?.event_id) return `slack:${rawPayload.event_id}`;
+    const event = rawPayload?.event ?? rawPayload;
+    if (event?.ts) return `slack:${event.channel ?? 'nochannel'}:${event.ts}`;
+    return undefined;
+  }
+
   formatOutbound(response: AdapterResponse): any {
     return { text: response.text };
   }
 
+  /**
+   * Post the reply with chat.postMessage.
+   *
+   * Slack's Web API answers HTTP 200 on a refusal and puts the verdict
+   * in the body: `{ok: true, ts, channel}` when the message was posted,
+   * `{ok: false, error: "not_in_channel" | "channel_not_found" |
+   * "invalid_auth" | ...}` when it was not. So `res.ok` alone proves
+   * nothing and `json.ok` is the contract — the same field
+   * `testConnection` reads off auth.test.
+   */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
-    // POST to Slack Web API chat.postMessage
-    try {
-      const fetch = globalThis.fetch || (await import('node-fetch')).default;
-      await (fetch as any)('https://slack.com/api/chat.postMessage', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.bot_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          channel: threadContext?.channel,
-          text: formattedResponse.text,
-          thread_ts: threadContext?.threadId,
-        }),
-      });
-    } catch (error) {
-      this.logger.error(`Slack send failed: ${error.message}`);
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.bot_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        channel: threadContext?.channel,
+        text: formattedResponse.text,
+        thread_ts: threadContext?.threadId,
+      }),
+    });
+
+    const body = await this.readJsonBody(res);
+    if (this.httpRejected(res)) {
+      this.sendFailed(
+        `chat.postMessage returned HTTP ${this.httpStatus(res)}${body?.error ? ` (${body.error})` : ''}`,
+      );
+    }
+    if (body?.ok !== true) {
+      // The platform's own word for what went wrong is the only thing
+      // that tells an operator "the bot is not in that channel" rather
+      // than "something happened".
+      const detail = body?.error ?? 'chat.postMessage did not confirm the post';
+      const hint = body?.response_metadata?.messages?.[0];
+      this.sendFailed(`chat.postMessage refused the reply: ${detail}${hint ? ` (${hint})` : ''}`);
     }
   }
 

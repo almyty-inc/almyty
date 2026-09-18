@@ -264,9 +264,15 @@ export function canPublishHostedChat(
     refuse('WHITE_LABEL_NOT_ENTITLED');
   }
 
-  // An empty string is an explicit removal; null means "use the default
-  // line", which is always allowed.
-  const removesDisclosure = config.aiDisclosure !== null && config.aiDisclosure.trim() === '';
+  // An empty string is an explicit removal; null or absent means "use
+  // the default line", which is always allowed.
+  //
+  // `typeof` rather than `!== null`: undefined passes a null check and
+  // then `.trim()` throws a TypeError, which createGateway and
+  // updateGateway surface as a 500. The zod schema defaults the field so
+  // the normal API path never gets there, but a config assembled
+  // anywhere else — a migration, a seed, an MCP call — does.
+  const removesDisclosure = typeof config.aiDisclosure === 'string' && config.aiDisclosure.trim() === '';
   if (removesDisclosure && !context.hasWhiteLabel) {
     refuse('DISCLOSURE_REMOVAL_NOT_ENTITLED');
   }

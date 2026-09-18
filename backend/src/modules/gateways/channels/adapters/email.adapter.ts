@@ -233,6 +233,24 @@ export class EmailAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * `svix-id` first: Resend and the other svix-backed forwarders put
+   * the delivery's own id there and repeat it on every retry of that
+   * delivery, which is exactly the key we want. Otherwise the RFC 5322
+   * Message-ID, which identifies the mail itself and is repeated when
+   * the same mail is forwarded twice.
+   *
+   * A raw-MIME forward with no Message-ID header yields nothing, and
+   * that is reported rather than papered over: the subject and body are
+   * not a delivery id, and two genuinely separate mails can share both.
+   */
+  deliveryId(rawPayload: any, headers?: Record<string, string>): string | undefined {
+    const svixId = EmailAdapter.headerOf(headers, 'svix-id');
+    if (svixId) return `email:svix:${svixId}`;
+    const messageId = this.normalizeInbound(rawPayload)?.metadata?.messageId;
+    return messageId ? `email:${messageId}` : undefined;
+  }
+
   formatOutbound(response: AdapterResponse): any {
     return { html: response.text, text: response.text };
   }
@@ -265,55 +283,73 @@ export class EmailAdapter extends BaseAdapter {
    * from the inbound Message-ID so mail clients file the reply into
    * the same thread, and `Reply-To` points at the gateway's inbound
    * address so the user's next reply comes back to the agent.
+   *
+   * Resend's send endpoint answers 200 with `{id}` when the mail is
+   * queued, and a 4xx carrying `{statusCode, name, message}` when it is
+   * not — `validation_error` for an unverified `from` domain,
+   * `invalid_api_key` on a revoked key, 429 `rate_limit_exceeded`. So
+   * the HTTP status is the verdict and `message`/`name` are the wording
+   * to keep.
    */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
-    try {
-      if (!config.resend_api_key) {
-        this.logger.warn('Email: resend_api_key not configured, cannot send reply');
-        return;
-      }
-      const to = threadContext?.from || threadContext?.userId;
-      if (!to) {
-        this.logger.warn('Email: no recipient available, cannot send reply');
-        return;
-      }
+    if (!config.resend_api_key) {
+      this.sendFailed('resend_api_key is not configured, so the reply could not be sent');
+    }
+    const to = threadContext?.from || threadContext?.userId;
+    if (!to) {
+      this.sendFailed('the inbound mail carried no address to reply to');
+    }
 
-      const meta = threadContext?.metadata || {};
-      const inboundMessageId = meta.messageId || threadContext?.messageId;
-      const inboundReferences = meta.references || threadContext?.references;
-      const headers: Record<string, string> = {};
-      if (inboundMessageId) {
-        headers['In-Reply-To'] = inboundMessageId;
-        // RFC 5322: the reply's References = the inbound References
-        // chain plus the inbound Message-ID.
-        headers['References'] = inboundReferences
-          ? `${String(inboundReferences).trim()} ${inboundMessageId}`
-          : inboundMessageId;
-      }
+    const meta = threadContext?.metadata || {};
+    const inboundMessageId = meta.messageId || threadContext?.messageId;
+    const inboundReferences = meta.references || threadContext?.references;
+    const headers: Record<string, string> = {};
+    if (inboundMessageId) {
+      headers['In-Reply-To'] = inboundMessageId;
+      // RFC 5322: the reply's References = the inbound References
+      // chain plus the inbound Message-ID.
+      headers['References'] = inboundReferences
+        ? `${String(inboundReferences).trim()} ${inboundMessageId}`
+        : inboundMessageId;
+    }
 
-      const rawSubject = (threadContext?.subject || 'Agent Response').trim();
-      const subject = /^re:/i.test(rawSubject) ? rawSubject : `Re: ${rawSubject}`;
+    const rawSubject = (threadContext?.subject || 'Agent Response').trim();
+    const subject = /^re:/i.test(rawSubject) ? rawSubject : `Re: ${rawSubject}`;
 
-      const payload: Record<string, any> = {
-        from: config.reply_from || config.inbound_address || 'agent@almyty.com',
-        to,
-        subject,
-        html: formattedResponse.html,
-      };
-      if (config.inbound_address) payload.reply_to = config.inbound_address;
-      if (Object.keys(headers).length > 0) payload.headers = headers;
+    const payload: Record<string, any> = {
+      from: config.reply_from || config.inbound_address || 'agent@almyty.com',
+      to,
+      subject,
+      html: formattedResponse.html,
+    };
+    if (config.inbound_address) payload.reply_to = config.inbound_address;
+    if (Object.keys(headers).length > 0) payload.headers = headers;
 
-      const fetch = globalThis.fetch || (await import('node-fetch')).default;
-      await (fetch as any)('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${config.resend_api_key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-    } catch (error) {
-      this.logger.error(`Email send failed: ${error.message}`);
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.resend_api_key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const body = await this.readJsonBody(res);
+    // Resend answers a refusal with a non-2xx and an error document
+    // carrying `name` (`validation_error`, `missing_api_key`, …). The
+    // acceptance body is `{ id }`.
+    //
+    // The HTTP status is the contract; `name` is a belt-and-braces check
+    // for a refusal delivered with a 2xx. `message` is deliberately NOT
+    // a failure signal on its own — it is a plausible field for Resend
+    // to add to a success response, and calling a send that worked a
+    // refusal is the worse error of the two: a missed refusal shows up
+    // as one customer not getting a reply, while a false refusal makes
+    // the channel refuse to work at all.
+    if (this.httpRejected(res) || body?.name) {
+      const detail = body?.message ?? body?.name ?? `HTTP ${this.httpStatus(res)}`;
+      this.sendFailed(`Resend refused the reply: ${detail}${body?.name ? ` (${body.name})` : ''}`);
     }
   }
 }

@@ -31,6 +31,13 @@ import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
 import { EmailProvisioningService } from './channels/email-provisioning.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+
+/**
+ * The partial unique index that actually reserves a hosted-chat slug.
+ * Named here because the service has to recognise its 23505.
+ */
+export const HOSTED_CHAT_SLUG_INDEX = 'UQ_gateways_hosted_chat_slug';
+
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -332,6 +339,13 @@ export class GatewaysService {
    * `{slug}.almyty.app` is one public address for the whole deployment.
    * Letting two organizations publish the same slug makes the public
    * lookup ambiguous and can route one tenant to another tenant's agent.
+   *
+   * This check is a SELECT before an INSERT, so it cannot be atomic on
+   * its own. The thing that actually reserves the address is the partial
+   * unique index `UQ_gateways_hosted_chat_slug`; this runs first only so
+   * the ordinary case gets a readable message instead of a driver error.
+   * The loser of a genuine race comes back through
+   * hostedChatSlugConflict() with the same conflict.
    */
   private async assertHostedChatSlugAvailable(
     configuration: Record<string, any> | undefined,
@@ -348,10 +362,39 @@ export class GatewaysService {
       .getMany();
 
     if (claims.some((gateway) => gateway.id !== allowedGatewayId)) {
-      throw new ConflictException(
-        `The web address '${slug}' is already in use. Choose a different app name.`,
-      );
+      throw this.slugConflict(slug);
     }
+  }
+
+  private slugConflict(slug: string): ConflictException {
+    return new ConflictException(
+      `The web address '${slug}' is already in use. Choose a different app name.`,
+    );
+  }
+
+  /**
+   * Translate the slug index's unique violation into the same conflict
+   * the pre-check raises, so a lost race is a 409 and not a 500.
+   */
+  private hostedChatSlugConflict(
+    error: any,
+    configuration?: Record<string, any>,
+  ): ConflictException | null {
+    const code = error?.code ?? error?.driverError?.code;
+    if (code !== '23505') return null;
+    const marker = HOSTED_CHAT_SLUG_INDEX;
+    const mentions = [
+      error?.constraint,
+      error?.driverError?.constraint,
+      error?.detail,
+      error?.driverError?.detail,
+      error?.message,
+    ].some((field) => typeof field === 'string' && field.includes(marker));
+    if (!mentions) return null;
+
+    const raw = configuration?.hostedChat?.slug;
+    const slug = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    return this.slugConflict(slug);
   }
 
   /**
@@ -401,6 +444,25 @@ export class GatewaysService {
   }
 
   /**
+   * Take back a gateway whose creation failed after the row was
+   * written, so the endpoint is free for the retry the caller is about
+   * to make. Neither step may mask the original error; a cleanup that
+   * itself fails is logged loudly, because then the endpoint really is
+   * stuck and someone has to look.
+   */
+  private async discardPartialGateway(gateway: Gateway): Promise<void> {
+    await this.releaseChannelCredential(gateway);
+    try {
+      await this.gatewayRepository.delete({ id: gateway.id });
+    } catch (err: any) {
+      this.logger.error(
+        `Gateway ${gateway.id} could not be removed after a failed create; ` +
+          `endpoint ${gateway.endpoint} stays taken in org ${gateway.organizationId}: ${err?.message ?? err}`,
+      );
+    }
+  }
+
+  /**
    * Envelope used to encrypt channel secrets. Prefers the injected
    * EnvelopeCryptoService (org-aware BYO-KMS routing); when it is absent
    * (positional unit tests), falls back to the platform field-crypto path,
@@ -417,7 +479,12 @@ export class GatewaysService {
   async createGateway(
     createGatewayDto: CreateGatewayDto,
     organizationId: string,
-    userId: string
+    userId: string,
+    // A caller that has more writes to do before the surface should
+    // answer creates it INACTIVE and activates it last, so a crash
+    // mid-sequence leaves nothing live. Everything else wants the
+    // gateway routable as soon as it commits.
+    initialStatus: GatewayStatus = GatewayStatus.ACTIVE,
   ): Promise<Gateway> {
     try {
       this.logger.log(`[CREATE_GATEWAY] Creating gateway '${createGatewayDto.name}' for org=${organizationId}, user=${userId}`);
@@ -503,20 +570,42 @@ export class GatewaysService {
         kind,
         endpoint,
         organizationId,
-        status: GatewayStatus.ACTIVE,
+        status: initialStatus,
       });
 
+      // The row, its channel secret and its default auth config are
+      // three writes across two tables plus the credential store, and
+      // only the first has to land for the endpoint to be taken:
+      // `(organizationId, endpoint)` is uniquely indexed. A failure in
+      // a later step used to leave an ACTIVE row behind with no auth
+      // config and no secrets — the caller saw a 500 and believed
+      // nothing had been created, but could then neither use the
+      // gateway nor recreate it ("Endpoint already exists in your
+      // organization"). It failed closed, so never an auth hole, just
+      // an endpoint nobody could have.
+      //
+      // Undone rather than wrapped in a database transaction: the
+      // secret write goes to the credential store through its own
+      // service, which no transaction opened here could enlist, so the
+      // failure path has to compensate for that write regardless.
+      // Compensating for all of it keeps one recovery path instead of
+      // two that have to agree.
       let savedGateway = await this.gatewayRepository.save(gateway);
-      if (deferSecrets) {
-        savedGateway.configuration = inlineConfiguration;
-        await this.storeChannelSecrets(savedGateway, savedGateway.configuration, null);
-        savedGateway = await this.gatewayRepository.save(savedGateway);
+      try {
+        if (deferSecrets) {
+          savedGateway.configuration = inlineConfiguration;
+          await this.storeChannelSecrets(savedGateway, savedGateway.configuration, null);
+          savedGateway = await this.gatewayRepository.save(savedGateway);
+        }
+
+        this.logger.log(`[CREATE_GATEWAY] Gateway saved to DB: id=${savedGateway.id}, name='${savedGateway.name}', org=${savedGateway.organizationId}`);
+
+        // Create default authentication if not provided
+        await this.init.createDefaultAuth(savedGateway);
+      } catch (error) {
+        await this.discardPartialGateway(savedGateway);
+        throw error;
       }
-
-      this.logger.log(`[CREATE_GATEWAY] Gateway saved to DB: id=${savedGateway.id}, name='${savedGateway.name}', org=${savedGateway.organizationId}`);
-
-      // Create default authentication if not provided
-      await this.init.createDefaultAuth(savedGateway);
 
       this.logger.log(`[CREATE_GATEWAY] Gateway '${savedGateway.name}' created successfully in organization ${organizationId}`);
 
@@ -533,6 +622,8 @@ export class GatewaysService {
       return savedGateway;
 
     } catch (error) {
+      const conflict = this.hostedChatSlugConflict(error, createGatewayDto.configuration);
+      if (conflict) throw conflict;
       this.logger.error(`Failed to create gateway: ${error.message}`);
       throw error;
     }
@@ -616,6 +707,8 @@ export class GatewaysService {
       return updatedGateway;
 
     } catch (error) {
+      const conflict = this.hostedChatSlugConflict(error, updateGatewayDto.configuration);
+      if (conflict) throw conflict;
       this.logger.error(`Failed to update gateway: ${error.message}`);
       throw error;
     }
@@ -709,12 +802,26 @@ export class GatewaysService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
+    // Count, don't load: the list only needs the number.
+    //
+    // This joined `gateway.tools` and `gatewayTool.tool`, so a page of 20
+    // gateways averaging 100 tools hydrated 2,000 nested Tool entities --
+    // each with `code`, `parameters` and `examples` -- and the authConfigs
+    // join row-multiplied on top of them, all to render one integer per
+    // row. Same shape as `ApisService.getApis`: a correlated COUNT read
+    // back through getRawAndEntities.
     const queryBuilder = this.gatewayRepository
       .createQueryBuilder('gateway')
-      .leftJoinAndSelect('gateway.tools', 'gatewayTool')
-      .leftJoinAndSelect('gatewayTool.tool', 'tool')
       .leftJoinAndSelect('gateway.authConfigs', 'authConfig')
       .where('1=1');
+    queryBuilder.addSelect(
+      (sub) =>
+        sub
+          .select('COUNT(gt.id)', 'cnt')
+          .from(GatewayTool, 'gt')
+          .where('gt."gatewayId" = gateway.id'),
+      'gateway_toolCount',
+    );
     await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'gateway');
 
     // Apply filters
@@ -755,10 +862,24 @@ export class GatewaysService {
     const total = await queryBuilder.getCount();
 
     // Apply pagination
-    const gateways = await queryBuilder
+    const { entities, raw } = await queryBuilder
       .skip(skip)
       .take(limit)
-      .getMany();
+      .getRawAndEntities();
+
+    // Keyed by id, not by position. The authConfigs join still emits one
+    // raw row per (gateway, authConfig) pair while `entities` is deduped,
+    // so raw[i] lines up with entities[i] only for gateways that happen
+    // to have exactly one auth config.
+    const toolCounts = new Map<string, number>();
+    for (const row of raw) {
+      const id = row?.gateway_id;
+      if (id != null) toolCounts.set(String(id), Number(row.gateway_toolCount ?? 0));
+    }
+    entities.forEach((gateway) => {
+      gateway.toolCount = toolCounts.get(gateway.id) ?? 0;
+    });
+    const gateways = entities;
 
     const totalPages = Math.ceil(total / limit);
 
@@ -817,19 +938,30 @@ export class GatewaysService {
    * Goes through createGateway and updateGateway rather than touching
    * the repository, so permission checks, organization limits and the
    * transport sync all still happen.
+   *
+   * `activate: false` hands the caller a gateway that exists but does
+   * not answer yet, for a publish that has its own bookkeeping to
+   * finish before the surface goes live.
    */
   async upsertForDistribution(
     dto: CreateGatewayDto,
     organizationId: string,
     userId: string,
+    options: { activate?: boolean } = {},
   ): Promise<Gateway> {
+    const activate = options.activate ?? true;
     const endpoint = dto.endpoint.startsWith('/') ? dto.endpoint : `/${dto.endpoint}`;
     const existing = await this.gatewayRepository.findOne({
       where: { endpoint, organizationId },
     });
 
     if (!existing) {
-      return this.createGateway(dto, organizationId, userId);
+      return this.createGateway(
+        dto,
+        organizationId,
+        userId,
+        activate ? GatewayStatus.ACTIVE : GatewayStatus.INACTIVE,
+      );
     }
 
     const updated = await this.updateGateway(
@@ -847,9 +979,8 @@ export class GatewaysService {
       userId,
     );
 
-    return updated.status === GatewayStatus.ACTIVE
-      ? updated
-      : this.activateGateway(updated.id, organizationId, userId);
+    if (!activate || updated.status === GatewayStatus.ACTIVE) return updated;
+    return this.activateGateway(updated.id, organizationId, userId);
   }
 
   async deactivateGateway(
@@ -948,5 +1079,6 @@ export class GatewaysService {
   performHealthCheck(...args: Parameters<GatewaysStatsHelper['performHealthCheck']>) { return this.statsHelper.performHealthCheck(...args); }
   searchSkillsAcrossGateways(...args: Parameters<GatewaysStatsHelper['searchSkillsAcrossGateways']>) { return this.statsHelper.searchSkillsAcrossGateways(...args); }
   getAllUserGateways(...args: Parameters<GatewaysStatsHelper['getAllUserGateways']>) { return this.statsHelper.getAllUserGateways(...args); }
+  getSkillContextOrganization(...args: Parameters<GatewaysStatsHelper['getSkillContextOrganization']>) { return this.statsHelper.getSkillContextOrganization(...args); }
   calculateRequestTrend(...args: Parameters<GatewaysStatsHelper['calculateRequestTrend']>) { return this.statsHelper.calculateRequestTrend(...args); }
 }

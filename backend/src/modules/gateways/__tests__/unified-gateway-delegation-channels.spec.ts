@@ -23,7 +23,7 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
     handleInboundMessage: jest.Mock;
   };
   let gatewayResolver: { resolveAndAuthenticate: jest.Mock };
-  let mcpService: { handleJsonRpc: jest.Mock };
+  let mcpService: { handleJsonRpc: jest.Mock; handleJsonRpcMessage: jest.Mock };
   let gatewayRepository: any;
 
   const organization = { id: 'org-1', slug: 'acme' } as Organization;
@@ -96,7 +96,10 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
     gatewayResolver = {
       resolveAndAuthenticate: jest.fn().mockResolvedValue({ auth: { userId: 'u-1' } }),
     };
-    mcpService = { handleJsonRpc: jest.fn().mockResolvedValue({ jsonrpc: '2.0', result: {} }) };
+    mcpService = {
+      handleJsonRpc: jest.fn().mockResolvedValue({ jsonrpc: '2.0', result: {} }),
+      handleJsonRpcMessage: jest.fn().mockResolvedValue({ jsonrpc: '2.0', result: {} }),
+    };
 
     delegation = new UnifiedGatewayDelegation(
       { findOne: jest.fn() } as any, // agent repo
@@ -229,7 +232,7 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
     await handle(mcpGateway(), req, res, body);
 
     expect(gatewayResolver.resolveAndAuthenticate).toHaveBeenCalledTimes(1);
-    expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(body, 'org-1', null, 'gw-mcp-1');
+    expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', null, 'gw-mcp-1');
     expect(channelGatewayService.getAdapter).not.toHaveBeenCalled();
     expect(channelGatewayService.handleInboundMessage).not.toHaveBeenCalled();
   });
