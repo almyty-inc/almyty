@@ -9,10 +9,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import * as Redis from 'ioredis';
+import { isUniqueViolation } from '../../../common/utils/unique-violation';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRun } from '../../../entities/agent-run.entity';
-import { ChannelEvent } from '../../../entities/channel-event.entity';
+import { ChannelEvent, ChannelEventStatus } from '../../../entities/channel-event.entity';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { BaseAdapter, NormalizedMessage } from './adapters/base.adapter';
 import { ChatWidgetAdapter } from './adapters/chat-widget.adapter';
@@ -32,6 +35,20 @@ import { IrcAdapter } from './adapters/irc.adapter';
 import { ChannelInstallationService } from './channel-installation.service';
 import { ChannelCredentialService, ChannelUsePurpose } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
+
+/**
+ * A handle on a `channel_events` row, so a later step can finish it.
+ *
+ * `eventId` is what our own insert came back with. A claim taken over
+ * from a replica that died mid-run was not inserted by us and has no
+ * id here, so the (gatewayId, deliveryId) pair — which the partial
+ * unique index guarantees names at most one row — addresses it instead.
+ */
+interface ChannelEventRef {
+  eventId: string | null;
+  gatewayId: string;
+  deliveryId: string | null;
+}
 
 @Injectable()
 export class ChannelGatewayService {
@@ -74,6 +91,11 @@ export class ChannelGatewayService {
     // Optional for the same reason. When present, channel secrets are
     // read from the credential store the gateway's connection lives in.
     @Optional() private readonly channelCredentials?: ChannelCredentialService,
+    // Optional for the same reason, and advisory even when present: the
+    // fast path for the inbound delivery dedupe. Correctness lives in
+    // the unique index, so an absent or unreachable Redis costs a DB
+    // round trip and nothing else.
+    @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
   ) {
 
     this.adapters = new Map<string, BaseAdapter>([
@@ -175,7 +197,56 @@ export class ChannelGatewayService {
 
     // Normalize inbound message
     const normalized: NormalizedMessage = adapter.normalizeInbound(body);
-    await this.logEvent(gateway, 'inbound', 'received', this.truncatePayload(body));
+
+    // One delivery, one run.
+    //
+    // Every hosted channel here redelivers: Slack retries any event it
+    // did not get a response to within three seconds, Telegram repeats
+    // an update until it is acknowledged, Twilio and the Bot Framework
+    // retry a dropped connection. The controller answered 200 before
+    // this ran, so the retry arrives while the first delivery is still
+    // in flight — and on another replica, whose thread lookup below
+    // finds nothing because the run is still being created. One user
+    // message then produced two runs, two LLM bills and two replies.
+    // Signature verification authenticates a redelivery; it cannot
+    // recognize one.
+    //
+    // The claim is the insert of the inbound event: `deliveryId` is
+    // unique per gateway, so the replica that inserts first owns the
+    // delivery and every other one is turned away by the database.
+    //
+    // A claim is a lease, not a tombstone. A replica that claims a
+    // delivery and dies mid-run would otherwise have the platform's
+    // retry rejected and the user's message dropped with nothing said —
+    // trading two replies for no reply. `logEvent` takes over a claim
+    // left in `received` past the lease; see
+    // `reclaimAbandonedDelivery`.
+    //
+    // Redis is a fast path so the common duplicate does not wait on a DB
+    // round trip. Its TTL matches the lease so a cache hit can only ever
+    // mean "claimed, and still good", and it fails open to the index.
+    const deliveryId = adapter.deliveryId(body, headers) ?? null;
+    if (deliveryId && (await this.deliveryAlreadyClaimedInCache(gateway.id, deliveryId))) {
+      this.logger.log(
+        `Duplicate delivery ${deliveryId} for gateway ${gateway.id} — claimed within the lease, dropped`,
+      );
+      return;
+    }
+    const claim = await this.logEvent(
+      gateway,
+      'inbound',
+      'received',
+      this.truncatePayload(body),
+      null,
+      undefined,
+      deliveryId,
+    );
+    if (!claim) {
+      this.logger.log(
+        `Duplicate delivery ${deliveryId} for gateway ${gateway.id} — already handled, dropped`,
+      );
+      return;
+    }
 
     // Each platform sender gets their own share of the surface, so one
     // person in a Slack workspace cannot use up the whole product's
@@ -185,7 +256,13 @@ export class ChannelGatewayService {
     if (senderId && this.gatewayRateLimit) {
       const own = await this.gatewayRateLimit.checkVisitor(gateway, { endUserId: senderId, clientHash: null });
       if (own.limited) {
-        await this.logEvent(gateway, 'inbound', 'failed', this.truncatePayload(body), own.message ?? 'sender rate limited');
+        // On the claim row rather than beside it: this delivery is
+        // finished, and a claim left in `received` is one the lease
+        // hands to the platform's next retry.
+        await this.markInboundOutcome(claim, {
+          status: 'failed',
+          errorMessage: own.message ?? 'sender rate limited',
+        });
         return;
       }
     }
@@ -210,8 +287,19 @@ export class ChannelGatewayService {
 
     if (run) {
       await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, normalized.text);
-      this.listenForCompletionAndRespond(run.id, gateway, adapter, normalized, effectiveConfig);
+      // The cross-link the claim row was always meant to carry: without
+      // it an operator holding "the bot never answered me at 14:05" has
+      // an inbound row and no way to reach the run that answered it.
+      await this.markInboundOutcome(claim, { runId: run.id });
+      this.listenForCompletionAndRespond(run.id, gateway, adapter, normalized, effectiveConfig, claim);
     } else {
+      // The channel's facts travel WITH the run row rather than in a
+      // follow-up save. The thread lookup above keys on
+      // metadata->>'threadId', and a second write left a window in
+      // which the run existed with no threadId on it — so a concurrent
+      // message in the same thread could not see it and started a
+      // second run. startRun writes `options.metadata` as part of the
+      // insert, which closes the window.
       const newRun = await this.agentRuntimeService.startRun(
         gateway.agentId,
         gateway.organizationId,
@@ -219,36 +307,104 @@ export class ChannelGatewayService {
         // is the platform's own id for the sender ("U012ABC" on Slack),
         // and putting it in a column that references `users` made every
         // conversation write fail, so a channel could not answer at all.
-        // The sender is recorded in metadata below, where the rest of
-        // the channel's facts already live.
+        // The sender is recorded in metadata, where the rest of the
+        // channel's facts already live.
         null,
         normalized.text,
-        { maxSteps: 25 },
+        {
+          maxSteps: 25,
+          metadata: {
+            channelUserId: normalized.userId,
+            threadId: normalized.threadId,
+            gatewayId: gateway.id,
+            gatewayType: gateway.type,
+            source: normalized.metadata?.source || gateway.type,
+          },
+        },
       );
 
-      newRun.metadata = {
-        ...(newRun.metadata || {}),
-        channelUserId: normalized.userId,
-        threadId: normalized.threadId,
-        gatewayId: gateway.id,
-        gatewayType: gateway.type,
-        source: normalized.metadata?.source || gateway.type,
-      };
-      await this.runRepository.save(newRun);
-
-      this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized, effectiveConfig);
+      await this.markInboundOutcome(claim, { runId: newRun.id });
+      this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized, effectiveConfig, claim);
     }
 
-    // Increment request count
-    gateway.incrementRequest(true);
-    await this.gatewayRepository.save(gateway);
+    // Inbound traffic count, as an atomic column bump rather than a
+    // save() of the whole row: the entity was loaded before config
+    // resolution, signature verification, the rate-limit check and
+    // startRun, so by now its `status` and `configuration` can be
+    // hundreds of milliseconds stale. save() diffs the stale copy
+    // against the row and writes it back, which turned a gateway an
+    // admin had just deactivated back to active, and reverted channel
+    // credentials rotated a moment earlier. Traffic could keep a
+    // gateway alive against its owner's wishes.
+    await this.incrementRequestCount(gateway.id);
   }
+
+  /**
+   * Atomic request-count bump. Touches only the three counter columns,
+   * so nothing a concurrent writer put in `status` or `configuration`
+   * is clobbered, and concurrent requests cannot lose increments to a
+   * read-modify-write. Same shape as GatewaysService.incrementRequestCount
+   * and the protocol path's bump.
+   */
+  private async incrementRequestCount(gatewayId: string): Promise<void> {
+    try {
+      await this.gatewayRepository
+        .createQueryBuilder()
+        .update(Gateway)
+        .set({
+          totalRequests: () => '"totalRequests" + 1',
+          successfulRequests: () => '"successfulRequests" + 1',
+          lastRequestAt: new Date(),
+        })
+        .where('id = :id', { id: gatewayId })
+        .execute();
+    } catch (err: any) {
+      this.logger.warn(`Failed to update gateway request metrics: ${err?.message ?? err}`);
+    }
+  }
+
+  /**
+   * Fast duplicate check in Redis: SET NX on the delivery key claims it
+   * for whoever gets there first. Returns true when someone already
+   * holds the claim.
+   *
+   * Advisory only. Without Redis, or when Redis is unreachable, this
+   * returns false and the unique index on channel_events does the
+   * actual rejecting — never the other way round, because a cache is
+   * not allowed to be the thing standing between a real message and an
+   * answer.
+   */
+  private async deliveryAlreadyClaimedInCache(gatewayId: string, deliveryId: string): Promise<boolean> {
+    if (!this.redis) return false;
+    try {
+      const key = `channel_delivery:${gatewayId}:${deliveryId}`;
+      const claimed = await this.redis.set(key, '1', 'EX', ChannelGatewayService.DELIVERY_CLAIM_TTL_SECONDS, 'NX');
+      return claimed === null;
+    } catch (err: any) {
+      this.logger.warn(`Delivery dedupe cache check failed, falling through to the index: ${err?.message ?? err}`);
+      return false;
+    }
+  }
+
+  /**
+   * How long a delivery claim stays in the cache.
+   *
+   * Deliberately the same as `DELIVERY_CLAIM_LEASE_MS`, not longer. A
+   * cache hit short-circuits before the database is consulted, so a
+   * cache entry that outlived the lease would drop a redelivery the
+   * lease says is now takeable — reintroducing the lost message for as
+   * long as the entry survived. Matching the two means a hit always
+   * means "claimed, and the claim is still good", and anything past the
+   * lease falls through to the row, where the takeover is decided.
+   */
+  private static readonly DELIVERY_CLAIM_TTL_SECONDS = 10 * 60;
 
   /**
    * Listen for a run to complete and send the response back via the adapter.
    * `sendConfig` (optional) carries installation-resolved credentials for
    * multi-workspace gateways; omitted, the gateway's own configuration
-   * is used.
+   * is used. `inbound` (optional) is the claim row for the delivery this
+   * run answers, so its outcome can be written back onto it.
    */
   private listenForCompletionAndRespond(
     runId: string,
@@ -256,10 +412,26 @@ export class ChannelGatewayService {
     adapter: BaseAdapter,
     normalized: NormalizedMessage,
     sendConfig?: Record<string, any>,
+    inbound?: ChannelEventRef | null,
   ): void {
     const emitter = this.agentRuntimeService.getRunEmitter(runId);
     if (!emitter) {
-      this.logger.warn(`No emitter found for run ${runId}, cannot send response`);
+      // The emitter is process-local and the run travels through
+      // BullMQ, so it can finish on a replica that never saw this
+      // registration — or after this pod was recycled. The run then
+      // completes, costs its tokens, and the reply is never sent. That
+      // used to leave one warning line carrying a run id and no trace
+      // anywhere an operator looks, so a customer's "it never answered"
+      // was unanswerable. It gets a row.
+      const reason =
+        `the reply was dropped: no run listener in this process for run ${runId}, ` +
+        'so the completed run never reached the channel';
+      this.logger.error(`No emitter found for run ${runId}, cannot send response`);
+      void this.logEvent(gateway, 'outbound', 'failed', null, reason, runId);
+      // The inbound claim keeps its runId but stays `received` on
+      // purpose: nothing answered this delivery, so the platform's
+      // retry should be allowed to take the lease and try again.
+      void this.markInboundOutcome(inbound, { runId });
       return;
     }
 
@@ -308,9 +480,18 @@ export class ChannelGatewayService {
               organizationId: gateway.organizationId,
               runId,
             });
+            // sendResponse resolves only when the platform accepted the
+            // message, so this row means delivered rather than
+            // attempted.
             await this.logEvent(gateway, 'outbound', 'processed', this.truncatePayload(formatted), null, runId);
+            await this.markInboundOutcome(inbound, { status: 'processed', runId });
           } catch (sendErr: any) {
-            await this.logEvent(gateway, 'outbound', 'failed', this.truncatePayload(formatted), sendErr?.message ?? String(sendErr), runId);
+            // The platform's own wording — "not_in_channel",
+            // "chat not found", "Missing Access" — is what makes this
+            // row worth reading.
+            const reason = sendErr?.message ?? String(sendErr);
+            await this.logEvent(gateway, 'outbound', 'failed', this.truncatePayload(formatted), reason, runId);
+            await this.markInboundOutcome(inbound, { status: 'failed', runId, errorMessage: reason });
             throw sendErr;
           }
         } catch (err: any) {
@@ -441,9 +622,7 @@ export class ChannelGatewayService {
       threadId: (run.metadata as any)?.threadId || normalized.threadId || run.id,
     });
 
-    // Increment request count
-    gateway.incrementRequest(true);
-    await this.gatewayRepository.save(gateway);
+    await this.incrementRequestCount(gateway.id);
 
     return {
       runId: run.id,
@@ -533,8 +712,24 @@ export class ChannelGatewayService {
   private static readonly MAX_PAYLOAD_BYTES = 16 * 1024;
 
   /**
-   * Persist a single channel event. Always returns; never throws — a
-   * failure to log must not break the actual channel flow.
+   * How long a delivery claim is honoured before a redelivery may take
+   * it over. Long enough that a slow run is not reprocessed; short
+   * enough that a message lost to a dying pod is answered on the
+   * platform's next retry rather than never.
+   */
+  private static readonly DELIVERY_CLAIM_LEASE_MS = ChannelGatewayService.DELIVERY_CLAIM_TTL_SECONDS * 1000;
+
+  /**
+   * Persist a single channel event.
+   *
+   * Returns null ONLY when the insert lost the race on
+   * `UQ_channel_events_gateway_delivery` and the claim it lost to is
+   * still good — this gateway has already accepted a delivery carrying
+   * this `deliveryId`, so the caller is holding a redelivery and must
+   * stop. Every other outcome returns a handle on the row, because a
+   * logging problem must neither break the channel flow nor silently
+   * drop real traffic: it is warned and swallowed exactly as before,
+   * and the handle then simply addresses nothing.
    */
   private async logEvent(
     gateway: Gateway,
@@ -543,9 +738,10 @@ export class ChannelGatewayService {
     payload: Record<string, any> | null,
     errorMessage?: string | null,
     runId?: string,
-  ): Promise<void> {
+    deliveryId?: string | null,
+  ): Promise<ChannelEventRef | null> {
     try {
-      await this.eventRepository.save(this.eventRepository.create({
+      const saved = await this.eventRepository.save(this.eventRepository.create({
         organizationId: gateway.organizationId,
         gatewayId: gateway.id,
         channelType: gateway.type,
@@ -554,10 +750,119 @@ export class ChannelGatewayService {
         payload,
         errorMessage: errorMessage ?? null,
         runId: runId ?? null,
+        deliveryId: deliveryId ?? null,
       }));
+      return {
+        eventId: (saved as any)?.id ?? null,
+        gatewayId: gateway.id,
+        deliveryId: deliveryId ?? null,
+      };
     } catch (err: any) {
+      // With a deliveryId in play the only unique constraint this
+      // insert can hit is the dedupe index, and hitting it is an answer
+      // rather than a failure.
+      if (deliveryId && isUniqueViolation(err)) {
+        return this.reclaimAbandonedDelivery(gateway.id, deliveryId);
+      }
       this.logger.warn(`Failed to log channel event: ${err.message ?? err}`);
+      return { eventId: null, gatewayId: gateway.id, deliveryId: deliveryId ?? null };
     }
+  }
+
+  /**
+   * Record how a claimed inbound delivery turned out.
+   *
+   * The claim row is inserted as `received` and nothing used to move it
+   * again, which cost more than a gap in the audit trail: the lease
+   * below reads "still `received` past the lease" as abandoned, so a
+   * delivery that was handled perfectly well stayed takeable forever
+   * and the platform's next retry — Slack's is thirty minutes out —
+   * started a second run, paid for a second LLM call and sent the user
+   * a second reply. Reaching `processed` (or `failed`) is what makes
+   * the lease mean what its doc comment says it means.
+   *
+   * Addressed by row id where we have one, and otherwise by the
+   * (gatewayId, deliveryId) pair the unique index already guarantees is
+   * a single row — which is how a claim taken over from a dead replica,
+   * where no insert of ours produced an id, is still finished properly.
+   */
+  private async markInboundOutcome(
+    ref: ChannelEventRef | null,
+    patch: { status?: ChannelEventStatus; runId?: string; errorMessage?: string | null },
+  ): Promise<void> {
+    if (!ref) return;
+    const where = ref.eventId
+      ? { id: ref.eventId }
+      : ref.deliveryId
+        ? { gatewayId: ref.gatewayId, deliveryId: ref.deliveryId }
+        : null;
+    // A channel whose platform offers no stable delivery id, logged by
+    // a repository that handed back no row id, leaves nothing to
+    // address. Nothing to do, and nothing worth failing a reply over.
+    if (!where) return;
+    try {
+      await this.eventRepository.update(where, patch);
+    } catch (err: any) {
+      this.logger.warn(`Failed to update channel event outcome: ${err?.message ?? err}`);
+    }
+  }
+
+  /**
+   * Whether a delivery whose claim already exists may be taken over.
+   *
+   * Keying the claim on the delivery id alone makes it at-most-once: a
+   * replica that claims a delivery and then dies — OOM, eviction, a
+   * rolling deploy — leaves a claim nobody is working on, and the
+   * platform's retry is turned away by the index. The user's message is
+   * then silently dropped, with an event row that says `received` and a
+   * thread that never gets an answer. Trading two replies for no reply
+   * is not an improvement.
+   *
+   * So a claim is a lease. A claim still in `received` after
+   * `DELIVERY_CLAIM_LEASE_MS` is assumed abandoned and the retry takes
+   * it, with the takeover itself conditional on the row still looking
+   * abandoned — so several simultaneous retries produce exactly one
+   * winner. A claim that reached `processed` or `failed` was finished by
+   * somebody and the retry is a genuine duplicate; `markInboundOutcome`
+   * is what puts it in one of those two states.
+   *
+   * This is effectively-once rather than exactly-once, which is the most
+   * any at-least-once transport can be given. The remaining window is
+   * one lease long, and the alternative is losing messages.
+   *
+   * Returns a handle on the reclaimed row, or null when the claim stands.
+   */
+  private async reclaimAbandonedDelivery(
+    gatewayId: string,
+    deliveryId: string,
+  ): Promise<ChannelEventRef | null> {
+    const cutoff = new Date(Date.now() - ChannelGatewayService.DELIVERY_CLAIM_LEASE_MS);
+    try {
+      const takeover = await this.eventRepository
+        .createQueryBuilder()
+        .update()
+        .set({ createdAt: () => 'NOW()' } as any)
+        .where('"gatewayId" = :gatewayId', { gatewayId })
+        .andWhere('"deliveryId" = :deliveryId', { deliveryId })
+        .andWhere('status = :received', { received: 'received' })
+        .andWhere('"createdAt" < :cutoff', { cutoff })
+        .execute();
+
+      if ((takeover.affected ?? 0) > 0) {
+        this.logger.warn(
+          `Delivery ${deliveryId} on gateway ${gatewayId} was claimed and abandoned; ` +
+            'taking it over on this redelivery.',
+        );
+        // No insert of ours produced this row, so it is addressed by
+        // the pair the unique index keys on.
+        return { eventId: null, gatewayId, deliveryId };
+      }
+    } catch (err: any) {
+      // A failed takeover attempt must not look like a successful claim,
+      // or a duplicate gets processed. Fall through to dropping it.
+      this.logger.warn(`Could not evaluate the claim on delivery ${deliveryId}: ${err.message ?? err}`);
+    }
+    return null;
   }
 
   /**

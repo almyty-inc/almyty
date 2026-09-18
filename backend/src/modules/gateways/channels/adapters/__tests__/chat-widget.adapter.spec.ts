@@ -79,9 +79,18 @@ describe('ChatWidgetAdapter', () => {
       expect(saved.payload.attachments).toEqual([{ url: 'u', type: 't', name: 'n' }]);
     });
 
-    it('drops (does not persist, does not throw) without gateway/thread context', async () => {
-      await expect(adapter.sendResponse({}, { message: 'r' }, {})).resolves.toBeUndefined();
-      await expect(adapter.sendResponse({}, { message: 'r' }, { threadId: 't' })).resolves.toBeUndefined();
+    /**
+     * The insert IS the delivery here, so identity that is missing
+     * means the visitor will never see the reply. Returning quietly
+     * made that indistinguishable from a reply they read.
+     */
+    it('refuses without gateway/thread context, and persists nothing', async () => {
+      await expect(adapter.sendResponse({}, { message: 'r' }, {})).rejects.toThrow(
+        /gatewayId, organizationId, threadId missing/,
+      );
+      await expect(adapter.sendResponse({}, { message: 'r' }, { threadId: 't' })).rejects.toThrow(
+        /gatewayId, organizationId missing/,
+      );
       expect(eventRepository.save).not.toHaveBeenCalled();
     });
   });

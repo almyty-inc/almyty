@@ -190,9 +190,11 @@ describe('HostedChatService', () => {
 
     it('exports the visitor record and every conversation with its messages', async () => {
       conversationRepository.find.mockResolvedValue([{ id: 'c1', title: 'Order', status: 'active', createdAt: new Date('2026-02-01') }]);
+      // One query returns every conversation's messages, so each row has to
+      // say which conversation it belongs to.
       messageRepository.find.mockResolvedValue([
-        { role: 'user', content: 'hi', createdAt: new Date('2026-02-01'), metadata: {} },
-        { role: 'assistant', content: 'hello', createdAt: new Date('2026-02-01'), metadata: {} },
+        { conversationId: 'c1', role: 'user', content: 'hi', createdAt: new Date('2026-02-01'), metadata: {} },
+        { conversationId: 'c1', role: 'assistant', content: 'hello', createdAt: new Date('2026-02-01'), metadata: {} },
       ]);
 
       const out: any = await service.exportVisitor(gateway(), visitor);
@@ -201,6 +203,8 @@ describe('HostedChatService', () => {
       expect(out.conversations).toHaveLength(1);
       expect(out.conversations[0].messages.map((m: any) => m.content)).toEqual(['hi', 'hello']);
       expect(conversationRepository.find).toHaveBeenCalledWith(expect.objectContaining({ where: { endUserId: 'eu-1' } }));
+      // One query for all of them, not one per conversation.
+      expect(messageRepository.find).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -406,7 +410,7 @@ describe('HostedChatService', () => {
   describe('findByCustomDomain', () => {
     it('resolves an active, verified custom domain', async () => {
       const gw = gateway();
-      qb.getOne.mockResolvedValueOnce(gw);
+      qb.getMany.mockResolvedValueOnce([gw]);
       await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBe(gw);
       expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), {
         hostname: 'chat.acme.com',
@@ -422,8 +426,16 @@ describe('HostedChatService', () => {
     });
 
     it('returns null rather than throwing for an unknown domain', async () => {
-      qb.getOne.mockResolvedValueOnce(null);
+      qb.getMany.mockResolvedValueOnce([]);
       await expect(service.findByCustomDomain('nope.example')).resolves.toBeNull();
+    });
+
+    it('refuses to serve a hostname two live gateways claim', async () => {
+      // Same fail-closed rule as findBySlug: a hostname is a global
+      // public address, and picking one of two claimants would put a
+      // tenant's agent and conversations under somebody else's URL.
+      qb.getMany.mockResolvedValueOnce([gateway(), gateway({ id: 'gw-2' } as any)]);
+      await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBeNull();
     });
 
     it('returns null for an empty hostname without touching the database', async () => {

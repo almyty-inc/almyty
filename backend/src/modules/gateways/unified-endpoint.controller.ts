@@ -239,6 +239,10 @@ export class UnifiedEndpointController {
    * Resolves org, then finds gateway or agent by slug/name.
    */
   @All(':orgSlug/:resourceSlug')
+  // Its three siblings here all carry this; this one did not, so the same
+  // gateway traffic was rate-limited or not depending on whether the path had
+  // a trailing segment.
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   async handleRequest(
     @Param('orgSlug') orgSlug: string,
     @Param('resourceSlug') resourceSlug: string,
