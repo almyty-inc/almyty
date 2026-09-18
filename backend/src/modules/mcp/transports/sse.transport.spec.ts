@@ -91,11 +91,70 @@ describe('SseTransport', () => {
       expect(mcpSessionService.createSession).toHaveBeenCalledWith('org-1', 'sse', 'user-1');
     });
 
+    // MCP 2024-11-05 "HTTP with SSE": the first frame on the stream must be
+    // `event: endpoint` whose data is the bare URI to POST messages to. The
+    // official SDKs resolve start() only from that listener, so without it
+    // nothing can drive this transport at all.
+    it('sends `endpoint` as the first SSE event, carrying a bare URI', async () => {
+      mockResponse.req = { originalUrl: '/mcp/sse?server=server-1' };
+
+      const connectionId = await transport.handleSseConnection(mockResponse, 'org-1', 'user-1');
+
+      const first = mockResponse.write.mock.calls[0][0];
+      expect(first.startsWith('event: endpoint\n')).toBe(true);
+      // Raw URI, not JSON: a quoted `data: "…"` fails SDK URL parsing.
+      expect(first).toBe(`event: endpoint\ndata: sse/${connectionId}/message\n\n`);
+    });
+
+    // What the SDKs actually do with the value: `new URL(data, sseUrl)` in
+    // TypeScript, `urljoin(url, sse.data)` in Python. The ingress rewrites
+    // /api(/|$)(.*) onto /$2 and the vite dev proxy strips /api too, so the
+    // path this server sees is NOT the path the client used — only a
+    // relative URI survives that, and it must survive it on every surface.
+    it.each([
+      // [what the client opened, what this server sees, where the POST must land]
+      ['https://api.almyty.com/mcp/sse', '/mcp/sse', 'https://api.almyty.com/mcp/sse/%ID%/message'],
+      ['https://acme.almyty.app/api/mcp/sse', '/mcp/sse', 'https://acme.almyty.app/api/mcp/sse/%ID%/message'],
+      ['http://localhost:3002/api/mcp/sse', '/mcp/sse', 'http://localhost:3002/api/mcp/sse/%ID%/message'],
+      ['https://acme.almyty.app/api/mcp/servers/s1/sse', '/mcp/servers/s1/sse', 'https://acme.almyty.app/api/mcp/sse/%ID%/message'],
+      ['https://api.almyty.com/mcp/servers/s1/sse', '/mcp/servers/s1/sse', 'https://api.almyty.com/mcp/sse/%ID%/message'],
+    ])('a client opening %s resolves the endpoint onto the real POST route', async (clientUrl, serverPath, expected) => {
+      mockResponse.req = { originalUrl: serverPath };
+
+      const connectionId = await transport.handleSseConnection(mockResponse, 'org-1', 'user-1');
+
+      const data = /^data: (.+)$/m.exec(mockResponse.write.mock.calls[0][0])![1];
+      const resolved = new URL(data, clientUrl);
+      expect(resolved.toString()).toBe(expected.replace('%ID%', connectionId));
+      // Both SDKs refuse an endpoint on a different origin.
+      expect(resolved.origin).toBe(new URL(clientUrl).origin);
+    });
+
+    // The POST route is addressed by connectionId, never by the MCP session
+    // id. Publishing session.id returned -32001 Connection not found.
+    it('addresses the endpoint URI by connectionId, not the MCP session id', async () => {
+      mockResponse.req = { originalUrl: '/mcp/sse' };
+
+      const connectionId = await transport.handleSseConnection(mockResponse, 'org-1', 'user-1');
+
+      const first = mockResponse.write.mock.calls[0][0];
+      expect(first).toContain(connectionId);
+      expect(first).not.toContain('session-1');
+
+      // And the id it hands out actually resolves on the POST path.
+      const res = await transport.handleSseMessage(
+        connectionId,
+        { jsonrpc: '2.0', id: 1, method: 'ping' } as any,
+        'org-1',
+      );
+      expect((res as any).error).toBeUndefined();
+    });
+
     it('should send initial connection event', async () => {
       await transport.handleSseConnection(mockResponse, 'org-1', 'user-1');
 
       expect(mockResponse.write).toHaveBeenCalled();
-      const writtenData = mockResponse.write.mock.calls[0][0];
+      const writtenData = mockResponse.write.mock.calls[1][0];
       expect(writtenData).toContain('event: connected');
       expect(writtenData).toContain('session-1');
     });

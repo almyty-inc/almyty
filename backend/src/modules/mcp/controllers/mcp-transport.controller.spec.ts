@@ -20,7 +20,6 @@ describe('McpTransportController', () => {
           useValue: {
             getWellKnown: jest.fn(),
             healthCheck: jest.fn(),
-            getToolsAsMcp: jest.fn(),
             handleJsonRpc: jest.fn(),
           },
         },

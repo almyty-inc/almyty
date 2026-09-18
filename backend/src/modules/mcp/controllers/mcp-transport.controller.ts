@@ -13,6 +13,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
 import { SseTransport } from '../transports/sse.transport';
 import { WebSocketTransport } from '../transports/websocket.transport';
 import { StreamableHttpTransport } from '../transports/streamable-http.transport';
@@ -36,7 +38,8 @@ export class McpTransportController {
   // stream for server->client. Sessions identified via Mcp-Session-Id
   // header; Last-Event-ID drives reconnect replay.
   @Post('/streamable')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('member', 'admin', 'owner')
   async streamablePost(@Request() req, @Response() res): Promise<void> {
     const organizationId = req.user?.currentOrganizationId;
     const userId = req.user?.id;
@@ -47,7 +50,8 @@ export class McpTransportController {
   }
 
   @Get('/streamable')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('member', 'admin', 'owner')
   async streamableStream(@Request() req, @Response() res): Promise<void> {
     const organizationId = req.user?.currentOrganizationId;
     const userId = req.user?.id;
@@ -58,7 +62,8 @@ export class McpTransportController {
   }
   // Server-Sent Events endpoint
   @Get('/sse')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('member', 'admin', 'owner')
   async handleSse(@Request() req, @Response() res, @Query('server') serverId?: string): Promise<void> {
     const organizationId = req.user?.currentOrganizationId;
     const userId = req.user?.id;
@@ -73,7 +78,8 @@ export class McpTransportController {
 
   // SSE message posting endpoint (for bidirectional communication)
   @Post('/sse/:connectionId/message')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('member', 'admin', 'owner')
   async sendSseMessage(
     @Param('connectionId') connectionId: string,
     @Body() message: JsonRpcRequest,
@@ -90,7 +96,8 @@ export class McpTransportController {
 
   // Server-specific SSE endpoints
   @Get('/servers/:serverId/sse')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('member', 'admin', 'owner')
   async handleServerSse(
     @Param('serverId') serverId: string,
     @Request() req,
@@ -111,7 +118,11 @@ export class McpTransportController {
   @Get('/ws/info')
   async getWebSocketInfo(): Promise<any> {
     return {
-      endpoint: `${process.env.BASE_URL || 'ws://localhost:4000'}/api/mcp/ws`,
+      // BASE_URL is the api host (https://api.almyty.com), whose ingress
+      // routes '/' straight through with no rewrite -- only the *.almyty.app
+      // and localhost dev hosts strip an '/api' prefix. So '/api/mcp/ws' on
+      // BASE_URL was a 404 for every client that read this document.
+      endpoint: `${process.env.BASE_URL || 'ws://localhost:4000'}/mcp/ws`,
       protocol: 'mcp-websocket',
       version: '1.0.0',
       features: {
@@ -125,7 +136,8 @@ export class McpTransportController {
 
   // Transport statistics
   @Get('/transport/stats')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('member', 'admin', 'owner')
   async getTransportStats(@Request() req): Promise<any> {
     const organizationId = req.user?.currentOrganizationId;
 
@@ -155,7 +167,12 @@ export class McpTransportController {
 
   // Broadcast message to organization
   @Post('/broadcast')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  // Fans an arbitrary message out to every MCP session in the org. There is no
+  // dashboard sibling to mirror, and it is an operator action rather than a
+  // tenant-user one, so it sits at admin+ -- one step above the member+ the
+  // rest of this controller uses.
+  @Roles('admin', 'owner')
   async broadcast(
     @Request() req,
     @Body() broadcastData: { message: any; transport?: 'sse' | 'websocket' | 'all' },
