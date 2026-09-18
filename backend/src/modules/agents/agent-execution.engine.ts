@@ -13,6 +13,7 @@ import { StreamEvent } from './stream-event.types';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Organization } from '../../entities/organization.entity';
 import { resolveRunLimits } from './run-limits';
+import { BudgetsService } from '../budgets/budgets.service';
 
 // Re-export so existing `import { StreamEvent } from './agent-execution.engine'`
 // continues to work without changing every consumer in one shot.
@@ -107,15 +108,17 @@ export class AgentExecutionEngine {
     // L4, needed whenever a compiled strategy is what runs.
     @Optional()
     private readonly agentRoles?: AgentRolesService,
-    // Only used to read the organization's run ceiling. Appended LAST, and
-    // every new optional dependency must be: the harnesses in
-    // engine-runs-strategy.spec construct this class positionally, so a
-    // parameter inserted in the middle silently shifts strategyPipelines
-    // and agentRoles one place along -- the engine then runs the drawn
-    // graph instead of the compiled strategy, with no type error.
+    // Only used to read the organization's run ceiling.
     @Optional()
     @InjectRepository(Organization)
     private readonly organizationRepository?: Repository<Organization>,
+    // Spend budgets. Appended last, like every optional dependency on this
+    // class: the spec harnesses construct it positionally, so a parameter
+    // inserted above silently shifts strategyPipelines and agentRoles along
+    // and the engine runs the drawn graph instead of the compiled strategy,
+    // with no type error to show for it.
+    @Optional()
+    private readonly budgets?: BudgetsService,
   ) {}
 
   /**
@@ -144,6 +147,19 @@ export class AgentExecutionEngine {
 
     // ── Input validation ────────────────────────────────────────────────
     validateInput(options.input, internalOptions);
+
+    // Spend budgets, before the execution row exists so a rejected run
+    // leaves nothing behind. enforceForRun had exactly one caller --
+    // agent-runtime.service, gated on mode === 'autonomous' -- so a budget
+    // set to 'reject' never stopped a workflow agent, whatever it spent.
+    // Workflow spend still counted toward the org total, so the budget
+    // could block somebody else's autonomous run while never blocking the
+    // run that exhausted it. Every path into a workflow run goes through
+    // here: the execution controller, the scheduler, both compat APIs and
+    // the sub-agent executor.
+    if (this.budgets) {
+      await this.budgets.enforceForRun(organizationId, agent.id);
+    }
 
     // 1. Create execution record
     const execution = this.agentExecutionRepository.create({

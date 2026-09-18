@@ -16,9 +16,11 @@ import { Organization } from './organization.entity';
  * SpendAlert (and emails) but lets runs proceed. `softThresholdPct`
  * (default 80) fires an earlier soft alert before the hard limit.
  *
- * Scope: `organizationId` is required. `agentId` / `llmProviderId`
- * narrow the budget to a single agent or provider; both null means an
- * org-wide budget.
+ * Scope: `organizationId` is required. `agentId` narrows the budget to
+ * a single agent; null means org-wide. `llmProviderId` is NOT enforced —
+ * no spend table records which provider a run was billed to, so
+ * BudgetsService refuses to create a provider-scoped budget and skips
+ * any that exists rather than measuring it against org-wide spend.
  */
 export type SpendBudgetPeriod = 'day' | 'month';
 export type SpendBudgetBehavior = 'warn_log' | 'reject';
@@ -36,7 +38,7 @@ export class SpendBudget {
   @Column({ nullable: true })
   agentId: string | null;
 
-  /** Narrow to one LLM provider. Null = applies to all providers. */
+  /** Reserved; NOT enforced — see the class doc above. */
   @Column({ nullable: true })
   llmProviderId: string | null;
 

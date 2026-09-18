@@ -21,6 +21,27 @@ export interface InstallTemplateOptions {
   credentialId?: string;
 }
 
+/** Page size when the caller asks for none. */
+const DEFAULT_PAGE_SIZE = 20;
+/** Hard ceiling on one page, whatever the caller asks for. */
+const MAX_PAGE_SIZE = 100;
+/** Hard ceiling on the page number, so OFFSET stays sane. */
+const MAX_PAGE = 10_000;
+
+/**
+ * `page` and `limit` come straight off the query string via `parseInt`,
+ * so they arrive as NaN (`?limit=abc`), zero, negative or arbitrarily
+ * large. NaN used to reach `.skip()`/`.take()` and produce invalid SQL;
+ * `?limit=1000000` asked Postgres for every template in the instance in
+ * one response. Clamp both to a sane integer range here — in the
+ * service, so every caller is covered, not just the HTTP controller.
+ */
+function clampInt(value: unknown, fallback: number, min: number, max: number): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(Math.max(n, min), max);
+}
+
 @Injectable()
 export class ToolHubService {
   private readonly logger = new Logger(ToolHubService.name);
@@ -39,7 +60,9 @@ export class ToolHubService {
     filters: ListTemplatesFilters,
     orgId?: string,
   ): Promise<{ templates: ToolTemplate[]; total: number }> {
-    const { category, provider, search, page = 1, limit = 20 } = filters;
+    const { category, provider, search } = filters;
+    const limit = clampInt(filters.limit, DEFAULT_PAGE_SIZE, 1, MAX_PAGE_SIZE);
+    const page = clampInt(filters.page, 1, 1, MAX_PAGE);
 
     const queryBuilder = this.templateRepository.createQueryBuilder('t');
 
