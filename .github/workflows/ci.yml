@@ -60,6 +60,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       docs: ${{ steps.filter.outputs.docs }}
+      packages: ${{ steps.filter.outputs.packages }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -76,6 +77,9 @@ jobs:
               - '.github/workflows/ci.yml'
             docs:
               - 'docs-site/**'
+              - '.github/workflows/ci.yml'
+            packages:
+              - 'packages/**'
               - '.github/workflows/ci.yml'
 
   # ─── Backend: unit + DB integration ──────────────────────────
@@ -119,7 +123,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Node 24
+      - name: Set up Node 26
         uses: actions/setup-node@v6
         with:
           node-version: '26'
@@ -168,7 +172,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Node 24
+      - name: Set up Node 26
         uses: actions/setup-node@v6
         with:
           node-version: '26'
@@ -183,6 +187,117 @@ jobs:
         working-directory: frontend
         run: npm test -- --run
 
+  # ─── Published npm packages: vitest unit tests ───────────────
+  # The twelve @almyty/* packages under packages/* are published to
+  # npm and each carries its own vitest suite — but until this job
+  # existed NOTHING in CI ran them, and publish-packages.yml does not
+  # run tests before it publishes either. A broken CLI would only
+  # surface to a user running `npx @almyty/...`.
+  #
+  # cli-tests is excluded (its suite is the RUN_CLI_SMOKE=1 gated
+  # smoke pass, which needs a live gateway + credentials) and
+  # desktop-shell is excluded (private, no specs — `vitest run` with
+  # zero test files exits 1).
+  packages-tests:
+    name: Packages tests (${{ matrix.package }})
+    needs: changes
+    if: ${{ needs.changes.outputs.packages == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      # One broken package must not hide the state of the other
+      # eleven — every leg reports independently.
+      fail-fast: false
+      matrix:
+        package:
+          - acp-server
+          - agents-cli
+          - auth-cli
+          - chat-cli
+          - client
+          - connections-cli
+          - mcp-mux
+          - mcp-server
+          - models-cli
+          - runner
+          - skills-cli
+        # almyty-cli is deliberately absent. It depends on
+        # @almyty/models and @almyty/connections at ^1.2.0, and neither is
+        # published -- npm answers 404, so no install can succeed here or
+        # for a user running `npm i -g @almyty/cli`. That is a live defect
+        # in the published umbrella binary, not a CI problem, and hiding it
+        # behind a green matrix leg would be worse than the gap. Tracked
+        # separately; add the leg back the moment both are on the registry.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 26
+        uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: packages/${{ matrix.package }}/package-lock.json
+
+      # `npm install`, not `npm ci`, ON PURPOSE AND ONLY FOR NOW: three
+      # of these lockfiles have rotted against their package.json and
+      # `npm ci` refuses them outright —
+      #   almyty-cli  lock is missing @almyty/models and @almyty/connections
+      #   chat-cli    lock is missing @types/react and ink-testing-library
+      #   models-cli  lock still carries version 0.1.0 vs package.json 1.2.0
+      # Regenerate those three (`cd packages/<pkg> && npm install` and
+      # commit the lockfile), then switch this line to
+      # `npm ci --ignore-scripts --legacy-peer-deps` to match every other
+      # install in this workflow. Leaving it on `npm install` permanently
+      # means CI tests a resolution the published artifact never saw.
+      - name: Install dependencies
+        working-directory: packages/${{ matrix.package }}
+        run: npm install --ignore-scripts --legacy-peer-deps --no-audit --no-fund
+
+      # Some packages' tests import their own dist/ (acp-server spawns the
+      # built binary and talks JSON-RPC to it), and --ignore-scripts above
+      # means no prepare/prepublishOnly ran. Build where there is one.
+      # chat-cli is skipped: its source requires `streamInvoke` on
+      # TurnTarget, and the PUBLISHED @almyty/client@1.2.0 it depends on
+      # does not have that method, so `tsc` cannot succeed here however
+      # correct the code is. That is a real defect in what was published
+      # (see #657), not something to fix by loosening the build. vitest
+      # transpiles via esbuild without typechecking, so the step below
+      # still exercises the package's tests meanwhile.
+      - name: Build (if the package has a build)
+        if: ${{ matrix.package != 'chat-cli' }}
+        working-directory: packages/${{ matrix.package }}
+        run: npm run build --if-present
+
+      # vitest runs against src/ via esbuild, so nothing else needs a build.
+      #
+      # runner excludes its *.real.spec.ts: those drive a real PTY through
+      # node-pty, whose native binding is fetched by an install script that
+      # --ignore-scripts deliberately skips. Dropping --ignore-scripts to
+      # satisfy two tests would run every dependency's install script in CI,
+      # which is the trade this flag exists to refuse. The other ten files
+      # in that package still run.
+      - name: Run vitest
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          case "${{ matrix.package }}" in
+            runner)
+              npx vitest run --exclude '**/*.real.spec.ts' ;;
+            acp-server)
+              # integration.test.ts spawns the built binary, sleeps 500ms and
+              # then talks JSON-RPC to it. It answers with an id but no
+              # result here, and it has never run in CI before this job
+              # existed, so whether that is a startup race or a real defect
+              # in the server is unestablished. Excluded rather than left
+              # red or silently passed; see issue #658. The other
+              # two files in this package run.
+              npx vitest run --exclude '**/integration.test.ts' ;;
+            *)
+              npm test ;;
+          esac
+
   # ─── Typecheck (fast, independent of tests) ──────────────────
   typecheck:
     name: Typecheck (backend)
@@ -195,7 +310,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Node 24
+      - name: Set up Node 26
         uses: actions/setup-node@v6
         with:
           node-version: '26'
@@ -223,6 +338,44 @@ jobs:
       - name: EE DI smoke
         working-directory: backend
         run: node scripts/ee-di-smoke.js
+
+  # ─── Typecheck (frontend) ────────────────────────────────────
+  # Nothing typechecked the React app. Not this workflow (the job
+  # above is backend-only), not frontend-tests (vitest transpiles
+  # with esbuild, which strips types without checking them), and not
+  # the image build either — frontend/Dockerfile runs `npx vite build`
+  # directly rather than `npm run build`, and it is the `npm run build`
+  # script that carries the `tsc &&` prefix. A type error in the
+  # frontend therefore reached production unchallenged.
+  #
+  # `npm run build` here rather than a bare `npx tsc --noEmit` so the
+  # vite bundle step is exercised too: a build that typechecks but
+  # cannot bundle is still a frontend that cannot ship.
+  typecheck-frontend:
+    name: Typecheck + build (frontend)
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 26
+        uses: actions/setup-node@v6
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts --legacy-peer-deps
+
+      - name: tsc --noEmit && vite build
+        working-directory: frontend
+        run: npm run build
 
   # ─── Dependency vulnerability scan (npm audit) ───────────────
   # Fails the PR if npm audit finds a high- or critical-severity
@@ -281,10 +434,28 @@ jobs:
         # react-router 7.x that clears them all (the 7.18 vs <7.12 advisories
         # are mutually exclusive), so a version bump can't resolve it. Every
         # other package still hard-blocks on high/critical.
+        # `npm audit --json` exits 1 for real findings AND for a registry
+        # outage, so the exit code is swallowed and the JSON is judged
+        # instead. That makes the shape of the JSON load-bearing: an
+        # outage emits {"error": {...}} with no `vulnerabilities` key,
+        # which used to sail through as "OK — no blocking advisories"
+        # and green-light a PR that was never actually audited. Assert
+        # the audit really ran before trusting its emptiness.
         run: |
           npm audit --omit=dev --json > audit.json || true
           node -e '
-            const a = require("./audit.json");
+            let a;
+            try {
+              a = require("./audit.json");
+            } catch (err) {
+              console.error("npm audit produced no parseable JSON: " + err.message);
+              process.exit(1);
+            }
+            if (a.error || !a.metadata || !a.metadata.vulnerabilities) {
+              console.error("npm audit did not complete — refusing to report a clean scan.");
+              console.error(JSON.stringify(a.error || a, null, 2).slice(0, 2000));
+              process.exit(1);
+            }
             const EXEMPT = new Set(["react-router", "react-router-dom"]);
             const blocking = Object.values(a.vulnerabilities || {}).filter(
               (v) => ["high", "critical"].includes(v.severity) && !EXEMPT.has(v.name),
@@ -294,7 +465,7 @@ jobs:
               for (const v of blocking) console.error(`  - ${v.name} (${v.severity})`);
               process.exit(1);
             }
-            console.log("OK: no blocking high/critical advisories (react-router framework-mode advisories exempted).");
+            console.log("OK: audit completed; no blocking high/critical advisories (react-router framework-mode advisories exempted).");
           '
 
   npm-audit-docs:
@@ -305,7 +476,14 @@ jobs:
     timeout-minutes: 10
     # WARN only — see the docstring on npm-audit-backend for why.
     # Track issues: next 14 → 15+, nextra 2 → 4 major upgrades.
-    continue-on-error: true
+    #
+    # continue-on-error moved from the job to the audit STEP: at job
+    # level a failing audit aborts the job, so nothing downstream can
+    # announce that it failed and the run just shows a soft green with
+    # no explanation. At step level the failure is recorded, the job
+    # keeps going, and the step below turns it into a visible
+    # ::warning:: in the run summary. Silence was intended; invisible
+    # silence was not.
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -314,8 +492,20 @@ jobs:
           cache: 'npm'
           cache-dependency-path: docs-site/package-lock.json
       - name: npm audit docs-site
+        id: audit
+        continue-on-error: true
         working-directory: docs-site
         run: ../scripts/npm-audit-retry.sh --audit-level=high --omit=dev
+      - name: Announce warn-only outcome
+        if: always()
+        run: |
+          if [ "${{ steps.audit.outcome }}" = "failure" ]; then
+            echo "::warning title=docs-site npm audit::High/critical advisories present in docs-site and NOT blocking this PR (warn-only gate). See the step above."
+            echo "### docs-site npm audit: FAILING (warn-only, not blocking)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "docs-site npm audit clean."
+            echo "### docs-site npm audit: clean" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   # ─── Secret scanning (gitleaks) ──────────────────────────────
   # Scans the working tree for accidentally committed secrets: AWS
@@ -374,7 +564,7 @@ jobs:
   # needs Node + a checkout — no install — so it's cheap enough to run
   # unconditionally on every PR.
   npm-lockstep:
-    name: repo invariants (versions, dev proxy)
+    name: repo invariants (node version, npm versions, dev proxy)
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -382,7 +572,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Node 24
+      - name: Set up Node 26
         uses: actions/setup-node@v6
         with:
           node-version: '26'
@@ -396,3 +586,19 @@ jobs:
       # side. Same shape as the check above: Node + a checkout, no install.
       - name: Check dev proxy covers every API prefix
         run: node scripts/check-dev-proxy.js
+      # Node major lockstep across CI + every Dockerfile + every
+      # engines.node. Dependabot bumps `FROM node:` in a Dockerfile and
+      # nothing bumps the other two, which is exactly how CI ended up on
+      # a different major than the images — hiding both the jsdom
+      # localStorage clash and the --permission network gate. Same shape
+      # as the checks above: Node + a checkout, no install.
+      - name: Check Node major is in lockstep
+        run: node scripts/check-node-version.js
+
+      # A build file can hold a value-shaped hole and still parse:
+      # `FROM --platform= node:26-alpine` is what shipped in
+      # frontend/Dockerfile, and BuildKit read the empty value as unset and
+      # built the frontend under QEMU for months without a warning. Same
+      # shape as the checks above: Node + a checkout, no install.
+      - name: Check no build/deploy value was eaten
+        run: node scripts/check-empty-values.js

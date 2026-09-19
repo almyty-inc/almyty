@@ -153,3 +153,19 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+
+  # Repo root: Dockerfile.allinone (the single self-host image,
+  # almyty/almyty). Left uncovered, it sat on node:24-alpine for two
+  # majors after every other image moved to 26 — a self-hoster was
+  # running a different Node than the one the code is tested on, and
+  # nothing said so. scripts/check-node-version.js now fails CI on that
+  # drift; this entry is what keeps the bump arriving on its own.
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "development"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"

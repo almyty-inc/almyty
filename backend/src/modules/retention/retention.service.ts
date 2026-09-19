@@ -6,12 +6,20 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { UpdateRetentionPolicyDto } from './dto/update-retention-policy.dto';
 
+// Every nullable day column on RetentionPolicy. The sweep reads each one
+// (retention-sweep.service.ts), so a column missing from this list is a
+// number the settings form accepts, returns 200 for, and never stores --
+// which is exactly what happened to toolExecutionsDays and
+// notificationsDays: both had a migration, an entity column, a DTO field
+// and a sweep branch, and no way to be set.
 const DAY_FIELDS = [
   'agentRunsDays',
   'conversationsDays',
   'requestLogsDays',
   'usageMetricsDays',
   'auditLogDays',
+  'toolExecutionsDays',
+  'notificationsDays',
 ] as const;
 
 @Injectable()
@@ -35,11 +43,7 @@ export class RetentionService {
     const defaults = this.policyRepository.create({
       organizationId,
       enabled: true,
-      agentRunsDays: null,
-      conversationsDays: null,
-      requestLogsDays: null,
-      usageMetricsDays: null,
-      auditLogDays: null,
+      ...Object.fromEntries(DAY_FIELDS.map((field) => [field, null])),
     });
     return defaults;
   }
