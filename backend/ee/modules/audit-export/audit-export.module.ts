@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuditLog } from '../../../src/entities/audit-log.entity';
 import { AuditStreamConfig } from '../../../src/entities/audit-stream-config.entity';
+import { Organization } from '../../../src/entities/organization.entity';
 import { AUDIT_STREAM_HOOK } from '../../../src/common/ee-hooks/ee-hooks';
 
 import { AuditExportService } from './audit-export.service';
@@ -21,7 +22,7 @@ import { AuditExportController } from './audit-export.controller';
  */
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([AuditLog, AuditStreamConfig])],
+  imports: [TypeOrmModule.forFeature([AuditLog, AuditStreamConfig, Organization])],
   providers: [
     AuditExportService,
     AuditStreamService,
