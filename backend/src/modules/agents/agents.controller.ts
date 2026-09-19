@@ -375,6 +375,15 @@ export class AgentsController {
     }
   }
 
+  @Get(':id/readiness')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Check workflow model setup without making a model call' })
+  async getReadiness(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) throw new HttpException('No organization found', HttpStatus.BAD_REQUEST);
+    return { success: true, data: await this.agentsService.getReadiness(id, organizationId, req.user.sub || req.user.id) };
+  }
+
   @Post(':id/activate')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Activate agent' })

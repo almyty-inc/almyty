@@ -51,4 +51,17 @@ describe('RunFailureBanner', () => {
     renderIt(agent(), [exec('timeout')])
     expect(screen.getByRole('alert')).toHaveTextContent('timed out')
   })
+
+  it('does not invent customer impact for a failed manual test', () => {
+    renderIt(agent(), [exec('failed', 'A tool failed')])
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Anyone using this agent')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Check the provider on its LLM node')
+    expect(screen.getByRole('alert')).toHaveTextContent('Review this run')
+  })
+
+  it('explains the role/catalog fix instead of advising a different pipeline node', () => {
+    renderIt(agent(), [exec('failed', 'Role "principal" could not be filled: no models are registered for this organization')])
+    expect(screen.getByRole('alert')).toHaveTextContent('Add a model to this organization')
+    expect(screen.getByRole('alert')).toHaveTextContent('Execution tab')
+  })
 })
