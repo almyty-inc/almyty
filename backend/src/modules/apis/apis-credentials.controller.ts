@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
+import { CreateApiCredentialBodyDto, UpdateApiCredentialBodyDto } from './dto/api-credential.dto';
 
 @Controller('apis')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,11 +27,11 @@ export class ApisCredentialsController {
   async createCredential(
     @Request() req: any,
     @Param('id') apiId: string,
-    @Body() dto: CreateCredentialDto,
+    @Body() dto: CreateApiCredentialBodyDto,
   ) {
     const orgId = req.user.currentOrganizationId;
     if (!orgId) throw new BadRequestException('Organization context required');
-    const result = await this.credentialService.createCredential(apiId, orgId, dto);
+    const result = await this.credentialService.createCredential(apiId, orgId, dto as CreateCredentialDto);
     return { success: true, data: result, message: 'Credential created successfully' };
   }
 
@@ -48,11 +49,11 @@ export class ApisCredentialsController {
   async updateCredential(
     @Request() req: any,
     @Param('credentialId') credentialId: string,
-    @Body() dto: UpdateCredentialDto,
+    @Body() dto: UpdateApiCredentialBodyDto,
   ) {
     const orgId = req.user.currentOrganizationId;
     if (!orgId) throw new BadRequestException('Organization context required');
-    const result = await this.credentialService.updateCredential(credentialId, orgId, dto);
+    const result = await this.credentialService.updateCredential(credentialId, orgId, dto as UpdateCredentialDto);
     return { success: true, data: result, message: 'Credential updated successfully' };
   }
 

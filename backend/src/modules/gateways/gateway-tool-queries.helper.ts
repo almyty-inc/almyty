@@ -135,9 +135,15 @@ export class GatewayToolQueriesHelper {
 
     const associatedToolIds = associatedTools.map(at => at.toolId);
 
+    // Org-scoped. The gateway lookup above proves the caller may see this
+    // gateway; it says nothing about which tools may be offered for it,
+    // and without this clause the "available tools" picker listed every
+    // active tool on the instance — every other tenant's tool names,
+    // descriptions and ids, to any member of any org.
     const queryBuilder = this.toolRepository
       .createQueryBuilder('tool')
-      .where('tool.status = :status', { status: ToolStatus.ACTIVE });
+      .where('tool.organizationId = :organizationId', { organizationId })
+      .andWhere('tool.status = :status', { status: ToolStatus.ACTIVE });
 
     if (associatedToolIds.length > 0) {
       queryBuilder.andWhere('tool.id NOT IN (:...associatedIds)', { associatedIds: associatedToolIds });

@@ -210,6 +210,20 @@ export class UpdateToolBodyDto {
   @IsObject()
   grpcConfig?: any;
 
+  /**
+   * Per-tool auth overrides.
+   *
+   * `updateTool` has handled this since the protocol-config fix
+   * (tools.service.ts: `if (updateToolDto.authConfig !== undefined)`),
+   * and CreateToolBodyDto accepts it, but this DTO did not list it --
+   * so with forbidNonWhitelisted on, a PUT carrying authConfig was
+   * rejected outright and the handling was unreachable. Same shape as
+   * the apiId note on the create body above.
+   */
+  @IsOptional()
+  @IsObject()
+  authConfig?: any;
+
   @IsOptional()
   @IsArray()
   examples?: Array<{ name: string; description?: string; input: Record<string, any>; expectedOutput?: any }>;
