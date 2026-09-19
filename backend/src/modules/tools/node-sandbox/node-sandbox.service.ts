@@ -333,6 +333,28 @@ export class NodeSandboxService {
 
     argv.push('--permission');
 
+    // Node 26 brought network under the permission model. Node 24's
+    // `--permission` gated the filesystem, child processes and worker
+    // threads but NOT sockets, so a sandboxed tool's fetch simply worked
+    // and `installSandboxNetGuard` in the worker was the only thing
+    // deciding where it could reach. From Node 26 the runtime denies every
+    // outbound connection with ERR_ACCESS_DENIED unless --allow-net is
+    // given -- which silently breaks every JavaScript tool that makes an
+    // HTTP request, reported to the person as a bare "fetch failed".
+    //
+    // Passing --allow-net restores exactly the Node 24 arrangement: the
+    // runtime permits sockets, and the in-worker guard remains the thing
+    // that decides which hosts a tool may actually reach. Relative to what
+    // ships today this is parity, not a loosening -- the guard, installed
+    // before any user code runs, is the egress policy.
+    //
+    // It does decline a defence Node 26 now offers, and that is worth
+    // revisiting: the flag cannot be scoped to a host list here because the
+    // allowlist is per-tool and resolved inside the worker, after these
+    // arguments are fixed. Threading it through to launch time would let
+    // this become --allow-net=<hosts> and put the runtime behind the guard.
+    argv.push('--allow-net');
+
     if (isCompiledPath) {
       // Tight prod scope: only the worker script's own directory
       // and any installed-dependency directories. Nothing else on
