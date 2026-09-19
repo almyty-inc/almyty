@@ -552,3 +552,11 @@ jobs:
       # as the checks above: Node + a checkout, no install.
       - name: Check Node major is in lockstep
         run: node scripts/check-node-version.js
+
+      # A build file can hold a value-shaped hole and still parse:
+      # `FROM --platform= node:26-alpine` is what shipped in
+      # frontend/Dockerfile, and BuildKit read the empty value as unset and
+      # built the frontend under QEMU for months without a warning. Same
+      # shape as the checks above: Node + a checkout, no install.
+      - name: Check no build/deploy value was eaten
+        run: node scripts/check-empty-values.js

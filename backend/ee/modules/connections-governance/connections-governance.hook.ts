@@ -12,13 +12,12 @@ import { ConnectionsGovernanceHook, GovernanceUseContext } from './seams';
  * at call time: an org without `connections_governance` gets exactly
  * the community behaviour, whatever policies its rows hold.
  *
- * TODO(lead): call sites in core, both `@Optional() @Inject(CONNECTIONS_GOVERNANCE_HOOK)`:
- * - `ConnectionsService.connect` / `rotate`, before the row is written:
- *   `await this.governance?.beforeConnect(organizationId, connector.key, owner)`
- * - `ConnectionsResolverService.resolveForUse`, after
- *   `const decision = await this.grants.assertCanUse(principal, row, context)`
- *   and before `materialize` / `recordResolve`:
- *   `await this.governance?.beforeUse(row.organizationId, row, { userId: principal.id, ...context }, context, decision)`
+ * Core calls it, both `@Optional() @Inject(CONNECTIONS_GOVERNANCE_HOOK)`:
+ * - `ConnectionsService.connect` / `rotate`, before the row is written
+ *   (`beforeConnect`)
+ * - `ConnectionsResolverService.resolveForUse` and
+ *   `CredentialRefResolver`, after the grant check and before
+ *   `materialize` / `recordResolve` (`beforeUse`)
  */
 @Injectable()
 export class ConnectionsGovernanceHookImpl implements ConnectionsGovernanceHook {
