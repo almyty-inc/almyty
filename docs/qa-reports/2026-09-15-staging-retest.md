@@ -141,8 +141,7 @@ session, its rollout and fresh create/reload check were still unverified.
 Staging is now `c3086d07541d436a5088b89104b34aee782d6929` (#643), which includes
 the organization-selection fix from #628/#629 and the first runtime wiring
 patch #631. [Image build 35250558320](https://github.com/almyty-inc/almyty/actions/runs/35250558320)
-succeeded. [Infrastructure run 35251321775](https://github.com/DEPLOY_TARGET_REPOSITORY/actions/runs/35251321775)
-explicitly targeted staging, completed migrations, rolled out API and frontend,
+succeeded. Deployment verification explicitly targeted staging, completed migrations, rolled out API and frontend,
 and passed smoke checks. This report does not certify the separate uncommitted
 runtime changes described by the implementing peer on September 18.
 

@@ -27,7 +27,7 @@ The disposable draft remains unactivated; neither existing active agent was modi
 
 Implementation [PR #588](https://github.com/almyty-inc/almyty/pull/588) merged into development. Staging promotion [PR #589](https://github.com/almyty-inc/almyty/pull/589) merged at `1db679d3fa1c48f1db5b0168ea3ec7b7ee8e11df`, together with chat documentation #587 and the isolated Multer security patch #590. Models-layer PR #586 was not part of #589.
 
-The staging push build appeared late and superseded a manually dispatched build for the same commit. That run was subsequently superseded during the implementing team's further promotions. Final verification used the deployed staging revision `4f937e178b01db28139da7d3be0e687c8428ad32` (promotion #593, including the models and boot fixes), not the incomplete original build. [Image build](https://github.com/almyty-inc/almyty/actions/runs/34362716624) and [staging rollout](https://github.com/DEPLOY_TARGET_REPOSITORY/actions/runs/34363543540) succeeded; API and frontend rolled out and smoke checks passed.
+The staging push build appeared late and superseded a manually dispatched build for the same commit. That run was subsequently superseded during the implementing team's further promotions. Final verification used the deployed staging revision `4f937e178b01db28139da7d3be0e687c8428ad32` (promotion #593, including the models and boot fixes), not the incomplete original build. The [image build](https://github.com/almyty-inc/almyty/actions/runs/34362716624) and staging rollout succeeded; API and frontend rolled out and smoke checks passed.
 
 ## Live post-deploy check
 

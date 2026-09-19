@@ -83,4 +83,4 @@ In the default `in-api` mode a terminal app, a standalone binary, and macOS sign
 
 For the full toolchain, deploy `backend/Dockerfile.builder` (glibc base with bun, rcodesign, osslsigncode, and electron-builder) with `APP_BUILD_MODE=worker`, and set `APP_BUILD_MODE=off` on the API pods. The worker consumes the same build queue; the API keeps validation, authorization, queueing, status, and downloads. When builds run on the worker, the capabilities endpoint reports the worker toolchain rather than probing the API pod, so the UI does not wrongly claim a target cannot be built.
 
-Building and deploying the worker image (the CI job that pushes `almyty/builder` and the worker Deployment manifest) lives in the infra repo alongside the rest of the deploy pipeline.
+The worker image (`almyty/builder`) is built and deployed through the managed deployment pipeline.
