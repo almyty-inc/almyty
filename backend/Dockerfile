@@ -1,10 +1,16 @@
 # Multi-stage build for production optimization.
 #
-# Node 24 (Krypton) is the Active LTS and the version our sandbox
-# hardening depends on: `--permission` graduated from experimental
-# in 24 and the flag contract is stable from 24.0 forward. Do not
-# downgrade without also auditing NodeSandboxService's execArgv
-# plumbing — the worker code assumes the stable flag name.
+# Node 26 is what CI runs (.github/workflows/ci.yml) and what every
+# engines.node in this repo declares (>=26.0.0). Keep all three in
+# lockstep — a CI/image split is how the jsdom `localStorage` clash
+# and the `--permission` network gate both hid.
+#
+# The sandbox hardening depends on this runtime: `--permission`
+# graduated from experimental in 24, and from 26 it also gates
+# NETWORK access, so NodeSandboxService must grant net explicitly
+# or every sandboxed JavaScript tool's fetch dies as "fetch failed".
+# Do not change the major without auditing NodeSandboxService's
+# execArgv plumbing.
 FROM node:26-alpine AS base
 
 # Install dependencies only when needed
