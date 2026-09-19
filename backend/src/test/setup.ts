@@ -1,5 +1,16 @@
 // Global test setup
 import { Test, TestingModule } from '@nestjs/testing';
+
+// The integration specs boot a real Nest graph and run every migration in
+// their own Postgres schema before the first assertion. That does not finish
+// in jest's default 5000ms, so their beforeAll hooks were racing a timeout on
+// every run -- which is why integration failures here look intermittent and
+// unrelated to the code, and why a green local run says little. Unit tests
+// keep the fast default: a unit test that needs sixty seconds is a defect in
+// the test.
+if (process.env.RUN_DB_INTEGRATION === '1') {
+  jest.setTimeout(120_000);
+}
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 
