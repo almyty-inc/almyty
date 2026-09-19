@@ -1,4 +1,5 @@
 import { AgentValidationHelper } from './agent-validation.helper';
+import { AgentReadinessService } from './agent-readiness.service';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
 import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
@@ -172,6 +173,7 @@ export class AgentsService {
     private auditService: AgentAuditService,
     private readonly validation: AgentValidationHelper,
     private readonly accessPolicy: AccessPolicyService,
+    private readonly readiness: AgentReadinessService,
   ) {}
 
   /**
@@ -289,6 +291,7 @@ export class AgentsService {
         teamId: createDto.visibility === 'team' ? (createDto.teamId ?? null) : null,
       });
 
+      if (agent.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
       const saved = await this.agentRepository.save(agent);
       this.logger.log(`[CREATE_AGENT] Agent created: id=${saved.id}`);
 
@@ -444,6 +447,7 @@ export class AgentsService {
     this.assertWebhookUrl(updateDto.webhookUrl);
     await this.assertToolsInOrg(updateDto.toolIds, agent.organizationId);
     Object.assign(agent, updateDto);
+    if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
     // Sanitize the team-scoping fields after the spread so a flip
     // back to visibility='org' doesn't leave the old teamId dangling.
     if (updateDto.visibility === 'org') {
@@ -493,13 +497,8 @@ export class AgentsService {
 
   async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId);
-
-    // Workflow agents need a valid graph. Autonomous agents do not have
-    // one: their "pipeline" is empty and validating it keeps them stuck
-    // in Draft with a refusal about missing output nodes.
-    if (agent.mode !== 'autonomous') {
-      this.validation.validatePipeline(agent.pipeline, agent.id);
-    }
+    if (userId) await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
+    await this.readiness.assertReady(agent, userId);
 
     agent.status = AgentStatus.ACTIVE;
     const saved = await this.agentRepository.save(agent);
@@ -523,6 +522,13 @@ export class AgentsService {
     }
 
     return saved;
+  }
+
+  async getReadiness(id: string, organizationId: string, userId: string) {
+    const agent = await this.getAgent(id, organizationId);
+    const decision = await this.accessPolicy.canAccess({ id: userId }, agent, 'read');
+    if (!decision.allowed) throw new ForbiddenException(decision.reason);
+    return this.readiness.inspect(agent, userId);
   }
 
   /**
