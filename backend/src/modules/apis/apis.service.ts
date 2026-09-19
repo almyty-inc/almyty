@@ -227,7 +227,12 @@ export class ApisService {
           .where('op."apiId" = api.id'),
       'api_operationCount',
     );
-    qb.orderBy('api.createdAt', 'DESC').skip((page - 1) * limit).take(limit);
+    // `id` is not decoration. `createdAt` is a millisecond timestamp, and
+    // two APIs written in the same millisecond order arbitrarily between
+    // one request and the next — so with `skip`/`take` a tied row can
+    // appear on two consecutive pages while another never appears at all.
+    // The pair is unique, so the order is total.
+    qb.orderBy('api.createdAt', 'DESC').addOrderBy('api.id', 'DESC').skip((page - 1) * limit).take(limit);
 
     const total = await qb.getCount();
     const { entities, raw } = await qb.getRawAndEntities();

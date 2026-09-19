@@ -922,6 +922,11 @@ describe('AuthService', () => {
   });
 
   describe('createApiKey', () => {
+    const lastCreateArg = (): any => {
+      const calls = apiKeyRepository.create.mock.calls;
+      return calls[calls.length - 1][0];
+    };
+
     it('should create API key successfully', async () => {
       const createDto = {
         name: 'Test Key',
@@ -939,6 +944,44 @@ describe('AuthService', () => {
       expect(result.keyData).toBe(mockApiKey);
       expect(apiKeyRepository.create).toHaveBeenCalled();
       expect(apiKeyRepository.save).toHaveBeenCalled();
+    });
+
+    /**
+     * `expiresAt` arrives as an ISO string (the DTO validates it with
+     * @IsDateString, and the dashboard sends `expiresAt?: string`), but
+     * it was typed `Date` with no @Type(() => Date) and assigned
+     * straight onto the entity. The row was fine -- the driver parses
+     * the string -- but the object handed back carried a string where
+     * every read path carries a Date, and `ApiKey.isExpired()` does
+     * `new Date() > this.expiresAt`, which on a string is a
+     * lexicographic comparison, not a chronological one.
+     *
+     * The gateway's own key endpoint already did `new Date(...)`; this
+     * is the same conversion on the auth path.
+     */
+    it('stores expiresAt as a Date, not the ISO string it arrived as', async () => {
+      apiKeyRepository.create.mockImplementation((data: any) => ({ ...data }));
+      apiKeyRepository.save.mockImplementation(async (entity: any) => entity);
+
+      const result = await service.createApiKey('user-1', {
+        name: 'Expiring Key',
+        organizationId: 'org-1',
+        expiresAt: '2030-12-31T23:59:59.000Z',
+      });
+
+      const created = lastCreateArg();
+      expect(created.expiresAt).toBeInstanceOf(Date);
+      expect((created.expiresAt as Date).toISOString()).toBe('2030-12-31T23:59:59.000Z');
+      expect(result.keyData.expiresAt).toBeInstanceOf(Date);
+    });
+
+    it('leaves expiresAt unset when the field is omitted', async () => {
+      apiKeyRepository.create.mockImplementation((data: any) => ({ ...data }));
+      apiKeyRepository.save.mockImplementation(async (entity: any) => entity);
+
+      await service.createApiKey('user-1', { name: 'Forever Key', organizationId: 'org-1' });
+
+      expect(lastCreateArg().expiresAt).toBeUndefined();
     });
 
     /**

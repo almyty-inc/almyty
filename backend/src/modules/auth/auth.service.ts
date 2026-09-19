@@ -510,7 +510,7 @@ export class AuthService {
       userId,
       organizationId: orgId,
       scopes: createApiKeyDto.scopes,
-      expiresAt: createApiKeyDto.expiresAt,
+      expiresAt: createApiKeyDto.expiresAt ? new Date(createApiKeyDto.expiresAt) : undefined,
       rateLimits: createApiKeyDto.rateLimits,
       metadata: createApiKeyDto.metadata,
     });
