@@ -3,6 +3,61 @@ import { vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeAll, afterAll } from 'vitest'
 
+// Node 22 added an experimental `localStorage` global and from Node 26 it is
+// present by default. It is a getter that warns and yields `undefined` unless
+// the process was started with --localstorage-file, and because vitest's jsdom
+// environment makes `globalThis === window`, that accessor sits where jsdom's
+// Storage would be: `window.localStorage` is undefined too. So every bare
+// `localStorage.getItem(...)` -- auth.ts has fourteen -- is a TypeError, and
+// any suite importing such a module dies at import.
+//
+// Pointing globalThis.localStorage at window.localStorage does NOT work, for
+// the reason above: they are the same undefined. The environment has to
+// supply a Storage, so this does, with the semantics the Storage interface
+// actually specifies -- keys and values are coerced to strings, a missing key
+// reads null (not undefined), and `length`/`key()` iterate insertion order.
+function createStorage(): Storage {
+  let map = new Map<string, string>()
+  return {
+    get length() {
+      return map.size
+    },
+    key(index: number) {
+      return Array.from(map.keys())[index] ?? null
+    },
+    getItem(key: string) {
+      const value = map.get(String(key))
+      return value === undefined ? null : value
+    },
+    setItem(key: string, value: string) {
+      map.set(String(key), String(value))
+    },
+    removeItem(key: string) {
+      map.delete(String(key))
+    },
+    clear() {
+      map = new Map()
+    },
+  } as Storage
+}
+
+for (const name of ['localStorage', 'sessionStorage'] as const) {
+  const existing = (() => {
+    try {
+      return (globalThis as any)[name]
+    } catch {
+      return undefined
+    }
+  })()
+  if (!existing || typeof existing.getItem !== 'function') {
+    Object.defineProperty(globalThis, name, {
+      value: createStorage(),
+      configurable: true,
+      writable: true,
+    })
+  }
+}
+
 // Cleanup after each test
 afterEach(() => {
   cleanup()
