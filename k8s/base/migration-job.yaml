@@ -30,6 +30,19 @@ spec:
             capabilities:
               drop:
               - ALL
+          # This is the only container in the repo that had NO resource
+          # block, which put the pod in the BestEffort QoS class: it is
+          # the first thing the kubelet evicts under node pressure, and
+          # it is the job the rollout is gated on. An evicted migration
+          # reads as a migration failure. Limits match the api pod's
+          # ceiling so nothing that fits there can fail here.
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "4Gi"
+              cpu: "1000m"
           volumeMounts:
           - name: tmp
             mountPath: /tmp
