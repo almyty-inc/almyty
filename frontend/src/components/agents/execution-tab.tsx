@@ -67,7 +67,10 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
   const saveExecution = useMutation({
     mutationFn: async (patch: ExecutionSettings) =>
       (await api.put(`/agents/${agentId}/execution`, patch)).data.data as ExecutionSettings,
-    onSuccess: (data) => queryClient.setQueryData(['agent-execution', agentId], data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['agent-execution', agentId], data)
+      queryClient.invalidateQueries({ queryKey: ['agent-readiness', agentId] })
+    },
   })
 
   const addRole = useMutation({
@@ -83,6 +86,7 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
     onSuccess: () => {
       setAddingRole(false)
       queryClient.invalidateQueries({ queryKey: ['agent-roles', agentId] })
+      queryClient.invalidateQueries({ queryKey: ['agent-readiness', agentId] })
     },
   })
 
@@ -106,12 +110,18 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
         })
       ).data.data
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent-roles', agentId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-roles', agentId] })
+      queryClient.invalidateQueries({ queryKey: ['agent-readiness', agentId] })
+    },
   })
 
   const removeRole = useMutation({
     mutationFn: async (key: string) => (await api.delete(`/agents/${agentId}/roles/${key}`)).data,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent-roles', agentId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-roles', agentId] })
+      queryClient.invalidateQueries({ queryKey: ['agent-readiness', agentId] })
+    },
   })
 
   // Ejecting rewrites the agent's graph and clears the strategy, so the
@@ -122,6 +132,7 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agent-execution', agentId] })
       queryClient.invalidateQueries({ queryKey: ['agent', agentId] })
+      queryClient.invalidateQueries({ queryKey: ['agent-readiness', agentId] })
       navigate(`/agents/${agentId}/edit`)
     },
   })
