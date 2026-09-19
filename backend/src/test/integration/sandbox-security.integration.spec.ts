@@ -393,4 +393,98 @@ describe('Sandbox security (real worker, permission model ON)', () => {
     expect(elapsed).toBeLessThan(2_000);
     expect(result.error).toMatch(/cancel/i);
   });
+
+  // ── 15. Every other egress surface Node offers ─────────────────
+  //
+  // Node 26 put network behind --permission, and the sandbox passes
+  // --allow-net because that flag is all-or-nothing (verified against
+  // 26.9.0: `--allow-net=127.0.0.1:1` still permits an unrelated port, so
+  // a host list would read like a policy while enforcing nothing). Egress
+  // policy therefore rests on two things: the require allowlist, which
+  // keeps raw sockets out of reach, and the net guard, which refuses
+  // private, loopback, link-local and metadata destinations.
+  //
+  // These pin that surface. A Node upgrade that adds a new way out -- or a
+  // change that makes one of these modules requirable -- should fail here
+  // rather than ship. `net` is covered above; these are the rest.
+
+  describe('the egress surface stays closed', () => {
+    let server: http.Server;
+    let livePort: number;
+
+    beforeAll(async () => {
+      // A REAL listening server, so a refusal cannot be confused with a
+      // destination that was simply down.
+      server = http.createServer((req, res) => {
+        res.writeHead(200);
+        res.end('ok');
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      livePort = (server.address() as AddressInfo).port;
+    });
+
+    afterAll(async () => {
+      await new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
+    });
+
+    it.each(['tls', 'http2', 'dgram', 'dns'])(
+      'refuses require("%s"), so user code cannot open a socket directly',
+      async (mod) => {
+        const result = await service.execute({
+          code: `
+            try { require(${JSON.stringify(mod)}); return { loaded: true }; }
+            catch (err) { return { loaded: false, msg: err.message }; }
+          `,
+          parameters: {},
+          timeoutMs: 10_000,
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data.loaded).toBe(false);
+        expect(result.data.msg).toMatch(/not allowed/);
+      },
+    );
+
+    it('refuses fetch() to a live loopback server', async () => {
+      const result = await service.execute({
+        code: `
+          try { const r = await fetch('http://127.0.0.1:' + parameters.port + '/'); return { reached: true, status: r.status }; }
+          catch (err) { return { reached: false, code: (err.cause && err.cause.code) || err.message }; }
+        `,
+        parameters: { port: livePort },
+        timeoutMs: 10_000,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.reached).toBe(false);
+      expect(result.data.code).toMatch(/ERR_SANDBOX_NET_REFUSED/);
+    });
+
+    it('does not let the WebSocket global reach a live loopback server', async () => {
+      // WebSocket became a global in Node 22, after this guard was written.
+      // It routes through undici and therefore through the patched socket
+      // path -- this proves that rather than assuming it.
+      const result = await service.execute({
+        code: `
+          if (typeof WebSocket === 'undefined') return { opened: false, reason: 'no-global' };
+          return await new Promise((resolve) => {
+            let ws;
+            try { ws = new WebSocket('ws://127.0.0.1:' + parameters.port + '/'); }
+            catch (err) { return resolve({ opened: false, reason: 'threw' }); }
+            ws.onopen = () => resolve({ opened: true });
+            ws.onerror = () => resolve({ opened: false, reason: 'error' });
+            setTimeout(() => resolve({ opened: false, reason: 'timeout' }), 4000);
+          });
+        `,
+        parameters: { port: livePort },
+        timeoutMs: 15_000,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.data.opened).toBe(false);
+    });
+  });
+
 });
