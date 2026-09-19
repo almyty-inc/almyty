@@ -48,7 +48,20 @@ export class PiiFilterPlugin {
       version: '1.0.0',
       description: 'Automatically detects and filters personally identifiable information (PII) from requests and responses',
       author: 'almyty',
-      isActive: true,
+      // Off by default, unlike the other built-ins. With the
+      // PRE_TOOL_EXECUTION hook registered, an active PII filter rewrites
+      // tool PARAMETERS -- so `send_email(to: 'alice@example.com')` would
+      // deliver to '****@example.com' and `lookup_by_ip` would be handed a
+      // masked address. The tool call still succeeds, which makes it worse:
+      // the failure is silent and looks like the tool misbehaving.
+      //
+      // An organization that wants it turns it on, and a compliance policy
+      // that enforces it runs it regardless -- executeHook's enforcement
+      // gate is `!plugin.isActive && enforcedSettings === undefined`, so
+      // enforcement overrides this. Masking outbound requests and responses
+      // is the uncontroversial case; masking inputs the caller chose is not,
+      // and is not a default anyone opted into.
+      isActive: false,
       configuration: {
         enabled: true,
         priority: 90, // High priority for security
@@ -86,6 +99,24 @@ export class PiiFilterPlugin {
           handler: 'filterPiiFromResponse',
           async: false,
           timeout: 5000,
+        },
+        {
+          // The hook the product actually runs. `executeHook` is invoked
+          // from one place -- ToolExecutorService.execute -- and always
+          // with PRE_TOOL_EXECUTION, so a built-in with no entry here is
+          // registered into `registry.byHook` under hook types nothing
+          // calls and cannot run at all. This plugin already advertised
+          // PRE_TOOL_EXECUTION in `capabilities.hooks` above and the
+          // executor already feeds the filtered parameters back into the
+          // call ("a filter plugin's whole purpose is to rewrite what gets
+          // sent"); only the registration entry was missing. Its absence
+          // is what made the EE compliance pack's enforced `pii-filter`
+          // report `enforced: true`, score 40 posture points, and redact
+          // nothing.
+          type: PluginHookType.PRE_TOOL_EXECUTION,
+          handler: 'filterPiiFromRequest',
+          async: false,
+          timeout: 3000,
         },
         {
           type: PluginHookType.DATA_FILTER,

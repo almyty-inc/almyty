@@ -26,9 +26,12 @@ class FakeConfigRepo {
   }
 }
 
-function makeService() {
+function makeService(egressAllowlist: string[] = []) {
   const repo = new FakeConfigRepo();
-  const svc = new AuditStreamService(repo as any);
+  // create() gates the endpoint through the org's egress allowlist, so
+  // the service needs the organizations repository too.
+  const orgs = { findOne: async () => ({ id: 'org-1', settings: { egressAllowlist } }) };
+  const svc = new AuditStreamService(repo as any, orgs as any);
   return { svc, repo };
 }
 
