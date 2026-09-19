@@ -52,6 +52,7 @@ import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
 import { ModelCatalogModule } from '../model-catalog/model-catalog.module';
 import { AgentRolesService } from './agent-roles.service';
+import { AgentReadinessService } from './agent-readiness.service';
 import { AgentRolesController } from './agent-roles.controller';
 import { StrategiesController } from './strategies/strategies.controller';
 import { AgentExecutionSettingsController } from './agent-execution-settings.controller';
@@ -104,7 +105,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
     AgentConstraintsModule,
     BudgetsModule,
   ],
-  providers: [AgentRunReaperService, OrchestratorService, StrategyPipelineResolver, 
+  providers: [AgentReadinessService, AgentRunReaperService, OrchestratorService, StrategyPipelineResolver,
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper],
   controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController],
   exports: [

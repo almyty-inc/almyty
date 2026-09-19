@@ -4,6 +4,7 @@ import { NotFoundException, BadRequestException, ForbiddenException } from '@nes
 import { AgentsService, CreateAgentInput, UpdateAgentInput, AGENT_LIST_COLUMNS, MAX_INLINE_AGENT_VERSIONS } from '../agents.service';
 import { AgentAuditService } from '../agent-audit.service';
 import { AgentValidationHelper } from '../agent-validation.helper';
+import { AgentReadinessService } from '../agent-readiness.service';
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entity';
 import { AgentExecution } from '../../../entities/agent-execution.entity';
@@ -138,6 +139,12 @@ describe('AgentsService', () => {
         { provide: getRepositoryToken(User), useValue: userRepo },
         { provide: AgentAuditService, useValue: mockAuditService },
         AgentValidationHelper,
+        { provide: AgentReadinessService, useValue: {
+          assertReady: jest.fn(async (agent: Agent) => {
+            if (agent.mode !== 'autonomous') new AgentValidationHelper().validatePipeline(agent.pipeline, agent.id);
+          }),
+          inspect: jest.fn().mockResolvedValue({ ready: true }),
+        } },
         {
           provide: AccessPolicyService,
           useValue: {
@@ -577,7 +584,39 @@ describe('AgentsService', () => {
 
   // ── activateAgent ─────────────────────────────────────────────────────────
 
+  describe('getReadiness', () => {
+    it('does not inspect a team-scoped agent the caller cannot read', async () => {
+      const agent = makeAgent();
+      agentRepo.findOne.mockResolvedValue(agent);
+      accessPolicy.canAccess.mockResolvedValue({ allowed: false, reason: 'Not on this team' });
+      const inspect = jest.fn();
+      (service as any).readiness = { inspect };
+      await expect(service.getReadiness('agent-1', 'org-1', 'other')).rejects.toThrow(ForbiddenException);
+      expect(inspect).not.toHaveBeenCalled();
+    });
+
+    it('checks org-scoped setup using the authenticated caller', async () => {
+      const agent = makeAgent();
+      agentRepo.findOne.mockResolvedValue(agent);
+      const inspect = jest.fn().mockResolvedValue({ ready: false, message: 'No model' });
+      (service as any).readiness = { inspect };
+      await expect(service.getReadiness('agent-1', 'org-1', 'user-1')).resolves.toEqual({ ready: false, message: 'No model' });
+      expect(inspect).toHaveBeenCalledWith(agent, 'user-1');
+    });
+  });
+
   describe('activateAgent', () => {
+    it('does not activate or persist an agent whose model setup is incomplete', async () => {
+      const agent = makeAgent({ settings: { execution: { strategyKey: 'single' } } });
+      agentRepo.findOne.mockResolvedValue(agent);
+      const readiness = { assertReady: jest.fn().mockRejectedValue(new BadRequestException('Role "principal" needs a model')) };
+      (service as any).readiness = readiness;
+
+      await expect(service.activateAgent('agent-1', 'org-1')).rejects.toThrow('needs a model');
+      expect(agent.status).toBe(AgentStatus.DRAFT);
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+
     it('should set status to active', async () => {
       const agent = makeAgent();
       agentRepo.findOne.mockResolvedValue(agent);

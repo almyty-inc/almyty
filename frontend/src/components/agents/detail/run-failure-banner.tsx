@@ -28,6 +28,7 @@ export function RunFailureBanner({ agent, executions }: { agent: Agent; executio
   const when = new Date(latest.createdAt)
   const whenLabel = Number.isNaN(when.getTime()) ? '' : when.toLocaleString()
   const detail = (latest as any).error as string | undefined
+  const roleFailure = /role ["'].*["'] (could not be filled|needs a model)|no models are registered/i.test(detail ?? '')
 
   return (
     <div role="alert" className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm">
@@ -39,7 +40,9 @@ export function RunFailureBanner({ agent, executions }: { agent: Agent; executio
         </p>
         {detail && <p className="break-words font-mono text-xs text-muted-foreground">{detail}</p>}
         <p className="text-muted-foreground">
-          Anyone using this agent through an app or channel got no answer. Check the provider on its LLM node, then run it again.
+          {roleFailure
+            ? 'Add a model to this organization in Models, then configure the required role on the Execution tab and retry.'
+            : 'Review this run and its error details before retrying.'}
         </p>
       </div>
     </div>

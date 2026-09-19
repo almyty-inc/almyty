@@ -438,6 +438,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         { appendAudit: jest.fn().mockResolvedValue(undefined) } as any,
         {} as any, // AgentValidationHelper
         { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined), applyListFilter: jest.fn(async (qb: any, _u: any, organizationId: string, alias: string) => { qb.andWhere(`${alias}."organizationId" = :_orgId`, { _orgId: organizationId }); return { bypass: true, teamIds: [] }; }) } as any, // accessPolicy
+        { assertReady: jest.fn() } as any, // AgentReadinessService; these tests read/list, never activate
       );
 
       const agentRepo = fx.ds.getRepository(Agent);
