@@ -342,17 +342,19 @@ export class NodeSandboxService {
     // given -- which silently breaks every JavaScript tool that makes an
     // HTTP request, reported to the person as a bare "fetch failed".
     //
-    // Passing --allow-net restores exactly the Node 24 arrangement: the
-    // runtime permits sockets, and the in-worker guard remains the thing
-    // that decides which hosts a tool may actually reach. Relative to what
-    // ships today this is parity, not a loosening -- the guard, installed
-    // before any user code runs, is the egress policy.
+    // The flag is ALL-OR-NOTHING, verified against Node 26.9.0 rather than
+    // assumed: `--allow-net=127.0.0.1:1` still permits a connection to an
+    // unrelated port, and every other form tried (bare host, host:port, a
+    // private address) behaves identically. Only presence matters. So there
+    // is no scoped variant to reach for, and nothing is gained by passing a
+    // value -- a host list here would read like a policy while enforcing
+    // nothing, which is worse than an honest blanket flag.
     //
-    // It does decline a defence Node 26 now offers, and that is worth
-    // revisiting: the flag cannot be scoped to a host list here because the
-    // allowlist is per-tool and resolved inside the worker, after these
-    // arguments are fixed. Threading it through to launch time would let
-    // this become --allow-net=<hosts> and put the runtime behind the guard.
+    // Egress policy therefore lives entirely in the in-worker guard, which
+    // patches dns.lookup, net.Socket.prototype.connect and dgram before any
+    // user code runs and refuses private, loopback, link-local, CGNAT,
+    // multicast and metadata destinations. That is the same arrangement
+    // Node 24 had; this flag restores it rather than loosening it.
     argv.push('--allow-net');
 
     if (isCompiledPath) {
