@@ -4,7 +4,7 @@
 
 - Privacy UI: [PR #584](https://github.com/almyty-inc/almyty/pull/584), merged to development.
 - Staging promotion: [PR #585](https://github.com/almyty-inc/almyty/pull/585), merge `79cf3985462961b00b3aeb48d4561609c8cbf67f`.
-- [Image build](https://github.com/almyty-inc/almyty/actions/runs/34200683518) and [infra deployment](https://github.com/DEPLOY_TARGET_REPOSITORY/actions/runs/34200967341) passed, including migrations, rollout, and post-deploy smoke checks.
+- The [image build](https://github.com/almyty-inc/almyty/actions/runs/34200683518) and staging deployment passed, including migrations, rollout, and post-deploy smoke checks.
 - Browser: VibeSurfer MCP. Dashboard: `https://app.staging.almyty.com`; public chat: `https://customer-care-console.staging.almyty.app`.
 - Public docs examples and screenshot manifest base remain production: `https://app.almyty.com`.
 
