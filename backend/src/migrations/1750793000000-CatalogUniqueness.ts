@@ -26,13 +26,27 @@ export class CatalogUniqueness1750793000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Fold any duplicates already written, keeping the oldest row so
     // anything referencing it by id still resolves.
+    //
+    // Ranked on the (createdAt, id) pair, not on the timestamp alone.
+    // `createdAt` defaults to now(), which is transaction-start time, so
+    // every card a single `syncFromProvider` pass writes carries the same
+    // value to the microsecond -- and that pass inserting one model twice
+    // is the duplicate this index is here to stop. With a bare `>` neither
+    // tied row is older than the other, the DELETE removes nothing, and
+    // the index creation aborts the migration on exactly the deployment it
+    // was meant to protect. The id breaks the tie deterministically.
+    //
+    // `providerId` is compared with `=` rather than IS NOT DISTINCT FROM:
+    // two endpoint-only cards both carry NULL there, Postgres treats NULLs
+    // as distinct, and the index below therefore permits them. Folding
+    // them anyway would delete a card the constraint never objected to.
     await queryRunner.query(`
       DELETE FROM models a
        USING models b
        WHERE a."organizationId" = b."organizationId"
-         AND a."providerId" IS NOT DISTINCT FROM b."providerId"
+         AND a."providerId" = b."providerId"
          AND a."vendorModelId" = b."vendorModelId"
-         AND a."createdAt" > b."createdAt"
+         AND (a."createdAt", a.id) > (b."createdAt", b.id)
     `);
     await queryRunner.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS models_org_provider_vendor_uq
@@ -44,7 +58,7 @@ export class CatalogUniqueness1750793000000 implements MigrationInterface {
        USING model_versions b
        WHERE a."organizationId" = b."organizationId"
          AND a."registryUri" = b."registryUri"
-         AND a."createdAt" > b."createdAt"
+         AND (a."createdAt", a.id) > (b."createdAt", b.id)
     `);
     await queryRunner.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS model_versions_org_registry_uq

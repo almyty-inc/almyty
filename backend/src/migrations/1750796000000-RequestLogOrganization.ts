@@ -42,19 +42,38 @@ export class RequestLogOrganization1750796000000 implements MigrationInterface {
 
     // Rows whose gateway is already gone: the interceptor stashed the
     // organization in metadata, which is the only remaining evidence.
+    //
+    // Joined to `organizations` rather than cast straight into the column.
+    // Metadata is a free-text json blob, not a reference, and nothing ever
+    // checked that the id in it still names a live organization -- while
+    // the rows this half exists for are precisely the ones whose gateway
+    // has gone, and the commonest reason for that is that the organization
+    // was deleted, cascading the gateway away and nulling this row's
+    // gatewayId. Copying that dead id in and then adding the foreign key
+    // aborts the migration on exactly the deployment the key exists to
+    // protect, and the deploy is fail-closed, so nothing rolls out. That
+    // is the shape that took staging down once already.
+    //
+    // The join also keeps the comparison in text, which cannot raise:
+    // uuid::text always succeeds, whereas text::uuid on a malformed value
+    // is an error Postgres is free to evaluate before the shape test
+    // beside it. Re-running is a no-op either way -- a row that found no
+    // organization the first time finds none the second.
     await queryRunner.query(`
-      UPDATE "request_logs"
-      SET "organizationId" = ("metadata" ->> 'organizationId')::uuid
-      WHERE "organizationId" IS NULL
-        AND "metadata" ->> 'organizationId' ~
-            '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      UPDATE "request_logs" AS rl
+      SET "organizationId" = o."id"
+      FROM "organizations" AS o
+      WHERE rl."organizationId" IS NULL
+        AND o."id"::text = lower(rl."metadata" ->> 'organizationId')
     `);
 
     await queryRunner.query(`
       DO $$
       BEGIN
         IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint WHERE conname = 'FK_request_logs_organizationId'
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'FK_request_logs_organizationId'
+            AND conrelid = '"request_logs"'::regclass
         ) THEN
           ALTER TABLE "request_logs"
             ADD CONSTRAINT "FK_request_logs_organizationId"
