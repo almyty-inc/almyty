@@ -32,6 +32,17 @@ describe('AppBuildsService.request - the row never outlives the job', () => {
       { add } as any,
       { canPresign: false } as any,
     );
+    // The service builds its own ProcessToolchainRunner, which shells out to
+    // the real host looking for bun. These tests are about whether the build
+    // ROW outlives its job, not about the machine they run on -- and probing
+    // the host made them pass on a developer laptop with bun installed and
+    // fail in CI without it. Stub the probe so the test asserts what it
+    // claims to.
+    (service as any).toolchain = {
+      available: async () => true,
+      version: async () => ({ ok: true, version: '1.2.0' }),
+      run: async () => ({ code: 0, stdout: '', stderr: '' }),
+    };
     return { service, buildRepository, saved };
   };
 
