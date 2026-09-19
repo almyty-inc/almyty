@@ -28,6 +28,7 @@ interface AgentHeaderProps {
   onInvoke: () => void
   onActivate: () => void
   onDeactivate: () => void
+  activationDisabled?: boolean
 }
 
 export function AgentHeader({
@@ -38,6 +39,7 @@ export function AgentHeader({
   onInvoke,
   onActivate,
   onDeactivate,
+  activationDisabled = false,
 }: AgentHeaderProps) {
   const navigate = useNavigate()
 
@@ -92,7 +94,7 @@ export function AgentHeader({
               Deactivate
             </Button>
           ) : (
-            <Button variant="outline" size="sm" onClick={onActivate}>
+            <Button variant="outline" size="sm" onClick={onActivate} disabled={activationDisabled}>
               Activate
             </Button>
           )}

@@ -10,7 +10,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { ExecutionTab } from '@/components/agents/execution-tab'
 
-import { agentsApi, memoriesApi, filesApi, versionsApi } from '@/lib/api'
+import { api, agentsApi, memoriesApi, filesApi, versionsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type {
@@ -29,6 +29,8 @@ import { AgentHeader } from '@/components/agents/detail/agent-header'
 import { AgentStats } from '@/components/agents/detail/agent-stats'
 import { ModelIssueBanner } from '@/components/agents/detail/model-issue-banner'
 import { RunFailureBanner } from '@/components/agents/detail/run-failure-banner'
+import { ExecutionPlan } from '@/components/agents/detail/execution-plan'
+import { ReadinessBanner, type ReadinessResult } from '@/components/agents/detail/readiness-banner'
 
 
 import { PipelineCanvas } from '@/components/agents/detail/pipeline-canvas'
@@ -71,6 +73,13 @@ export function AgentDetailPage() {
   })
 
   const agent = agentData as Agent | undefined
+  const workflow = !!agent && agent.mode !== 'autonomous'
+  const readiness = useQuery({
+    queryKey: ['agent-readiness', id, orgId],
+    queryFn: async () => (await api.get(`/agents/${id}/readiness`)).data.data as ReadinessResult,
+    enabled: workflow,
+    retry: false,
+  })
 
   // Fetch executions
   const { data: executionsData, error: executionsError, refetch: refetchExecutions } = useQuery({
@@ -348,7 +357,10 @@ export function AgentDetailPage() {
         onInvoke={() => setInvokeDialogOpen(true)}
         onActivate={() => activateMutation.mutate()}
         onDeactivate={() => deactivateMutation.mutate()}
+        activationDisabled={activateMutation.isPending || (workflow && (readiness.isFetching || readiness.isError || !readiness.data?.ready))}
       />
+
+      {workflow && <ReadinessBanner result={readiness.data} pending={readiness.isPending} failed={readiness.isError} onRetry={() => readiness.refetch()} onConfigure={() => setActiveTab('execution')} />}
 
       <ModelIssueBanner agent={agent} />
       <RunFailureBanner agent={agent} executions={executions} />
@@ -359,7 +371,9 @@ export function AgentDetailPage() {
 
       {/* Pipeline Canvas (read-only) -- hidden for autonomous agents */}
       {agent.mode !== 'autonomous' && (
-        <PipelineCanvas flowNodes={flowNodes} flowEdges={flowEdges} />
+        <ExecutionPlan agentId={agent.id} onConfigure={() => setActiveTab('execution')}>
+          <PipelineCanvas flowNodes={flowNodes} flowEdges={flowEdges} />
+        </ExecutionPlan>
       )}
 
       {/* Tabs */}
