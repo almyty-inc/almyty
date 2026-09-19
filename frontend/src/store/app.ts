@@ -23,9 +23,36 @@ interface Notification {
   duration?: number
 }
 
+/**
+ * localStorage is a per-viewer convenience here, never state the app needs.
+ * Reading it can THROW rather than return null -- a private window, blocked
+ * site data, or a test environment that defines window without a working
+ * storage -- and the read below happens at module evaluation time, so a
+ * throw takes the whole store down at import and every test that touches it
+ * fails for a reason that has nothing to do with what it was testing.
+ * `typeof window !== 'undefined'` does not cover that: window exists, and
+ * the access is what fails.
+ */
+function readSetting(key: string): string | null {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeSetting(key: string, value: string): void {
+  try {
+    if (typeof window !== 'undefined') window.localStorage.setItem(key, value)
+  } catch {
+    // A preference we could not persist is not worth failing the action the
+    // person actually took.
+  }
+}
+
 export const useAppStore = create<AppState>()((set, get) => ({
   sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
-  sidebarCollapsed: typeof window !== 'undefined' && localStorage.getItem('sidebar-collapsed') === 'true',
+  sidebarCollapsed: readSetting('sidebar-collapsed') === 'true',
   theme: 'light',
   notifications: [],
   isLoading: false,
@@ -41,7 +68,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
   toggleSidebarCollapse: () => {
     set(state => {
       const collapsed = !state.sidebarCollapsed
-      localStorage.setItem('sidebar-collapsed', String(collapsed))
+      writeSetting('sidebar-collapsed', String(collapsed))
       return { sidebarCollapsed: collapsed }
     })
   },
@@ -54,7 +81,7 @@ export const useAppStore = create<AppState>()((set, get) => ({
     } else {
       document.documentElement.classList.remove('dark')
     }
-    localStorage.setItem('theme', theme)
+    writeSetting('theme', theme)
   },
 
   addNotification: (notification: Omit<Notification, 'id'>) => {
