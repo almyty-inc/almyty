@@ -52,27 +52,51 @@ export class HostedChatSlugUniqueness1750797000000 implements MigrationInterface
     // `configuration` is plain json, so the write goes through jsonb and
     // back; -> and ->> are immutable either way.
     await queryRunner.query(`
-      WITH ranked AS (
-        SELECT id,
-               ROW_NUMBER() OVER (
-                 PARTITION BY ("configuration" -> 'hostedChat' ->> 'slug')
-                 ORDER BY ("status" = 'active') DESC, "createdAt", id
-               ) AS rn
-          FROM "gateways"
-         WHERE "type" = 'hosted_chat'
-           AND ("configuration" -> 'hostedChat' ->> 'slug') IS NOT NULL
-      )
-      UPDATE "gateways" g
-         SET "configuration" = jsonb_set(
-               g."configuration"::jsonb,
-               '{hostedChat,slug}',
-               to_jsonb(
-                 (g."configuration" -> 'hostedChat' ->> 'slug') || '-' || left(g.id::text, 8)
-               )
-             )::json
-        FROM ranked r
-       WHERE g.id = r.id
-         AND r.rn > 1
+      DO $$
+      DECLARE
+        loser RECORD;
+        candidate text;
+        attempt int;
+      BEGIN
+        FOR loser IN
+          SELECT id, slug FROM (
+            SELECT id,
+                   ("configuration" -> 'hostedChat' ->> 'slug') AS slug,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY ("configuration" -> 'hostedChat' ->> 'slug')
+                     ORDER BY ("status" = 'active') DESC, "createdAt", id
+                   ) AS rn
+              FROM "gateways"
+             WHERE "type" = 'hosted_chat'
+               AND ("configuration" -> 'hostedChat' ->> 'slug') IS NOT NULL
+          ) ranked
+          WHERE rn > 1
+        LOOP
+          -- The id prefix alone is not collision-proof: someone may already
+          -- hold '<slug>-<prefix>', and two ids can share eight characters.
+          -- Ask the table, and keep asking until the answer is free. Each
+          -- iteration re-reads live state, so rows renamed earlier in this
+          -- same loop are accounted for.
+          candidate := loser.slug || '-' || left(loser.id::text, 8);
+          attempt := 0;
+          WHILE EXISTS (
+            SELECT 1 FROM "gateways"
+             WHERE "type" = 'hosted_chat'
+               AND ("configuration" -> 'hostedChat' ->> 'slug') = candidate
+          ) LOOP
+            attempt := attempt + 1;
+            candidate := loser.slug || '-' || left(loser.id::text, 8) || '-' || attempt::text;
+          END LOOP;
+
+          UPDATE "gateways"
+             SET "configuration" = jsonb_set(
+                   "configuration"::jsonb,
+                   '{hostedChat,slug}',
+                   to_jsonb(candidate)
+                 )::json
+           WHERE id = loser.id;
+        END LOOP;
+      END $$;
     `);
 
     await queryRunner.query(`
