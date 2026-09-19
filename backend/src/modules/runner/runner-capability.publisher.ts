@@ -103,20 +103,38 @@ export class RunnerCapabilityPublisher {
    * description / schema changes without a migration.
    */
   async publish(runner: Runner): Promise<Tool[]> {
+    const names = RunnerCapabilityPublisher.CAPABILITIES.map(
+      (cap) => `runner.${runner.name}.${cap.method}`,
+    );
     return this.tools.manager.transaction(async (mgr) => {
       const repo = mgr.getRepository(Tool);
-      // `runnerConfig` is a json column, so a criteria object cannot reach
-      // into it -- `repo.delete({ runnerConfig: { runnerId } })` matched
-      // nothing and the previous rows survived. Republishing the same
-      // runner then re-inserted `runner.<name>.<method>`, which silently
-      // produced duplicate tools until tools_org_name_uq existed and now
-      // fails outright. `unpublish` in this same file has always used the
-      // json-path form; this is that form.
+      // Two deletes, because two different things can hold these rows.
+      //
+      // By runnerId: `runnerConfig` is a json column, so a criteria object
+      // cannot reach into it -- `repo.delete({ runnerConfig: { runnerId } })`
+      // matched nothing, the previous rows survived, and republishing
+      // re-inserted the same names. That produced duplicate tools silently
+      // until tools_org_name_uq existed.
+      //
+      // By name: a runner that was replaced, renamed or reaped can leave a
+      // row still holding `runner.<name>.<method>` under a DIFFERENT runner
+      // id, which the first delete cannot see and the unique index refuses
+      // on insert. Publishing is meant to be idempotent -- the newest
+      // registration owns the name.
       await repo
         .createQueryBuilder()
         .delete()
         .from(Tool)
         .where(`"runnerConfig"->>'runnerId' = :runnerId`, { runnerId: runner.id })
+        .execute();
+      await repo
+        .createQueryBuilder()
+        .delete()
+        .from(Tool)
+        .where('"organizationId" = :organizationId AND name IN (:...names)', {
+          organizationId: runner.organizationId,
+          names,
+        })
         .execute();
       const rows: Tool[] = [];
       for (const cap of RunnerCapabilityPublisher.CAPABILITIES) {

@@ -3,26 +3,59 @@ import { vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, beforeAll, afterAll } from 'vitest'
 
-// Node 22+ ships its own experimental `localStorage` global, and from Node 26
-// it is present by default. It THROWS unless the process was started with
-// --localstorage-file, and because it is a global it shadows the working one
-// jsdom puts on `window`. So any code writing bare `localStorage.getItem(...)`
-// -- which is most of it -- reaches Node's broken global rather than jsdom's,
-// and every suite that touches such a store dies at import.
+// Node 22 added an experimental `localStorage` global and from Node 26 it is
+// present by default. It is a getter that warns and yields `undefined` unless
+// the process was started with --localstorage-file, and because vitest's jsdom
+// environment makes `globalThis === window`, that accessor sits where jsdom's
+// Storage would be: `window.localStorage` is undefined too. So every bare
+// `localStorage.getItem(...)` -- auth.ts has fourteen -- is a TypeError, and
+// any suite importing such a module dies at import.
 //
-// In a browser `globalThis.localStorage` and `window.localStorage` are the
-// same object. This restores that, so the tests exercise what ships.
-if (typeof window !== 'undefined' && globalThis.localStorage !== window.localStorage) {
-  Object.defineProperty(globalThis, 'localStorage', {
-    value: window.localStorage,
-    configurable: true,
-    writable: true,
-  })
-  Object.defineProperty(globalThis, 'sessionStorage', {
-    value: window.sessionStorage,
-    configurable: true,
-    writable: true,
-  })
+// Pointing globalThis.localStorage at window.localStorage does NOT work, for
+// the reason above: they are the same undefined. The environment has to
+// supply a Storage, so this does, with the semantics the Storage interface
+// actually specifies -- keys and values are coerced to strings, a missing key
+// reads null (not undefined), and `length`/`key()` iterate insertion order.
+function createStorage(): Storage {
+  let map = new Map<string, string>()
+  return {
+    get length() {
+      return map.size
+    },
+    key(index: number) {
+      return Array.from(map.keys())[index] ?? null
+    },
+    getItem(key: string) {
+      const value = map.get(String(key))
+      return value === undefined ? null : value
+    },
+    setItem(key: string, value: string) {
+      map.set(String(key), String(value))
+    },
+    removeItem(key: string) {
+      map.delete(String(key))
+    },
+    clear() {
+      map = new Map()
+    },
+  } as Storage
+}
+
+for (const name of ['localStorage', 'sessionStorage'] as const) {
+  const existing = (() => {
+    try {
+      return (globalThis as any)[name]
+    } catch {
+      return undefined
+    }
+  })()
+  if (!existing || typeof existing.getItem !== 'function') {
+    Object.defineProperty(globalThis, name, {
+      value: createStorage(),
+      configurable: true,
+      writable: true,
+    })
+  }
 }
 
 // Cleanup after each test
