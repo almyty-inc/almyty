@@ -36,8 +36,12 @@ export class HostedChatSlugUniqueness1750797000000 implements MigrationInterface
     // fail-closed, blocks the rollout entirely. That is what happened on
     // staging.
     //
-    // The earliest claim keeps the address, ordered by createdAt then id so
-    // the outcome is deterministic and a re-run is a no-op. Later claimants
+    // Canonical owner: an ACTIVE claimant outranks an inactive one, and
+    // among equals the earliest wins -- ordered by status, then createdAt,
+    // then id, so the outcome is deterministic and a re-run is a no-op.
+    // Ordering by age alone would be wrong in the case that matters: if the
+    // first claimant had been deactivated and a later one is serving live
+    // traffic, age would take the address off the running app. Other
     // keep their gateway and their configuration; only the slug moves, to
     // `<slug>-<first 8 of id>`, which cannot itself collide. Nothing is
     // deleted: a duplicate slug means both tenants' hosted chat is already
@@ -52,7 +56,7 @@ export class HostedChatSlugUniqueness1750797000000 implements MigrationInterface
         SELECT id,
                ROW_NUMBER() OVER (
                  PARTITION BY ("configuration" -> 'hostedChat' ->> 'slug')
-                 ORDER BY "createdAt", id
+                 ORDER BY ("status" = 'active') DESC, "createdAt", id
                ) AS rn
           FROM "gateways"
          WHERE "type" = 'hosted_chat'
