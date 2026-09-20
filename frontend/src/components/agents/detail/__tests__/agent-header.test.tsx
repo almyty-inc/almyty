@@ -25,6 +25,14 @@ const renderHeader = (overrides: Partial<React.ComponentProps<typeof AgentHeader
 }
 
 describe('AgentHeader', () => {
+  it('lets the title and action buttons wrap instead of overflowing narrow screens', () => {
+    renderHeader({ agent: { ...agent, name: 'QA Strategy Runtime 20260915' } as Agent })
+    const actions = screen.getByRole('group', { name: 'Agent actions' })
+    expect(actions).toHaveClass('flex-wrap', 'max-w-full')
+    expect(actions.parentElement).toHaveClass('flex-wrap')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveClass('[overflow-wrap:anywhere]')
+  })
+
   it('blocks activation when model setup is not ready without changing the existing Run action', () => {
     const handlers = renderHeader({ agent: { ...agent, status: 'inactive' } as Agent, activationDisabled: true })
     const activate = screen.getByRole('button', { name: /^activate$/i })
