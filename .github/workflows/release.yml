@@ -289,9 +289,9 @@ jobs:
           MAJOR: ${{ steps.ver.outputs.major }}
 
   # Trigger the production rollout. This does NOT deploy — it only fires a
-  # repository_dispatch at DEPLOY_TARGET_REPOSITORY, whose deploy.yml owns the actual
-  # cluster rollout (migration, kubectl, smoke, rollback). Same pattern
-  # build-publish.yml uses for dev/staging. We pass the semver tag so infra
+  # deployment dispatch; the deployment pipeline owns the actual cluster
+  # rollout (migration, kubectl, smoke, rollback). Same pattern as
+  # build-publish.yml for dev/staging. We pass the semver tag so the rollout
   # pins almyty/api:<version> and kubectl shows the running version.
   #
   # Intentionally needs ONLY `release` (api + frontend). NOT release-docs
@@ -301,13 +301,15 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch production deploy to infra (by version tag)
+      - name: Dispatch production deployment (by version tag)
         env:
           GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+          DEPLOY_TARGET_REPOSITORY: ${{ secrets.DEPLOY_TARGET_REPOSITORY }}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Deploying production at almyty/*:${VERSION}"
-          gh api repos/DEPLOY_TARGET_REPOSITORY/dispatches \
+          : "${DEPLOY_TARGET_REPOSITORY:?Deployment target is not configured}"
+          gh api "repos/${DEPLOY_TARGET_REPOSITORY}/dispatches" \
             -f event_type=deploy \
             -F client_payload[environment]="production" \
             -F client_payload[image_tag]="${VERSION}"

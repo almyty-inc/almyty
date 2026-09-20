@@ -46,31 +46,31 @@ export function AgentHeader({
   return (
     <>
       {/* Breadcrumbs */}
-      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/agents" className="hover:text-foreground">Agents</Link>
-        <ChevronRight className="h-3 w-3" />
-        <span className="text-foreground">{agent.name}</span>
+      <div className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
+        <Link to="/agents" className="shrink-0 hover:text-foreground">Agents</Link>
+        <ChevronRight className="h-3 w-3 shrink-0" />
+        <span className="min-w-0 text-foreground [overflow-wrap:anywhere]">{agent.name}</span>
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" aria-label="Back to agents" onClick={() => navigate('/agents')}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-1 basis-80 items-start gap-3">
+          <Button variant="ghost" size="icon" className="shrink-0" aria-label="Back to agents" onClick={() => navigate('/agents')}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-heading font-bold">{agent.name}</h1>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="min-w-0 text-2xl font-heading font-bold [overflow-wrap:anywhere]">{agent.name}</h1>
               <Badge variant={statusVariant[agent.status] || 'secondary'}>
                 {agent.status === 'active' ? 'Active' : agent.status === 'draft' ? 'Draft' : agent.status === 'inactive' ? 'Inactive' : agent.status}
               </Badge>
             </div>
             {agent.description && (
-              <p className="text-muted-foreground mt-0.5">{agent.description}</p>
+              <p className="text-muted-foreground mt-0.5 [overflow-wrap:anywhere]">{agent.description}</p>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div role="group" aria-label="Agent actions" className="flex max-w-full flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={onExport}>
             <Download className="h-4 w-4 mr-2" />
             Export
