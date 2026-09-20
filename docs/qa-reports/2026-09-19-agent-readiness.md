@@ -110,9 +110,31 @@ the header, title and action group to wrap and permits long names to break.
 The new layout regression failed before the change; afterwards 19 focused tests
 and frontend typecheck passed. A local VibeSurfer component fixture confirmed
 the title and every action remain inside the viewport at 320, 390 and 1440 px.
-The temporary fixture was removed after verification. This local result does
-not claim the mobile layout fix is deployed yet.
+The temporary fixture was removed after verification. PR #659 passed CI and
+merged; staging promotion #660 deployed revision
+`241a4919dde8c7037df0111dcebbce90df7da99a` after its
+[image build](https://github.com/almyty-inc/almyty/actions/runs/35495509284)
+passed. Staging migrations, API/frontend rollout and smoke checks passed.
 
 ![Staging mobile before: header actions extend beyond the viewport](2026-09-20-readiness-mobile-before.png)
 
 ![Local component verification after: every action wraps inside the viewport](2026-09-20-readiness-mobile-local.png)
+
+Final live check at 390 × 844: all six header actions are visible and inside
+the viewport. Measured action-group bounds are x=16, width=358; no button
+extends beyond it. Activate remains disabled for the missing-model fixture.
+Bug [#661](https://github.com/almyty-inc/almyty/issues/661) is fixed and verified
+on staging.
+
+![Staging mobile after: all agent actions are visible and the readiness warning remains](2026-09-20-readiness-mobile-after.png)
+
+## Hosted-chat regression
+
+A new browser conversation on September 20 received a response. Asked whether
+it was a demo or connected to a real company account, the assistant identified
+itself as a customer-support demo without a real account connection and offered
+help with supplied context. After reload, reopening that conversation restored
+the reply. This verifies a real hosted-chat response, not the
+separate SDK, MCP, A2A or JavaScript-tool acceptance cases.
+
+![Staging hosted chat responds and identifies its demo scope](2026-09-20-hosted-chat.png)
