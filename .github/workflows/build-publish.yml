@@ -2,7 +2,7 @@ name: Build & Publish Images
 
 # Builds multi-arch container images and publishes them to Docker Hub
 # (public: almyty/api, almyty/frontend, almyty/docs), then fires a
-# repository_dispatch to almyty-inc/infra to roll out the new tag.
+# a deployment dispatch to roll out the new tag.
 #
 # This runs alongside the legacy GHCR deploy-api/frontend/docs workflows
 # until cutover — it does NOT deploy to the cluster itself.
@@ -321,15 +321,15 @@ jobs:
           TAG: ${{ needs.meta.outputs.latest_tag }}
 
   dispatch-deploy:
-    name: Dispatch deploy to infra
+    name: Dispatch deployment
     runs-on: ubuntu-latest
     # Only on branch pushes (the env→branch mapping); tags publish images
     # but production rollout of a release is intentionally manual.
     #
     # Fire ONLY when at least one image was actually built+pushed this run.
     # A push touching no backend/frontend/docs code skips every build job; we
-    # must NOT dispatch a deploy for an image tag that was never built (infra
-    # would then fail pulling a non-existent tag). `always()` keeps this job
+    # must NOT dispatch a deploy for an image tag that was never built (the
+    # rollout would then fail pulling a non-existent tag). `always()` keeps this job
     # evaluating even though some needed build jobs are skipped.
     #
     # NOTE: build-almyty is intentionally NOT a dependency here. The all-in-one
@@ -354,11 +354,13 @@ jobs:
       - name: Fire repository_dispatch
         env:
           GH_TOKEN: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+          DEPLOY_TARGET_REPOSITORY: ${{ secrets.DEPLOY_TARGET_REPOSITORY }}
           ENVIRONMENT: ${{ needs.meta.outputs.environment }}
           MOVING_TAG: ${{ needs.meta.outputs.latest_tag }}
         run: |
           # Deploy dev/staging by their moving env tag (dev|staging). No digest.
-          gh api repos/almyty-inc/infra/dispatches \
+          : "${DEPLOY_TARGET_REPOSITORY:?Deployment target is not configured}"
+          gh api "repos/${DEPLOY_TARGET_REPOSITORY}/dispatches" \
             -f event_type=deploy \
             -F client_payload[environment]="$ENVIRONMENT" \
             -F client_payload[image_tag]="$MOVING_TAG"
