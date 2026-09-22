@@ -26,17 +26,25 @@ Authenticate once with `npx @almyty/auth login`; the server announces itself as 
 
 ## What your assistant can do
 
-The control endpoint exposes 42 management tools:
+The control endpoint exposes 69 management tools, grouped by the part of the platform they operate. Every one of them is always available — nothing here is gated behind a plan or a flag.
 
-| Area | Tools |
+| Area | What the tools cover |
 | --- | --- |
-| **APIs** | `create_api`, `list_apis`, `update_api`, `delete_api`, `import_schema`, `check_import_status` |
-| **Tools** | `list_tools`, `delete_tool` |
-| **Gateways** | `create_gateway`, `list_gateways`, `delete_gateway`, `assign_tools_to_gateway`, `add_auth_to_gateway`, `remove_auth_from_gateway` |
-| **Agents** | `create_agent`, `list_agents` |
-| **Agent Factory** | `list_apps`, `create_app`, `get_app`, `check_app`, `update_app`, `delete_app`, `add_distribution`, `remove_distribution`, `publish_distribution`, `unpublish_distribution`, `build_app`, `list_builds` |
-| **AI Models** | `add_provider`, `list_providers` |
-| **Memory** | `memory_put`, `memory_get`, `memory_list`, `memory_search`, `memory_delete`, `memory_supersede`, `memory_consolidate`, `memory_sync`, `memory_transfer`, `memory_list_backends`, `memory_backends_health` |
+| **APIs** | Connect, update and delete APIs; import a schema and poll the import. `create_api`, `list_apis`, `update_api`, `delete_api`, `import_schema`, `check_import_status` |
+| **Tools** | List generated tools, activate one, delete one. `list_tools`, `activate_tool`, `delete_tool` |
+| **Tool hub** | Search the ready-made template catalog and install a template as an API plus its tools. `list_tool_templates`, `install_tool_template` |
+| **Gateways** | Create and delete gateways, assign tools, add or remove auth. `create_gateway`, `list_gateways`, `delete_gateway`, `assign_tools_to_gateway`, `add_auth_to_gateway`, `remove_auth_from_gateway` |
+| **Agents** | Full lifecycle: create, update, activate, deactivate, delete, and run. `create_agent`, `list_agents`, `update_agent`, `activate_agent`, `deactivate_agent`, `delete_agent`, `invoke_agent` |
+| **Agent Factory** | Ship an agent as a product: apps, distributions, builds. `list_apps`, `create_app`, `get_app`, `check_app`, `update_app`, `delete_app`, `add_distribution`, `remove_distribution`, `publish_distribution`, `unpublish_distribution`, `build_app`, `list_builds` |
+| **Providers** | Add and list LLM providers. `add_provider`, `list_providers` |
+| **Models** | The catalog: cards, sync, validation, routing preview, deployments and registered weights. `list_models`, `sync_models`, `validate_model`, `preview_model_routing`, `list_model_deployments`, `list_model_versions` |
+| **Connections + credentials** | The one store for third-party secrets: connectors, connections, the connect handshake, grants, and the vault view. `list_connectors`, `list_connections`, `start_connection`, `complete_connection`, `list_connection_grants`, `grant_connection`, `list_credentials` |
+| **Memory** | Read, write, search and maintain agent memory across backends. `memory_put`, `memory_get`, `memory_list`, `memory_search`, `memory_delete`, `memory_supersede`, `memory_consolidate`, `memory_sync`, `memory_transfer`, `memory_list_backends`, `memory_backends_health` |
+| **Runners** | The daemons that accept dispatched work, and the workspaces open on them. `list_runners` |
+| **Organization** | Members and their roles, useful for picking a grant principal or an approver. `list_org_members` |
+| **Cost governance** | Spend ceilings and what has actually been spent this period. `list_budgets`, `get_spend` |
+| **Analytics** | One organization-scoped report per call: overview, tools, gateways, models, agent runs, alerts, routing failures. `get_analytics` |
+| **Approvals** | Pending approval gates, and deciding them so a waiting run resumes. `list_approvals`, `decide_approval` |
 
 ## Example
 
@@ -61,10 +69,11 @@ back a live channel.
 
 ## What's not exposed
 
-The control set is deliberately build-and-configure, not run-and-mutate:
+The control set covers build, configure, and run; a few things stay outside it:
 
-- **No `run_agent`**: invoke an agent through its own endpoint (`https://api.almyty.com/{org}/{agent}`), not the control plane.
-- **No `update_agent` / `update_gateway`**: edit an existing agent or gateway in the dashboard or via the [REST API](/api-reference). The MCP tools create and wire; deeper edits stay in the UI so a stray model call can't silently rewrite a production agent.
+- **No `update_gateway`**: gateways are created and wired here, but editing an existing one is a dashboard or [REST API](/api-reference) job, so a stray model call can't silently rewrite a published endpoint.
+- **No direct tool authoring**: tools arrive by importing an API schema or installing a tool-hub template. `activate_tool` and `delete_tool` manage what that produced; there is no `create_tool`.
+- **Status is not a settable field**: `create_agent` always produces a DRAFT agent, and `activate_agent` is the only path to active, because it runs pipeline validation first. `invoke_agent` refuses an agent that is not active.
 
 ## Related
 

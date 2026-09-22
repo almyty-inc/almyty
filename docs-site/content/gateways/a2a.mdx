@@ -1,86 +1,206 @@
 # A2A Gateway
 
-Let other AI agents discover and use your tools. An A2A gateway implements Google's Agent-to-Agent protocol: any A2A-compatible agent reads your gateway's Agent Card, sees what it can do, and sends it tasks over JSON-RPC.
+Let other AI agents call your agent. An A2A gateway implements Google's Agent-to-Agent protocol: any A2A-compatible client reads your gateway's Agent Card, sees what the agent can do, and sends it messages over JSON-RPC.
 
 ![Gateway detail page](/screenshots/gateway-detail.png)
 
 ## Create the gateway
 
 1. Open **Gateways** in the sidebar and click **Create Gateway**
-2. Select **A2A** as the protocol
+2. Under **Gateway Kind**, pick **Agent** — A2A serves an agent, not a tool bundle
 
 ![Create Gateway dialog](/screenshots/gateways-create-dialog.png)
 
-3. Enter a name, slug, and optional description
-4. Under **Capabilities**, toggle streaming and push notifications as needed
-5. Click **Create**
+3. Select **A2A** as the gateway type
+4. Pick the **Agent** that will handle requests on this gateway
+5. Enter a name, an endpoint path (the slug in the URL), and an optional description
+6. Click **Create**
 
-Assign tools from the **Tools** tab on the gateway detail page, then configure authentication before exposing the gateway externally.
-
-![Assigning tools on the gateway Tools tab](/screenshots/gateway-detail-tools.png)
+Configure authentication from the **Authentication** tab before exposing the gateway externally.
 
 Your A2A endpoint follows this pattern:
 
 ```
-https://api.almyty.com/a2a/{org}/{gateway-slug}
+https://api.almyty.com/{org}/{gateway-slug}
 ```
+
+There is no `/a2a` path segment. Every gateway is served from the same
+`{org}/{gateway-slug}` URL, and the protocol is decided by the gateway's type, which
+you set at creation time — not by a query parameter or an `Accept` header. A gateway
+created as A2A answers A2A there; an MCP gateway answers MCP at the same URL shape.
 
 The Agent Card is generated automatically at:
 
 ```
-https://api.almyty.com/a2a/{org}/{gateway-slug}/.well-known/agent.json
+https://api.almyty.com/{org}/{gateway-slug}/.well-known/agent-card.json
 ```
+
+`.well-known/agent.json` is accepted as an alias, and a plain `GET` on the gateway URL
+returns the same card. Those three reads are public; the JSON-RPC endpoint is not.
 
 ## Connect an agent
 
 Give the calling agent your Agent Card URL. It reads the card, discovers your skills, and starts sending tasks. No manual request building on your side.
 
 ```
-https://api.almyty.com/a2a/acme/my-agent/.well-known/agent.json
+https://api.almyty.com/acme/my-agent/.well-known/agent-card.json
 ```
 
-Every A2A gateway generates a JSON Agent Card describing its capabilities:
+almyty emits A2A **v1.0**, so the card carries `supportedInterfaces` rather than a bare
+`url` — the top-level `url` is kept alongside it for v0.2.x / v0.3.x clients:
 
 ```json
 {
   "name": "My A2A Agent",
-  "description": "Tools exposed via A2A protocol",
-  "url": "https://api.almyty.com/a2a/acme/my-agent",
+  "description": "Answers questions about the pet store.",
   "version": "1.0.0",
+  "supportedInterfaces": [
+    {
+      "url": "https://api.almyty.com/acme/my-agent",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    }
+  ],
   "capabilities": {
-    "streaming": false,
-    "pushNotifications": false
+    "streaming": true,
+    "pushNotifications": false,
+    "extendedAgentCard": true
   },
   "skills": [
     {
-      "id": "get_users",
-      "name": "Get Users",
-      "description": "Retrieve a list of users"
+      "id": "agent-<agent-uuid>",
+      "name": "My A2A Agent",
+      "description": "Interact with the My A2A Agent agent",
+      "tags": [],
+      "examples": [],
+      "inputModes": ["text"],
+      "outputModes": ["text"]
     }
-  ]
+  ],
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"],
+  "url": "https://api.almyty.com/acme/my-agent"
 }
 ```
 
 ## Supported methods
 
-Calling agents send JSON-RPC requests to the endpoint using these methods:
+Calling agents `POST` JSON-RPC 2.0 requests to the gateway URL. Each method has a v1.0
+(PascalCase) name and a v0.2.x / v0.3.x name; both are dispatched to the same handler.
 
-| Method | Description |
-|--------|-------------|
-| `tasks/send` | Send a new task |
-| `tasks/get` | Get the status and result of a task |
-| `tasks/cancel` | Cancel a running task |
+| v1.0 method | v0.x method | Description |
+|-------------|-------------|-------------|
+| `SendMessage` | `message/send` | Send a message, get a task back |
+| `StreamMessage` | `message/stream` | Same, streamed back over SSE |
+| `SubscribeToTask` | `tasks/resubscribe` | Reattach an SSE stream to a running task |
+| `GetTask` | `tasks/get` | Get the status and result of a task |
+| `CancelTask` | `tasks/cancel` | Cancel a running task |
+| `ListTasks` | `tasks/list` | List tasks on this gateway |
+| `GetExtendedAgentCard` | `agent/getAuthenticatedExtendedCard` | The full card, including security schemes |
 
-A `tasks/send` message carries a `role` and one or more `parts` (for example a text part with the instruction). The gateway returns a task `id` you can poll with `tasks/get`.
+`tasks/send` is **not** a method almyty implements — it returns `-32601 Method not found`.
+Push notification methods (`SetTaskPushNotificationConfig` and friends) are rejected with
+an explicit "not supported" error; use `message/stream` for real-time updates.
+
+A message carries one or more `parts`. almyty emits v1.0 parts (`{ "text": "..." }`) and
+accepts all three dialects on input (`{ "type": "text", ... }`, `{ "kind": "text", ... }`,
+`{ "text": ... }`), so a v0.x client does not have to change.
+
+```bash
+curl -X POST https://api.almyty.com/acme/my-agent \
+  -H "x-api-key: your-gateway-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "message/send",
+    "params": {
+      "message": {
+        "messageId": "msg-1",
+        "role": "ROLE_USER",
+        "parts": [{ "text": "List the pets that are available" }]
+      }
+    }
+  }'
+```
+
+The response is a JSON-RPC envelope around a Task. `message/send` returns the Task
+directly as `result`; `SendMessage` wraps it as `result.task`.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "id": "b1f0...-run-uuid",
+    "contextId": "b1f0...-conversation-uuid",
+    "status": {
+      "state": "TASK_STATE_COMPLETED",
+      "message": {
+        "messageId": "b1f0...-status",
+        "role": "ROLE_AGENT",
+        "parts": [{ "text": "Rosie and Max are available." }],
+        "taskId": "b1f0...-run-uuid",
+        "contextId": "b1f0...-conversation-uuid"
+      },
+      "timestamp": "2026-01-01T12:00:00.000Z"
+    },
+    "history": [],
+    "artifacts": [
+      {
+        "artifactId": "b1f0...-run-uuid-result",
+        "name": "result",
+        "parts": [{ "text": "Rosie and Max are available." }]
+      }
+    ]
+  }
+}
+```
+
+### Blocking is the default
+
+almyty follows the v1.0 default: a request that sends no `configuration`, or one that
+states neither flag, **waits** for the task to settle (up to 30 seconds) and returns a
+finished Task. To get the task id back immediately and poll with `GetTask`, say so:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "message/send",
+  "params": {
+    "message": {
+      "messageId": "msg-1",
+      "role": "ROLE_USER",
+      "parts": [{ "text": "List the pets that are available" }]
+    },
+    "configuration": { "returnImmediately": true }
+  }
+}
+```
+
+`configuration.blocking: false` (the v0.x spelling) does the same thing. Stating either
+flag always decides; only the unstated case falls through to waiting.
+
+Note that an A2A gateway starts an **autonomous** agent run. Workflow agents are not
+reachable over A2A — use the agent's invoke or stream endpoints instead.
 
 ## Task lifecycle
 
+A2A v1.0 carries the ProtoJSON encoding of the `TaskState` enum on every binding,
+JSON-RPC included — so the states are upper-case `TASK_STATE_*` strings, not the
+kebab-case ones from v0.2.x / v0.3.x.
+
 | State | Description |
 |-------|-------------|
-| `submitted` | Task received and queued |
-| `working` | Task is being processed |
-| `completed` | Task finished successfully |
-| `failed` | Task execution failed |
-| `canceled` | Task was canceled |
+| `TASK_STATE_SUBMITTED` | Task received and queued |
+| `TASK_STATE_WORKING` | Task is being processed |
+| `TASK_STATE_INPUT_REQUIRED` | The agent is waiting on more input |
+| `TASK_STATE_COMPLETED` | Task finished successfully |
+| `TASK_STATE_FAILED` | Task execution failed, or timed out |
+| `TASK_STATE_CANCELED` | Task was canceled |
+
+`TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, and
+`TASK_STATE_REJECTED` are terminal — nothing transitions out of them.
 
 See [Gateway Authentication](/gateways/authentication) to secure the endpoint. Discovery endpoints such as the Agent Card stay public so other agents can find you.

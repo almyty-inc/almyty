@@ -22,15 +22,18 @@ claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
   Claude calls getPetById via almyty -> "Rosie", available
 ```
 
-The same gateway also answers over A2A and UTCP, so other agents and frameworks reach
-the identical tools without a rebuild.
+Point a second gateway at the same tools and it answers over UTCP or Agent Skills
+instead, so other frameworks and coding agents reach the identical tools without a
+rebuild. A2A is the agent-facing counterpart: it serves one of your agents rather than a
+tool bundle. Each gateway speaks one protocol — the one you pick when you create it.
 
 ## Create one
 
 1. Open **Gateways** in the sidebar and click **Create Gateway**
-2. Pick a protocol (MCP, A2A, UTCP, or Skills), name it, and set a slug
-3. Open the **Tools** tab and assign the tools this gateway should serve
-4. Open the **Authentication** tab and add an auth method before going live
+2. Pick a kind — **Tools** for MCP, UTCP, or Skills; **Agent** for A2A and the chat channels
+3. Pick the protocol, name it, and set an endpoint path (the slug in the URL)
+4. For a tools gateway, open the **Tools** tab and assign the tools it should serve
+5. Open the **Authentication** tab and add an auth method before going live
 
 ![The Create Gateway dialog](/screenshots/gateways-create-dialog.png)
 
@@ -41,13 +44,16 @@ paste into any client:
 
 ## Protocols
 
-One set of tools, four ways to reach them. Start with the protocol your client speaks:
+One set of tools, four ways to reach them. Every gateway is served from the same
+`api.almyty.com/{org}/{gateway}` URL — there is no per-protocol path segment. Which
+protocol answers there is fixed by the gateway's type, chosen when you create it, so
+start with the protocol your client speaks and give that gateway its own slug:
 
 | Protocol | Reach it with | Endpoint |
 |----------|---------------|----------|
 | [MCP](/gateways/mcp) | Claude, Cursor, Windsurf, VS Code Copilot | `api.almyty.com/{org}/{gateway}` |
-| [A2A](/gateways/a2a) | Google A2A agents, via the Agent Card | `api.almyty.com/a2a/{org}/{gateway}` |
-| [UTCP](/gateways/utcp) | Any HTTP client or agent framework | `api.almyty.com/utcp/{org}/{gateway}` |
+| [A2A](/gateways/a2a) | Google A2A agents, via the Agent Card | `api.almyty.com/{org}/{gateway}` |
+| [UTCP](/gateways/utcp) | Any HTTP client or agent framework | `api.almyty.com/{org}/{gateway}` |
 | [Agent Skills](/gateways/skills) | 30+ coding agents, via the Skills CLI | Installed as `SKILL.md` files |
 
 Agents you build on almyty also get an [OpenAI-compatible endpoint](/api-reference/openai-compatible),
