@@ -32,9 +32,37 @@ almyty runner stop              # send SIGTERM to the local daemon
 almyty runner start --name build-box --label gpu=true --label region=eu
 ```
 
-## Safe by default
+## What a runner can do on your machine
 
-A runner executes untrusted agent requests, so it starts locked down: container isolation, a concurrency cap, no outbound network, and no package installs, until you opt in through its config. See [docs/runner.md](https://github.com/almyty-inc/almyty/blob/master/docs/runner.md) for the config schema and the full method surface (`process.*`, `agent.*`, `coding.*`).
+Read this before you start a runner on a machine you care about. The daemon prints the same summary as its third line at boot.
+
+A runner uses **host isolation** by default: commands your agents dispatch run as the user who started the daemon, on that machine, with that user's files and that user's network access. There is no container and no sandbox, because this build does not implement one. Outbound network is not blocked.
+
+| Setting | Default | What it actually does |
+|---------|---------|----------------------|
+| `defaultIsolation` | `host` | Commands run directly on the machine, as you |
+| `installBlocked` | `true` | Refuses `npm install`, `pip install`, `brew install` and friends |
+| `maxConcurrent` | `4` | Further commands are refused while at capacity |
+| `networkBlocked` | `false` | Outbound network is available to dispatched commands |
+| `allowedCwdRoots` | `[]` | Empty means no restriction: commands may run in any directory |
+| `denyPatterns` | `[]` | Empty means nothing is denied by pattern |
+
+To narrow it, put any of these in `~/.almyty/config.json`:
+
+- `allowedCwdRoots`: directories commands may run in. Paths are canonicalized through `realpath`, so a symlink or `..` cannot escape.
+- `denyPatterns`: regexes matched against the whole command line; a match is refused. An invalid regex falls back to a literal substring match, so a typo denies rather than silently allowing.
+- `installBlocked`: on by default. Set it to `false` only if your agents need to install packages.
+- `maxConcurrent`: how many commands may run at once.
+
+The backend can only *constrain* a runner further at registration time (lower limits, smaller path allowlists, more deny patterns). It can never escalate what your local config allows.
+
+### Container isolation and network blocking are not available
+
+`defaultIsolation: "container"` and `networkBlocked: true` are accepted by the config loader but **not implemented in this build**. If you set either one, the runner refuses *every* spawn and *every* shell command rather than silently running on the host anyway.
+
+So there is currently no configuration that gives you a sandboxed or network-isolated runner that still executes anything. Either the runner has host access, or it does nothing. Plan for that before you connect a machine. Both refusal cases are reported once at boot rather than per command, so a runner you meant to lock down does not sit there looking healthy while denying everything.
+
+See [docs/runner.md](https://github.com/almyty-inc/almyty/blob/master/docs/runner.md) for the config schema and the full method surface (`process.*`, `agent.*`, `coding.*`).
 
 ## Drive coding CLIs from chat
 

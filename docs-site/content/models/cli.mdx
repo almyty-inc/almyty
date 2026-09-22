@@ -45,16 +45,29 @@ Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
 Run: almyty models validate 4f2a...
 ```
 
-Register an OpenAI-compatible server you run (the URL and key become a `custom` provider):
+Register an OpenAI-compatible server you run (the URL and key become a `custom` provider). Leave the key off and it is prompted without echo:
 
 ```bash
 $ npx @almyty/models register-endpoint \
     --name "Lab box" \
     --url http://10.0.0.7:8000/v1 \
     --model qwen3-32b \
-    --api-key sk-lab \
     --tier local
+API key for the endpoint (empty for none):
 ```
+
+In a script there is no one to prompt, so pipe the key in instead:
+
+```bash
+$ printf '%s' "$LAB_KEY" | npx @almyty/models register-endpoint \
+    --name "Lab box" \
+    --url http://10.0.0.7:8000/v1 \
+    --model qwen3-32b \
+    --tier local \
+    --api-key-stdin
+```
+
+`--api-key sk-...` is refused with a usage error. argv is written to your shell history and is readable by any process through `ps`, so a key passed that way has to be treated as disclosed. The three accepted forms are the prompt, `--api-key-stdin` (spelled `--api-key -` if you prefer), and `--api-key ""` for a server that checks no key at all.
 
 Import what a provider currently lists, as unvalidated cards:
 
@@ -86,9 +99,9 @@ Deleted.
 | Flag | Commands | Meaning |
 |---|---|---|
 | `--tier` | register, register-endpoint | `public`, `private_cloud` or `local` |
-| `--region` | register, register-endpoint | Region label used by routing allowlists |
+| `--region` | register, register-endpoint | Region label used by routing allowlists. A card with no region is excluded by any policy that sets one |
 | `--context` | register | Context length in tokens |
-| `--api-key` | register-endpoint | Bearer token the server expects |
+| `--api-key-stdin` | register-endpoint | Read the Bearer token the server expects from stdin. Left off entirely, the key is prompted without echo; `--api-key ""` means the server checks no key. `--api-key <value>` is refused |
 | `--selectable` | list | Only cards the router may pick |
 
 Note `--model` here names the **vendor model id** on `register` and `register-endpoint`; it is not the deploy command's model reference below.
@@ -127,16 +140,28 @@ huggingface-endpoints  Hugging Face Inference Endpoints
 
 `--json` includes each adapter's `modelSchemes` (every reference it accepts, as literal prefixes) and its config schema, the same data the deploy form renders from.
 
-Naming the model is configuration, so the model reference is the **positional argument**. Deploy straight from a Hugging Face repository:
+Naming the model is configuration, so the model reference is the **positional argument**. The adapter's config carries the secrets, so it comes from a file, from stdin or from a stored connection — never from argv. Deploy straight from a Hugging Face repository:
 
 ```bash
+$ cat > hf.json <<'JSON'
+{"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}
+JSON
 $ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B@main \
     --adapter huggingface-endpoints \
-    --config '{"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}' \
+    --config-file hf.json \
     --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}' \
     --budget 5d3f...
 Queued.
 c07b...  huggingface-endpoints  pending  replicas ?/1
+```
+
+Better still, connect the account once and name the connection, so no key reaches this machine's filesystem at all:
+
+```bash
+$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B@main \
+    --adapter huggingface-endpoints \
+    --credential 9b4c... \
+    --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}'
 ```
 
 Or from a model already on a platform:
@@ -145,21 +170,25 @@ Or from a model already on a platform:
 $ npx @almyty/models deploy bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --adapter aws-bedrock-import
 ```
 
-Or, for lineage tracked through a registered version, point at it instead of naming the model:
+Or, for lineage tracked through a registered version, point at it instead of naming the model. Piping the config keeps it out of a file too:
 
 ```bash
-$ npx @almyty/models deploy --model-version a91c... --adapter modal \
-    --config '{"tokenId":"ak-...","tokenSecret":"as-...","workspace":"acme","gpu":"A100-80GB"}'
+$ printf '%s' "$MODAL_CONFIG_JSON" | npx @almyty/models deploy --model-version a91c... \
+    --adapter modal --config-stdin
 ```
+
+`--config '<json>'` still exists, but `deploy` screens it against the adapter's config schema and refuses it the moment it carries a field the adapter marks secret — `token` for `huggingface-endpoints`, `tokenId` and `tokenSecret` for `modal`, `apiKey` for `fireworks` and the rest. argv is written to your shell history, is echoed by most CI runners and is readable by any process through `ps`, so a secret that travelled that way is disclosed. `--config` is also refused outright when the adapter catalog cannot be read, because then almyty does not know which of the fields are secret and will not guess. Run `adapters` to see which fields each one marks secret. `--config` is fine for the fields that are not secret, such as `namespace`, `region`, `instanceType` or `gpu`.
 
 | Flag | Meaning |
 |---|---|
 | `<model>` (positional) | The model to run: `hf://org/repo@sha`, `s3://bucket/prefix@etag`, `gs://bucket/prefix@gen`, `file:///path@sha`, or a provider reference such as `bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`. Required unless `--model-version` is given |
 | `--model-version` | A registered version instead of the positional model reference |
 | `--adapter` | Adapter key from `adapters` (required) |
-| `--config` | JSON provider config for the adapter |
+| `--config-file <path>` | Provider config read from a JSON file. The way to pass secret fields |
+| `--config-stdin` | Provider config read from stdin. Same, for a secret that should not touch disk |
+| `--config '<json>'` | Provider config inline. Refused if it carries a field the adapter marks secret, or if the adapter catalog could not be read to check |
+| `--credential <id>` | A connection made with `almyty connections connect`; the adapter reads its secrets from there instead of from any config you pass |
 | `--desired` | JSON desired state: `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
-| `--credential` | A stored credential the adapter reads secrets from instead of `--config` |
 | `--budget` | A spend budget; reaching it scales the deployment to zero |
 | `--card` | A model card that already exists for this model; the deployment fills its endpoint once ready and keeps pricing it. Without it, register the ready URL with `register-endpoint` |
 
