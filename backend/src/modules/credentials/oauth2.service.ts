@@ -12,7 +12,7 @@ import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
-import { validateUrl } from '../../common/security/url-validator';
+import { validateUrl, validateResponseSize } from '../../common/security/url-validator';
 
 export interface OAuth2Preset {
   name: string;
@@ -118,6 +118,66 @@ function assertSafeOAuthUrl(kind: 'authorizationUrl' | 'tokenUrl', value: string
   if (!check.valid) {
     throw new BadRequestException(`Refused ${kind}: ${check.error}`);
   }
+}
+
+/**
+ * A token endpoint's reply is a few hundred bytes of JSON. `tokenUrl` is
+ * supplied by an org admin and fetched server-side, so a hostile or
+ * compromised endpoint can answer a megabyte-a-second stream instead, and
+ * `await response.json()` will buffer all of it into the API process.
+ *
+ * The tool executors are already covered: they go through axios, whose
+ * `maxContentLength` clamps the stream. These two call sites use native
+ * `fetch`, which has no such option — which is why `validateResponseSize`
+ * exists in common/security and, until this was wired, had no caller
+ * outside its own unit test.
+ *
+ * Declared size is checked first (cheap, and rejects before a byte of body
+ * is read); an undeclared or chunked length falls through to reading with
+ * a hard byte budget, because `validateResponseSize` returns true for an
+ * unknown length by design and a cap that a missing header switches off is
+ * not a cap.
+ */
+const OAUTH_TOKEN_MAX_BYTES = 256 * 1024;
+
+async function readTokenJson(response: Response): Promise<any> {
+  const declared = response.headers.get('content-length');
+  const contentLength = declared == null ? undefined : Number(declared);
+  if (!validateResponseSize(contentLength, OAUTH_TOKEN_MAX_BYTES)) {
+    throw new BadRequestException(
+      `Token endpoint replied with ${contentLength} bytes, over the ${OAUTH_TOKEN_MAX_BYTES}-byte limit`,
+    );
+  }
+
+  const body = await readCapped(response, OAUTH_TOKEN_MAX_BYTES);
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new BadRequestException('Token endpoint did not return JSON');
+  }
+}
+
+/** Read a body, aborting once it passes `max` bytes rather than after. */
+async function readCapped(response: Response, max: number): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return response.text();
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > max) {
+      await reader.cancel();
+      throw new BadRequestException(
+        `Token endpoint body exceeded the ${max}-byte limit`,
+      );
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
 }
 
 @Injectable()
@@ -360,7 +420,7 @@ export class OAuth2Service {
       body: tokenParams.toString(),
     });
 
-    const tokenData = await tokenResponse.json();
+    const tokenData = await readTokenJson(tokenResponse);
 
     if (!tokenResponse.ok || tokenData.error) {
       const errorMsg =
@@ -454,7 +514,7 @@ export class OAuth2Service {
       body: tokenParams.toString(),
     });
 
-    const tokenData = await tokenResponse.json();
+    const tokenData = await readTokenJson(tokenResponse);
 
     if (!tokenResponse.ok || tokenData.error) {
       const errorMsg =

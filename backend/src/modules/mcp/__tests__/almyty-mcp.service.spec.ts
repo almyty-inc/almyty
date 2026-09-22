@@ -49,6 +49,7 @@ describe('AlmytyMcpService', () => {
     findAllByOrganization: jest.fn().mockResolvedValue({ apis: [], total: 0 }),
     create: jest.fn().mockResolvedValue({ id: 'api-1', name: 'Test' }),
     importSchema: jest.fn().mockResolvedValue({ api: {}, schema: {}, operations: [], resources: [], tools: [] }),
+    fetchSchemaFromUrl: jest.fn().mockResolvedValue('{"openapi":"3.0.0"}'),
     remove: jest.fn().mockResolvedValue(undefined),
   };
   const mockToolsService: any = {
@@ -458,13 +459,16 @@ describe('AlmytyMcpService', () => {
       expect(res.result.isError).toBeUndefined();
     });
 
-    it('import_schema fetches URL and passes content to ApisService', async () => {
+    it('import_schema fetches the URL through the SSRF-guarded helper', async () => {
       const res = await call('tools/call', {
         name: 'import_schema',
         arguments: { apiId: 'api-1', schemaUrl: 'https://example.com/openapi.json', generateTools: true },
       });
-      // Verifies: URL is fetched, then job is queued (not sync import)
-      expect(mockAxiosGet).toHaveBeenCalledWith('https://example.com/openapi.json', { timeout: 30000 });
+      // Not a bare axios.get: this asserted the raw call for as long as the
+      // MCP path bypassed validateUrl, the 15 MB cap and maxRedirects: 0
+      // that the REST import route has always gone through.
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+      expect(mockApisService.fetchSchemaFromUrl).toHaveBeenCalledWith('https://example.com/openapi.json');
       expect(mockSchemaImportQueue.add).toHaveBeenCalledWith(
         'import',
         expect.objectContaining({

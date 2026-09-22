@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Gateway } from './gateway.entity';
 import { Tool } from './tool.entity';
+import { decideToolCaller } from '../common/security/gateway-tool-permissions';
 
 @Entity('gateway_tools')
 @Index(['gatewayId', 'toolId'], { unique: true })
@@ -117,36 +118,20 @@ export class GatewayTool {
     return this.tool?.parameters || {};
   }
 
+  /**
+   * Delegates to common/security/gateway-tool-permissions.ts, which is
+   * where the executor reads it from: the decision has to work on whatever
+   * the repository returned, and a method only exists on a hydrated entity.
+   * Keeping the logic in one place is what stops this method drifting back
+   * into being the only copy -- which is how it ended up with no callers.
+   */
   hasPermission(userId: string, userRoles: string[], userOrg: string, scopes: string[]): boolean {
-    if (!this.permissions) return true;
-
-    // Check user permission
-    if (this.permissions.allowedUsers?.length > 0) {
-      if (!this.permissions.allowedUsers.includes(userId)) {
-        return false;
-      }
-    }
-
-    // Check role permission
-    if (this.permissions.allowedRoles?.length > 0) {
-      const hasRole = userRoles.some(role => this.permissions.allowedRoles.includes(role));
-      if (!hasRole) return false;
-    }
-
-    // Check organization permission
-    if (this.permissions.allowedOrganizations?.length > 0) {
-      if (!this.permissions.allowedOrganizations.includes(userOrg)) {
-        return false;
-      }
-    }
-
-    // Check scope permission
-    if (this.permissions.requiredScopes?.length > 0) {
-      const hasScope = this.permissions.requiredScopes.some(scope => scopes.includes(scope));
-      if (!hasScope) return false;
-    }
-
-    return true;
+    return decideToolCaller(this.permissions, {
+      userId,
+      roles: userRoles,
+      organizationId: userOrg,
+      scopes,
+    }).allowed;
   }
 
   transformInput(input: Record<string, any>): Record<string, any> {

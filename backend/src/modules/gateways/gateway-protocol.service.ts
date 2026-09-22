@@ -252,6 +252,8 @@ export class GatewayProtocolService {
         // gateway_tool.securityPolicy before dispatch.
         gatewayId: gateway.id,
         securityPolicy: gatewayTool.securityPolicy ?? null,
+        // Checked against gateway_tools.permissions.requiredScopes.
+        scopes: request.scopes ?? [],
       };
 
       const result = await this.toolExecutorService.executeTool(
@@ -353,6 +355,8 @@ export class GatewayProtocolService {
         // gateway_tool.securityPolicy before dispatch.
         gatewayId: gateway.id,
         securityPolicy: gatewayTool.securityPolicy ?? null,
+        // Checked against gateway_tools.permissions.requiredScopes.
+        scopes: request.scopes ?? [],
       };
 
       const result = await this.toolExecutorService.executeTool(

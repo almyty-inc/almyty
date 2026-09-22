@@ -331,8 +331,16 @@ export class AlmytyMcpService {
         if (args.schemaContent) {
           content = String(args.schemaContent);
         } else if (args.schemaUrl) {
-          const schemaRes = await axios.get(args.schemaUrl, { timeout: 30000 });
-          content = typeof schemaRes.data === 'string' ? schemaRes.data : JSON.stringify(schemaRes.data);
+          // Through ApisService, which is where the SSRF guard and the
+          // inbound size cap live. This used to be a bare
+          // `axios.get(args.schemaUrl, { timeout: 30000 })`: no validateUrl,
+          // no maxContentLength, no maxRedirects. The REST route
+          // (apis.controller.ts importSchema) has always gone through the
+          // helper, so the guard existed, was tested, and this second
+          // entrance walked around it -- an MCP client could ask the server
+          // to fetch http://169.254.169.254/ or a loopback admin port and
+          // read the body back out of the queued job.
+          content = await get(ApisService).fetchSchemaFromUrl(String(args.schemaUrl));
         } else {
           throw new Error('import_schema requires either schemaUrl or schemaContent');
         }
