@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -11,6 +11,7 @@ import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
 import { AgentExecutionEngine, StreamEvent } from '../agents/agent-execution.engine';
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
+import { AgentExecutionCancellationService } from '../agents/agent-execution-cancellation.service';
 
 /**
  * Agent-side endpoint logic for the unified `/:orgSlug/:resourceSlug` controller:
@@ -31,6 +32,11 @@ export class UnifiedAgentHelper {
     private readonly executionEngine: AgentExecutionEngine,
     private readonly runtimeService: AgentRuntimeService,
     private readonly jwtService: JwtService,
+    // Appended last and @Optional(): a spec constructs this helper
+    // positionally, so a required parameter inserted anywhere above would
+    // silently shift the ones after it.
+    @Optional()
+    private readonly cancellations?: AgentExecutionCancellationService,
   ) {}
 
   async handleAgentRequest(
@@ -85,6 +91,10 @@ export class UnifiedAgentHelper {
 
     if (action === 'runs' || action.startsWith('runs/')) {
       return this.handleAgentRuns(agent, organization, body, req, res, apiKey, action);
+    }
+
+    if (action === 'executions' || action.startsWith('executions/')) {
+      return this.handleAgentExecutions(agent, organization, req, res, action);
     }
 
     if (req.method === 'GET' && action.startsWith('conversations/')) {
@@ -379,6 +389,46 @@ export class UnifiedAgentHelper {
     }
 
     throw new HttpException(`Unknown runs action: ${subAction}`, HttpStatus.NOT_FOUND);
+  }
+
+  /**
+   * POST /:orgSlug/:agentSlug/executions/:executionId/cancel
+   *
+   * The workflow counterpart of /runs/:id/cancel. A workflow run is an
+   * AgentExecution, not an AgentRun, so the runs route could never stop
+   * one: a client that cancelled without dropping its connection left the
+   * pipeline running and billing.
+   *
+   * Same authentication (already done by the caller), same org scoping and
+   * the same "wrong org reads as not found" answer as the runs route;
+   * additionally asserts the execution belongs to the agent this URL names.
+   */
+  private async handleAgentExecutions(
+    agent: Agent,
+    organization: Organization,
+    req: Request,
+    res: Response,
+    action: string,
+  ) {
+    const parts = action.split('/');
+    const executionId = parts[1];
+    const subAction = parts[2];
+
+    if (req.method === 'POST' && executionId && subAction === 'cancel') {
+      if (!this.cancellations) {
+        throw new HttpException('Execution cancellation is unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+      }
+      const execution = await this.cancellations.cancel(executionId, organization.id, agent.id);
+      return res.json({
+        success: true,
+        data: { id: execution.id, status: execution.status },
+      });
+    }
+
+    throw new HttpException(
+      `Unknown executions action: ${subAction ?? ''}`,
+      HttpStatus.NOT_FOUND,
+    );
   }
 
   private async getConversationMessages(convId: string, organizationId: string, res: Response) {

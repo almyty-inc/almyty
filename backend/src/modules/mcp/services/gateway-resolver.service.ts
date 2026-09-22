@@ -2,7 +2,7 @@ import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
-import { GatewayAuthType } from '../../../entities/gateway-auth.entity';
+import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { GatewayAuthService, AuthenticationResult } from '../../gateways/gateway-auth.service';
 
@@ -151,17 +151,59 @@ export class GatewayResolverService {
   }
 
   /**
+   * The gateway's active auth configs, already in hand.
+   *
+   * Both paths into this service load `authConfigs` as a relation, so
+   * GatewayAuthService does not have to query for them a second time.
+   * The relation arrives without its inverse `gateway` side, which
+   * `validateOAuth2` reads to bind the token to the owning org — that is
+   * backfilled onto a copy rather than mutated onto the caller's entity,
+   * which would make the object graph circular. Returns undefined when
+   * the relation was never loaded, so the auth service falls back to its
+   * own query and nothing changes for callers that pass a bare gateway.
+   */
+  private activeAuthConfigs(gateway: Gateway): GatewayAuth[] | undefined {
+    if (!Array.isArray(gateway.authConfigs)) return undefined;
+
+    return gateway.authConfigs
+      .filter((config) => config.isActive)
+      .map((config) =>
+        config.gateway
+          ? config
+          : (Object.assign(
+              Object.create(Object.getPrototypeOf(config) ?? Object.prototype),
+              config,
+              { gateway },
+            ) as GatewayAuth),
+      )
+      .sort((a, b) => {
+        const left = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const right = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return left - right;
+      });
+  }
+
+  /**
    * Full resolution pipeline: org → gateway → auth check.
    * Returns the resolved org, gateway, and auth result.
    * Throws HttpException on any failure.
+   *
+   * `preResolved` is for callers that already hold both — the unified
+   * endpoint resolves the org and loads the gateway before it delegates,
+   * and re-running those two lookups here was two redundant queries on
+   * the hottest route in the product. Omit it and resolution is exactly
+   * as it was.
    */
   async resolveAndAuthenticate(
     orgSlugOrId: string,
     gatewayEndpoint: string,
     req: any,
+    preResolved?: { organization: Organization; gateway: Gateway },
   ): Promise<ResolvedGateway> {
-    const organization = await this.resolveOrganization(orgSlugOrId);
-    const gateway = await this.resolveGateway(organization.id, gatewayEndpoint);
+    const organization =
+      preResolved?.organization ?? (await this.resolveOrganization(orgSlugOrId));
+    const gateway =
+      preResolved?.gateway ?? (await this.resolveGateway(organization.id, gatewayEndpoint));
 
     // Enforce gateway auth
     const headers = req.headers || {};
@@ -174,6 +216,7 @@ export class GatewayResolverService {
       query,
       req.body,
       clientIp,
+      this.activeAuthConfigs(gateway),
     );
 
     if (!auth.isValid) {

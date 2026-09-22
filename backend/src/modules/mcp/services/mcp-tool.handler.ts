@@ -331,6 +331,7 @@ export class McpToolHandler {
     params: McpCallToolRequest,
     organizationId: string,
     userId?: string,
+    gatewayId?: string,
   ): Promise<McpCallToolResult> {
     if (!params.name) {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Tool name is required');
@@ -351,7 +352,14 @@ export class McpToolHandler {
       const result = await this.toolExecutorService.executeTool(
         tool.id,
         params.arguments || {},
-        { userId: userId || null, organizationId },
+        {
+          userId: userId || null,
+          organizationId,
+          // The gateway this call arrived through. The executor uses it to
+          // load `gateway_tools.securityPolicy` for this tool and enforce it
+          // on the outbound request; without it the policy is invisible here.
+          gatewayId: gatewayId ?? null,
+        },
       );
 
       this.metrics?.record(MetricType.MCP_TOOL_CALL, {
