@@ -110,7 +110,15 @@ describe('persistent history', () => {
   });
 
   it('never throws when the path cannot be written', () => {
-    expect(() => appendHistory('x', '/proc/definitely/not/writable/history')).not.toThrow();
+    // A path *through* a regular file: mkdir -p answers ENOTDIR on every
+    // platform, immediately. Do NOT reach for a system path like /proc
+    // here -- on Linux `mkdirSync('/proc/...', { recursive: true })` does
+    // not fail, it blocks forever, so this one assertion hung the whole
+    // CI leg for fifteen minutes and reported as cancelled (#657). It
+    // returned ENOENT instantly on macOS, which is why it looked fine.
+    const blocker = join(dir, 'a-file');
+    writeFileSync(blocker, 'not a directory');
+    expect(() => appendHistory('x', join(blocker, 'nested', 'history'))).not.toThrow();
   });
 
   it('is overridable, so a test or a sandbox does not touch the real one', () => {

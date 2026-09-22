@@ -241,13 +241,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: packages/${{ matrix.package }}/package-lock.json
 
-      # `npm install`, not `npm ci`, ON PURPOSE AND ONLY FOR NOW: three
+      # `npm install`, not `npm ci`, ON PURPOSE AND ONLY FOR NOW: two
       # of these lockfiles have rotted against their package.json and
       # `npm ci` refuses them outright —
       #   almyty-cli  lock is missing @almyty/models and @almyty/connections
-      #   chat-cli    lock is missing @types/react and ink-testing-library
       #   models-cli  lock still carries version 0.1.0 vs package.json 1.2.0
-      # Regenerate those three (`cd packages/<pkg> && npm install` and
+      # (chat-cli was a third; its lock is regenerated and `npm ci` clean.)
+      # Regenerate the last two (`cd packages/<pkg> && npm install` and
       # commit the lockfile), then switch this line to
       # `npm ci --ignore-scripts --legacy-peer-deps` to match every other
       # install in this workflow. Leaving it on `npm install` permanently
@@ -285,14 +285,6 @@ jobs:
           case "${{ matrix.package }}" in
             runner)
               npx vitest run --exclude '**/*.real.spec.ts' ;;
-            chat-cli)
-              # Its .tsx files leak ink render loops and the run never
-              # exits -- 135 tests pass, then the process holds open
-              # handles until the job timeout kills it, which reads as a
-              # cancelled leg rather than a failure. The forks pool does
-              # not contain it; the handles are in the main process. See
-              # #657. The other 96 tests still run.
-              npx vitest run --exclude '**/*.test.tsx' ;;
             acp-server)
               # integration.test.ts spawns the built binary, sleeps 500ms and
               # then talks JSON-RPC to it. It answers with an id but no
