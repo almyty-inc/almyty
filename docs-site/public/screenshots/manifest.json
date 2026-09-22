@@ -1,203 +1,968 @@
 {
-  "capturedAt": "2026-09-02T09:36:33.000Z",
+  "schemaVersion": 2,
   "baseUrl": "https://app.almyty.com",
-  "theme": "mixed",
-  "viewport": {
-    "width": 1440,
-    "height": 1100
-  },
   "screenshots": [
     {
-      "id": "auth-login",
-      "title": "Sign-in screen",
-      "path": "screenshots/auth-login.png"
+      "id": "agent-builder-autonomous",
+      "title": "agent builder autonomous",
+      "path": "screenshots/agent-builder-autonomous.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "c94b58f0f0c815fbb223492905bb6a79c98972f42157f255c2a44cf5cd844466"
     },
     {
-      "id": "auth-register",
-      "title": "Sign-up screen",
-      "path": "screenshots/auth-register.png"
+      "id": "agent-builder-empty",
+      "title": "agent builder empty",
+      "path": "screenshots/agent-builder-empty.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "eb4e16caf366576df0a2f76b92c0c544e598efa74f1026cc4bb5d5fcd7134a53"
     },
     {
-      "id": "dashboard-empty",
-      "title": "Empty-org dashboard \u2014 first-run onboarding checklist",
-      "path": "screenshots/dashboard-empty.png"
-    },
-    {
-      "id": "command-palette",
-      "title": "Global \u2318K command palette",
-      "path": "screenshots/command-palette.png"
-    },
-    {
-      "id": "apis-empty",
-      "title": "APIs page \u2014 empty state",
-      "path": "screenshots/apis-empty.png"
-    },
-    {
-      "id": "apis-import-dialog",
-      "title": "Import API dialog",
-      "path": "screenshots/apis-import-dialog.png"
-    },
-    {
-      "id": "apis-list",
-      "title": "APIs list with a Petstore import",
-      "path": "screenshots/apis-list.png"
-    },
-    {
-      "id": "tools-empty",
-      "title": "Tools page \u2014 empty state",
-      "path": "screenshots/tools-empty.png"
-    },
-    {
-      "id": "tools-create-dialog",
-      "title": "Create Tool dialog \u2014 5 execution methods",
-      "path": "screenshots/tools-create-dialog.png"
-    },
-    {
-      "id": "tools-list",
-      "title": "Tools list",
-      "path": "screenshots/tools-list.png"
-    },
-    {
-      "id": "gateways-empty",
-      "title": "Gateways page \u2014 empty state",
-      "path": "screenshots/gateways-empty.png"
-    },
-    {
-      "id": "gateways-create-dialog",
-      "title": "Create Gateway dialog (MCP / A2A / UTCP / Skills)",
-      "path": "screenshots/gateways-create-dialog.png"
-    },
-    {
-      "id": "gateway-detail-tools",
-      "title": "Gateway detail \u2014 Tools tab with scoping",
-      "path": "screenshots/gateway-detail-tools.png"
-    },
-    {
-      "id": "agents-empty",
-      "title": "Agents page \u2014 empty state",
-      "path": "screenshots/agents-empty.png"
+      "id": "agent-builder-node-palette",
+      "title": "agent builder node palette",
+      "path": "screenshots/agent-builder-node-palette.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "baf4fb6fa7d60074a0edc158e1ac8de98fff5bc195488d483fc717fb9b6cda7d"
     },
     {
       "id": "agent-builder",
       "title": "Visual agent DAG builder (react-flow)",
-      "path": "screenshots/agent-builder.png"
+      "path": "screenshots/agent-builder.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "aec23af9c643ccc4bd4957ae080a1dc4fc9ac41794999e73f56a0bcb689fc287"
     },
     {
-      "id": "llm-providers-empty",
-      "title": "Models page \u2014 empty state",
-      "path": "screenshots/llm-providers-empty.png"
+      "id": "agent-collab-debate",
+      "title": "agent collab debate",
+      "path": "screenshots/agent-collab-debate.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "0151ac29672c9601e031e34476a394c11370c36883f61a1cd0feff3cbf85436b"
     },
     {
-      "id": "llm-providers-create",
-      "title": "Add LLM Provider dialog",
-      "path": "screenshots/llm-providers-create.png"
+      "id": "agent-constraints",
+      "title": "Seeded support agent constraints",
+      "path": "screenshots/agent-constraints.png",
+      "capturedAt": "2026-09-22T15:03:56.228Z",
+      "status": "current",
+      "sha256": "92c5d4960db84bb41e769dcf7fba75f556869c6ef60a39fd0489c3c5ab69628c",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/agents"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed"
     },
     {
-      "id": "credentials-vault",
-      "title": "Credentials vault",
-      "path": "screenshots/credentials-vault.png"
+      "id": "agent-detail-overview",
+      "title": "Autonomous support agent overview with primary model and verifier panel",
+      "path": "screenshots/agent-detail-overview.png",
+      "capturedAt": "2026-09-22T15:02:31.998Z",
+      "status": "current",
+      "sha256": "b2f5761e661b123b4ac9b14adbc07cd48d90cdcfca9257e204dd59cc043b9359",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/agents"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed",
+      "notes": "Live seeded demo agent. Viewport framed to show configuration without environment-specific integration URLs."
     },
     {
-      "id": "credentials-add",
-      "title": "Add Credential dialog",
-      "path": "screenshots/credentials-add.png"
+      "id": "agent-skill-viewer",
+      "title": "agent skill viewer",
+      "path": "screenshots/agent-skill-viewer.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "0c857a615f0262d587219eebec75d75045dbfe9c1a62e05f610bceccc385b2df"
+    },
+    {
+      "id": "agent-skills",
+      "title": "agent skills",
+      "path": "screenshots/agent-skills.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "593c3669f7fb23bed93e701f190ac0ca4f95c6507eb260d8de9e09a4dae99370"
+    },
+    {
+      "id": "agent-verify-config-dialog",
+      "title": "Verification dialog showing policy and cross-vendor reviewer fields",
+      "path": "screenshots/agent-verify-config-dialog.png",
+      "capturedAt": "2026-09-22T15:04:43.634Z",
+      "status": "current",
+      "sha256": "44d320a8ab557a0c43d1c269698fed55477d51c98cdb5167783addeb04e14364",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/agents"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed",
+      "notes": "Upper portion of the scrollable verification dialog; no configuration saved."
+    },
+    {
+      "id": "agents-empty",
+      "title": "Agents page — empty state",
+      "path": "screenshots/agents-empty.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "3b65348a8fb2624e358c9496f97c908a1758e1c78b3f5da6afed186203082d96"
+    },
+    {
+      "id": "agents-list",
+      "title": "Agents list filtered to the seeded customer support agent",
+      "path": "screenshots/agents-list.png",
+      "capturedAt": "2026-09-22T15:00:19.849Z",
+      "status": "current",
+      "sha256": "60f6726d4c8fe298fb4e9626f31a26b1118386d99d3f7376afb91f589504d300",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/agents"
+      },
+      "sources": [
+        "frontend/src/pages/agents.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "087585b4f31390e541789fd98e10bfdbf1408481a73586a95cef1561565d690d",
+      "notes": "Live seeded demo organization; search filter excludes unrelated QA fixtures. Sidebar collapsed to omit account details."
+    },
+    {
+      "id": "analytics-agents",
+      "title": "Analytics → Agents tab with execution metrics",
+      "path": "screenshots/analytics-agents.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "aac9458b5d32268e06f804a44959e3f582c92170000f275c9cc6f8dd3993737f"
+    },
+    {
+      "id": "analytics-audit",
+      "title": "Analytics → Audit trail tab",
+      "path": "screenshots/analytics-audit.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "322b1a98ed79e74a991d63db46e55add636928e9ac064c2b6215c61d250cf67d"
+    },
+    {
+      "id": "analytics-gateways",
+      "title": "Analytics → Gateways tab with per-protocol traffic",
+      "path": "screenshots/analytics-gateways.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "b100364e3b9410879a7b8aa7a92091a3f45915b75f6e990ef8fdcbbc5cfc8b71"
     },
     {
       "id": "analytics-overview",
       "title": "Analytics overview",
-      "path": "screenshots/analytics-overview.png"
-    },
-    {
-      "id": "analytics-audit",
-      "title": "Analytics \u2192 Audit trail tab",
-      "path": "screenshots/analytics-audit.png"
-    },
-    {
-      "id": "memories",
-      "title": "Memories page",
-      "path": "screenshots/memories.png"
-    },
-    {
-      "id": "keyboard-shortcuts",
-      "title": "Keyboard shortcuts help dialog",
-      "path": "screenshots/keyboard-shortcuts.png"
+      "path": "screenshots/analytics-overview.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "2c89a541163e6230ad8acae778aca2f1114a03c876b61830c81069179575e0a4"
     },
     {
       "id": "analytics-tools",
-      "title": "Analytics \u2192 Tools tab with live execution stats",
-      "path": "screenshots/analytics-tools.png"
+      "title": "Analytics → Tools tab with live execution stats",
+      "path": "screenshots/analytics-tools.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "a8c0ea82905ed75db98946cdf6a8d25709011cd141e1a4274704f63a29234dab"
     },
     {
-      "id": "analytics-gateways",
-      "title": "Analytics \u2192 Gateways tab with per-protocol traffic",
-      "path": "screenshots/analytics-gateways.png"
+      "id": "api-auth-curl",
+      "title": "api auth curl",
+      "path": "screenshots/api-auth-curl.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "d1db4d4fc3f51620e849f2db1d31bb325ebbac76a07cde827801c58aeab2e3e1"
     },
     {
-      "id": "analytics-agents",
-      "title": "Analytics \u2192 Agents tab with execution metrics",
-      "path": "screenshots/analytics-agents.png"
+      "id": "api-detail",
+      "title": "api detail",
+      "path": "screenshots/api-detail.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "0cb3a683dc857424ad4669b8368bec0a52eee82c22546166b49b21656d88be4c"
     },
     {
-      "id": "apps-list",
-      "title": "Apps list with a customer-facing product",
-      "path": "screenshots/apps-list.png"
+      "id": "api-error-sample",
+      "title": "api error sample",
+      "path": "screenshots/api-error-sample.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "d9836462c748005884cb2d37cf9bda3bca5e61ea0abb3b21c65cbe3fbef28897"
     },
     {
-      "id": "apps-detail",
-      "title": "App detail page with Slack, Terminal, and Web distribution cards",
-      "path": "screenshots/apps-detail.png"
+      "id": "api-rate-limit-headers",
+      "title": "api rate limit headers",
+      "path": "screenshots/api-rate-limit-headers.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "79ff0cc3172ea7325cab0d62fd0ab1fe117fa252352761833cbfb5bb11ccf1ac"
     },
     {
-      "id": "apps-empty",
-      "title": "Empty app: not shipping anywhere yet",
-      "path": "screenshots/apps-empty.png"
+      "id": "apis-empty",
+      "title": "APIs page — empty state",
+      "path": "screenshots/apis-empty.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "a18b3c2d086d31a361ca273ba6c49a955a303563469e2a53295e0c27c3a71f23"
+    },
+    {
+      "id": "apis-import-dialog",
+      "title": "Import API dialog",
+      "path": "screenshots/apis-import-dialog.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "28119d9bbfe93b918cd001241b942364ea15e7c922dd501950dd98f9d8ba4e7e"
+    },
+    {
+      "id": "apis-list",
+      "title": "APIs list with a Petstore import",
+      "path": "screenshots/apis-list.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "3e1f0d974e9ed5acd89ad2ecd8dcc5c511705986e184e15bf9bc13bae8688d60"
+    },
+    {
+      "id": "approval-refund-820",
+      "title": "approval refund 820",
+      "path": "screenshots/approval-refund-820.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "b1c09457867b05eeda0c80f4544abad0d22deeee02cd295a35b43912107d8dcd"
+    },
+    {
+      "id": "approvals-empty",
+      "title": "approvals empty",
+      "path": "screenshots/approvals-empty.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "30414afdd97b2e1b08d18389cef65a56bfdc343ffd43c31ef6468b0600f406f7"
+    },
+    {
+      "id": "approvals-pending",
+      "title": "approvals pending",
+      "path": "screenshots/approvals-pending.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "55fe72de0843b510b95d3656c19f0d08984873f066762c6b09aaab1dcb632586"
     },
     {
       "id": "apps-agents",
       "title": "App Agents tab with the product default",
-      "path": "screenshots/apps-agents.png"
-    },
-    {
-      "id": "apps-settings",
-      "capturedAt": "2026-09-08T07:59:28.902Z",
-      "title": "App Settings tab with visitor privacy controls, cost ceiling, and rate limits",
-      "path": "screenshots/apps-settings.png"
-    },
-    {
-      "id": "apps-web-published",
-      "title": "Published Web app distribution",
-      "path": "screenshots/apps-web-published.png"
-    },
-    {
-      "id": "apps-hosted-chat",
-      "title": "Branded hosted chat surface",
-      "path": "screenshots/apps-hosted-chat.png"
-    },
-    {
-      "id": "apps-hosted-chat-privacy",
-      "capturedAt": "2026-09-08T08:04:35.743Z",
-      "title": "Hosted chat privacy menu with visitor export and deletion controls",
-      "path": "screenshots/apps-hosted-chat-privacy.png"
-    },
-    {
-      "id": "apps-slack-credentials",
-      "title": "Slack distribution with Bot token and Signing secret fields",
-      "path": "screenshots/apps-slack-credentials.png"
-    },
-    {
-      "id": "apps-slack-live",
-      "title": "Slack distribution published and live",
-      "path": "screenshots/apps-slack-live.png"
+      "path": "screenshots/apps-agents.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "c6d2dc6577758abf0317e3a632f586a4972e213c8dee161795963c57bb773ee9"
     },
     {
       "id": "apps-build-capabilities",
       "title": "Build capability refusal when Bun is unavailable",
-      "path": "screenshots/apps-build-capabilities.png"
+      "path": "screenshots/apps-build-capabilities.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "a54a37231df9605022d3f408f64fecd6195ddb0077a69382cafe75a3524fb8fd"
+    },
+    {
+      "id": "apps-detail",
+      "title": "App detail page with Slack, Terminal, and Web distribution cards",
+      "path": "screenshots/apps-detail.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "95b14e9928eddd271f9fa47d3960cee055507ddc689a440c36d66904b4bc88a2"
+    },
+    {
+      "id": "apps-empty",
+      "title": "Empty app: not shipping anywhere yet",
+      "path": "screenshots/apps-empty.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "d80ca650f5f082f9e2d803cbd375dd8087f35443921aa0771d648574ce6fbe7c"
+    },
+    {
+      "id": "apps-hosted-chat-privacy",
+      "title": "Hosted chat privacy menu with visitor export and deletion controls",
+      "path": "screenshots/apps-hosted-chat-privacy.png",
+      "capturedAt": "2026-09-08T08:04:35.743Z",
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "90449095be6a2c379383d6d016278be9d5c7bcd7263df10857626682d6b1b577"
     },
     {
       "id": "apps-hosted-chat-routing-failure",
       "title": "Hosted-chat wildcard routing failure",
-      "path": "screenshots/apps-hosted-chat-routing-failure.png"
+      "path": "screenshots/apps-hosted-chat-routing-failure.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "227adb55926cb6bf2c8e6aa8aebbadaa3fa3471e4276b1460bfa42420dbba784"
+    },
+    {
+      "id": "apps-hosted-chat",
+      "title": "Branded hosted chat surface",
+      "path": "screenshots/apps-hosted-chat.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "2b26f59866e2c3dd9729a1714c362bc04e9b2c7db86bc29355ede88547364899"
+    },
+    {
+      "id": "apps-list",
+      "title": "Apps list with a customer-facing product",
+      "path": "screenshots/apps-list.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "929359bfe6fd59140f7e18764d02813664cdb4c76c5879ccebcdb792cf9f3c54"
+    },
+    {
+      "id": "apps-settings",
+      "title": "App Settings tab with visitor privacy controls, cost ceiling, and rate limits",
+      "path": "screenshots/apps-settings.png",
+      "capturedAt": "2026-09-08T07:59:28.902Z",
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "61aeb5b71e0b969ab6367e30ef369f0fb38cfa9424488dfaef0bcf7087ba74ba"
+    },
+    {
+      "id": "apps-slack-credentials",
+      "title": "Slack distribution with Bot token and Signing secret fields",
+      "path": "screenshots/apps-slack-credentials.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "8ad236a0c90022ab382d59f5ff91fc04c5b4588c14192e59ca2d0e20c4a13d92"
+    },
+    {
+      "id": "apps-slack-live",
+      "title": "Slack distribution published and live",
+      "path": "screenshots/apps-slack-live.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "8ad236a0c90022ab382d59f5ff91fc04c5b4588c14192e59ca2d0e20c4a13d92"
+    },
+    {
+      "id": "apps-web-published",
+      "title": "Published Web app distribution",
+      "path": "screenshots/apps-web-published.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "73a8ceaf9161f967acb65a0739628d7aaa130eaa5f548b8193be984aa553b322"
+    },
+    {
+      "id": "auth-login",
+      "title": "Sign-in screen",
+      "path": "screenshots/auth-login.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "3ecef9358b4307987d32c815779c2f8b49358b8b3a37fec6d451a63ca1af2f9e"
+    },
+    {
+      "id": "auth-register",
+      "title": "Sign-up screen",
+      "path": "screenshots/auth-register.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "45370a6be997c16400943b1165dc7588d2c457d7dba9b73160b21e25ef3bb0bf"
+    },
+    {
+      "id": "cli-agents-help",
+      "title": "Agents CLI 1.5.0 help",
+      "path": "screenshots/cli/agents-help.png",
+      "capturedAt": "2026-09-22T13:42:14.000Z",
+      "status": "current",
+      "sha256": "ce9560c890c85cd02d2f2197c284b41d01d71dbc01aba4844921fb521e0e60e7",
+      "source": {
+        "kind": "published-cli",
+        "package": "@almyty/agents@1.5.0",
+        "command": "almyty-agents --help"
+      },
+      "sources": [
+        "packages/agents-cli/src",
+        "packages/agents-cli/package.json"
+      ],
+      "sourceDigest": "bca52111e3127bee68152141dc22e7499564ce2967d3a538d41958aa2f49f0b0"
+    },
+    {
+      "id": "cli-almyty-help",
+      "title": "almyty CLI 1.5.0 help",
+      "path": "screenshots/cli/almyty-help.png",
+      "capturedAt": "2026-09-22T13:42:14.000Z",
+      "status": "current",
+      "sha256": "127476c28bf06cb8875274993aabc45a03f804e1e21bea8de6bcc3cf4963c393",
+      "source": {
+        "kind": "published-cli",
+        "package": "@almyty/cli@1.5.0",
+        "command": "almyty --help"
+      },
+      "sources": [
+        "packages/almyty-cli/src",
+        "packages/almyty-cli/package.json"
+      ],
+      "sourceDigest": "5741b43e9021fb325aaf9292de652b617c3ac6b2216cc315949f29d0bc11babc",
+      "notes": "Rendered from the published binary using freeze; CLI refresh merged in #684."
+    },
+    {
+      "id": "cli-auth-help",
+      "title": "Auth CLI 1.5.0 help",
+      "path": "screenshots/cli/auth-help.png",
+      "capturedAt": "2026-09-22T13:42:14.000Z",
+      "status": "current",
+      "sha256": "bb5f75fd765b191b74ec5178246ed59c2375cec367bca8541d38ee636f9df54d",
+      "source": {
+        "kind": "published-cli",
+        "package": "@almyty/auth@1.5.0",
+        "command": "almyty-auth --help"
+      },
+      "sources": [
+        "packages/auth-cli/src",
+        "packages/auth-cli/package.json"
+      ],
+      "sourceDigest": "405c3fc9c8cbee2db49e5a9a4cd81dbe24e4814bdb7101deaafd84474cca5d23",
+      "notes": "Local home directory normalized to ~ before rendering; no personal machine path published."
+    },
+    {
+      "id": "cli-chat-help",
+      "title": "Chat CLI 1.5.0 help",
+      "path": "screenshots/cli/chat-help.png",
+      "capturedAt": "2026-09-22T13:42:14.000Z",
+      "status": "current",
+      "sha256": "7bd2f9304e5fd0b835700609dd4fc65a2e1875070670e879c411b13507da17e4",
+      "source": {
+        "kind": "published-cli",
+        "package": "@almyty/chat@1.5.0",
+        "command": "almyty-chat --help"
+      },
+      "sources": [
+        "packages/chat-cli/src",
+        "packages/chat-cli/package.json"
+      ],
+      "sourceDigest": "734bc72a10ff7645243e3ab8e186c1426f3d841112af24160b422a3780aead3f"
+    },
+    {
+      "id": "cli-mcp-server-help",
+      "title": "MCP server CLI 1.5.0 help",
+      "path": "screenshots/cli/mcp-server-help.png",
+      "capturedAt": "2026-09-22T13:42:14.000Z",
+      "status": "current",
+      "sha256": "ca20cb3aa051362aa5c2bdfc09da337171142ca458566e69d736430b6db59b3f",
+      "source": {
+        "kind": "published-cli",
+        "package": "@almyty/mcp-server@1.5.0",
+        "command": "almyty-mcp --help"
+      },
+      "sources": [
+        "packages/mcp-server/src",
+        "packages/mcp-server/package.json"
+      ],
+      "sourceDigest": "adc0006f8ca5e8ac3682f2a496933292632f5a104361637df910be86dad9b9d0"
+    },
+    {
+      "id": "cli-skills-help",
+      "title": "Skills CLI 1.5.0 help",
+      "path": "screenshots/cli/skills-help.png",
+      "capturedAt": "2026-09-22T13:42:14.000Z",
+      "status": "current",
+      "sha256": "b6859549f586c2f3312554002948e2da588722c6440a4eaf11ec186166205f72",
+      "source": {
+        "kind": "published-cli",
+        "package": "@almyty/skills@1.5.0",
+        "command": "almyty-skills --help"
+      },
+      "sources": [
+        "packages/skills-cli/src",
+        "packages/skills-cli/package.json"
+      ],
+      "sourceDigest": "f5d74c59f2e94233b69cd9176698ff75e24b864e0709fe8b75442cb7a46709b2"
+    },
+    {
+      "id": "command-palette",
+      "title": "Global ⌘K command palette",
+      "path": "screenshots/command-palette.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "492d12ae7c8da3928998e6e3e825311c8bc82ec2c69092afa3baa6e2f59864e2"
+    },
+    {
+      "id": "credentials-add",
+      "title": "Add Credential dialog",
+      "path": "screenshots/credentials-add.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "ff4cb9f506c0571492b1aadccd885e3be89d273d132ae5dc90bf6a245b3bf8c6"
+    },
+    {
+      "id": "credentials-vault",
+      "title": "Credentials vault",
+      "path": "screenshots/credentials-vault.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "64394c98a3a9f4c9baf4c78af32747c4a41d8b8ae49c5d84025b22dc7d0b5502"
+    },
+    {
+      "id": "dashboard-empty",
+      "title": "Empty-org dashboard — first-run onboarding checklist",
+      "path": "screenshots/dashboard-empty.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "d602270b684628809a3cab2641db4b24e47ef40ccc51a9bc263b27188d38b38a"
+    },
+    {
+      "id": "dashboard-populated",
+      "title": "dashboard populated",
+      "path": "screenshots/dashboard-populated.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "3446843cf086e6d51b8893ba316dbaf5d50395cb121bce5e0db1660576f66a24"
+    },
+    {
+      "id": "gateway-detail-tools",
+      "title": "Gateway detail — Tools tab with scoping",
+      "path": "screenshots/gateway-detail-tools.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "c638eca3e8262999cb2a9015d486ec11e84b8f0337b06fc7c820478d997828c4"
+    },
+    {
+      "id": "gateway-detail",
+      "title": "gateway detail",
+      "path": "screenshots/gateway-detail.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "341c3513b9c2d32056a1f2a8bd0e7c5494e946eb61f975d1ea5e5754bf6ae76a"
+    },
+    {
+      "id": "gateway-petstore-config",
+      "title": "gateway petstore config",
+      "path": "screenshots/gateway-petstore-config.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "a18d4dc7315900a7268221676d2ef15c793f39fc5bd33c1b945d971f3fade1b2"
+    },
+    {
+      "id": "gateway-petstore-integration",
+      "title": "gateway petstore integration",
+      "path": "screenshots/gateway-petstore-integration.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "8ce35bad186b518728f4f61f25a05718db98a9edb94154da5333ea9f26878420"
+    },
+    {
+      "id": "gateways-create-dialog",
+      "title": "Create Gateway dialog (MCP / A2A / UTCP / Skills)",
+      "path": "screenshots/gateways-create-dialog.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "6b9fdaff72e50113f7389cb59a35a04217971ddecbafdebe2325d810931cfa38"
+    },
+    {
+      "id": "gateways-empty",
+      "title": "Gateways page — empty state",
+      "path": "screenshots/gateways-empty.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "4cadb5f50e5b93ac41d9f3f651692d9b466f3c72105aa0d0d6033b0c603f04e2"
+    },
+    {
+      "id": "interfaces-channel-config",
+      "title": "interfaces channel config",
+      "path": "screenshots/interfaces-channel-config.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "5acf3f1ffb3494a664e19f5589e626d7a1396ee1cd6e1fc4736f9f1603e4f73b"
+    },
+    {
+      "id": "interfaces-channel-setup",
+      "title": "interfaces channel setup",
+      "path": "screenshots/interfaces-channel-setup.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "981ad7f99f7e76e0d34d788f046417d0caba96e2fc133b53c60b40a11ee657ab"
+    },
+    {
+      "id": "keyboard-shortcuts",
+      "title": "Keyboard shortcuts help dialog",
+      "path": "screenshots/keyboard-shortcuts.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "27864f372797b0d45181737aa4ce15a6752c5f3f518f33c0a0d55c5d18f18e32"
+    },
+    {
+      "id": "llm-providers-create",
+      "title": "Add LLM Provider dialog",
+      "path": "screenshots/llm-providers-create.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "b890a50dca4543856c488141c13a8988cc3bf08ed257e84e28c5c8ea55137943"
+    },
+    {
+      "id": "llm-providers-empty",
+      "title": "Models page — empty state",
+      "path": "screenshots/llm-providers-empty.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "6bfcaeca65d1ee8ff87aec86d7acd2cd5062bdbb90298048250607fee173357d"
+    },
+    {
+      "id": "memories",
+      "title": "Memories page",
+      "path": "screenshots/memories.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "13164c77bb39b466ace13d6e739bdb0718d1dd4e6a45c3cb8bd6561694679d51"
+    },
+    {
+      "id": "memory-write",
+      "title": "memory write",
+      "path": "screenshots/memory-write.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "9c0843b06e418a05c779d3141463e227d6f205fad6fc1378ffbfd17534c23d97"
+    },
+    {
+      "id": "memory",
+      "title": "memory",
+      "path": "screenshots/memory.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "04fc052b6d18f330fffea2e529243b88981c93dab137a95b3354ab170d39be68"
+    },
+    {
+      "id": "models",
+      "title": "models",
+      "path": "screenshots/models.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "58f67d8d688b2735878ae231b17e929665301965e15f553118fd82c8d97e8d71"
+    },
+    {
+      "id": "quickstart-api-imported",
+      "title": "quickstart api imported",
+      "path": "screenshots/quickstart-api-imported.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "fb2dbbcf3dbdece6754f19bf741e0aa5b6a47010db5442be4326da2c08e4fa02"
+    },
+    {
+      "id": "quickstart-claude-config",
+      "title": "quickstart claude config",
+      "path": "screenshots/quickstart-claude-config.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "9383ece88b0d876961032b01d060c51516a3056aeb02c8fea95b3c75b2f216c4"
+    },
+    {
+      "id": "quickstart-gateway-mcp",
+      "title": "quickstart gateway mcp",
+      "path": "screenshots/quickstart-gateway-mcp.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "a99843fba87607e705e1d7dc8414225592b1e8fc14fbabf77637ad5885d4ce10"
+    },
+    {
+      "id": "quickstart-mcp-endpoints",
+      "title": "quickstart mcp endpoints",
+      "path": "screenshots/quickstart-mcp-endpoints.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "18537595dad1a5455ed425f126ef48e436da3d9ee28c322627ebdbf3ecefc7f5"
+    },
+    {
+      "id": "runner-detail",
+      "title": "runner detail",
+      "path": "screenshots/runner-detail.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "1b1cd0d9afbed153cd9e0a2018e6b8cdb044b93920be5080745dc94b411db426"
+    },
+    {
+      "id": "runner-new",
+      "title": "runner new",
+      "path": "screenshots/runner-new.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "63c56e0fe2d858941dce74b0b488a1356d1d776448da1186a79578120f904546"
+    },
+    {
+      "id": "runners-list",
+      "title": "runners list",
+      "path": "screenshots/runners-list.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "3beefba3a06dfb389778a1034ac8a99329a34bd1dd2e90c7a6245ab5f596a632"
+    },
+    {
+      "id": "schedule-config",
+      "title": "schedule config",
+      "path": "screenshots/schedule-config.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "fba222bc1d9f56a0e7f5a12170db4c328889d7b0a00b9c388469486692325a05"
+    },
+    {
+      "id": "self-hosting-compose",
+      "title": "self hosting compose",
+      "path": "screenshots/self-hosting-compose.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "44cc16af94a40f8e2260d0289bb385f90f7c18e51831f73f2281f2588419896a"
+    },
+    {
+      "id": "settings-profile",
+      "title": "settings profile",
+      "path": "screenshots/settings-profile.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "3349356621d3414077c5860406446420e6cc5fa725762d4ad503edee74b4b7e0"
+    },
+    {
+      "id": "settings-security",
+      "title": "settings security",
+      "path": "screenshots/settings-security.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "d225d4b0f46f5b35a98058656971cf7bd96ef0720b15bf413cffd47fabf79a82"
+    },
+    {
+      "id": "settings-teams",
+      "title": "settings teams",
+      "path": "screenshots/settings-teams.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "945d55a82fc88087fc3b5b0bc3adbfc3636fedce73461151ee73130cf8b69543"
+    },
+    {
+      "id": "support-agent-constraints",
+      "title": "Seeded support agent constraints",
+      "path": "screenshots/support-agent-constraints.png",
+      "capturedAt": "2026-09-22T15:03:56.228Z",
+      "status": "current",
+      "sha256": "92c5d4960db84bb41e769dcf7fba75f556869c6ef60a39fd0489c3c5ab69628c",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/agents"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed"
+    },
+    {
+      "id": "support-agent-overview",
+      "title": "Autonomous support agent overview with primary model and verifier panel",
+      "path": "screenshots/support-agent-overview.png",
+      "capturedAt": "2026-09-22T15:02:31.998Z",
+      "status": "current",
+      "sha256": "b2f5761e661b123b4ac9b14adbc07cd48d90cdcfca9257e204dd59cc043b9359",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/agents"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed",
+      "notes": "Live seeded demo agent. Viewport framed to show configuration without environment-specific integration URLs."
+    },
+    {
+      "id": "support-agent-runs",
+      "title": "Seeded support agent autonomous run history with costs and outcomes",
+      "path": "screenshots/support-agent-runs.png",
+      "capturedAt": "2026-09-22T15:03:24.398Z",
+      "status": "current",
+      "sha256": "6f86d21633ab3174563eda7271b71a3df3b4f60e17c674f6b969b0c215de0b70",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/agents"
+      },
+      "sources": [
+        "frontend/src/pages/agent-detail.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed"
+    },
+    {
+      "id": "tool-detail",
+      "title": "tool detail",
+      "path": "screenshots/tool-detail.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "46239450d8f268ae84a2066b13de2bcc9de0ab3171b2258f5ce42a3a45cad430"
+    },
+    {
+      "id": "tools-create-dialog",
+      "title": "Create Tool dialog — 5 execution methods",
+      "path": "screenshots/tools-create-dialog.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "5722f2ff4938248b8cf46c3687eb054790154dc49d9a032df1bde420e5d7fc4f"
+    },
+    {
+      "id": "tools-empty",
+      "title": "Tools page — empty state",
+      "path": "screenshots/tools-empty.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "8623dbd1af00d96a0d7a0aa0a95c1932e008c462c39f8386b174732b9fb10519"
+    },
+    {
+      "id": "tools-list",
+      "title": "Tools list",
+      "path": "screenshots/tools-list.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "f30472439f44f3e409aa8edb9d8df2d106c99e41eee4767f58331ae0dbabcd37"
+    },
+    {
+      "id": "tools",
+      "title": "tools",
+      "path": "screenshots/tools.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "606dac17287b9e1b96c62c97b473b23443f40c43d677bd0ad9ae399432270076"
+    },
+    {
+      "id": "versioning-history",
+      "title": "versioning history",
+      "path": "screenshots/versioning-history.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "c7b92cf8167576870f5fae2c2d206e3eb696a141dcc6014cce78745cd58f50be"
+    },
+    {
+      "id": "versioning",
+      "title": "versioning",
+      "path": "screenshots/versioning.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "89a8e774481444845575915d7ac3f9d02d10061feebdb16d71db34d7c25e349d"
+    },
+    {
+      "id": "webhook-config",
+      "title": "webhook config",
+      "path": "screenshots/webhook-config.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "b546ba18585fc5f8c0799fecc566c9d03dca890ebc8f855c182a2aaabbf2c083"
+    },
+    {
+      "id": "widget-builder",
+      "title": "widget builder",
+      "path": "screenshots/widget-builder.png",
+      "capturedAt": null,
+      "status": "needs-recapture",
+      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "sha256": "3e007ef828b2789531a98aa22d9ba9f573f0fbc419ec4fea57d99accf938a991"
     }
   ]
 }
