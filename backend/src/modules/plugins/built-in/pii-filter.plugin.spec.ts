@@ -48,7 +48,13 @@ describe('PiiFilterPlugin - Real Business Logic', () => {
 
       expect(definition.name).toBe('PII Filter');
       expect(definition.version).toBe('1.0.0');
-      expect(definition.isActive).toBe(true);
+      // Off by default, unlike the other built-ins: with PRE_TOOL_EXECUTION
+      // registered this rewrites tool PARAMETERS, so an active filter would
+      // turn send_email(to: 'alice@example.com') into '****@example.com'
+      // and the call would still succeed. A compliance policy that enforces
+      // it still runs it -- executeHook's gate is
+      // `!isActive && enforcedSettings === undefined`.
+      expect(definition.isActive).toBe(false);
       expect(definition.configuration.priority).toBe(90); // High priority for security
     });
 
@@ -66,13 +72,24 @@ describe('PiiFilterPlugin - Real Business Logic', () => {
       expect(definition.capabilities.dataFormats).toEqual(['json', 'xml', 'yaml']);
     });
 
-    it('should define hooks with correct handlers', () => {
+    it('registers a handler for every hook it advertises', () => {
       const definition = plugin.getPluginDefinition();
 
-      expect(definition.hooks).toHaveLength(3);
-      expect(definition.hooks[0].handler).toBe('filterPiiFromRequest');
-      expect(definition.hooks[1].handler).toBe('filterPiiFromResponse');
-      expect(definition.hooks[2].handler).toBe('filterPiiFromData');
+      // Keyed by hook type rather than by position: the assertion used to
+      // pin the array at length 3, which is what made the missing
+      // PRE_TOOL_EXECUTION entry -- the only hook type the product
+      // actually invokes -- look like the intended shape.
+      const byType = Object.fromEntries(definition.hooks.map((h) => [h.type, h.handler]));
+
+      expect(byType).toEqual({
+        [PluginHookType.PRE_REQUEST]: 'filterPiiFromRequest',
+        [PluginHookType.POST_RESPONSE]: 'filterPiiFromResponse',
+        [PluginHookType.PRE_TOOL_EXECUTION]: 'filterPiiFromRequest',
+        [PluginHookType.DATA_FILTER]: 'filterPiiFromData',
+      });
+      expect(Object.keys(byType).sort()).toEqual(
+        [...definition.capabilities.hooks].map(String).sort(),
+      );
     });
   });
 

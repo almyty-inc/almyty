@@ -475,8 +475,16 @@ export class GatewayAuthValidators {
       // match the gateway's owning org. A stale token with a
       // gatewayId that survived a cross-tenant gateway rename
       // would otherwise get through.
-      if (oauthToken.organizationId !== authConfig.gateway?.organizationId &&
-          authConfig.gateway?.organizationId !== undefined) {
+      //
+      // This read `oauthToken.organizationId !== authConfig.gateway?.organizationId
+      // && authConfig.gateway?.organizationId !== undefined`, and the one
+      // production caller (GatewayAuthService.authenticateRequest) loads
+      // the auth configs without their `gateway` relation — so the second
+      // clause was always false and the guard never ran once. Refusing
+      // when the owning org cannot be established is the only reading
+      // that leaves the check any force; the relation is loaded now.
+      const gatewayOrgId = authConfig.gateway?.organizationId;
+      if (!gatewayOrgId || oauthToken.organizationId !== gatewayOrgId) {
         return {
           isValid: false,
           error: 'OAuth2 token not bound to this gateway',

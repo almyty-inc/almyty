@@ -52,12 +52,20 @@ export class CreateApiKeyDto {
   scopes?: string[];
 
   @ApiPropertyOptional({
-    description: 'API key expiration date',
+    description: 'API key expiration date, ISO 8601',
     example: '2024-12-31T23:59:59.000Z',
   })
   @IsOptional()
   @IsDateString()
-  expiresAt?: Date;
+  // A string, because that is what arrives and what @IsDateString
+  // accepts. It was declared `Date` with no @Type(() => Date), so
+  // class-transformer left the string in place and the service assigned
+  // it straight to a `timestamp` column: the row was right, but the
+  // object handed back from createApiKey carried a string where every
+  // read path carries a Date, and ApiKey.isExpired() compares it with
+  // `new Date() > this.expiresAt` -- a Date-vs-string comparison that
+  // silently degrades to a lexicographic one.
+  expiresAt?: string;
 
   @ApiPropertyOptional({
     description: 'Rate limiting configuration',

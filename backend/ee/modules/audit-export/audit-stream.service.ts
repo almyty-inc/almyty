@@ -7,6 +7,8 @@ import {
   AuditStreamTarget,
 } from '../../../src/entities/audit-stream-config.entity';
 import { AuditLog } from '../../../src/entities/audit-log.entity';
+import { Organization } from '../../../src/entities/organization.entity';
+import { decideEgress } from '../../../src/modules/connections/egress-policy';
 
 export interface CreateStreamConfigInput {
   organizationId: string;
@@ -42,6 +44,8 @@ export class AuditStreamService {
   constructor(
     @InjectRepository(AuditStreamConfig)
     private readonly configs: Repository<AuditStreamConfig>,
+    @InjectRepository(Organization)
+    private readonly organizations: Repository<Organization>,
   ) {}
 
   // ── Config CRUD ──
@@ -51,15 +55,49 @@ export class AuditStreamService {
       throw new BadRequestException(`unsupported target: ${input.target}`);
     }
     if (!input.endpoint?.trim()) throw new BadRequestException('endpoint is required');
+    const endpoint = input.endpoint.trim();
+    await this.assertEndpointAllowed(input.organizationId, endpoint);
     const row = this.configs.create({
       organizationId: input.organizationId,
       target: input.target,
-      endpoint: input.endpoint.trim(),
+      endpoint,
       token: input.token ?? null,
       actionFilter: input.actionFilter?.length ? input.actionFilter : null,
       enabled: input.enabled ?? true,
     });
     return this.configs.save(row);
+  }
+
+  /**
+   * A SIEM endpoint is a URL an admin types that the server then calls on
+   * the org's behalf, so it goes through the same gate as every other
+   * such URL in the product (`decideEgress`): public hosts pass the SSRF
+   * validator, and a private, loopback or link-local host passes only if
+   * it is on the organization's `settings.egressAllowlist`.
+   *
+   * Checked at write time, once, rather than per delivery -- the same
+   * place and for the same reason as the provider save path in
+   * `llm-providers.service`. The endpoint column is write-once: there is
+   * no update route, so a stored row was gated here.
+   */
+  private async assertEndpointAllowed(organizationId: string, endpoint: string): Promise<void> {
+    let allowlist: string[] = [];
+    try {
+      const org = await this.organizations.findOne({ where: { id: organizationId } });
+      allowlist = org?.settings?.egressAllowlist ?? [];
+    } catch (err: any) {
+      // Failing open here would defeat the check, so an unreadable org
+      // simply gets the strict public-only rule.
+      this.logger.warn(`egress allowlist lookup failed for ${organizationId}: ${err?.message ?? err}`);
+    }
+    const decision = decideEgress(endpoint, { allowlist });
+    if (!decision.allowed) {
+      throw new BadRequestException({
+        code: 'EGRESS_NOT_ALLOWED',
+        message: `this SIEM endpoint cannot be called: ${decision.reason}`,
+        reason: decision.reason,
+      });
+    }
   }
 
   async list(organizationId: string): Promise<AuditStreamConfig[]> {
