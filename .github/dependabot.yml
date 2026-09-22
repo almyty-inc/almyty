@@ -64,6 +64,13 @@ updates:
       # arrived inside the group below in #674 and broke development.
       - dependency-name: "@nestjs/*"
         update-types: ["version-update:semver-major"]
+      # v13 depends on an ESM-only @apidevtools/json-schema-ref-parser, so
+      # CommonJS Jest fails with "Must use import to load ES Module" and
+      # the whole backend suite stops loading. Pinned to 12 in #682; this
+      # ignore was missing, so dependabot re-proposed 13 as #691 within
+      # the hour. Moves with the same ESM migration as Nest 12.
+      - dependency-name: "@apidevtools/swagger-parser"
+        update-types: ["version-update:semver-major"]
     groups:
       backend-minor-and-patch:
         applies-to: version-updates
