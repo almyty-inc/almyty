@@ -74,7 +74,10 @@ Built-in connectors, by kind:
 | `deployment` | Modal, Baseten, RunPod, plus one connector per registered [deployment adapter](/models/deployments#adapters), derived from the adapter's own config schema |
 | `cloud` | Amazon Web Services (cross-account role or key pair), Google Cloud (service account), Microsoft Azure (app registration), DigitalOcean (personal access token) |
 | `registry` | S3-compatible registry (endpoint, region, bucket, prefix, access keys), Hugging Face Hub |
-| `memory`, `mcp`, `tool_source`, `channel` | Memory backend over HTTP, MCP server, OpenAPI document, outbound webhook |
+| `memory`, `mcp`, `tool_source` | Memory backend over HTTP, MCP server, OpenAPI document |
+| `channel` | Slack, Discord, Telegram, Microsoft Teams, Google Chat, Signal, Matrix, IRC, WhatsApp (Twilio), WhatsApp Cloud API (Meta), SMS (Twilio), Email (Resend), and a signed outbound webhook for anything else |
+
+Channel connectors are how an agent reaches people where they already talk: every one of them except the plain outbound webhook both sends and receives, so a connected channel is a two-way conversation with the agent, not a notification feed. Each carries the credential that platform actually uses (a Slack bot token from an OAuth install or pasted from the app config, a Discord bot token, a Telegram BotFather token, an Azure Bot registration for Teams, a Twilio account for SMS and WhatsApp or Meta's Cloud API directly, a Resend key for mail, a bridge URL for Signal and IRC, an access token for a Matrix homeserver), and the [channel adapters](/interfaces) do the rest.
 
 Inference connectors reuse the provider catalog for names, key pages, docs and base URLs, so a vendor is described once. SambaNova and Novita serve their model lists without a key, so a probe would prove reachability only; they take a key on the [provider form](/llm-providers) instead.
 
@@ -82,7 +85,7 @@ Admins can add connectors the catalog does not have: any OpenAI-compatible endpo
 
 ## Governance
 
-Organizations with the `connections_governance` entitlement (Enterprise) set rules over the whole layer:
+Organizations with the `connections_governance` entitlement (the Business and Enterprise plans) set rules over the whole layer:
 
 - **Connector allowlists and denylists**: which connectors may be connected at all, for organization connections, personal ones, or both.
 - **Scope rules**: what an agent, workspace, user, team or role may resolve, optionally only in some environments (an agent tagged `production`, for example); a rule can require organization-owned connections and only connectors on an enabled allowlist.
