@@ -1,9 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../entities/llm-provider.entity';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
+import { Organization } from '../../entities/organization.entity';
+import { decideEgress, hostMatches } from '../connections/egress-policy';
 
 /** Where a model card's endpoint provider row says it came from. */
 export const ENDPOINT_MANAGED_KIND = 'model_endpoint';
@@ -42,6 +44,7 @@ export class EndpointProviderHelper {
   constructor(
     @InjectRepository(LlmProvider) private readonly providers: Repository<LlmProvider>,
     private readonly secrets: LlmProviderSecretsHelper,
+    @InjectRepository(Organization) private readonly organizations: Repository<Organization>,
   ) {}
 
   /**
@@ -52,14 +55,55 @@ export class EndpointProviderHelper {
    * LiteLLM server puts its OpenAI surface.
    */
   static baseFor(url: string, declared?: string | null): string {
-    const chosen = (declared ?? url ?? '').trim().replace(/\/+$/, '');
-    if (!chosen) return '';
+    const raw = (declared ?? url ?? '').trim();
+    if (!raw) return '';
+    // Parsed rather than string-trimmed: the previous version never built
+    // a URL, so a '#' in the submitted value silently truncated everything
+    // after it at request time and the path the server actually dialled
+    // was not the one the gate below judged.
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      return '';
+    }
+    parsed.hash = '';
+    parsed.search = '';
+    const chosen = parsed.toString().replace(/\/+$/, '');
     if (/\/(v\d+[a-z]*|openai|inference)(\/|$)/i.test(chosen)) return chosen;
     return `${chosen}/v1`;
   }
 
+  /**
+   * The same gate LlmProvidersService applies on create and update.
+   *
+   * This helper writes `llm_providers.configuration.apiUrl` too, via
+   * POST /models/register-endpoint, and it did so without the check — so
+   * the documented single gate for user-supplied LLM URLs had a second
+   * door. The chat path re-gates at request time in safe-request.ts, but
+   * provider-usage does not: it fetched the URL and put 300 bytes of the
+   * response body into the sync error.
+   */
+  private async assertEgressAllowed(apiUrl: string, organizationId: string): Promise<string | undefined> {
+    if (!apiUrl) return undefined;
+    const organization = await this.organizations.findOne({ where: { id: organizationId } });
+    const allowlist = organization?.settings?.egressAllowlist ?? [];
+    const decision = decideEgress(apiUrl, { allowlist });
+    if (!decision.allowed) {
+      throw new BadRequestException({ code: 'EGRESS_NOT_ALLOWED', message: decision.reason });
+    }
+    let host: string | undefined;
+    try {
+      host = new URL(apiUrl).hostname;
+    } catch {
+      return undefined;
+    }
+    return allowlist.some((pattern) => hostMatches(host as string, pattern)) ? host : undefined;
+  }
+
   async upsert(input: EndpointProviderInput): Promise<LlmProvider> {
     const apiUrl = EndpointProviderHelper.baseFor(input.apiUrl);
+    const approvedHost = await this.assertEgressAllowed(apiUrl, input.organizationId);
     let provider = input.providerId
       ? await this.providers.findOne({ where: { id: input.providerId, organizationId: input.organizationId } })
       : null;
@@ -84,7 +128,14 @@ export class EndpointProviderHelper {
     provider.type = LlmProviderType.OPENAI;
     provider.status = LlmProviderStatus.ACTIVE;
     provider.isHealthy = true;
-    provider.configuration = { ...(provider.configuration ?? {}), apiUrl, model: input.model };
+    provider.configuration = {
+      ...(provider.configuration ?? {}),
+      apiUrl,
+      model: input.model,
+      // Never from a caller: the stamp is what lets a name past DNS
+      // pinning at connect.
+      ...(approvedHost ? { egressApprovedHost: approvedHost } : {}),
+    };
     provider.metadata = { ...(provider.metadata ?? {}), managedBy, endpointRegion: input.region ?? null } as LlmProvider['metadata'];
     const saved = await this.providers.save(provider);
 

@@ -56,12 +56,13 @@ export class GoogleChatAdapter extends BaseAdapter {
       body.thread = { name: threadContext.threadId };
     }
 
+    this.assertEgress(webhookUrl);
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
-    const res = await (fetch as any)(webhookUrl, {
+    const res = await (fetch as any)(webhookUrl, this.egressInit({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    });
+    }));
 
     const answer = await this.readJsonBody(res);
     const error = answer?.error;

@@ -1,4 +1,10 @@
 import axios, { AxiosInstance } from 'axios';
+import {
+  ollamaPrivateUrlsAllowed,
+  validateUrl,
+  validateUrlAllowingPrivate,
+} from '../../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 
 import {
   ActualState,
@@ -25,7 +31,7 @@ export class OllamaAdapter implements ModelProviderAdapter {
   readonly key = 'ollama';
   readonly displayName = 'Ollama (local or remote server)';
 
-  constructor(private readonly http: AxiosInstance = axios.create({ timeout: 10 * 60_000 })) {}
+  constructor(private readonly http: AxiosInstance = axios.create({ timeout: 10 * 60_000, maxRedirects: 0, httpAgent: ssrfSafeHttpAgent, httpsAgent: ssrfSafeHttpsAgent })) {}
 
   capabilities(): AdapterCapabilities {
     return {
@@ -74,8 +80,30 @@ export class OllamaAdapter implements ModelProviderAdapter {
     throw Object.assign(new Error(message), { code: 'ADAPTER_ERROR', status });
   }
 
+  /**
+   * The server URL, gated.
+   *
+   * `providerConfig` is whatever an org admin posted to
+   * /model-deployments; nothing on that path validates a URL (the create
+   * check is a JSON-schema shape check). Ungated, a deployment pointed at
+   * `http://169.254.169.254/` made the reconcile worker issue the request
+   * and wrote the outcome into `lastError`, which GET /model-deployments/:id
+   * returns unmasked — an internal probe with a readable verdict.
+   *
+   * A machine-local Ollama is the normal self-host case, so the
+   * OLLAMA_ALLOW_PRIVATE_URLS hatch applies here exactly as it does on the
+   * provider save path: http(s) only, no embedded credentials, private
+   * ranges permitted only when the operator switched them on.
+   */
   private base(cfg: Record<string, any>): string {
-    return String(cfg.baseUrl ?? 'http://localhost:11434').replace(/\/+$/, '');
+    const raw = String(cfg.baseUrl ?? 'http://localhost:11434').replace(/\/+$/, '');
+    const check = ollamaPrivateUrlsAllowed() ? validateUrlAllowingPrivate(raw) : validateUrl(raw);
+    if (!check.valid) {
+      throw Object.assign(new Error(`Ollama server URL refused: ${check.error}`), {
+        code: 'ADAPTER_CONFIG',
+      });
+    }
+    return raw;
   }
 
   /** How the server gets the weights: a pull target or a create-from path. */

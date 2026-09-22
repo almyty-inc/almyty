@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { safeFetch } from '../../common/security/safe-fetch';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -108,17 +109,22 @@ export class ProviderUsageService {
     );
   }
 
-  /** Thin wrapper around global fetch — the single seam tests mock. */
+  /**
+   * Thin wrapper around global fetch — the single seam tests mock.
+   *
+   * Gated, and the upstream body is no longer quoted back. `url` is built
+   * from `provider.configuration.apiUrl`, which a caller supplies, and
+   * this is the one consumer of that column that does not re-gate at
+   * request time the way safe-request.ts does — so an internal address
+   * reached here returned 300 bytes of its response in the sync error.
+   */
   protected async fetchJson(
     url: string,
     headers: Record<string, string>,
   ): Promise<any> {
-    const res = await fetch(url, { method: 'GET', headers });
+    const res = await safeFetch(url, { method: 'GET', headers });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(
-        `HTTP ${res.status} from ${url}: ${body.slice(0, 300)}`,
-      );
+      throw new Error(`the usage API answered HTTP ${res.status}`);
     }
     return res.json();
   }

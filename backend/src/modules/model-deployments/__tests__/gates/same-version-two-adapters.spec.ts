@@ -77,7 +77,11 @@ describe('gate 2: one ModelVersion, two adapters, provider specifics never cross
     modelRegistry = fakeRegistry();
     service = new ModelDeploymentsService(deployments as any, versions as any, credentials as any, queue as any, registry, fakeEnvelope as any, audit as any, modelRegistry as any);
     providerRows = fakeRepo<any>(() => new LlmProvider());
-    const endpointProviders = new EndpointProviderHelper(providerRows as any, { applyKey: jest.fn(async () => undefined) } as any);
+    const endpointProviders = new EndpointProviderHelper(
+      providerRows as any,
+      { applyKey: jest.fn(async () => undefined) } as any,
+      fakeRepo<any>(() => ({})) as any,
+    );
     processor = new ModelDeploymentsProcessor(queue as any, deployments as any, versions as any, models as any, budgets as any, registry, service, { emit: jest.fn(async () => undefined) } as any, endpointProviders);
 
     // Only providerType and providerConfig differ between the two requests.
