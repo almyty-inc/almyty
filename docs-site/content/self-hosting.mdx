@@ -1,6 +1,6 @@
 # Self-Hosting
 
-almyty can be self-hosted using Docker Compose for single-server deployments or Kubernetes with Kustomize for production clusters.
+almyty can be self-hosted with the Docker Compose file in this repository for a single-server install, or with the Kustomize base in `k8s/base` as the starting point for a cluster. Read the [ENCRYPTION_KEY](#encryption_key-has-a-dev-fallback-that-will-bite-you) and [Outbound email](#outbound-email) sections before you put real data in it.
 
 ## Docker Hub
 
@@ -13,10 +13,18 @@ docker pull almyty/frontend:latest
 
 | Image | Base | Description |
 |-------|------|-------------|
-| `almyty/api` | node:24-alpine | Backend API server |
-| `almyty/frontend` | nginx:1.25-alpine | Frontend SPA served via nginx |
+| `almyty/api` | node:26-alpine | Backend API server |
+| `almyty/frontend` | nginx:1.31-alpine | Frontend SPA served via nginx |
 
-Tags: `latest` (most recent master build), `vX.Y.Z` (releases), `sha-XXXXXXX` (per-commit).
+Tags:
+
+| Tag | Means |
+|-----|-------|
+| `latest` | Newest stable release. Minted only by the release workflow on a `v*` git tag. |
+| `X.Y.Z`, `X.Y`, `X` | Release tags. Note the `v` is stripped: git tag `v1.2.3` publishes `1.2.3`, `1.2` and `1`. There is no `v1.2.3` image tag. |
+| `prod`, `staging`, `dev` | Moving tags for the head of the `master`, `staging` and `development` branches. |
+
+There are no per-commit or digest-suffixed tags. To pin a deployment, pin a release tag such as `almyty/api:1.2.3`.
 
 ## Docker Compose
 
@@ -26,7 +34,11 @@ backend API, and the frontend (with an optional nginx profile for production):
 ```yaml
 services:
   postgres:
-    image: postgres:16-alpine
+    # NOT postgres:16-alpine. The memory module stores embeddings in a
+    # pgvector column and its first migration runs CREATE EXTENSION vector,
+    # which stock postgres images do not ship. Substituting one makes the
+    # API fail to boot on migration MemoryCanonicalInit.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: almyty
       POSTGRES_USER: postgres
@@ -40,12 +52,20 @@ services:
     command: redis-server --appendonly yes
 
   backend:
+    image: almyty/api:latest
     build: { context: ./backend, target: development }
     ports: ["4000:3000"]
     environment:
+      - NODE_ENV=development
       - DATABASE_HOST=postgres
       - REDIS_HOST=redis
       - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
+      # Not in the shipped file. Add it, or every stored secret is
+      # encrypted with a key that is published in this repository.
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+      # Not in the shipped file. Without it no email is ever sent and
+      # nobody can complete signup.
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     depends_on:
@@ -53,6 +73,7 @@ services:
       redis: { condition: service_started }
 
   frontend:
+    image: almyty/frontend:latest
     build: { context: ./frontend }
     ports: ["4001:3000"]
     depends_on: [backend]
@@ -62,14 +83,27 @@ volumes:
   redis_data:
 ```
 
+The `ENCRYPTION_KEY` and `RESEND_API_KEY` lines above are additions, not a transcription: the `docker-compose.yml` in the repository omits both, and the sections below explain what that costs you.
+
 ### Quick start
+
+There is no `.env.example` at the repository root. Compose interpolates a handful of variables from a root `.env` if one exists, so create it yourself:
 
 ```bash
 git clone https://github.com/almyty-inc/almyty.git
 cd almyty
-cp .env.example .env   # edit with your values
+
+cat > .env <<'ENVFILE'
+POSTGRES_PASSWORD=<a strong password>
+JWT_SECRET=<openssl rand -hex 48>
+ENCRYPTION_KEY=<openssl rand -hex 32>
+RESEND_API_KEY=<your Resend key>
+ENVFILE
+
 docker-compose up -d
 ```
+
+`ENCRYPTION_KEY` and `RESEND_API_KEY` are not forwarded to the backend by the shipped `docker-compose.yml`. Add them to the backend service's `environment:` block, or the platform will encrypt your secrets with the built-in dev key and send no email. See [ENCRYPTION_KEY has a dev fallback that will bite you](#encryption_key-has-a-dev-fallback-that-will-bite-you) and [Outbound email](#outbound-email).
 
 The frontend is available at `http://localhost:4001` and the backend API at `http://localhost:4000`.
 
@@ -77,7 +111,7 @@ The frontend is available at `http://localhost:4001` and the backend API at `htt
 
 | Service | Image | Port (host) | Port (container) |
 |---------|-------|-------------|-------------------|
-| `postgres` | postgres:16-alpine | 5433 | 5432 |
+| `postgres` | pgvector/pgvector:pg16 | 5433 | 5432 |
 | `redis` | redis:7-alpine | 6380 | 6379 |
 | `backend` | almyty/api | 4000 | 3000 |
 | `frontend` | almyty/frontend | 4001 | 3000 |
@@ -91,36 +125,43 @@ docker build -t almyty/api ./backend
 docker build -t almyty/frontend ./frontend
 ```
 
-Both Dockerfiles are multi-stage. The backend builds on `node:24-alpine` and produces a minimal production image. The frontend builds the Vite app on `node:24-alpine` and copies the output into `nginx:1.25-alpine`.
+Both Dockerfiles are multi-stage. The backend builds on `node:26-alpine` and produces a minimal production image. The frontend builds the Vite app on `node:26-alpine` and copies the output into `nginx:1.31-alpine`.
 
 ## Kubernetes
 
-The repository provides Kustomize base manifests with three overlays.
+This repository ships a single Kustomize base, `k8s/base`. There are no overlays in it. The environment overlays almyty uses for its own hosted deployment live in a separate, private repository, so you will be writing your own on top of this base.
 
-### Overlays
+### What is in the base
 
-| Overlay | Purpose |
-|---------|---------|
-| `development` | Local k8s (minikube, kind). Single replicas, no TLS. |
-| `staging` | Pre-production. Managed Postgres, `ENCRYPTION_KEY` wired. |
-| `production` | Full production. Multiple replicas, TLS via cert-manager, resource limits. |
+| File | Contents |
+|------|----------|
+| `namespace.yaml` | Namespace |
+| `configmap.yaml` | Non-secret backend configuration |
+| `secret.yaml` | Secret template with placeholder values, including `ENCRYPTION_KEY` and `JWT_SECRET` |
+| `postgres-deployment.yaml`, `redis-deployment.yaml` | In-cluster Postgres and Redis, for a self-contained install |
+| `api-deployment.yaml`, `frontend-deployment.yaml` | The two application Deployments and their Services |
+| `api-network-policy.yaml` | NetworkPolicy for the API pods |
+| `ingress.yaml` | Ingress |
+| `cert-manager.yaml` | Let's Encrypt `ClusterIssuer` resources (production and staging ACME endpoints) |
+| `migration-job.yaml` | One-off Job that runs pending TypeORM migrations |
+
+`kustomization.yaml` deliberately leaves `secret.yaml` out of its `resources` list, because the secret values are environment-specific. Your overlay supplies it.
 
 ### Deploy
 
 ```bash
-# Development
-kubectl apply -k k8s/overlays/development
+# Inspect what the base renders before applying anything
+kubectl kustomize k8s/base
 
-# Staging
-kubectl apply -k k8s/overlays/staging
-
-# Production
-kubectl apply -k k8s/overlays/production
+# Apply it directly (in-cluster Postgres and Redis, placeholder secrets)
+kubectl apply -k k8s/base
 ```
+
+Applied as-is the base is not ready for your environment: `secret.yaml` holds `CHANGE_ME_*` placeholders, and `ingress.yaml` is hard-coded to almyty's own hostnames (`api.almyty.com`, `app.almyty.com`, `*.almyty.app`). Write an overlay that references `../base` and patches at minimum the secret values and the ingress hosts. Replica counts (2 each for the API and frontend) and CPU/memory requests and limits are already set in the base; patch those too if your cluster is sized differently.
 
 ### TLS
 
-The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt. Set `DOMAIN` in the overlay's configmap to your domain. Certificates are provisioned automatically.
+`k8s/base/cert-manager.yaml` defines Let's Encrypt `ClusterIssuer` resources. cert-manager itself is not installed by this base, so install it in the cluster first. Point `ingress.yaml` at your hostname and reference the issuer from the Ingress annotations.
 
 ## Required environment variables
 
@@ -135,14 +176,37 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 | `REDIS_HOST` | Redis hostname | `localhost` |
 | `REDIS_PORT` | Redis port | `6379` |
 | `JWT_SECRET` | Secret for signing JWT tokens | Random 64+ char string |
-| `ENCRYPTION_KEY` | AES-256 key for encrypting stored secrets: credentials and LLM provider API keys | Random 32-byte hex string |
+| `ENCRYPTION_KEY` | AES-256 key for encrypting stored secrets: credentials, LLM provider API keys, SSO config. **See the warning below: this one has a silent fallback** | Random 32-byte hex string |
+
+### ENCRYPTION_KEY has a dev fallback that will bite you
+
+If `ENCRYPTION_KEY` is unset, the backend does one of two things depending on `NODE_ENV`:
+
+- `NODE_ENV=production`: it throws on first use and refuses to encrypt anything. Loud, correct.
+- anything else, **including the `docker-compose.yml` in this repository, which sets `NODE_ENV=development`**: it falls back to the literal string `default-encryption-key-change-me!`, prints one `[SECURITY WARNING]` line, and carries on.
+
+That fallback is in the public source. Every credential, provider API key and SSO secret written under it can be decrypted by anyone who can read this repository and get a copy of your database. It is not a placeholder that later gets replaced; it is the key your data is actually encrypted with until you set the variable.
+
+The compose file does not pass `ENCRYPTION_KEY` through, so set it explicitly on the backend service before you store a single credential:
+
+```bash
+openssl rand -hex 32
+```
+
+```yaml
+  backend:
+    environment:
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+```
+
+The `:?` form makes Compose refuse to start rather than silently fall back. Rotating this key later does not re-encrypt what is already stored, so anything written under the dev fallback has to be re-entered.
 
 ### Optional variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Backend listen port | `3000` |
-| `FRONTEND_URL` | Frontend origin for CORS | `http://localhost:3002` |
+| `FRONTEND_URL` | Frontend origin. Used for CORS and as the base URL in verification, password-reset and invite emails | `http://localhost:3002` |
 | `ALMYTY_API_BASE_URL` | API origin for the frontend (cross-domain deploys) | (same origin) |
 | `METRICS_RETENTION_DAYS` | How long usage metrics and request logs are kept before the retention sweep prunes them (`0` disables pruning) | `90` |
 | `MONITORING_STATS_WINDOW_SECONDS` | Rolling window the live monitoring dashboard aggregates over | `300` |
@@ -150,11 +214,26 @@ The production overlay includes a cert-manager `ClusterIssuer` for Let's Encrypt
 | `RATE_LIMIT_TTL` | Rate-limit window in seconds | `60` |
 | `RATE_LIMIT_MAX` | Requests allowed per window | `100` |
 | `BULL_REDIS_HOST` | Separate Redis for BullMQ (if desired) | Falls back to `REDIS_HOST` |
-| `MAIL_HOST` | SMTP host for outbound email | -- |
-| `MAIL_PORT` | SMTP port | `587` |
-| `MAIL_USER` | SMTP username | -- |
-| `MAIL_PASS` | SMTP password | -- |
+| `RESEND_API_KEY` | [Resend](https://resend.com) API key. The only outbound-email transport. Without it no mail is sent at all (see [Outbound email](#outbound-email)) | -- |
+| `MAIL_FROM` | Sender address for outbound mail. `EMAIL_FROM` is accepted as a fallback | `almyty <notifications@almyty.com>` |
+| `PLATFORM_METRICS_TOKEN` | Bearer token for `/monitoring/health/details` and `/monitoring/metrics*`. Unset means those endpoints refuse every request | -- (endpoints disabled) |
 | `OLLAMA_ALLOW_PRIVATE_URLS` | Allow Ollama providers to target localhost/private-network URLs (see [Local models with Ollama](#local-models-with-ollama)) | `false` |
+
+## Outbound email
+
+There is no SMTP support. The backend sends mail through [Resend](https://resend.com) and reads exactly one credential, `RESEND_API_KEY`.
+
+**Set it before you invite anyone to your instance.** With no key the mail service warns at boot that outbound email is disabled, and every send becomes a log line instead of an email. That breaks signup outright: registration creates the account unverified and sends a verification email, and login refuses an unverified account with `EMAIL_NOT_VERIFIED`. No key means the verification mail never arrives and the new account can never sign in. Password resets and organization invites fail the same way. Outside `NODE_ENV=production` the send call still reports success, so nothing in the UI tells you.
+
+Everything mail-related:
+
+```bash
+RESEND_API_KEY=re_...                                # required for any mail to leave the box
+MAIL_FROM="almyty <notifications@example.com>"       # sender; must be a domain verified in Resend
+FRONTEND_URL=https://almyty.example.com              # base URL used in verification, reset and invite links
+```
+
+`FRONTEND_URL` is the same variable the CORS origin uses. If it is wrong, the links in the emails point at the wrong host.
 
 ## Local models with Ollama
 
@@ -170,13 +249,17 @@ Networking note for Docker Compose: inside the backend container, `localhost` is
 
 ## Health check endpoints
 
-The backend exposes three health endpoints:
+| Endpoint | Auth | What it actually checks |
+|----------|------|-------------------------|
+| `GET /health` | none | **Nothing.** Returns `{"status":"ok"}` unconditionally. |
+| `GET /health/live` | none | Node heap is under 3.4 GB. No dependency checks. |
+| `GET /health/ready` | none | Postgres ping and Redis ping. Non-200 if either is unreachable. |
+| `GET /monitoring/health` | none | Computed status only: `healthy`, `degraded` or `unhealthy`. |
+| `GET /monitoring/health/details` | `Bearer $PLATFORM_METRICS_TOKEN` | Full per-component breakdown. |
 
-| Endpoint | Purpose | Checks |
-|----------|---------|--------|
-| `GET /health` | Full health | Database, Redis, disk, memory |
-| `GET /health/live` | Liveness probe | Process is running |
-| `GET /health/ready` | Readiness probe | Database and Redis are reachable |
+`GET /health` is a deliberate fixed 200. It used to return the full check result, which on failure serialised the underlying connection error (database hostname, port, sometimes a fragment of the connection string) to anyone who polled it. It now hands out nothing beyond "this process answered". Treat it as a reachability ping and nothing more.
+
+For anything that needs to know whether the system is *working*, use `GET /health/ready` (dependencies) or the token-gated `GET /monitoring/health/details` (component breakdown). `PLATFORM_METRICS_TOKEN` fails closed: with it unset, the details endpoint refuses every request rather than serving the breakdown publicly.
 
 ### Kubernetes probes
 
@@ -207,14 +290,19 @@ External uptime pingers (UptimeRobot, Pingdom, Better Uptime, or a Kubernetes-na
 | Endpoint | Purpose | Alert when |
 |----------|---------|------------|
 | `GET /health/ready` | Readiness: API plus its Postgres and Redis dependencies. This is the one to page on. | Non-200, or down for more than one check interval. |
-| `GET /health/live` | Liveness: process is up (does not check dependencies). | Use for restart detection, not paging. |
-| `GET /health` | Full health report (all indicators). | Useful for a status dashboard. |
+| `GET /health/live` | Liveness: heap headroom only. Does not check dependencies. | Use for restart detection, not paging. |
+| `GET /monitoring/health` | Computed platform status (`healthy` / `degraded` / `unhealthy`). Public, no component breakdown. | Useful for a status dashboard. |
+| `GET /monitoring/health/details` | Full component breakdown. Requires `Authorization: Bearer $PLATFORM_METRICS_TOKEN`; refuses every request when that variable is unset. | Diagnostics, not paging. |
+
+**Do not point a status dashboard at `GET /health`.** It returns `{"status":"ok"}` unconditionally. It never fails, by design, so that an unauthenticated caller cannot enumerate your dependencies. A dashboard wired to it is permanently green no matter what is broken.
 
 Recommended baseline: poll `/health/ready` every 30–60s from at least two regions, alert on two consecutive failures. `/health/ready` returns non-200 when the database or Redis is unreachable, so it catches the dependency outages that a bare liveness check would miss.
 
-### Deploy smoke gate
+### Gate your rollout on the migration Job
 
-The GitHub Actions deploy workflow runs a one-off migration Job to completion and only rolls out new pods if it succeeds (see [Database migrations](#database-migrations) below). A failed migration stops the deploy instead of shipping pods against a schema they don't expect, so a broken release surfaces at deploy time, not in production.
+This repository's GitHub Actions workflows build and publish images; they do not roll out to a cluster. The rollout pipeline almyty runs for its own hosted deployment is not part of this repository and is not public, so you will be wiring your own.
+
+Whatever you wire it with, run `k8s/base/migration-job.yaml` to completion first and only continue the rollout if it succeeds (see [Database migrations](#database-migrations) below). A failed migration then stops the deploy instead of shipping pods against a schema they don't expect, so a broken release surfaces at deploy time rather than in production.
 
 ### Error tracking (Sentry)
 
@@ -231,7 +319,7 @@ How migrations run depends on how you deploy.
 
 On a single-node or Docker Compose setup the API applies any pending migrations itself when it starts (`DB_MIGRATIONS_RUN` defaults to `true`). There's only one process, so there's nothing to coordinate.
 
-In a cluster you don't want several replicas racing to run the same migrations as they boot. Set `DB_MIGRATIONS_RUN=false` and run migrations once, before the new pods roll out, as a Kubernetes `Job`, an init container, or `npm run typeorm migration:run`. The provided GitHub Actions deploy workflow already does this: it runs a one-off migration Job to completion and only continues the rollout if it succeeds, so a failed migration stops the deploy instead of shipping pods against a schema they don't expect.
+In a cluster you don't want several replicas racing to run the same migrations as they boot. Set `DB_MIGRATIONS_RUN=false` and run migrations once, before the new pods roll out, as a Kubernetes `Job`, an init container, or `npm run typeorm migration:run`. `k8s/base/migration-job.yaml` is that Job. Gate your rollout on it completing successfully, so a failed migration stops the deploy instead of shipping pods against a schema they don't expect.
 
 Either way, back up the database before upgrading.
 
