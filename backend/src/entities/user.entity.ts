@@ -10,6 +10,7 @@ import {
 import { Exclude } from 'class-transformer';
 import { UserOrganization } from './user-organization.entity';
 import { ApiKey } from './api-key.entity';
+import { findEffectiveMembership } from '../common/authorization/membership';
 
 @Entity('users')
 @Index(['email'], { unique: true })
@@ -102,9 +103,9 @@ export class User {
 
   // Methods
   hasPermissionInOrganization(organizationId: string, permission: string): boolean {
-    const membership = this.organizationMemberships?.find(
-      m => m.organizationId === organizationId
-    );
+    // A revoked invite leaves an inactive row behind and a pending
+    // invite has one before acceptance; neither is a membership.
+    const membership = findEffectiveMembership(this.organizationMemberships, organizationId);
     
     if (!membership) return false;
     

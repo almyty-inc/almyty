@@ -1,4 +1,5 @@
 import { OrganizationRole } from '../../entities/user-organization.entity';
+import { findEffectiveMembership } from '../../common/authorization/membership';
 
 /**
  * RBAC vocabulary for the Connections layer. Org-scoped connections need
@@ -37,9 +38,9 @@ export interface ConnectionPrincipal {
 }
 
 export function membershipOf(principal: ConnectionPrincipal, organizationId: string): MembershipLike | undefined {
-  return principal.organizationMemberships?.find(
-    (m) => (m.organizationId ?? m.organization?.id) === organizationId,
-  );
+  // Inactive (revoked invite) and not-yet-accepted rows are not
+  // memberships; see common/authorization/membership.ts.
+  return findEffectiveMembership(principal.organizationMemberships, organizationId);
 }
 
 export function roleHasConnectionPermission(role: string | undefined, permission: string): boolean {

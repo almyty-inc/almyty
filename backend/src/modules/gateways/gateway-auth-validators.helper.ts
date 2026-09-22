@@ -14,6 +14,10 @@ import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { compileSafeRegex, boundRegexInput } from '../../common/security/regex-safety';
 import { hashKey, isIpInCIDR, isIpInRanges, validateAuthConfiguration, validateKeyFormat } from './gateway-auth-utils';
+import {
+  findEffectiveMembership,
+  hasEffectiveMembership,
+} from '../../common/authorization/membership';
 
 @Injectable()
 export class GatewayAuthValidators {
@@ -311,8 +315,9 @@ export class GatewayAuthValidators {
       if (!gateway) {
         return { isValid: false, error: 'Gateway not found', errorCode: 'GATEWAY_NOT_FOUND' };
       }
-      const membership = user.organizationMemberships?.find(
-        (m) => m.organizationId === gateway.organizationId,
+      const membership = findEffectiveMembership(
+        user.organizationMemberships,
+        gateway.organizationId,
       );
       if (!membership) {
         return {
@@ -393,8 +398,9 @@ export class GatewayAuthValidators {
       const gatewayOrgId = gateway?.organizationId;
 
       if (user && gatewayOrgId) {
-        const userInGatewayOrg = user.organizationMemberships?.some(
-          (m) => m.organizationId === gatewayOrgId,
+        const userInGatewayOrg = hasEffectiveMembership(
+          user.organizationMemberships,
+          gatewayOrgId,
         );
         if (!userInGatewayOrg) {
           return {

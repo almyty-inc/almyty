@@ -35,6 +35,7 @@ import { IrcAdapter } from './adapters/irc.adapter';
 import { ChannelInstallationService } from './channel-installation.service';
 import { ChannelCredentialService, ChannelUsePurpose } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
+import { outboundFailureDetail, safeFetch } from '../../../common/security/safe-fetch';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -993,38 +994,50 @@ export class ChannelGatewayService {
         }
         case GatewayType.GOOGLE_CHAT:
         case GatewayType.IRC:
+        case GatewayType.GOOGLE_CHAT:
+        case GatewayType.IRC:
         case GatewayType.WEBHOOK: {
           if (!cfg.webhook_url && !cfg.callback_url) {
             return { ok: false, detail: 'webhook_url not configured' };
           }
           // For these, the only check we can perform without sending
           // is a HEAD probe to the configured endpoint (best-effort).
+          //
+          // Gated, and the failure detail is uniform. Ungated this was an
+          // internal port scanner an admin could drive from the dashboard:
+          // `HEAD 200/401/404` versus `unreachable: connect ECONNREFUSED`
+          // separates "port open, speaks HTTP" from "closed" for any
+          // address in the cluster.
           const url = cfg.webhook_url || cfg.callback_url;
           try {
-            const res = await fetch(url, { method: 'HEAD' });
+            const res = await safeFetch(url, { method: 'HEAD' });
             return { ok: res.status < 500, detail: `HEAD ${res.status}` };
           } catch (e: any) {
-            return { ok: false, detail: `unreachable: ${e?.message ?? e}` };
+            return { ok: false, detail: outboundFailureDetail(e) };
           }
         }
         case GatewayType.SIGNAL: {
           if (!cfg.api_url || !cfg.phone_number) return { ok: false, detail: 'api_url + phone_number required' };
           try {
-            const res = await fetch(`${cfg.api_url}/v1/about`);
+            const res = await safeFetch(`${cfg.api_url}/v1/about`);
             return res.ok ? { ok: true, detail: 'signal-cli reachable' }
-                          : { ok: false, detail: `about ${res.status}` };
+                          : { ok: false, detail: 'signal-cli did not accept the probe' };
           } catch (e: any) {
-            return { ok: false, detail: `unreachable: ${e?.message ?? e}` };
+            return { ok: false, detail: outboundFailureDetail(e) };
           }
         }
         case GatewayType.MATRIX: {
           if (!cfg.homeserver_url || !cfg.access_token) return { ok: false, detail: 'homeserver_url + access_token required' };
-          const res = await fetch(`${cfg.homeserver_url}/_matrix/client/r0/account/whoami`, {
-            headers: { Authorization: `Bearer ${cfg.access_token}` },
-          });
-          const json: any = await res.json().catch(() => ({}));
-          return res.ok ? { ok: true, detail: `matrix user ${json?.user_id || '?'}` }
-                        : { ok: false, detail: json?.errcode || `whoami ${res.status}` };
+          try {
+            const res = await safeFetch(`${cfg.homeserver_url}/_matrix/client/r0/account/whoami`, {
+              headers: { Authorization: `Bearer ${cfg.access_token}` },
+            });
+            const json: any = await res.json().catch(() => ({}));
+            return res.ok ? { ok: true, detail: `matrix user ${json?.user_id || '?'}` }
+                          : { ok: false, detail: 'the homeserver did not accept the access token' };
+          } catch (e: any) {
+            return { ok: false, detail: outboundFailureDetail(e) };
+          }
         }
         case GatewayType.EMAIL: {
           if (!cfg.resend_api_key) return { ok: false, detail: 'resend_api_key not configured' };

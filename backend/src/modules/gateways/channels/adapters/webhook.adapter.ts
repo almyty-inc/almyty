@@ -71,8 +71,9 @@ export class WebhookAdapter extends BaseAdapter {
       headers['X-Webhook-Signature'] = signature;
     }
 
+    this.assertEgress(target);
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
-    const res = await (fetch as any)(target, { method: 'POST', headers, body });
+    const res = await (fetch as any)(target, this.egressInit({ method: 'POST', headers, body }));
 
     if (this.httpRejected(res)) {
       const detail = await this.readTextBody(res);

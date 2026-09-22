@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 import { InjectRepository } from '@nestjs/typeorm';
 import axios, { AxiosRequestConfig } from 'axios';
 import { Repository } from 'typeorm';
@@ -88,7 +89,12 @@ export class ToolGrpcExecutor {
       timeout: tool.configuration?.timeout ?? 30000,
       maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
-      signal: options.signal,
+      // Its siblings (tool-http / tool-protocol) both pin DNS and refuse
+      // redirects; this one did neither, on the same tenant-supplied
+      // api.baseUrl.
+      maxRedirects: 0,
+      httpAgent: ssrfSafeHttpAgent,
+      httpsAgent: ssrfSafeHttpsAgent,
     };
 
     if (api) await this.authService.applyApiAuth(axConfig, api, options);

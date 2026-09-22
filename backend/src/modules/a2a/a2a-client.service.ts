@@ -7,6 +7,8 @@ import { v4 as uuid } from 'uuid';
 import { ExternalAgent } from '../../entities/external-agent.entity';
 import { CredentialsService } from '../credentials/credentials.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { assertOutboundUrlAllowed } from '../../common/security/safe-fetch';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 
 @Injectable()
 export class A2AClientService {
@@ -18,6 +20,33 @@ export class A2AClientService {
     private readonly credentialsService: CredentialsService,
     private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
+
+  /**
+   * Every JSON-RPC call to an external agent, gated.
+   *
+   * `baseRpcUrl` is written straight from the request body by
+   * ExternalAgentsService.create/update (and, second-order, from the
+   * remote agent card's own `url`), and these requests carry the stored
+   * credential's auth headers. Ungated, that was an authenticated POST to
+   * any address the caller named — cloud metadata, an in-cluster admin
+   * port — with the response returned as the sub_agent node's result.
+   * `agentCardUrl` has been through validateUrl since it was added;
+   * `baseRpcUrl` never was.
+   */
+  private async rpcPost(
+    rpcUrl: string,
+    payload: unknown,
+    headers: Record<string, string>,
+  ): Promise<{ data: any }> {
+    const url = assertOutboundUrlAllowed(rpcUrl);
+    return axios.post(url, payload, {
+      headers,
+      timeout: 30_000,
+      maxRedirects: 0,
+      httpAgent: ssrfSafeHttpAgent,
+      httpsAgent: ssrfSafeHttpsAgent,
+    });
+  }
 
   /**
    * Resolve credential and build auth headers for an external agent.
@@ -80,10 +109,7 @@ export class A2AClientService {
 
     this.logger.log(`[A2A_CLIENT] Sending message/send to ${rpcUrl}`);
 
-    const response = await axios.post(rpcUrl, payload, {
-      headers,
-      timeout: 30_000,
-    });
+    const response = await this.rpcPost(rpcUrl, payload, headers);
 
     // Track request stats
     await this.trackRequest(externalAgent, !response.data?.error);
@@ -109,10 +135,7 @@ export class A2AClientService {
       params: { id: taskId },
     };
 
-    const response = await axios.post(rpcUrl, payload, {
-      headers,
-      timeout: 30_000,
-    });
+    const response = await this.rpcPost(rpcUrl, payload, headers);
 
     return response.data;
   }
@@ -135,10 +158,7 @@ export class A2AClientService {
       params: { id: taskId },
     };
 
-    const response = await axios.post(rpcUrl, payload, {
-      headers,
-      timeout: 30_000,
-    });
+    const response = await this.rpcPost(rpcUrl, payload, headers);
 
     return response.data;
   }

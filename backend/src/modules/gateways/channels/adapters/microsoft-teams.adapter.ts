@@ -85,14 +85,15 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
 
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
     const url = `${serviceUrl}/v3/conversations/${conversationId}/activities`;
-    const res = await (fetch as any)(url, {
+    this.assertEgress(url);
+    const res = await (fetch as any)(url, this.egressInit({
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(formattedResponse),
-    });
+    }));
 
     const answer = await this.readJsonBody(res);
     const error = answer?.error;

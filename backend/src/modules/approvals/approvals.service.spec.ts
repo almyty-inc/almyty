@@ -146,7 +146,7 @@ describe('ApprovalsService', () => {
       const events: any[] = [];
       svc.on('approval.decided', (a) => events.push(a));
       const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x' });
-      const decided = await svc.approve(row.id, { decidedBy: 'u-approver', decisionReason: 'lgtm' }, { id: 'u-approver' });
+      const decided = await svc.approve(row.id, { decidedBy: 'u-approver', decisionReason: 'lgtm' }, { id: 'u-approver' }, row.organizationId);
       expect(decided.status).toBe('approved');
       expect(decided.decidedBy).toBe('u-approver');
       expect(decided.decisionReason).toBe('lgtm');
@@ -156,15 +156,15 @@ describe('ApprovalsService', () => {
     it('reject flips to rejected', async () => {
       const { svc } = makeService();
       const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x' });
-      const decided = await svc.reject(row.id, { decidedBy: 'u-rev' }, { id: 'u-rev' });
+      const decided = await svc.reject(row.id, { decidedBy: 'u-rev' }, { id: 'u-rev' }, row.organizationId);
       expect(decided.status).toBe('rejected');
     });
 
     it('refuses to flip an already-decided row', async () => {
       const { svc } = makeService();
       const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x' });
-      await svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' });
-      await expect(svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' })).rejects.toThrow(/already approved/);
+      await svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' }, row.organizationId);
+      await expect(svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' }, row.organizationId)).rejects.toThrow(/already approved/);
     });
 
     /**
@@ -186,8 +186,8 @@ describe('ApprovalsService', () => {
       svc.on('approval.decided', (r: any) => decided.push(r.status));
 
       const results = await Promise.allSettled([
-        svc.approve(row.id, { decidedBy: 'reviewer-a' }, { id: 'reviewer-a' }),
-        svc.reject(row.id, { decidedBy: 'reviewer-b' }, { id: 'reviewer-b' }),
+        svc.approve(row.id, { decidedBy: 'reviewer-a' }, { id: 'reviewer-a' }, row.organizationId),
+        svc.reject(row.id, { decidedBy: 'reviewer-b' }, { id: 'reviewer-b' }, row.organizationId),
       ]);
 
       expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
@@ -200,7 +200,7 @@ describe('ApprovalsService', () => {
       const { svc, policy } = makeService();
       policy.decision = { allowed: false, reason: 'team lead required' };
       const row = await svc.create({ organizationId: 'o', teamId: 't1', runId: 'r', agentId: 'a', reason: 'x' });
-      await expect(svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' })).rejects.toThrow(/team lead/);
+      await expect(svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' }, row.organizationId)).rejects.toThrow(/team lead/);
     });
   });
 
@@ -209,7 +209,7 @@ describe('ApprovalsService', () => {
       const { svc } = makeService();
       const a = await svc.create({ organizationId: 'o', teamId: null, runId: 'r1', agentId: 'a', reason: 'x' });
       await svc.create({ organizationId: 'o', teamId: null, runId: 'r2', agentId: 'a', reason: 'y' });
-      await svc.approve(a.id, { decidedBy: 'u' }, { id: 'u' });
+      await svc.approve(a.id, { decidedBy: 'u' }, { id: 'u' }, a.organizationId);
       const list = await svc.listPending({ organizationId: 'o', caller: { id: 'u' } });
       expect(list.length).toBe(1);
       expect(list[0].status).toBe('pending');
@@ -294,7 +294,7 @@ describe('ApprovalsService notifications', () => {
     const row = await svc.create(createInput());
     notifications.emit.mockClear();
 
-    await svc.approve(row.id, { decidedBy: 'admin-1', decisionReason: 'ok' }, { id: 'admin-1' });
+    await svc.approve(row.id, { decidedBy: 'admin-1', decisionReason: 'ok' }, { id: 'admin-1' }, row.organizationId);
     await flush();
 
     expect(notifications.emit).toHaveBeenCalledTimes(1);
@@ -312,7 +312,7 @@ describe('ApprovalsService notifications', () => {
     const row = await svc.create(createInput());
     notifications.emit.mockClear();
 
-    await svc.reject(row.id, { decidedBy: 'admin-1', decisionReason: 'no' }, { id: 'admin-1' });
+    await svc.reject(row.id, { decidedBy: 'admin-1', decisionReason: 'no' }, { id: 'admin-1' }, row.organizationId);
     await flush();
 
     expect(notifications.emit.mock.calls[0][0].title).toBe('Approval rejected');
@@ -323,7 +323,7 @@ describe('ApprovalsService notifications', () => {
     const row = await svc.create(createInput());
     notifications.emit.mockClear();
 
-    await svc.approve(row.id, { decidedBy: 'admin-1' }, { id: 'admin-1' });
+    await svc.approve(row.id, { decidedBy: 'admin-1' }, { id: 'admin-1' }, row.organizationId);
     await flush();
 
     expect(notifications.emit).not.toHaveBeenCalled();

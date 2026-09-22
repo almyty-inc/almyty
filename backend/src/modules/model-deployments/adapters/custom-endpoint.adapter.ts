@@ -1,4 +1,10 @@
 import axios, { AxiosInstance } from 'axios';
+import {
+  customLlmPrivateUrlsAllowed,
+  validateUrl,
+  validateUrlAllowingPrivate,
+} from '../../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 
 import {
   ActualState,
@@ -22,7 +28,7 @@ export class CustomEndpointAdapter implements ModelProviderAdapter {
   readonly key = 'custom-endpoint';
   readonly displayName = 'OpenAI-compatible endpoint (managed elsewhere)';
 
-  constructor(private readonly http: AxiosInstance = axios.create({ timeout: 15_000 })) {}
+  constructor(private readonly http: AxiosInstance = axios.create({ timeout: 15_000, maxRedirects: 0, httpAgent: ssrfSafeHttpAgent, httpsAgent: ssrfSafeHttpsAgent })) {}
 
   capabilities(): AdapterCapabilities {
     return {
@@ -65,6 +71,12 @@ export class CustomEndpointAdapter implements ModelProviderAdapter {
   async readEndpoint(ref: EndpointRef, credentials: AdapterCredentials): Promise<ActualState> {
     const url = String(ref.url ?? '').replace(/\/+$/, '');
     if (!url) return { state: 'failed', message: 'no url' };
+    // Same gate as the provider save path. `ref.url` comes from
+    // providerConfig, which POST /model-deployments takes from the body
+    // and checks only for shape, so this was an unauthenticated-by-URL
+    // GET from the worker whose verdict came back in `lastError`.
+    const check = customLlmPrivateUrlsAllowed() ? validateUrlAllowingPrivate(url) : validateUrl(url);
+    if (!check.valid) return { state: 'failed', url, message: `endpoint URL refused: ${check.error}` };
     try {
       const res = await this.http.get(`${url}/models`, { headers: this.headers(credentials) });
       const ids = (res.data?.data ?? []).map((m: any) => m.id);
