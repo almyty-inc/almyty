@@ -856,7 +856,10 @@ export class GatewaysService {
     // Apply sorting
     const sortBy = filters.sortBy || 'createdAt';
     const sortOrder = filters.sortOrder || 'DESC';
-    queryBuilder.orderBy(`gateway.${sortBy}`, sortOrder);
+    // Paged with skip/take below, so the sort has to be total. `name` and
+    // `createdAt` both tie readily, and a tied pair reshuffles between
+    // requests — one gateway on two pages, another on none.
+    queryBuilder.orderBy(`gateway.${sortBy}`, sortOrder).addOrderBy('gateway.id', 'ASC');
 
     // Get total count
     const total = await queryBuilder.getCount();

@@ -868,7 +868,9 @@ describe('GatewayToolService', () => {
       const result = await service.getAvailableTools('gateway-1', 'org-1');
 
       expect(result).toBe(mockAvailableTools);
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith('tool.status = :status', { status: ToolStatus.ACTIVE });
+      // Org first, then status: the candidate set is this org's tools.
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith('tool.organizationId = :organizationId', { organizationId: 'org-1' });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('tool.status = :status', { status: ToolStatus.ACTIVE });
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
         'tool.id NOT IN (:...associatedIds)',
         { associatedIds: ['tool-1', 'tool-2'] }
@@ -894,7 +896,12 @@ describe('GatewayToolService', () => {
       const result = await service.getAvailableTools('gateway-1', 'org-1');
 
       expect(result).toBe(mockAvailableTools);
-      expect(mockQueryBuilder.andWhere).not.toHaveBeenCalled();
+      // No associations to exclude, so no NOT IN clause. The status
+      // filter still rides on andWhere behind the org predicate.
+      expect(mockQueryBuilder.andWhere).not.toHaveBeenCalledWith(
+        'tool.id NOT IN (:...associatedIds)',
+        expect.anything(),
+      );
     });
 
     it('should throw NotFoundException when gateway not found', async () => {

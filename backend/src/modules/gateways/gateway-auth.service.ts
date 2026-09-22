@@ -270,9 +270,14 @@ export class GatewayAuthService {
     clientIp?: string
   ): Promise<AuthenticationResult> {
     try {
-      // Get all active auth configs for the gateway
+      // Get all active auth configs for the gateway.
+      //
+      // `gateway` is loaded because validateOAuth2 compares the access
+      // token's organizationId against the gateway's owning org. Without
+      // the relation that comparison had nothing to compare against.
       const authConfigs = await this.gatewayAuthRepository.find({
         where: { gatewayId, isActive: true },
+        relations: { gateway: true },
         order: { createdAt: 'ASC' },
       });
 
