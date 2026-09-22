@@ -49,6 +49,23 @@ export interface ToolExecutionOptions {
    * request; see `common/security/gateway-tool-policy.ts`.
    */
   securityPolicy?: GatewayToolSecurityPolicy | null;
+  /**
+   * OAuth / API-key scopes the caller presented, checked against
+   * `gateway_tools.permissions.requiredScopes` before dispatch.
+   *
+   * Absent means the caller presented none, and a tool that requires a
+   * scope refuses — fail-closed, because the alternative for an access
+   * control is to let an unproven caller through. The refusal names the
+   * scopes it wanted, so the failure explains itself.
+   *
+   * Only the gateway-protocol path fills this today (it carries
+   * `ProtocolRequest.scopes`). The MCP and UTCP handlers authenticate at
+   * the gateway and do not thread the resulting scopes down to the
+   * executor, so `requiredScopes` on a tool served over those surfaces
+   * refuses everyone until that plumbing exists. Use allowedUsers /
+   * allowedRoles / allowedOrganizations there, or do the plumbing.
+   */
+  scopes?: string[];
 }
 
 export interface ToolExecutionResult {

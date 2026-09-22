@@ -18,13 +18,25 @@ import { AgentApp } from './agent-app.entity';
  * the Windows one unsigned, and rebuilds. Answering "which binary is
  * this person running" later needs the history, not just the latest.
  */
+/**
+ * A build only ever reaches one of these four.
+ *
+ * There was a fifth, CANCELLED ("cancelled before the toolchain
+ * started"), and nothing could produce it: no route, no CLI command and
+ * no UI control cancels a build, and no code assigned the value. The
+ * dashboard still rendered a "Cancelled" label for it, so the product
+ * described a capability it did not have. A queued build that never runs
+ * is reclaimed by failStaleBuilds() as FAILED with an explanation.
+ *
+ * Adding a real cancel path is a product decision, not a bug fix; make it
+ * deliberately, with the route and the control, rather than by adding the
+ * value back here.
+ */
 export enum BuildStatus {
   QUEUED = 'queued',
   RUNNING = 'running',
   SUCCEEDED = 'succeeded',
   FAILED = 'failed',
-  /** Cancelled before the toolchain started. */
-  CANCELLED = 'cancelled',
 }
 
 @Entity('app_builds')

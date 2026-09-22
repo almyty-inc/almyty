@@ -86,7 +86,6 @@ export interface AppContext {
   hasEnterpriseAuth?: boolean;
 }
 
-/** True when anyone holding the link or the artifact can use it. */
 /**
  * The limits a new product starts with.
  *
@@ -103,13 +102,39 @@ export const DEFAULT_PUBLIC_APP_LIMITS: NonNullable<AgentApp['limits']> = {
   perIpRateLimit: 120,
 };
 
+/**
+ * The auth modes that have a sign-in flow behind them.
+ *
+ * `AppAuthMode` offers four, and the settings panel offers all four, but
+ * only SSO is implemented: ee/modules/sso/hosted-chat-sso.controller.ts is
+ * the one route that calls bindAuthenticatedVisitor, and it refuses unless
+ * the surface is set to `sso`. No route ever issues an email code or
+ * completes an OAuth round trip, so no visitor can ever hold an
+ * `email_otp` or `oauth` identity.
+ *
+ * That made isOpenToAnyone() fail OPEN. It compared against PUBLIC_LINK,
+ * so selecting "Email verification" -- a mode nothing can satisfy --
+ * skipped PUBLIC_NEEDS_COST_CAP, skipped PUBLIC_NEEDS_RATE_LIMIT, dropped
+ * both rate limits to null in defaultLimitsFor(), and let
+ * LOCAL_ACCESS_ON_PUBLIC pass, so a desktop or binary build with
+ * `capabilities.shell` could publish to anyone who downloaded it.
+ *
+ * The predicate is now "can this mode actually keep a stranger out",
+ * answered by this list, so an unimplemented mode is treated as open and
+ * the caps stay on. Adding a mode here without a route that binds an
+ * identity for it re-opens the hole; auth-modes-fail-closed.guard.spec.ts
+ * checks the list against the routes.
+ */
+export const GATED_AUTH_MODES: readonly AppAuthMode[] = Object.freeze([AppAuthMode.SSO]);
+
 export function defaultLimitsFor(authMode: AppAuthMode | undefined): NonNullable<AgentApp['limits']> {
-  if ((authMode ?? AppAuthMode.PUBLIC_LINK) === AppAuthMode.PUBLIC_LINK) return { ...DEFAULT_PUBLIC_APP_LIMITS };
+  if (isOpenToAnyone(authMode)) return { ...DEFAULT_PUBLIC_APP_LIMITS };
   return { costCapCents: DEFAULT_PUBLIC_APP_LIMITS.costCapCents, perUserRateLimit: null, perIpRateLimit: null };
 }
 
+/** True when anyone holding the link or the artifact can use it. */
 export function isOpenToAnyone(authMode: AppAuthMode | string | undefined): boolean {
-  return (authMode ?? AppAuthMode.PUBLIC_LINK) === AppAuthMode.PUBLIC_LINK;
+  return !GATED_AUTH_MODES.includes((authMode ?? AppAuthMode.PUBLIC_LINK) as AppAuthMode);
 }
 
 /** True when the app grants any access to the machine it runs on. */

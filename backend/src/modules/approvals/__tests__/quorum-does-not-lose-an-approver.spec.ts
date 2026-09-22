@@ -160,7 +160,7 @@ describe('a quorum does not lose an approver', () => {
     const row = await svc.create(createInput);
 
     // A approves first and commits.
-    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' });
+    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' }, row.organizationId);
 
     // B and C both read the request while it holds only [A], then both
     // decide. This is the interleaving the accumulator lost. One of the
@@ -169,8 +169,8 @@ describe('a quorum does not lose an approver', () => {
     // CAS doing its job; what matters is that neither approval is
     // forgotten.
     const outcomes = await Promise.allSettled([
-      svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }),
-      svc.approve(row.id, { decidedBy: 'C' }, { id: 'C' }),
+      svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }, row.organizationId),
+      svc.approve(row.id, { decidedBy: 'C' }, { id: 'C' }, row.organizationId),
     ]);
     expect(outcomes.some((o) => o.status === 'fulfilled')).toBe(true);
 
@@ -186,11 +186,11 @@ describe('a quorum does not lose an approver', () => {
     const { svc, approvals } = makeService(3);
     const row = await svc.create(createInput);
 
-    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' });
+    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' }, row.organizationId);
     expect(approvals.rows[0].status).toBe('pending');
-    await svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' });
+    await svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }, row.organizationId);
     expect(approvals.rows[0].status).toBe('pending');
-    await svc.approve(row.id, { decidedBy: 'C' }, { id: 'C' });
+    await svc.approve(row.id, { decidedBy: 'C' }, { id: 'C' }, row.organizationId);
 
     expect(approvals.rows[0].status).toBe('approved');
   });
@@ -199,12 +199,12 @@ describe('a quorum does not lose an approver', () => {
     const { svc, hook, policyApprovals } = makeService(3);
     const row = await svc.create(createInput);
 
-    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' });
+    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' }, row.organizationId);
 
     // B double-clicks: two requests, one person.
     const outcomes = await Promise.allSettled([
-      svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }),
-      svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }),
+      svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }, row.organizationId),
+      svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }, row.organizationId),
     ]);
     const refused = outcomes.filter((o) => o.status === 'rejected');
     expect(refused).toHaveLength(1);
@@ -219,7 +219,7 @@ describe('a quorum does not lose an approver', () => {
   it('a repeat approval is refused even when the request has forgotten the earlier one', async () => {
     const { svc, approvals } = makeService(3);
     const row = await svc.create(createInput);
-    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' });
+    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' }, row.organizationId);
 
     // Wipe the payload accumulator, i.e. exactly the state a lost
     // update produced. The guard must still hold, because it is the
@@ -229,7 +229,7 @@ describe('a quorum does not lose an approver', () => {
       approvals: [],
     } };
 
-    await expect(svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' })).rejects.toBeInstanceOf(
+    await expect(svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' }, row.organizationId)).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
@@ -248,7 +248,7 @@ describe('a quorum does not lose an approver', () => {
       },
     };
 
-    await svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' });
+    await svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }, row.organizationId);
 
     expect(new Set(lastScored(hook).map((a) => a.approverId))).toEqual(new Set(['A', 'B']));
     expect(approvals.rows[0].status).toBe('approved');
@@ -258,10 +258,10 @@ describe('a quorum does not lose an approver', () => {
     const { svc, approvals } = makeService(2);
     const row = await svc.create(createInput);
 
-    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' });
+    await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' }, row.organizationId);
     expect(approvals.rows[0].status).toBe('pending');
 
-    await svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' });
+    await svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }, row.organizationId);
     expect(approvals.rows[0].status).toBe('approved');
     expect(approvals.rows[0].decidedBy).toBe('B');
   });

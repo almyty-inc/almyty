@@ -80,6 +80,19 @@ describe('CatalogTab', () => {
     vi.mocked(llmProvidersApi.getAll).mockResolvedValue([{ id: 'p1', name: 'Anthropic prod', type: 'anthropic' }] as any)
   })
 
+  it('labels the view toggle without literal escape characters', async () => {
+    vi.mocked(modelsApi.list).mockResolvedValue([card()])
+    render(<CatalogTab />, { queryClient })
+
+    const grid = await screen.findByRole('button', { name: 'Grid', exact: true })
+    expect(grid).toHaveTextContent(/^Grid$/)
+    expect(grid).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(screen.getByRole('button', { name: 'Table', exact: true }))
+    expect(grid).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(grid)
+    expect(grid).toHaveAttribute('aria-pressed', 'true')
+  })
+
   it('renders every card the same way, whatever it came from, with where it runs and what it costs', async () => {
     vi.mocked(modelsApi.list).mockResolvedValue([
       card(),

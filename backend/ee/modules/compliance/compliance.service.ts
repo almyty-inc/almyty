@@ -10,6 +10,7 @@ import {
 import { AuditLog } from '../../../src/entities/audit-log.entity';
 import { PiiFilterPlugin } from '../../../src/modules/plugins/built-in/pii-filter.plugin';
 import { SecurityScannerPlugin } from '../../../src/modules/plugins/built-in/security-scanner.plugin';
+import { piiCategoriesToSettings } from './pii-categories';
 
 /** Valid security severities, in ascending order of risk. */
 const SEVERITIES: ComplianceSeverity[] = ['low', 'medium', 'high', 'critical'];
@@ -205,8 +206,11 @@ export class ComplianceService {
       {
         plugin: 'pii-filter' as EnforceablePlugin,
         enforced: enforcedSet.has('pii-filter'),
+        // Through the same translation the enforcement hook uses, so the
+        // report cannot claim a narrowing the pipeline does not apply.
         settings: {
           ...piiDef.configuration.settings,
+          ...piiCategoriesToSettings(policy.piiCategories),
           categories:
             policy.piiCategories.length > 0 ? policy.piiCategories : 'all',
         },

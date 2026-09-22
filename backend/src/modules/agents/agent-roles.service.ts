@@ -119,6 +119,14 @@ export class AgentRolesService {
  * A role's requirement expressed as the routing policy fields L3 already
  * understands. The requirement is the durable statement of what the job
  * needs; the policy is how this layer asks for it.
+ *
+ * **Every field of RoleRequirement must appear here.** Three of them
+ * (minContext, maxBlendedPrice, tags) were declared on the entity, written
+ * by the API and read by nothing: a role saying "at least 200k context"
+ * resolved to a 4k card without complaint. A field the requirement can
+ * carry and this function drops is a setting that silently does nothing,
+ * so requirement-fields-reach-the-router.guard.spec.ts fails the build
+ * when the two lists diverge.
  */
 export function requirementToPolicy(role: Pick<AgentRole, 'requirement'>): Partial<RoutingPolicy> {
   const r = role.requirement ?? {};
@@ -126,5 +134,7 @@ export function requirementToPolicy(role: Pick<AgentRole, 'requirement'>): Parti
   if (r.capabilities) policy.capabilities = r.capabilities as RoutingPolicy['capabilities'];
   if (r.privacyTierCeiling) policy.privacyTier = r.privacyTierCeiling as RoutingPolicy['privacyTier'];
   if (r.region) policy.regions = [r.region];
+  if (r.minContext != null) policy.minContextLength = r.minContext;
+  if (r.maxBlendedPrice != null) policy.maxBlendedPricePerMTok = r.maxBlendedPrice;
   return policy;
 }
