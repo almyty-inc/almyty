@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   Min,
   Max,
@@ -109,8 +110,17 @@ export class RunnerConfigDto {
 }
 
 export class RegisterRunnerDto {
+  // The accepted name is `[a-zA-Z0-9_-]{1,64}`: it is published as part
+  // of a runner's capability tool names and shown in `/runners`, so it
+  // stays a single safe token. RunnerService.register enforces the same
+  // rule (it is the contract, not a nicety); declaring it here too means
+  // a bad name is refused by the validation pipe with a field-level
+  // error instead of a bare 400 from the service.
   @IsString()
-  @MaxLength(120)
+  @MaxLength(64)
+  @Matches(/^[a-zA-Z0-9_-]{1,64}$/, {
+    message: 'name must match [a-zA-Z0-9_-]{1,64}',
+  })
   name!: string;
 
   @IsObject()

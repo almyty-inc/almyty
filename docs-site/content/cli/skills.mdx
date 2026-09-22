@@ -89,10 +89,10 @@ $ npx @almyty/skills install @acme/petstore/get-pet
 The CLI detects which AI agents are configured in your project and writes SKILL.md files to the correct directories. Each skill gets its own folder:
 
 ```
-.claude/skills/almyty-get-pet/SKILL.md
-.claude/skills/almyty-list-pets/SKILL.md
-.agents/skills/almyty-get-pet/SKILL.md
-.agents/skills/almyty-list-pets/SKILL.md
+.claude/skills/get-pet/SKILL.md
+.claude/skills/list-pets/SKILL.md
+.agents/skills/get-pet/SKILL.md
+.agents/skills/list-pets/SKILL.md
 ```
 
 ### Agent detection
@@ -105,7 +105,7 @@ The CLI auto-detects 30+ AI coding agents by looking for their config directorie
 | Cursor | `.cursor/` | `.agents/skills/` |
 | Windsurf | `.windsurf/` | `.windsurf/skills/` |
 | GitHub Copilot | `.github/copilot/` | `.agents/skills/` |
-| Codex | `.codex/` | `.agents/skills/` |
+| Codex | `.codex/` | `.codex/skills/` |
 | Gemini CLI | `.gemini/` | `.agents/skills/` |
 
 If no agents are detected, the CLI defaults to `.claude/skills/` and `.agents/skills/` (the cross-client standard from agentskills.io).
@@ -134,7 +134,7 @@ $ npx @almyty/skills remove
 Removed 10 skill(s) total.
 ```
 
-Only files in `almyty-*` subdirectories are removed. Your other skills are untouched.
+Only skills almyty installed are removed, identified by the `author: almyty` line in their SKILL.md frontmatter. Your other skills are untouched.
 
 ## Running skills directly
 

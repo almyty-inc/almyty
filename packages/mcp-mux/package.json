@@ -1,10 +1,10 @@
 {
   "name": "@almyty/mcp-mux",
-  "version": "1.2.0",
+  "version": "1.5.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Share one stdio MCP server subprocess across many concurrent clients over a Unix socket \u2014 remaps request ids, serializes writes, respawns on crash. Internal almyty plumbing.",
+  "description": "Share one stdio MCP server subprocess across many concurrent clients over a Unix socket — remaps request ids, serializes writes, respawns on crash. Internal almyty plumbing.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

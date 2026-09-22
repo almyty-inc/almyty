@@ -1,10 +1,10 @@
 {
   "name": "@almyty/acp-server",
-  "version": "1.2.0",
+  "version": "1.5.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Expose any almyty agent over the Agent Client Protocol (ACP) \u2014 drop your agent into ACP-compatible editors and clients.",
+  "description": "Expose any almyty agent over the Agent Client Protocol (ACP) — drop your agent into ACP-compatible editors and clients.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
