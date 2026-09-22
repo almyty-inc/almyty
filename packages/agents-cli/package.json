@@ -1,10 +1,10 @@
 {
   "name": "@almyty/agents",
-  "version": "1.2.0",
+  "version": "1.5.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Run and manage almyty agents from your terminal \u2014 list, invoke workflow or autonomous runs, stream steps, and inspect run history.",
+  "description": "Run and manage almyty agents from your terminal — list, invoke workflow or autonomous runs, stream steps, and inspect run history.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

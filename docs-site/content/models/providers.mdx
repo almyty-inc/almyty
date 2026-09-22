@@ -1,6 +1,6 @@
 # Providers
 
-A provider is a key almyty calls a vendor with. Add one and its models become [cards](/models) in the background; the first passing health check makes the default model selectable, and the router can pick it. almyty ships 31 provider types, and any server that speaks the OpenAI chat API can be registered without one.
+A provider is a key almyty calls a vendor with. Add one and its models become [cards](/models) in the background; the first passing health check makes the default model selectable, and the router can pick it. almyty ships 39 provider types: 38 named vendors, plus `custom`, which takes any server that speaks the OpenAI chat API.
 
 ![Models page](/screenshots/models.png)
 
@@ -34,6 +34,13 @@ Every row below was checked against the vendor's current documentation on 2026-0
 | `zai` | Z.ai (GLM) | `https://api.z.ai/api/paas/v4` | `Authorization: Bearer` | **none documented** | yes | yes |
 | `cohere` | Cohere | `https://api.cohere.ai/compatibility/v1` | `Authorization: Bearer` | yes, from the native `/v1/models` | yes | yes |
 | `perplexity` | Perplexity | `https://api.perplexity.ai/v1` (Responses-shaped) | `Authorization: Bearer` | yes, unauthenticated | yes, flat Responses shape | yes |
+| `minimax` | MiniMax | `https://api.minimax.io/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `upstage` | Upstage Solar | `https://api.upstage.ai/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `writer` | Writer (Palmyra) | `https://api.writer.com/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `qianfan` | Baidu ERNIE (Qianfan) | `https://qianfan.baidubce.com/v2` | `Authorization: Bearer` | yes | yes | yes |
+| `hunyuan` | Tencent Hunyuan (TokenHub) | `https://tokenhub-intl.tencentcloudmaas.com/v1` | `Authorization: Bearer` | yes | yes | yes |
+| `volcengine` | ByteDance Doubao (Ark) | `https://ark.ap-southeast.bytepluses.com/api/v3`, or the mainland endpoint via `ark.edition` | `Authorization: Bearer` | **none documented** | yes | yes |
+| `spark` | iFlytek Spark | `https://spark-api-open.xf-yun.com/x2`, generation selected by `spark.generation` | `Authorization: Bearer` | **none documented** | yes | yes |
 
 ### Aggregators and OpenAI-compatible hosts
 
@@ -50,6 +57,7 @@ Every row below was checked against the vendor's current documentation on 2026-0
 | `nebius` | Nebius Token Factory | `https://api.tokenfactory.nebius.com/v1` | `Authorization: Bearer` | yes | yes | not documented |
 | `sambanova` | SambaNova | `https://api.sambanova.ai/v1` | `Authorization: Bearer` | **none documented** | yes | yes |
 | `huggingface` | Hugging Face | `https://router.huggingface.co/v1` | `Authorization: Bearer hf_...` | yes, with per-provider `supports_tools` and pricing | yes | yes |
+| `straitly` | Straitly | `https://api.straitly.ai/v1` | `Authorization: Bearer` | yes | yes | yes |
 
 ### The customer's own cloud
 
@@ -73,13 +81,13 @@ Every row below was checked against the vendor's current documentation on 2026-0
 | Type | Vendor | Default base URL | Auth | Live model list | Tools | Stream |
 |---|---|---|---|---|---|---|
 | `ollama` | Ollama | `http://localhost:11434/v1` | none (optional Bearer behind a proxy) | yes, native `GET /api/tags` | yes | yes |
-| `custom` | Custom (any OpenAI-compatible server) | your `baseUrl` | per `custom.authMethod` | yes, `GET <base>/models` | operator's | operator's |
+| `custom` | Custom (any OpenAI-compatible server) | your `configuration.apiUrl` | per `custom.authMethod` | yes, `GET <base>/models` | operator's | operator's |
 
-Every native type ships with its default base URL; set `baseUrl` to point at a compatible proxy instead. The key field takes whatever token the vendor issues and is encrypted at rest.
+Every native type ships with its default base URL; set `configuration.apiUrl` to point at a compatible proxy instead. There is no top-level `baseUrl` field. The key field takes whatever token the vendor issues and is encrypted at rest.
 
 **Live model list.** Where the vendor serves a listing, the model dropdown is populated from it, a configured model is checked against it on save, and a blank model resolves to the vendor's current default by family, never a hardcoded id. Where no listing exists, a blank model resolves to `NO_MODEL_CONFIGURED` rather than a guessed id; the health check and the catalog surface the vendor's own reason when a request still fails.
 
-**Dispatch.** Most types ride the OpenAI-compatible chat client: `<base>/chat/completions` with a Bearer key (or an `api-key` header for the two Azure surfaces). Anthropic, Gemini, Cohere, Perplexity, Vertex AI and Hugging Face have their own request shapes; nothing vendor-specific is added for a plain OpenAI-compatible host beyond its base URL, its auth header, its key page and its price-feed namespace.
+**Dispatch.** Most types ride the OpenAI-compatible chat client: `<base>/chat/completions` with a Bearer key (or an `api-key` header for the two Azure surfaces). Anthropic, Gemini, Cohere, Perplexity, Vertex AI and Hugging Face have their own request shapes, and Writer is OpenAI-shaped in body but posts to `/chat` rather than `/chat/completions`; nothing vendor-specific is added for a plain OpenAI-compatible host beyond its base URL, its auth header, its key page and its price-feed namespace.
 
 ### Notes per vendor
 
@@ -110,6 +118,7 @@ $ npx @almyty/models register-endpoint \
     --model qwen3-32b \
     --tier local \
     --region office
+API key for the endpoint (empty for none):
 Registered.
 Lab box  [qwen3-32b]  local/office  unpriced
     4f2a...  not selectable (validation: never)
@@ -121,7 +130,7 @@ Lab box  [qwen3-32b]  local/office  unpriced
     4f2a...  selectable
 ```
 
-`--api-key` adds a Bearer token when the server checks one. A self-run server has no feed price, so give the card a price override if you want `cheapest` to weigh it, or leave it unpriced and let the router place it last. A server the reconcile loop should watch and price as a deployment is registered the same way and shows up under the `custom-endpoint` [adapter](/models/deployments#custom-endpoint).
+The command above prompts for a Bearer token without echoing it, and takes an empty answer for a server that checks none. In a script, pipe the key in instead — `printf '%s' "$LAB_KEY" | npx @almyty/models register-endpoint ... --api-key-stdin`. Passing `--api-key sk-...` on the command line is refused: argv lands in your shell history and is readable by any process through `ps`. A self-run server has no feed price, so give the card a price override if you want `cheapest` to weigh it, or leave it unpriced and let the router place it last. A server the reconcile loop should watch and price as a deployment is registered the same way and shows up under the `custom-endpoint` [adapter](/models/deployments#custom-endpoint).
 
 ## Related
 

@@ -601,6 +601,15 @@ jobs:
       - name: Check @almyty/* version lockstep
         run: node scripts/check-npm-lockstep.js
 
+      # check-npm-lockstep proves the manifests agree with each other; this
+      # proves each CLI's binary agrees with its own manifest. A version
+      # restated as a literal does not move when this workflow bumps
+      # package.json, which is why the published @almyty/cli@1.2.0 answers
+      # --version with 0.1.0. Same shape as the checks around it: Node + a
+      # checkout, no install (it runs the built bin only where one exists).
+      - name: Check every CLI reports its own version
+        run: node scripts/check-cli-versions.js
+
       # A rotted package-lock.json is invisible until `npm ci`, which does
       # not warn about it — it refuses. Two had rotted unnoticed, and the
       # cost was that CI could not use `npm ci` for ANY package leg, so

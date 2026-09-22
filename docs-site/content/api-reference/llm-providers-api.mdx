@@ -12,14 +12,21 @@ REST API reference for managing LLM provider connections.
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/llm-providers` | List all providers |
-| `POST` | `/llm-providers` | Add a provider |
+| `POST` | `/llm-providers` | Add a provider (admin/owner) |
+| `GET` | `/llm-providers/provider-types` | Every vendor the platform can call, with display name, features, and key/docs links |
+| `POST` | `/llm-providers/test-connection` | Probe a `{type, apiKey}` pair before saving it |
+| `POST` | `/llm-providers/models/by-type` | List a vendor's models from a `{type, apiKey}` pair, before saving |
 | `GET` | `/llm-providers/:id` | Get provider by ID |
-| `PATCH` | `/llm-providers/:id` | Update a provider |
-| `DELETE` | `/llm-providers/:id` | Delete a provider |
+| `PATCH` | `/llm-providers/:id` | Update a provider (admin/owner) |
+| `DELETE` | `/llm-providers/:id` | Delete a provider (admin/owner) |
+| `GET` | `/llm-providers/:id/usage` | Request, token, and cost totals for one provider |
+| `GET` | `/llm-providers/:id/models` | Models this saved provider currently lists |
 | `POST` | `/llm-providers/:id/test` | Test connection |
 | `POST` | `/llm-providers/:id/chat` | Send a chat message |
 
 ## Add a Provider
+
+`type` picks the vendor, and everything else about the connection — the key, the base URL, the default call parameters — lives under `configuration`.
 
 ```bash
 curl -X POST https://api.almyty.com/llm-providers \
@@ -27,10 +34,10 @@ curl -X POST https://api.almyty.com/llm-providers \
   -H "Content-Type: application/json" \
   -d '{
     "name": "OpenAI Production",
-    "provider": "openai",
-    "apiKey": "sk-...",
-    "model": "gpt-4o",
+    "type": "openai",
     "configuration": {
+      "apiKey": "sk-...",
+      "model": "gpt-4o",
       "temperature": 0.7,
       "maxTokens": 4096
     }
@@ -41,14 +48,41 @@ curl -X POST https://api.almyty.com/llm-providers \
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | string | Yes | Display name |
-| `provider` | string | Yes | `openai`, `anthropic`, or `custom` |
-| `apiKey` | string | Yes | Provider API key |
-| `model` | string | No | Default model |
-| `baseUrl` | string | No | Custom endpoint URL (for self-hosted or compatible APIs) |
-| `configuration` | object | No | Default parameters (temperature, maxTokens, etc.) |
+| `name` | string | Yes | Display name, max 100 characters |
+| `type` | string | Yes | Vendor key. One of the values `GET /llm-providers/provider-types` returns — `openai`, `anthropic`, `google`, `mistral`, `ollama`, `azure_openai`, `aws_bedrock`, `custom`, and the rest. An unknown value is rejected. |
+| `configuration` | object | Yes | Connection and default call settings — see below |
+| `description` | string | No | Max 1000 characters |
+| `credentialId` | uuid | No | Point at an existing connection instead of pasting `configuration.apiKey`. `null` clears the reference |
+| `usageCredentialId` | uuid | No | Connection holding the admin key for the vendor's usage/cost API |
+| `capabilities` | object | No | `{supportedModels, maxTokens, supportsFunctionCalling, supportsStreaming, supportsBatching, supportsVision, supportsAudio, supportsToolUse, supportedToolFormats}` |
+| `metadata` | object | No | `{version, region, endpoint, modelInfo}` |
+| `visibility` | `org` \| `team` | No | Who in the organization sees the provider |
+| `teamId` | string | No | The owning team when `visibility` is `team` |
+
+Creating, updating, and deleting a provider require the `admin` or `owner` role. Reading, testing, and chatting are open to `member` as well.
+
+### `configuration`
+
+Every field is optional; what a given vendor needs depends on its type.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `apiKey` | string | The pasted key. It becomes a Credential row rather than a column on the provider, and reads back masked |
+| `usageApiKey` | string | Admin or org-scoped key for the vendor's usage/cost API, where the vendor publishes one |
+| `apiUrl` | string | Base URL override: self-hosted servers, regional endpoints, and OpenAI-compatible hosts |
+| `apiVersion` | string | Vendor API version, where the vendor pins one |
+| `model` | string | Default model for calls that do not name one |
+| `maxTokens`, `temperature`, `topP`, `topK`, `frequencyPenalty`, `presencePenalty` | number | Default call parameters |
+| `timeout`, `retries` | number | Per-call timeout in milliseconds, and retry count |
+| `rateLimits` | object | `{requestsPerMinute, requestsPerHour, tokensPerMinute, tokensPerHour}` |
+| `azure` | object | `{deploymentName, resourceName, apiVersion}` |
+| `bedrock` | object | `{region, accessKeyId, secretAccessKey, sessionToken}` |
+| `huggingface` | object | `{endpoint, taskType}` |
+| `custom` | object | `{headers, authMethod, requestFormat}` for an OpenAI-compatible host that needs shaping |
 
 ### Response
+
+The provider comes back with its secrets stripped: `configuration` is reduced to the non-secret call settings, and the key is referenced rather than returned.
 
 ```json
 {
@@ -56,18 +90,27 @@ curl -X POST https://api.almyty.com/llm-providers \
   "data": {
     "id": "prov-uuid",
     "name": "OpenAI Production",
-    "provider": "openai",
-    "model": "gpt-4o",
+    "type": "openai",
     "status": "active",
+    "configuration": {
+      "model": "gpt-4o",
+      "maxTokens": 4096,
+      "temperature": 0.7,
+      "apiUrl": null
+    },
+    "totalRequests": 0,
     "totalCost": 0,
     "createdAt": "2026-03-01T10:00:00Z"
-  }
+  },
+  "message": "Provider added"
 }
 ```
 
+`status` is one of `active`, `inactive`, `error`, or `maintenance`.
+
 ## Test Connection
 
-Verify the provider is configured correctly:
+Verify a saved provider is configured correctly. The platform makes one short real call, using the provider's configured model or, when it has none, whatever the vendor currently serves:
 
 ```bash
 curl -X POST https://api.almyty.com/llm-providers/{id}/test \
@@ -78,31 +121,56 @@ curl -X POST https://api.almyty.com/llm-providers/{id}/test \
 {
   "success": true,
   "data": {
-    "status": "ok",
-    "model": "gpt-4o",
+    "isHealthy": true,
     "responseTime": 450
-  }
+  },
+  "message": "Connection test completed"
 }
 ```
 
+A failed probe returns `isHealthy: false` with an `error` string rather than an HTTP error.
+
+To check a key *before* saving anything, post the pair to `/llm-providers/test-connection`:
+
+```bash
+curl -X POST https://api.almyty.com/llm-providers/test-connection \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "type": "openai", "apiKey": "sk-..." }'
+```
+
+That returns `{ok, latencyMs, modelCount}`. Ollama is keyless, so `apiKey` may be omitted for it.
+
 ## Send a Chat Message
+
+The body is a message list, not a single string:
 
 ```bash
 curl -X POST https://api.almyty.com/llm-providers/{id}/chat \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "Hello, what can you do?",
+    "messages": [
+      { "role": "user", "content": "Hello, what can you do?" }
+    ],
     "sessionId": "optional-session-uuid"
   }'
 ```
+
+`messages` is required. `model` overrides the provider default; `maxTokens` (1–200000), `temperature` (0–2), `topP` (0–1), `topK` (0–100), `frequencyPenalty` and `presencePenalty` (−2–2), `stopSequences`, `tools`, `toolIds`, and `stream` are all optional. Pass `routing` instead of `model` to let the model catalog pick, in which case the response carries a `routing` attribution saying which card answered.
 
 Sessions maintain conversation history. Omit `sessionId` for one-off messages.
 
 ## Supported Providers
 
-| Provider | Models |
-|----------|--------|
-| **OpenAI** | gpt-4o, gpt-4o-mini, gpt-4-turbo, o1, o3 |
-| **Anthropic** | claude-opus-5, claude-sonnet-5, claude-haiku-4-5 |
-| **Custom** | Any OpenAI-compatible API (set `baseUrl`) |
+Which vendors almyty can call is registry data, not a list frozen in these docs, and which *models* are usable is a property of your organization's catalog rather than of the platform. Three endpoints answer it live:
+
+| Question | Call |
+|----------|------|
+| Which vendor types exist? | `GET /llm-providers/provider-types` |
+| What does this saved provider currently serve? | `GET /llm-providers/:id/models` |
+| What would this key serve, before I save it? | `POST /llm-providers/models/by-type` with `{type, apiKey}` |
+
+A model is only *usable* once it has a card in your catalog that is active, points at a callable provider, and has passed one real validation run. `GET /models` lists the cards with that state, `POST /models/sync` imports what a provider currently lists, and `POST /models/:id/validate` runs the call that makes a card selectable. See the [Models](/models) guide for the whole flow.
+
+`custom` is the escape hatch: any OpenAI-compatible API, pointed at with `configuration.apiUrl` and shaped with `configuration.custom`.

@@ -1,10 +1,10 @@
 {
   "name": "@almyty/runner",
-  "version": "1.2.0",
+  "version": "1.5.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Connect your own machine to almyty \u2014 a small daemon that lets agents run tools and coding CLIs locally, with code and credentials staying on your box.",
+  "description": "Connect your own machine to almyty — a small daemon that lets agents run tools and coding CLIs locally, with code and credentials staying on your box.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

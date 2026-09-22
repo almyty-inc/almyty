@@ -10,11 +10,14 @@ hf://Qwen/Qwen3-14B@e3b0    ->      adapter + config + desired  ->    card (endp
 bedrock://anthropic.claude...       reconcile every 2 min              router picks it
 ```
 
-The whole flow from the terminal, deploying straight from a Hugging Face repository:
+The whole flow from the terminal, deploying straight from a Hugging Face repository. The adapter's config holds the Hugging Face token, and a token never goes on the command line, so it comes from a file here (`--config-stdin` and `--credential` are the other two ways; see [the CLI page](/models/cli#deployments)):
 
 ```bash
+$ cat > hf.json <<'JSON'
+{"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}
+JSON
 $ npx @almyty/models deploy hf://Qwen/Qwen3-14B@e3b0c442 --adapter huggingface-endpoints \
-    --config '{"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}' \
+    --config-file hf.json \
     --desired '{"replicas":1,"privacyTier":"private_cloud","region":"eu-west-1"}'
 Queued.
 c07b...  huggingface-endpoints  pending  replicas ?/1
@@ -22,6 +25,7 @@ $ npx @almyty/models deployments --json | jq -r '.[0].actual.url'
 https://acme-qwen3-14b.eu-west-1.aws.endpoints.huggingface.cloud/v1
 $ npx @almyty/models register-endpoint --name "Support fine-tune" --url https://acme-qwen3-14b.eu-west-1.aws.endpoints.huggingface.cloud/v1 \
     --model qwen3-14b-support-ft --tier private_cloud --region eu-west-1
+API key for the endpoint (empty for none):
 $ npx @almyty/models validate 4f2a...
 Passed in 1210 ms.
 ```
