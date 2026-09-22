@@ -84,7 +84,6 @@ export function currentTenantSlug(location: Location = window.location): string 
   return devSlugOverride(location.search) ?? slugFromHost(location.hostname)
 }
 
-/** True on {slug}.almyty.app (or a configured base), where the dashboard must not run. */
 /**
  * Product analytics and error reporting belong to almyty's own dashboard.
  * A visitor on a tenant's chat host is the tenant's user, not ours, and
@@ -95,7 +94,7 @@ export function telemetryAllowedOn(location: Location = window.location): boolea
   return !isHostedChatHost(location)
 }
 
+/** True on {slug}.almyty.app (or a configured base), where the dashboard must not run. */
 export function isHostedChatHost(location: Location = window.location): boolean {
-
   return currentTenantSlug(location) !== null
 }

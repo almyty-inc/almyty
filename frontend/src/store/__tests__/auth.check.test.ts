@@ -15,9 +15,15 @@ vi.mock('@/lib/api', () => ({
     updateProfile: vi.fn(),
   },
 }))
-vi.mock('@/lib/analytics', () => ({ identifyForAnalytics: vi.fn(), resetAnalytics: vi.fn() }))
+// `identifyForAnalytics` is a local helper inside store/auth.ts, not an export
+// of @/lib/analytics — naming it here left the real import, `identifyUser`,
+// absent from the mock, so every successful checkAuth threw inside the
+// post-auth bookkeeping and the store's own try/catch swallowed it. The
+// assertions below still passed while the analytics path was never exercised.
+vi.mock('@/lib/analytics', () => ({ identifyUser: vi.fn(), resetAnalytics: vi.fn() }))
 
 import { authApi } from '@/lib/api'
+import { identifyUser } from '@/lib/analytics'
 import { useAuthStore } from '../auth'
 
 describe('checkAuth and authChecked', () => {
@@ -41,5 +47,14 @@ describe('checkAuth and authChecked', () => {
     const s = useAuthStore.getState()
     expect(s.authChecked).toBe(true)
     expect(s.isAuthenticated).toBe(false)
+  })
+
+  // Guard for the mock above: a session restore must reach identifyUser.
+  // Without this, renaming the export again would silently put the test
+  // back on the swallowed-error path with every other assertion green.
+  it('re-identifies the restored session for analytics', async () => {
+    ;(authApi.getProfile as any).mockResolvedValueOnce({ id: 'u-2', email: 'a@b.c', organizationMemberships: [] })
+    await useAuthStore.getState().checkAuth()
+    expect(identifyUser).toHaveBeenCalledWith(expect.objectContaining({ id: 'u-2' }))
   })
 })
