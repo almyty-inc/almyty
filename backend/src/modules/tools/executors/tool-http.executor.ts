@@ -27,6 +27,10 @@ import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
 import { Operation } from '../../../entities/operation.entity';
 import { validateUrl, sanitizeHeaders } from '../../../common/security/url-validator';
+import {
+  decideToolRequest,
+  effectiveMaxResponseBytes,
+} from '../../../common/security/gateway-tool-policy';
 import { ToolAuthService } from '../services/tool-auth.service';
 import {
   ToolExecutionOptions,
@@ -97,6 +101,14 @@ export class ToolHttpExecutor {
       if (!urlCheck.valid) {
         this.logger.warn(`SSRF blocked for HTTP tool ${tool.name}: ${urlCheck.error}`);
         return this.blockedResult(url, httpConfig.method, urlCheck.error!, startTime);
+      }
+
+      // Gateway-tool security policy. Narrows what validateUrl already
+      // allowed: allowed/blocked domains, require-HTTPS, allowed methods.
+      const policyCheck = decideToolRequest(options.securityPolicy, url, httpConfig.method);
+      if (!policyCheck.allowed) {
+        this.logger.warn(`Security policy blocked HTTP tool ${tool.name}: ${policyCheck.reason}`);
+        return this.blockedResult(url, httpConfig.method, policyCheck.reason!, startTime);
       }
 
       // 4. Query params. Start from httpConfig.queryParams (which can
@@ -172,7 +184,7 @@ export class ToolHttpExecutor {
         url,
         timeout,
         signal: options.signal,
-        maxContentLength: MAX_CONTENT_LENGTH,
+        maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
         maxBodyLength: MAX_BODY_LENGTH,
         // SSRF: never follow redirects past the validateUrl gate.
         maxRedirects: 0,
@@ -230,7 +242,7 @@ export class ToolHttpExecutor {
       // 10. Execute, optionally with pagination.
       let result: any;
       if (httpConfig.pagination?.type) {
-        result = await executeWithPagination(axiosConfig, httpConfig);
+        result = await executeWithPagination(axiosConfig, httpConfig, options.securityPolicy);
       } else {
         const response = await axios(axiosConfig);
         result = processHttpResponse(response, httpConfig);
@@ -357,6 +369,14 @@ export class ToolHttpExecutor {
         return this.blockedResult(url, operation.method, fullUrlCheck.error!, Date.now());
       }
 
+      // Gateway-tool security policy. Narrows what validateUrl already
+      // allowed: allowed/blocked domains, require-HTTPS, allowed methods.
+      const policyCheck = decideToolRequest(options.securityPolicy, url, operation.method);
+      if (!policyCheck.allowed) {
+        this.logger.warn(`Security policy blocked tool ${tool.name}: ${policyCheck.reason}`);
+        return this.blockedResult(url, operation.method, policyCheck.reason!, Date.now());
+      }
+
       const safeHeaders = sanitizeHeaders(headerParams as Record<string, string>);
 
       const config: AxiosRequestConfig = {
@@ -364,7 +384,7 @@ export class ToolHttpExecutor {
         url,
         timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
         signal: options.signal,
-        maxContentLength: MAX_CONTENT_LENGTH,
+        maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
         maxBodyLength: MAX_BODY_LENGTH,
         // SSRF: never follow redirects past the validateUrl gate.
         maxRedirects: 0,

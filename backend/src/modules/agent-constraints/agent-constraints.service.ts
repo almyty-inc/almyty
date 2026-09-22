@@ -54,15 +54,27 @@ export class AgentConstraintsService {
     return this.repo.save(c);
   }
 
-  async setActive(id: string, organizationId: string, active: boolean): Promise<AgentConstraint> {
-    const c = await this.repo.findOne({ where: { id, organizationId } });
+  /**
+   * Flip a constraint active/inactive. `agentId`, when given, is part of the
+   * lookup: a constraint reached through another agent's URL is not found.
+   */
+  async setActive(
+    id: string,
+    organizationId: string,
+    active: boolean,
+    agentId?: string,
+  ): Promise<AgentConstraint> {
+    const c = await this.repo.findOne({
+      where: { id, organizationId, ...(agentId ? { agentId } : {}) },
+    });
     if (!c) throw new NotFoundException('Constraint not found');
     c.active = active;
     return this.repo.save(c);
   }
 
-  async remove(id: string, organizationId: string): Promise<void> {
-    const res = await this.repo.delete({ id, organizationId });
+  /** Delete a constraint. `agentId`, when given, must be the one it belongs to. */
+  async remove(id: string, organizationId: string, agentId?: string): Promise<void> {
+    const res = await this.repo.delete({ id, organizationId, ...(agentId ? { agentId } : {}) });
     if (!res.affected) throw new NotFoundException('Constraint not found');
   }
 
