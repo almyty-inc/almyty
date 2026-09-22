@@ -40,8 +40,10 @@ vi.mock('@/pages/not-found', () => ({
 }))
 
 // Auth store is only consumed by App for checkAuth + pageviews; stub it.
+// One shared spy so a test can assert whether the auth bootstrap ran.
+const { checkAuth } = vi.hoisted(() => ({ checkAuth: vi.fn() }))
 vi.mock('@/store/auth', () => ({
-  useAuthStore: () => ({ checkAuth: vi.fn() }),
+  useAuthStore: () => ({ checkAuth }),
 }))
 
 vi.mock('@/hooks/use-pageviews', () => ({
@@ -92,6 +94,13 @@ describe('App authed routing', () => {
     await waitFor(() => expect(screen.getByTestId('dashboard-shell')).toBeInTheDocument())
     expect(screen.getByText('Page not found')).toBeInTheDocument()
   })
+
+  it('runs the dashboard auth bootstrap on the dashboard host', async () => {
+    checkAuth.mockClear()
+    renderAt('/')
+    await screen.findByText('Dashboard Marker')
+    expect(checkAuth).toHaveBeenCalled()
+  })
 })
 
 describe('App hosted-chat dispatch', () => {
@@ -103,6 +112,15 @@ describe('App hosted-chat dispatch', () => {
     renderAt('/')
     expect(await screen.findByText('Hosted chat acme')).toBeInTheDocument()
     expect(screen.queryByText('Dashboard Marker')).not.toBeInTheDocument()
+  })
+
+  // checkAuth hits /auth/profile; a 401 there sends the visitor to the
+  // dashboard sign-in, which a tenant host must never show.
+  it('does not run the dashboard auth bootstrap on a tenant host', async () => {
+    checkAuth.mockClear()
+    renderAt('/')
+    await screen.findByText('Hosted chat acme')
+    expect(checkAuth).not.toHaveBeenCalled()
   })
 })
 
