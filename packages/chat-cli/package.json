@@ -1,10 +1,10 @@
 {
   "name": "@almyty/chat",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Chat with your almyty agents in an interactive terminal REPL \u2014 multi-turn and streaming, with tool calls and autonomous runs.",
+  "description": "Chat with your almyty agents in an interactive terminal REPL — multi-turn and streaming, with tool calls and autonomous runs.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
