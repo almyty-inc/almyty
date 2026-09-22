@@ -583,7 +583,7 @@ describe('ToolGeneratorService', () => {
       jest.spyOn(toolRepository, 'findOne').mockResolvedValue(toolWithOp as any);
       jest.spyOn(toolRepository, 'save').mockResolvedValue(toolWithOp as any);
 
-      const result = await service.regenerateToolFromOperation('tool-1');
+      const result = await service.regenerateToolFromOperation('tool-1', 'org-1');
 
       expect(result).toBeDefined();
       expect(result.version).toBe('1.0.1');
@@ -593,7 +593,7 @@ describe('ToolGeneratorService', () => {
       jest.spyOn(toolRepository, 'findOne').mockResolvedValue(null);
 
       await expect(
-        service.regenerateToolFromOperation('tool-1')
+        service.regenerateToolFromOperation('tool-1', 'org-1')
       ).rejects.toThrow('Tool or operation not found');
     });
 
@@ -602,7 +602,7 @@ describe('ToolGeneratorService', () => {
       jest.spyOn(toolRepository, 'findOne').mockResolvedValue(toolWithoutOp as any);
 
       await expect(
-        service.regenerateToolFromOperation('tool-1')
+        service.regenerateToolFromOperation('tool-1', 'org-1')
       ).rejects.toThrow('Tool or operation not found');
     });
 
@@ -615,7 +615,7 @@ describe('ToolGeneratorService', () => {
       jest.spyOn(toolRepository, 'findOne').mockResolvedValue(toolWithOp as any);
       jest.spyOn(toolRepository, 'save').mockResolvedValue({ ...toolWithOp, version: '2.5.4' } as any);
 
-      const result = await service.regenerateToolFromOperation('tool-1');
+      const result = await service.regenerateToolFromOperation('tool-1', 'org-1');
 
       expect(result.version).toBe('2.5.4');
     });

@@ -171,9 +171,9 @@ export class ConnectionsGovernanceService {
     private readonly auditLog: AuditLogService,
     private readonly spend: SpendService,
     @Optional() private readonly notifications?: NotificationsService,
-    // TODO(lead): bind gate 5's RotationService: { provide: CONNECTION_ROTATOR, useExisting: RotationService }
+    // Bound in this module to ConnectionsRotatorBridge.
     @Optional() @Inject(CONNECTION_ROTATOR) private readonly rotator?: ConnectionRotator,
-    // TODO(lead): bind gate 2's GrantsService: { provide: CONNECTION_GRANT_REVOKER, useExisting: GrantsService }
+    // Bound in this module to gate 2's GrantsService.
     @Optional() @Inject(CONNECTION_GRANT_REVOKER) private readonly grantRevoker?: ConnectionGrantRevoker,
   ) {}
 

@@ -84,7 +84,10 @@ export class FilesService {
     if (filters?.runId) qb.andWhere('file.runId = :runId', { runId: filters.runId });
     if (filters?.mimeType) qb.andWhere('file.mimeType = :mimeType', { mimeType: filters.mimeType });
 
-    qb.orderBy('file.createdAt', 'DESC').skip(skip).take(limit);
+    // Tied `createdAt` values order arbitrarily; with skip/take that
+    // duplicates one row across pages and drops another. See
+    // ApisService.findAllByOrganization for the same pairing.
+    qb.orderBy('file.createdAt', 'DESC').addOrderBy('file.id', 'DESC').skip(skip).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };

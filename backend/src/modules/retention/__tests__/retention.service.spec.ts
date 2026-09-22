@@ -1,3 +1,6 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 import { RetentionService } from '../retention.service';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 
@@ -145,6 +148,49 @@ describe('RetentionService', () => {
       expect(entry.changes).toEqual([
         { field: 'enabled', from: true, to: false },
       ]);
+    });
+  });
+
+  /**
+   * Source-reading guard.
+   *
+   * `toolExecutionsDays` and `notificationsDays` each had a migration, an
+   * entity column, a validated DTO field and a branch in the sweep -- and
+   * no way to be set, because RetentionService kept its own hand-written
+   * DAY_FIELDS list and neither was on it. The settings form accepted the
+   * number, the PUT answered 200 with the old value, and tool_executions
+   * (the largest table by bytes) was never pruned.
+   *
+   * Reading the DTO rather than restating it means the next column added
+   * to the form fails here instead of failing silently in production.
+   */
+  describe('every day field the DTO accepts is persisted', () => {
+    const dtoSource = readFileSync(
+      join(__dirname, '..', 'dto', 'update-retention-policy.dto.ts'),
+      'utf8',
+    );
+    const dayFields = [...dtoSource.matchAll(/^\s{2}(\w+Days)\??:/gm)].map((m) => m[1]);
+
+    it('finds the day fields in the DTO', () => {
+      expect(dayFields.length).toBeGreaterThanOrEqual(7);
+      expect(dayFields).toEqual(expect.arrayContaining(['toolExecutionsDays', 'notificationsDays']));
+    });
+
+    it.each(dayFields)('persists %s', async (field) => {
+      const result: any = await service.upsertPolicy('org-1', { [field]: 42 } as any, 'user-1');
+
+      expect(result[field]).toBe(42);
+      expect(auditLogService.log.mock.calls[0][0].changes).toEqual([
+        { field, from: null, to: 42 },
+      ]);
+    });
+
+    it('returns keep-forever defaults for every day field when no row exists', async () => {
+      const result: any = await service.getPolicy('org-1');
+
+      for (const field of dayFields) {
+        expect(result[field]).toBeNull();
+      }
     });
   });
 });
