@@ -44,8 +44,6 @@ export interface Organization {
   plan: OrganizationPlan
   settings: OrganizationSettings
   agentDefaults?: OrganizationAgentDefaults
-  /** Members may connect accounts only they can use. Default on for personal orgs, off for production orgs. */
-  allowUserScopedConnections?: boolean
   billingInfo?: BillingInfo
   isActive: boolean
   createdAt: string
@@ -65,6 +63,15 @@ export enum OrganizationPlan {
   ENTERPRISE = 'enterprise',
 }
 
+/**
+ * The `settings` json column on the Organization row
+ * (backend/src/entities/organization.entity.ts OrganizationSettings).
+ *
+ * Every key is optional there and a freshly created organization is
+ * saved with no settings at all, so nothing here may be declared
+ * required: `settings.maxApis` used to be typed `number` and is
+ * `undefined` on every org the dashboard has ever loaded.
+ */
 export interface OrganizationSettings {
   /**
    * Consulted by the engine when an llm_call node names neither a provider
@@ -72,12 +79,22 @@ export interface OrganizationSettings {
    * builder reads it to know whether such a node is actually incomplete or
    * merely relying on the organization default.
    */
-  defaultRouting?: Record<string, any>
-  maxGateways: number
-  maxApis: number
-  maxTools: number
-  allowedDomains?: string[]
-  webhookUrl?: string
+  defaultRouting?: Record<string, any> | null
+  maxGateways?: number
+  maxApis?: number
+  maxTools?: number
+  allowedApiTypes?: string[]
+  defaultRateLimit?: { ttl: number; limit: number }
+  webhooks?: { enabled: boolean; endpoints: string[] }
+  /** Hosts this org may reach even though they resolve to a private address. */
+  egressAllowlist?: string[]
+  /**
+   * Members may connect accounts only they can use. Read by the backend at
+   * `settings.allowUserScopedConnections` (connections.service.ts) and
+   * written there by connectionsApi.setUserScopedConnections; it is not a
+   * top-level column, which is where this used to be declared.
+   */
+  allowUserScopedConnections?: boolean
 }
 
 export interface BillingInfo {

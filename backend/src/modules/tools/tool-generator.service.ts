@@ -452,9 +452,21 @@ export class ToolGeneratorService {
     return this.toolVersionRepository.save(version);
   }
 
-  async regenerateToolFromOperation(toolId: string): Promise<Tool> {
+  /**
+   * Regenerate a tool's schemas from its source API operation.
+   *
+   * `organizationId` is REQUIRED and part of the lookup: the route that
+   * reaches here is `POST /organizations/:organizationId/tools/:toolId/
+   * regenerate`, and RolesGuard only proves the caller is an admin/owner
+   * of the org in the PATH — it says nothing about who owns `toolId`.
+   * Looking the tool up by id alone let an admin of one org regenerate
+   * (and so rewrite the description, parameters and version of) a tool
+   * belonging to another. Scope the read, exactly as the sibling
+   * generateToolsFromApi handler scopes its API read.
+   */
+  async regenerateToolFromOperation(toolId: string, organizationId: string): Promise<Tool> {
     const tool = await this.toolRepository.findOne({
-      where: { id: toolId },
+      where: { id: toolId, organizationId },
       relations: { operation: { api: true } },
     });
 

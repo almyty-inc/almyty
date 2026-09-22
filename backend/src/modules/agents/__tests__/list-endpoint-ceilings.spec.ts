@@ -98,6 +98,10 @@ describe('list endpoints clamp a caller-set limit', () => {
         andWhere: jest.fn().mockReturnThis(),
         addSelect: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
+        // The list now adds a unique tiebreak after the sort key, because
+        // createdAt ties and skip/take over a tied ordering can show one row
+        // on two pages and another on none.
+        addOrderBy: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
         getCount: jest.fn().mockResolvedValue(0),

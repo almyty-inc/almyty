@@ -925,7 +925,7 @@ describe('ToolGeneratorService', () => {
       toolVersionRepository.create.mockReturnValue(mockToolVersion);
       toolVersionRepository.save.mockResolvedValue(mockToolVersion);
 
-      const result = await service.regenerateToolFromOperation('tool-1');
+      const result = await service.regenerateToolFromOperation('tool-1', 'org-1');
 
       expect(result.version).toBe('1.0.1');
       expect(toolRepository.save).toHaveBeenCalled();
@@ -935,7 +935,7 @@ describe('ToolGeneratorService', () => {
     it('should throw error if tool not found', async () => {
       toolRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.regenerateToolFromOperation('non-existent'))
+      await expect(service.regenerateToolFromOperation('non-existent', 'org-1'))
         .rejects
         .toThrow('Tool or operation not found');
     });

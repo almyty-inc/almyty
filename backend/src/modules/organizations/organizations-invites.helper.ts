@@ -13,6 +13,23 @@ import { GatewaysService } from '../gateways/gateways.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { TeamMembershipHelper } from './team-membership.helper';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
+
+/**
+ * Extra permissions off an invite body: trimmed, de-duplicated, and
+ * with anything that isn't a non-empty string dropped. The column is
+ * `json`, so without this a body could park numbers or objects in a
+ * list that hasPermission() then compares with `includes`.
+ */
+function normalizeInvitePermissions(permissions?: string[]): string[] {
+  if (!Array.isArray(permissions)) return [];
+  const seen = new Set<string>();
+  for (const permission of permissions) {
+    const trimmed = typeof permission === 'string' ? permission.trim() : '';
+    if (trimmed) seen.add(trimmed);
+  }
+  return [...seen];
+}
+
 /**
  * Invitation flow extracted from OrganizationsService:
  * inviteUser, acceptInvite, getInviteDetails. The original service
@@ -62,6 +79,29 @@ export class OrganizationsInvitesHelper {
       throw new ForbiddenException('Cannot invite a user at a role higher than your own');
     }
 
+    // Extra permissions asked for on the invite land on the membership
+    // row, but never above what the inviter holds themselves.
+    //
+    // The column is read by UserOrganization.hasPermission() and by the
+    // connections permission check, and it is additive to the role: an
+    // ADMIN has no 'billing' permission, so persisting the body's array
+    // unchecked would let an admin invite an address they control with
+    // permissions: ['billing'] and reach billing anyway -- the same
+    // self-escalation the role-rank check above refuses, one field over.
+    //
+    // Until now nothing wrote this column at all, so the field was
+    // accepted, validated, advertised in Swagger, and dropped.
+    const permissionsProvided = inviteUserDto.permissions !== undefined;
+    const grantedPermissions = normalizeInvitePermissions(inviteUserDto.permissions);
+    const ungrantable = grantedPermissions.filter(
+      (permission) => !inviterMembership.hasPermission(permission),
+    );
+    if (ungrantable.length > 0) {
+      throw new ForbiddenException(
+        `Cannot grant permissions you do not hold yourself: ${ungrantable.join(', ')}`,
+      );
+    }
+
     const inviter = await this.userRepository.findOne({ where: { id: invitedBy } });
     const inviterName = inviter ? `${inviter.firstName} ${inviter.lastName}`.trim() : 'A team member';
 
@@ -85,6 +125,7 @@ export class OrganizationsInvitesHelper {
         }
         // Update existing pending membership
         existingMembership.role = inviteUserDto.role;
+        if (permissionsProvided) existingMembership.permissions = grantedPermissions;
         existingMembership.invitedBy = invitedBy;
         existingMembership.inviteToken = inviteToken;
         existingMembership.inviteExpiresAt = inviteExpiresAt;
@@ -97,6 +138,7 @@ export class OrganizationsInvitesHelper {
           userId: user.id,
           organizationId,
           role: inviteUserDto.role,
+          permissions: permissionsProvided ? grantedPermissions : undefined,
           invitedBy,
           inviteToken,
           inviteExpiresAt,
@@ -145,6 +187,7 @@ export class OrganizationsInvitesHelper {
       inviteToken,
       inviteExpiresAt: inviteExpiresAt.toISOString(),
       invitedBy,
+      ...(permissionsProvided ? { permissions: grantedPermissions } : {}),
     };
 
     // Appended by the database, not read-modify-written here.
@@ -269,6 +312,7 @@ export class OrganizationsInvitesHelper {
           organizationId: org.id,
           role: invite.role,
           invitedBy: invite.invitedBy,
+          permissions: Array.isArray(invite.permissions) ? invite.permissions : undefined,
           inviteAccepted: true,
           isActive: true,
         });
