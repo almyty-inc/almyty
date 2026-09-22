@@ -33,6 +33,7 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { Api, ApiType } from '../../entities/api.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
+import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
@@ -84,6 +85,12 @@ export class ToolExecutorService {
     private readonly runnerCalls: RunnerCallService,
     private readonly memoryService: CanonicalMemoryService,
     private readonly mcpSources: McpSourcesService,
+    // The reader for `gateway_tools.securityPolicy`. Placed here, after the
+    // other required dependencies and before the optional plugin manager,
+    // so the positional spec harnesses keep the same order for everything
+    // that came before it.
+    @InjectRepository(GatewayTool)
+    private readonly gatewayToolRepository: Repository<GatewayTool>,
     // Optional and last: PluginsModule is @Global(), but the spec harnesses
     // for this service construct it positionally, and a plugin pipeline that
     // is absent must not stop a tool running.
@@ -132,6 +139,27 @@ export class ToolExecutorService {
 
       if (tool.status !== ToolStatus.ACTIVE) {
         throw new Error(`Tool is ${tool.status}, cannot execute`);
+      }
+
+      // Resolve the gateway tool's security policy before dispatch.
+      //
+      // `gateway_tools.securityPolicy` had a column, a PATCH endpoint and a
+      // dashboard form, and no reader anywhere in backend/src: a user could
+      // set allowed domains, require-HTTPS and a max response size, watch it
+      // save, and have every setting ignored on the next call. This is where
+      // it is read; the executors enforce it at each outbound request.
+      //
+      // Only the gateway paths carry a gatewayId, which is correct: the
+      // policy is scoped to one tool on one gateway, and a direct API call
+      // or an agent node that did not come through a gateway is not governed
+      // by it. A caller that already holds the row can pass `securityPolicy`
+      // itself (including explicit `null`) to skip this query.
+      if (options.securityPolicy === undefined && options.gatewayId) {
+        const gatewayTool = await this.gatewayToolRepository.findOne({
+          where: { gatewayId: options.gatewayId, toolId: tool.id },
+          select: { id: true, securityPolicy: true },
+        });
+        options = { ...options, securityPolicy: gatewayTool?.securityPolicy ?? null };
       }
 
       // User permission check (skipped for MCP unauthenticated sessions,

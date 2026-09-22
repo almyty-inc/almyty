@@ -51,6 +51,7 @@ import { ToolVersion } from '../entities/tool-version.entity';
 import { ToolExecution } from '../entities/tool-execution.entity';
 import { Agent } from '../entities/agent.entity';
 import { AgentExecution } from '../entities/agent-execution.entity';
+import { AgentExecutionCancellationService } from '../modules/agents/agent-execution-cancellation.service';
 import { AgentRun } from '../entities/agent-run.entity';
 import { CanonicalMemory } from '../modules/memory/canonical/canonical-memory.entity';
 import { CanonicalMemoryWorkspaceConfig } from '../modules/memory/canonical/canonical-memory-config.entity';
@@ -297,6 +298,7 @@ const mockRedis = {
     { provide: AcpDiscoveryService, useValue: { buildDiscovery: () => ({}) } },
     { provide: UtcpService, useValue: { handleRequest: () => ({}) } },
     { provide: AgentRuntimeService, useValue: { startRun: () => ({}), getRun: () => ({}), listRuns: () => ([]), getRunEmitter: () => null, subscribeRunEvents: () => ({}), sendInput: () => ({}), cancelRun: () => ({}) } },
+    AgentExecutionCancellationService,
     UnifiedAgentHelper,
     UnifiedGatewayDelegation,
     // Channel layer (mock — channel webhook delegation isn't exercised here)

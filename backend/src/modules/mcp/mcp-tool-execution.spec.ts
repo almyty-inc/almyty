@@ -151,6 +151,9 @@ describe('McpService - Tool Execution', () => {
         {
           userId: null,
           organizationId: 'org-123',
+          // No gateway on this path, so no gateway_tools.securityPolicy
+          // applies -- but the executor is told so explicitly.
+          gatewayId: null,
         }
       );
     });
@@ -192,6 +195,9 @@ describe('McpService - Tool Execution', () => {
         {
           userId: null,
           organizationId: 'org-123',
+          // No gateway on this path, so no gateway_tools.securityPolicy
+          // applies -- but the executor is told so explicitly.
+          gatewayId: null,
         }
       );
     });

@@ -8,6 +8,10 @@ import { Api } from '../../../entities/api.entity';
 import { ApiSchema } from '../../../entities/api-schema.entity';
 import { Operation } from '../../../entities/operation.entity';
 import { validateUrl, sanitizeHeaders } from '../../../common/security/url-validator';
+import {
+  decideToolRequest,
+  effectiveMaxResponseBytes,
+} from '../../../common/security/gateway-tool-policy';
 import { ToolAuthService } from '../services/tool-auth.service';
 import { GrpcCallerService } from './grpc-caller.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tool-execution.types';
@@ -51,6 +55,14 @@ export class ToolGrpcExecutor {
       return this.blocked(urlCheck.error!, startTime);
     }
 
+    // Gateway-tool security policy. gRPC here is JSON-over-HTTP POST, so
+    // allowed-domains, require-HTTPS and allowed-methods all apply.
+    const grpcPolicy = decideToolRequest(options.securityPolicy, url, 'POST');
+    if (!grpcPolicy.allowed) {
+      this.logger.warn(`Security policy blocked gRPC tool ${tool.name}: ${grpcPolicy.reason}`);
+      return this.blocked(grpcPolicy.reason!, startTime);
+    }
+
     const requestData: Record<string, any> = {};
     if (tool.grpcConfig!.requestMapping) {
       for (const [k, v] of Object.entries(tool.grpcConfig!.requestMapping)) {
@@ -74,7 +86,7 @@ export class ToolGrpcExecutor {
       }),
       data: requestData,
       timeout: tool.configuration?.timeout ?? 30000,
-      maxContentLength: MAX_CONTENT_LENGTH,
+      maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       signal: options.signal,
     };
@@ -107,6 +119,12 @@ export class ToolGrpcExecutor {
     if (!baseValidation.valid) {
       this.logger.warn(`SSRF blocked for gRPC tool ${tool.name}: ${baseValidation.error}`);
       return this.blocked(baseValidation.error!, startTime);
+    }
+
+    const basePolicy = decideToolRequest(options.securityPolicy, api.baseUrl, 'POST');
+    if (!basePolicy.allowed) {
+      this.logger.warn(`Security policy blocked gRPC tool ${tool.name}: ${basePolicy.reason}`);
+      return this.blocked(basePolicy.reason!, startTime);
     }
 
     // Resolve service + method from the parser-emitted endpoint

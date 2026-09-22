@@ -661,7 +661,13 @@ describe('GatewaysController', () => {
       expect(toolExecutorService.executeTool).toHaveBeenCalledWith(
         'tool-1',
         { key: 'value' },
-        { userId: 'user-1', organizationId: 'org-1' },
+        // gatewayId and securityPolicy are part of the contract now: the
+        // executor resolves gateway_tools.securityPolicy from the gatewayId
+        // and enforces it on the outbound request. A skill executed through
+        // a gateway that carries no policy passes null, which allows
+        // everything -- but it must still be passed, or the executor has
+        // nothing to look the policy up by.
+        { userId: 'user-1', organizationId: 'org-1', gatewayId: 'gw-1', securityPolicy: null },
       );
     });
 
@@ -747,7 +753,7 @@ describe('GatewaysController', () => {
       expect(toolExecutorService.executeTool).toHaveBeenCalledWith(
         'tool-1',
         {},
-        { userId: 'user-1', organizationId: 'org-1' },
+        { userId: 'user-1', organizationId: 'org-1', gatewayId: 'gw-1', securityPolicy: null },
       );
     });
   });

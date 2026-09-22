@@ -4,6 +4,10 @@ import {
   assertSafeNextPageUrl,
   evaluateHttpSuccessCondition,
 } from '../tool-execution-utils';
+import {
+  assertToolRequestAllowed,
+  GatewayToolSecurityPolicy,
+} from '../../../common/security/gateway-tool-policy';
 
 export function processHttpResponse(response: any, httpConfig: any): any {
   const mapping = httpConfig.responseMapping;
@@ -36,6 +40,7 @@ export function processHttpResponse(response: any, httpConfig: any): any {
 export async function executeWithPagination(
   baseConfig: AxiosRequestConfig,
   httpConfig: any,
+  policy?: GatewayToolSecurityPolicy | null,
 ): Promise<any[]> {
   const pagination = httpConfig.pagination;
   const maxPages = pagination.maxPages ?? 5;
@@ -63,6 +68,10 @@ export async function executeWithPagination(
           // back through validateUrl before fetch. A malicious API
           // can't redirect us into 169.254.169.254, localhost, etc.
           pageConfig.url = assertSafeNextPageUrl(nextUrl, baseConfig.url);
+          // ...and back through the gateway tool's own policy. A next-page
+          // URL is supplied by the upstream, so an allowed-domain list that
+          // held for page 1 has to be re-checked for page 2.
+          assertToolRequestAllowed(policy, pageConfig.url, String(pageConfig.method ?? 'GET'));
           pageConfig.params = undefined;
         } else if (nextCursor && pagination.cursorParam) {
           pageConfig.params = pageConfig.params || {};
@@ -80,6 +89,7 @@ export async function executeWithPagination(
       case 'link-header':
         if (nextUrl) {
           pageConfig.url = assertSafeNextPageUrl(nextUrl, baseConfig.url);
+          assertToolRequestAllowed(policy, pageConfig.url, String(pageConfig.method ?? 'GET'));
           pageConfig.params = undefined;
         }
         break;

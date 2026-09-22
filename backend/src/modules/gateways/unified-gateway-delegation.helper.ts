@@ -139,10 +139,14 @@ export class UnifiedGatewayDelegation {
 
     let auth: any = null;
     if (!isDiscovery && !isChannel) {
+      // The org and the gateway (with its auth configs) are already in
+      // hand from the unified controller — hand them over so the resolver
+      // does not repeat both lookups.
       const result = await this.gatewayResolver.resolveAndAuthenticate(
         orgSlug,
         `/${resourceSlug}`,
         req,
+        { organization, gateway },
       );
       auth = result.auth;
     }
@@ -438,7 +442,7 @@ export class UnifiedGatewayDelegation {
 
     if (action === 'execute' && req.method === 'POST') {
       const userId = auth?.userId || (req as any).user?.sub || null;
-      const result = await this.utcpService.executeUtcpTool(body, organization.id, userId);
+      const result = await this.utcpService.executeUtcpTool(body, organization.id, userId, gateway.id);
       this.metrics?.record(MetricType.UTCP_DIRECT_CALL, {
         organizationId: organization.id,
         gatewayId: gateway.id,

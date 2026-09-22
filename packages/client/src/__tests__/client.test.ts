@@ -481,6 +481,28 @@ describe('GatewayClient', () => {
     expect(url).toBe(`${BASE}/myorg/my-agent/runs/run-1/cancel`);
   });
 
+  it('should POST to /executions/:id/cancel, the workflow counterpart of cancelRun', async () => {
+    globalThis.fetch = mockFetch(200, { data: { id: 'exec-1', status: 'cancelled' } });
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('myorg', 'my-agent');
+
+    await gw.cancelExecution('exec-1');
+    const [url, init] = (globalThis.fetch as any).mock.calls[0];
+    expect(url).toBe(`${BASE}/myorg/my-agent/executions/exec-1/cancel`);
+    expect(init.method).toBe('POST');
+  });
+
+  it('should escape an execution id rather than splice it into the path', async () => {
+    globalThis.fetch = mockFetch(200, {});
+    const client = new AlmytyClient(BASE, TOKEN);
+    const gw = client.gateway('myorg', 'my-agent');
+
+    await gw.cancelExecution('a/../b');
+    expect((globalThis.fetch as any).mock.calls[0][0]).toBe(
+      `${BASE}/myorg/my-agent/executions/a%2F..%2Fb/cancel`,
+    );
+  });
+
   it('should POST to /runs/:id/input', async () => {
     globalThis.fetch = mockFetch(200, {});
     const client = new AlmytyClient(BASE, TOKEN);

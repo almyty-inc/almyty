@@ -149,7 +149,7 @@ export class McpService {
           break;
 
         case 'tools/call':
-          result = await this.toolHandler.handleToolCall(request.params as McpCallToolRequest, organizationId, userId);
+          result = await this.toolHandler.handleToolCall(request.params as McpCallToolRequest, organizationId, userId, gatewayId);
           break;
 
         case 'completion/complete':

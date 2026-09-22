@@ -18,7 +18,8 @@
 import * as readline from 'node:readline';
 import { resolveCredentials } from './auth.js';
 import { AlmytyProxy } from './proxy.js';
-import { AlmytyAcpAgent, type JsonRpcRequest, type JsonRpcResponse, type JsonRpcNotification } from './agent.js';
+import { AlmytyAcpAgent, type JsonRpcResponse, type JsonRpcNotification } from './agent.js';
+import { createLineHandler } from './dispatch.js';
 
 // ── Argument parsing ─────────────────────────────────────────────
 
@@ -102,48 +103,23 @@ async function main(): Promise<void> {
   // Start listening on stdin IMMEDIATELY — Zed expects the process
   // to be ready for JSON-RPC as soon as it spawns. Agent resolution
   // and auth happen lazily on first `initialize` message.
+  //
+  // Resolution is memoised inside createLineHandler: readline hands us
+  // every line already buffered in the pipe in one burst, so the guard
+  // has to be the in-flight promise, not the settled agent.
   let agent: AlmytyAcpAgent | null = null;
+
+  const handleLine = createLineHandler({
+    resolveAgent: async () => {
+      agent = await resolveAgent(agentArg!, send);
+      return agent;
+    },
+    send,
+  });
 
   const rl = readline.createInterface({ input: process.stdin, terminal: false });
 
-  rl.on('line', async (line: string) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-
-    let msg: JsonRpcRequest;
-    try {
-      msg = JSON.parse(trimmed);
-    } catch {
-      send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
-      return;
-    }
-
-    if (!msg.jsonrpc || msg.jsonrpc !== '2.0' || !msg.method) {
-      if (msg.id !== undefined) {
-        send({ jsonrpc: '2.0', id: msg.id, error: { code: -32600, message: 'Invalid request' } });
-      }
-      return;
-    }
-
-    // Lazy init: resolve credentials + agent on first message
-    if (!agent) {
-      try {
-        agent = await resolveAgent(agentArg!, send);
-      } catch (err: any) {
-        send({ jsonrpc: '2.0', id: msg.id ?? null, error: { code: -32603, message: err.message } });
-        return;
-      }
-    }
-
-    try {
-      await agent.handleMessage(msg);
-    } catch (err) {
-      process.stderr.write(`[acp] Error: ${err}\n`);
-      if (msg.id !== undefined && msg.id !== null) {
-        send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'Internal error' } });
-      }
-    }
-  });
+  rl.on('line', handleLine);
 
   // Handle stdin close (client disconnected)
   rl.on('close', () => {
