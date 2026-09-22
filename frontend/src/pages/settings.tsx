@@ -66,7 +66,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 border-b">
+      <div role="group" aria-label="Settings sections" className="flex flex-wrap items-center gap-1 border-b">
         {([
           { key: 'organization' as SettingsTab, label: 'Organization', icon: Building },
           { key: 'members' as SettingsTab, label: 'Members & Teams', icon: Users },

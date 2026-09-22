@@ -365,7 +365,9 @@ export function CatalogTab() {
               )}
               <div className="ml-auto flex items-center gap-1">
                 <Button variant={view === 'cards' ? 'secondary' : 'ghost'} size="sm" className="gap-1.5" onClick={() => setView('cards')} aria-pressed={view === 'cards'}>
-                  <LayoutGrid className="h-4 w-4" />\n                  Grid\n                </Button>
+                  <LayoutGrid className="h-4 w-4" />
+                  Grid
+                </Button>
                 <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="sm" className="gap-1.5" onClick={() => setView('table')} aria-pressed={view === 'table'}>
                   <Rows3 className="h-4 w-4" />
                   Table
