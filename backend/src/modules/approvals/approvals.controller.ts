@@ -81,6 +81,7 @@ export class ApprovalsController {
       id,
       { decidedBy: req.user.id, decisionReason: body?.decisionReason },
       { id: req.user.id },
+      req.user.currentOrganizationId,
     );
     return { success: true, data };
   }
@@ -97,6 +98,7 @@ export class ApprovalsController {
       id,
       { decidedBy: req.user.id, decisionReason: body?.decisionReason },
       { id: req.user.id },
+      req.user.currentOrganizationId,
     );
     return { success: true, data };
   }

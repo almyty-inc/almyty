@@ -66,6 +66,17 @@ describe('organization store stays in sync with the server', () => {
     }
   })
 
+  it('keeps every settings section in a wrapping navigation group', async () => {
+    render(<SettingsPage />)
+    const sections = screen.getByRole('group', { name: 'Settings sections' })
+    expect(sections).toHaveClass('flex-wrap')
+    expect(within(sections).getAllByRole('button')).toHaveLength(14)
+    for (const name of ['SSO', 'Roles', 'Compliance', 'Audit streaming', 'Encryption']) {
+      expect(within(sections).getByRole('button', { name, exact: true })).toBeEnabled()
+    }
+    await screen.findByText('Old Name')
+  })
+
   it('renaming from Settings updates the store, so the name on screen changes', async () => {
     vi.mocked(organizationsApi.update).mockResolvedValue({
       ...ORG,

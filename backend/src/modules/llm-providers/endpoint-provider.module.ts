@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { LlmProvider } from '../../entities/llm-provider.entity';
+import { Organization } from '../../entities/organization.entity';
 import { EndpointProviderHelper } from './endpoint-provider.helper';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 
@@ -13,7 +14,7 @@ import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
  * which would drag them into the providers/tools/agents dependency cycle.
  */
 @Module({
-  imports: [TypeOrmModule.forFeature([LlmProvider])],
+  imports: [TypeOrmModule.forFeature([LlmProvider, Organization])],
   providers: [EndpointProviderHelper, LlmProviderSecretsHelper],
   exports: [EndpointProviderHelper],
 })

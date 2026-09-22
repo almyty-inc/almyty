@@ -59,16 +59,24 @@ describe('every schema fetch goes through the guarded helper', () => {
     expect(mcp).toContain('fetchSchemaFromUrl(String(args.schemaUrl))');
   });
 
-  it('the helper still validates, caps and refuses redirects', () => {
+  it('the helper gates, pins, caps and refuses redirects', () => {
     const helper = readFileSync(join(SRC, 'modules', 'apis', 'apis-import.helper.ts'), 'utf8');
     const start = helper.indexOf('async fetchSchemaFromUrl(');
     expect(start).toBeGreaterThan(-1);
     const body = helper.slice(start, helper.indexOf('\n  }', start));
 
-    expect(body).toContain('validateUrl(url)');
+    // `assertOutboundUrlAllowed` replaced a direct `validateUrl` call when
+    // #696's mechanism moved in here: same string check underneath, plus
+    // the uniform refusal that does not leak whether a host or port exists.
+    expect(body).toContain('assertOutboundUrlAllowed(url)');
     expect(body).toContain('maxContentLength');
     expect(body).toContain('maxRedirects: 0');
+    // The string gate is not enough on its own. A public name whose A
+    // record answers 169.254.169.254 passes it, so the connection is
+    // pinned too -- this is the half #696 found and the REST door lacked.
+    expect(body).toContain('httpAgent: ssrfSafeHttpAgent');
+    expect(body).toContain('httpsAgent: ssrfSafeHttpsAgent');
     // The refusal must come before the request, not after it.
-    expect(body.indexOf('validateUrl(url)')).toBeLessThan(body.indexOf('axios.get('));
+    expect(body.indexOf('assertOutboundUrlAllowed(url)')).toBeLessThan(body.indexOf('axios.get('));
   });
 });
