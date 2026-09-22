@@ -29,6 +29,7 @@ function fakeGateway(options: FakeOptions = {}) {
   const calls = {
     startRun: 0,
     cancelRun: [] as string[],
+    cancelExecution: [] as string[],
     sendRunInput: [] as Array<[string, string]>,
     invoke: 0,
     streamInvoke: 0,
@@ -46,8 +47,10 @@ function fakeGateway(options: FakeOptions = {}) {
     },
     async streamInvoke(_input, handler) {
       calls.streamInvoke++;
-      if (options.invokeStreamError) throw options.invokeStreamError;
+      // Script first, then the error: a mid-stream abort has already seen
+      // execution.started, which is where the execution id comes from.
       for (const event of options.script ?? []) handler({ type: event.type, data: event.data ?? {} } as StreamEvent);
+      if (options.invokeStreamError) throw options.invokeStreamError;
     },
     async invoke() {
       calls.invoke++;
@@ -55,6 +58,7 @@ function fakeGateway(options: FakeOptions = {}) {
     },
     async sendRunInput(runId, input) { calls.sendRunInput.push([runId, input]); },
     async cancelRun(runId) { calls.cancelRun.push(runId); },
+    async cancelExecution(executionId) { calls.cancelExecution.push(executionId); },
   };
 
   return { target, calls };
@@ -198,6 +202,54 @@ describe('workflow turn', () => {
     const result = await runTurn(target, 'go', { mode: 'workflow' });
     expect(result.status).toBe('failed');
     expect(result.error).toBe('node exploded');
+  });
+
+  it('cancels the execution server-side when the caller aborts mid-pipeline', async () => {
+    const abort = Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    const { target, calls } = fakeGateway({
+      script: [
+        { type: 'execution.started', data: { executionId: 'exec_7', agentId: 'agent_1' } },
+        { type: 'node.started', data: { nodeId: 'llm', nodeType: 'llm_call' } },
+      ],
+      invokeStreamError: abort,
+    });
+    const ac = new AbortController();
+    ac.abort();
+
+    const result = await runTurn(target, 'go', { mode: 'workflow', signal: ac.signal });
+
+    expect(result.status).toBe('cancelled');
+    // The whole point of the issue: a workflow run is an execution, not a
+    // run, so cancelRun could never stop it.
+    expect(calls.cancelExecution).toEqual(['exec_7']);
+    expect(calls.cancelRun).toEqual([]);
+  });
+
+  it('does not invent an execution id when the stream never started one', async () => {
+    const abort = Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    const { target, calls } = fakeGateway({ invokeStreamError: abort });
+    const ac = new AbortController();
+    ac.abort();
+
+    const result = await runTurn(target, 'go', { mode: 'workflow', signal: ac.signal });
+
+    expect(result.status).toBe('cancelled');
+    expect(calls.cancelExecution).toEqual([]);
+  });
+
+  it('a cancel that fails server-side still reports the turn as cancelled', async () => {
+    const abort = Object.assign(new Error('Aborted'), { name: 'AbortError' });
+    const { target, calls } = fakeGateway({
+      script: [{ type: 'execution.started', data: { executionId: 'exec_9' } }],
+      invokeStreamError: abort,
+    });
+    target.cancelExecution = async () => { throw new Error('API error 409'); };
+    const ac = new AbortController();
+    ac.abort();
+
+    const result = await runTurn(target, 'go', { mode: 'workflow', signal: ac.signal });
+    expect(result.status).toBe('cancelled');
+    expect(calls.cancelExecution).toEqual([]);
   });
 });
 

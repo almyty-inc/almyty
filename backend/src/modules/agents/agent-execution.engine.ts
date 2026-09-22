@@ -14,6 +14,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Organization } from '../../entities/organization.entity';
 import { resolveRunLimits } from './run-limits';
 import { BudgetsService } from '../budgets/budgets.service';
+import { AgentExecutionCancellationService } from './agent-execution-cancellation.service';
 
 // Re-export so existing `import { StreamEvent } from './agent-execution.engine'`
 // continues to work without changing every consumer in one shot.
@@ -119,6 +120,12 @@ export class AgentExecutionEngine {
     // with no type error to show for it.
     @Optional()
     private readonly budgets?: BudgetsService,
+    // The in-process registry of running executions. Appended last for the
+    // same positional reason as everything above it. @Optional() so the
+    // spec harnesses that construct the engine without it still run -- an
+    // engine with no registry simply cannot be cancelled out-of-band.
+    @Optional()
+    private readonly cancellations?: AgentExecutionCancellationService,
   ) {}
 
   /**
@@ -171,6 +178,15 @@ export class AgentExecutionEngine {
       metadata: options.metadata || {},
     });
     await this.agentExecutionRepository.save(execution);
+
+    // Now that the execution has an id, put it in the cancellation registry
+    // and run on the registry's signal rather than the caller's. The two are
+    // the same signal as far as the nodes are concerned -- register() mirrors
+    // the caller's abort into it -- but the registry's is reachable by id,
+    // which is what lets POST .../executions/:id/cancel stop a run the
+    // caller is no longer holding.
+    const cancelController = this.cancellations?.register(execution.id, organizationId, options.signal);
+    const runSignal: AbortSignal | undefined = cancelController?.signal ?? options.signal;
 
     // Put this run in the correlation scope. Every log line for the rest
     // of the run, and every row written under it (a tool execution, a
@@ -318,7 +334,7 @@ export class AgentExecutionEngine {
         // cancelled, job killed), stop dispatching more work and
         // mark the run CANCELLED. This fires before timeout/budget
         // checks so a genuine cancel doesn't get mis-classified.
-        if (options.signal?.aborted) {
+        if (runSignal?.aborted) {
           execution.status = AgentExecutionStatus.CANCELLED;
           execution.error = 'Execution cancelled';
           execution.executionTime = Date.now() - startTime;
@@ -427,9 +443,9 @@ export class AgentExecutionEngine {
         // signal covering both client-cancel and budget.
         const layerAbort = new AbortController();
         const forwardCallerAbort = () => layerAbort.abort();
-        if (options.signal) {
-          if (options.signal.aborted) layerAbort.abort();
-          else options.signal.addEventListener('abort', forwardCallerAbort, { once: true });
+        if (runSignal) {
+          if (runSignal.aborted) layerAbort.abort();
+          else runSignal.addEventListener('abort', forwardCallerAbort, { once: true });
         }
         let layerRunningCost = totalCost;
 
@@ -555,7 +571,7 @@ export class AgentExecutionEngine {
             () => layerAbort.abort(),
           );
         } catch (timeoutErr: any) {
-          options.signal?.removeEventListener('abort', forwardCallerAbort);
+          runSignal?.removeEventListener('abort', forwardCallerAbort);
 
           // Give the aborted nodes a bounded moment to come back, so the
           // cost they already incurred is counted. `layerRunningCost`
@@ -608,7 +624,7 @@ export class AgentExecutionEngine {
         }
 
         // Done with this layer's abort; the next layer installs its own.
-        options.signal?.removeEventListener('abort', forwardCallerAbort);
+        runSignal?.removeEventListener('abort', forwardCallerAbort);
 
         // Track whether any node in this layer failed
         let layerHasFailure = false;
@@ -824,6 +840,33 @@ export class AgentExecutionEngine {
         return execution;
       }
 
+      // A cancel that arrives while the LAST layer is running has no next
+      // layer for the between-layer check to guard, so without this the
+      // engine would write COMPLETED straight over the CANCELLED row the
+      // cancellation service just persisted, and the caller who asked to
+      // stop would be told the run finished. Keyed on an explicit cancel,
+      // not on the signal: a client that merely disconnected as the run
+      // landed still gets its answer recorded.
+      if (this.cancellations?.isCancelled(execution.id)) {
+        execution.status = AgentExecutionStatus.CANCELLED;
+        execution.error = 'Execution cancelled';
+        execution.output = finalOutput;
+        execution.nodeResults = nodeResults;
+        execution.executionTime = executionTime;
+        execution.totalCost = totalCost;
+        execution.totalTokens = totalTokens;
+        execution.inputTokens = totalInputTokens;
+        execution.outputTokens = totalOutputTokens;
+        await this.agentExecutionRepository.save(execution);
+        await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
+        this.state.emitEvent(onEvent, {
+          type: 'execution.failed',
+          data: { error: execution.error, errorType: 'CANCELLED', executionId: execution.id },
+          timestamp: Date.now(),
+        });
+        return execution;
+      }
+
       // 8. Update execution record
       execution.status = AgentExecutionStatus.COMPLETED;
       execution.output = finalOutput;
@@ -907,6 +950,12 @@ export class AgentExecutionEngine {
       this.notifyRunFailed(agent, execution).catch(() => {});
 
       return execution;
+    } finally {
+      // Every exit from this method -- completed, failed, timed out,
+      // cancelled, crashed -- stops tracking the execution. A registry that
+      // leaked entries would both grow without bound and let a cancel abort
+      // a controller nothing is listening to.
+      this.cancellations?.release(execution.id);
     }
   }
 

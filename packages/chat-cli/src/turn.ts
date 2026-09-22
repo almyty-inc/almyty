@@ -30,6 +30,7 @@ export interface TurnTarget {
   invoke(input: Record<string, any>): Promise<any>;
   sendRunInput(runId: string, input: string): Promise<void>;
   cancelRun(runId: string): Promise<void>;
+  cancelExecution(executionId: string): Promise<void>;
 }
 
 export interface TurnHooks {
@@ -164,10 +165,28 @@ export async function runTurn(
   }
 
   // Workflow agents: a pipeline, streamed so its nodes are visible.
+  // The execution id arrives on execution.started and is the only handle
+  // on the pipeline: it is not known before the stream opens, and without
+  // it a cancel has nothing to name.
+  let executionId: string | undefined;
   try {
-    await target.streamInvoke({ message }, (event) => { state = pump(hooks, state, event); }, signal);
+    await target.streamInvoke(
+      { message },
+      (event) => {
+        const id = (event as { data?: { executionId?: unknown } })?.data?.executionId;
+        if (typeof id === 'string' && id) executionId = id;
+        state = pump(hooks, state, event);
+      },
+      signal,
+    );
   } catch (err) {
     if (isAborted(err, signal)) {
+      // Stop the pipeline where it is running, not just where it is
+      // watched -- the same handshake the autonomous branch does with
+      // cancelRun. A workflow run is an execution, not a run, so
+      // cancelRun could never reach it: Ctrl-C reported `cancelled`
+      // while the pipeline ran on, billing model calls nobody would read.
+      if (executionId) await target.cancelExecution(executionId).catch(() => {});
       return { status: 'cancelled', text: state.partial.trim(), usage: state.usage, conversationId: options.conversationId };
     }
     if (!streamUnavailable(err)) throw err;
