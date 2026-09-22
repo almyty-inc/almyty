@@ -222,13 +222,23 @@ jobs:
           - models-cli
           - runner
           - skills-cli
-        # almyty-cli is deliberately absent. It depends on
-        # @almyty/models and @almyty/connections at ^1.2.0, and neither is
-        # published -- npm answers 404, so no install can succeed here or
-        # for a user running `npm i -g @almyty/cli`. That is a live defect
-        # in the published umbrella binary, not a CI problem, and hiding it
-        # behind a green matrix leg would be worse than the gap. Tracked
-        # separately; add the leg back the moment both are on the registry.
+        # almyty-cli is deliberately absent, and its lockfile is the one
+        # rotted lock that cannot be regenerated. It depends on
+        # @almyty/models and @almyty/connections at ^1.2.0 and neither name
+        # exists on the registry (both answer 404), so `npm install` in that
+        # package fails outright -- there is nothing for npm to resolve.
+        #
+        # What a user gets today is worse than a failed install, not better:
+        # the PUBLISHED @almyty/cli@1.2.0 manifest predates those two
+        # dependencies, so `npm i -g @almyty/cli` succeeds and installs a
+        # binary that reports v0.1.0 and has no `models`, `connections` or
+        # `acp` command at all. The next publish from this tree would flip
+        # that to an uninstallable package, because npm publish does not
+        # check that a dependency resolves.
+        #
+        # Both halves close the same way: publish @almyty/models and
+        # @almyty/connections, then regenerate
+        # packages/almyty-cli/package-lock.json and add the leg back.
 
     steps:
       - name: Checkout
@@ -241,33 +251,53 @@ jobs:
           cache: 'npm'
           cache-dependency-path: packages/${{ matrix.package }}/package-lock.json
 
-      # `npm install`, not `npm ci`, ON PURPOSE AND ONLY FOR NOW: two
-      # of these lockfiles have rotted against their package.json and
-      # `npm ci` refuses them outright —
-      #   almyty-cli  lock is missing @almyty/models and @almyty/connections
-      #   models-cli  lock still carries version 0.1.0 vs package.json 1.2.0
-      # (chat-cli was a third; its lock is regenerated and `npm ci` clean.)
-      # Regenerate the last two (`cd packages/<pkg> && npm install` and
-      # commit the lockfile), then switch this line to
-      # `npm ci --ignore-scripts --legacy-peer-deps` to match every other
-      # install in this workflow. Leaving it on `npm install` permanently
-      # means CI tests a resolution the published artifact never saw.
+      # `npm ci`, like every other install in this workflow. It used to be
+      # `npm install` because two lockfiles had rotted against their
+      # package.json and `npm ci` refuses those outright: models-cli's lock
+      # still said 0.1.0 against a package.json at 1.2.0, and almyty-cli's
+      # was missing two dependencies. models-cli's is regenerated;
+      # almyty-cli is not in this matrix (see the note above it). Every
+      # package listed here now passes `npm ci --dry-run`, and
+      # scripts/check-package-locks.js fails the build if a lock drifts from
+      # its manifest again — so this line does not have to drift back.
+      #
+      # It matters which one runs: `npm install` resolves afresh and tests a
+      # dependency graph the published artifact was never built from.
       - name: Install dependencies
         working-directory: packages/${{ matrix.package }}
-        run: npm install --ignore-scripts --legacy-peer-deps --no-audit --no-fund
+        run: npm ci --ignore-scripts --legacy-peer-deps --no-audit --no-fund
+
+      # Every CLI here takes @almyty/client from the npm registry, so each
+      # leg was testing its package against the LAST PUBLISHED client rather
+      # than the one in this commit. That is how #657 hid: `streamInvoke`
+      # landed on GatewayClient in September, @almyty/client@1.2.0 was
+      # published in July, and chat-cli's `tsc` could not pass against the
+      # registry copy however correct the source was — so its build step was
+      # disabled instead. Build the sibling in this tree and put it where the
+      # dependent resolves it, and a package leg checks THIS repo.
+      #
+      # This is not a substitute for publishing: @almyty/client still has to
+      # ship a version carrying streamInvoke (1.2.0 is immutable on npm, so
+      # it needs a new one) before an installed @almyty/chat works. It is how
+      # CI stops being blind to the gap.
+      - name: Build the in-repo @almyty/client and link it into this package
+        run: |
+          target="packages/${{ matrix.package }}/node_modules/@almyty/client"
+          if [ ! -d "$target" ]; then
+            echo "packages/${{ matrix.package }} does not depend on @almyty/client — nothing to link"
+            exit 0
+          fi
+          npm --prefix packages/client ci --ignore-scripts --legacy-peer-deps --no-audit --no-fund
+          npm --prefix packages/client run build
+          rm -rf "$target/dist"
+          cp -R packages/client/dist "$target/dist"
+          cp packages/client/package.json "$target/package.json"
+          echo "linked packages/client@$(node -p "require('./packages/client/package.json').version") (this tree) into $target"
 
       # Some packages' tests import their own dist/ (acp-server spawns the
       # built binary and talks JSON-RPC to it), and --ignore-scripts above
       # means no prepare/prepublishOnly ran. Build where there is one.
-      # chat-cli is skipped: its source requires `streamInvoke` on
-      # TurnTarget, and the PUBLISHED @almyty/client@1.2.0 it depends on
-      # does not have that method, so `tsc` cannot succeed here however
-      # correct the code is. That is a real defect in what was published
-      # (see #657), not something to fix by loosening the build. vitest
-      # transpiles via esbuild without typechecking, so the step below
-      # still exercises the package's tests meanwhile.
       - name: Build (if the package has a build)
-        if: ${{ matrix.package != 'chat-cli' }}
         working-directory: packages/${{ matrix.package }}
         run: npm run build --if-present
 
@@ -285,15 +315,6 @@ jobs:
           case "${{ matrix.package }}" in
             runner)
               npx vitest run --exclude '**/*.real.spec.ts' ;;
-            acp-server)
-              # integration.test.ts spawns the built binary, sleeps 500ms and
-              # then talks JSON-RPC to it. It answers with an id but no
-              # result here, and it has never run in CI before this job
-              # existed, so whether that is a startup race or a real defect
-              # in the server is unestablished. Excluded rather than left
-              # red or silently passed; see issue #658. The other
-              # two files in this package run.
-              npx vitest run --exclude '**/integration.test.ts' ;;
             *)
               npm test ;;
           esac
@@ -579,6 +600,14 @@ jobs:
 
       - name: Check @almyty/* version lockstep
         run: node scripts/check-npm-lockstep.js
+
+      # A rotted package-lock.json is invisible until `npm ci`, which does
+      # not warn about it — it refuses. Two had rotted unnoticed, and the
+      # cost was that CI could not use `npm ci` for ANY package leg, so
+      # every leg tested a resolution the published artifact never saw.
+      # Same shape again: Node + a checkout, no install.
+      - name: Check every package-lock still describes its package.json
+        run: node scripts/check-package-locks.js
 
       # A backend controller prefix with no dev-proxy rule answers with
       # index.html under `npm run dev`, so the page dies parsing HTML as

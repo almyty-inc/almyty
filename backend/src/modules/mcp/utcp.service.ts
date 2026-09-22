@@ -346,6 +346,7 @@ export class UtcpService {
     context: UtcpExecutionContext,
     organizationId: string,
     userId: string | null,
+    gatewayId?: string | null,
   ): Promise<UtcpExecutionResult> {
     const startTime = Date.now();
 
@@ -362,6 +363,10 @@ export class UtcpService {
           timeout: context.options?.timeout,
           retries: context.options?.retries,
           skipCache: context.options?.skipCache,
+          // Lets the executor resolve and enforce this gateway_tool's
+          // securityPolicy. UTCP proxy calls always arrive through a
+          // gateway, so leaving it out silently skipped the policy.
+          gatewayId: gatewayId ?? null,
         },
       );
 

@@ -20,6 +20,10 @@ import { Tool } from '../../../entities/tool.entity';
 import { Api } from '../../../entities/api.entity';
 import { Operation } from '../../../entities/operation.entity';
 import { validateUrl, sanitizeHeaders } from '../../../common/security/url-validator';
+import {
+  decideToolRequest,
+  effectiveMaxResponseBytes,
+} from '../../../common/security/gateway-tool-policy';
 import { ToolAuthService } from '../services/tool-auth.service';
 import { ToolGrpcExecutor } from './tool-grpc.executor';
 import {
@@ -83,6 +87,15 @@ export class ToolProtocolExecutor {
       return this.blocked(urlCheck.error!, startTime);
     }
 
+    // Gateway-tool security policy. GraphQL and SOAP are POST-only over
+    // HTTP, so allowed-methods is judged against POST; domains and
+    // require-HTTPS apply exactly as they do to a plain HTTP tool.
+    const gqlPolicy = decideToolRequest(options.securityPolicy, endpoint, 'POST');
+    if (!gqlPolicy.allowed) {
+      this.logger.warn(`Security policy blocked GraphQL tool ${tool.name}: ${gqlPolicy.reason}`);
+      return this.blocked(gqlPolicy.reason!, startTime);
+    }
+
     const variables: Record<string, any> = {};
     if (tool.graphqlConfig!.variables) {
       for (const [k, v] of Object.entries(tool.graphqlConfig!.variables)) {
@@ -109,7 +122,7 @@ export class ToolProtocolExecutor {
       headers,
       data: { query: tool.graphqlConfig!.query, variables },
       timeout: tool.configuration?.timeout ?? 30000,
-      maxContentLength: MAX_CONTENT_LENGTH,
+      maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
       httpAgent: ssrfSafeHttpAgent,
@@ -149,6 +162,12 @@ export class ToolProtocolExecutor {
       return this.blocked(urlCheck.error!, startTime);
     }
 
+    const gqlOpPolicy = decideToolRequest(options.securityPolicy, targetUrl, 'POST');
+    if (!gqlOpPolicy.allowed) {
+      this.logger.warn(`Security policy blocked GraphQL tool ${tool.name}: ${gqlOpPolicy.reason}`);
+      return this.blocked(gqlOpPolicy.reason!, startTime);
+    }
+
     // If the caller passed an explicit `variables` object, use it.
     // Otherwise, treat the remaining parameters as variables — but
     // strip the three meta keys so they don't leak into the GraphQL
@@ -171,7 +190,7 @@ export class ToolProtocolExecutor {
       method: 'POST',
       url: targetUrl,
       timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
-      maxContentLength: MAX_CONTENT_LENGTH,
+      maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
       httpAgent: ssrfSafeHttpAgent,
@@ -249,6 +268,12 @@ export class ToolProtocolExecutor {
       return this.blocked(urlCheck.error!, startTime);
     }
 
+    const soapPolicy = decideToolRequest(options.securityPolicy, endpoint, 'POST');
+    if (!soapPolicy.allowed) {
+      this.logger.warn(`Security policy blocked SOAP tool ${tool.name}: ${soapPolicy.reason}`);
+      return this.blocked(soapPolicy.reason!, startTime);
+    }
+
     // XML-escape substituted parameter values. Without this, a value
     // containing `</soap:Body>` (or any `<`, `>`, `&`) breaks out of
     // its containing element and injects arbitrary XML into the
@@ -272,7 +297,7 @@ export class ToolProtocolExecutor {
       headers,
       data: envelope,
       timeout: tool.configuration?.timeout ?? 30000,
-      maxContentLength: MAX_CONTENT_LENGTH,
+      maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
       httpAgent: ssrfSafeHttpAgent,
@@ -319,6 +344,12 @@ export class ToolProtocolExecutor {
       return this.blocked(urlCheck.error!, startTime);
     }
 
+    const soapOpPolicy = decideToolRequest(options.securityPolicy, targetUrl, 'POST');
+    if (!soapOpPolicy.allowed) {
+      this.logger.warn(`Security policy blocked SOAP tool ${tool.name}: ${soapOpPolicy.reason}`);
+      return this.blocked(soapOpPolicy.reason!, startTime);
+    }
+
     const soapRequest = parameters as SOAPRequest;
     const safeSoapHeaders = soapRequest.headers ? sanitizeHeaders(soapRequest.headers) : {};
     const targetNamespace =
@@ -353,7 +384,7 @@ export class ToolProtocolExecutor {
       method: 'POST',
       url: targetUrl,
       timeout: options.timeout ?? tool.configuration?.timeout ?? 30000,
-      maxContentLength: MAX_CONTENT_LENGTH,
+      maxContentLength: effectiveMaxResponseBytes(options.securityPolicy, MAX_CONTENT_LENGTH),
       maxBodyLength: MAX_BODY_LENGTH,
       maxRedirects: 0,
       httpAgent: ssrfSafeHttpAgent,

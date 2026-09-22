@@ -9,6 +9,9 @@
  * that import from the old path keep working.
  */
 
+import { GatewayToolSecurityPolicy } from '../../common/security/gateway-tool-policy';
+export { GatewayToolSecurityPolicy };
+
 export interface ToolExecutionOptions {
   userId: string;
   organizationId: string;
@@ -36,6 +39,16 @@ export interface ToolExecutionOptions {
    */
   gatewayId?: string | null;
   runId?: string | null;
+  /**
+   * The `gateway_tools.securityPolicy` row governing this call.
+   *
+   * Normally left undefined: `ToolExecutorService.executeTool` resolves it
+   * from `gatewayId` + `toolId` before dispatch. Callers that already hold
+   * the gateway_tool row may pass it (or explicit `null` for "no policy")
+   * to skip that lookup. The executors enforce it at every outbound
+   * request; see `common/security/gateway-tool-policy.ts`.
+   */
+  securityPolicy?: GatewayToolSecurityPolicy | null;
 }
 
 export interface ToolExecutionResult {

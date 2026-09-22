@@ -267,7 +267,8 @@ export class GatewayAuthService {
     headers: Record<string, string>,
     query: Record<string, string>,
     body?: any,
-    clientIp?: string
+    clientIp?: string,
+    preloadedAuthConfigs?: GatewayAuth[]
   ): Promise<AuthenticationResult> {
     try {
       // Get all active auth configs for the gateway.
@@ -275,11 +276,18 @@ export class GatewayAuthService {
       // `gateway` is loaded because validateOAuth2 compares the access
       // token's organizationId against the gateway's owning org. Without
       // the relation that comparison had nothing to compare against.
-      const authConfigs = await this.gatewayAuthRepository.find({
-        where: { gatewayId, isActive: true },
-        relations: { gateway: true },
-        order: { createdAt: 'ASC' },
-      });
+      //
+      // The resolver reaches here holding the same rows off the gateway's
+      // `authConfigs` relation (with the inverse side attached); when it
+      // hands them over this query is skipped entirely. Every other caller
+      // omits the argument and the query runs as before.
+      const authConfigs =
+        preloadedAuthConfigs ??
+        (await this.gatewayAuthRepository.find({
+          where: { gatewayId, isActive: true },
+          relations: { gateway: true },
+          order: { createdAt: 'ASC' },
+        }));
 
       if (authConfigs.length === 0) {
         // No auth configs = deny by default. Gateways must have explicit auth configured.

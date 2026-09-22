@@ -248,6 +248,10 @@ export class GatewayProtocolService {
         organizationId: gateway.organizationId,
         timeout: gatewayTool.getEffectiveTimeout(),
         retries: gatewayTool.getEffectiveRetries(),
+        // Carries the gateway so the executor can resolve this
+        // gateway_tool.securityPolicy before dispatch.
+        gatewayId: gateway.id,
+        securityPolicy: gatewayTool.securityPolicy ?? null,
       };
 
       const result = await this.toolExecutorService.executeTool(
@@ -345,6 +349,10 @@ export class GatewayProtocolService {
         organizationId: gateway.organizationId,
         timeout: gatewayTool.getEffectiveTimeout(),
         retries: gatewayTool.getEffectiveRetries(),
+        // Carries the gateway so the executor can resolve this
+        // gateway_tool.securityPolicy before dispatch.
+        gatewayId: gateway.id,
+        securityPolicy: gatewayTool.securityPolicy ?? null,
       };
 
       const result = await this.toolExecutorService.executeTool(
