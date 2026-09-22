@@ -7,6 +7,7 @@ import { TextExtractorService } from './text-extractor.service';
 import { v4 as uuidv4 } from 'uuid';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { Readable } from 'stream';
 
 @Injectable()
 export class FilesService {
@@ -83,7 +84,10 @@ export class FilesService {
     if (filters?.runId) qb.andWhere('file.runId = :runId', { runId: filters.runId });
     if (filters?.mimeType) qb.andWhere('file.mimeType = :mimeType', { mimeType: filters.mimeType });
 
-    qb.orderBy('file.createdAt', 'DESC').skip(skip).take(limit);
+    // Tied `createdAt` values order arbitrarily; with skip/take that
+    // duplicates one row across pages and drops another. See
+    // ApisService.findAllByOrganization for the same pairing.
+    qb.orderBy('file.createdAt', 'DESC').addOrderBy('file.id', 'DESC').skip(skip).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
@@ -95,8 +99,16 @@ export class FilesService {
     return file;
   }
 
-  async getDownloadUrl(id: string, organizationId: string): Promise<string> {
+  /**
+   * A direct link to the stored object, when storage can mint one.
+   *
+   * Local storage cannot, and returns null rather than a URL that
+   * resolves to nothing. Callers fall back to `/files/:id/download`,
+   * which streams the bytes through the API either way.
+   */
+  async getDownloadUrl(id: string, organizationId: string): Promise<string | null> {
     const file = await this.findById(id, organizationId);
+    if (!this.storageService.canPresign) return null;
     return this.storageService.getSignedUrl(file.storageKey);
   }
 
@@ -108,6 +120,22 @@ export class FilesService {
     this.auditLogService.log({ organizationId, action: AuditAction.FILE_DOWNLOAD, resourceType: AuditResource.FILE, resourceId: file.id, resourceName: file.name });
 
     return { buffer, file };
+  }
+
+  /**
+   * The same download, piped rather than buffered.
+   *
+   * Reading a 50MB upload into heap and then `res.send`ing it (which
+   * copies) pinned ~100MB per concurrent download on a pod that peaks
+   * around 286MB.
+   */
+  async downloadStream(id: string, organizationId: string): Promise<{ stream: Readable; file: AgentFile }> {
+    const file = await this.findById(id, organizationId);
+    const stream = await this.storageService.downloadStream(file.storageKey);
+
+    this.auditLogService.log({ organizationId, action: AuditAction.FILE_DOWNLOAD, resourceType: AuditResource.FILE, resourceId: file.id, resourceName: file.name });
+
+    return { stream, file };
   }
 
   async remove(id: string, organizationId: string): Promise<void> {

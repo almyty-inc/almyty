@@ -22,8 +22,9 @@ spec:
         app: frontend
         component: frontend
     spec:
-      # The frontend image is nginx:1.25-alpine. The image has an
-      # nginx user at uid 101. We explicitly set runAsUser: 101
+      # The frontend image is nginx:1.31-alpine (see
+      # frontend/Dockerfile). The image has an nginx user at uid
+      # 101. We explicitly set runAsUser: 101
       # plus runAsNonRoot: true so the pod fails to start rather
       # than silently running nginx as root if the image ever
       # changes.
@@ -49,6 +50,14 @@ spec:
           capabilities:
             drop:
             - ALL
+        # Per-environment hosted-chat base domain; the entrypoint bakes
+        # it into /runtime-config.js at container start (not build time).
+        env:
+        - name: HOSTED_CHAT_BASE_DOMAIN
+          valueFrom:
+            configMapKeyRef:
+              name: almyty-config
+              key: HOSTED_CHAT_BASE_DOMAIN
         ports:
         - containerPort: 8080
           name: http

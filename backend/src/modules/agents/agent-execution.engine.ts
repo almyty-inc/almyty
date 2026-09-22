@@ -1,4 +1,5 @@
 import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
+import { findModelNotFound } from '../llm-providers/model-errors';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -10,6 +11,10 @@ import { AgentExecutionStateHelper } from './agent-execution-state.helper';
 import { ExecutionContext } from './agent-template-resolver';
 import { StreamEvent } from './stream-event.types';
 import { NotificationsService } from '../notifications/notifications.service';
+import { Organization } from '../../entities/organization.entity';
+import { resolveRunLimits } from './run-limits';
+import { BudgetsService } from '../budgets/budgets.service';
+import { AgentExecutionCancellationService } from './agent-execution-cancellation.service';
 
 // Re-export so existing `import { StreamEvent } from './agent-execution.engine'`
 // continues to work without changing every consumer in one shot.
@@ -47,11 +52,25 @@ export interface EngineInternalOptions {
   maxNestingDepth?: number;
 }
 
+/**
+ * How long a timed-out layer's aborted nodes are given to come back
+ * before the run is written off. Long enough for an aborted HTTP call
+ * to reject and report what it spent, short enough that a run already
+ * past its wall-clock budget is not held open on work that may never
+ * return.
+ */
+const LAYER_TIMEOUT_DRAIN_MS = 2_000;
+
 import {
   buildGraph,
   computeLayers,
   markBranchAsSkipped,
 } from './agent-execution-graph.helper';
+import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolver';
+import { AgentRolesService } from './agent-roles.service';
+import { evaluateBudget } from './strategies/budget-policy';
+import { capPersistedPayload } from './persist-cap';
+import { runWithRequestContext, updateRequestContext } from '../../common/request-context';
 import {
   classifiedError,
   classifyNodeError,
@@ -82,6 +101,31 @@ export class AgentExecutionEngine {
     // without it resolve to undefined and skip run.failed emission.
     @Optional()
     private readonly notifications?: NotificationsService,
+    // L5. @Optional() so the existing harnesses that construct the engine
+    // without it keep working: an agent that has chosen no strategy runs
+    // its own graph either way.
+    @Optional()
+    private readonly strategyPipelines?: StrategyPipelineResolver,
+    // L4, needed whenever a compiled strategy is what runs.
+    @Optional()
+    private readonly agentRoles?: AgentRolesService,
+    // Only used to read the organization's run ceiling.
+    @Optional()
+    @InjectRepository(Organization)
+    private readonly organizationRepository?: Repository<Organization>,
+    // Spend budgets. Appended last, like every optional dependency on this
+    // class: the spec harnesses construct it positionally, so a parameter
+    // inserted above silently shifts strategyPipelines and agentRoles along
+    // and the engine runs the drawn graph instead of the compiled strategy,
+    // with no type error to show for it.
+    @Optional()
+    private readonly budgets?: BudgetsService,
+    // The in-process registry of running executions. Appended last for the
+    // same positional reason as everything above it. @Optional() so the
+    // spec harnesses that construct the engine without it still run -- an
+    // engine with no registry simply cannot be cancelled out-of-band.
+    @Optional()
+    private readonly cancellations?: AgentExecutionCancellationService,
   ) {}
 
   /**
@@ -111,6 +155,19 @@ export class AgentExecutionEngine {
     // ── Input validation ────────────────────────────────────────────────
     validateInput(options.input, internalOptions);
 
+    // Spend budgets, before the execution row exists so a rejected run
+    // leaves nothing behind. enforceForRun had exactly one caller --
+    // agent-runtime.service, gated on mode === 'autonomous' -- so a budget
+    // set to 'reject' never stopped a workflow agent, whatever it spent.
+    // Workflow spend still counted toward the org total, so the budget
+    // could block somebody else's autonomous run while never blocking the
+    // run that exhausted it. Every path into a workflow run goes through
+    // here: the execution controller, the scheduler, both compat APIs and
+    // the sub-agent executor.
+    if (this.budgets) {
+      await this.budgets.enforceForRun(organizationId, agent.id);
+    }
+
     // 1. Create execution record
     const execution = this.agentExecutionRepository.create({
       agentId: agent.id,
@@ -122,6 +179,21 @@ export class AgentExecutionEngine {
     });
     await this.agentExecutionRepository.save(execution);
 
+    // Now that the execution has an id, put it in the cancellation registry
+    // and run on the registry's signal rather than the caller's. The two are
+    // the same signal as far as the nodes are concerned -- register() mirrors
+    // the caller's abort into it -- but the registry's is reachable by id,
+    // which is what lets POST .../executions/:id/cancel stop a run the
+    // caller is no longer holding.
+    const cancelController = this.cancellations?.register(execution.id, organizationId, options.signal);
+    const runSignal: AbortSignal | undefined = cancelController?.signal ?? options.signal;
+
+    // Put this run in the correlation scope. Every log line for the rest
+    // of the run, and every row written under it (a tool execution, a
+    // model_routed audit row), picks the run up from here instead of
+    // having it threaded through each signature in between.
+    updateRequestContext({ runId: execution.id, organizationId });
+
     // Emit execution started
     this.state.emitEvent(onEvent, {
       type: 'execution.started',
@@ -129,8 +201,69 @@ export class AgentExecutionEngine {
       timestamp: Date.now(),
     });
 
+    // Declared out here, not inside the try, so the crash path below can
+    // still save them. An unexpected throw used to save `status` and
+    // `error` and nothing else — discarding every node that had already
+    // succeeded, and recording the run's spend as zero though the LLM
+    // calls it made were billed. The normal-failure and timeout paths
+    // always saved these, which is what made the crash path's omission a
+    // bug rather than a decision.
+    const nodeResults: Record<string, any> = {};
+    let totalCost = 0;
+    let totalTokens = 0;
+    // Kept alongside totalTokens rather than derived from it: a run mixes
+    // llm nodes (which have a split) with tool and transform nodes (which
+    // do not), so the two input/output figures sum to at most totalTokens,
+    // never necessarily to it.
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+
     try {
-      const pipeline = agent.pipeline;
+      // A chosen strategy IS the pipeline for this run. Compiled here
+      // rather than saved onto the agent, so the shape stays a choice you
+      // can change and the graph stays what the person drew.
+      // The request text is what an orchestrator decides on, so it has to
+      // reach the resolver rather than being rebuilt from the graph later.
+      const requestText =
+        typeof options.input === 'string'
+          ? options.input
+          : typeof (options.input as any)?.message === 'string'
+            ? (options.input as any).message
+            : JSON.stringify(options.input ?? {});
+
+      const compiled = await this.strategyPipelines?.pipelineFor(agent, requestText).catch((err) => {
+        throw classifiedError(err?.message ?? 'Could not compile this strategy', ExecutionErrorType.VALIDATION_ERROR);
+      });
+      if (compiled) {
+        execution.metadata = {
+          ...(execution.metadata ?? {}),
+          strategyKey: compiled.strategyKey,
+          // Recorded so a run can answer "why this shape?" — a fallback
+          // that looks like a choice is how an orchestrator silently
+          // stops working.
+          ...(compiled.chosenBy ? { strategyChosenBy: compiled.chosenBy } : {}),
+          ...(compiled.fallbackReason ? { strategyFallbackReason: compiled.fallbackReason } : {}),
+        };
+        await this.agentExecutionRepository.save(execution);
+      }
+
+      // A compiled strategy names roles on its nodes, so the roles have to
+      // be filled before any of them runs. Without this the executor threw
+      // "names role principal, which this agent does not define" on an
+      // agent that defines exactly that role, because nothing had resolved
+      // it — the compiler was wired to the engine and L4 was not.
+      let resolvedRoles: Array<{ key: string; modelId: string; via: 'pinned' | 'resolved'; rationale?: string }> | undefined;
+      if (compiled && this.agentRoles) {
+        try {
+          resolvedRoles = await this.agentRoles.resolveRoles(organizationId, agent.id, {}, userId ? { id: userId } : undefined);
+        } catch (err: any) {
+          // A role that cannot be filled stops the run here, naming the
+          // role, rather than surfacing as a confusing node error later.
+          throw classifiedError(err?.message ?? 'A role could not be filled', ExecutionErrorType.VALIDATION_ERROR);
+        }
+      }
+
+      const pipeline = compiled?.pipeline ?? agent.pipeline;
       if (!pipeline || !pipeline.nodes || !pipeline.edges) {
         throw classifiedError('Agent pipeline is not configured', ExecutionErrorType.VALIDATION_ERROR);
       }
@@ -145,10 +278,30 @@ export class AgentExecutionEngine {
       const layers = computeLayers(pipeline.nodes, adjacencyList, inDegree);
 
       // 4. Initialize context
+      // The maxSteps/maxToolCalls clamp in agent-node-executor reads
+      // context.runLimits. Nothing ever set it, so every loop and tool
+      // budget in the product was declared, read, and inert -- a loop node
+      // could outrun the run's budget as many times as it liked. The
+      // organization row is a best-effort read: resolveRunLimits clamps to
+      // the env ceiling whether or not it arrives, so a database hiccup
+      // cannot turn a ceiling into no ceiling.
+      let organization: Organization | null = null;
+      if (this.organizationRepository) {
+        try {
+          organization = await this.organizationRepository.findOne({ where: { id: organizationId } });
+        } catch (err: any) {
+          this.logger.warn(
+            `Could not load organization run limits for execution ${execution.id}: ${err.message}`,
+          );
+        }
+      }
+      const runLimits = resolveRunLimits({ organization, agent });
+
       const context: ExecutionContext = {
         input: options.input || {},
         nodes: {},
         variables: { ...(agent.variables || {}), ...(options.variables || {}) },
+        runLimits: { maxSteps: runLimits.maxSteps, maxToolCalls: runLimits.maxToolCalls },
       };
 
       // Build node map
@@ -157,9 +310,10 @@ export class AgentExecutionEngine {
         nodeMap.set(node.id, node);
       }
 
-      const nodeResults: Record<string, any> = {};
-      let totalCost = 0;
-      let totalTokens = 0;
+      // What the layer just finished cost, used as the estimate for the
+      // next one. A projection has to come from somewhere, and the last
+      // layer is the only honest signal available between stages.
+      let lastLayerCost = 0;
       let finalOutput: any = null;
       // Track whether an `output` node actually ran. Distinguishes
       // "no output node was reached" (failure) from "output node ran and
@@ -180,12 +334,14 @@ export class AgentExecutionEngine {
         // cancelled, job killed), stop dispatching more work and
         // mark the run CANCELLED. This fires before timeout/budget
         // checks so a genuine cancel doesn't get mis-classified.
-        if (options.signal?.aborted) {
+        if (runSignal?.aborted) {
           execution.status = AgentExecutionStatus.CANCELLED;
           execution.error = 'Execution cancelled';
           execution.executionTime = Date.now() - startTime;
           execution.totalCost = totalCost;
           execution.totalTokens = totalTokens;
+          execution.inputTokens = totalInputTokens;
+          execution.outputTokens = totalOutputTokens;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
           await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
@@ -222,6 +378,34 @@ export class AgentExecutionEngine {
           return execution;
         }
 
+        // Stop rules, before the hard cap. A run that has already got
+        // what it needs should finish because it is DONE, not because it
+        // ran out of money — and the recorded reason should say which.
+        // An agent with no budget policy is unaffected: evaluateBudget
+        // returns continue for an absent policy.
+        const budgetVerdict = evaluateBudget(agent.settings?.budget as any, {
+          spentCents: Math.round(totalCost * 100),
+          // The layer just run is the closest estimate of the next one.
+          nextStageCents: Math.round(lastLayerCost * 100),
+        });
+        if (budgetVerdict.action === 'stop') {
+          execution.status = AgentExecutionStatus.COMPLETED;
+          execution.metadata = {
+            ...(execution.metadata ?? {}),
+            budgetStop: { reason: budgetVerdict.reason, projection: budgetVerdict.projection },
+          };
+          execution.executionTime = Date.now() - startTime;
+          execution.totalCost = totalCost;
+          execution.totalTokens = totalTokens;
+          execution.inputTokens = totalInputTokens;
+          execution.outputTokens = totalOutputTokens;
+          execution.nodeResults = nodeResults;
+          execution.output = context.nodes;
+          await this.agentExecutionRepository.save(execution);
+          this.logger.log(`[EXECUTE] Agent ${agent.id} stopped on budget policy: ${budgetVerdict.reason}`);
+          return execution;
+        }
+
         // Check budget
         if (totalCost > budgetLimit) {
           execution.status = AgentExecutionStatus.FAILED;
@@ -229,6 +413,8 @@ export class AgentExecutionEngine {
           execution.executionTime = Date.now() - startTime;
           execution.totalCost = totalCost;
           execution.totalTokens = totalTokens;
+          execution.inputTokens = totalInputTokens;
+          execution.outputTokens = totalOutputTokens;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
           await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
@@ -257,9 +443,9 @@ export class AgentExecutionEngine {
         // signal covering both client-cancel and budget.
         const layerAbort = new AbortController();
         const forwardCallerAbort = () => layerAbort.abort();
-        if (options.signal) {
-          if (options.signal.aborted) layerAbort.abort();
-          else options.signal.addEventListener('abort', forwardCallerAbort, { once: true });
+        if (runSignal) {
+          if (runSignal.aborted) layerAbort.abort();
+          else runSignal.addEventListener('abort', forwardCallerAbort, { once: true });
         }
         let layerRunningCost = totalCost;
 
@@ -284,19 +470,31 @@ export class AgentExecutionEngine {
             // NodeExecutionOptions so leaf calls (LLM, tool, sub-agent)
             // can propagate it into their own axios / sub-execute paths
             // and abort mid-flight on client disconnect.
-            const result: NodeExecutionResult = await this.nodeExecutor.execute(
-              node,
-              context,
-              organizationId,
-              userId,
-              {
-                organizationId,
-                userId,
-                edges: pipeline.edges,
-                nestingDepth: internalOptions?.nestingDepth,
-                maxNestingDepth: internalOptions?.maxNestingDepth,
-                signal: layerAbort.signal,
-              },
+            // A real nested scope, not an in-place update: the nodes of a
+            // layer run concurrently under Promise.all, so mutating one
+            // shared store would have them overwrite each other's nodeId.
+            const result: NodeExecutionResult = await runWithRequestContext(
+              { nodeId },
+              () =>
+                this.nodeExecutor.execute(
+                  node,
+                  context,
+                  organizationId,
+                  userId,
+                  {
+                    organizationId,
+                    userId,
+                    edges: pipeline.edges,
+                    nestingDepth: internalOptions?.nestingDepth,
+                    maxNestingDepth: internalOptions?.maxNestingDepth,
+                    signal: layerAbort.signal,
+                    // Filled once for the whole run, above, rather than per
+                    // node: a role is one decision, and resolving it per node
+                    // would let two nodes of the same run answer from
+                    // different models.
+                    resolvedRoles,
+                  },
+                ),
             );
 
             const nodeCompletedAt = Date.now();
@@ -314,6 +512,12 @@ export class AgentExecutionEngine {
               result,
               error: null as string | null,
               errorType: null as ExecutionErrorType | null,
+              errorCode: undefined as string | undefined,
+              errorModel: undefined as string | undefined,
+              errorProviderId: undefined as string | undefined,
+              // What the node was actually given, so the run is
+              // reproducible from its own record.
+              resolvedInput: result?.resolvedInput,
               startedAt: nodeStartedAt,
               completedAt: nodeCompletedAt,
             };
@@ -332,6 +536,18 @@ export class AgentExecutionEngine {
               result: null as NodeExecutionResult | null,
               error: err.message || 'Unknown node error',
               errorType,
+              // Typed cause, so callers that only see the persisted node
+              // results (the scheduler) can still act on MODEL_NOT_FOUND.
+              errorCode: err?.code as string | undefined,
+              triedModels: Array.isArray(err?.tried) ? err.tried : undefined,
+              errorModel: findModelNotFound(err)?.model,
+              errorProviderId: findModelNotFound(err)?.providerId,
+              // A failing node's resolved prompt is exactly what someone
+              // needs to reproduce the failure, and it was persisted
+              // nowhere.
+              resolvedInput: err?.resolvedInput,
+              attemptedProviderId: err?.attemptedProviderId as string | undefined,
+              attemptedModel: err?.attemptedModel as string | undefined,
               startedAt: nodeStartedAt,
               completedAt: nodeCompletedAt,
             };
@@ -348,16 +564,54 @@ export class AgentExecutionEngine {
             Promise.all(layerPromises),
             remainingTime,
             `Layer execution timed out`,
+            // Stop the work, not just the waiting. Promise.race abandons
+            // the layer's promises but they keep running — against the
+            // provider, on our bill — and could still write side effects
+            // after the execution row says TIMEOUT.
+            () => layerAbort.abort(),
           );
         } catch (timeoutErr: any) {
+          runSignal?.removeEventListener('abort', forwardCallerAbort);
+
+          // Give the aborted nodes a bounded moment to come back, so the
+          // cost they already incurred is counted. `layerRunningCost`
+          // accumulates as each node returns, and the timeout path used
+          // to persist `totalCost` — the total as of the *previous*
+          // layer — discarding this layer's spend entirely and feeding
+          // that undercount to bumpAgentStats, which is what budget
+          // enforcement reads.
+          const drained = await this.state.settleWithin(layerPromises, LAYER_TIMEOUT_DRAIN_MS);
+
+          // A node that never reported has a cost we cannot know. Record
+          // that, rather than letting a missing number read as zero.
+          const unaccounted: string[] = [];
+          activeNodes.forEach((nodeId, i) => {
+            const settled = drained.results[i];
+            const reported = settled?.status === 'fulfilled' && !!(settled.value as any)?.result;
+            if (reported) return;
+            unaccounted.push(nodeId);
+            nodeResults[nodeId] = {
+              error: 'Aborted by the layer timeout',
+              errorType: ExecutionErrorType.TIMEOUT,
+              // Explicitly not "cost 0": the node was cancelled in
+              // flight and never told us what it had spent.
+              costAccounted: false,
+            };
+          });
+
           execution.status = AgentExecutionStatus.TIMEOUT;
-          execution.error = `Execution timed out after ${maxExecutionTime}ms`;
+          execution.error = unaccounted.length
+            ? `Execution timed out after ${maxExecutionTime}ms; the cost of ${unaccounted.length} ` +
+              `node(s) (${unaccounted.join(', ')}) could not be determined`
+            : `Execution timed out after ${maxExecutionTime}ms`;
           execution.executionTime = Date.now() - startTime;
-          execution.totalCost = totalCost;
+          execution.totalCost = layerRunningCost;
           execution.totalTokens = totalTokens;
+          execution.inputTokens = totalInputTokens;
+          execution.outputTokens = totalOutputTokens;
           execution.nodeResults = nodeResults;
           await this.agentExecutionRepository.save(execution);
-          await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
+          await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, layerRunningCost);
 
           this.state.emitEvent(onEvent, {
             type: 'execution.failed',
@@ -370,15 +624,16 @@ export class AgentExecutionEngine {
         }
 
         // Done with this layer's abort; the next layer installs its own.
-        options.signal?.removeEventListener('abort', forwardCallerAbort);
+        runSignal?.removeEventListener('abort', forwardCallerAbort);
 
         // Track whether any node in this layer failed
         let layerHasFailure = false;
 
         // Process layer results
+        let layerCost = 0;
         for (const item of layerResults) {
           if (!item) continue;
-          const { nodeId, node, result, error, errorType, startedAt, completedAt } = item;
+          const { nodeId, node, result, error, errorType, errorCode, errorModel, errorProviderId, startedAt, completedAt } = item;
 
           if (error || !result) {
             // Node failed — record error but continue with other branches
@@ -386,11 +641,27 @@ export class AgentExecutionEngine {
             nodeResults[nodeId] = {
               error,
               errorType,
+              ...(errorCode ? { errorCode, errorModel, errorProviderId } : {}),
+              // Which models were tried before giving up. A node where every
+              // candidate failed leaves no routing attribution, because
+              // nothing answered -- so without this the co-failures would be
+              // invisible exactly when they matter most.
+              ...(item.triedModels?.length ? { triedModels: item.triedModels } : {}),
+              // The resolved prompt / parameters this node was given, so a
+              // failure can be reproduced from the record rather than
+              // guessed at from the graph and the templates.
+              ...(item.resolvedInput !== undefined
+                ? { input: capPersistedPayload(item.resolvedInput) }
+                : {}),
+              ...(item.attemptedProviderId ? { providerId: item.attemptedProviderId } : {}),
+              ...(item.attemptedModel ? { model: item.attemptedModel } : {}),
               startedAt,
+
               completedAt,
               executionTime: completedAt - startedAt,
             };
-            context.nodes[nodeId] = { output: undefined };
+            // Marked, not just blanked: a downstream node reading upstream state must be able to tell a failure from a legitimate undefined.
+            context.nodes[nodeId] = { output: undefined, status: 'failed' };
 
             this.state.emitEvent(onEvent, {
               type: 'node.completed',
@@ -417,10 +688,31 @@ export class AgentExecutionEngine {
             executionTime: result.executionTime || 0,
             startedAt,
             completedAt,
+            ...(result.resolvedInput !== undefined
+              ? { input: capPersistedPayload(result.resolvedInput) }
+              : {}),
+            // Model attribution for the spend on this step, routed or
+            // pinned. A step used to carry a cost with no model beside
+            // it whenever the agent pinned a provider.
+            ...(result.providerId ? { providerId: result.providerId } : {}),
+            ...(result.model ? { model: result.model } : {}),
+            ...(result.routing ? { routing: result.routing } : {}),
+            // A template reference that resolved to nothing was substituted
+            // with an empty string. That is correct for an optional field and
+            // is also what a typo looks like, so the reference is carried here
+            // rather than left in a server-side log the person reading the run
+            // will never see.
+            ...(result.unresolvedReferences?.length
+              ? { unresolvedReferences: result.unresolvedReferences }
+              : {}),
           };
 
+
           totalCost += result.cost || 0;
+          layerCost += result.cost || 0;
           totalTokens += result.tokens || 0;
+          totalInputTokens += result.inputTokens || 0;
+          totalOutputTokens += result.outputTokens || 0;
 
           this.state.emitEvent(onEvent, {
             type: 'node.output',
@@ -466,12 +758,16 @@ export class AgentExecutionEngine {
           }
         }
 
+        // Carried to the next iteration's budget check: the layer just
+        // finished is the closest thing to an estimate of the next one.
+        lastLayerCost = layerCost;
+
         // Mark skipped nodes in nodeResults
         for (const nodeId of layer) {
           if (skippedNodes.has(nodeId) && !nodeResults[nodeId]) {
             const node = nodeMap.get(nodeId);
             nodeResults[nodeId] = { skipped: true };
-            context.nodes[nodeId] = { output: undefined };
+            context.nodes[nodeId] = { output: undefined, status: 'skipped' };
 
             this.state.emitEvent(onEvent, {
               type: 'node.skipped',
@@ -493,6 +789,8 @@ export class AgentExecutionEngine {
         execution.executionTime = Date.now() - startTime;
         execution.totalCost = totalCost;
         execution.totalTokens = totalTokens;
+        execution.inputTokens = totalInputTokens;
+        execution.outputTokens = totalOutputTokens;
         execution.nodeResults = nodeResults;
         await this.agentExecutionRepository.save(execution);
         await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
@@ -525,6 +823,8 @@ export class AgentExecutionEngine {
         execution.executionTime = executionTime;
         execution.totalCost = totalCost;
         execution.totalTokens = totalTokens;
+        execution.inputTokens = totalInputTokens;
+        execution.outputTokens = totalOutputTokens;
         await this.agentExecutionRepository.save(execution);
 
         await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
@@ -540,6 +840,33 @@ export class AgentExecutionEngine {
         return execution;
       }
 
+      // A cancel that arrives while the LAST layer is running has no next
+      // layer for the between-layer check to guard, so without this the
+      // engine would write COMPLETED straight over the CANCELLED row the
+      // cancellation service just persisted, and the caller who asked to
+      // stop would be told the run finished. Keyed on an explicit cancel,
+      // not on the signal: a client that merely disconnected as the run
+      // landed still gets its answer recorded.
+      if (this.cancellations?.isCancelled(execution.id)) {
+        execution.status = AgentExecutionStatus.CANCELLED;
+        execution.error = 'Execution cancelled';
+        execution.output = finalOutput;
+        execution.nodeResults = nodeResults;
+        execution.executionTime = executionTime;
+        execution.totalCost = totalCost;
+        execution.totalTokens = totalTokens;
+        execution.inputTokens = totalInputTokens;
+        execution.outputTokens = totalOutputTokens;
+        await this.agentExecutionRepository.save(execution);
+        await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
+        this.state.emitEvent(onEvent, {
+          type: 'execution.failed',
+          data: { error: execution.error, errorType: 'CANCELLED', executionId: execution.id },
+          timestamp: Date.now(),
+        });
+        return execution;
+      }
+
       // 8. Update execution record
       execution.status = AgentExecutionStatus.COMPLETED;
       execution.output = finalOutput;
@@ -547,6 +874,8 @@ export class AgentExecutionEngine {
       execution.executionTime = executionTime;
       execution.totalCost = totalCost;
       execution.totalTokens = totalTokens;
+      execution.inputTokens = totalInputTokens;
+      execution.outputTokens = totalOutputTokens;
       await this.agentExecutionRepository.save(execution);
 
       // 9. Update agent stats atomically via SQL UPDATE.
@@ -573,20 +902,42 @@ export class AgentExecutionEngine {
     } catch (error) {
       const executionTime = Date.now() - startTime;
 
-      // Update execution with error — always, even on unexpected crashes
+      // Update execution with error — always, even on unexpected crashes.
+      // Everything that had already happened is saved with it: the nodes
+      // that succeeded before the throw, and the cost and tokens they
+      // actually spent. Saving `status` and `error` alone threw away the
+      // run's whole record and reported its spend as zero, which made the
+      // crash both unreproducible and free.
+      execution.status = AgentExecutionStatus.FAILED;
+      execution.error = error.message || 'Unknown error';
+      execution.executionTime = executionTime;
+      execution.nodeResults = nodeResults;
+      execution.totalCost = totalCost;
+      execution.totalTokens = totalTokens;
+      execution.inputTokens = totalInputTokens;
+      execution.outputTokens = totalOutputTokens;
       try {
-        execution.status = AgentExecutionStatus.FAILED;
-        execution.error = error.message || 'Unknown error';
-        execution.executionTime = executionTime;
         await this.agentExecutionRepository.save(execution);
-
-        // Update agent stats (failed)
-        await this.state.bumpAgentStats(agent.id, false, executionTime, 0);
       } catch (saveError) {
         this.logger.error(`[EXECUTE] Failed to persist execution record on crash: ${saveError.message}`);
       }
 
-      this.logger.error(`[EXECUTE] Agent ${agent.id} execution failed: ${error.message}`, error.stack);
+      // Separate try, so a failed row write does not also cost us the
+      // stats bump — and with the real cost, not 0. The LLM calls the run
+      // made before it crashed were billed, so passing 0 here
+      // undercounted every spend surface and every budget check
+      // downstream of it.
+      try {
+        await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
+      } catch (statsError) {
+        this.logger.error(`[EXECUTE] Failed to bump agent stats on crash: ${statsError.message}`);
+      }
+
+      this.logger.error(
+        `[EXECUTE] Agent ${agent.id} execution failed: ${error.message} ` +
+          `(nodes=${Object.keys(nodeResults).length}, cost=${totalCost})`,
+        error.stack,
+      );
 
       this.state.emitEvent(onEvent, {
         type: 'execution.failed',
@@ -599,6 +950,12 @@ export class AgentExecutionEngine {
       this.notifyRunFailed(agent, execution).catch(() => {});
 
       return execution;
+    } finally {
+      // Every exit from this method -- completed, failed, timed out,
+      // cancelled, crashed -- stops tracking the execution. A registry that
+      // leaked entries would both grow without bound and let a cancel abort
+      // a controller nothing is listening to.
+      this.cancellations?.release(execution.id);
     }
   }
 

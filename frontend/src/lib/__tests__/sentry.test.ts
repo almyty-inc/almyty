@@ -20,7 +20,7 @@ describe('sentry wrapper — no DSN (disabled)', () => {
     vi.resetModules()
     sentryMock.init.mockClear()
     sentryMock.captureException.mockClear()
-    vi.stubEnv('VITE_SENTRY_DSN', '')
+    vi.stubEnv('ALMYTY_SENTRY_DSN', '')
   })
 
   afterEach(() => {
@@ -47,10 +47,10 @@ describe('sentry wrapper — DSN set (enabled)', () => {
     vi.resetModules()
     sentryMock.init.mockClear()
     sentryMock.captureException.mockClear()
-    vi.stubEnv('VITE_SENTRY_DSN', 'https://public@o1.ingest.sentry.io/123')
+    vi.stubEnv('ALMYTY_SENTRY_DSN', 'https://public@o1.ingest.sentry.io/123')
     // Pin a tracked environment — jsdom's host is localhost, which the
     // wrapper (correctly) treats as development and would not track.
-    vi.stubEnv('VITE_APP_ENV', 'production')
+    vi.stubEnv('ALMYTY_APP_ENV', 'production')
   })
 
   afterEach(() => {
@@ -68,7 +68,7 @@ describe('sentry wrapper — DSN set (enabled)', () => {
   })
 
   it('tags the environment super-property (staging vs production)', async () => {
-    vi.stubEnv('VITE_APP_ENV', 'staging')
+    vi.stubEnv('ALMYTY_APP_ENV', 'staging')
     const s = await loadSentry()
     await s.initSentry()
     expect(sentryMock.init.mock.calls[0][0].environment).toBe('staging')
@@ -101,7 +101,7 @@ describe('sentry wrapper — environment gating', () => {
   beforeEach(() => {
     vi.resetModules()
     sentryMock.init.mockClear()
-    vi.stubEnv('VITE_SENTRY_DSN', 'https://public@o1.ingest.sentry.io/123')
+    vi.stubEnv('ALMYTY_SENTRY_DSN', 'https://public@o1.ingest.sentry.io/123')
   })
 
   afterEach(() => {
@@ -109,7 +109,7 @@ describe('sentry wrapper — environment gating', () => {
   })
 
   it('does NOT track development (DSN set, but env is development)', async () => {
-    vi.stubEnv('VITE_APP_ENV', 'development')
+    vi.stubEnv('ALMYTY_APP_ENV', 'development')
     const s = await loadSentry()
     await s.initSentry()
     expect(sentryMock.init).not.toHaveBeenCalled()
@@ -117,7 +117,7 @@ describe('sentry wrapper — environment gating', () => {
   })
 
   it('defaults to development (untracked) for an unrecognized host', async () => {
-    // No VITE_APP_ENV override; jsdom host is localhost -> development.
+    // No ALMYTY_APP_ENV override; jsdom host is localhost -> development.
     const s = await loadSentry()
     await s.initSentry()
     expect(sentryMock.init).not.toHaveBeenCalled()
@@ -127,7 +127,7 @@ describe('sentry wrapper — environment gating', () => {
     for (const env of ['staging', 'production'] as const) {
       vi.resetModules()
       sentryMock.init.mockClear()
-      vi.stubEnv('VITE_APP_ENV', env)
+      vi.stubEnv('ALMYTY_APP_ENV', env)
       const s = await loadSentry()
       await s.initSentry()
       expect(sentryMock.init).toHaveBeenCalledTimes(1)

@@ -58,6 +58,17 @@ export class AuditExportService {
     const limit = Math.min(filters.limit ?? MAX_EXPORT_ROWS, MAX_EXPORT_ROWS);
     const qb = this.auditLogs
       .createQueryBuilder('audit')
+      // Only the columns an export emits.
+      //
+      // An AuditLog carries three json columns, and `changes` holds
+      // field-level from/to diffs -- an agent-pipeline edit row runs to
+      // hundreds of KB. Neither `changes` nor `metadata` appears in
+      // EXPORT_COLUMNS, so 50k whole rows were materialized to emit a
+      // subset of them: roughly 100MB of entities at a modest 2KB
+      // average, on a pod that peaks around 286MB, and this is the
+      // feature's intended use (lift the in-app 200 cap so compliance can
+      // pull a full window at once).
+      .select(EXPORT_COLUMNS.map((column) => `audit.${column}`))
       .where('audit.organizationId = :organizationId', {
         organizationId: filters.organizationId,
       });
@@ -86,7 +97,11 @@ export class AuditExportService {
       format: 'json',
       contentType: 'application/json',
       filename: `audit-export-${stamp}.json`,
-      body: JSON.stringify(rows, null, 2),
+      // Not pretty-printed. Two-space indentation on 50k rows roughly
+      // doubles a string that is already the largest thing in the
+      // process, for the benefit of a human reading a compliance dump in
+      // a text editor -- which is not how it is consumed.
+      body: JSON.stringify(rows),
       count: rows.length,
     };
   }

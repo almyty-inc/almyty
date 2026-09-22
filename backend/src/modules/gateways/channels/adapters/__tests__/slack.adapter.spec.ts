@@ -81,9 +81,19 @@ describe('SlackAdapter', () => {
     const signingSecret = 'super-secret-signing-key';
     const config = { signing_secret: signingSecret };
 
-    it('returns true when there is no signing_secret configured', async () => {
+    it('refuses inbound when there is no signing_secret configured', async () => {
+      // Fail closed: with no secret we cannot tell Slack from a forger.
       const ok = await adapter.verifyWebhook(slackEventCallback, {}, {});
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
+    });
+
+    it('rejects rather than throwing when the signature length differs', async () => {
+      const ok = await adapter.verifyWebhook(
+        slackEventCallback,
+        { 'x-slack-request-timestamp': '1700000000', 'x-slack-signature': 'v0=short' },
+        config,
+      );
+      expect(ok).toBe(false);
     });
 
     it('accepts a correctly-signed request', async () => {
@@ -118,6 +128,7 @@ describe('SlackAdapter', () => {
 
   describe('sendResponse', () => {
     it('POSTs to chat.postMessage with bearer auth and threading', async () => {
+      fetchMock.setNextResponse({ json: { ok: true, channel: 'C5555ZZ', ts: '1700000000.000200' } });
       await adapter.sendResponse(
         { bot_token: 'xoxb-test-token' },
         { text: 'reply text' },
@@ -135,9 +146,54 @@ describe('SlackAdapter', () => {
       });
     });
 
-    it('does not throw when fetch rejects (logs and returns)', async () => {
+    /**
+     * The one that made a dropped reply look delivered.
+     *
+     * Slack does not use the HTTP status to refuse a post: removing the
+     * bot from the channel, deleting the channel or revoking the token
+     * all come back as HTTP 200 with `ok: false`. An adapter that
+     * checked only the transport — or, as this one did, checked nothing
+     * at all — reported every one of those as sent, and the outbound
+     * event row said `processed` with no error while the customer sat
+     * there unanswered.
+     */
+    it('refuses an HTTP 200 that carries ok:false, with Slack\'s own error', async () => {
+      fetchMock.setNextResponse({ ok: true, status: 200, json: { ok: false, error: 'not_in_channel' } });
+      await expect(
+        adapter.sendResponse({ bot_token: 'xoxb' }, { text: 'x' }, { channel: 'C1' }),
+      ).rejects.toThrow(/not_in_channel/);
+    });
+
+    it('refuses an HTTP 200 that confirms nothing', async () => {
+      // No `ok` at all is not a confirmation either.
+      fetchMock.setNextResponse({ ok: true, status: 200, json: {} });
+      await expect(
+        adapter.sendResponse({ bot_token: 'xoxb' }, { text: 'x' }, { channel: 'C1' }),
+      ).rejects.toThrow(/did not confirm/);
+    });
+
+    it('refuses a transport-level rejection and names the status', async () => {
+      fetchMock.setNextResponse({ ok: false, status: 429, json: { ok: false, error: 'ratelimited' } });
+      await expect(
+        adapter.sendResponse({ bot_token: 'xoxb' }, { text: 'x' }, { channel: 'C1' }),
+      ).rejects.toThrow(/429.*ratelimited/);
+    });
+
+    it('does not swallow a network failure', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('network down'));
-      await expect(adapter.sendResponse({ bot_token: 't' }, { text: 'x' }, { channel: 'C1' })).resolves.toBeUndefined();
+      await expect(
+        adapter.sendResponse({ bot_token: 't' }, { text: 'x' }, { channel: 'C1' }),
+      ).rejects.toThrow('network down');
+    });
+
+    it('never puts the bot token in the failure it reports', async () => {
+      fetchMock.setNextResponse({ ok: true, status: 200, json: { ok: false, error: 'invalid_auth' } });
+      const error = await adapter
+        .sendResponse({ bot_token: 'xoxb-super-secret' }, { text: 'x' }, { channel: 'C1' })
+        .then(() => null, (e) => e);
+      expect(error).toBeTruthy();
+      expect(error.message).toContain('invalid_auth');
+      expect(error.message).not.toContain('xoxb-super-secret');
     });
   });
 });

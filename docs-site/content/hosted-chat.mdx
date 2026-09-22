@@ -1,0 +1,140 @@
+# Hosted chat app
+
+Publish an agent as a branded, full-page chat at `https://<app-slug>.almyty.app`. There is no widget to embed and no separate frontend to deploy.
+
+![A branded hosted chat app on its own address](/screenshots/apps-hosted-chat.png)
+
+The page carries your app's name, colour, greeting, and AI disclosure. Visitors get streaming replies and conversation history without seeing the almyty dashboard.
+
+## Publish from Apps
+
+1. Open **Apps** and create an app, or select one you already have.
+2. On **Agents**, attach at least one autonomous agent and choose the default agent that answers.
+3. On **Settings**, set the name and colour visitors see, the greeting, the access mode, spending limits, and the privacy and visitor-data choices.
+4. On **Distributions**, select **Add distribution**, then choose **Web app**.
+5. Open the Web app card. Resolve any listed blockers, then select **Publish**.
+
+The distribution changes to **Live** when the hosted chat is answering. Open `https://<app-slug>.almyty.app` to test it as a visitor.
+
+![The Web app distribution after publication](/screenshots/apps-web-published.png)
+
+The address comes from the app slug. It must be 3 to 63 characters, using lowercase letters, numbers, and hyphens without a hyphen at either end. Reserved service names cannot be used.
+
+## What a visitor gets
+
+A visitor can start a chat, receive a streaming reply, and reopen earlier conversations. Public-link visitors do not need an almyty account. An anonymous visitor still has a separate record, keyed by a cookie scoped to that app's host, so one visitor cannot read another visitor's conversations.
+
+Unpublishing turns the chat off without deleting its address or settings. Publishing it again restores the same distribution.
+
+### Give the answering agent its product context
+
+The app's name and greeting are presentation settings; they do not teach the agent about your product. Check the default agent on **Agents**, then configure that agent's instructions with its product scope, relevant policies, and how to handle missing information. Attach the tools or knowledge it needs before promising account-specific help.
+
+Test ordinary visitor questions as well as connectivity: “What product do you support?”, a typical support request, and a request at the edge of the intended scope. A generic support-demo instruction can produce vague answers or unnecessary refusals even when chat delivery works correctly.
+
+## What almyty stores about a visitor
+
+A visitor on `{slug}.almyty.app` (or your own domain) is your user, not almyty's. This is exactly what the platform keeps, where it goes, who can read it, and for how long. It applies to every hosted chat surface.
+
+**What is stored**
+
+- **A visitor record**: a random session key in a cookie scoped to that host, a truncated hash of the client IP (used only for rate limits; the address itself is not stored), and the time last seen. If the app requires sign-in, the record also holds the identity the sign-in returned: the provider, its subject id, the email and display name.
+- **Conversations and messages**: every visitor turn and every assistant reply in full, with the model used, token counts and cost, and any tool calls the agent made with their arguments and results.
+- **Runs**: the agent run behind each reply, with its input, steps, output and error, attributed to the visitor record rather than to a dashboard user.
+- **Nothing enters the agent's shared memory by default.** Visitor runs are not summarised into shared memory unless the app owner explicitly enables **Include visitor conversations in memory**. When enabled, summaries may influence answers to other visitors.
+- **Transient**: rate-limit counters (one hour at most) and the live event stream of a reply (minutes) in Redis.
+
+**Where it goes**
+
+- To the model provider you configured, under your API key, as the prompt. What that provider retains is governed by your agreement with them.
+- To any tool the agent calls, as arguments.
+- Nowhere else. Tenant chat hosts load none of almyty's product analytics or error reporting; those run only on the dashboard.
+
+**Who can read it**
+
+- Members of your organization whose role can open the agent: the runs tab shows each run with its input and output.
+- Whoever operates the almyty deployment has database access to everything above. On almyty's hosted service that is almyty; on a self-hosted installation it is you.
+- No one else. Another visitor cannot see it, and an unpublished app keeps its data but stops serving it.
+
+**How long**
+
+- Until you delete it, or until your organization's retention policy sweeps it. Settings, Organization, Data Retention sets independent periods for conversations and runs; the hourly sweep deletes records past the period and records what it removed in the audit log. With no policy set, records are kept indefinitely.
+- Individual conversations and runs can be deleted per record from the dashboard.
+
+**What you control, per app**
+
+Every product carries these settings on its **Settings** tab, with defaults that need no attention:
+
+- **Visitors may delete their conversations** (on by default): the chat page offers *delete this conversation* and *delete everything about me*. Deleting everything removes the visitor record, every conversation and the runs behind them, then reloads the page with a new private visitor identity.
+- **Visitors may download their data** (on by default): a JSON file with the visitor record and every conversation.
+- **Visitor conversations may feed agent memory** (off by default): only switch it on for an agent whose memory is meant to learn from the public.
+- **Keep visitor conversations for** a number of days (empty by default, meaning the organization policy applies). A value only ever shortens the organization policy; the hourly sweep removes older conversations, their messages and runs.
+
+![The hosted chat privacy menu with export and deletion controls](/screenshots/apps-hosted-chat-privacy.png)
+
+Switching a right off returns a plain refusal to the visitor with a stable code; nothing is deleted or exported behind their back.
+
+
+## Protect model spend
+
+
+An app that uses **Anyone with the link** cannot be published until all three limits are set on **Settings**:
+
+- a cost ceiling per run;
+- a request limit per visitor, per hour; and
+- a request limit per IP address, per hour.
+
+These are enforced publication rules. The distribution dialog names each missing setting before the app can go live, so a public URL cannot spend against your model keys without a ceiling.
+
+The app-level access selector also includes email verification, OAuth, and SSO. Gated modes do not require public-link limits because the identity gate stands between an unknown visitor and your model spend. SSO requires a commercial entitlement.
+
+## AI disclosure
+
+Every hosted chat shows an AI disclosure under the composer by default. You can change the wording on **Settings**. Removing it requires the white-label entitlement, and the removal is recorded.
+
+See [Compliance](/compliance) for the full EU AI Act mapping.
+
+## Addresses in each environment
+
+Hosted apps and the dashboard use separate domains:
+
+| Environment | Dashboard | Hosted app |
+|---|---|---|
+| Production | `app.almyty.com` | `<app-slug>.almyty.app` |
+| Staging | `app.staging.almyty.com` | `<app-slug>.staging.almyty.app` |
+| Development | your development dashboard | `<app-slug>.dev.almyty.app` |
+
+Keeping the app on its own host lets the visitor cookie stay scoped to that app instead of the dashboard or API.
+
+## Self-hosting
+
+Hosted chat is part of the Apache-licensed core. To serve apps on a domain you control:
+
+1. Point a wildcard DNS record at your deployment, for example `*.chat.acme.com`.
+2. Set `HOSTED_CHAT_BASE_DOMAIN=chat.acme.com` on both the API and frontend containers. The frontend reads it at runtime, so the same image can be used in every environment.
+3. Route `/api` on every tenant host to the API and strip the `/api` prefix. Route every other path to the frontend. Keeping these calls same-origin is what keeps the anonymous visitor cookie on the tenant host.
+4. Issue a wildcard certificate for the domain and attach it to the tenant-host ingress.
+
+An app with the slug `support` is then available at `https://support.chat.acme.com`.
+
+### Wildcard certificates need DNS-01
+
+Let's Encrypt does not issue wildcard certificates through an HTTP-01 challenge. Use DNS-01, which means your certificate controller needs permission to create TXT records in the zone. If your issuer has no solver for that DNS provider, move the zone or delegate `_acme-challenge` to one it can update.
+
+A certificate per tenant also works, but Let's Encrypt limits issuance to 50 certificates per registered domain each week.
+
+## What is commercial
+
+Two options require a commercial entitlement:
+
+- removing the almyty mark with white-label mode; and
+- using SSO as the app access mode.
+
+Public links, email verification, and OAuth remain in the core edition.
+
+## Related
+
+- [Agent Factory](/apps): turn agents into products and distributions
+- [Distributions](/apps/distributions): publish to Web, Slack, and other channels
+- [Chat interfaces](/interfaces): embed a widget or connect a messaging platform
+- [Run limits](/run-limits): stop runs at explicit ceilings

@@ -197,7 +197,7 @@ export class CodegenService {
     lines.push('');
     lines.push('    try {');
     lines.push('      const response = await fetch(');
-    lines.push('        `${this.baseUrl}/api/utcp/tools/${toolName}/execute`,');
+    lines.push('        `${this.baseUrl}/utcp/tools/${toolName}/execute`,');
     lines.push('        {');
     lines.push("          method: 'POST',");
     lines.push('          headers: {');

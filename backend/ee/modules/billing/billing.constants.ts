@@ -94,9 +94,16 @@ export const PLAN_ENTITLEMENTS: Record<string, string[]> = {
     EE_ENTITLEMENTS.APPROVAL_POLICY,
     EE_ENTITLEMENTS.COMPLIANCE_PACK,
     EE_ENTITLEMENTS.AUDIT_EXPORT,
+    EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE,
   ],
   // Enterprise (custom / contact sales) = Business + SCIM (part of SSO),
-  // customer-managed keys/private cloud, and cost attribution.
+  // customer-managed keys/private cloud, cost attribution, and removing
+  // the almyty mark.
+  //
+  // WHITE_LABEL was defined and enforced in two places and granted by no
+  // plan at all, so every check against it failed for every customer.
+  // Enterprise is the narrower of the two plausible homes; move it to
+  // Business if that is the commercial intent.
   [PLAN_ENTERPRISE]: [
     EE_ENTITLEMENTS.SSO,
     EE_ENTITLEMENTS.ADVANCED_RBAC,
@@ -105,6 +112,8 @@ export const PLAN_ENTITLEMENTS: Record<string, string[]> = {
     EE_ENTITLEMENTS.AUDIT_EXPORT,
     EE_ENTITLEMENTS.BYO_KMS,
     EE_ENTITLEMENTS.CHARGEBACK,
+    EE_ENTITLEMENTS.CONNECTIONS_GOVERNANCE,
+    EE_ENTITLEMENTS.WHITE_LABEL,
   ],
 };
 

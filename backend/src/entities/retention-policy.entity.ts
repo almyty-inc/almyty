@@ -22,6 +22,8 @@ import {
  * - requestLogsDays   -> request_logs (scoped via the org's gateways)
  * - usageMetricsDays  -> usage_metrics
  * - auditLogDays      -> audit_logs
+ * - toolExecutionsDays -> tool_executions
+ * - notificationsDays  -> notifications
  */
 @Entity('retention_policies')
 @Index(['organizationId'], { unique: true })
@@ -50,6 +52,24 @@ export class RetentionPolicy {
 
   @Column({ type: 'int', nullable: true })
   auditLogDays: number | null;
+
+  /**
+   * tool_executions. The only per-event table with no sweep, and the one
+   * that grows fastest in bytes: each row keeps `parameters` and
+   * `result` as json, and the HTTP executor allows 10MB responses.
+   */
+  @Column({ type: 'int', nullable: true })
+  toolExecutionsDays: number | null;
+
+  /**
+   * notifications. Written per failed scheduled/webhook run and per
+   * approval request and decision, and the only other per-event table
+   * with no sweep. A permanently broken 5-minute schedule writes 288
+   * rows a day forever -- and schedules do break, which is why there is
+   * a RESTORE_FAILED pause.
+   */
+  @Column({ type: 'int', nullable: true })
+  notificationsDays: number | null;
 
   @CreateDateColumn()
   createdAt: Date;

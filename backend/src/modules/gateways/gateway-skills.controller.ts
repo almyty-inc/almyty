@@ -96,8 +96,10 @@ export class GatewaySkillsController {
 
       let context: { orgSlug?: string; gatewaySlug?: string } | undefined;
       const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId, false);
-      const gateways = await this.gatewaysService.getAllUserGateways(organizationId);
-      const org = gateways[0]?.organization;
+      // One row, by primary key. This read `gateways[0]?.organization`
+      // off getAllUserGateways(organizationId) -- every active gateway of
+      // the org with every Tool on each -- to use that single field.
+      const org = await this.gatewaysService.getSkillContextOrganization(organizationId);
       if (org && gateway) {
         const orgSlug = org.slug || org.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'unknown';
         const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -159,7 +161,14 @@ export class GatewaySkillsController {
       const result = await this.toolExecutorService.executeTool(
         toolId,
         body.parameters || {},
-        { userId, organizationId },
+        {
+          userId,
+          organizationId,
+          // The gateway_tool row is already in hand, so hand its security
+          // policy straight to the executor rather than making it re-query.
+          gatewayId,
+          securityPolicy: gatewayTool.securityPolicy ?? null,
+        },
       );
 
       // Increment gateway request counter

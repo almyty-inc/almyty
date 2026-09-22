@@ -2,8 +2,26 @@ import { Injectable, Logger } from '@nestjs/common';
 
 export interface ExecutionContext {
   input: Record<string, any>;
-  nodes: Record<string, { output: any }>;
+  nodes: Record<string, { output: any; status?: 'failed' | 'skipped' }>;
   variables?: Record<string, any>;
+  /**
+   * Sink for template references that resolved to nothing. The resolver
+   * substitutes an empty string for them rather than throwing, because a
+   * genuinely optional field (`{{input.note}}` in a prompt) is a normal
+   * thing to leave unset -- but a typo is indistinguishable from that at
+   * the point of substitution, and used to leave nothing behind but a
+   * server-side warning. The node executor gives each node its own array
+   * and puts whatever lands in it on the node's result, so an unresolved
+   * reference shows up on the run instead of only in the logs.
+   */
+  unresolvedReferences?: string[];
+  /**
+   * Ceilings resolved for the run this pipeline belongs to. Present so
+   * a node cannot exceed the run's budget through its own config: a
+   * loop node asking for 100 iterations inside a run capped at 25 steps
+   * would otherwise outlive the budget that governs everything else.
+   */
+  runLimits?: { maxSteps?: number; maxToolCalls?: number };
 }
 
 /** Maximum allowed length for a single template expression (inside {{ }}). */
@@ -93,6 +111,14 @@ export class AgentTemplateResolver {
 
       if (resolved === undefined || resolved === null) {
         this.logger.warn(`Template expression '${trimmedPath}' resolved to ${resolved}`);
+        // Recorded as well as logged: substituting '' is right for an
+        // optional field and indistinguishable from a typo, so the only way
+        // a typo stops being invisible is for the reference to reach the run
+        // record. The caller decides what to do with it; resolution itself
+        // keeps working the way an optional field needs it to.
+        if (context.unresolvedReferences && !context.unresolvedReferences.includes(trimmedPath)) {
+          context.unresolvedReferences.push(trimmedPath);
+        }
         return '';
       }
 

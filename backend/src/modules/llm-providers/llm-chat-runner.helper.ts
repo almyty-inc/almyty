@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
+
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -8,8 +9,8 @@ import {
   callAnthropic,
   callAnthropicStream,
   callGoogle,
-  callCohere,
-  callHuggingFace,
+  callPerplexity,
+  callVertex,
   callCustomProvider,
 } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderConfig } from '../../entities/llm-provider.entity';
@@ -21,12 +22,26 @@ import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto'
 import { callLlmProviderHttp } from './providers/safe-request';
 import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
+import { DefaultModelResolver } from './default-model.resolver';
+import { ModelNotFoundError, isModelNotFoundResponse, vendorMessage } from './model-errors';
+import { batchAsync } from '../../common/utils/batch-async';
+
+/**
+ * How many of one model turn's tool calls run at once. Matches the bound the
+ * agent runtime uses, so neither path can exhaust the connection pool.
+ */
+const TOOL_CALL_CONCURRENCY = 3;
+import { ModelRouterService, NoRouteError, ResolvedCandidate, RouteAttribution } from '../model-catalog/routing/model-router.service';
+
+
 import {
   validateUrl,
   validateUrlAllowingPrivate,
   ollamaPrivateUrlsAllowed,
 } from '../../common/security/url-validator';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
+import { preferredBinding, providerProfile } from './provider-profile';
 
 /**
  * Provider-call mechanics extracted from LlmChatHelper:
@@ -45,9 +60,116 @@ export class LlmChatRunnerHelper {
     private readonly toolExecutorService: ToolExecutorService,
     private readonly modelsHelper: LlmModelsHelper,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    private readonly defaultModels: DefaultModelResolver,
+    @Optional() private readonly router?: ModelRouterService,
+    @Optional() private readonly secrets?: LlmProviderSecretsHelper,
   ) {}
 
+
+
   async callLlmProvider(
+    provider: LlmProvider,
+    request: ChatRequest,
+    session: Conversation,
+    tools: Tool[]
+  ): Promise<ChatResponse> {
+    if (request.routing) {
+      return this.callRouted(provider?.organizationId ?? session.organizationId, request, session, tools);
+    }
+    return this.callWithRetries(provider, request, session, tools);
+  }
+
+  /**
+   * Catalog-routed call: plan the candidate chain for the org, try each in
+   * order, move on when a candidate fails for a reason that is not the
+   * request's fault. The answer carries which card served it and why.
+   */
+  async callRouted(
+    organizationId: string,
+    request: ChatRequest,
+    session: Conversation,
+    tools: Tool[],
+  ): Promise<ChatResponse> {
+    if (!this.router) {
+      throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
+    }
+    const { routing, ...plain } = request;
+    const plan = await this.router.plan(organizationId, routing, session.userId ? { id: session.userId } : undefined);
+    if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
+
+    const tried: Array<{ modelId: string; reason: string }> = [];
+    let lastError: any;
+    for (let i = 0; i < plan.candidates.length; i++) {
+      const candidate = plan.candidates[i];
+      try {
+        const response = await this.callWithRetries(candidate.provider, { ...plain, model: candidate.vendorModelId }, session, tools);
+        response.routing = {
+          modelId: candidate.modelId,
+          modelVersionId: candidate.modelVersionId,
+          vendorModelId: candidate.vendorModelId,
+          providerId: candidate.card.providerId,
+          rationale: candidate.rationale,
+          attempt: i + 1,
+          tried,
+          rejected: plan.rejected,
+        };
+        this.router.recordRoute(organizationId, response.routing, {
+          userId: session.userId ?? undefined,
+          conversationId: session.id,
+          cost: response.cost,
+          tokens: response.usage?.totalTokens,
+        });
+        if (typeof response.responseTime === 'number') void this.router.recordLatency(candidate.card, response.responseTime);
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (!this.canAdvanceRoute(error, request.signal)) throw error;
+        const reason = error?.code ?? error?.response?.status ?? error?.message ?? 'failed';
+        tried.push({ modelId: candidate.modelId, reason: String(reason).slice(0, 200) });
+        this.logger.warn(`route candidate ${candidate.vendorModelId} (${candidate.modelId}) failed: ${reason}; trying next`);
+      }
+    }
+    throw Object.assign(lastError ?? new Error('All route candidates failed'), { code: lastError?.code ?? 'ROUTE_EXHAUSTED', tried });
+  }
+
+  /** The provider at the head of the plan; chat() uses it for the session when no provider id was given. */
+  /** The head of the plan with its provider; the streaming path uses it since a stream cannot walk the chain mid-answer. */
+  async planRouteHead(organizationId: string, request: ChatRequest, principal?: { id: string }): Promise<{ provider: LlmProvider; candidate: ResolvedCandidate; rejected: Array<{ modelId: string; reason: string }> }> {
+    if (!this.router) {
+      throw new BadRequestException({ code: 'ROUTING_UNAVAILABLE', message: 'Model routing is not available in this deployment' });
+    }
+    const plan = await this.router.plan(organizationId, request.routing ?? {}, principal);
+    if (plan.candidates.length === 0) throw new NoRouteError(plan.rejected);
+    return { provider: plan.candidates[0].provider, candidate: plan.candidates[0], rejected: plan.rejected };
+  }
+
+  async headProviderForRoute(organizationId: string, request: ChatRequest, principal?: { id: string }): Promise<LlmProvider> {
+    return (await this.planRouteHead(organizationId, request, principal)).provider;
+  }
+
+  /** Audit + latency bookkeeping for a routed answer produced outside the walk (the streaming head). */
+  recordRoute(
+    organizationId: string,
+    attribution: RouteAttribution,
+    context: { userId?: string; conversationId?: string; cost?: number; tokens?: number },
+  ): void {
+    this.router?.recordRoute(organizationId, attribution, context);
+  }
+
+  /**
+   * Whether a failed candidate should be walked past.
+ Request-shaped
+   * failures (bad input, payload too large, unprocessable) and a caller
+   * abort stop the walk; everything else (retired model, quota, outage,
+   * auth on that one provider) moves to the next card.
+   */
+  private canAdvanceRoute(error: any, signal?: AbortSignal): boolean {
+    if (signal?.aborted || error?.name === 'AbortError' || error?.name === 'CanceledError') return false;
+    const status = error?.response?.status ?? error?.status ?? 0;
+    return ![400, 413, 422].includes(status);
+  }
+
+  async callWithRetries(
     provider: LlmProvider,
     request: ChatRequest,
     session: Conversation,
@@ -58,6 +180,22 @@ export class LlmChatRunnerHelper {
     // point for outbound provider calls, so it covers chat, streaming, and the
     // health check path.
     await this.envelopeCrypto.warmOrg(provider.organizationId);
+    // The credential reference: policy check (grants seam) and a fresh
+    // read of the row before the sync getters run. Optional only for
+    // specs that build the runner by hand; the module always wires it.
+    if (this.secrets) {
+      await this.secrets.withResolvedSecrets(provider, {
+        principal: session?.userId ? { id: session.userId } : undefined,
+        context: { purpose: 'llm_call', resourceType: 'llm_provider', resourceId: provider.id },
+      });
+    }
+
+    // Settle the model once, up front. Provider implementations never
+    // guess: when neither the request nor the provider names one, the
+    // vendor's current list decides (see DefaultModelResolver).
+    if (!request.model) {
+      request = { ...request, model: await this.defaultModels.resolve(provider) };
+    }
     const maxRetries = 2;
     const backoffDelays = [1000, 3000]; // 1s, 3s exponential backoff
     let lastError: any;
@@ -100,7 +238,21 @@ export class LlmChatRunnerHelper {
         // via bumpProviderStats, which is the right place for the
         // persistent record. Keep the per-attempt log above.
 
+        // A retired or mistyped model id is not transient: surface it as
+        // a typed error the scheduler and UI can act on, and forget any
+        // cached default so the next call re-asks the vendor.
+        if (isModelNotFoundResponse(statusCode, error.response?.data || error.response?.body)) {
+          this.defaultModels.invalidate(provider.id);
+          throw new ModelNotFoundError(
+            request.model ?? provider.configuration?.model ?? 'unknown',
+            provider.id,
+            provider.type,
+            vendorMessage(error.response?.data || error.response?.body),
+          );
+        }
+
         // Retry only on retryable status codes (429, 500, 502, 503)
+
         const isRetryable = [429, 500, 502, 503].includes(statusCode) ||
           error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
 
@@ -131,29 +283,37 @@ export class LlmChatRunnerHelper {
     startTime: number,
   ): Promise<ChatResponse> {
     const costFn = this.modelsHelper.calculateProviderCost.bind(this.modelsHelper);
+    // One implementation per protocol, shared by every vendor that speaks
+    // it. This replaced a list of twenty-odd case labels that had to be
+    // edited by hand for each new vendor, which is how AWS_BEDROCK ended
+    // up in it twice and how a vendor could be added everywhere else and
+    // still fall through to the default branch.
+    const profile = providerProfile(provider.type);
+    if (profile && preferredBinding(profile).protocol === 'chat_completions') {
+      return callOpenAI(provider, request, session, tools, startTime, costFn);
+    }
     switch (provider.type) {
-      case LlmProviderType.OPENAI:
+      // The chat-completions vendors with no profile: Hugging Face gives
+      // its endpoint field precedence over apiUrl, Ollama treats apiUrl as
+      // the server root rather than the base, and Azure OpenAI builds its
+      // host from a resource name.
       case LlmProviderType.AZURE_OPENAI:
-      case LlmProviderType.MISTRAL:
-      case LlmProviderType.XAI:
-      case LlmProviderType.DEEPSEEK:
-      case LlmProviderType.GROQ:
-      case LlmProviderType.TOGETHER:
-      case LlmProviderType.OPENROUTER:
-      // Ollama serves an OpenAI-compatible API under <server>/v1 —
-      // chat, streaming, and tool calling all ride the OpenAI path.
-      // getAuthHeaders() adds no Authorization header when no key is
-      // configured (Ollama needs none).
+      case LlmProviderType.HUGGINGFACE:
       case LlmProviderType.OLLAMA:
         return callOpenAI(provider, request, session, tools, startTime, costFn);
       case LlmProviderType.ANTHROPIC:
         return callAnthropic(provider, request, session, tools, startTime, costFn);
       case LlmProviderType.GOOGLE:
         return callGoogle(provider, request, session, tools, startTime, costFn);
-      case LlmProviderType.COHERE:
-        return callCohere(provider, request, session, tools, startTime, costFn);
-      case LlmProviderType.HUGGINGFACE:
-        return callHuggingFace(provider, request, session, tools, startTime);
+      // Perplexity's generally available surface is Responses-shaped, not
+      // chat-completions shaped, so it has its own dispatch.
+      case LlmProviderType.PERPLEXITY:
+        return callPerplexity(provider, request, session, tools, startTime, costFn);
+      // Vertex speaks the OpenAI shape but cannot use the synchronous
+      // getAuthHeaders(): its adapter mints a short-lived OAuth token from
+      // the service-account key first.
+      case LlmProviderType.VERTEX_AI:
+        return callVertex(provider, request, session, tools, startTime, costFn);
       case LlmProviderType.CUSTOM:
         return callCustomProvider(provider, request, session, tools, startTime);
       default:
@@ -209,23 +369,39 @@ export class LlmChatRunnerHelper {
     organizationId: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    for (const toolCall of toolCalls) {
+    if (!toolCalls.length) return;
+
+    // Resolve every requested tool in ONE org-scoped query rather than a
+    // findOne per call. `prepareTools` ten lines above already had this
+    // shape; the loop was issuing N of them for one model turn.
+    //
+    // CRITICAL: the lookup stays scoped to the caller's organization. An
+    // unscoped `{ name }` query let an LLM in org A resolve and execute
+    // org B's tool of the same name — the downstream `use_tools` check was
+    // satisfied trivially because the user does have that permission in
+    // their OWN org, not in the org that owns the tool.
+    const requested = [...new Set(toolCalls.map((c) => c.name))];
+    const rows = await this.toolRepository.find({
+      where: requested.map((name) => ({ name, organizationId })),
+    });
+    const byName = new Map<string, Tool>();
+    for (const tool of rows) {
+      // Defense in depth: re-check the org on every row before it can be
+      // matched to a call.
+      if (tool.organizationId === organizationId) byName.set(tool.name, tool);
+    }
+
+    // Bounded concurrency, the same shape the agent runtime uses for a
+    // turn's tool calls. Strictly serial round trips made N parallel calls
+    // from one model turn take N times as long for no ordering guarantee
+    // the model asked for.
+    await batchAsync(toolCalls, TOOL_CALL_CONCURRENCY, async (toolCall) => {
       try {
-        // CRITICAL: scope the lookup to the caller's organization. The
-        // previous query was `{ name: toolCall.name }` with NO org filter,
-        // so an LLM in org A asking for a tool named e.g. `send_email`
-        // could resolve and execute org B's `send_email` tool. The
-        // downstream tool-executor permission check (`use_tools` in
-        // organizationId) was satisfied trivially because the user does
-        // have that permission in their OWN org — not in the org that
-        // owns the tool.
-        const tool = await this.toolRepository.findOne({
-          where: { name: toolCall.name, organizationId },
-        });
+        const tool = byName.get(toolCall.name);
 
         if (!tool) {
           toolCall.error = `Tool '${toolCall.name}' not found`;
-          continue;
+          return;
         }
 
         // Execute the tool. Forward the caller's cancellation
@@ -252,7 +428,7 @@ export class LlmChatRunnerHelper {
       } catch (error) {
         toolCall.error = error.message;
       }
-    }
+    });
   }
 
   validateProviderConfiguration(type: LlmProviderType, config: LlmProviderConfig): void {
@@ -278,8 +454,72 @@ export class LlmChatRunnerHelper {
       case LlmProviderType.OPENROUTER:
       case LlmProviderType.COHERE:
       case LlmProviderType.HUGGINGFACE:
+      case LlmProviderType.FIREWORKS:
+      case LlmProviderType.CEREBRAS:
+      case LlmProviderType.DEEPINFRA:
+      case LlmProviderType.NOVITA:
+      case LlmProviderType.PERPLEXITY:
+      case LlmProviderType.ZAI:
+      case LlmProviderType.BASETEN:
+      case LlmProviderType.NEBIUS:
+      case LlmProviderType.SAMBANOVA:
+      case LlmProviderType.MOONSHOT:
+      case LlmProviderType.QWEN:
+      case LlmProviderType.MINIMAX:
+      case LlmProviderType.UPSTAGE:
+      case LlmProviderType.WRITER:
+      case LlmProviderType.QIANFAN:
+      case LlmProviderType.HUNYUAN:
+      case LlmProviderType.VOLCENGINE:
+      case LlmProviderType.SPARK:
+      case LlmProviderType.DIGITALOCEAN:
+      case LlmProviderType.MODAL:
         if (!config.apiKey) {
           throw new BadRequestException(`${type} provider requires an API key`);
+        }
+        break;
+
+      case LlmProviderType.AZURE_AI_FOUNDRY:
+        // `model` is the customer's deployment name on this surface, so a
+        // resource with no deployment named cannot be called at all.
+        if (!config.apiKey || !config.azure?.resourceName || !config.azure?.deploymentName) {
+          throw new BadRequestException(
+            'Azure AI Foundry provider requires API key, resource name, and deployment name',
+          );
+        }
+        break;
+
+      case LlmProviderType.RUNPOD:
+        // Every RunPod URL carries an endpoint: a public catalog slug
+        // (nothing to deploy) or the customer's own serverless endpoint id.
+        // There is no shared base without one.
+        if (!config.apiKey) {
+          throw new BadRequestException('RunPod provider requires an API key');
+        }
+        if (!config.runpod?.endpointId) {
+          throw new BadRequestException(
+            'RunPod provider requires an endpoint: a public model slug (e.g. gpt-oss-120b) or your own endpoint id',
+          );
+        }
+        break;
+
+      case LlmProviderType.VERTEX_AI:
+        // The credential is a service-account JSON key (or a current access
+        // token); the project selects whose quota is spent. Location
+        // defaults to `global`. There is no model listing on this surface,
+        // so a model must be named up front rather than discovered.
+        if (!config.apiKey) {
+          throw new BadRequestException(
+            'Vertex AI provider requires a Google Cloud service-account JSON key as its credential',
+          );
+        }
+        if (!config.vertex?.projectId) {
+          throw new BadRequestException('Vertex AI provider requires a Google Cloud project id');
+        }
+        if (!config.model) {
+          throw new BadRequestException(
+            'Vertex AI provider requires a model (e.g. google/gemini-3.5-flash): this surface serves no model list to choose from',
+          );
         }
         break;
 
@@ -307,14 +547,25 @@ export class LlmChatRunnerHelper {
       }
 
       case LlmProviderType.AZURE_OPENAI:
+        // The deployment name is the `model` on the /openai/v1 surface, so
+        // it is still required: it is what a call actually names.
         if (!config.apiKey || !config.azure?.resourceName || !config.azure?.deploymentName) {
           throw new BadRequestException('Azure OpenAI provider requires API key, resource name, and deployment name');
         }
         break;
 
       case LlmProviderType.AWS_BEDROCK:
+        // Region selects the host and the model set; the Bedrock API key is
+        // the bearer token on the OpenAI-compatible surface. Requiring the
+        // key here is new: before this change Bedrock validated with a
+        // region alone, and then had no dispatch path at all, so a provider
+        // saved cleanly and every chat through it threw "Unsupported LLM
+        // provider type".
         if (!config.bedrock?.region) {
           throw new BadRequestException('AWS Bedrock provider requires region');
+        }
+        if (!config.apiKey) {
+          throw new BadRequestException('AWS Bedrock provider requires a Bedrock API key');
         }
         break;
 

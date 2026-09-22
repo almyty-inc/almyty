@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenEx
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
+import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callPerplexity, callPerplexityStream, callVertex, callVertexStream, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
 import { Message, MessageRole, MessageType, MessageStatus, ToolCall, MessageContent } from '../../entities/message.entity';
@@ -13,12 +13,16 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { LlmModelsHelper } from './llm-models.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
+import { DefaultModelResolver } from './default-model.resolver';
+import { ModelNotFoundError, isModelNotFoundResponse, vendorMessage } from './model-errors';
+
 import { LlmProvidersService } from './llm-providers.service';
 import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto';
 import { callLlmProviderHttp } from './providers/safe-request';
 import { safeErrorBody, safeErrorMessage, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { ToolExecutionOptions } from '../tools/tool-executor.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { preferredBinding, providerProfile } from './provider-profile';
 
 @Injectable()
 export class LlmChatHelper {
@@ -42,11 +46,13 @@ export class LlmChatHelper {
     private readonly providers: LlmProvidersService,
     private readonly stats: LlmStatsHelper,
     private readonly runner: LlmChatRunnerHelper,
+    private readonly defaultModels: DefaultModelResolver,
+
     private readonly envelopeCrypto: EnvelopeCryptoService,
   ) {}
 
   async chat(
-    providerId: string,
+    providerId: string | null | undefined,
     request: ChatRequest,
     organizationId: string,
     userId?: string
@@ -54,9 +60,14 @@ export class LlmChatHelper {
     const startTime = Date.now();
 
     try {
-      const provider = await this.providers.getProvider(providerId, organizationId, true);
+      // With a routing policy the catalog chooses the model. The head of
+      // the plan stands in as the session's provider; the runner walks the
+      // whole chain and stamps the answering card on the response.
+      const provider = providerId
+        ? await this.providers.getProvider(providerId, organizationId, true)
+        : await this.runner.headProviderForRoute(organizationId, request, userId ? { id: userId } : undefined);
 
-      if (!provider.isHealthy) {
+      if (!provider.isHealthy && !request.routing) {
         throw new BadRequestException(LLM_HEALTH_GATE_MESSAGE);
       }
 
@@ -238,7 +249,7 @@ export class LlmChatHelper {
         if (upstreamMsg !== LLM_HEALTH_GATE_MESSAGE) {
           await this.llmProviderRepository.update(
             { id: providerId, organizationId },
-            { lastError: upstreamMsg },
+            { lastError: upstreamMsg, lastErrorAt: new Date() },
           );
         }
       } catch (updateError: any) {
@@ -264,7 +275,7 @@ export class LlmChatHelper {
    * SSE events in real time.
    */
   async chatStream(
-    providerId: string,
+    providerId: string | null | undefined,
     request: ChatRequest,
     organizationId: string,
     userId?: string,
@@ -278,25 +289,39 @@ export class LlmChatHelper {
 
     const startTime = Date.now();
 
+    const originalRequest = request;
     try {
-      const provider = await this.providers.getProvider(providerId, organizationId, true);
-
-      if (!provider.isHealthy) {
+      // A routing policy picks the head of the plan here: a stream cannot
+      // move to the next candidate once tokens have gone out, so the walk
+      // that the non-streaming path does is limited to this first choice.
+      const routed = request.routing ? await this.runner.planRouteHead(organizationId, request, userId ? { id: userId } : undefined) : null;
+      const provider = routed ? routed.provider : await this.providers.getProvider(providerId as string, organizationId, true);
+      if (routed) {
+        request = { ...request, model: routed.candidate.vendorModelId, routing: undefined };
+      } else if (!provider.isHealthy) {
         throw new BadRequestException(LLM_HEALTH_GATE_MESSAGE);
       }
 
       // Determine if the provider supports streaming
-      const supportsStreaming = [
-        LlmProviderType.OPENAI,
-        LlmProviderType.AZURE_OPENAI,
-        LlmProviderType.MISTRAL,
-        LlmProviderType.XAI,
-        LlmProviderType.DEEPSEEK,
-        LlmProviderType.GROQ,
-        LlmProviderType.TOGETHER,
-        LlmProviderType.OPENROUTER,
-        LlmProviderType.ANTHROPIC,
-      ].includes(provider.type);
+      // Every type whose dispatch has a streaming implementation. A type
+      // absent here falls back to a non-streaming call rather than
+      // failing, but it must then also be absent from the switch below.
+      //
+      // Every chat-completions vendor streams through callOpenAIStream, so
+      // membership is derived from the protocol rather than listed by
+      // hand. The names below are the ones with no profile or a protocol
+      // of their own.
+      const profile = providerProfile(provider.type);
+      const supportsStreaming =
+        (profile && preferredBinding(profile).protocol === 'chat_completions') ||
+        [
+          LlmProviderType.AZURE_OPENAI,
+          LlmProviderType.HUGGINGFACE,
+          LlmProviderType.OLLAMA,
+          LlmProviderType.ANTHROPIC,
+          LlmProviderType.PERPLEXITY,
+          LlmProviderType.VERTEX_AI,
+        ].includes(provider.type);
 
       if (!supportsStreaming) {
         // Fall back to non-streaming for unsupported providers
@@ -359,31 +384,42 @@ export class LlmChatHelper {
       }
 
       const costFn = this.modelsHelper.calculateProviderCost.bind(this.modelsHelper);
+      // Streaming bypasses the runner, so settle the model here the same
+      // way: configured, else the vendor's current list. Never a literal.
+      if (!request.model) {
+        request = { ...request, model: await this.defaultModels.resolve(provider) };
+      }
       let response: ChatResponse;
+
 
       // Streaming dispatches straight to callOpenAIStream/callAnthropicStream
       // (bypassing runner.callLlmProvider), so warm the org's DEK here too
       // before the sync getAuthHeaders read. No-op for non-KMS orgs.
       await this.envelopeCrypto.warmOrg(provider.organizationId);
 
+      if (profile && preferredBinding(profile).protocol === 'chat_completions') {
+        response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
+      } else {
       switch (provider.type) {
-        case LlmProviderType.OPENAI:
+        // The chat-completions vendors with no profile of their own.
         case LlmProviderType.AZURE_OPENAI:
-        case LlmProviderType.MISTRAL:
-        case LlmProviderType.XAI:
-        case LlmProviderType.DEEPSEEK:
-        case LlmProviderType.GROQ:
-        case LlmProviderType.TOGETHER:
-        case LlmProviderType.OPENROUTER:
+        case LlmProviderType.HUGGINGFACE:
         case LlmProviderType.OLLAMA:
           response = await callOpenAIStream(provider, request, session, tools, startTime, costFn, onChunk);
           break;
         case LlmProviderType.ANTHROPIC:
           response = await callAnthropicStream(provider, request, session, tools, startTime, costFn, onChunk);
           break;
+        case LlmProviderType.PERPLEXITY:
+          response = await callPerplexityStream(provider, request, session, tools, startTime, costFn, onChunk);
+          break;
+        case LlmProviderType.VERTEX_AI:
+          response = await callVertexStream(provider, request, session, tools, startTime, costFn, onChunk);
+          break;
         default:
           // Should not reach here due to supportsStreaming check, but safety net
-          return this.chat(providerId, request, organizationId, userId);
+        return this.chat(providerId, originalRequest, organizationId, userId);
+      }
       }
 
       // Save final message to database
@@ -421,10 +457,31 @@ export class LlmChatHelper {
         success: true,
       });
 
+      const routing = routed
+        ? {
+            modelId: routed.candidate.modelId,
+            modelVersionId: routed.candidate.modelVersionId,
+            vendorModelId: routed.candidate.vendorModelId,
+            providerId: routed.candidate.card.providerId,
+            rationale: routed.candidate.rationale,
+            attempt: 1,
+            tried: [],
+            rejected: routed.rejected,
+          }
+        : undefined;
+      if (routing) {
+        this.runner.recordRoute(organizationId, routing, {
+          userId,
+          conversationId: session.id,
+          cost: response.cost,
+          tokens: response.usage?.totalTokens,
+        });
+      }
       return {
         ...response,
         conversationId: session.id,
         messageId: savedMessage.id,
+        ...(routing ? { routing } : {}),
       };
     } catch (error) {
       const safeBody = safeErrorBody(error.response?.data);
@@ -448,13 +505,25 @@ export class LlmChatHelper {
         if (upstreamMsg !== LLM_HEALTH_GATE_MESSAGE) {
           await this.llmProviderRepository.update(
             { id: providerId, organizationId },
-            { lastError: upstreamMsg },
+            { lastError: upstreamMsg, lastErrorAt: new Date() },
           );
         }
       } catch (updateError: any) {
         this.logger.warn(`Failed to update provider error stats: ${updateError.message}`);
       }
 
+      // A retired model id is not transient; hand callers the typed error
+      // so schedules stop and the UI can say which model to replace.
+      const status = error.response?.status || error.status;
+      if (isModelNotFoundResponse(status, error.response?.data)) {
+        this.defaultModels.invalidate(providerId);
+        throw new ModelNotFoundError(
+          request.model ?? 'unknown',
+          providerId,
+          undefined,
+          vendorMessage(error.response?.data),
+        );
+      }
       throw error;
     }
   }

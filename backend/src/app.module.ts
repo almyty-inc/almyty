@@ -69,7 +69,6 @@ import { ApisModule } from './modules/apis/apis.module';
 import { ToolsModule } from './modules/tools/tools.module';
 import { McpSourcesModule } from './modules/mcp-sources/mcp-sources.module';
 import { GatewaysModule } from './modules/gateways/gateways.module';
-// import { MonitoringModule } from './modules/monitoring/monitoring.module'; // TODO: Create this module
 import { SchemaParserModule } from './modules/schema-parser/schema-parser.module';
 import { JsonSchemaTranslatorModule } from './modules/json-schema-translator/json-schema-translator.module';
 import { LlmProvidersModule } from './modules/llm-providers/llm-providers.module';
@@ -95,6 +94,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { VersionsModule } from './modules/versions/versions.module';
 import { RunnerModule } from './modules/runner/runner.module';
 import { ApprovalsModule } from './modules/approvals/approvals.module';
+import { AgentAppsModule } from './modules/agent-apps/agent-apps.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { LicensingModule } from './modules/licensing/licensing.module';
 import { KmsModule } from './modules/kms/kms.module';
@@ -104,6 +104,12 @@ import { ReferralsModule } from './modules/referrals/referrals.module';
 import { RetentionModule } from './modules/retention/retention.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { LifecycleModule } from './modules/lifecycle/lifecycle.module';
+import { ModelCatalogModule } from './modules/model-catalog/model-catalog.module';
+import { ModelRegistryModule } from './modules/model-registry/model-registry.module';
+import { ModelDeploymentsModule } from './modules/model-deployments/model-deployments.module';
+import { ConnectionsModule } from './modules/connections/connections.module';
+import { CredentialRefModule } from './modules/credentials/credential-ref.module';
+
 // EE feature modules (sso, rbac, audit-export, approval-policies, billing,
 // ee-stubs, compliance, chargeback) live under `ee/` and are loaded at
 // runtime via the ee-loader — NOT statically imported here, so this file
@@ -292,6 +298,12 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     McpModule,
     JobsModule,
     PluginsModule,
+    // Imported at the top of this file since it was written and never
+    // listed here, so its processor was never constructed: every signup
+    // enqueued a welcome job that no worker consumed, the jobs sat in
+    // Redis, no welcome or nudge email was ever sent, and the unsubscribe
+    // link in those unsent emails pointed at a route that did not exist.
+    LifecycleModule,
     MetricsModule,
     MonitoringModule,
     HealthModule,
@@ -313,7 +325,7 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     AuditLogModule,
     RunnerModule,
     ApprovalsModule,
-    RunnerModule,
+    AgentAppsModule,
     WorkspaceModule,
     LicensingModule,
     BudgetsModule,
@@ -321,7 +333,12 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
     ReferralsModule,
     RetentionModule,
     NotificationsModule,
-    LifecycleModule,
+    KmsModule,
+    ModelCatalogModule,
+    ModelRegistryModule,
+    ModelDeploymentsModule,
+    ConnectionsModule,
+    CredentialRefModule,
     KmsModule,
     // EE feature modules are loaded dynamically so the OSS build compiles +
     // boots without the commercial `ee/` tree present (loadEeModules() → []).

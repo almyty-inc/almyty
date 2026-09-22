@@ -1,0 +1,104 @@
+# Connections
+
+Connections is where almyty keeps every key, token and account it uses on your behalf: inference vendors, deployment providers, model registries, clouds, memory backends, MCP servers, tool sources and chat channels. You connect once; agents, [models](/models), [deployments](/models/deployments) and the registry use the connection. The secret itself never leaves the backend.
+
+```
+Connector (catalog, data)   ->   Connection (credential + account label + health)   ->   used by agents, models, deployments
+  how to connect                   who owns it: the organization or you                   directly, or through a grant
+  how to validate                  valid | failed | expired | revoked | quota | unknown
+```
+
+## Connect
+
+Open **Settings**, then **Connections**, and pick a connector from the catalog. Each one offers one or more ways to connect, best first:
+
+| Method | What you do | What is stored |
+|---|---|---|
+| `oauth2_pkce` | Sign in at the provider and approve (OpenRouter today). Nothing to paste | The key the provider mints for almyty |
+| `oauth2_code` | Standard authorization code with a platform client id | Access and refresh token |
+| `oauth2_client_credentials` | Paste a tenant, client id and secret (Azure) | Those three, secret encrypted |
+| `api_key` | Paste a key; the form links straight to the page where it is created | The key and any plain fields, such as a base URL |
+| `cloud_iam` | AWS: a CloudFormation quick-create link makes a role in your account that trusts almyty with an external id, no long-lived keys | The role ARN |
+| `service_account` | Upload a service account JSON (Google Cloud) | The JSON, encrypted |
+| `installation` | A Slack-style app install | The installation token |
+
+Every method carries a small form; fields marked secret are encrypted at rest and never returned by the API, not even masked. The key is checked against the provider before it is saved: `GET /models` for most inference vendors, a whoami for Hugging Face and DigitalOcean, STS for AWS, a token grant for Google Cloud and Azure, a `HeadBucket` for a registry, an `initialize` for an MCP server. Modal has no endpoint that answers to a token alone, so its format is checked and the first deploy is the live check.
+
+From a terminal or a machine without a browser, a sign-in connector can run headless: start the connect with `mode: 'headless'`, the provider shows a code on screen, and you paste it back to complete.
+
+A connect ends in one of two states. **Connected**: the provider accepted the credential and told almyty what it is, which becomes the account label (the OpenRouter key label, your Hugging Face username, `bucket@endpoint`, the AWS role ARN). **Failed**: the provider said no. The answer is shown and the connection is kept with health `failed`, so you can fix the key at the provider and validate again, or rotate it, without starting over, and the attempt is in the audit log.
+
+## What a connection is
+
+A connection is a credential plus:
+
+| Field | Meaning |
+|---|---|
+| `connectorKey` | Which connector made it |
+| `ownerUserId` | Empty for an organization connection, your id for a personal one |
+| `accountLabel` | What the key resolves to at the provider |
+| `healthStatus` | `valid`, `failed`, `expired`, `revoked`, `quota` or `unknown` |
+| `healthCheckedAt`, `healthError` | When validation last ran and what the provider said when it was not valid |
+| `scopesGranted` | OAuth scopes actually granted |
+
+The list and detail views show all of that plus the method and the owner. Values are never shown.
+
+## Organization or personal
+
+A connection belongs to the organization or to you.
+
+- **Organization connections** are what agents and deployments use. Making one needs the `connections:manage` permission (admins and owners).
+- **Personal connections** are your own keys. Every member can keep them when the organization allows it: `allowUserScopedConnections` is on by default for free and personal organizations and off for production organizations, and an admin flips it under organization settings.
+
+Everyone with `connections:read` (every role) sees the organization's connections; a personal connection is visible to its owner and to admins. Who may actually *use* a connection in a run, beyond its owner, is decided by [grants](/connections/grants).
+
+## Validate
+
+Validate re-runs the connector's check, refreshes the health and the account label, and records the outcome. Run it after fixing a key at the provider, or when a run reports the connection as failed.
+
+## Rotate
+
+Rotate replaces the secret in place, so everything that points at the connection keeps working. For a pasted key you get the form back and send it with the new value; for a sign-in connector you get a new authorize URL, and completing it swaps the key on the same connection.
+
+## Disconnect
+
+Disconnecting removes the connection. When the connector declares a revoke endpoint the key is revoked at the provider first; otherwise revoke it in the provider's console as well.
+
+## The catalog
+
+Built-in connectors, by kind:
+
+| Kind | Connectors |
+|---|---|
+| `inference` | OpenRouter (sign in or key), OpenAI, Anthropic, Google Gemini, Mistral, Groq, Together, xAI, DeepSeek, Cohere, Hugging Face, Ollama, Fireworks, Cerebras, DeepInfra, Perplexity, Z.ai, Nebius Token Factory, any OpenAI-compatible endpoint |
+| `deployment` | Modal, Baseten, RunPod, plus one connector per registered [deployment adapter](/models/deployments#adapters), derived from the adapter's own config schema |
+| `cloud` | Amazon Web Services (cross-account role or key pair), Google Cloud (service account), Microsoft Azure (app registration), DigitalOcean (personal access token) |
+| `registry` | S3-compatible registry (endpoint, region, bucket, prefix, access keys), Hugging Face Hub |
+| `memory`, `mcp`, `tool_source`, `channel` | Memory backend over HTTP, MCP server, OpenAPI document, outbound webhook |
+
+Inference connectors reuse the provider catalog for names, key pages, docs and base URLs, so a vendor is described once. SambaNova and Novita serve their model lists without a key, so a probe would prove reachability only; they take a key on the [provider form](/llm-providers) instead.
+
+Admins can add connectors the catalog does not have: any OpenAI-compatible endpoint, any MCP server, any memory service, any bucket. A custom connector has the same shape as a built-in entry (a key, a kind, the form with secret fields marked, how to validate) and may not shadow a built-in key.
+
+## Governance
+
+Organizations with the `connections_governance` entitlement (Enterprise) set rules over the whole layer:
+
+- **Connector allowlists and denylists**: which connectors may be connected at all, for organization connections, personal ones, or both.
+- **Scope rules**: what an agent, workspace, user, team or role may resolve, optionally only in some environments (an agent tagged `production`, for example); a rule can require organization-owned connections and only connectors on an enabled allowlist.
+- **Expiry rules**: a secret older than a maximum age is expired, owners are warned ahead of time, and with enforcement the connection's grants are revoked so nothing keeps resolving it.
+- **Rotation rules**: rotation on a schedule through the provider's API where the connector supports it, with the owner told to rotate by hand where it does not.
+- **Grant budgets**: a grant whose spend budget is exhausted is refused before the secret is decrypted.
+
+Every rule is evaluated after the [grant](/connections/grants) check and refuses with the policy that carried the decision.
+
+## Where secrets live
+
+Secrets are stored in one place, the organization's credential store, encrypted with the platform key or, for organizations that bring their own KMS, with their key. They leave the backend only inside the request to the provider they belong to. Every URL a validation probes passes the SSRF guard; private ranges are allowed only for connectors with an explicit opt-in (`OLLAMA_ALLOW_PRIVATE_URLS`, `MCP_ALLOW_PRIVATE_URLS`). Every connect, validate, rotate, disconnect, grant, revoke and use is written to the audit log with the connector, method, owner and outcome.
+
+## Related
+
+- [Grants](/connections/grants): who may use a connection beyond its owner
+- [Credentials](/credentials): the vault the connections live in, and API access keys
+- [Providers](/models/providers): the vendors behind inference connections
+- [Connections API](/api-reference/connections-api)

@@ -19,7 +19,7 @@ export interface GatewayConfigurationCardProps {
 }
 
 function buildEndpoint(gateway: any, orgSlug: string): string {
-  const backendUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin
+  const backendUrl = import.meta.env.ALMYTY_API_BASE_URL || window.location.origin
   const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
   if (gateway.type === 'mcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
   if (gateway.type === 'utcp') return `${backendUrl}/${orgSlug}/${gwSlug}`
@@ -73,6 +73,7 @@ export function GatewayConfigurationCard({
               <Button
                 size="sm"
                 variant="outline"
+                aria-label={gateway.type === 'skills' ? 'Copy install command' : 'Copy endpoint URL'}
                 onClick={handleCopy}
               >
                 <Copy className="h-4 w-4" />

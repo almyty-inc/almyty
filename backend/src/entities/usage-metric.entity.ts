@@ -126,9 +126,12 @@ export class UsageMetric {
   @JoinColumn({ name: 'userId' })
   user: User;
 
+  // The retention sweep filters usage metrics by organizationId, so a
+  // detached row would be unreachable by any policy. Nothing wants an
+  // orphaned metric either way.
   @ManyToOne(() => Organization, {
     nullable: true,
-    onDelete: 'SET NULL',
+    onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'organizationId' })
   organization: Organization;

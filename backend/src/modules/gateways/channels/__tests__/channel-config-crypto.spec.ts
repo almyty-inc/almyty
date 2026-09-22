@@ -275,3 +275,48 @@ describe('channel pipeline reads decrypted, key-normalized config', () => {
     expect(fetchMock.calls[0].url).toContain('/bot123456:ABC/');
   });
 });
+
+describe('connection reference helpers', () => {
+  const {
+    CHANNEL_CREDENTIAL_KEYS,
+    LEGACY_CHANNEL_CONFIG_KEY_MAP,
+    channelSecretKeysIn,
+    credentialKeysOf,
+    hasChannelSecret,
+    hasInlineChannelSecret,
+    splitChannelConfigSecrets,
+  } = require('../channel-config.helper');
+
+  it('the credential keys are the canonical snake_case names only, and cover the outbound webhook and Google Chat secrets', () => {
+    for (const key of CHANNEL_CREDENTIAL_KEYS) expect(key in LEGACY_CHANNEL_CONFIG_KEY_MAP).toBe(false);
+    expect(CHANNEL_CREDENTIAL_KEYS).toEqual(expect.arrayContaining(['bot_token', 'signing_secret', 'client_secret', 'app_secret', 'twilio_auth_token', 'bot_password', 'resend_api_key', 'secret', 'verification_token']));
+  });
+
+  it('splitChannelConfigSecrets separates secrets (canonical names) from the public part, ignoring masks', () => {
+    const { secrets, publicConfig } = splitChannelConfigSecrets({
+      botToken: 'legacy', signing_secret: 'sig', app_secret: MASKED_CHANNEL_SECRET, client_id: 'A1', phoneNumber: '+1',
+    });
+    expect(secrets).toEqual({ bot_token: 'legacy', signing_secret: 'sig' });
+    expect(publicConfig).toEqual({ client_id: 'A1', phoneNumber: '+1' });
+    expect(hasInlineChannelSecret({ client_id: 'A1', credentialId: 'c' })).toBe(false);
+    expect(hasInlineChannelSecret({ secret: 'hmac' })).toBe(true);
+  });
+
+  it('hasChannelSecret sees inline values and keys held by the connection, never reading the store', () => {
+    expect(hasChannelSecret({ botToken: 'x' }, 'bot_token')).toBe(true);
+    expect(hasChannelSecret({ bot_token: MASKED_CHANNEL_SECRET }, 'bot_token')).toBe(false);
+    expect(hasChannelSecret({ credentialId: 'c', credentialKeys: ['bot_token'] }, 'bot_token')).toBe(true);
+    expect(hasChannelSecret({ credentialId: 'c', credentialKeys: ['bot_token'] }, 'signing_secret')).toBe(false);
+    expect(credentialKeysOf({ credentialKeys: ['bot_token', 'not_a_secret', 42] })).toEqual(['bot_token']);
+    expect(channelSecretKeysIn({ bot_token: 'enc', client_id: 'A1', signing_secret: '' })).toEqual(['bot_token']);
+  });
+
+  it('maskChannelConfigSecrets masks the keys the connection holds so a client sees a value exists', () => {
+    const masked = maskChannelConfigSecrets({ credentialId: 'c', credentialKeys: ['bot_token'], client_id: 'A1' })!;
+    expect(masked).toEqual({ credentialId: 'c', credentialKeys: ['bot_token'], client_id: 'A1', bot_token: MASKED_CHANNEL_SECRET });
+    // Round-tripping that mask through an update drops it rather than storing the placeholder.
+    const incoming = { bot_token: MASKED_CHANNEL_SECRET, credentialId: 'c' };
+    restoreMaskedChannelSecrets(incoming, { credentialId: 'c', credentialKeys: ['bot_token'] });
+    expect(incoming).toEqual({ credentialId: 'c' });
+  });
+});

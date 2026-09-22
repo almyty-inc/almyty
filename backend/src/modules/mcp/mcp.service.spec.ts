@@ -121,6 +121,14 @@ describe('McpService', () => {
     toolExecutorService = module.get(ToolExecutorService);
   });
 
+  // prompts/list resolves its tools through McpToolHandler.getToolsForScope
+  // now, which on the gateway-less path is team-scoped to the caller rather
+  // than reading the tool table on organizationId alone.
+  const mockToolListing = (tools: any[]) => {
+    toolRepository.find.mockResolvedValue(tools);
+    toolsService.getTools.mockResolvedValue({ tools, total: tools.length });
+  };
+
   describe('handleJsonRpc', () => {
     it('should handle initialize request with valid protocol version', async () => {
       const request = {
@@ -222,7 +230,7 @@ describe('McpService', () => {
         method: 'ping',
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('2');
@@ -441,7 +449,7 @@ describe('McpService', () => {
 
       resourceRepository.find.mockResolvedValue(mockResources);
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('5');
@@ -470,7 +478,7 @@ describe('McpService', () => {
 
       resourceRepository.findOne.mockResolvedValue(mockResource);
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('6');
@@ -481,7 +489,7 @@ describe('McpService', () => {
     });
 
     it('should handle prompts/list request successfully', async () => {
-      toolRepository.find.mockResolvedValue([
+      mockToolListing([
         { name: 'get-pet', description: 'Get pet by ID', parameters: [{ name: 'petId', required: true }] },
       ]);
 
@@ -491,7 +499,7 @@ describe('McpService', () => {
         method: 'prompts/list',
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('7');
@@ -515,7 +523,7 @@ describe('McpService', () => {
         params: { name: 'list-available-tools' },
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('8');
@@ -531,7 +539,7 @@ describe('McpService', () => {
         params: { name: 'nonexistent-prompt' },
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('9');
@@ -545,7 +553,7 @@ describe('McpService', () => {
         method: 'unknown/method',
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('4');
@@ -561,7 +569,7 @@ describe('McpService', () => {
         params: { level: 'debug' },
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.id).toBe('20');
@@ -675,7 +683,7 @@ describe('McpService', () => {
         method: 'test',
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.error).toBeDefined();
@@ -688,7 +696,7 @@ describe('McpService', () => {
         id: '10',
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.error).toBeDefined();
@@ -712,17 +720,21 @@ describe('McpService', () => {
       expect(result.error.code).toBe(-32600);
     });
 
-    it('should handle missing request ID with error', async () => {
+    // Was: "should handle missing request ID with error". A message with no
+    // `id` is not a malformed request — it is a JSON-RPC 2.0 Notification,
+    // and §4.1 says a notification MUST NOT be answered. Answering it with
+    // -32600 was wrong twice over: the message was valid, and the error was
+    // itself a reply to a notification. The method name is irrelevant; only
+    // the absent id matters.
+    it('treats a message with no id as a notification and answers nothing', async () => {
       const request = {
         jsonrpc: '2.0',
         method: 'test',
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
-      expect(result.jsonrpc).toBe('2.0');
-      expect(result.error).toBeDefined();
-      expect(result.error.code).toBe(-32600);
+      expect(result).toBeNull();
     });
 
     it('should handle invalid method type with error', async () => {
@@ -732,7 +744,7 @@ describe('McpService', () => {
         method: 123,
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.error).toBeDefined();
@@ -748,7 +760,7 @@ describe('McpService', () => {
 
       toolsService.getTools.mockRejectedValue(new Error('Database connection failed'));
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.error).toBeDefined();
@@ -766,7 +778,7 @@ describe('McpService', () => {
         },
       };
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.error).toBeDefined();
@@ -785,100 +797,11 @@ describe('McpService', () => {
 
       resourceRepository.findOne.mockResolvedValue(null);
 
-      const result = await service.handleJsonRpc(request, 'org-1');
+      const result = await service.handleJsonRpc(request, 'org-1', 'user-1');
 
       expect(result.jsonrpc).toBe('2.0');
       expect(result.error).toBeDefined();
       expect(result.error.code).toBe(-32001); // RESOURCE_NOT_FOUND
-    });
-  });
-
-  describe('getToolsAsMcp', () => {
-    it('should return tools in MCP format', async () => {
-      const mockTools = [
-        {
-          id: 'tool-1',
-          name: 'getUser',
-          description: 'Get user by ID',
-          parameters: { type: 'object', properties: { id: { type: 'string' } } },
-        },
-        {
-          id: 'tool-2',
-          name: 'createUser',
-          description: 'Create new user',
-          parameters: { type: 'object', properties: { name: { type: 'string' } } },
-        },
-      ];
-
-      toolsService.getTools.mockResolvedValue({ tools: mockTools, total: 2 });
-
-      const result = await service.getToolsAsMcp('org-1');
-
-      expect(result).toHaveLength(2);
-      expect(result[0].name).toBe('getUser');
-      expect(result[0].description).toBe('Get user by ID');
-      expect(result[0].inputSchema).toBeDefined();
-    });
-
-    it('should return empty array when no tools', async () => {
-      toolsService.getTools.mockResolvedValue({ tools: [], total: 0 });
-
-      const result = await service.getToolsAsMcp('org-1');
-
-      expect(result).toEqual([]);
-    });
-
-    it('should generate description when missing', async () => {
-      const mockTools = [
-        {
-          id: 'tool-1',
-          name: 'getUser',
-          parameters: { type: 'object', properties: { id: { type: 'string' } } },
-          metadata: { sourceApi: { name: 'UserAPI' } },
-        },
-      ];
-
-      toolsService.getTools.mockResolvedValue({ tools: mockTools, total: 1 });
-
-      const result = await service.getToolsAsMcp('org-1');
-
-      expect(result[0].description).toContain('AI tool generated from UserAPI');
-    });
-
-    it('should use default description when no metadata', async () => {
-      const mockTools = [
-        {
-          id: 'tool-1',
-          name: 'getUser',
-          parameters: { type: 'object', properties: { id: { type: 'string' } } },
-        },
-      ];
-
-      toolsService.getTools.mockResolvedValue({ tools: mockTools, total: 1 });
-
-      const result = await service.getToolsAsMcp('org-1');
-
-      expect(result[0].description).toContain('AI tool generated from API');
-    });
-
-    it('should use default parameters when missing', async () => {
-      const mockTools = [
-        {
-          id: 'tool-1',
-          name: 'getUser',
-          description: 'Get user',
-        },
-      ];
-
-      toolsService.getTools.mockResolvedValue({ tools: mockTools, total: 1 });
-
-      const result = await service.getToolsAsMcp('org-1');
-
-      expect(result[0].inputSchema).toEqual({
-        type: 'object',
-        properties: {},
-        description: 'Get user',
-      });
     });
   });
 
@@ -984,7 +907,7 @@ describe('McpService', () => {
         },
       ];
 
-      toolRepository.find.mockResolvedValue(mockTools);
+      mockToolListing(mockTools);
 
       const request = {
         jsonrpc: '2.0',
@@ -1013,7 +936,7 @@ describe('McpService', () => {
         },
       ];
 
-      toolRepository.find.mockResolvedValue(mockTools);
+      mockToolListing(mockTools);
 
       const request = {
         jsonrpc: '2.0',

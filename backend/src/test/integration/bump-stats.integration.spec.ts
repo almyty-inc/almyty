@@ -230,6 +230,7 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         {} as any, // runnerCalls
         {} as any, // memoryService
         {} as any, // mcpSources
+        {} as any, // gatewayToolRepository
       );
     });
 
@@ -347,8 +348,10 @@ describeIfDb('bump*Stats helpers (real Postgres integration)', () => {
         {} as any, // chatHelper
         new LlmStatsHelper(conversationRepo, providerRepo),
         {} as any, // runner
+        {} as any, // defaultModels
         { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } as any, // accessPolicy
         makeEnvelopeCryptoMock(), // envelopeCrypto
+        {} as any, // LlmProviderSecretsHelper — stats tests never touch keys
       );
     });
 

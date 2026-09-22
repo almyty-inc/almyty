@@ -6,6 +6,8 @@ import { BadRequestException } from '@nestjs/common';
 import { AgentSchedulerService } from '../agent-scheduler.service';
 import { AgentsService } from '../agents.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
+import { ModelNotFoundError } from '../../llm-providers/model-errors';
+
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 
 describe('AgentSchedulerService', () => {
@@ -48,10 +50,34 @@ describe('AgentSchedulerService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
+  /**
+   * Scheduling something that will never run.
+   *
+   * handleScheduledExecution refuses a non-ACTIVE agent and deletes the
+   * job, and restoreSchedules only restores ACTIVE ones -- but nothing
+   * stopped you scheduling a draft. The card counted down to a run that
+   * deleted itself the first time it fired, and agents are created as
+   * DRAFT, so that was the default outcome for anyone who set a schedule
+   * before activating.
+   */
+  describe('scheduleAgent: the agent has to be able to run', () => {
+    it('refuses to schedule an agent that is not active', async () => {
+      agentsService.getAgent.mockResolvedValue({
+        id: 'a1',
+        organizationId: 'org-1',
+        status: AgentStatus.DRAFT,
+        settings: {},
+      });
+
+      await expect(service.scheduleAgent('a1', 'org-1', 15)).rejects.toThrow(/activate this agent/i);
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
   // ── intervalMinutes validation ──────────────────────────────────────
 
   describe('scheduleAgent: intervalMinutes validation', () => {
-    const baseAgent = { id: 'a1', organizationId: 'org-1', settings: {}, createdBy: 'u1' };
+    const baseAgent = { id: 'a1', organizationId: 'org-1', settings: {}, createdBy: 'u1', status: AgentStatus.ACTIVE };
 
     beforeEach(() => {
       agentsService.getAgent.mockResolvedValue(baseAgent);
@@ -135,7 +161,142 @@ describe('AgentSchedulerService', () => {
     });
   });
 
-  // ── restoreSchedules: corrupted schedule handling ──────────────────
+  // ── restoreSchedules ────────────────────────────────────────────────
+
+  /**
+   * Boot clears every repeatable job before rebuilding them, so a throw
+   * part-way through used to escape to the outer catch: one logged line,
+   * the process finishes booting, and the queue is left emptied and only
+   * partly repopulated. Nothing visible changed, because
+   * `settings.schedule.enabled` stays true -- so the card went on saying
+   * "next run in ~N minutes" for a job that no longer existed.
+   */
+  describe('restoreSchedules: one agent that will not restore', () => {
+    const scheduledAgent = (id: string) => ({
+      id,
+      organizationId: 'org-1',
+      status: AgentStatus.ACTIVE,
+      settings: { schedule: { enabled: true, intervalMinutes: 10, input: {} } },
+    });
+
+    it('restores the rest, and pauses the one it could not', async () => {
+      queue.getRepeatableJobs.mockResolvedValue([]);
+      agentRepo.find.mockResolvedValue([scheduledAgent('a1'), scheduledAgent('a2'), scheduledAgent('a3')]);
+      queue.add
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('redis blip'))
+        .mockResolvedValueOnce(undefined);
+
+      await service.restoreSchedules();
+
+      // a1 and a3 are back on the queue; a2 is not abandoned in silence.
+      expect(queue.add).toHaveBeenCalledTimes(3);
+      const paused = agentRepo.save.mock.calls.map((c: any[]) => c[0]);
+      expect(paused).toHaveLength(1);
+      expect(paused[0].id).toBe('a2');
+      expect(paused[0].settings.schedule.enabled).toBe(false);
+      expect(paused[0].settings.schedule.pausedReason).toMatchObject({ code: 'RESTORE_FAILED' });
+    });
+
+    it('leaves the agents it did restore alone', async () => {
+      queue.getRepeatableJobs.mockResolvedValue([]);
+      agentRepo.find.mockResolvedValue([scheduledAgent('a1')]);
+      queue.add.mockResolvedValue(undefined);
+
+      await service.restoreSchedules();
+
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+
+  // ── handleScheduledExecution: retired model ─────────────────────────
+
+  describe('handleScheduledExecution: model the vendor no longer serves', () => {
+    const scheduled = () => ({
+      id: 'a1',
+      organizationId: 'org-1',
+      status: AgentStatus.ACTIVE,
+      settings: { schedule: { enabled: true, intervalMinutes: 10, input: {} } },
+    });
+    const job = { data: { agentId: 'a1', organizationId: 'org-1', userId: 'u1', input: {} } } as any;
+
+    it('pauses the schedule, records why on the agent, and removes the repeatable job', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduled());
+      queue.getRepeatableJobs.mockResolvedValue([{ id: 'schedule-a1', key: 'k-a1' }]);
+      const notFound = new ModelNotFoundError('claude-sonnet-4-20250514', 'p1', 'anthropic', 'model: claude-sonnet-4-20250514');
+      executionEngine.execute.mockRejectedValue(
+        Object.assign(new Error('LLM call failed: ' + notFound.message), { cause: notFound, code: 'MODEL_NOT_FOUND' }),
+      );
+
+      await service.handleScheduledExecution(job);
+
+      const saved = agentRepo.save.mock.calls[0][0];
+      expect(saved.settings.schedule.enabled).toBe(false);
+      expect(saved.settings.schedule.pausedReason).toMatchObject({ code: 'MODEL_NOT_FOUND', model: 'claude-sonnet-4-20250514', providerId: 'p1' });
+      expect(saved.settings.modelIssue).toMatchObject({ code: 'MODEL_NOT_FOUND', model: 'claude-sonnet-4-20250514' });
+      expect(saved.settings.modelIssue.detectedAt).toEqual(expect.any(String));
+      expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('k-a1');
+    });
+
+    it('pauses when the engine returns a failed execution whose node hit MODEL_NOT_FOUND', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduled());
+      queue.getRepeatableJobs.mockResolvedValue([{ id: 'schedule-a1', key: 'k-a1' }]);
+      executionEngine.execute.mockResolvedValue({
+        status: 'failed',
+        nodeResults: {
+          input_1: { output: {} },
+          llm_1: { error: 'LLM call failed: Model "claude-sonnet-4-20250514" is not available', errorType: 'LLM_ERROR', errorCode: 'MODEL_NOT_FOUND', errorModel: 'claude-sonnet-4-20250514', errorProviderId: 'p1' },
+        },
+      });
+
+      await service.handleScheduledExecution(job);
+
+      const saved = agentRepo.save.mock.calls[0][0];
+      expect(saved.settings.schedule.enabled).toBe(false);
+      expect(saved.settings.modelIssue).toMatchObject({ code: 'MODEL_NOT_FOUND', model: 'claude-sonnet-4-20250514', providerId: 'p1' });
+      expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('k-a1');
+    });
+
+    it('does not pause when the execution failed for another reason', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduled());
+      executionEngine.execute.mockResolvedValue({
+        status: 'failed',
+        nodeResults: { llm_1: { error: 'Request failed with status code 429', errorType: 'LLM_ERROR' } },
+      });
+
+      await service.handleScheduledExecution(job);
+
+      expect(agentRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('leaves the schedule alone for any other failure', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduled());
+      executionEngine.execute.mockRejectedValue(new Error('Request failed with status code 429'));
+
+      await service.handleScheduledExecution(job);
+
+      expect(agentRepo.save).not.toHaveBeenCalled();
+      expect(queue.removeRepeatableByKey).not.toHaveBeenCalled();
+    });
+
+    it('clears the note when the schedule is enabled again', async () => {
+      agentsService.getAgent.mockResolvedValue({
+        id: 'a1',
+        organizationId: 'org-1',
+        status: AgentStatus.ACTIVE,
+        settings: {
+          modelIssue: { code: 'MODEL_NOT_FOUND', model: 'old', message: 'gone', detectedAt: 'x' },
+          schedule: { enabled: false, intervalMinutes: 10, input: {}, pausedReason: { code: 'MODEL_NOT_FOUND' } },
+        },
+      });
+
+      const saved = await service.scheduleAgent('a1', 'org-1', 15);
+
+      expect(saved.settings.modelIssue).toBeUndefined();
+      expect(saved.settings.schedule).toEqual({ enabled: true, intervalMinutes: 15, input: {} });
+    });
+  });
 
   describe('restoreSchedules', () => {
     it('skips agents with corrupted intervalMinutes instead of crashing', async () => {

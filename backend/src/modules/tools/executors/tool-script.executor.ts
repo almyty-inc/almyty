@@ -69,7 +69,7 @@ export class ToolScriptExecutor {
       const { LlmProvidersService } = await import('../../llm-providers/llm-providers.service');
       const llmService = this.moduleRef?.get(LlmProvidersService, { strict: false });
       if (!llmService) {
-        throw new Error('LLM providers service not available');
+        throw new Error('Provider service not available');
       }
 
       const chatResponse = await llmService.chat(
@@ -114,7 +114,7 @@ export class ToolScriptExecutor {
     } catch (error: any) {
       return {
         success: false,
-        error: error.message || 'LLM execution failed',
+        error: error.message || 'Model call failed',
         executionTime: Date.now() - startTime,
         cached: false,
         rateLimited: false,

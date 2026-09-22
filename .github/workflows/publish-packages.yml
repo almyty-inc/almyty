@@ -12,6 +12,8 @@ on:
           - mcp-server
           - auth-cli
           - agents-cli
+          - models-cli
+          - connections-cli
           - chat-cli
           - almyty-cli
           - acp-server
@@ -61,6 +63,12 @@ jobs:
           - id: agents-cli
             npm_name: "@almyty/agents"
             dir: packages/agents-cli
+          - id: models-cli
+            npm_name: "@almyty/models"
+            dir: packages/models-cli
+          - id: connections-cli
+            npm_name: "@almyty/connections"
+            dir: packages/connections-cli
           - id: chat-cli
             npm_name: "@almyty/chat"
             dir: packages/chat-cli
@@ -90,7 +98,7 @@ jobs:
       - uses: actions/setup-node@v6
         if: inputs.package == 'all' || inputs.package == matrix.id
         with:
-          node-version: '24'
+          node-version: '26'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build and publish ${{ matrix.npm_name }}
@@ -123,12 +131,24 @@ jobs:
             echo "SKIP_PUBLISH=1" >> "$GITHUB_ENV"
             exit 0
           fi
-          # Drop the lockfile: several CLI packages pin @almyty/* to
-          # file:../ links (unbuilt local source in CI). Without the
-          # lockfile npm resolves them from the published registry versions.
+          # Drop the lockfile so npm resolves @almyty/* from the
+          # registry rather than from local source.
+          #
+          # STALE AS OF THIS AUDIT: no package under packages/ declares a
+          # `file:../` dependency any more (verified across all 14
+          # package.json files), so this `rm` no longer has a reason to
+          # exist — and it means the artifact published to npm is built
+          # against floating resolutions rather than the committed,
+          # CI-tested lockfile. Replacing it with `npm ci` is the right
+          # move, but do it on a publish run you can watch, not blind.
           rm -f package-lock.json
           npm install --legacy-peer-deps --no-audit --no-fund
-          npm run build || true
+          # No `|| true` here. A failing build must stop the publish at
+          # the step that names the error, not slip through to `npm
+          # publish` and rely on `prepublishOnly` catching it a second
+          # time — the packages all ship `files: ["dist"]`, so a package
+          # published on a half-built dist/ is a broken CLI on npm.
+          npm run build
           if [ "${{ inputs.dist_tag }}" = "next" ]; then
             npm publish --access public --provenance --tag next
           else

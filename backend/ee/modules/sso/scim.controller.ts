@@ -17,9 +17,6 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request } from 'express';
 
 import { Public } from '../../../src/common/decorators/public.decorator';
-import { EntitlementGuard } from '../../../src/modules/licensing/guards/entitlement.guard';
-import { RequiresEntitlement } from '../../../src/modules/licensing/decorators/requires-entitlement.decorator';
-import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 import { ScimAuthGuard } from './guards/scim-auth.guard';
 import {
   ScimService,
@@ -39,9 +36,12 @@ import {
  */
 @ApiTags('SCIM')
 @Controller('scim/v2')
+// ScimAuthGuard checks the entitlement itself, once the bearer token has
+// said which organization this is. EntitlementGuard ran before it and,
+// on a @Public() route with no user attached, could only consult the
+// deployment-global license — so every Okta/Entra push got 402.
 @Public()
-@UseGuards(EntitlementGuard, ScimAuthGuard)
-@RequiresEntitlement(EE_ENTITLEMENTS.SSO)
+@UseGuards(ScimAuthGuard)
 export class ScimController {
   constructor(private readonly scim: ScimService) {}
 

@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   # Database
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: almyty
       POSTGRES_USER: postgres
@@ -70,17 +68,27 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # Without an explicit target, `docker compose up` built the LAST
+      # stage — production, which is nginx:1.31-alpine on :8080 with no
+      # node and no npm. The `command: npm run dev` below then died on
+      # an image that has no npm, and the port mapping pointed at 3000
+      # which nginx does not listen on. The backend service has always
+      # named its target; this one never did.
+      target: development
     ports:
+      # The development stage's CMD serves vite on 3000 bound to
+      # 0.0.0.0 (a bare `npm run dev` binds loopback inside the
+      # container and is unreachable from the host, which is why there
+      # is no `command:` override here any more).
       - "4001:3000"
     environment:
-      - VITE_API_BASE_URL=http://localhost:4000/api
+      - ALMYTY_API_BASE_URL=http://localhost:4000/api
       - CHOKIDAR_USEPOLLING=true
     depends_on:
       - backend
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    command: npm run dev
 
   # Nginx Reverse Proxy (Optional for production)
   nginx:

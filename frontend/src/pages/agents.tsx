@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -65,6 +65,7 @@ import { ImportExternalA2ADialog } from '@/components/agents/import-external-a2a
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Agent, ExternalAgent } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface AgentTemplate {
   id: string
@@ -181,6 +182,17 @@ export function AgentsPage() {
     defaultValues: { name: '', description: '' },
   })
 
+
+  // The same four keys the detail page drops for these operations. A
+  // list-page activate used to invalidate ['agents'] only, so the
+  // detail page -- and its version list and audit log, both of which
+  // gain a row from the operation -- kept serving the old answer.
+  const invalidateAgent = async (agentId: string) => {
+    await queryClient.invalidateQueries({ queryKey: ['agent', agentId] })
+    await queryClient.invalidateQueries({ queryKey: ['agents'] })
+    await queryClient.invalidateQueries({ queryKey: ['entity-versions', 'Agent', agentId] })
+    await queryClient.invalidateQueries({ queryKey: ['agent-audit-log', agentId] })
+  }
   // Create agent mutation
   const createAgentMutation = useMutation({
     mutationFn: async (data: CreateAgentForm) => {
@@ -201,7 +213,7 @@ export function AgentsPage() {
       setCreateDialogOpen(false)
     },
     onError: (err: any) => {
-      errorNotif('Error', err?.response?.data?.message || err?.message || 'Failed to create agent')
+      errorNotif('Error', getApiErrorMessage(err, 'Failed to create agent'))
     },
   })
 
@@ -210,50 +222,57 @@ export function AgentsPage() {
     mutationFn: async (agentId: string) => {
       return await agentsApi.delete(agentId)
     },
-    onSuccess: async () => {
+    onSuccess: async (_result, agentId) => {
       success('Agent Deleted', 'Agent has been deleted successfully.')
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      // The detail page's caches for this agent would otherwise be
+      // served to whoever navigated to it next. agent-detail.tsx does
+      // the same four keys for the same operations; the list page only
+      // ever dropped ['agents'].
+      queryClient.removeQueries({ queryKey: ['agent', agentId] })
+      queryClient.removeQueries({ queryKey: ['entity-versions', 'Agent', agentId] })
+      queryClient.removeQueries({ queryKey: ['agent-audit-log', agentId] })
       setDeleteDialogOpen(false)
       setAgentToDelete(null)
     },
     onError: (err: any) => {
-      errorNotif('Failed to delete agent', err?.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to delete agent', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
   // Activate mutation
   const activateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.activate(id),
-    onSuccess: async () => {
+    onSuccess: async (_result, id) => {
       success('Agent Activated', 'Agent is now active.')
-      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      await invalidateAgent(id)
     },
     onError: (err: any) => {
-      errorNotif('Error', err?.response?.data?.message || 'Failed to activate agent')
+      errorNotif('Error', getApiErrorMessage(err, 'Failed to activate agent'))
     },
   })
 
   // Deactivate mutation
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.deactivate(id),
-    onSuccess: async () => {
+    onSuccess: async (_result, id) => {
       success('Agent Deactivated', 'Agent is now inactive.')
-      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      await invalidateAgent(id)
     },
     onError: (err: any) => {
-      errorNotif('Error', err?.response?.data?.message || 'Failed to deactivate agent')
+      errorNotif('Error', getApiErrorMessage(err, 'Failed to deactivate agent'))
     },
   })
 
   // Duplicate mutation
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => agentsApi.duplicate(id),
-    onSuccess: async () => {
+    onSuccess: async (_result, id) => {
       success('Agent Duplicated', 'A copy of the agent has been created.')
-      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      await invalidateAgent(id)
     },
     onError: (err: any) => {
-      errorNotif('Error', err?.response?.data?.message || 'Failed to duplicate agent')
+      errorNotif('Error', getApiErrorMessage(err, 'Failed to duplicate agent'))
     },
   })
 
@@ -390,25 +409,31 @@ export function AgentsPage() {
               <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                 {templates.map((template) => {
                   const Icon = template.category === 'basic' ? Zap : template.id === 'research-agent' ? Brain : template.id === 'tool-augmented' ? Wrench : Bot
+                  // These are the headline "create an agent" entry, and they
+                  // were a <Card onClick> -- no tab stop, no Enter, no
+                  // cmd-click. A Link wrapping the card keeps the look and
+                  // gives it real link behaviour.
                   return (
-                    <Card
+                    <Link
                       key={template.id}
-                      className="hover:shadow-md transition-shadow cursor-pointer border-dashed"
-                      onClick={() => navigate(`/agents/new?template=${template.id}`)}
+                      to={`/agents/new?template=${template.id}`}
+                      className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
-                      <CardContent className="pt-4 pb-4">
-                        <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 rounded-md bg-amber-500/10 flex items-center justify-center shrink-0">
-                            <Icon className="h-4 w-4 text-amber-600" />
+                      <Card className="h-full hover:shadow-md transition-shadow cursor-pointer border-dashed">
+                        <CardContent className="pt-4 pb-4">
+                          <div className="flex items-start gap-3">
+                            <div className="w-8 h-8 rounded-md bg-amber-500/10 flex items-center justify-center shrink-0">
+                              <Icon className="h-4 w-4 text-amber-600" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm">{template.name}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{template.description}</p>
+                              <Badge variant="outline" className="mt-1.5 text-[10px]">{template.category}</Badge>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-medium text-sm">{template.name}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{template.description}</p>
-                            <Badge variant="outline" className="mt-1.5 text-[10px]">{template.category}</Badge>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
+                    </Link>
                   )
                 })}
               </div>
@@ -465,14 +490,26 @@ export function AgentsPage() {
                   className="border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors"
                   onClick={(e) => {
                     const target = e.target as HTMLElement
-                    if (target.closest('button, [role="menuitem"]')) return
+                    // The name is now a real link, so let the anchor handle its
+                    // own click rather than navigating twice.
+                    if (target.closest('button, a, [role="menuitem"]')) return
                     navigate(`/agents/${agent.id}`)
                   }}
                 >
                   <td className="py-3 px-4">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-primary hover:underline">{agent.name}</span>
+                        {/*
+                          onClick on a <tr> is unreachable by keyboard, and the
+                          row menu only offers Edit -- there was no way to open
+                          an agent without a mouse. This link is that way in.
+                        */}
+                        <Link
+                          to={`/agents/${agent.id}`}
+                          className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+                        >
+                          {agent.name}
+                        </Link>
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0">Native</Badge>
                         <VisibilityBadge
                           visibility={(agent as any).visibility}

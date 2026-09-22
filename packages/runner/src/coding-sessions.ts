@@ -68,6 +68,13 @@ interface Session {
   unsubscribe: () => void;
 }
 
+/**
+ * How long an exited coding session stays listable before it is dropped.
+ * A session is started per task on a daemon that runs for weeks, and
+ * nothing used to remove one.
+ */
+const EXITED_SESSION_RETENTION_MS = 30 * 60 * 1000;
+
 export class CodingSessionManager {
   private readonly sessions = new Map<string, Session>();
 
@@ -144,6 +151,18 @@ export class CodingSessionManager {
           exitCode: info.exitCode,
           signal: info.signal,
         });
+
+        // Forget the session after a grace period.
+        //
+        // Nothing deleted from this map: a session was set on start and
+        // stayed for the life of the daemon, holding its record and its
+        // subscriber list. This runs for weeks, and a coding session is
+        // started per task. The delay leaves the exited session listable
+        // and inspectable for a while, which is what `list()` is for.
+        const reap = setTimeout(() => {
+          this.sessions.delete(sessionId);
+        }, EXITED_SESSION_RETENTION_MS);
+        reap.unref?.();
       },
     });
 

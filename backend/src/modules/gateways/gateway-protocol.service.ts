@@ -101,9 +101,17 @@ export class GatewayProtocolService {
 
   async handleProtocolRequest(request: ProtocolRequest): Promise<ProtocolResponse> {
     try {
+      // The gateway, without its tools.
+      //
+      // This carried `relations: { tools: { tool: true } }`, so a
+      // 200-tool gateway hydrated 200 GatewayTool plus 200 Tool entities
+      // -- each with `code`, `parameters` and `examples` -- on every
+      // request, including a `tools/call` that then picked one out with a
+      // linear JS scan. Only `tools/list` needs the whole set, and it
+      // loads it itself; a call resolves its one row by name in SQL.
       const gateway = await this.gatewayRepository.findOne({
         where: { id: request.gatewayId },
-        relations: { tools: { tool: true }, authConfigs: true },
+        relations: { authConfigs: true },
       });
 
       if (!gateway) {
@@ -219,7 +227,7 @@ export class GatewayProtocolService {
       }
 
       // Find the tool
-      const gatewayTool = gateway.tools.find(gt => gt.getEffectiveName() === utcpRequest.toolName && gt.isActive);
+      const gatewayTool = await this.resolveGatewayToolByName(gateway.id, utcpRequest.toolName);
       
       if (!gatewayTool) {
         const utcpResponse: UTCPResponse = {
@@ -240,6 +248,10 @@ export class GatewayProtocolService {
         organizationId: gateway.organizationId,
         timeout: gatewayTool.getEffectiveTimeout(),
         retries: gatewayTool.getEffectiveRetries(),
+        // Carries the gateway so the executor can resolve this
+        // gateway_tool.securityPolicy before dispatch.
+        gatewayId: gateway.id,
+        securityPolicy: gatewayTool.securityPolicy ?? null,
       };
 
       const result = await this.toolExecutorService.executeTool(
@@ -277,8 +289,33 @@ export class GatewayProtocolService {
   }
 
 
+  /**
+   * The one gateway_tool a call names, resolved in SQL.
+   *
+   * `getEffectiveName()` is `overrides.name` falling back to the tool's
+   * own name, which is the same COALESCE below -- so the whole set no
+   * longer has to be in memory for a linear scan to find one row.
+   * `IDX(gatewayId, isActive)` covers the scope.
+   */
+  private async resolveGatewayToolByName(gatewayId: string, name: string): Promise<GatewayTool | null> {
+    return this.gatewayToolRepository
+      .createQueryBuilder('gatewayTool')
+      .innerJoinAndSelect('gatewayTool.tool', 'tool')
+      .where('gatewayTool.gatewayId = :gatewayId', { gatewayId })
+      .andWhere('gatewayTool.isActive = true')
+      .andWhere("COALESCE(gatewayTool.overrides ->> 'name', tool.name) = :name", { name })
+      .getOne();
+  }
+
   private async handleMCPToolsList(gateway: Gateway, mcpRequest: MCPRequest): Promise<ProtocolResponse> {
-    const tools: MCPToolDefinition[] = gateway.getActiveTools().map(gatewayTool => ({
+    // tools/list is the one method that genuinely wants every tool, so it
+    // asks for them here rather than every request paying for them.
+    const gatewayTools = await this.gatewayToolRepository.find({
+      where: { gatewayId: gateway.id, isActive: true },
+      relations: { tool: true },
+    });
+
+    const tools: MCPToolDefinition[] = gatewayTools.map(gatewayTool => ({
       name: gatewayTool.getEffectiveName(),
       description: gatewayTool.getEffectiveDescription(),
       inputSchema: gatewayTool.getEffectiveParameters(),
@@ -300,7 +337,7 @@ export class GatewayProtocolService {
       return this.createMCPErrorResponse(mcpRequest.id, -32602, 'Invalid params', 'Missing tool name');
     }
 
-    const gatewayTool = gateway.tools.find(gt => gt.getEffectiveName() === name && gt.isActive);
+    const gatewayTool = await this.resolveGatewayToolByName(gateway.id, name);
     
     if (!gatewayTool) {
       return this.createMCPErrorResponse(mcpRequest.id, -32602, 'Invalid params', `Tool '${name}' not found`);
@@ -312,6 +349,10 @@ export class GatewayProtocolService {
         organizationId: gateway.organizationId,
         timeout: gatewayTool.getEffectiveTimeout(),
         retries: gatewayTool.getEffectiveRetries(),
+        // Carries the gateway so the executor can resolve this
+        // gateway_tool.securityPolicy before dispatch.
+        gatewayId: gateway.id,
+        securityPolicy: gatewayTool.securityPolicy ?? null,
       };
 
       const result = await this.toolExecutorService.executeTool(
@@ -390,7 +431,7 @@ export class GatewayProtocolService {
     try {
       const gateway = await this.gatewayRepository.findOne({
         where: { id: gatewayId },
-        relations: { tools: true, authConfigs: true },
+        relations: { authConfigs: true },
       });
 
       if (!gateway || !gateway.canAcceptRequests()) {

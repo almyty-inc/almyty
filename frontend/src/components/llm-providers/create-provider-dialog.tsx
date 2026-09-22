@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CredentialPicker } from '@/components/credential-picker'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import { ConnectedChip } from '@/components/connections/connected-chip'
+import type { Connection } from '@/types/connections'
 import {
   Dialog,
   DialogContent,
@@ -24,7 +27,9 @@ import { VisibilityField, type VisibilityValue } from '@/components/ui/visibilit
 import { useOrganizationStore } from '@/store/organization'
 import { ExternalLink, TestTube, CheckCircle2, XCircle } from 'lucide-react'
 import { llmProvidersApi } from '@/lib/api'
-import { providerKeyUrls, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
+import { providerKeyUrls, providerTypeOptions, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
+import { BASE_URL_PRIVATE_HOST_HINT, structuralFieldsFor } from './schema'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface CreateProviderDialogProps {
   open: boolean
@@ -43,6 +48,7 @@ export function CreateProviderDialog({
   const [visibility, setVisibility] = React.useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [testing, setTesting] = React.useState(false)
   const [testResult, setTestResult] = React.useState<any>(null)
+  const [connectedAccount, setConnectedAccount] = React.useState<Connection | null>(null)
   const handleTestConnection = async () => {
     const type = createForm.watch('type')
     const apiKey = createForm.watch('apiKey')
@@ -53,7 +59,7 @@ export function CreateProviderDialog({
       const res: any = await llmProvidersApi.testConnection(type, apiKey)
       setTestResult(res?.data ?? res)
     } catch (e: any) {
-      setTestResult({ ok: false, error: e?.response?.data?.message || e?.message || 'Test failed' })
+      setTestResult({ ok: false, error: getApiErrorMessage(e, 'Test failed') })
     } finally {
       setTesting(false)
     }
@@ -78,7 +84,7 @@ export function CreateProviderDialog({
               placeholder="e.g., OpenAI Production"
             />
             {createForm.formState.errors.name && (
-              <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.name as any).message}</p>
+              <p className="text-sm text-destructive mt-1">{(createForm.formState.errors.name as any).message}</p>
             )}
           </div>
 
@@ -94,39 +100,90 @@ export function CreateProviderDialog({
                     <SelectValue placeholder="Select provider type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="openai">OpenAI</SelectItem>
-                    <SelectItem value="anthropic">Anthropic</SelectItem>
-                    <SelectItem value="google">Google Gemini</SelectItem>
-                    <SelectItem value="mistral">Mistral AI</SelectItem>
-                    <SelectItem value="xai">xAI (Grok)</SelectItem>
-                    <SelectItem value="deepseek">DeepSeek</SelectItem>
-                    <SelectItem value="groq">Groq</SelectItem>
-                    <SelectItem value="together">Together AI</SelectItem>
-                    <SelectItem value="openrouter">OpenRouter</SelectItem>
-                    <SelectItem value="azure_openai">Azure OpenAI</SelectItem>
-                    <SelectItem value="aws_bedrock">AWS Bedrock</SelectItem>
-                    <SelectItem value="cohere">Cohere</SelectItem>
-                    <SelectItem value="huggingface">HuggingFace</SelectItem>
-                    <SelectItem value="ollama">Ollama</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
+                    {providerTypeOptions.map(({ value, label }) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
             />
             {createForm.formState.errors.type && (
-              <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.type as any).message}</p>
+              <p className="text-sm text-destructive mt-1">{(createForm.formState.errors.type as any).message}</p>
             )}
           </div>
+
+          {/* Structural configuration: the region / resource / project /
+              endpoint that makes this provider's base URL resolvable. Without
+              these, AWS Bedrock and Azure OpenAI could be selected here and
+              then always failed to save. */}
+          {structuralFieldsFor(createForm.watch('type')).map((field) => (
+            <div key={field.name}>
+              <Label htmlFor={field.name}>
+                {field.label}{field.required ? '' : ' (optional)'}
+              </Label>
+              <Input
+                id={field.name}
+                {...createForm.register(field.name)}
+                placeholder={field.placeholder}
+              />
+              {field.hint && (
+                <p className="text-xs text-muted-foreground mt-1">{field.hint}</p>
+              )}
+              {createForm.formState.errors[field.name] && (
+                <p className="text-sm text-destructive mt-1">
+                  {String((createForm.formState.errors as any)[field.name].message)}
+                </p>
+              )}
+            </div>
+          ))}
+
+          {createForm.watch('type') === 'vertex_ai' && (
+            <div>
+              <Label htmlFor="model">Model</Label>
+              <Input
+                id="model"
+                {...createForm.register('model')}
+                placeholder="google/gemini-3.5-flash"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Vertex AI's OpenAI-compatible surface serves no model list, so the model has
+                to be named here. Paste your service-account JSON key as the credential below -
+                this surface does not accept an API key.
+              </p>
+              {createForm.formState.errors.model && (
+                <p className="text-sm text-destructive mt-1">
+                  {String((createForm.formState.errors as any).model.message)}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* API Key — select from vault or enter new */}
           <CredentialPicker
             label={createForm.watch('type') === 'ollama' ? 'API Key (optional)' : 'API Key'}
             value={createForm.watch('credentialId') || ''}
-            onSelect={(id) => { createForm.setValue('credentialId', id); createForm.setValue('apiKey', '') }}
-            onNewKey={(key) => { createForm.setValue('apiKey', key); createForm.setValue('credentialId', '') }}
+            onSelect={(id) => { createForm.setValue('credentialId', id); createForm.setValue('apiKey', ''); createForm.setValue('connectionId', '') }}
+            onNewKey={(key) => { createForm.setValue('apiKey', key); createForm.setValue('credentialId', ''); createForm.setValue('connectionId', '') }}
             newKeyValue={createForm.watch('apiKey') || ''}
             filterType="api_key"
           />
+          {/* Or connect an account through the Connections layer */}
+          {createForm.watch('connectionId') && connectedAccount ? (
+            <ConnectedChip connection={connectedAccount} onClear={() => { createForm.setValue('connectionId', ''); setConnectedAccount(null) }} />
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">or</span>
+              <ConnectAccountButton
+                kind="inference"
+                onConnected={(connection) => {
+                  setConnectedAccount(connection)
+                  createForm.setValue('connectionId', connection.id)
+                  createForm.setValue('apiKey', '')
+                  createForm.setValue('credentialId', '')
+                }}
+              />
+            </div>
+          )}
           {providerKeyUrls[createForm.watch('type')] && (
             <a
               href={providerKeyUrls[createForm.watch('type')]}
@@ -167,6 +224,22 @@ export function CreateProviderDialog({
               </div>
             </div>
           )}
+          {createForm.watch('type') === 'custom' && (
+            <div>
+              <Label htmlFor="apiUrl">Base URL</Label>
+              <Input
+                id="apiUrl"
+                {...createForm.register('apiUrl')}
+                placeholder="https://llm.example.internal/v1"
+              />
+              {createForm.formState.errors.apiUrl && (
+                <p className="text-xs text-destructive mt-1">{String(createForm.formState.errors.apiUrl.message)}</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Any OpenAI-compatible server (vLLM, LM Studio, llama.cpp, a gateway). {BASE_URL_PRIVATE_HOST_HINT}
+              </p>
+            </div>
+          )}
           {createForm.watch('apiKey') && (
             <div className="space-y-1">
               <Button type="button" variant="outline" size="sm" onClick={handleTestConnection} disabled={testing} className="gap-2">
@@ -184,14 +257,14 @@ export function CreateProviderDialog({
                   {typeof testResult.latencyMs === 'number' ? ` (${testResult.latencyMs}ms)` : ''}
                 </p>
               ) : (
-                <p className="text-xs text-red-600 flex items-center gap-1">
+                <p className="text-xs text-destructive flex items-center gap-1">
                   <XCircle className="h-3 w-3" /> {testResult.error || 'Connection failed'}
                 </p>
               ))}
             </div>
           )}
           {createForm.formState.errors.apiKey && (
-            <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
+            <p className="text-sm text-destructive mt-1">{(createForm.formState.errors.apiKey as any).message}</p>
           )}
 
           {/* Usage API key — only for types with a supported usage/cost API */}
@@ -231,7 +304,7 @@ export function CreateProviderDialog({
                 placeholder="org-..."
               />
               {createForm.formState.errors.organizationId && (
-                <p className="text-sm text-red-600 mt-1">{(createForm.formState.errors.organizationId as any).message}</p>
+                <p className="text-sm text-destructive mt-1">{(createForm.formState.errors.organizationId as any).message}</p>
               )}
             </div>
           )}

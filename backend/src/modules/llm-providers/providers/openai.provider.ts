@@ -1,15 +1,47 @@
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { LlmProvider } from '../../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { Conversation } from '../../../entities/conversation.entity';
 import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
 import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
+import { requireModel } from '../model-errors';
+
+
+/**
+ * Headers a caller supplies in place of `provider.getAuthHeaders()`.
+ *
+ * `getAuthHeaders()` is synchronous, which is fine for every vendor whose
+ * credential is a static token. Vertex AI is not one: it authenticates with
+ * a one-hour OAuth access token minted from a service-account key, so its
+ * adapter mints the token and hands the resulting headers in here rather
+ * than duplicating the whole OpenAI body builder.
+ */
+export interface OpenAiAuthOverride {
+  headers?: Record<string, string>;
+}
 
 /**
  * Handles OpenAI-compatible provider calls (OpenAI, Azure OpenAI, Mistral, xAI,
- * DeepSeek, Groq, Together, OpenRouter).
+ * DeepSeek, Groq, Together, OpenRouter, and every OpenAI-compatible host in
+ * docs/design/call-only-vendors.md).
  */
+
+/**
+ * The chat path under a provider's base.
+ *
+ * Almost every OpenAI-compatible vendor serves `/chat/completions`.
+ * Writer does not: its documented endpoint is `POST <base>/chat`, with an
+ * otherwise verbatim OpenAI body and response. That one difference is the
+ * whole of its incompatibility, so it rides this path rather than a
+ * duplicate provider module. Verified 2026-09-10, see
+ * docs/design/call-only-vendors.md.
+ */
+export function chatCompletionsUrl(provider: LlmProvider): string {
+  const base = provider.getApiUrl();
+  return provider.type === LlmProviderType.WRITER ? `${base}/chat` : `${base}/chat/completions`;
+}
+
 export async function callOpenAI(
   provider: LlmProvider,
   request: ChatRequest,
@@ -17,13 +49,14 @@ export async function callOpenAI(
   tools: Tool[],
   startTime: number,
   calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
+  auth?: OpenAiAuthOverride,
 ): Promise<ChatResponse> {
   const apiUrl = provider.getApiUrl();
-  const headers = provider.getAuthHeaders();
+  const headers = auth?.headers ?? provider.getAuthHeaders();
 
   // Prepare OpenAI request
   const openaiRequest: Record<string, unknown> = {
-    model: request.model || provider.configuration.model || 'gpt-4o',
+    model: requireModel(request, provider),
     messages: request.messages.map(msg => {
       const openaiMsg: Record<string, unknown> = {
         role: msg.role,
@@ -70,7 +103,7 @@ export async function callOpenAI(
 
   const config: AxiosRequestConfig = {
     method: 'POST',
-    url: `${apiUrl}/chat/completions`,
+    url: chatCompletionsUrl(provider),
     headers,
     data: openaiRequest,
     timeout: provider.configuration.timeout || 30000,
@@ -147,7 +180,7 @@ function buildOpenAIRequestBody(
   stream: boolean,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
-    model: request.model || provider.configuration.model || 'gpt-4o',
+    model: requireModel(request, provider),
     messages: request.messages.map(msg => {
       const openaiMsg: Record<string, unknown> = {
         role: msg.role,
@@ -213,15 +246,16 @@ export async function callOpenAIStream(
   startTime: number,
   calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
   onChunk: (chunk: StreamChunk) => void,
+  auth?: OpenAiAuthOverride,
 ): Promise<ChatResponse> {
   const apiUrl = provider.getApiUrl();
-  const headers = provider.getAuthHeaders();
+  const headers = auth?.headers ?? provider.getAuthHeaders();
 
   const openaiRequest = buildOpenAIRequestBody(provider, request, conversation, tools, true);
 
   const config: AxiosRequestConfig = {
     method: 'POST',
-    url: `${apiUrl}/chat/completions`,
+    url: chatCompletionsUrl(provider),
     headers,
     data: openaiRequest,
     timeout: provider.configuration.timeout || 30000,
@@ -338,7 +372,7 @@ export async function callOpenAIStream(
           totalTokens,
         },
         cost,
-        model: modelName || (request.model || provider.configuration.model || 'gpt-4o'),
+        model: modelName || requireModel(request, provider),
         conversationId: conversation.id,
         messageId: '',
         responseTime,

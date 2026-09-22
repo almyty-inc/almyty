@@ -56,8 +56,10 @@ describe('IrcAdapter', () => {
       );
       expect(parseSentJson(fetchMock.calls[0]).channel).toBe('#fallback');
     });
-    it('skips when webhook_url missing', async () => {
-      await adapter.sendResponse({}, { text: 'r' }, { threadId: '#x' });
+    it('refuses rather than skipping when webhook_url is missing', async () => {
+      await expect(adapter.sendResponse({}, { text: 'r' }, { threadId: '#x' })).rejects.toThrow(
+        /webhook_url is not configured/,
+      );
       expect(fetchMock.calls.length).toBe(0);
     });
   });
@@ -79,11 +81,30 @@ describe('IrcAdapter', () => {
       );
       expect(fetchMock.calls[0].init.headers['Authorization']).toBeUndefined();
     });
-    it('logs but does not throw when the bridge rejects', async () => {
-      fetchMock.setNextResponse({ ok: false, status: 502 });
+
+    /**
+     * This one already noticed the bridge's refusal — and logged it,
+     * which the dispatch path cannot see, so the outbound row still
+     * said `processed`.
+     */
+    it('refuses when the bridge rejects, with its status and body', async () => {
+      fetchMock.setNextResponse({ ok: false, status: 502, text: 'bad gateway' });
       await expect(
         adapter.sendResponse({ webhook_url: 'https://bridge.example/webhook' }, { text: 'r' }, {}),
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow(/502.*bad gateway/);
+    });
+
+    it('never puts the bridge token in the failure it reports', async () => {
+      fetchMock.setNextResponse({ ok: false, status: 401, text: 'unauthorized' });
+      const error = await adapter
+        .sendResponse(
+          { webhook_url: 'https://bridge.example/webhook', bridge_token: 'brt-super-secret' },
+          { text: 'r' },
+          {},
+        )
+        .then(() => null, (e) => e);
+      expect(error).toBeTruthy();
+      expect(error.message).not.toContain('brt-super-secret');
     });
   });
 
@@ -100,8 +121,8 @@ describe('IrcAdapter', () => {
       expect(await adapter.verifyWebhook({}, { authorization: 'Bearer wrong' }, config)).toBe(false);
       expect(await adapter.verifyWebhook({}, {}, config)).toBe(false);
     });
-    it('skips verification when inbound_token is not configured', async () => {
-      expect(await adapter.verifyWebhook({}, {}, {})).toBe(true);
+    it('refuses inbound when inbound_token is not configured', async () => {
+      expect(await adapter.verifyWebhook({}, {}, {})).toBe(false);
     });
   });
 });

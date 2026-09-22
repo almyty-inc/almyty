@@ -31,6 +31,7 @@ import {
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { ApiCredential } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const CREDENTIAL_TYPE_LABELS: Record<string, string> = {
   API_KEY: 'API Key',
@@ -72,7 +73,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
       setNewCredConfig({})
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      errorNotif('Failed to add credential', err.response?.data?.message || 'Please try again')
+      errorNotif('Failed to add credential', getApiErrorMessage(err, 'Please try again'))
     },
   })
 
@@ -84,7 +85,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
       setDeleteId(null)
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      errorNotif('Failed to delete', err.response?.data?.message || 'Please try again')
+      errorNotif('Failed to delete', getApiErrorMessage(err, 'Please try again'))
     },
   })
 
@@ -94,7 +95,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
       success('Credential Valid', 'Test request succeeded')
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
-      errorNotif('Test Failed', err.response?.data?.message || 'Credential may be invalid')
+      errorNotif('Test Failed', getApiErrorMessage(err, 'Credential may be invalid'))
     },
   })
 
@@ -115,8 +116,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
         return (
           <>
             <div>
-              <Label>API Key</Label>
-              <Input
+              <Label htmlFor="cred-api-key">API Key</Label>
+              <Input id="cred-api-key"
                 type="password"
                 value={newCredConfig.apiKey || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, apiKey: e.target.value })}
@@ -125,8 +126,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               />
             </div>
             <div>
-              <Label>Header Name</Label>
-              <Input
+              <Label htmlFor="cred-header-name">Header Name</Label>
+              <Input id="cred-header-name"
                 value={newCredConfig.headerName || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, headerName: e.target.value })}
                 placeholder="X-API-Key (default)"
@@ -138,8 +139,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
       case 'BEARER_TOKEN':
         return (
           <div>
-            <Label>Bearer Token</Label>
-            <Input
+            <Label htmlFor="cred-bearer-token">Bearer Token</Label>
+            <Input id="cred-bearer-token"
               type="password"
               value={newCredConfig.token || ''}
               onChange={e => setNewCredConfig({ ...newCredConfig, token: e.target.value })}
@@ -152,8 +153,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
         return (
           <>
             <div>
-              <Label>Username</Label>
-              <Input
+              <Label htmlFor="cred-username">Username</Label>
+              <Input id="cred-username"
                 value={newCredConfig.username || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, username: e.target.value })}
                 placeholder="Username"
@@ -161,8 +162,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               />
             </div>
             <div>
-              <Label>Password</Label>
-              <Input
+              <Label htmlFor="cred-password">Password</Label>
+              <Input id="cred-password"
                 type="password"
                 value={newCredConfig.password || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, password: e.target.value })}
@@ -176,8 +177,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
         return (
           <>
             <div>
-              <Label>Client ID</Label>
-              <Input
+              <Label htmlFor="cred-client-id">Client ID</Label>
+              <Input id="cred-client-id"
                 value={newCredConfig.clientId || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, clientId: e.target.value })}
                 placeholder="OAuth client ID"
@@ -185,8 +186,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               />
             </div>
             <div>
-              <Label>Client Secret</Label>
-              <Input
+              <Label htmlFor="cred-client-secret">Client Secret</Label>
+              <Input id="cred-client-secret"
                 type="password"
                 value={newCredConfig.clientSecret || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, clientSecret: e.target.value })}
@@ -195,8 +196,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               />
             </div>
             <div>
-              <Label>Token Endpoint</Label>
-              <Input
+              <Label htmlFor="cred-token-endpoint">Token Endpoint</Label>
+              <Input id="cred-token-endpoint"
                 value={newCredConfig.tokenUrl || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, tokenUrl: e.target.value })}
                 placeholder="https://oauth.example.com/token"
@@ -204,8 +205,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               />
             </div>
             <div>
-              <Label>Access Token</Label>
-              <Input
+              <Label htmlFor="cred-access-token">Access Token</Label>
+              <Input id="cred-access-token"
                 type="password"
                 value={newCredConfig.accessToken || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, accessToken: e.target.value })}
@@ -214,8 +215,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               />
             </div>
             <div>
-              <Label>Refresh Token</Label>
-              <Input
+              <Label htmlFor="cred-refresh-token">Refresh Token</Label>
+              <Input id="cred-refresh-token"
                 type="password"
                 value={newCredConfig.refreshToken || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, refreshToken: e.target.value })}
@@ -229,8 +230,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
         return (
           <>
             <div>
-              <Label>JWT Token</Label>
-              <Input
+              <Label htmlFor="cred-jwt-token">JWT Token</Label>
+              <Input id="cred-jwt-token"
                 type="password"
                 value={newCredConfig.token || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, token: e.target.value })}
@@ -239,8 +240,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               />
             </div>
             <div>
-              <Label>Header Name</Label>
-              <Input
+              <Label htmlFor="cred-header-name-2">Header Name</Label>
+              <Input id="cred-header-name-2"
                 value={newCredConfig.headerName || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, headerName: e.target.value })}
                 placeholder="Authorization (default)"
@@ -253,8 +254,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
         return (
           <>
             <div>
-              <Label>Header Name</Label>
-              <Input
+              <Label htmlFor="cred-header-name-3">Header Name</Label>
+              <Input id="cred-header-name-3"
                 value={newCredConfig.headerName || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, headerName: e.target.value })}
                 placeholder="X-Custom-Header"
@@ -262,8 +263,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               />
             </div>
             <div>
-              <Label>Header Value</Label>
-              <Input
+              <Label htmlFor="cred-header-value">Header Value</Label>
+              <Input id="cred-header-value"
                 type="password"
                 value={newCredConfig.headerValue || ''}
                 onChange={e => setNewCredConfig({ ...newCredConfig, headerValue: e.target.value })}
@@ -331,6 +332,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
                   <Button
                     variant="ghost"
                     size="sm"
+                    aria-label={`Test credential ${cred.name}`}
                     onClick={() => testMutation.mutate(cred.id)}
                     disabled={testMutation.isPending}
                   >
@@ -339,6 +341,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
                   <Button
                     variant="ghost"
                     size="sm"
+                    aria-label={`Delete credential ${cred.name}`}
                     className="text-destructive hover:text-destructive"
                     onClick={() => setDeleteId(cred.id)}
                   >
@@ -362,8 +365,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Name</Label>
-              <Input
+              <Label htmlFor="cred-name">Name</Label>
+              <Input id="cred-name"
                 value={newCredName}
                 onChange={e => setNewCredName(e.target.value)}
                 placeholder="e.g. Production API Key"
@@ -371,9 +374,9 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               />
             </div>
             <div>
-              <Label>Type</Label>
+              <Label htmlFor="cred-type">Type</Label>
               <Select value={newCredType} onValueChange={v => { setNewCredType(v); setNewCredConfig({}) }}>
-                <SelectTrigger className="mt-1">
+                <SelectTrigger id="cred-type" className="mt-1">
                   <SelectValue placeholder="Select credential type" />
                 </SelectTrigger>
                 <SelectContent>

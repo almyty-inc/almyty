@@ -1,9 +1,12 @@
 import { AgentValidationHelper } from './agent-validation.helper';
+import { AgentReadinessService } from './agent-readiness.service';
 import { AgentTemplate, getAgentTemplates } from './agent-templates';
 import { EstimatedCost, estimateAgentCost } from './agent-cost-estimator';
 import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { validateUrl } from '../../common/security/url-validator';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
+import { Tool } from '../../entities/tool.entity';
 
 import { Agent, AgentStatus, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
@@ -83,6 +86,77 @@ export interface AgentVersionSnapshot {
   changelog: string;
 }
 
+/**
+ * How many inline pipeline snapshots an agent keeps in `metadata.versions`.
+ *
+ * The array used to grow forever: every pipeline update, every explicit
+ * saveVersion and every rollback pushed a full deep copy of the pipeline
+ * into the agent row, so a 20-node pipeline (~50-100 KB) edited a couple of
+ * hundred times turned into a multi-megabyte `metadata` column that every
+ * read of the agent had to load.
+ *
+ * Nothing is lost by trimming: Agent is a `@VersionedEntity`, so the version
+ * subscriber already writes the complete agent JSON — pipeline included — to
+ * the `version` table on every save, and that history is served by
+ * `GET /versions/Agent/:id`. The inline array only backs the builder's quick
+ * "recent versions" rollback list, which shows a short window.
+ */
+export const MAX_INLINE_AGENT_VERSIONS = 10;
+
+/**
+ * Trim an inline version list to the newest MAX_INLINE_AGENT_VERSIONS entries.
+ * Returns a new array; the input is not mutated.
+ */
+export function trimAgentVersions(
+  versions: AgentVersionSnapshot[],
+): AgentVersionSnapshot[] {
+  if (versions.length <= MAX_INLINE_AGENT_VERSIONS) return versions;
+  return versions.slice(versions.length - MAX_INLINE_AGENT_VERSIONS);
+}
+
+/**
+ * Columns the agents list response emits. `metadata` is deliberately absent:
+ * it carries the inline version history and no list consumer reads it.
+ */
+export const AGENT_LIST_COLUMNS = [
+  'id',
+  'name',
+  'description',
+  'organizationId',
+  'visibility',
+  'teamId',
+  'status',
+  'version',
+  'pipeline',
+  'variables',
+  'settings',
+  'mode',
+  'instructions',
+  'personality',
+  'heartbeat',
+  'toolIds',
+  'modelConfig',
+  'memoryConfig',
+  'agentConfig',
+  'isTemporary',
+  'parentRunId',
+  'collaboration',
+  'webhookUrl',
+  'totalExecutions',
+  'successfulExecutions',
+  'totalCost',
+  'averageExecutionTime',
+  'lastExecutedAt',
+  'createdBy',
+  'createdAt',
+  'updatedAt',
+] as const;
+
+/** Page size for GET /agents/:id/executions when none is asked for. */
+export const DEFAULT_EXECUTIONS_PAGE_SIZE = 20;
+/** Hard ceiling on one page of executions. */
+export const MAX_EXECUTIONS_PAGE_SIZE = 100;
+
 @Injectable()
 export class AgentsService {
   private readonly logger = new Logger(AgentsService.name);
@@ -99,7 +173,58 @@ export class AgentsService {
     private auditService: AgentAuditService,
     private readonly validation: AgentValidationHelper,
     private readonly accessPolicy: AccessPolicyService,
+    private readonly readiness: AgentReadinessService,
   ) {}
+
+  /**
+   * Refuse a webhook URL the delivery path will silently drop.
+   *
+   * agent-webhook.service runs this same check at delivery time and, on
+   * failure, logs a warning and returns. Nothing surfaces that anywhere:
+   * the agent saved cleanly, the UI said "Webhook URL updated", and every
+   * run afterwards posted nowhere with no toast, no run detail and no
+   * delivery record. Say no at save time, where somebody is looking.
+   */
+  private assertWebhookUrl(webhookUrl?: string | null): void {
+    if (!webhookUrl) return;
+    const validation = validateUrl(webhookUrl);
+    if (!validation.valid) {
+      throw new BadRequestException(
+        `That webhook URL cannot be used: ${validation.error}`,
+      );
+    }
+  }
+
+  /**
+   * Refuse tool ids that are not this organization's.
+   *
+   * `agent.toolIds` is a plain `string[]` column with no referential
+   * integrity, and the DTO only asserts "array of strings" — so an id
+   * from another tenant used to survive the write and then get resolved
+   * at run time. The resolvers are org-scoped now too, but that only
+   * makes the tool quietly vanish; refusing at save time is what tells
+   * the caller their agent is not going to have the tool they asked for.
+   *
+   * A missing id is refused for the same reason: an agent silently
+   * missing a tool it was configured with is a support ticket, and the
+   * two cases are indistinguishable from the outside anyway.
+   */
+  private async assertToolsInOrg(toolIds: string[] | undefined, organizationId: string): Promise<void> {
+    if (!toolIds?.length) return;
+    const wanted = [...new Set(toolIds)];
+    const found = await this.agentRepository.manager.getRepository(Tool).find({
+      where: { id: In(wanted), organizationId },
+      select: { id: true },
+    });
+    const have = new Set(found.map((t) => t.id));
+    const missing = wanted.filter((id) => !have.has(id));
+    if (missing.length) {
+      throw new BadRequestException(
+        `These tools are not available in this organization: ${missing.join(', ')}. ` +
+          'Remove them, or create them here first.',
+      );
+    }
+  }
 
   async createAgent(
     createDto: CreateAgentInput,
@@ -108,6 +233,9 @@ export class AgentsService {
   ): Promise<Agent> {
     try {
       this.logger.log(`[CREATE_AGENT] Creating agent '${createDto.name}' for org=${organizationId}, user=${userId}`);
+
+      this.assertWebhookUrl(createDto.webhookUrl);
+      await this.assertToolsInOrg(createDto.toolIds, organizationId);
 
       // Verify organization
       const organization = await this.organizationRepository.findOne({
@@ -163,6 +291,7 @@ export class AgentsService {
         teamId: createDto.visibility === 'team' ? (createDto.teamId ?? null) : null,
       });
 
+      if (agent.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
       const saved = await this.agentRepository.save(agent);
       this.logger.log(`[CREATE_AGENT] Agent created: id=${saved.id}`);
 
@@ -260,6 +389,12 @@ export class AgentsService {
 
     queryBuilder.skip(skip).take(limit);
 
+    // The agents list page never reads `metadata`, and `metadata.versions`
+    // holds every retained pipeline snapshot for the agent. Projecting the
+    // columns the list response actually emits keeps a page of agents from
+    // dragging the version history of every row out of Postgres.
+    queryBuilder.select(AGENT_LIST_COLUMNS.map((c) => `agent.${c}`));
+
     const [data, total] = await queryBuilder.getManyAndCount();
 
     return {
@@ -305,11 +440,14 @@ export class AgentsService {
           savedAt: new Date().toISOString(),
           changelog: `Auto-saved before pipeline update`,
         });
-        agent.metadata = { ...agent.metadata, versions };
+        agent.metadata = { ...agent.metadata, versions: trimAgentVersions(versions) };
       }
     }
 
+    this.assertWebhookUrl(updateDto.webhookUrl);
+    await this.assertToolsInOrg(updateDto.toolIds, agent.organizationId);
     Object.assign(agent, updateDto);
+    if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);
     // Sanitize the team-scoping fields after the spread so a flip
     // back to visibility='org' doesn't leave the old teamId dangling.
     if (updateDto.visibility === 'org') {
@@ -359,9 +497,8 @@ export class AgentsService {
 
   async activateAgent(id: string, organizationId: string, userId?: string): Promise<Agent> {
     const agent = await this.getAgent(id, organizationId);
-
-    // Validate pipeline before activating
-    this.validation.validatePipeline(agent.pipeline, agent.id);
+    if (userId) await this.checkAgentPermission(agent, organizationId, userId, 'edit_agents');
+    await this.readiness.assertReady(agent, userId);
 
     agent.status = AgentStatus.ACTIVE;
     const saved = await this.agentRepository.save(agent);
@@ -387,6 +524,20 @@ export class AgentsService {
     return saved;
   }
 
+  async getReadiness(id: string, organizationId: string, userId: string) {
+    const agent = await this.getAgent(id, organizationId);
+    const decision = await this.accessPolicy.canAccess({ id: userId }, agent, 'read');
+    if (!decision.allowed) throw new ForbiddenException(decision.reason);
+    return this.readiness.inspect(agent, userId);
+  }
+
+  /**
+   * Execution history for an agent.
+   *
+   * `limit` comes straight off the query string, so it is clamped to the same
+   * ceiling the other list endpoints use. `nodeResults` stays in the
+   * projection — the overview tab renders routing attribution out of it.
+   */
   async getAgentExecutions(
     agentId: string,
     organizationId: string,
@@ -402,20 +553,25 @@ export class AgentsService {
     // Verify agent exists
     await this.getAgent(agentId, organizationId);
 
-    const skip = (page - 1) * limit;
+    const take = Math.min(
+      Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : DEFAULT_EXECUTIONS_PAGE_SIZE,
+      MAX_EXECUTIONS_PAGE_SIZE,
+    );
+    const currentPage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const skip = (currentPage - 1) * take;
     const [data, total] = await this.agentExecutionRepository.findAndCount({
       where: { agentId, organizationId },
       order: { createdAt: 'DESC' },
       skip,
-      take: limit,
+      take,
     });
 
     return {
       data,
       total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      page: currentPage,
+      limit: take,
+      totalPages: Math.ceil(total / take),
     };
   }
 
@@ -431,9 +587,9 @@ export class AgentsService {
       changelog: changelog || `Version ${agent.version}`,
     });
     await this.agentRepository.update(agentId, {
-      metadata: { ...agent.metadata, versions },
+      metadata: { ...agent.metadata, versions: trimAgentVersions(versions) },
     });
-    this.logger.log(`[SAVE_VERSION] Saved version for agent=${agentId}, total versions=${versions.length}`);
+    this.logger.log(`[SAVE_VERSION] Saved version for agent=${agentId}, retained versions=${trimAgentVersions(versions).length}`);
 
     if (userId) {
       await this.auditService.log({
@@ -464,9 +620,9 @@ export class AgentsService {
     const targetVersion = versions[versionIndex];
     agent.pipeline = JSON.parse(JSON.stringify(targetVersion.pipeline));
     agent.version = targetVersion.version;
-    agent.metadata = { ...agent.metadata, versions };
+    agent.metadata = { ...agent.metadata, versions: trimAgentVersions(versions) };
     const saved = await this.agentRepository.save(agent);
-    this.logger.log(`[ROLLBACK] Agent=${agentId} rolled back to version index=${versionIndex}, total versions=${versions.length}`);
+    this.logger.log(`[ROLLBACK] Agent=${agentId} rolled back to version index=${versionIndex}, retained versions=${agent.metadata.versions.length}`);
 
     if (userId) {
       await this.auditService.log({
@@ -565,7 +721,7 @@ export class AgentsService {
   /**
    * Validate pipeline:
    * - Must have exactly 1 input node
-   * - Must have at least 1 output node
+   * - Must have exactly 1 output node
    * - Must have no cycles (topological sort)
    * - All edges must reference existing nodes
    * - Condition nodes must have exactly 2 outgoing edges with sourceHandle 'true' and 'false'

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 import {
   ApprovalPolicyApproval,
@@ -6,7 +6,7 @@ import {
   ApprovalPolicyProgress,
   ApprovalPolicyRef,
 } from '../../../src/common/ee-hooks/ee-hooks';
-import { LicenseService } from '../../../src/modules/licensing/license.service';
+import { OrgLicenseResolver } from '../../../src/modules/licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 
 import { ApprovalPolicyService } from './approval-policy.service';
@@ -26,14 +26,35 @@ import { ApprovalContext } from './approval-policy.evaluator';
 export class ApprovalPolicyHookImpl implements ApprovalPolicyHook {
   constructor(
     private readonly policies: ApprovalPolicyService,
-    private readonly license: LicenseService,
+    private readonly licenses: OrgLicenseResolver,
   ) {}
+
+  /**
+   * Per-organization, not per-process.
+   *
+   * Licensing in this product is org-scoped: tokens are minted per org
+   * by billing, EntitlementGuard resolves per org, and
+   * /licensing/entitlements answers for the requesting org. This hook
+   * checked LicenseService -- the process-global singleton, which is
+   * community unless ALMYTY_LICENSE_KEY/TOKEN is in the environment.
+   * The deployed API sets only the license SIGNING key, so has()
+   * returned false for every entitlement, forever: a Business or
+   * Enterprise org could reach the settings screen, configure the
+   * feature, be told it saved, and have it do nothing at run time.
+   */
+  private async licensed(organizationId: string, key: string): Promise<boolean> {
+    try {
+      return await this.licenses.hasForOrg(organizationId, key);
+    } catch {
+      return false;
+    }
+  }
 
   async resolveForContext(
     organizationId: string,
     ctx: Record<string, unknown>,
   ): Promise<ApprovalPolicyRef | null> {
-    if (!this.license.has(EE_ENTITLEMENTS.APPROVAL_POLICY)) return null;
+    if (!(await this.licensed(organizationId, EE_ENTITLEMENTS.APPROVAL_POLICY))) return null;
     const policy = await this.policies.resolveForContext(organizationId, ctx as ApprovalContext);
     return policy ? { id: policy.id, name: policy.name } : null;
   }
@@ -43,15 +64,23 @@ export class ApprovalPolicyHookImpl implements ApprovalPolicyHook {
     policyId: string,
     approvals: ApprovalPolicyApproval[],
   ): Promise<ApprovalPolicyProgress | null> {
-    if (!this.license.has(EE_ENTITLEMENTS.APPROVAL_POLICY)) return null;
+    if (!(await this.licensed(organizationId, EE_ENTITLEMENTS.APPROVAL_POLICY))) return null;
     try {
       const policy = await this.policies.get(organizationId, policyId);
       return this.policies.scoreProgress(policy, approvals);
-    } catch {
-      // Policy deleted (or otherwise unavailable) since the request was
-      // created — degrade to the OSS single gate rather than dead-locking
-      // the pending approval.
-      return null;
+    } catch (err) {
+      // A deleted policy degrades to the OSS single gate. Anything else
+      // does not.
+      //
+      // This used to catch everything and return null, and null is the
+      // caller's signal to fall back to that single gate -- so a dropped
+      // connection, a query timeout or an exhausted pool turned a
+      // configured 3-of-5 into one approver and let the gated tool call
+      // run. The caller was changed to hold the gate on a throw, and this
+      // swallow defeated it one layer down: the hook could never reject,
+      // so the core test passed only because it mocked the hook.
+      if (err instanceof NotFoundException) return null;
+      throw err;
     }
   }
 }

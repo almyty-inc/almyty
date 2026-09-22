@@ -22,17 +22,6 @@ export enum UserRole {
   USER = 'user',
 }
 
-export interface LoginRequest {
-  email: string
-  password: string
-}
-
-export interface RegisterRequest {
-  email: string
-  password: string
-  name: string
-}
-
 export interface AuthResponse {
   user: User
   token: string
@@ -60,6 +49,8 @@ export interface Organization {
   createdAt: string
   updatedAt: string
   members: OrganizationMembership[]
+  /** Active member count, sent by the list endpoint, which does not hydrate `members`. */
+  memberCount?: number
   gateways: Gateway[]
   apis: Api[]
   tools: Tool[]
@@ -72,12 +63,38 @@ export enum OrganizationPlan {
   ENTERPRISE = 'enterprise',
 }
 
+/**
+ * The `settings` json column on the Organization row
+ * (backend/src/entities/organization.entity.ts OrganizationSettings).
+ *
+ * Every key is optional there and a freshly created organization is
+ * saved with no settings at all, so nothing here may be declared
+ * required: `settings.maxApis` used to be typed `number` and is
+ * `undefined` on every org the dashboard has ever loaded.
+ */
 export interface OrganizationSettings {
-  maxGateways: number
-  maxApis: number
-  maxTools: number
-  allowedDomains?: string[]
-  webhookUrl?: string
+  /**
+   * Consulted by the engine when an llm_call node names neither a provider
+   * nor a policy of its own (agent-node-executor.defaultRoutingFor). The
+   * builder reads it to know whether such a node is actually incomplete or
+   * merely relying on the organization default.
+   */
+  defaultRouting?: Record<string, any> | null
+  maxGateways?: number
+  maxApis?: number
+  maxTools?: number
+  allowedApiTypes?: string[]
+  defaultRateLimit?: { ttl: number; limit: number }
+  webhooks?: { enabled: boolean; endpoints: string[] }
+  /** Hosts this org may reach even though they resolve to a private address. */
+  egressAllowlist?: string[]
+  /**
+   * Members may connect accounts only they can use. Read by the backend at
+   * `settings.allowUserScopedConnections` (connections.service.ts) and
+   * written there by connectionsApi.setUserScopedConnections; it is not a
+   * top-level column, which is where this used to be declared.
+   */
+  allowUserScopedConnections?: boolean
 }
 
 export interface BillingInfo {
@@ -133,6 +150,19 @@ export interface Gateway {
   successfulRequests: number
   lastRequestAt?: string
   lastHealthCheckAt?: string
+  /** Set with lastError; the error is current when it is newer than lastSuccessAt. */
+  lastErrorAt?: string
+  lastSuccessAt?: string
+
+  /**
+   * How many tools are assigned, on the LIST response only. The list used
+   * to hydrate every nested Tool -- 2,000 entities with their code and
+   * parameter schemas for a page of 20 gateways -- purely so the table
+   * could render `tools.length`. The list now returns a correlated COUNT
+   * and no `tools` array, so the count must be read from here; the detail
+   * response still carries the real `tools`.
+   */
+  toolCount?: number
   isHealthy: boolean
   isSystem?: boolean
   createdAt: string
@@ -152,6 +182,7 @@ export enum GatewayKind {
 export enum GatewayType {
   MCP = 'mcp',
   A2A = 'a2a',
+  ACP = 'acp',
   UTCP = 'utcp',
   SKILLS = 'skills',
   OPENAI_CHAT = 'openai_chat',
@@ -159,6 +190,8 @@ export enum GatewayType {
   DISCORD = 'discord',
   TELEGRAM = 'telegram',
   WHATSAPP = 'whatsapp',
+  WHATSAPP_CLOUD = 'whatsapp_cloud',
+  SMS = 'sms',
   EMAIL = 'email',
   WEBHOOK = 'webhook',
   GOOGLE_CHAT = 'google_chat',
@@ -167,6 +200,7 @@ export enum GatewayType {
   MATRIX = 'matrix',
   IRC = 'irc',
   CHAT_WIDGET = 'chat_widget',
+  HOSTED_CHAT = 'hosted_chat',
 }
 
 export enum GatewayStatus {
@@ -369,8 +403,18 @@ export interface ToolTemplate {
   examples: Array<{ name: string; input: any; expectedOutput?: any }>
   apiConfig?: { name: string; baseUrl: string; headers?: Record<string, string>; authRequirements?: { type: string; scopes?: string[]; setupInstructions?: string } }
   isBuiltIn: boolean
+  /**
+   * Null means public -- visible to every organization. A value means the
+   * template belongs to that organization and only it can see, edit or
+   * retract it.
+   */
+  organizationId: string | null
+  sourceToolId?: string | null
+  createdBy?: string | null
   version: string
   installCount: number
+  createdAt?: string
+  updatedAt?: string
 }
 
 export enum ToolType {
@@ -431,14 +475,51 @@ export interface LlmProvider {
   usageMetrics: UsageMetric[]
 }
 
+/**
+ * Mirrors the backend enum (backend/src/entities/llm-provider.entity.ts).
+ * This list had drifted to 8 of the then-24 values; keep it complete, the
+ * type union in components/llm-providers/schema.ts is derived from the same
+ * set and a missing value silently narrows both.
+ */
 export enum LlmProviderType {
   OPENAI = 'openai',
   ANTHROPIC = 'anthropic',
   GOOGLE = 'google',
-  COHERE = 'cohere',
-  HUGGINGFACE = 'huggingface',
+  MISTRAL = 'mistral',
+  XAI = 'xai',
+  DEEPSEEK = 'deepseek',
+  GROQ = 'groq',
+  TOGETHER = 'together',
+  OPENROUTER = 'openrouter',
+  STRAITLY = 'straitly',
   AZURE_OPENAI = 'azure_openai',
   AWS_BEDROCK = 'aws_bedrock',
+  COHERE = 'cohere',
+  HUGGINGFACE = 'huggingface',
+  OLLAMA = 'ollama',
+  FIREWORKS = 'fireworks',
+  CEREBRAS = 'cerebras',
+  DEEPINFRA = 'deepinfra',
+  NOVITA = 'novita',
+  PERPLEXITY = 'perplexity',
+  ZAI = 'zai',
+  BASETEN = 'baseten',
+  NEBIUS = 'nebius',
+  SAMBANOVA = 'sambanova',
+  MOONSHOT = 'moonshot',
+  QWEN = 'qwen',
+  MINIMAX = 'minimax',
+  UPSTAGE = 'upstage',
+  WRITER = 'writer',
+  QIANFAN = 'qianfan',
+  HUNYUAN = 'hunyuan',
+  VOLCENGINE = 'volcengine',
+  SPARK = 'spark',
+  VERTEX_AI = 'vertex_ai',
+  AZURE_AI_FOUNDRY = 'azure_ai_foundry',
+  DIGITALOCEAN = 'digitalocean',
+  RUNPOD = 'runpod',
+  MODAL = 'modal',
   CUSTOM = 'custom',
 }
 
@@ -474,4 +555,5 @@ export interface LlmCostConfig {
 
 export * from './usage';
 export * from './runtime';
+export * from './models';
 export * from './notification';

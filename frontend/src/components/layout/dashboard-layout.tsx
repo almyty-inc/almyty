@@ -26,6 +26,8 @@ import {
   Database,
   Store,
   Cpu,
+  FolderGit2,
+  Package,
   Shield,
 } from 'lucide-react'
 
@@ -85,18 +87,23 @@ interface DashboardLayoutProps {
 // an agent but left newcomers wondering what to click first.
 const navigation: { name: string; href: string; icon: any; dataTour?: string }[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  // Core workflow — follows the APIs → Tools → Gateways → Agents
-  // pipeline narrative.
+  // Core workflow — follows the APIs → Tools → Gateways → Agents → Apps
+  // pipeline narrative. Apps sits directly after Agents because that is
+  // the last link of the chain: you build agents, then you ship them as
+  // a product. Putting it here also keeps it above the fold rather than
+  // buried below Runners.
   { name: 'APIs', href: '/apis', icon: Globe, dataTour: 'nav-api' },
   { name: 'Tools', href: '/tools', icon: Wrench },
   { name: 'Gateways', href: '/gateways', icon: Zap, dataTour: 'nav-gateway' },
   { name: 'Agents', href: '/agents', icon: Bot },
+  { name: 'Apps', href: '/apps', icon: Package, dataTour: 'nav-apps' },
   { name: 'Runners', href: '/runners', icon: Cpu },
+  { name: 'Workspaces', href: '/workspaces', icon: FolderGit2 },
   { name: 'Credentials', href: '/credentials', icon: Key },
   { name: 'Approvals', href: '/approvals', icon: Shield },
   // Configuration
   { name: 'divider', href: '', icon: null as any },
-  { name: 'Models', href: '/llm-providers', icon: Brain, dataTour: 'nav-provider' },
+  { name: 'Models', href: '/models', icon: Brain, dataTour: 'nav-provider' },
   { name: 'Memory', href: '/memories', icon: Database },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
@@ -105,7 +112,7 @@ const navigation: { name: string; href: string; icon: any; dataTour?: string }[]
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, isAuthenticated, logout, hasHydrated } = useAuthStore()
+  const { user, isAuthenticated, logout, hasHydrated, authChecked } = useAuthStore()
   const { currentOrganization, organizations, setCurrentOrganization, fetchOrganizations } = useOrganizationStore()
   const queryClient = useQueryClient()
   const { sidebarOpen, setSidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse } = useAppStore()
@@ -133,20 +140,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, [darkMode])
 
   // Check authentication and redirect if not logged in (only after hydration)
+  // Check authentication and redirect if not logged in: only after the
+  // persisted store hydrated AND checkAuth has asked the server. A valid
+  // httpOnly cookie with an empty persisted store used to bounce to the
+  // sign-in page before /auth/profile had a chance to answer.
   useEffect(() => {
-    if (hasHydrated && !isAuthenticated) {
+    if (hasHydrated && authChecked && !isAuthenticated) {
       navigate('/auth/login')
       return
     }
-  }, [isAuthenticated, hasHydrated, navigate])
+  }, [isAuthenticated, hasHydrated, authChecked, navigate])
 
-  // Initialize organizations from user data when available
+  // A persisted profile can predate a newly-created organization. Do not let
+  // it overwrite the saved selection while checkAuth is fetching memberships.
+  // Auth initialization remains authoritative, including revoked memberships.
   useEffect(() => {
-    if (user && organizations.length === 0) {
+    if (authChecked && isAuthenticated && user && organizations.length === 0) {
       const { initializeFromUser } = useOrganizationStore.getState()
       initializeFromUser(user)
     }
-  }, [user, organizations.length])
+  }, [authChecked, isAuthenticated, user, organizations.length])
 
   // Listen for 403 responses from the axios interceptor and surface
   // them as a permission toast. Before this the 403s that came back

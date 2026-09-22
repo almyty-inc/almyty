@@ -211,7 +211,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
         heading: `Approval ${outcome}`,
         bodyHtml:
           para(
-            `The approval gate on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ', the run is resuming' : ', the run was terminated'}.`,
+            `The approval on your run${p.agentName ? ` of <strong>${esc(p.agentName)}</strong>` : ''} was <strong>${esc(outcome)}</strong>${outcome === 'approved' ? ', the run is resuming' : ', the run was terminated'}.`,
           ) + (p.decisionReason ? para(`Note from the approver: <em>${esc(p.decisionReason)}</em>`) : ''),
         button: p.runUrl ? { label: 'View run', url: p.runUrl } : undefined,
         orgName: p.organizationName,
@@ -352,6 +352,59 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     }),
     text: flattenText(
       `Retention sweep deleted ${p.totalDeleted ?? 0} expired records.${p.summary ? ` Breakdown: ${p.summary}.` : ''}`,
+    ),
+  }),
+
+  // ── Connections (key layer) ──────────────────────────────────────────
+
+  'connections.expiring': (p) => ({
+    subject: sanitizeSubject(`A connected account expires in ${p.daysLeft ?? 'a few'} day${Number(p.daysLeft) === 1 ? '' : 's'}`),
+    html: renderBaseLayout({
+      heading: 'Connection expiring',
+      bodyHtml:
+        para(
+          `The <strong>${esc(p.connectorName || p.connectorKey || 'connected account')}</strong> connection${p.connectionName ? ` <strong>${esc(p.connectionName)}</strong>` : ''} expires on <strong>${esc(p.expiresAt || 'soon')}</strong>.`,
+        ) + para('Rotate it before then so agents that depend on it keep working.'),
+      button: p.connectionsUrl ? { label: 'Open connections', url: p.connectionsUrl } : undefined,
+      footerNote: 'You receive this because you own the connection or manage connections for the organization.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `The ${p.connectorName || p.connectorKey || 'connected account'} connection${p.connectionName ? ` ${p.connectionName}` : ''} expires on ${p.expiresAt || 'soon'}. Rotate it in Settings, Connections.${p.connectionsUrl ? ` ${p.connectionsUrl}` : ''}`,
+    ),
+  }),
+
+  'connections.expired': (p) => ({
+    subject: sanitizeSubject(`A connected account has expired: ${p.connectorName || p.connectorKey || 'connection'}`),
+    html: renderBaseLayout({
+      heading: 'Connection expired',
+      bodyHtml:
+        para(
+          `The <strong>${esc(p.connectorName || p.connectorKey || 'connected account')}</strong> connection${p.connectionName ? ` <strong>${esc(p.connectionName)}</strong>` : ''} has expired.`,
+        ) + para(p.grantsPaused ? 'Its grants were paused; agents using it will fail until it is rotated.' : 'Agents using it will fail until it is rotated.'),
+      button: p.connectionsUrl ? { label: 'Rotate now', url: p.connectionsUrl } : undefined,
+      footerNote: 'You receive this because you own the connection or manage connections for the organization.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `The ${p.connectorName || p.connectorKey || 'connected account'} connection${p.connectionName ? ` ${p.connectionName}` : ''} has expired. Rotate it in Settings, Connections.${p.connectionsUrl ? ` ${p.connectionsUrl}` : ''}`,
+    ),
+  }),
+
+  'connections.rotation_due': (p) => ({
+    subject: sanitizeSubject(`Rotation due: ${p.connectorName || p.connectorKey || 'a connected account'}`),
+    html: renderBaseLayout({
+      heading: 'Rotation due',
+      bodyHtml:
+        para(
+          `The <strong>${esc(p.connectorName || p.connectorKey || 'connected account')}</strong> connection${p.connectionName ? ` <strong>${esc(p.connectionName)}</strong>` : ''} is <strong>${esc(p.ageDays ?? '')}</strong> days old, older than your rotation rule allows.`,
+        ) + para(p.automatic ? 'Automatic rotation is not available for this provider, so it needs a hand.' : 'Rotate it from Settings, Connections.'),
+      button: p.connectionsUrl ? { label: 'Rotate now', url: p.connectionsUrl } : undefined,
+      footerNote: 'Rotation rules are set by your organization admins under Connections governance.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `The ${p.connectorName || p.connectorKey || 'connected account'} connection${p.connectionName ? ` ${p.connectionName}` : ''} is ${p.ageDays ?? ''} days old and due for rotation.${p.connectionsUrl ? ` ${p.connectionsUrl}` : ''}`,
     ),
   }),
 
@@ -498,7 +551,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
       heading: 'A few things people build on almyty',
       bodyHtml:
         para(
-          'Teams use almyty to turn internal APIs into MCP tools their coding agents can call, to wire multi-LLM agent pipelines with the visual builder, and to run those agents on their own machines with the runner.',
+          'Teams use almyty to turn internal APIs into MCP tools their coding agents can call, to wire multi-model agent pipelines with the visual builder, and to run those agents on their own machines with the runner.',
         ) +
         para(
           'This is the last setup email we will send. If almyty is not the right fit right now, no worries: everything is here when you come back.',
@@ -507,7 +560,7 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
       footerNote: `This is the final almyty setup email. Prefer none at all? Unsubscribe: ${p.unsubscribeUrl}`,
     }),
     text: flattenText(
-      `What people build on almyty: internal APIs as MCP tools, multi-LLM agent pipelines, agents running on their own machines via the runner. This is the last setup email we will send: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
+      `What people build on almyty: internal APIs as MCP tools, multi-model agent pipelines, agents running on their own machines via the runner. This is the last setup email we will send: ${p.appUrl}. Unsubscribe: ${p.unsubscribeUrl}`,
     ),
   }),
 

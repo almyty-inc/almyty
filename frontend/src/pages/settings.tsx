@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { Settings, Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, CreditCard, Gift, Bell } from 'lucide-react'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { Settings, Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, Radio, Lock, CreditCard, Gift, Bell, Plug } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { cn } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { MembersAndTeamsTab } from '@/components/MembersAndTeamsTab'
@@ -17,14 +17,18 @@ import { SsoSettings } from '@/components/settings/sso-settings'
 import { RbacSettings } from '@/components/settings/rbac-settings'
 import { ApprovalPoliciesSettings } from '@/components/settings/approval-policies-settings'
 import { ComplianceSettings } from '@/components/settings/compliance-settings'
+import { AuditStreamsSettings } from '@/components/settings/audit-streams-settings'
+import { KmsSettings } from '@/components/settings/kms-settings'
 import { ReferralsTab } from '@/components/settings/referrals-tab'
 import { DataRetentionCard } from '@/components/settings/data-retention-card'
 import { NotificationPreferences } from '@/components/settings/notification-preferences'
+import { ConnectionsTab } from '@/components/connections/connections-tab'
 import { BillingTab } from '@/components/BillingTab'
 import { PlanBadge } from '@/components/plan-indicator'
 import { authApi, organizationsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 
-const SETTINGS_TABS = ['organization', 'members', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso', 'rbac', 'approvals', 'compliance'] as const
+const SETTINGS_TABS = ['organization', 'members', 'connections', 'billing', 'referrals', 'profile', 'notifications', 'security', 'sso', 'rbac', 'approvals', 'compliance', 'audit-streams', 'encryption'] as const
 type SettingsTab = typeof SETTINGS_TABS[number]
 
 function getSettingsTab(pathname: string): SettingsTab {
@@ -66,6 +70,7 @@ export function SettingsPage() {
         {([
           { key: 'organization' as SettingsTab, label: 'Organization', icon: Building },
           { key: 'members' as SettingsTab, label: 'Members & Teams', icon: Users },
+          { key: 'connections' as SettingsTab, label: 'Connections', icon: Plug },
           { key: 'billing' as SettingsTab, label: 'Billing', icon: CreditCard },
           { key: 'referrals' as SettingsTab, label: 'Referrals', icon: Gift },
           { key: 'profile' as SettingsTab, label: 'Profile', icon: User },
@@ -75,6 +80,8 @@ export function SettingsPage() {
           { key: 'rbac' as SettingsTab, label: 'Roles', icon: KeyRound },
           { key: 'approvals' as SettingsTab, label: 'Approvals', icon: ShieldAlert },
           { key: 'compliance' as SettingsTab, label: 'Compliance', icon: ScrollText },
+          { key: 'audit-streams' as SettingsTab, label: 'Audit streaming', icon: Radio },
+          { key: 'encryption' as SettingsTab, label: 'Encryption', icon: Lock },
         ]).map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -95,6 +102,7 @@ export function SettingsPage() {
       <div>
         {settingsTab === 'organization' && <OrganizationTab organization={currentOrganization} />}
         {settingsTab === 'members' && <MembersAndTeamsTab organizationId={currentOrganization?.id} />}
+        {settingsTab === 'connections' && <ConnectionsTab />}
         {settingsTab === 'billing' && <BillingTab organizationId={currentOrganization?.id} />}
         {settingsTab === 'referrals' && <ReferralsTab />}
         {settingsTab === 'profile' && <ProfileTab />}
@@ -104,6 +112,8 @@ export function SettingsPage() {
         {settingsTab === 'rbac' && <RbacSettings />}
         {settingsTab === 'approvals' && <ApprovalPoliciesSettings />}
         {settingsTab === 'compliance' && <ComplianceSettings />}
+        {settingsTab === 'audit-streams' && <AuditStreamsSettings />}
+        {settingsTab === 'encryption' && <KmsSettings />}
       </div>
     </div>
   )
@@ -112,6 +122,7 @@ export function SettingsPage() {
 function OrganizationTab({ organization }: { organization: any }) {
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
+  const { upsertOrganization } = useOrganizationStore()
   const [isEditing, setIsEditing] = useState(false)
   const [orgName, setOrgName] = useState('')
   const [orgDescription, setOrgDescription] = useState('')
@@ -153,14 +164,24 @@ function OrganizationTab({ organization }: { organization: any }) {
   const updateOrgMutation = useMutation({
     mutationFn: (data: { name: string; description?: string }) =>
       organizationsApi.update(organization.id, data),
-    onSuccess: async () => {
+    onSuccess: async (updated: any, variables) => {
       success('Organization updated', 'Organization details have been updated.')
       setIsEditing(false)
+      // The heading below this card, the sidebar switcher and the
+      // X-Organization-Id header all read the store, not a query, so
+      // invalidating alone left the toast claiming a rename the page
+      // still showed the old name for -- across a reload, because the
+      // persisted copy wins whenever its id is still a membership.
+      upsertOrganization({
+        ...organization,
+        ...variables,
+        ...(updated && updated.id ? updated : {}),
+      })
       await queryClient.invalidateQueries({ queryKey: ['organizations'] })
       await queryClient.invalidateQueries({ queryKey: ['organization-details'] })
     },
     onError: (err: any) => {
-      error('Failed to update organization', err.response?.data?.message || 'Please try again.')
+      error('Failed to update organization', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -172,7 +193,7 @@ function OrganizationTab({ organization }: { organization: any }) {
       await queryClient.invalidateQueries({ queryKey: ['organization-details'] })
     },
     onError: (err: any) => {
-      error('Failed to save agent defaults', err.response?.data?.message || 'Please try again.')
+      error('Failed to save agent defaults', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -222,9 +243,19 @@ function OrganizationTab({ organization }: { organization: any }) {
             <CardDescription>Manage your organization settings</CardDescription>
           </div>
           {!isEditing ? (
-            <Button variant="outline" onClick={() => setIsEditing(true)}>
-              Edit Organization
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setIsEditing(true)}>
+                Edit Organization
+              </Button>
+              {/*
+                Creating one was possible and unreachable: the
+                organizations page holds the dialog and is in neither the
+                sidebar nor anywhere a person looks for it.
+              */}
+              <Button variant="outline" asChild data-testid="new-organization">
+                <Link to="/organizations?new=1">New Organization</Link>
+              </Button>
+            </div>
           ) : (
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleCancel}>Cancel</Button>
@@ -275,7 +306,7 @@ function OrganizationTab({ organization }: { organization: any }) {
           <div>
             <label className="text-sm font-medium text-muted-foreground">Created</label>
             <div className="text-sm mt-1">
-              {(fullOrg.createdAt || fullOrg.created_at) ? new Date(fullOrg.createdAt || fullOrg.created_at).toLocaleDateString() : <span className="inline-block w-20 h-4 bg-muted animate-pulse rounded" />}
+              {(fullOrg.createdAt || fullOrg.created_at) ? formatDate(fullOrg.createdAt || fullOrg.created_at) : <span className="inline-block w-20 h-4 bg-muted animate-pulse rounded" />}
             </div>
           </div>
         </CardContent>
@@ -383,7 +414,7 @@ function ProfileTab() {
       await queryClient.invalidateQueries({ queryKey: ['user-profile'] })
     },
     onError: (err: any) => {
-      error('Failed to update profile', err.response?.data?.message || 'Please try again.')
+      error('Failed to update profile', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -479,7 +510,7 @@ function ProfileTab() {
                   className="mt-1"
                 />
                 {validationErrors.firstName && (
-                  <p className="text-sm text-red-600 mt-1">{validationErrors.firstName}</p>
+                  <p className="text-sm text-destructive mt-1">{validationErrors.firstName}</p>
                 )}
               </>
             ) : (
@@ -502,7 +533,7 @@ function ProfileTab() {
                   className="mt-1"
                 />
                 {validationErrors.lastName && (
-                  <p className="text-sm text-red-600 mt-1">{validationErrors.lastName}</p>
+                  <p className="text-sm text-destructive mt-1">{validationErrors.lastName}</p>
                 )}
               </>
             ) : (
@@ -528,7 +559,7 @@ function ProfileTab() {
                 className="mt-1"
               />
               {validationErrors.email && (
-                <p className="text-sm text-red-600 mt-1">{validationErrors.email}</p>
+                <p className="text-sm text-destructive mt-1">{validationErrors.email}</p>
               )}
             </>
           ) : (
@@ -540,7 +571,7 @@ function ProfileTab() {
           <div>
             <label className="text-sm font-medium text-muted-foreground">Account Created</label>
             <div className="text-sm mt-1">
-              {new Date(userProfile.createdAt).toLocaleDateString()}
+              {formatDate(userProfile.createdAt)}
             </div>
           </div>
           <div>

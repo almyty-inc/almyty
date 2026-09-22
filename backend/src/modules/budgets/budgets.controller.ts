@@ -8,6 +8,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { BudgetsService, CreateBudgetDto, UpdateBudgetDto } from './budgets.service';
+import { CreateBudgetBodyDto, UpdateBudgetBodyDto } from './dto/budgets-controller.dto';
 import { SpendService } from './spend.service';
 import { startOfPeriod } from './spend-period.util';
 
@@ -94,8 +95,8 @@ export class BudgetsController {
   @Post()
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Create a spend budget' })
-  async create(@Body() body: CreateBudgetDto, @Request() req: any) {
-    const data = await this.budgets.create(this.orgId(req), body);
+  async create(@Body() body: CreateBudgetBodyDto, @Request() req: any) {
+    const data = await this.budgets.create(this.orgId(req), body as CreateBudgetDto);
     return { success: true, data };
   }
 
@@ -105,10 +106,10 @@ export class BudgetsController {
   @ApiOperation({ summary: 'Update a spend budget' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: UpdateBudgetDto,
+    @Body() body: UpdateBudgetBodyDto,
     @Request() req: any,
   ) {
-    const data = await this.budgets.update(id, this.orgId(req), body);
+    const data = await this.budgets.update(id, this.orgId(req), body as UpdateBudgetDto);
     return { success: true, data };
   }
 

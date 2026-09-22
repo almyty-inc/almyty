@@ -16,6 +16,22 @@ export interface StoredCredentials {
   token: string;
   email?: string;
   frontendUrl?: string;
+  /**
+   * When the token stops working, from the JWT's own `exp` claim.
+   *
+   * `@almyty/auth` writes it; this reader did not carry the field, so
+   * every CLI other than `auth` could not tell an expired credential
+   * from a live one and discovered the difference on its first API call
+   * — as a 401 from whatever the user was actually trying to do.
+   */
+  expiresAt?: string;
+}
+
+/** Past its `exp`, treating a malformed or absent value as "no idea, assume live". */
+export function credentialsExpired(creds: Pick<StoredCredentials, 'expiresAt'>): boolean {
+  if (!creds.expiresAt) return false;
+  const at = Date.parse(creds.expiresAt);
+  return Number.isFinite(at) && at <= Date.now();
 }
 
 export function loadCredentials(): StoredCredentials | null {
@@ -28,7 +44,13 @@ export function loadCredentials(): StoredCredentials | null {
 }
 
 /**
- * Resolve credentials from env or file. Returns null if nothing found.
+ * Resolve credentials from env or file. Returns null if nothing usable
+ * was found — an expired stored credential counts as nothing, because
+ * using it produces a 401 on the user's actual request rather than a
+ * sentence telling them to log in again.
+ *
+ * `ALMYTY_TOKEN` is never expiry-checked: it did not come from `auth
+ * login`, so there is no claim to check and no file to correct.
  */
 export function resolveCredentials(): StoredCredentials | null {
   const envToken = process.env.ALMYTY_TOKEN;
@@ -36,22 +58,34 @@ export function resolveCredentials(): StoredCredentials | null {
   if (envToken) return { url: envUrl, token: envToken };
 
   const stored = loadCredentials();
-  if (stored?.token) return stored;
+  if (stored?.token && !credentialsExpired(stored)) return stored;
 
   return null;
 }
 
 /**
- * Resolve credentials or exit with an error message.
+ * Resolve credentials or exit.
+ *
+ * Exits 3, which is "not authenticated" in the exit-code table every
+ * almyty CLI shares (0 ok, 1 unexpected, 2 usage, 3 not authenticated,
+ * 4 not found, 5 the operation ran and failed). It exited 1 before, so
+ * a script could not tell a stale login from a crash.
  */
 export function resolveCredentialsOrExit(): StoredCredentials {
   const creds = resolveCredentials();
   if (creds) return creds;
 
+  const stored = loadCredentials();
+  if (stored?.token && credentialsExpired(stored)) {
+    console.error(`Your login expired on ${stored.expiresAt}. Run:`);
+    console.error('  npx @almyty/auth login');
+    process.exit(3);
+  }
+
   console.error('Not authenticated. Run one of:');
   console.error('  npx @almyty/auth login');
   console.error('  export ALMYTY_TOKEN=<your-token>');
-  process.exit(1);
+  process.exit(3);
 }
 
 /**

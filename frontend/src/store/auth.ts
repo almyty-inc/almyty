@@ -7,7 +7,7 @@ import { identifyUser, resetAnalytics } from '@/lib/analytics'
 
 // Identify the logged-in user in PostHog. Called only after auth succeeds
 // (contract basis). Carries the minimum: user id + current org id + plan.
-// No-op when analytics is disabled (no VITE_POSTHOG_KEY).
+// No-op when analytics is disabled (no ALMYTY_POSTHOG_KEY).
 function identifyForAnalytics(user: User) {
   if (!user?.id) return
   const org = useOrganizationStore.getState().currentOrganization
@@ -20,6 +20,8 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   hasHydrated: boolean
+  /** True once checkAuth has answered (either way); layouts redirect only after that. */
+  authChecked: boolean
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => Promise<void>
   logout: () => void
@@ -35,6 +37,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       hasHydrated: false,
+      authChecked: false,
 
       login: async (email: string, password: string) => {
         set({ isLoading: true })
@@ -185,33 +188,41 @@ export const useAuthStore = create<AuthState>()(
           // from a previous session on this browser.
         }
 
+        let user: User
         try {
-          const response = await authApi.getProfile()
-          const user = response
-
-          localStorage.setItem('user', JSON.stringify(user))
-
-          // Initialize organization store from user data
-          const { initializeFromUser } = useOrganizationStore.getState()
-          initializeFromUser(user)
-
-          // Re-identify on cookie-based session restore. The user is
-          // authenticated (valid cookie), so this is on contract basis.
-          identifyForAnalytics(user)
-
-          set({
-            user,
-            token: null,
-            isAuthenticated: true,
-          })
+          user = await authApi.getProfile()
         } catch (error) {
+          // Only the server's answer signs the user out.
           localStorage.removeItem('user')
           set({
             user: null,
             token: null,
             isAuthenticated: false,
+            authChecked: true,
           })
+          return
         }
+
+        // Client-side bookkeeping after a successful profile fetch must
+        // never log the user out; a broken analytics hook or a full
+        // localStorage is not a sign-out.
+        try {
+          localStorage.setItem('user', JSON.stringify(user))
+          const { initializeFromUser } = useOrganizationStore.getState()
+          initializeFromUser(user)
+          // Re-identify on cookie-based session restore. The user is
+          // authenticated (valid cookie), so this is on contract basis.
+          identifyForAnalytics(user)
+        } catch (error) {
+          console.warn('post-auth bookkeeping failed', error)
+        }
+
+        set({
+          user,
+          token: null,
+          isAuthenticated: true,
+          authChecked: true,
+        })
       },
     }),
     {

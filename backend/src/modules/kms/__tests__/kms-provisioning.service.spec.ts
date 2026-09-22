@@ -1,10 +1,17 @@
+import { ConflictException, NotFoundException } from '@nestjs/common';
+
 import { KmsProvisioningService } from '../kms-provisioning.service';
-import { EnvelopeCryptoService } from '../envelope-crypto.service';
+import {
+  EnvelopeCryptoService,
+  keyIdOf,
+} from '../envelope-crypto.service';
 import { KmsClientFactory, KmsKeyRef } from '../kms.service';
 import { OrgKmsConfig } from '../../../entities/org-kms-config.entity';
 
 const CMK_ARN =
   'arn:aws:kms:eu-west-1:210987654321:key/1111aaaa-2222-3333-4444-555566667777';
+const OTHER_CMK_ARN =
+  'arn:aws:kms:eu-west-1:210987654321:key/8888bbbb-9999-aaaa-bbbb-ccccddddeeee';
 
 class FakeKmsClientFactory {
   failEncrypt = false;
@@ -38,6 +45,7 @@ class FakeRepo {
       cmkArn: null,
       awsRegion: null,
       wrappedDek: null,
+      retiredDeks: [],
       createdAt: new Date(),
       updatedAt: new Date(),
       ...partial,
@@ -69,7 +77,7 @@ describe('KmsProvisioningService', () => {
   });
 
   it('generates a fresh 32-byte DEK, wraps it via KMS, and stores only the wrapped blob', async () => {
-    const view = await service.setCmk('org1', { cmkArn: CMK_ARN });
+    const view = await service.attachCmk('org1', { cmkArn: CMK_ARN });
 
     expect(kms.encryptCalls.length).toBe(1);
     expect(kms.encryptCalls[0].plaintext.length).toBe(32); // 256-bit DEK
@@ -85,34 +93,109 @@ describe('KmsProvisioningService', () => {
     expect(view.provisioned).toBe(true);
     expect(view.enabled).toBe(true);
     expect(view.cmkArn).toBe(CMK_ARN);
+    // The key id names the stored blob, and nothing is retired yet.
+    expect(view.activeKeyId).toBe(keyIdOf(stored.wrappedDek as string));
+    expect(view.retiredKeyIds).toEqual([]);
     // The view never carries key material.
     expect((view as any).wrappedDek).toBeUndefined();
+    expect((view as any).retiredDeks).toBeUndefined();
     expect(envelope.invalidate).toHaveBeenCalledWith('org1');
   });
 
   it('propagates a KMS Encrypt failure and writes nothing', async () => {
     kms.failEncrypt = true;
     await expect(
-      service.setCmk('org2', { cmkArn: CMK_ARN }),
+      service.attachCmk('org2', { cmkArn: CMK_ARN }),
     ).rejects.toThrow(/NotFound|key does not exist/);
     expect(repo.rows.length).toBe(0);
   });
 
-  it('re-wraps (rotates) with a new DEK on a subsequent setCmk', async () => {
-    await service.setCmk('org3', { cmkArn: CMK_ARN });
+  it('refuses to attach over an existing key — replacing one is a rotation', async () => {
+    await service.attachCmk('org3', { cmkArn: CMK_ARN });
+    const firstBlob = repo.rows[0].wrappedDek;
+
+    await expect(
+      service.attachCmk('org3', { cmkArn: OTHER_CMK_ARN }),
+    ).rejects.toThrow(ConflictException);
+
+    // Nothing was minted and nothing was overwritten.
+    expect(kms.encryptCalls.length).toBe(1);
+    expect(repo.rows[0].wrappedDek).toBe(firstBlob);
+    expect(repo.rows[0].cmkArn).toBe(CMK_ARN);
+  });
+
+  it('rotateCmk mints a new DEK and retains the outgoing one', async () => {
+    await service.attachCmk('org4', { cmkArn: CMK_ARN });
+    const firstBlob = repo.rows[0].wrappedDek as string;
     const firstDek = kms.encryptCalls[0].plaintext.toString('hex');
-    await service.setCmk('org3', { cmkArn: CMK_ARN });
+
+    const view = await service.rotateCmk('org4', { cmkArn: OTHER_CMK_ARN });
+
     const secondDek = kms.encryptCalls[1].plaintext.toString('hex');
     expect(secondDek).not.toBe(firstDek);
     expect(repo.rows.length).toBe(1); // same row, updated in place
+
+    // The new DEK is active under the new CMK...
+    expect(view.cmkArn).toBe(OTHER_CMK_ARN);
+    expect(view.activeKeyId).toBe(keyIdOf(repo.rows[0].wrappedDek as string));
+    expect(repo.rows[0].wrappedDek).not.toBe(firstBlob);
+
+    // ...and the outgoing one is retained, still wrapped by the CMK that
+    // wrapped it, so values sealed under it can still be unwrapped.
+    expect(view.retiredKeyIds).toEqual([keyIdOf(firstBlob)]);
+    expect(repo.rows[0].retiredDeks).toHaveLength(1);
+    expect(repo.rows[0].retiredDeks[0]).toMatchObject({
+      keyId: keyIdOf(firstBlob),
+      wrappedDek: firstBlob,
+      cmkArn: CMK_ARN,
+    });
+    expect(envelope.invalidate).toHaveBeenCalledWith('org4');
+  });
+
+  it('rotateCmk keeps the configured CMK when none is supplied', async () => {
+    await service.attachCmk('org5', { cmkArn: CMK_ARN, awsRegion: 'eu-west-1' });
+    const view = await service.rotateCmk('org5');
+    expect(view.cmkArn).toBe(CMK_ARN);
+    expect(view.awsRegion).toBe('eu-west-1');
+    expect(view.retiredKeyIds).toHaveLength(1);
+  });
+
+  it('rotateCmk accumulates every retired key, oldest first', async () => {
+    await service.attachCmk('org6', { cmkArn: CMK_ARN });
+    const first = repo.rows[0].wrappedDek as string;
+    await service.rotateCmk('org6');
+    const second = repo.rows[0].wrappedDek as string;
+    const view = await service.rotateCmk('org6');
+
+    expect(view.retiredKeyIds).toEqual([keyIdOf(first), keyIdOf(second)]);
+  });
+
+  it('rotateCmk propagates a KMS Encrypt failure and changes nothing', async () => {
+    await service.attachCmk('org7', { cmkArn: CMK_ARN });
+    const blob = repo.rows[0].wrappedDek;
+    kms.failEncrypt = true;
+
+    await expect(service.rotateCmk('org7')).rejects.toThrow(
+      /NotFound|key does not exist/,
+    );
+
+    expect(repo.rows[0].wrappedDek).toBe(blob);
+    expect(repo.rows[0].retiredDeks).toEqual([]);
+  });
+
+  it('rotateCmk refuses an org with nothing attached', async () => {
+    await expect(service.rotateCmk('nobody')).rejects.toThrow(NotFoundException);
   });
 
   it('setEnabled toggles the flag and invalidates the cached DEK', async () => {
-    await service.setCmk('org4', { cmkArn: CMK_ARN, enabled: true });
-    const view = await service.setEnabled('org4', false);
+    await service.attachCmk('org8', { cmkArn: CMK_ARN, enabled: true });
+    const view = await service.setEnabled('org8', false);
     expect(view.enabled).toBe(false);
     expect(view.provisioned).toBe(true); // wrapped DEK retained
-    expect(envelope.invalidate).toHaveBeenCalledWith('org4');
+    // Disabling retires nothing and leaves the active key named as before.
+    expect(view.activeKeyId).toBe(keyIdOf(repo.rows[0].wrappedDek as string));
+    expect(view.retiredKeyIds).toEqual([]);
+    expect(envelope.invalidate).toHaveBeenCalledWith('org8');
   });
 
   it('getConfig returns an unprovisioned view for an org with no config', async () => {
@@ -120,5 +203,7 @@ describe('KmsProvisioningService', () => {
     expect(view.provisioned).toBe(false);
     expect(view.enabled).toBe(false);
     expect(view.cmkArn).toBeNull();
+    expect(view.activeKeyId).toBeNull();
+    expect(view.retiredKeyIds).toEqual([]);
   });
 });

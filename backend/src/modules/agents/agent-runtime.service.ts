@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
@@ -7,6 +7,8 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
 import { EventEmitter } from 'events';
@@ -97,6 +99,46 @@ export const BUILT_IN_TOOLS = {
 /** Interval between orphaned-emitter sweeps. */
 const RUNTIME_EMITTER_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 
+
+/** Page size for GET /agents/:id/runs when the caller does not ask for one. */
+export const DEFAULT_RUNS_PAGE_SIZE = 20;
+/**
+ * Hard ceiling on one page of runs. Matches the ceiling `tools.service.ts`
+ * and `gateways.service.ts` already apply to their own list endpoints.
+ */
+export const MAX_RUNS_PAGE_SIZE = 100;
+
+/**
+ * Columns the runs list response emits. `workingMemory` is deliberately
+ * absent — it is the run's scratch state, is never rendered in the list, and
+ * is one of the larger json columns on the row.
+ */
+export const AGENT_RUN_LIST_COLUMNS = {
+  id: true,
+  agentId: true,
+  organizationId: true,
+  userId: true,
+  endUserId: true,
+  conversationId: true,
+  mode: true,
+  status: true,
+  steps: true,
+  currentStep: true,
+  maxSteps: true,
+  input: true,
+  output: true,
+  error: true,
+  totalCost: true,
+  totalTokens: true,
+  executionTime: true,
+  recursionDepth: true,
+  toolCallCount: true,
+  metadata: true,
+  limits: true,
+  parentRunId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 @Injectable()
 export class AgentRuntimeService implements OnModuleInit {
   readonly logger = new Logger(AgentRuntimeService.name);
@@ -145,6 +187,11 @@ export class AgentRuntimeService implements OnModuleInit {
     readonly builtInTools: AgentBuiltInToolsHelper,
     readonly events: AgentRuntimeEventsHelper,
     readonly misc: AgentRuntimeMiscHelper,
+    // Optional so the runtime still constructs in tests and in any
+    // context where the audit module is not wired; a missing audit sink
+    // must not stop runs.
+    @Optional()
+    private readonly auditLogService: AuditLogService | undefined,
     @Inject(forwardRef(() => AgentStepProcessor))
     readonly processor: AgentStepProcessor,
     @Inject(forwardRef(() => ApprovalsService))
@@ -155,10 +202,19 @@ export class AgentRuntimeService implements OnModuleInit {
   /**
    * Start a new autonomous agent run
    */
+  /**
+   * Start an autonomous run.
+   *
+   * `userId` is a dashboard user, or null when a visitor on a published
+   * surface started this. Their identity goes in `options.endUserId`:
+   * an end user has no account here, so putting their id in `userId`
+   * writes a value into a column that references `users` and every
+   * conversation write after it fails.
+   */
   async startRun(
     agentId: string,
     organizationId: string,
-    userId: string,
+    userId: string | null,
     input: any,
     options?: {
       maxSteps?: number;
@@ -166,7 +222,11 @@ export class AgentRuntimeService implements OnModuleInit {
       maxDurationMs?: number;
       parentRunId?: string;
       conversationId?: string;
+      endUserId?: string | null;
+      /** Extra run metadata the surface wants the runtime to see (e.g. visitorMemory). */
+      metadata?: Record<string, any>;
     },
+
   ): Promise<AgentRun> {
     const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
     if (!agent) throw new NotFoundException('Agent not found');
@@ -250,7 +310,8 @@ export class AgentRuntimeService implements OnModuleInit {
       const conversation = Conversation.createConversation({
         agentId,
         organizationId,
-        userId,
+        userId: userId ?? undefined,
+        endUserId: options?.endUserId ?? null,
       });
       savedConversation = await this.conversationRepository.save(conversation);
     }
@@ -265,7 +326,8 @@ export class AgentRuntimeService implements OnModuleInit {
     const run = this.runRepository.create({
       agentId,
       organizationId,
-      userId,
+      userId: userId ?? null,
+      endUserId: options?.endUserId ?? null,
       conversationId: savedConversation.id,
       mode: AgentMode.AUTONOMOUS,
       status: AgentRunStatus.RUNNING,
@@ -280,9 +342,18 @@ export class AgentRuntimeService implements OnModuleInit {
         maxToolCalls: 100,
       },
       parentRunId: options?.parentRunId || null,
+      ...(options?.metadata ? { metadata: { ...options.metadata } } : {}),
     });
 
     const savedRun = await this.runRepository.save(run);
+
+    savedRun.agent = agent;
+
+    // Audit the ceilings that actually applied, resolved rather than
+    // requested, so a later question of "which limits governed this run"
+    // has an answer that does not depend on replaying today's policy
+    // against yesterday's run.
+    void this.recordResolvedLimits(savedRun, agent, userId);
 
     // Create event emitter for this run (for SSE streaming)
     this.events.ensureRunEmitter(savedRun.id);
@@ -346,17 +417,29 @@ export class AgentRuntimeService implements OnModuleInit {
   }
 
   /**
-   * List runs for an agent
+   * List runs for an agent.
+   *
+   * `limit` is caller-set, so it needs a ceiling: `?limit=100000` used to put
+   * 100,000 rows in heap each carrying its full `steps` array. The number is
+   * the same one `tools.service.ts` and `gateways.service.ts` already use.
+   * `workingMemory` is projected away — it is the run's scratch state and
+   * nothing in the list response emits it.
    */
   async listRuns(agentId: string, organizationId: string, page = 1, limit = 20) {
-    const skip = (page - 1) * limit;
+    const take = Math.min(
+      Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : DEFAULT_RUNS_PAGE_SIZE,
+      MAX_RUNS_PAGE_SIZE,
+    );
+    const currentPage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const skip = (currentPage - 1) * take;
     const [data, total] = await this.runRepository.findAndCount({
       where: { agentId, organizationId },
       order: { createdAt: 'DESC' },
+      select: AGENT_RUN_LIST_COLUMNS,
       skip,
-      take: limit,
+      take,
     });
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return { data, total, page: currentPage, limit: take, totalPages: Math.ceil(total / take) };
   }
 
   /**
@@ -407,6 +490,34 @@ export class AgentRuntimeService implements OnModuleInit {
   }
 
   /** Get SSE event emitter for a run. */
+  /**
+   * Emit a run_start audit event carrying the resolved limits snapshot.
+   *
+   * Fire and forget: an audit write must never be the reason a run fails
+   * to start, and the ceilings are enforced at the point of use whether
+   * or not this row lands.
+   */
+  private async recordResolvedLimits(
+    run: AgentRun,
+    agent: Agent,
+    userId: string | null,
+  ): Promise<void> {
+    try {
+      const limits = await this.misc.resolveLimits(run);
+      await this.auditLogService?.log({
+        organizationId: run.organizationId,
+        userId: userId ?? undefined,
+        action: AuditAction.RUN_START,
+        resourceType: AuditResource.AGENT,
+        resourceId: agent.id,
+        resourceName: agent.name,
+        details: { runId: run.id, resolvedLimits: limits },
+      });
+    } catch (err: any) {
+      this.logger.warn(`Could not audit resolved limits for run ${run.id}: ${err.message}`);
+    }
+  }
+
   getRunEmitter(runId: string): EventEmitter | null {
     return this.events.getRunEmitter(runId);
   }
@@ -456,7 +567,16 @@ export class AgentRuntimeService implements OnModuleInit {
     if (approval.status === 'approved') {
       run.status = AgentRunStatus.RUNNING;
       await this.runRepository.save(run);
-      await this.runtimeQueue.add('next-step', { runId: run.id }, {
+      // Same seq-from-timestamp rule as the resume path above, and for
+      // the same reason. Without a seq the processor read it as 0 and
+      // enqueued the next step as `step:<runId>:1` -- an id already in
+      // Redis from before the pause, which Bull drops silently. The run
+      // then sat RUNNING with nothing queued until the reaper timed it
+      // out half an hour later with a misleading "worker likely
+      // terminated".
+      const resumeSeq = Date.now();
+      await this.runtimeQueue.add('next-step', { runId: run.id, seq: resumeSeq }, {
+        jobId: `step:${run.id}:${resumeSeq}`,
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
         removeOnComplete: 100,

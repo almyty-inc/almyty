@@ -1,10 +1,10 @@
 {
-  "capturedAt": "2026-06-11T18:30:00.000Z",
-  "baseUrl": "https://app.staging.almyty.com",
-  "theme": "dark",
+  "capturedAt": "2026-09-02T09:36:33.000Z",
+  "baseUrl": "https://app.almyty.com",
+  "theme": "mixed",
   "viewport": {
     "width": 1440,
-    "height": 900
+    "height": 1100
   },
   "screenshots": [
     {
@@ -136,6 +136,68 @@
       "id": "analytics-agents",
       "title": "Analytics \u2192 Agents tab with execution metrics",
       "path": "screenshots/analytics-agents.png"
+    },
+    {
+      "id": "apps-list",
+      "title": "Apps list with a customer-facing product",
+      "path": "screenshots/apps-list.png"
+    },
+    {
+      "id": "apps-detail",
+      "title": "App detail page with Slack, Terminal, and Web distribution cards",
+      "path": "screenshots/apps-detail.png"
+    },
+    {
+      "id": "apps-empty",
+      "title": "Empty app: not shipping anywhere yet",
+      "path": "screenshots/apps-empty.png"
+    },
+    {
+      "id": "apps-agents",
+      "title": "App Agents tab with the product default",
+      "path": "screenshots/apps-agents.png"
+    },
+    {
+      "id": "apps-settings",
+      "capturedAt": "2026-09-08T07:59:28.902Z",
+      "title": "App Settings tab with visitor privacy controls, cost ceiling, and rate limits",
+      "path": "screenshots/apps-settings.png"
+    },
+    {
+      "id": "apps-web-published",
+      "title": "Published Web app distribution",
+      "path": "screenshots/apps-web-published.png"
+    },
+    {
+      "id": "apps-hosted-chat",
+      "title": "Branded hosted chat surface",
+      "path": "screenshots/apps-hosted-chat.png"
+    },
+    {
+      "id": "apps-hosted-chat-privacy",
+      "capturedAt": "2026-09-08T08:04:35.743Z",
+      "title": "Hosted chat privacy menu with visitor export and deletion controls",
+      "path": "screenshots/apps-hosted-chat-privacy.png"
+    },
+    {
+      "id": "apps-slack-credentials",
+      "title": "Slack distribution with Bot token and Signing secret fields",
+      "path": "screenshots/apps-slack-credentials.png"
+    },
+    {
+      "id": "apps-slack-live",
+      "title": "Slack distribution published and live",
+      "path": "screenshots/apps-slack-live.png"
+    },
+    {
+      "id": "apps-build-capabilities",
+      "title": "Build capability refusal when Bun is unavailable",
+      "path": "screenshots/apps-build-capabilities.png"
+    },
+    {
+      "id": "apps-hosted-chat-routing-failure",
+      "title": "Hosted-chat wildcard routing failure",
+      "path": "screenshots/apps-hosted-chat-routing-failure.png"
     }
   ]
 }

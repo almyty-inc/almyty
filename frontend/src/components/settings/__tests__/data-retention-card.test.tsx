@@ -30,6 +30,8 @@ const basePolicy = {
   requestLogsDays: null,
   usageMetricsDays: null,
   auditLogDays: 365,
+  toolExecutionsDays: 14,
+  notificationsDays: null,
 }
 
 describe('DataRetentionCard', () => {
@@ -77,9 +79,75 @@ describe('DataRetentionCard', () => {
         requestLogsDays: null,
         usageMetricsDays: null,
         auditLogDays: 365,
+        toolExecutionsDays: 14,
+        notificationsDays: null,
       })
     })
     expect(successMock).toHaveBeenCalled()
+  })
+
+  // The sweep deletes tool_executions and notifications, the DTO accepts
+  // both, and for a while neither had a field here -- so the two rows the
+  // doc calls out as the heaviest classes could not be set through the
+  // product at all. These pin the rows and the payload.
+  it('renders a row for every class the policy supports, tool executions and notifications included', async () => {
+    mockedGetRetention.mockResolvedValue(basePolicy)
+
+    render(<DataRetentionCard organizationId="org-1" />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/tool executions \(days\)/i)).toHaveValue(14)
+    })
+
+    const notifications = screen.getByLabelText(/notifications \(days\)/i)
+    expect(notifications).toHaveValue(null)
+    expect(notifications).toHaveAttribute('placeholder', 'Keep forever')
+    // Same control and the same bounds as the DTO's @Min/@Max.
+    const toolExecutions = screen.getByLabelText(/tool executions \(days\)/i)
+    expect(toolExecutions).toHaveAttribute('type', 'number')
+    expect(toolExecutions).toHaveAttribute('min', '1')
+    expect(toolExecutions).toHaveAttribute('max', '3650')
+  })
+
+  it('sends tool executions and notifications in the PUT payload when they change', async () => {
+    mockedGetRetention.mockResolvedValue(basePolicy)
+    mockedUpdateRetention.mockResolvedValue(basePolicy)
+
+    render(<DataRetentionCard organizationId="org-1" />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/tool executions \(days\)/i)).toHaveValue(14)
+    })
+
+    fireEvent.change(screen.getByLabelText(/tool executions \(days\)/i), { target: { value: '7' } })
+    fireEvent.change(screen.getByLabelText(/notifications \(days\)/i), { target: { value: '60' } })
+    fireEvent.click(screen.getByRole('button', { name: /save retention policy/i }))
+
+    await waitFor(() => {
+      expect(mockedUpdateRetention).toHaveBeenCalledWith(
+        'org-1',
+        expect.objectContaining({ toolExecutionsDays: 7, notificationsDays: 60 }),
+      )
+    })
+  })
+
+  it('range-checks the two heaviest classes like every other one', async () => {
+    mockedGetRetention.mockResolvedValue(basePolicy)
+
+    render(<DataRetentionCard organizationId="org-1" />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/tool executions \(days\)/i)).toHaveValue(14)
+    })
+
+    fireEvent.change(screen.getByLabelText(/tool executions \(days\)/i), { target: { value: '3651' } })
+    fireEvent.click(screen.getByRole('button', { name: /save retention policy/i }))
+
+    expect(errorMock).toHaveBeenCalledWith(
+      'Invalid retention period',
+      expect.stringContaining('Tool executions'),
+    )
+    expect(mockedUpdateRetention).not.toHaveBeenCalled()
   })
 
   it('rejects out-of-range values client-side without calling the API', async () => {

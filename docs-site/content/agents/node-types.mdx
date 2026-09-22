@@ -1,26 +1,44 @@
 # Node Types
 
-Every step in a workflow agent is a node. There are 10 types, each doing one job,
+Every step in a workflow agent is a node. There are 12 types, each doing one job,
 wired together by edges on the canvas. Drag them from the palette in the
 [builder](/agents/builder); this page is the reference for what each one needs
 and what it hands downstream.
+
+Ten of the twelve are in the palette. The other two — [Verify](#verify) and
+`extract_context` — are produced by the strategy compiler rather than dragged.
+Verify is documented at the bottom of this page; `extract_context` is covered
+with the strategies that use it in
+[docs/strategies.md](https://github.com/almyty-inc/almyty/blob/master/docs/strategies.md).
 
 ![Node palette in the agent builder](/screenshots/agent-builder-node-palette.png)
 
 ## Quick Reference
 
-| Node Type | Required Fields | Output available as |
-|-----------|----------------|---------------------|
+Every key below is read by the executor. A node's config may carry anything
+else, and nothing will read it.
+
+| Node Type | Config keys read | Output available as |
+|-----------|------------------|---------------------|
 | **Input** | `schema` | `{{input.*}}` |
-| **Output** | `mapping` | (terminal node) |
-| **LLM Call** | `providerId`, `userPromptTemplate` | `{{nodes.<id>.output}}` |
-| **Tool Call** | `toolId` | `{{nodes.<id>.output}}` |
-| **Condition** | `expression` | (routes to true/false branches) |
-| **Transform** | `code` | `{{nodes.<id>.output}}` |
-| **Loop** | `iterableExpression` | `{{nodes.<id>.output}}` |
-| **Parallel** | `branches` | `{{nodes.<id>.output}}` |
-| **Merge** | `sources`, `strategy` | `{{nodes.<id>.output}}` |
-| **Sub-Agent** | `agentId` | `{{nodes.<id>.output}}` |
+| **Output** | `mapping`, `source` | (terminal node) |
+| **LLM Call** | `userPromptTemplate` (or `userPrompt`, required), `systemPrompt`, `providerId`, `routing`, `roleKey`, `model`, `temperature`, `maxTokens`, `toolIds` | `{{nodes.<id>.output}}` |
+| **Tool Call** | `toolId` (required), `parameterMapping` | `{{nodes.<id>.output}}` |
+| **Condition** | `expression` (required) | (routes to true/false branches) |
+| **Transform** | `expression` (required) | `{{nodes.<id>.output}}`, a string |
+| **Loop** | `iterableExpression` (required), `maxIterations` | `{{nodes.<id>.output}}`, an array |
+| **Parallel** | none | `{{nodes.<id>.output}}` |
+| **Merge** | `strategy`, `judgePrompt`, `consensusThreshold`, `judgeConfig`, `roleKey`, `model`, `routing` | `{{nodes.<id>.output}}` |
+| **Sub-Agent** | `agentId` or `target` (required), `inputMapping` | `{{nodes.<id>.output}}` |
+| **Verify** | `checkers` (required), `target`, `spec`, `policy` | `{{nodes.<id>.output}}`, a verdict object |
+
+An LLM Call node needs a model from somewhere: a `providerId`, a `routing`
+policy, a `roleKey` the agent defines, or the organization's default routing
+policy. With none of the four the node fails at run time.
+
+Saving a pipeline enforces more than this table — a Condition node's two
+outgoing edges, a Merge node's two incoming ones. See
+[pipeline validation](/agents/pipeline-validation).
 
 ## Input
 
@@ -62,18 +80,19 @@ expressions via `{{input.message}}` or `{{input.context}}`.
 
 ## Output
 
-The exit point of the pipeline. Maps the final result from upstream nodes.
+The exit point of the pipeline. Names the final result.
 
 ### In the UI
 
 1. Click the **Output** node on the canvas
-2. In the config panel, set the **Mapping** expression to reference an upstream node's output
+2. In the config panel, pick an upstream node, or write the template yourself
 
 ### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `mapping` | Template string | Expression resolving to the output value |
+| `mapping` | Template string or object | Rendered against the context. A string result; an object is rendered value by value. |
+| `source` | Dot path | Read instead of `mapping` when `mapping` is absent. Resolved as a raw value, so objects and arrays keep their type. |
 
 ```json
 {
@@ -85,7 +104,15 @@ The exit point of the pipeline. Maps the final result from upstream nodes.
 }
 ```
 
-Every pipeline must have exactly one Output node.
+`mapping` is what the builder writes, and it renders to text: a node whose
+output is an object or an array arrives at the pipeline result as JSON text.
+`source` instead takes a bare dot path with no `{{...}}` around it, for example
+`nodes.llm_1.output`, and preserves the value's type. It is reachable through
+the API; the builder does not write it yet.
+
+With neither set, the node returns every node's output keyed by node id.
+
+A pipeline needs at least one Output node. Two of them are allowed only when they cannot both run in the same execution — on opposite branches of a Condition — because otherwise which one became the run's answer would come down to the order the nodes are stored in.
 
 ## LLM Call
 
@@ -103,7 +130,7 @@ Sends a prompt to a configured LLM provider and returns the response.
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `providerId` | string | -- | ID of the LLM provider to use |
-| `model` | string | Provider default | Specific model (e.g., `gpt-4o`, `claude-sonnet-4-20250514`) |
+| `model` | string | Provider default | Specific model (e.g., `gpt-4o`, `claude-sonnet-5`) |
 | `systemPrompt` | string | -- | System prompt for the LLM |
 | `userPromptTemplate` | string | -- | User prompt with template expressions |
 | `temperature` | number | `0.7` | Sampling temperature (0-2) |
@@ -191,49 +218,75 @@ edges: one for `true` and one for `false`.
 
 ## Transform
 
-Applies a JavaScript transformation to data flowing through the pipeline.
-Transform nodes run in a sandboxed environment.
+Renders a template against the execution context and outputs the rendered text.
+
+### It is a template language, not JavaScript
+
+The expression goes through the same resolver every other node's `{{...}}`
+fields use. That resolver reads `input.*`, `nodes.<id>.output.*` and
+`variables.*` by dot path, own properties only, against a keyword blocklist —
+and nothing else. There are no function calls, no arithmetic, no array
+indexing and no `return`. `{{Date.now()}}` does not evaluate: it fails the
+resolver's path check and the node throws.
+
+The output is the rendered **string**. A template shaped like a JSON object
+therefore produces a JSON string rather than an object, and
+`{{nodes.transform_1.output.summary}}` downstream resolves to an empty string.
+To carry structure between nodes, leave the value in the node that produced it
+and reference that node directly.
 
 ### In the UI
 
 1. Drag a **Transform** node onto the canvas
-2. In the config panel, write JavaScript code in the code editor
-3. Use `{{...}}` expressions to reference upstream data
-4. The code must return a value
+2. In the config panel, write the template
+3. Use `{{...}}` expressions to pull in upstream data
 
 ### Configuration
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `code` | string | JavaScript code that processes input and returns output |
+| `expression` | string | Template rendered against the execution context. Required. |
 
 ```json
 {
   "id": "transform_1",
   "type": "transform",
   "data": {
-    "code": "const data = {{nodes.tool_1.output}};\nreturn data.map(item => item.name).join(', ');"
+    "expression": "Summary: {{nodes.llm_1.output}} (source: {{input.url}})"
   }
 }
 ```
 
 ## Loop
 
-Iterates over an array, executing downstream nodes for each item.
+Resolves an expression to an array and outputs that array, capped at
+`maxIterations`.
+
+### It does not run downstream nodes once per item
+
+The engine executes a pipeline in topological layers, and a Loop node is one
+node in one layer: it resolves its iterable, caps it, and hands the whole list
+downstream in a single pass. It does not re-run the nodes after it once per
+item, and there is no loop context — `{{loop.item}}` and `{{loop.index}}` name
+nothing in the execution context, so an expression using either resolves to an
+empty string.
+
+What the node is for is producing a list at a known point in the graph: feed
+`{{nodes.loop_1.output}}` to a tool that takes an array, to an LLM Call prompt
+that handles the whole list in one call, or to a **Parallel** node's branches.
 
 ### In the UI
 
 1. Drag a **Loop** node onto the canvas
 2. In the config panel, set the **Iterable Expression** to an array reference
-3. Optionally set a **Max Iterations** safety limit
-4. Connect downstream nodes that should run per iteration
+3. Optionally lower **Max Iterations**
 
 ### Configuration
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `iterableExpression` | string | Template expression resolving to an array |
-| `maxIterations` | number | Safety limit for iteration count (default: 100) |
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `iterableExpression` | string | -- | Template expression resolving to an array. Required. |
+| `maxIterations` | number | `100` | How many items are kept. |
 
 ```json
 {
@@ -246,44 +299,47 @@ Iterates over an array, executing downstream nodes for each item.
 }
 ```
 
-Inside the loop body, access the current item as `{{loop.item}}` and the
-index as `{{loop.index}}`.
+An expression that is a single `{{...}}` reference keeps its type, so an array
+stays an array. Anything else is rendered to a string, and any non-array value
+is wrapped in a one-element array.
 
 ## Parallel
 
-Executes multiple downstream branches simultaneously and aggregates results.
+Marks a fan-out point. The engine executes a pipeline in topological layers, so
+every node wired to a Parallel node's output already runs concurrently, in the
+same layer. The concurrency is the engine's; the node itself is a marker.
 
 ### In the UI
 
 1. Drag a **Parallel** node onto the canvas
-2. In the config panel, select which downstream nodes to run concurrently
-3. Choose an **Aggregation** strategy: `array`, `object`, or `first`
+2. Connect its output handle to each branch you want to run at the same time
+3. Connect those branches into a **Merge** node to collect the results
 
 ### Configuration
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `branches` | string[] | IDs of downstream nodes to run in parallel |
-| `aggregation` | string | How to combine results: `array`, `object`, or `first` |
+None. A Parallel node reads nothing from its config — there is no `branches`
+list and no `aggregation` setting. Which nodes run together is decided by the
+edges you draw, and how their results combine is decided by the **Merge** node
+you draw them into.
 
 ```json
 {
   "id": "parallel_1",
   "type": "parallel",
-  "data": {
-    "branches": ["llm_1", "llm_2", "tool_1"],
-    "aggregation": "array"
-  }
+  "data": {}
 }
 ```
 
-Results are available as `{{nodes.parallel_1.output}}`, which is an array or
-object depending on the aggregation strategy.
+The node's own output is a pass-through of its first incoming edge's output,
+falling back to the invocation input when it has none. The branch results are
+read from the Merge node, or from each branch directly with
+`{{nodes.<branch id>.output}}`.
 
 ## Merge
 
-Combines outputs from multiple upstream nodes into a single value. Use this
-after parallel branches or condition branches to unify data before continuing.
+Collects the outputs of every node with an edge into it and applies a merge
+strategy. Use it after parallel branches or condition branches to unify data
+before continuing.
 
 ### In the UI
 
@@ -291,23 +347,46 @@ after parallel branches or condition branches to unify data before continuing.
 2. Connect the branches you want to combine as inputs
 3. In the config panel, select a **Strategy** for combining the values
 
+### What it merges
+
+The incoming edges, and only those. There is no `sources` list: the node reads
+the output of every node whose edge targets it, in edge order.
+
 ### Configuration
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `sources` | string[] | IDs of upstream nodes whose outputs to merge |
-| `strategy` | string | Merge strategy: `concat`, `object`, or `first_non_null` |
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `strategy` | string | `first_response` | One of `first_response`, `concatenate`, `best_of_n`, `consensus`. Any other value behaves as `first_response`. |
+| `judgePrompt` | string | -- | `best_of_n` only: the rubric sent to the judge. |
+| `consensusThreshold` | number | `0.5` | `consensus` only: the share of branches that must agree. |
+| `judgeConfig` | object | -- | Pins the judging call: `{ providerId?, model?, routing?, temperature?, maxTokens? }`. |
+| `roleKey`, `model`, `routing` | -- | -- | Read for the judging call when `judgeConfig` does not pin them. |
 
 ```json
 {
   "id": "merge_1",
   "type": "merge",
   "data": {
-    "sources": ["llm_1", "llm_2"],
-    "strategy": "object"
+    "strategy": "best_of_n",
+    "judgePrompt": "Prefer the answer that cites a source."
   }
 }
 ```
+
+What each strategy outputs:
+
+| Strategy | Output |
+|----------|--------|
+| `first_response` | the first incoming output |
+| `concatenate` | an array of every incoming output |
+| `best_of_n` | the incoming output a judge model picked |
+| `consensus` | `{ answer, agreement, consensusReached, threshold, responses }` |
+
+`best_of_n` and `consensus` make a model call. It resolves the way an LLM Call
+node's does — a `roleKey` the agent defines, then `judgeConfig.providerId`,
+then a routing policy, then the organization's default routing policy — and
+the node fails if none of them is set. With one incoming branch neither
+strategy calls a judge; the single answer is returned as-is.
 
 The merged result is available as `{{nodes.merge_1.output}}`.
 
@@ -343,3 +422,75 @@ modular architectures.
 ```
 
 The sub-agent's output is available as `{{nodes.sub_1.output}}`.
+
+`inputMapping` also accepts an object — `{ "query": "{{nodes.llm_1.output}}" }` —
+and both shapes resolve the same way. With no mapping at all, the whole
+invocation input is passed through to the sub-agent unchanged.
+
+## Verify
+
+Judges a value against a spec using a panel of **refute-only** checkers. Each
+checker runs in its own bounded context, with its own provider and model, all in
+parallel; their verdicts are then merged under a policy. Pointing checkers at
+provider entities from different vendors is how you get a multi-vendor check,
+and it is the reason a checker names a `providerId` of its own rather than
+inheriting the pipeline's.
+
+A checker's only job is to refute. It sees the target and the spec and answers
+with structured JSON.
+
+### Where it comes from
+
+This is the one node type with no palette entry. A `verify` node reaches a graph
+either from the strategy compiler — the `cascade` and `best_of_n` strategies both
+compile a `verify` step bound to the `verifier` role slot — or from a pipeline
+definition written directly against the API. Ejecting a strategy to an editable
+graph (Execution tab → Eject) leaves the compiled `verify` node in place.
+
+### It never throws on a failing verdict
+
+A failing check is data, not an error: the node emits the failure list and
+completes, so a downstream **Condition** node can branch on it and decide to
+retry, escalate or halt. A checker that itself errors or returns unparseable
+JSON becomes verdict `error`, and the policy decides whether that blocks.
+
+### Configuration
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `checkers` | array | At least one. Each is `{ name?, providerId, roleKey?, model?, instructions?, temperature?, maxTokens? }`, with a `providerId` or a `roleKey` required. An empty list fails the node. |
+| `target` | any / string | The value to check. A string is template-resolved. Defaults to the incoming node output. |
+| `spec` | any / string | The rules to check against. A string is template-resolved; an object is serialized. |
+| `policy` | string | `any_fail_blocks` (default), `all_pass` or `majority`. |
+
+```json
+{
+  "id": "check",
+  "type": "verify",
+  "data": {
+    "target": "{{nodes.draft.output}}",
+    "spec": "Must cite a source for every figure. Must not exceed 200 words.",
+    "policy": "any_fail_blocks",
+    "checkers": [
+      { "name": "cites", "providerId": "provider-uuid-anthropic" },
+      { "name": "length", "providerId": "provider-uuid-openai" }
+    ]
+  }
+}
+```
+
+### Output
+
+`{{nodes.check.output}}` is a verdict object rather than a bare value:
+
+| Field | Description |
+|-------|-------------|
+| `verdict` | `pass` or `fail` |
+| `passed` | the same thing as a boolean, for `condition` expressions |
+| `policy` | the policy the merge actually used |
+| `failures` | one entry per refutation: `{ rule, evidence, checker }` |
+| `passed_rules` | the rules no checker could refute |
+| `checkers` | per-checker `{ checker, verdict, error? }` |
+
+Cost and tokens are summed across the panel and accounted to the node like any
+other call, so a check's price shows up in the run.

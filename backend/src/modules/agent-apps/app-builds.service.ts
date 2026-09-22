@@ -1,0 +1,498 @@
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
+import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
+import { createHash } from 'crypto';
+
+import { AppBuild, BuildStatus } from '../../entities/app-build.entity';
+import { AgentApp } from '../../entities/agent-app.entity';
+import {
+  AppDistribution,
+  DistributionTarget,
+} from '../../entities/agent-app-distribution.entity';
+import { StorageService } from '../files/storage.service';
+import {
+  BUILD_PLATFORMS,
+  MacPackaging,
+  SigningKind,
+  artifactExtension,
+  canBuildHere,
+  describeOutcome,
+  platformsFor,
+} from './build-targets';
+import { signingReadiness } from './build-signing';
+import { downloadedFilename } from './build-handoff';
+import { buildsRunOnWorker } from './build-mode';
+import { ProcessToolchainRunner, TOOL_FOR_TARGET, toolchainReadiness } from './build-toolchain';
+import { Readable } from 'stream';
+
+export const APP_BUILD_QUEUE = 'app-build';
+
+/** How long a finished artifact stays downloadable. */
+export const ARTIFACT_TTL_DAYS = 30;
+
+/** How long a download link stays valid once minted. */
+export const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
+
+/**
+ * How long a build may sit in QUEUED or RUNNING before the sweep
+ * declares it dead. Generously above the slowest real build (a
+ * multi-platform Electron package is minutes, not hours), because the
+ * cost of waiting is a stale row and the cost of being wrong is
+ * failing a build that was about to succeed.
+ */
+export const BUILD_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
+export interface RequestBuildDto {
+  target: DistributionTarget;
+  platform: string;
+  version?: string;
+  macPackaging?: MacPackaging;
+}
+
+/**
+ * Producing a downloadable artifact, and handing back a link.
+ *
+ * The build runs here rather than on the customer's machine, which is
+ * the difference between "download your app" and "install Node and run
+ * this command". Signing still uses their own identity, uploaded to the
+ * credential vault, the way every CI service does it.
+ */
+@Injectable()
+export class AppBuildsService {
+  private readonly logger = new Logger(AppBuildsService.name);
+  private readonly toolchain = new ProcessToolchainRunner();
+
+  constructor(
+    @InjectRepository(AppBuild)
+    private readonly buildRepository: Repository<AppBuild>,
+    @InjectRepository(AgentApp)
+    private readonly appRepository: Repository<AgentApp>,
+    @InjectRepository(AppDistribution)
+    private readonly distributionRepository: Repository<AppDistribution>,
+    @InjectQueue(APP_BUILD_QUEUE)
+    private readonly queue: Queue,
+    private readonly storage: StorageService,
+  ) {}
+
+  private async findApp(organizationId: string, slug: string): Promise<AgentApp> {
+    const app = await this.appRepository.findOne({
+      where: { slug: (slug || '').trim().toLowerCase(), organizationId },
+    });
+    if (!app) throw new NotFoundException('App not found');
+    return app;
+  }
+
+  /**
+   * Queue a build.
+   *
+   * Everything that can be known up front is checked here rather than
+   * inside the job: an unknown platform, a target that produces no
+   * file, a missing toolchain. Discovering any of those twenty minutes
+   * into a queued job is a worse experience than being told at once.
+   */
+  async request(
+    organizationId: string,
+    slug: string,
+    dto: RequestBuildDto,
+    requestedBy: string | null,
+  ): Promise<AppBuild> {
+    const app = await this.findApp(organizationId, slug);
+
+    if (!BUILD_PLATFORMS[dto.platform]) {
+      throw new BadRequestException(`Unknown platform: ${dto.platform}`);
+    }
+
+    const here = canBuildHere(dto.platform, dto.target);
+    if (!here.ok) throw new BadRequestException(here.reason ?? 'Cannot build that here.');
+
+    const readiness = await toolchainReadiness(dto.target, this.toolchain);
+    if (!readiness.ready) throw new BadRequestException(readiness.reason ?? 'Cannot build that.');
+
+    const build = await this.buildRepository.save(
+      this.buildRepository.create({
+        organizationId,
+        appId: app.id,
+        target: dto.target,
+        platform: dto.platform,
+        status: BuildStatus.QUEUED,
+        version: dto.version ?? null,
+        requestedBy,
+      }),
+    );
+
+    try {
+      await this.queue.add(
+        { buildId: build.id, macPackaging: dto.macPackaging ?? 'zip' },
+        {
+          // A failed build is rarely fixed by running it again: the usual
+          // causes are a bad certificate or a missing tool. Retrying would
+          // burn minutes of build time to reach the same answer.
+          attempts: 1,
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
+    } catch (error: any) {
+      // The row has to exist before the job, because the job is
+      // addressed by its id — so if the enqueue fails, the row is left
+      // QUEUED with nothing to run it and nothing to reap it (the
+      // artifact sweep only touches SUCCEEDED builds). Fail it here so
+      // it stops claiming to be waiting.
+      build.status = BuildStatus.FAILED;
+      build.error = `Could not be queued: ${error?.message ?? error}`;
+      build.finishedAt = new Date();
+      await this.buildRepository.save(build).catch((saveErr: any) =>
+        this.logger.error(
+          `Build ${build.id} could not be queued and could not be marked failed: ${saveErr?.message ?? saveErr}`,
+        ),
+      );
+      throw error;
+    }
+
+    return build;
+  }
+
+  async list(organizationId: string, slug: string): Promise<AppBuild[]> {
+    const app = await this.findApp(organizationId, slug);
+    return this.buildRepository.find({
+      where: { appId: app.id, organizationId },
+      order: { createdAt: 'DESC' },
+      take: 50,
+    });
+  }
+
+  /**
+   * Load a build without an organization scope.
+   *
+   * For the queue worker only. It runs outside a request, and the id it
+   * holds came from a row we wrote rather than from a caller, so there
+   * is nothing to scope against. Every request path uses findOne, which
+   * scopes.
+   */
+  async findByIdUnscoped(buildId: string): Promise<AppBuild | null> {
+    return this.buildRepository.findOne({ where: { id: buildId } });
+  }
+
+  /**
+   * What this deployment can actually do for a target.
+   *
+   * Answered before anyone presses Build, because the alternative is
+   * discovering that the host has no `rcodesign` by queueing a build
+   * and reading the result. Nothing here is derived from configuration:
+   * it asks the host whether each tool is present.
+   */
+  async capabilities(target: DistributionTarget): Promise<{
+    canBuild: boolean;
+    buildReason: string | null;
+    signing: Array<{ kind: SigningKind; ready: boolean; reason: string | null }>;
+  }> {
+    // One answer per signing kind the target's platforms use, rather
+    // than per platform, since the tool is what is present or absent.
+    const kinds = [
+      ...new Set(
+        platformsFor(target)
+          .map((platform) => platform.signing)
+          .filter((kind): kind is SigningKind => kind !== 'none'),
+      ),
+    ];
+
+    // When builds run on a dedicated worker, this API pod has no
+    // toolchain of its own to probe — the worker image carries the full
+    // set (bun, npx, rcodesign, osslsigncode), so report that rather
+    // than the API pod's empty result, which would wrongly say nothing
+    // can be built or signed.
+    if (buildsRunOnWorker()) {
+      const known = target in TOOL_FOR_TARGET;
+      return {
+        canBuild: known,
+        buildReason: known ? null : `${target} does not produce a downloadable file.`,
+        signing: kinds.map((kind) => ({ kind, ready: true, reason: null })),
+      };
+    }
+
+    const build = await toolchainReadiness(target, this.toolchain);
+    const signing = await Promise.all(
+      kinds.map(async (kind) => {
+        const readiness = await signingReadiness(kind, this.toolchain);
+        return { kind, ready: readiness.ready, reason: readiness.reason };
+      }),
+    );
+
+    return { canBuild: build.ready, buildReason: build.reason, signing };
+  }
+
+  /**
+   * The app a build belongs to, unscoped.
+   *
+   * For the queue, which has an id from a row we wrote rather than a
+   * request to authorise.
+   */
+  async appFor(appId: string): Promise<AgentApp | null> {
+    return this.appRepository.findOne({ where: { id: appId } });
+  }
+
+  /** The distribution a build is for, unscoped, for the same reason. */
+  async distributionFor(appId: string, target: string): Promise<AppDistribution | null> {
+    return this.distributionRepository.findOne({
+      where: { appId, target: target as DistributionTarget },
+    });
+  }
+
+  async findOne(organizationId: string, buildId: string): Promise<AppBuild> {
+    const build = await this.buildRepository.findOne({
+      where: { id: buildId, organizationId },
+    });
+    if (!build) throw new NotFoundException('Build not found');
+    return build;
+  }
+
+  /**
+   * A link the operator can hand out.
+   *
+   * Short lived and minted per request rather than stored, so a URL
+   * that leaks into a chat log or a ticket stops working. The artifact
+   * itself expires separately.
+   */
+  async downloadUrl(organizationId: string, buildId: string): Promise<string> {
+    const build = await this.findOne(organizationId, buildId);
+
+    if (build.status !== BuildStatus.SUCCEEDED) {
+      throw new BadRequestException(
+        build.status === BuildStatus.FAILED
+          ? 'That build failed, so there is nothing to download.'
+          : 'That build has not finished yet.',
+      );
+    }
+    if (!build.isDownloadable()) {
+      throw new BadRequestException(
+        'That artifact has expired. Build it again to get a fresh download.',
+      );
+    }
+
+    // Object storage hands the browser a link and keeps the bytes off
+    // the API. A local directory has nothing to sign, so the API serves
+    // the file itself rather than returning a URL that resolves to
+    // nothing, which is what this used to do.
+    if (this.storage.canPresign) {
+      return this.storage.getSignedUrl(build.artifactKey!, DOWNLOAD_URL_TTL_SECONDS);
+    }
+
+    const app = await this.appRepository.findOne({
+      where: { id: build.appId, organizationId },
+    });
+    if (!app) throw new NotFoundException('That app no longer exists.');
+    return `/apps/${app.slug}/builds/${build.id}/artifact`;
+  }
+
+  /**
+   * The artifact itself, for deployments that cannot presign.
+   *
+   * Runs the same ownership and expiry checks as the link, because
+   * this is the link on those deployments rather than a shortcut past
+   * it.
+   */
+  async artifact(
+    organizationId: string,
+    buildId: string,
+  ): Promise<{ body: Readable; filename: string; bytes?: number }> {
+    const build = await this.findOne(organizationId, buildId);
+
+    if (build.status !== BuildStatus.SUCCEEDED) {
+      throw new BadRequestException('That build produced nothing to download.');
+    }
+    if (!build.isDownloadable()) {
+      throw new BadRequestException(
+        'That artifact has expired. Build it again to get a fresh download.',
+      );
+    }
+
+    const app = await this.appRepository.findOne({
+      where: { id: build.appId, organizationId },
+    });
+    if (!app) throw new NotFoundException('That app no longer exists.');
+
+    return {
+      // Piped, not buffered. A bun --compile binary is ~60-100MB and an
+      // Electron desktop package 100-200MB, with no size cap anywhere on
+      // this path -- so reading one into heap and then res.send()ing it
+      // (which copies) was an OOM on its own, on a pod that peaks around
+      // 286MB. artifactBytes is on the row, so the length header
+      // survives.
+      body: await this.storage.downloadStream(build.artifactKey!),
+      bytes: build.artifactBytes ? Number(build.artifactBytes) : undefined,
+      // Named after the product rather than a row id, because this is
+      // what lands in someone's Downloads folder. Shared with the
+      // instructions we hand out, so the two cannot name different
+      // files.
+      filename: downloadedFilename(
+        app.slug,
+        build.version,
+        build.platform,
+        build.artifactKey,
+      ),
+    };
+  }
+
+  /** Where an artifact lives. Scoped by org so keys cannot collide. */
+  static artifactKey(
+    build: Pick<AppBuild, 'organizationId' | 'appId' | 'id'>,
+    extension: string | null,
+  ) {
+    const base = `app-builds/${build.organizationId}/${build.appId}/${build.id}`;
+    return extension ? `${base}.${extension}` : base;
+  }
+
+  async markRunning(buildId: string): Promise<void> {
+    await this.buildRepository.update(
+      { id: buildId },
+      { status: BuildStatus.RUNNING, startedAt: new Date() },
+    );
+  }
+
+  /**
+   * Store the artifact and mark the build done.
+   *
+   * The checksum is recorded so a download can be verified, which
+   * matters more than usual here: this is an executable someone will
+   * run on their own machine.
+   */
+  async succeed(
+    build: AppBuild,
+    artifact: Buffer,
+    options: {
+      signed: boolean;
+      log: string;
+      macPackaging?: MacPackaging;
+      /** Why it is unsigned, when it could have been signed. */
+      signingNote?: string | null;
+    },
+  ): Promise<AppBuild> {
+    // Depends on the target as well as the platform: a terminal app is
+    // a bare executable, not a bundle to zip.
+    const extension = artifactExtension(
+      build.target,
+      build.platform,
+      options.macPackaging ?? 'zip',
+    );
+
+    const key = AppBuildsService.artifactKey(build, extension);
+    await this.storage.upload(key, artifact, 'application/octet-stream');
+
+    const expires = new Date();
+    expires.setDate(expires.getDate() + ARTIFACT_TTL_DAYS);
+
+    build.status = BuildStatus.SUCCEEDED;
+    build.artifactKey = key;
+    build.artifactBytes = String(artifact.length);
+    build.checksum = createHash('sha256').update(artifact).digest('hex');
+    build.signed = options.signed;
+    build.signingNote = options.signingNote ?? null;
+    build.log = options.log;
+    build.error = null;
+    build.finishedAt = new Date();
+    build.artifactExpiresAt = expires;
+
+    return this.buildRepository.save(build);
+  }
+
+  async fail(build: AppBuild, error: string, log: string): Promise<AppBuild> {
+    build.status = BuildStatus.FAILED;
+    build.error = error;
+    build.log = log;
+    build.finishedAt = new Date();
+    return this.buildRepository.save(build);
+  }
+
+  /**
+   * Drop artifacts past their expiry.
+   *
+   * Deletes the file but keeps the row: the history of what was built,
+   * and whether it was signed, is what a later support question needs,
+   * and it costs nothing to keep.
+   *
+   * The "still has a file" clause is `Not(IsNull())`, not `Not(null)`.
+   * The second compiles and reads the same, and TypeORM renders it as
+   * `"artifactKey" != $1` with $1 bound to NULL, which in SQL is never
+   * true -- so this swept nothing at all. The hourly job ran, found
+   * zero rows every time and logged nothing, while every artifact this
+   * deployment ever built (60-200MB each) stayed in object storage for
+   * ever.
+   */
+  async sweepExpiredArtifacts(now: Date = new Date()): Promise<number> {
+    const expired = await this.buildRepository.find({
+      where: {
+        status: BuildStatus.SUCCEEDED,
+        artifactExpiresAt: LessThan(now),
+        artifactKey: Not(IsNull()),
+      },
+      take: 200,
+    });
+
+    let removed = 0;
+    for (const build of expired) {
+      try {
+        await this.storage.delete?.(build.artifactKey!);
+      } catch (err: any) {
+        // A file already gone is the expected case on a retry, so it
+        // must not stop the sweep clearing the row's pointer.
+        this.logger.warn(`Could not delete artifact ${build.artifactKey}: ${err?.message ?? err}`);
+      }
+      build.artifactKey = null;
+      await this.buildRepository.save(build);
+      removed += 1;
+    }
+    return removed;
+  }
+
+  /**
+   * Give up on builds whose job is never coming back.
+   *
+   * Nothing else ever moves a build out of QUEUED or RUNNING except the
+   * worker that owns it, and there are several ways for that worker to
+   * stop existing: the pod is evicted or OOM-killed mid-compile, Redis
+   * drops the queue, or the job is delivered and the process dies
+   * before `fail()` runs. `attempts: 1` means Bull will not hand the
+   * job to anyone else, and the artifact sweep only looks at SUCCEEDED
+   * rows -- so the build sat at "Building..." in the panel for ever and
+   * the operator had no way to tell a dead build from a slow one.
+   *
+   * Conditional on the row still being un-finished, so a build that
+   * completes between the SELECT and the write keeps its own outcome
+   * rather than being overwritten with a failure that did not happen.
+   */
+  async failStaleBuilds(now: Date = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - BUILD_STALE_AFTER_MS);
+    const stuck = await this.buildRepository.find({
+      where: [
+        { status: BuildStatus.QUEUED, createdAt: LessThan(cutoff) },
+        { status: BuildStatus.RUNNING, createdAt: LessThan(cutoff) },
+      ],
+      take: 200,
+    });
+
+    let failed = 0;
+    for (const build of stuck) {
+      const result = await this.buildRepository.update(
+        { id: build.id, status: In([BuildStatus.QUEUED, BuildStatus.RUNNING]) },
+        {
+          status: BuildStatus.FAILED,
+          error:
+            'The build never finished. The machine running it stopped before it reported an outcome; build it again.',
+          finishedAt: now,
+        },
+      );
+      if ((result.affected ?? 0) > 0) failed += 1;
+    }
+    if (failed > 0) {
+      this.logger.warn(`Gave up on ${failed} build(s) that never reported an outcome`);
+    }
+    return failed;
+  }
+
+  /** What the operator will get, for showing before they commit. */
+  preview(platform: string, willBeSigned: boolean, macPackaging: MacPackaging = 'zip') {
+    return describeOutcome(platform, willBeSigned, macPackaging);
+  }
+}

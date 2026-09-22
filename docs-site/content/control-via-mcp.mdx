@@ -26,7 +26,7 @@ Authenticate once with `npx @almyty/auth login`; the server announces itself as 
 
 ## What your assistant can do
 
-The control endpoint exposes 30 management tools:
+The control endpoint exposes 42 management tools:
 
 | Area | Tools |
 | --- | --- |
@@ -34,6 +34,7 @@ The control endpoint exposes 30 management tools:
 | **Tools** | `list_tools`, `delete_tool` |
 | **Gateways** | `create_gateway`, `list_gateways`, `delete_gateway`, `assign_tools_to_gateway`, `add_auth_to_gateway`, `remove_auth_from_gateway` |
 | **Agents** | `create_agent`, `list_agents` |
+| **Agent Factory** | `list_apps`, `create_app`, `get_app`, `check_app`, `update_app`, `delete_app`, `add_distribution`, `remove_distribution`, `publish_distribution`, `unpublish_distribution`, `build_app`, `list_builds` |
 | **AI Models** | `add_provider`, `list_providers` |
 | **Memory** | `memory_put`, `memory_get`, `memory_list`, `memory_search`, `memory_delete`, `memory_supersede`, `memory_consolidate`, `memory_sync`, `memory_transfer`, `memory_list_backends`, `memory_backends_health` |
 
@@ -46,6 +47,17 @@ Ask your assistant, in plain language:
 ```
 
 It chains the management tools: `import_schema`, `check_import_status`, `list_tools`, `create_gateway`, `assign_tools_to_gateway`, `add_auth_to_gateway`, and hands you back a ready endpoint, without you touching the UI.
+
+Or ship an agent as a product, end to end:
+
+```text
+> Turn my support-bot agent into an app called Acme Support, set a $2 cost
+> cap, add a Slack distribution, and publish it.
+```
+
+It chains `create_app`, `update_app` (the limits a public product needs),
+`add_distribution`, `check_app`, and `publish_distribution`, and hands you
+back a live channel.
 
 ## What's not exposed
 

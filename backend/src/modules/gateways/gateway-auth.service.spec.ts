@@ -762,14 +762,20 @@ describe('GatewayAuthService - Real Business Logic', () => {
       jest.spyOn(gatewayRepository, 'findOne').mockResolvedValue(gateway);
 
       const auths = [
-        { id: 'auth-1', type: GatewayAuthType.API_KEY },
-        { id: 'auth-2', type: GatewayAuthType.JWT },
-      ] as GatewayAuth[];
+        { id: 'auth-1', type: GatewayAuthType.API_KEY, configuration: {} },
+        // A JWT auth carries the HMAC signing key in plaintext.
+        { id: 'auth-2', type: GatewayAuthType.JWT, configuration: { secret: 'hmac-signing-key', issuer: 'almyty' } },
+      ] as unknown as GatewayAuth[];
       jest.spyOn(gatewayAuthRepository, 'find').mockResolvedValue(auths);
 
       const result = await service.getGatewayAuths('gateway-1', 'org-1');
 
-      expect(result).toBe(auths);
+      // Returned masked, not as stored: this route is open to `member`,
+      // and whoever holds that secret can mint gateway JWTs with any
+      // claims they like.
+      expect(JSON.stringify(result)).not.toContain('hmac-signing-key');
+      expect(result[1].configuration.issuer).toBe('almyty');
+      expect(result.map((a) => a.id)).toEqual(['auth-1', 'auth-2']);
       expect(gatewayAuthRepository.find).toHaveBeenCalledWith({
         where: { gatewayId: 'gateway-1' },
         order: { createdAt: 'ASC' },

@@ -1,4 +1,4 @@
-import { Inject, Optional, forwardRef } from '@nestjs/common';
+import { ConflictException, Inject, Optional, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindManyOptions, Like, MoreThanOrEqual } from 'typeorm';
@@ -14,17 +14,30 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
+import { canPublishHostedChat } from './channels/hosted-chat.config';
+import { EE_ENTITLEMENTS } from '../licensing/license.constants';
+import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import {
   encryptChannelConfigSecrets,
+  hasInlineChannelSecret,
   restoreMaskedChannelSecrets,
+  splitChannelConfigSecrets,
   type ChannelSecretEnvelope,
 } from './channels/channel-config.helper';
+import { ChannelCredentialService } from './channels/channel-credential.service';
 import { encryptField as platformEncryptField } from '../../common/security/field-crypto';
 import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
 import { EmailProvisioningService } from './channels/email-provisioning.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+
+/**
+ * The partial unique index that actually reserves a hosted-chat slug.
+ * Named here because the service has to recognise its 23505.
+ */
+export const HOSTED_CHAT_SLUG_INDEX = 'UQ_gateways_hosted_chat_slug';
+
 export interface CreateGatewayDto {
   name: string;
   description?: string;
@@ -39,7 +52,10 @@ export interface CreateGatewayDto {
     requestsPerDay?: number;
     burstLimit?: number;
     windowSize?: number;
+    perVisitorPerHour?: number;
+    perIpPerHour?: number;
   };
+
   corsConfig?: {
     origins: string[];
     methods: string[];
@@ -69,6 +85,14 @@ export interface CreateGatewayDto {
 export interface UpdateGatewayDto {
   name?: string;
   description?: string;
+  /**
+   * Which agent answers here.
+   *
+   * Applied by the Object.assign below and always has been; it was
+   * simply absent from this type, so a caller repointing a gateway had
+   * to cast. Declaring it is what makes that caller's intent checkable.
+   */
+  agentId?: string;
   configuration?: Record<string, any>;
   rateLimitConfig?: {
     enabled: boolean;
@@ -77,7 +101,10 @@ export interface UpdateGatewayDto {
     requestsPerDay?: number;
     burstLimit?: number;
     windowSize?: number;
+    perVisitorPerHour?: number;
+    perIpPerHour?: number;
   };
+
   corsConfig?: {
     origins: string[];
     methods: string[];
@@ -136,6 +163,20 @@ export interface GatewayStats {
   }>;
 }
 
+/**
+ * The hosted-chat refusals that are about what an organization has paid
+ * for, as opposed to how an operator has configured a surface.
+ *
+ * Only these are enforced server-side on write. The rest — the cost cap
+ * and rate limits a public link needs — depend on values that do not
+ * exist on a gateway, so this path cannot judge them.
+ */
+const ENTITLEMENT_REFUSALS = new Set([
+  'WHITE_LABEL_NOT_ENTITLED',
+  'DISCLOSURE_REMOVAL_NOT_ENTITLED',
+  'AUTH_MODE_NOT_ENTITLED',
+]);
+
 @Injectable()
 export class GatewaysService {
   private readonly logger = new Logger(GatewaysService.name);
@@ -172,7 +213,69 @@ export class GatewaysService {
     // path (byte-identical to the pre-KMS behavior); when present, a BYO-KMS
     // org's secrets are wrapped with the customer CMK.
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
+    // Optional for the same reason. When present, channel secrets are
+    // moved to the credential store instead of being encrypted inline.
+    @Optional() private readonly channelCredentials?: ChannelCredentialService,
+    // Optional for the same reason. Absent means unentitled, which is the
+    // safe answer for the checks below.
+    @Optional() private readonly orgLicense?: OrgLicenseResolver,
   ) {}
+
+  /**
+   * Refuse a hosted-chat configuration the organization is not entitled to.
+   *
+   * canPublishHostedChat existed and was called from exactly one place:
+   * the builder component, in the browser. Nothing on the server ran it,
+   * and the gateway write path has no HOSTED_CHAT case at all -- so a
+   * PATCH setting `whiteLabel: true` and `aiDisclosure: ""` was simply
+   * accepted, and the public page then dropped both the almyty mark and
+   * the AI disclosure. The disclosure is an EU AI Act Art. 50 control,
+   * not decoration, so a browser-only check was never enough.
+   */
+  private async assertHostedChatEntitled(
+    organizationId: string,
+    configuration: Record<string, any> | undefined,
+  ): Promise<void> {
+    const hostedChat = configuration?.hostedChat;
+    if (!hostedChat) return;
+
+    const entitled = async (key: string) => {
+      try {
+        return this.orgLicense ? await this.orgLicense.hasForOrg(organizationId, key) : false;
+      } catch {
+        return false;
+      }
+    };
+
+    // Entitlement refusals only.
+    //
+    // canPublishHostedChat also gates a public link on a cost cap and
+    // rate limits, and those values do not exist on a gateway: they live
+    // on AgentApp.limits, and the builder reads them from the gateway row
+    // rather than from this config blob. Passing the blob's (absent) keys
+    // in made the context permanently null, so every public_link save --
+    // the schema default, and the ordinary case -- was refused with
+    // PUBLIC_LINK_NEEDS_COST_CAP and no value an operator could set to
+    // clear it. That was a regression this method introduced.
+    //
+    // What belongs here is the half the browser must not be trusted with:
+    // whether this organization may remove the almyty mark, blank the AI
+    // disclosure, or use an enterprise auth mode.
+    const check = canPublishHostedChat(hostedChat as any, {
+      hasEnterpriseAuth: await entitled(EE_ENTITLEMENTS.SSO),
+      hasWhiteLabel: await entitled(EE_ENTITLEMENTS.WHITE_LABEL),
+    });
+
+    const entitlementRefusals = check.refusals.filter(r => ENTITLEMENT_REFUSALS.has(r.code));
+    if (entitlementRefusals.length > 0) {
+      throw new BadRequestException({
+        success: false,
+        code: 'HOSTED_CHAT_NOT_PUBLISHABLE',
+        message: entitlementRefusals.map(r => r.message).join(' '),
+        refusals: entitlementRefusals,
+      });
+    }
+  }
 
   /**
    * Keep the persistent discord gateway connection in sync with the
@@ -230,6 +333,71 @@ export class GatewaysService {
   }
 
   /**
+   * Reserve a hosted-chat subdomain globally.
+   *
+   * App slugs are tenant-scoped, but a hosted chat's DNS name is not:
+   * `{slug}.almyty.app` is one public address for the whole deployment.
+   * Letting two organizations publish the same slug makes the public
+   * lookup ambiguous and can route one tenant to another tenant's agent.
+   *
+   * This check is a SELECT before an INSERT, so it cannot be atomic on
+   * its own. The thing that actually reserves the address is the partial
+   * unique index `UQ_gateways_hosted_chat_slug`; this runs first only so
+   * the ordinary case gets a readable message instead of a driver error.
+   * The loser of a genuine race comes back through
+   * hostedChatSlugConflict() with the same conflict.
+   */
+  private async assertHostedChatSlugAvailable(
+    configuration: Record<string, any> | undefined,
+    allowedGatewayId?: string,
+  ): Promise<void> {
+    const raw = configuration?.hostedChat?.slug;
+    const slug = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (!slug) return;
+
+    const claims = await this.gatewayRepository
+      .createQueryBuilder('gateway')
+      .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
+      .andWhere("gateway.configuration -> 'hostedChat' ->> 'slug' = :slug", { slug })
+      .getMany();
+
+    if (claims.some((gateway) => gateway.id !== allowedGatewayId)) {
+      throw this.slugConflict(slug);
+    }
+  }
+
+  private slugConflict(slug: string): ConflictException {
+    return new ConflictException(
+      `The web address '${slug}' is already in use. Choose a different app name.`,
+    );
+  }
+
+  /**
+   * Translate the slug index's unique violation into the same conflict
+   * the pre-check raises, so a lost race is a 409 and not a 500.
+   */
+  private hostedChatSlugConflict(
+    error: any,
+    configuration?: Record<string, any>,
+  ): ConflictException | null {
+    const code = error?.code ?? error?.driverError?.code;
+    if (code !== '23505') return null;
+    const marker = HOSTED_CHAT_SLUG_INDEX;
+    const mentions = [
+      error?.constraint,
+      error?.driverError?.constraint,
+      error?.detail,
+      error?.driverError?.detail,
+      error?.message,
+    ].some((field) => typeof field === 'string' && field.includes(marker));
+    if (!mentions) return null;
+
+    const raw = configuration?.hostedChat?.slug;
+    const slug = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    return this.slugConflict(slug);
+  }
+
+  /**
    * Channel configs carry channel secrets: the app's OAuth client
    * secret (multi-workspace installs, e.g. a Slack app's
    * client_secret) plus per-channel credentials such as bot_token,
@@ -245,6 +413,53 @@ export class GatewaysService {
     organizationId: string,
   ): Promise<void> {
     await encryptChannelConfigSecrets(configuration, organizationId, this.secretEnvelope());
+  }
+
+  /**
+   * Channel secrets belong in the credential store. With the channel
+   * credential service wired (always, outside positional unit tests)
+   * pasted values become a managed connection and the row keeps only
+   * `credentialId` + `credentialKeys`; without it the inline encryption
+   * path above is the fallback.
+   */
+  private async storeChannelSecrets(
+    gateway: Gateway,
+    configuration: Record<string, any> | undefined,
+    previous: Record<string, any> | null | undefined,
+  ): Promise<void> {
+    if (!configuration) return;
+    if (!this.channelCredentials) {
+      await this.encryptConfigSecrets(configuration, gateway.organizationId);
+      return;
+    }
+    await this.channelCredentials.persistSecrets(gateway, configuration, previous);
+  }
+
+  private async releaseChannelCredential(gateway: Gateway): Promise<void> {
+    try {
+      await this.channelCredentials?.release(gateway);
+    } catch (err: any) {
+      this.logger.warn(`Failed to release channel credential of gateway ${gateway.id}: ${err?.message ?? err}`);
+    }
+  }
+
+  /**
+   * Take back a gateway whose creation failed after the row was
+   * written, so the endpoint is free for the retry the caller is about
+   * to make. Neither step may mask the original error; a cleanup that
+   * itself fails is logged loudly, because then the endpoint really is
+   * stuck and someone has to look.
+   */
+  private async discardPartialGateway(gateway: Gateway): Promise<void> {
+    await this.releaseChannelCredential(gateway);
+    try {
+      await this.gatewayRepository.delete({ id: gateway.id });
+    } catch (err: any) {
+      this.logger.error(
+        `Gateway ${gateway.id} could not be removed after a failed create; ` +
+          `endpoint ${gateway.endpoint} stays taken in org ${gateway.organizationId}: ${err?.message ?? err}`,
+      );
+    }
   }
 
   /**
@@ -264,7 +479,12 @@ export class GatewaysService {
   async createGateway(
     createGatewayDto: CreateGatewayDto,
     organizationId: string,
-    userId: string
+    userId: string,
+    // A caller that has more writes to do before the surface should
+    // answer creates it INACTIVE and activates it last, so a crash
+    // mid-sequence leaves nothing live. Everything else wants the
+    // gateway routable as soon as it commits.
+    initialStatus: GatewayStatus = GatewayStatus.ACTIVE,
   ): Promise<Gateway> {
     try {
       this.logger.log(`[CREATE_GATEWAY] Creating gateway '${createGatewayDto.name}' for org=${organizationId}, user=${userId}`);
@@ -320,6 +540,11 @@ export class GatewaysService {
       // Validate configuration based on gateway type
       this.init.validateGatewayConfiguration(createGatewayDto.type, createGatewayDto.configuration);
 
+      if (createGatewayDto.type === GatewayType.HOSTED_CHAT) {
+        await this.assertHostedChatSlugAvailable(createGatewayDto.configuration);
+        await this.assertHostedChatEntitled(organizationId, createGatewayDto.configuration);
+      }
+
       // Validate team scoping before persisting.
       await this.accessPolicy.assertCanScopeToTeam(
         userId,
@@ -328,24 +553,59 @@ export class GatewaysService {
         (createGatewayDto as any).teamId,
       );
 
-      // Encrypt channel OAuth client secrets at rest before persisting.
-      await this.encryptConfigSecrets(createGatewayDto.configuration, organizationId);
+      // Channel secrets go to the credential store, never onto the row.
+      // The managed row names the gateway, so it is created after the
+      // first save; until then the row carries only the public part.
+      const inlineConfiguration = createGatewayDto.configuration;
+      const deferSecrets = !!this.channelCredentials && !!inlineConfiguration
+        && (hasInlineChannelSecret(inlineConfiguration) || 'credentialId' in inlineConfiguration);
+      if (!deferSecrets) {
+        await this.encryptConfigSecrets(createGatewayDto.configuration, organizationId);
+      }
 
       // Create the gateway
       const gateway = this.gatewayRepository.create({
         ...createGatewayDto,
+        ...(deferSecrets ? { configuration: splitChannelConfigSecrets(inlineConfiguration).publicConfig } : {}),
         kind,
         endpoint,
         organizationId,
-        status: GatewayStatus.ACTIVE,
+        status: initialStatus,
       });
 
-      const savedGateway = await this.gatewayRepository.save(gateway);
+      // The row, its channel secret and its default auth config are
+      // three writes across two tables plus the credential store, and
+      // only the first has to land for the endpoint to be taken:
+      // `(organizationId, endpoint)` is uniquely indexed. A failure in
+      // a later step used to leave an ACTIVE row behind with no auth
+      // config and no secrets — the caller saw a 500 and believed
+      // nothing had been created, but could then neither use the
+      // gateway nor recreate it ("Endpoint already exists in your
+      // organization"). It failed closed, so never an auth hole, just
+      // an endpoint nobody could have.
+      //
+      // Undone rather than wrapped in a database transaction: the
+      // secret write goes to the credential store through its own
+      // service, which no transaction opened here could enlist, so the
+      // failure path has to compensate for that write regardless.
+      // Compensating for all of it keeps one recovery path instead of
+      // two that have to agree.
+      let savedGateway = await this.gatewayRepository.save(gateway);
+      try {
+        if (deferSecrets) {
+          savedGateway.configuration = inlineConfiguration;
+          await this.storeChannelSecrets(savedGateway, savedGateway.configuration, null);
+          savedGateway = await this.gatewayRepository.save(savedGateway);
+        }
 
-      this.logger.log(`[CREATE_GATEWAY] Gateway saved to DB: id=${savedGateway.id}, name='${savedGateway.name}', org=${savedGateway.organizationId}`);
+        this.logger.log(`[CREATE_GATEWAY] Gateway saved to DB: id=${savedGateway.id}, name='${savedGateway.name}', org=${savedGateway.organizationId}`);
 
-      // Create default authentication if not provided
-      await this.init.createDefaultAuth(savedGateway);
+        // Create default authentication if not provided
+        await this.init.createDefaultAuth(savedGateway);
+      } catch (error) {
+        await this.discardPartialGateway(savedGateway);
+        throw error;
+      }
 
       this.logger.log(`[CREATE_GATEWAY] Gateway '${savedGateway.name}' created successfully in organization ${organizationId}`);
 
@@ -362,6 +622,8 @@ export class GatewaysService {
       return savedGateway;
 
     } catch (error) {
+      const conflict = this.hostedChatSlugConflict(error, createGatewayDto.configuration);
+      if (conflict) throw conflict;
       this.logger.error(`Failed to create gateway: ${error.message}`);
       throw error;
     }
@@ -419,7 +681,11 @@ export class GatewaysService {
       // Validate configuration if updated
       if (updateGatewayDto.configuration) {
         this.init.validateGatewayConfiguration(gateway.type, gateway.configuration);
-        await this.encryptConfigSecrets(gateway.configuration, organizationId);
+        if (gateway.type === GatewayType.HOSTED_CHAT) {
+          await this.assertHostedChatSlugAvailable(gateway.configuration, gateway.id);
+          await this.assertHostedChatEntitled(gateway.organizationId, gateway.configuration);
+        }
+        await this.storeChannelSecrets(gateway, gateway.configuration, oldValues.configuration);
       }
 
       const updatedGateway = await this.gatewayRepository.save(gateway);
@@ -441,6 +707,8 @@ export class GatewaysService {
       return updatedGateway;
 
     } catch (error) {
+      const conflict = this.hostedChatSlugConflict(error, updateGatewayDto.configuration);
+      if (conflict) throw conflict;
       this.logger.error(`Failed to update gateway: ${error.message}`);
       throw error;
     }
@@ -534,12 +802,26 @@ export class GatewaysService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
+    // Count, don't load: the list only needs the number.
+    //
+    // This joined `gateway.tools` and `gatewayTool.tool`, so a page of 20
+    // gateways averaging 100 tools hydrated 2,000 nested Tool entities --
+    // each with `code`, `parameters` and `examples` -- and the authConfigs
+    // join row-multiplied on top of them, all to render one integer per
+    // row. Same shape as `ApisService.getApis`: a correlated COUNT read
+    // back through getRawAndEntities.
     const queryBuilder = this.gatewayRepository
       .createQueryBuilder('gateway')
-      .leftJoinAndSelect('gateway.tools', 'gatewayTool')
-      .leftJoinAndSelect('gatewayTool.tool', 'tool')
       .leftJoinAndSelect('gateway.authConfigs', 'authConfig')
       .where('1=1');
+    queryBuilder.addSelect(
+      (sub) =>
+        sub
+          .select('COUNT(gt.id)', 'cnt')
+          .from(GatewayTool, 'gt')
+          .where('gt."gatewayId" = gateway.id'),
+      'gateway_toolCount',
+    );
     await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'gateway');
 
     // Apply filters
@@ -574,16 +856,33 @@ export class GatewaysService {
     // Apply sorting
     const sortBy = filters.sortBy || 'createdAt';
     const sortOrder = filters.sortOrder || 'DESC';
-    queryBuilder.orderBy(`gateway.${sortBy}`, sortOrder);
+    // Paged with skip/take below, so the sort has to be total. `name` and
+    // `createdAt` both tie readily, and a tied pair reshuffles between
+    // requests — one gateway on two pages, another on none.
+    queryBuilder.orderBy(`gateway.${sortBy}`, sortOrder).addOrderBy('gateway.id', 'ASC');
 
     // Get total count
     const total = await queryBuilder.getCount();
 
     // Apply pagination
-    const gateways = await queryBuilder
+    const { entities, raw } = await queryBuilder
       .skip(skip)
       .take(limit)
-      .getMany();
+      .getRawAndEntities();
+
+    // Keyed by id, not by position. The authConfigs join still emits one
+    // raw row per (gateway, authConfig) pair while `entities` is deduped,
+    // so raw[i] lines up with entities[i] only for gateways that happen
+    // to have exactly one auth config.
+    const toolCounts = new Map<string, number>();
+    for (const row of raw) {
+      const id = row?.gateway_id;
+      if (id != null) toolCounts.set(String(id), Number(row.gateway_toolCount ?? 0));
+    }
+    entities.forEach((gateway) => {
+      gateway.toolCount = toolCounts.get(gateway.id) ?? 0;
+    });
+    const gateways = entities;
 
     const totalPages = Math.ceil(total / limit);
 
@@ -627,6 +926,64 @@ export class GatewaysService {
     this.auditLogService.log({ organizationId, userId, action: AuditAction.GATEWAY_ACTIVATE, resourceType: AuditResource.GATEWAY, resourceId: gateway.id, resourceName: gateway.name });
 
     return updatedGateway;
+  }
+
+  /**
+   * The gateway a published app distribution answers on.
+   *
+   * Find-or-create rather than create, because publishing is idempotent:
+   * doing it twice is usually someone reapplying a settings change, and
+   * the endpoint is unique per organization so a second create would
+   * simply fail. An existing one is re-synced with the product's current
+   * name, branding and limits, and reactivated if it had been taken
+   * down.
+   *
+   * Goes through createGateway and updateGateway rather than touching
+   * the repository, so permission checks, organization limits and the
+   * transport sync all still happen.
+   *
+   * `activate: false` hands the caller a gateway that exists but does
+   * not answer yet, for a publish that has its own bookkeeping to
+   * finish before the surface goes live.
+   */
+  async upsertForDistribution(
+    dto: CreateGatewayDto,
+    organizationId: string,
+    userId: string,
+    options: { activate?: boolean } = {},
+  ): Promise<Gateway> {
+    const activate = options.activate ?? true;
+    const endpoint = dto.endpoint.startsWith('/') ? dto.endpoint : `/${dto.endpoint}`;
+    const existing = await this.gatewayRepository.findOne({
+      where: { endpoint, organizationId },
+    });
+
+    if (!existing) {
+      return this.createGateway(
+        dto,
+        organizationId,
+        userId,
+        activate ? GatewayStatus.ACTIVE : GatewayStatus.INACTIVE,
+      );
+    }
+
+    const updated = await this.updateGateway(
+      existing.id,
+      {
+        name: dto.name,
+        description: dto.description,
+        // Repointed on every publish, so changing which agent an app
+        // uses and republishing actually moves the surface.
+        agentId: dto.agentId,
+        configuration: dto.configuration,
+        rateLimitConfig: dto.rateLimitConfig,
+      },
+      organizationId,
+      userId,
+    );
+
+    if (!activate || updated.status === GatewayStatus.ACTIVE) return updated;
+    return this.activateGateway(updated.id, organizationId, userId);
   }
 
   async deactivateGateway(
@@ -690,6 +1047,7 @@ export class GatewaysService {
       throw new ForbiddenException(decision3.reason);
     }
 
+    await this.releaseChannelCredential(gateway);
     await this.gatewayRepository.remove(gateway);
 
     this.stopDiscordTransport(gateway);
@@ -724,5 +1082,6 @@ export class GatewaysService {
   performHealthCheck(...args: Parameters<GatewaysStatsHelper['performHealthCheck']>) { return this.statsHelper.performHealthCheck(...args); }
   searchSkillsAcrossGateways(...args: Parameters<GatewaysStatsHelper['searchSkillsAcrossGateways']>) { return this.statsHelper.searchSkillsAcrossGateways(...args); }
   getAllUserGateways(...args: Parameters<GatewaysStatsHelper['getAllUserGateways']>) { return this.statsHelper.getAllUserGateways(...args); }
+  getSkillContextOrganization(...args: Parameters<GatewaysStatsHelper['getSkillContextOrganization']>) { return this.statsHelper.getSkillContextOrganization(...args); }
   calculateRequestTrend(...args: Parameters<GatewaysStatsHelper['calculateRequestTrend']>) { return this.statsHelper.calculateRequestTrend(...args); }
 }

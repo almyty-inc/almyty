@@ -132,7 +132,7 @@ export class SsoService {
    * (`authorizationUrl` + `callback`), which keeps this factory's contract
    * stable for the unit tests that stub it.
    */
-  async buildOidcClient(config: DecryptedSsoConfig): Promise<any> {
+  async buildOidcClient(config: DecryptedSsoConfig, redirectUriOverride?: string): Promise<any> {
     if (
       !config.oidcIssuerUrl ||
       !config.oidcClientId ||
@@ -158,7 +158,7 @@ export class SsoService {
       undefined,
       discoveryOptions,
     );
-    const redirectUri = config.oidcRedirectUri;
+    const redirectUri = redirectUriOverride ?? config.oidcRedirectUri;
     return {
       authorizationUrl(parameters: Record<string, string>): string {
         return oidc
@@ -192,9 +192,11 @@ export class SsoService {
 
   async getOidcLoginUrl(
     orgId: string,
+    options: { redirectUri?: string } = {},
   ): Promise<{ url: string; state: string }> {
     const config = await this.loadEnabledConfig(orgId, 'oidc');
-    const client = await this.buildOidcClient(config);
+    const client = await this.buildOidcClient(config, options.redirectUri);
+
     const state = randomBytes(16).toString('hex');
     const url = client.authorizationUrl({
       scope: 'openid email profile',
@@ -209,12 +211,36 @@ export class SsoService {
     expectedState: string | undefined,
   ): Promise<User> {
     const config = await this.loadEnabledConfig(orgId, 'oidc');
-    const client = await this.buildOidcClient(config);
+    const claims = await this.resolveOidcClaims(orgId, params, expectedState);
+    return this.resolveUser(
+      orgId,
+      {
+        email: claims.email,
+        firstName: claims.givenName,
+        lastName: claims.familyName,
+      },
+      config,
+    );
+  }
+
+  /**
+   * Finish the auth-code exchange and return the verified identity, without
+   * deciding what it is for. The dashboard login turns it into a User; a
+   * hosted-chat surface turns it into a signed-in visitor.
+   */
+  async resolveOidcClaims(
+    orgId: string,
+    params: Record<string, any>,
+    expectedState: string | undefined,
+    redirectUri?: string,
+  ): Promise<{ sub: string; email: string; name?: string; givenName?: string; familyName?: string }> {
+    const config = await this.loadEnabledConfig(orgId, 'oidc');
+    const client = await this.buildOidcClient(config, redirectUri);
 
     let claims: Record<string, any>;
     try {
       const tokenSet = await client.callback(
-        config.oidcRedirectUri,
+        redirectUri ?? config.oidcRedirectUri,
         params,
         expectedState ? { state: expectedState } : {},
       );
@@ -228,15 +254,14 @@ export class SsoService {
     if (!email) {
       throw new UnauthorizedException('OIDC claims did not include an email');
     }
-    return this.resolveUser(
-      orgId,
-      {
-        email,
-        firstName: claims.given_name as string | undefined,
-        lastName: claims.family_name as string | undefined,
-      },
-      config,
-    );
+    const sub = typeof claims.sub === 'string' && claims.sub ? claims.sub : email;
+    return {
+      sub,
+      email,
+      name: claims.name as string | undefined,
+      givenName: claims.given_name as string | undefined,
+      familyName: claims.family_name as string | undefined,
+    };
   }
 
   // ── Shared ──────────────────────────────────────────────────────────

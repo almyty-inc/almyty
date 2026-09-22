@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
+import { ForbiddenException, BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
@@ -6,11 +6,30 @@ import * as crypto from 'crypto';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization } from '../../entities/user-organization.entity';
+import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { TeamMembershipHelper } from './team-membership.helper';
+import { isUniqueViolation } from '../../common/utils/unique-violation';
+
+/**
+ * Extra permissions off an invite body: trimmed, de-duplicated, and
+ * with anything that isn't a non-empty string dropped. The column is
+ * `json`, so without this a body could park numbers or objects in a
+ * list that hasPermission() then compares with `includes`.
+ */
+function normalizeInvitePermissions(permissions?: string[]): string[] {
+  if (!Array.isArray(permissions)) return [];
+  const seen = new Set<string>();
+  for (const permission of permissions) {
+    const trimmed = typeof permission === 'string' ? permission.trim() : '';
+    if (trimmed) seen.add(trimmed);
+  }
+  return [...seen];
+}
+
 /**
  * Invitation flow extracted from OrganizationsService:
  * inviteUser, acceptInvite, getInviteDetails. The original service
@@ -42,6 +61,47 @@ export class OrganizationsInvitesHelper {
     const org = await this.organizationRepository.findOne({ where: { id: organizationId } });
     if (!org) throw new NotFoundException('Organization not found');
 
+    // An inviter may not hand out a role more privileged than their own.
+    //
+    // The route is open to `admin` as well as `owner`, and the role came
+    // straight off the body, so an admin could invite an address they
+    // control as OWNER and hold the organization outright -- the same
+    // self-escalation updateMemberRole refuses ("Cannot assign a role
+    // higher than your own"), reached through the invite door instead of
+    // the role door.
+    const inviterMembership = await this.userOrganizationRepository.findOne({
+      where: { organizationId, userId: invitedBy, isActive: true },
+    });
+    if (!inviterMembership) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+    if (ORGANIZATION_ROLE_RANK[inviteUserDto.role] < ORGANIZATION_ROLE_RANK[inviterMembership.role]) {
+      throw new ForbiddenException('Cannot invite a user at a role higher than your own');
+    }
+
+    // Extra permissions asked for on the invite land on the membership
+    // row, but never above what the inviter holds themselves.
+    //
+    // The column is read by UserOrganization.hasPermission() and by the
+    // connections permission check, and it is additive to the role: an
+    // ADMIN has no 'billing' permission, so persisting the body's array
+    // unchecked would let an admin invite an address they control with
+    // permissions: ['billing'] and reach billing anyway -- the same
+    // self-escalation the role-rank check above refuses, one field over.
+    //
+    // Until now nothing wrote this column at all, so the field was
+    // accepted, validated, advertised in Swagger, and dropped.
+    const permissionsProvided = inviteUserDto.permissions !== undefined;
+    const grantedPermissions = normalizeInvitePermissions(inviteUserDto.permissions);
+    const ungrantable = grantedPermissions.filter(
+      (permission) => !inviterMembership.hasPermission(permission),
+    );
+    if (ungrantable.length > 0) {
+      throw new ForbiddenException(
+        `Cannot grant permissions you do not hold yourself: ${ungrantable.join(', ')}`,
+      );
+    }
+
     const inviter = await this.userRepository.findOne({ where: { id: invitedBy } });
     const inviterName = inviter ? `${inviter.firstName} ${inviter.lastName}`.trim() : 'A team member';
 
@@ -65,6 +125,7 @@ export class OrganizationsInvitesHelper {
         }
         // Update existing pending membership
         existingMembership.role = inviteUserDto.role;
+        if (permissionsProvided) existingMembership.permissions = grantedPermissions;
         existingMembership.invitedBy = invitedBy;
         existingMembership.inviteToken = inviteToken;
         existingMembership.inviteExpiresAt = inviteExpiresAt;
@@ -77,6 +138,7 @@ export class OrganizationsInvitesHelper {
           userId: user.id,
           organizationId,
           role: inviteUserDto.role,
+          permissions: permissionsProvided ? grantedPermissions : undefined,
           invitedBy,
           inviteToken,
           inviteExpiresAt,
@@ -119,17 +181,35 @@ export class OrganizationsInvitesHelper {
     // User doesn't exist — store pending invite in organization metadata
     // When the user registers via the invite link, the accept endpoint creates the real membership
     // We store invite info in the organization's metadata so we can look it up by token
-    const pendingInvites = (org.settings as any)?.pendingInvites || [];
-    pendingInvites.push({
+    const pendingInvite = {
       email: inviteUserDto.email,
       role: inviteUserDto.role,
       inviteToken,
       inviteExpiresAt: inviteExpiresAt.toISOString(),
       invitedBy,
-    });
-    await this.organizationRepository.update(organizationId, {
-      settings: { ...(org.settings as any || {}), pendingInvites },
-    });
+      ...(permissionsProvided ? { permissions: grantedPermissions } : {}),
+    };
+
+    // Appended by the database, not read-modify-written here.
+    //
+    // pendingInvites is an array inside a json column, and this used to
+    // load the org, push onto the in-memory copy, and write the whole
+    // settings object back. Two admins inviting two different people --
+    // or one admin double-clicking -- both read the same snapshot and
+    // both wrote their own full array, so one invite vanished from the
+    // database while its recipient held a live-looking link that would
+    // answer "Invalid or expired invitation" forever. Nothing logged the
+    // loss. The email is sent after this write, so both still go out.
+    await this.organizationRepository.query(
+      `UPDATE organizations
+          SET settings = jsonb_set(
+            COALESCE(settings, '{}'::jsonb),
+            '{pendingInvites}',
+            COALESCE(settings->'pendingInvites', '[]'::jsonb) || $2::jsonb
+          )
+        WHERE id = $1`,
+      [organizationId, JSON.stringify([pendingInvite])],
+    );
 
     // Send invite email to new user
     const emailSent = await this.mailService.sendInvitation({
@@ -232,17 +312,23 @@ export class OrganizationsInvitesHelper {
           organizationId: org.id,
           role: invite.role,
           invitedBy: invite.invitedBy,
+          permissions: Array.isArray(invite.permissions) ? invite.permissions : undefined,
           inviteAccepted: true,
           isActive: true,
         });
-        await this.userOrganizationRepository.save(newMembership);
+        try {
+          await this.userOrganizationRepository.save(newMembership);
+        } catch (err: any) {
+          // The membership unique index on (userId, organizationId) is
+          // the backstop for a token accepted twice. Say so, rather
+          // than letting the driver error out as a 500.
+          if (!isUniqueViolation(err)) throw err;
+          throw new ConflictException('You are already a member of this organization');
+        }
         await this.teamMembershipHelper.joinDefaultTeam(org.id, userId, invite.role);
 
-        // Remove from pending
-        const updated = pendingInvites.filter((i: any) => i.inviteToken !== token);
-        await this.organizationRepository.update(org.id, {
-          settings: { ...(org.settings as any || {}), pendingInvites: updated },
-        });
+        // Remove from pending, in the database.
+        await this.removePendingInvite(org.id, token);
 
         return { organizationId: org.id, organizationName: org.name };
       }
@@ -415,12 +501,49 @@ export class OrganizationsInvitesHelper {
     if (matchIdx === -1) {
       throw new NotFoundException('Invite not found');
     }
-    const updated = pendingInvites.filter((_, idx) => idx !== matchIdx);
-    await this.organizationRepository.update(organizationId, {
-      settings: { ...(org.settings as any || {}), pendingInvites: updated },
-    });
+    // The read above only resolves the opaque handle to a token; the
+    // removal itself happens in the database, for the same reason as
+    // in acceptInvite.
+    await this.removePendingInvite(organizationId, pendingInvites[matchIdx].inviteToken);
     this.logger.log(`Revoked settings invite ${targetHash} in org ${organizationId}`);
     return { revoked: true };
+  }
+
+  /**
+   * Drop one invite from `settings.pendingInvites`, matching on its
+   * token, without rewriting the rest of the column.
+   *
+   * Both callers used to filter their own in-memory copy of the array
+   * and write `settings: { ...org.settings, pendingInvites: filtered }`
+   * — the whole json column, from a snapshot read earlier. Two
+   * invitees accepting different invites at the same time each wrote
+   * their own full array, so the one the other had just removed came
+   * back; a second accept of a resurrected token then hit the
+   * membership unique index. An admin editing org settings alongside
+   * an accept had their edit reverted wholesale for the same reason.
+   *
+   * The column is jsonb (see the JsonbAndKmsFk migration), so the
+   * jsonb operators below apply to it.
+   */
+  private async removePendingInvite(organizationId: string, inviteToken: string): Promise<void> {
+    await this.organizationRepository.query(
+      `UPDATE organizations
+          SET settings = jsonb_set(
+            COALESCE(settings, '{}'::jsonb),
+            '{pendingInvites}',
+            COALESCE(
+              (SELECT jsonb_agg(invite)
+                 FROM jsonb_array_elements(
+                   COALESCE(settings->'pendingInvites', '[]'::jsonb)
+                 ) AS invite
+                WHERE invite->>'inviteToken' IS DISTINCT FROM $2
+              ),
+              '[]'::jsonb
+            )
+          )
+        WHERE id = $1`,
+      [organizationId, inviteToken],
+    );
   }
 
 }

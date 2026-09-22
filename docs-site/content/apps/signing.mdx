@@ -1,0 +1,28 @@
+# Signing
+
+The certificate is yours, so the signature is yours. That is the whole point of a branded build: when a user's operating system asks who published the app, it names you.
+
+A distribution names a code-signing credential, or the build stays unsigned and says so. Nothing is guessed: signing software with an identity nobody chose is not a convenience.
+
+## What each platform does
+
+| Platform | What happens | Result |
+|---|---|---|
+| macOS | signed with a hardened runtime, notarised, and stapled | opens without a Gatekeeper warning |
+| Windows | signed with an RFC 3161 trusted timestamp | a named publisher instead of "Unknown" |
+| Linux | nothing to sign against | unaffected |
+
+Two things worth knowing:
+
+- **A build records what actually happened, never what was attempted.** An artifact never claims a signature it does not carry, because that is how someone ships a binary the target OS refuses to open.
+- **Signed is not notarised.** macOS enforces the notarisation ticket, not the signature, so a signed-but-unnotarised app still warns on download. For macOS you provide both your Developer ID certificate and an App Store Connect key so the build can notarise; a build tells you when it is signed but not notarised.
+
+If a build produces a working binary but could not sign it, that is still a success: you get the file and a sentence explaining why it is unsigned. A build only fails when there is no usable artifact.
+
+## Adding a signing certificate
+
+Store a **code-signing** credential: a `.p12`/`.pfx` and its password, plus the App Store Connect key for macOS notarisation. A half-filled credential is refused before the signing tool ever sees it, rather than producing a build that looks signed and is not.
+
+Your certificate and its password are encrypted at rest like every other secret. Whoever holds a signing certificate can publish software as you, so it is treated as no less sensitive than a password: it is written to the build host only for the length of one build, removed before anything else is cleaned up, and never echoed into the part of the build log you see.
+
+The unsigned consequence is shown **before** the build, not after: the moment to learn that macOS will refuse to open an app is before you send the link to two hundred people.

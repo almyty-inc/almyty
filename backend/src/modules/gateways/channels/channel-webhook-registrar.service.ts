@@ -2,11 +2,12 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomBytes } from 'crypto';
 
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { ChannelEvent } from '../../../entities/channel-event.entity';
-import { getChannelConfig } from './channel-config.helper';
+import { ChannelCredentialService } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 
 /**
@@ -56,10 +57,16 @@ export class ChannelWebhookRegistrar {
     private readonly eventRepository: Repository<ChannelEvent>,
     private readonly configService: ConfigService,
     // Optional so positional unit tests can construct the registrar; when
-    // present, warms a BYO-KMS org's DEK before the sync getChannelConfig
-    // token reads below.
+    // present, warms a BYO-KMS org's DEK before the token reads below.
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
+    // Optional for the same reason; resolves the gateway's connection.
+    @Optional() private readonly channelCredentials?: ChannelCredentialService,
   ) {}
+
+  /** The token-bearing configuration, through the credential store. */
+  private channelConfig(gateway: Gateway): Promise<Record<string, any>> {
+    return ChannelCredentialService.resolveWith(this.channelCredentials, this.envelopeCrypto, gateway, 'channel_outbound');
+  }
 
   static isRegistrable(type: GatewayType): boolean {
     return ChannelWebhookRegistrar.REGISTRABLE_TYPES.has(type);
@@ -101,9 +108,6 @@ export class ChannelWebhookRegistrar {
   // ---------------------------------------------------------------------------
 
   private async register(gateway: Gateway): Promise<void> {
-    // Warm the org's DEK so the sync getChannelConfig token reads below can
-    // unwrap a BYO-KMS gateway's `encrypted:kms:` secrets (no-op otherwise).
-    await this.envelopeCrypto?.warmOrg(gateway.organizationId);
     const publicUrl = await this.buildPublicUrl(gateway);
     if (!publicUrl) {
       await this.record(gateway, 'register', 'skipped', null, 'PUBLIC_API_URL not configured');
@@ -134,8 +138,6 @@ export class ChannelWebhookRegistrar {
   }
 
   private async unregister(gateway: Gateway, recordOnGateway = true): Promise<void> {
-    // Warm the org's DEK before the sync getChannelConfig token reads.
-    await this.envelopeCrypto?.warmOrg(gateway.organizationId);
     try {
       switch (gateway.type) {
         case GatewayType.TELEGRAM:
@@ -164,21 +166,39 @@ export class ChannelWebhookRegistrar {
   // Platform calls
   // ---------------------------------------------------------------------------
 
+  /**
+   * Register the Telegram webhook and, with it, a per-gateway
+   * secret_token. Telegram echoes that token back in the
+   * X-Telegram-Bot-Api-Secret-Token header on every update, which is the
+   * only inbound authenticity signal the Bot API offers. It is minted
+   * here rather than asked of the user, and persisted so the adapter can
+   * compare it. Reusing an existing token keeps re-registration stable.
+   */
   private async telegramSetWebhook(gateway: Gateway, publicUrl: string): Promise<void> {
-    const token = getChannelConfig(gateway.configuration, gateway.organizationId).bot_token;
+    const config = await this.channelConfig(gateway);
+    const token = config.bot_token;
     if (!token) throw new Error('bot_token not configured');
+
+    // Telegram accepts 1-256 chars of A-Z, a-z, 0-9, _ and -.
+    const secretToken: string = config.webhook_secret_token || randomBytes(32).toString('hex');
+
     const res = await this.fetch(
-      `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(publicUrl)}`,
+      `https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(publicUrl)}` +
+        `&secret_token=${encodeURIComponent(secretToken)}`,
       { method: 'POST' },
     );
     const json: any = await res.json().catch(() => ({}));
     if (!res.ok || json?.ok === false) {
       throw new Error(json?.description || `setWebhook failed (${res.status})`);
     }
+
+    // Persist only after Telegram accepted it, so a failed registration
+    // never leaves us checking a token Telegram is not sending.
+    await this.persistConfig(gateway, { webhook_secret_token: secretToken });
   }
 
   private async telegramDeleteWebhook(gateway: Gateway): Promise<void> {
-    const token = getChannelConfig(gateway.configuration, gateway.organizationId).bot_token;
+    const token = (await this.channelConfig(gateway)).bot_token;
     if (!token) throw new Error('bot_token not configured');
     const res = await this.fetch(`https://api.telegram.org/bot${token}/deleteWebhook`, {
       method: 'POST',
@@ -195,7 +215,7 @@ export class ChannelWebhookRegistrar {
    * SID for the configured phone_number, then update its SmsUrl.
    */
   private async twilioSetWebhook(gateway: Gateway, url: string): Promise<void> {
-    const cfg = getChannelConfig(gateway.configuration, gateway.organizationId);
+    const cfg = await this.channelConfig(gateway);
     const accountSid = cfg.twilio_account_sid;
     const authToken = cfg.twilio_auth_token;
     const phoneNumber = cfg.phone_number;

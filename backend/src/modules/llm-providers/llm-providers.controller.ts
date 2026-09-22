@@ -47,8 +47,8 @@ export class LlmProvidersController {
 
   @Post()
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Create a new LLM provider' })
-  @ApiResponse({ status: 201, description: 'LLM provider created successfully' })
+  @ApiOperation({ summary: 'Add a provider' })
+  @ApiResponse({ status: 201, description: 'Provider added' })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   async createProvider(
@@ -78,7 +78,7 @@ export class LlmProvidersController {
       return {
         success: true,
         data: provider.toPublicView(),
-        message: 'LLM provider created successfully',
+        message: 'Provider added',
       };
     } catch (error) {
       throw new HttpException(
@@ -94,8 +94,8 @@ export class LlmProvidersController {
 
   @Get()
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Get all LLM providers for organization' })
-  @ApiResponse({ status: 200, description: 'LLM providers retrieved successfully' })
+  @ApiOperation({ summary: 'Get all providers for organization' })
+  @ApiResponse({ status: 200, description: 'Providers' })
   async getProviders(
     @Query(ValidationPipe) query: LlmProviderSearchQueryDto,
     @Request() req: any,
@@ -120,7 +120,7 @@ export class LlmProvidersController {
       return {
         success: true,
         data: result,
-        message: 'LLM providers retrieved successfully',
+        message: 'Providers',
       };
     } catch (error) {
       throw new HttpException(
@@ -136,9 +136,9 @@ export class LlmProvidersController {
 
   @Get(':providerId')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Get LLM provider by ID' })
-  @ApiResponse({ status: 200, description: 'LLM provider retrieved successfully' })
-  @ApiResponse({ status: 404, description: 'LLM provider not found' })
+  @ApiOperation({ summary: 'Get provider by ID' })
+  @ApiResponse({ status: 200, description: 'Provider' })
+  @ApiResponse({ status: 404, description: 'Provider not found' })
   async getProvider(
     @Param('providerId', ParseUUIDPipe) providerId: string,
     @Query('includeSecrets') includeSecrets: string,
@@ -169,7 +169,7 @@ export class LlmProvidersController {
       return {
         success: true,
         data: provider,
-        message: 'LLM provider retrieved successfully',
+        message: 'Provider',
       };
     } catch (error) {
       throw new HttpException(
@@ -185,7 +185,7 @@ export class LlmProvidersController {
 
   @Get(':providerId/usage')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Get LLM provider usage stats' })
+  @ApiOperation({ summary: 'Get provider usage stats' })
   async getProviderUsage(
     @Param('providerId', ParseUUIDPipe) providerId: string,
     @Request() req: any,
@@ -222,9 +222,9 @@ export class LlmProvidersController {
 
   @Patch(':providerId')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Update LLM provider' })
-  @ApiResponse({ status: 200, description: 'LLM provider updated successfully' })
-  @ApiResponse({ status: 404, description: 'LLM provider not found' })
+  @ApiOperation({ summary: 'Update provider' })
+  @ApiResponse({ status: 200, description: 'Provider updated' })
+  @ApiResponse({ status: 404, description: 'Provider not found' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   async updateProvider(
     @Param('providerId', ParseUUIDPipe) providerId: string,
@@ -250,7 +250,7 @@ export class LlmProvidersController {
       return {
         success: true,
         data: provider.toPublicView(),
-        message: 'LLM provider updated successfully',
+        message: 'Provider updated',
       };
     } catch (error) {
       throw new HttpException(
@@ -266,9 +266,9 @@ export class LlmProvidersController {
 
   @Delete(':providerId')
   @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Delete LLM provider' })
-  @ApiResponse({ status: 200, description: 'LLM provider deleted successfully' })
-  @ApiResponse({ status: 404, description: 'LLM provider not found' })
+  @ApiOperation({ summary: 'Remove a provider' })
+  @ApiResponse({ status: 200, description: 'Provider removed' })
+  @ApiResponse({ status: 404, description: 'Provider not found' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   async deleteProvider(
     @Param('providerId', ParseUUIDPipe) providerId: string,
@@ -287,7 +287,7 @@ export class LlmProvidersController {
 
       return {
         success: true,
-        message: 'LLM provider deleted successfully',
+        message: 'Provider removed',
       };
     } catch (error) {
       throw new HttpException(
@@ -303,7 +303,7 @@ export class LlmProvidersController {
 
   @Post(':providerId/chat')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Chat with LLM provider' })
+  @ApiOperation({ summary: 'Chat with provider' })
   @ApiResponse({ status: 200, description: 'Chat response received successfully' })
   @ApiResponse({ status: 400, description: 'Invalid chat request' })
   async chat(
@@ -346,7 +346,7 @@ export class LlmProvidersController {
 
   @Post(':providerId/test')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Test LLM provider connection' })
+  @ApiOperation({ summary: 'Test provider connection' })
   @ApiResponse({ status: 200, description: 'Connection test completed' })
   async performHealthCheck(
     @Param('providerId', ParseUUIDPipe) providerId: string,
@@ -395,7 +395,7 @@ export class LlmProvidersController {
   // Utility endpoints
   @Get('provider-types')
   @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Get available LLM provider types' })
+  @ApiOperation({ summary: 'Get available provider types' })
   @ApiResponse({ status: 200, description: 'Provider types retrieved successfully' })
   async getProviderTypes() {
     const providerTypes = Object.values(LlmProviderType).map(type => ({

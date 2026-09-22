@@ -81,13 +81,40 @@ describe('SmsAdapter', () => {
       expect(form.Body).toHaveLength(1600);
     });
 
-    it('swallows errors', async () => {
+    /** Same Twilio contract as the whatsapp adapter, no address prefix. */
+    it('refuses a non-2xx and keeps Twilio\'s message and code', async () => {
+      fetchMock.setNextResponse({
+        ok: false,
+        status: 400,
+        json: { code: 21610, message: 'Attempt to send to unsubscribed recipient', status: 400 },
+      });
+      await expect(adapter.sendResponse(
+        { twilio_account_sid: 'a', twilio_auth_token: 'b', phone_number: '+1' },
+        { body: 'x' },
+        { from: '+2' },
+      )).rejects.toThrow(/unsubscribed recipient.*21610/);
+    });
+
+    it('refuses a created message Twilio already marked failed', async () => {
+      fetchMock.setNextResponse({
+        ok: true,
+        status: 201,
+        json: { sid: 'SM1', status: 'failed', error_code: 30006, error_message: 'Landline or unreachable carrier' },
+      });
+      await expect(adapter.sendResponse(
+        { twilio_account_sid: 'a', twilio_auth_token: 'b', phone_number: '+1' },
+        { body: 'x' },
+        { from: '+2' },
+      )).rejects.toThrow(/Landline or unreachable carrier/);
+    });
+
+    it('does not swallow a network failure', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('x'));
       await expect(adapter.sendResponse(
         { twilio_account_sid: 'a', twilio_auth_token: 'b', phone_number: '+1' },
         { body: 'x' },
         { from: '+2' },
-      )).resolves.toBeUndefined();
+      )).rejects.toThrow('x');
     });
   });
 
@@ -126,14 +153,16 @@ describe('SmsAdapter', () => {
       expect(ok).toBe(false);
     });
 
-    it('skips verification when webhook_url is not configured', async () => {
+    it('refuses inbound when webhook_url is not configured', async () => {
+      // Twilio signs the exact URL it called, so without webhook_url the
+      // signature cannot be reconstructed and the request is refused.
       const ok = await adapter.verifyWebhook(twilioPayload, {}, { twilio_auth_token: authToken });
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
     });
 
-    it('skips verification when twilio_auth_token is not configured', async () => {
+    it('refuses inbound when twilio_auth_token is not configured', async () => {
       const ok = await adapter.verifyWebhook(twilioPayload, {}, { webhook_url: webhookUrl });
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
     });
   });
 });

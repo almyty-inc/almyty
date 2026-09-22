@@ -19,9 +19,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
+import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 import { organizationsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
+import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { formatDate, getInitials, formatCurrency } from '@/lib/utils'
@@ -41,8 +44,8 @@ type CreateOrgFormData = z.infer<typeof createOrgSchema>
 type InviteMemberFormData = z.infer<typeof inviteMemberSchema>
 
 export function OrganizationsPage() {
-  const { currentOrganization, organizations, setCurrentOrganization } = useOrganizationStore()
-  const { success, error } = useNotifications()
+  const { currentOrganization, organizations, setCurrentOrganization, upsertOrganization, removeOrganization } = useOrganizationStore()
+  const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
 
   React.useEffect(() => {
@@ -53,10 +56,19 @@ export function OrganizationsPage() {
   const [selectedOrg, setSelectedOrg] = React.useState<Organization | null>(null)
   const [selectedOrgId, setSelectedOrgId] = React.useState<string | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  // Honour ?new=1, so Settings and the palette can send you straight to
+  // the dialog -- there was no create affordance anywhere else.
+  useCreateDeepLink(setCreateDialogOpen)
   const [inviteDialogOpen, setInviteDialogOpen] = React.useState(false)
   const [orgDetailsOpen, setOrgDetailsOpen] = React.useState(false)
 
-  const { data: organizationsData, isLoading } = useQuery({
+  const {
+    data: organizationsData,
+    isLoading,
+    isError: orgsError,
+    error: orgsErrorValue,
+    refetch: refetchOrgs,
+  } = useQuery({
     queryKey: ['organizations'],
     queryFn: () => organizationsApi.getAll(),
   })
@@ -73,23 +85,34 @@ export function OrganizationsPage() {
       queryClient.invalidateQueries({ queryKey: ['organizations'] })
       success('Organization created', 'Your new organization has been created successfully.')
       setCreateDialogOpen(false)
+      upsertOrganization(response)
       setCurrentOrganization(response)
     },
     onError: (err: any) => {
-      error('Failed to create organization', err.response?.data?.message || 'Please try again.')
+      error('Failed to create organization', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
   const inviteMemberMutation = useMutation({
     mutationFn: ({ orgId, data }: { orgId: string; data: InviteMemberFormData }) =>
       organizationsApi.addMember(orgId, data),
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['organization-members'] })
-      success('Member invited', 'Invitation sent successfully.')
+      // Same branch as the other invite dialog: the mail service returns
+      // false rather than throwing, so this said "sent" over a send that
+      // was refused.
+      if ((result as any)?.inviteSent === false) {
+        warning(
+          'Invite created, email not delivered',
+          'They are invited, but the email could not be sent. Share the invite link with them directly.',
+        )
+      } else {
+        success('Member invited', 'Invitation sent successfully.')
+      }
       setInviteDialogOpen(false)
     },
     onError: (err: any) => {
-      error('Failed to invite member', err.response?.data?.message || 'Please try again.')
+      error('Failed to invite member', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -101,7 +124,7 @@ export function OrganizationsPage() {
       success('Member role updated', 'Role has been updated successfully.')
     },
     onError: (err: any) => {
-      error('Failed to update role', err.response?.data?.message || 'Please try again.')
+      error('Failed to update role', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -113,7 +136,7 @@ export function OrganizationsPage() {
       success('Member removed', 'Member has been removed from the organization.')
     },
     onError: (err: any) => {
-      error('Failed to remove member', err.response?.data?.message || 'Please try again.')
+      error('Failed to remove member', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -123,24 +146,36 @@ export function OrganizationsPage() {
   const updateOrgMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: { name: string; description: string } }) =>
       organizationsApi.update(id, data),
-    onSuccess: () => {
+    onSuccess: (updated: any, { id, data }) => {
       queryClient.invalidateQueries({ queryKey: ['organizations'] })
+      queryClient.invalidateQueries({ queryKey: ['organization-details', id] })
+      // The store is the other owner of this entity and its
+      // currentOrganization is persisted, so a rename that only
+      // invalidated a query key survived a reload as the old name.
+      upsertOrganization(
+        updated && updated.id ? updated : ({ id, ...data } as Organization),
+      )
       success('Organization updated', 'Settings saved successfully.')
     },
     onError: (err: any) => {
-      error('Failed to update organization', err.response?.data?.message || 'Please try again.')
+      error('Failed to update organization', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
   const deleteOrgMutation = useMutation({
     mutationFn: organizationsApi.delete,
-    onSuccess: () => {
+    onSuccess: (_result, id: string) => {
       queryClient.invalidateQueries({ queryKey: ['organizations'] })
+      queryClient.removeQueries({ queryKey: ['organization-details', id] })
+      // Without this the deleted org stayed selected, and the axios
+      // interceptor kept stamping its id on X-Organization-Id for
+      // every request the app made afterwards.
+      removeOrganization(id)
       success('Organization deleted', 'Organization has been deleted successfully.')
       setOrgDetailsOpen(false)
     },
     onError: (err: any) => {
-      error('Failed to delete organization', err.response?.data?.message || 'Please try again.')
+      error('Failed to delete organization', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -177,15 +212,32 @@ export function OrganizationsPage() {
       ...createSortableColumn('name', 'Name'),
       cell: ({ row }) => {
         const org = row.original
+        const openDetails = () => {
+          setSelectedOrg(org)
+          setSelectedOrgId(org.id)
+          setOrgDetailsOpen(true)
+        }
         return (
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
               <span className="text-sm font-medium">{getInitials(org.name)}</span>
             </div>
             <div>
-              <div className="font-medium">{org.name}</div>
+              {/*
+                The row's onRowClick was the only way into an organization, and
+                a click handler on a <tr> is invisible to the keyboard. A real
+                button here is tabbable and announces itself; DataTable skips
+                onRowClick for clicks on a <button>, so it does not double-fire.
+              */}
+              <button
+                type="button"
+                onClick={openDetails}
+                className="font-medium text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
+              >
+                {org.name}
+              </button>
               <div className="text-sm text-muted-foreground">
-                {org.members?.length || 0} members
+                {org.memberCount ?? org.members?.length ?? 0} members
               </div>
             </div>
           </div>
@@ -338,6 +390,13 @@ export function OrganizationsPage() {
     )
   }
 
+  // Every signed-in user belongs to at least one organization, so an
+  // empty table here is always a failure rather than a fact -- and it
+  // rendered with no message and no retry.
+  if (orgsError) {
+    return <QueryError error={orgsErrorValue} onRetry={() => refetchOrgs()} title="Couldn't load your organizations" />
+  }
+
   // organizationsApi.getAll() runs through apiGet → extractData, so
   // organizationsData is already the array. The previous `?.data`
   // double-unwrap was always undefined, dropping us into the stale
@@ -345,8 +404,11 @@ export function OrganizationsPage() {
   // createdAt/isActive — that's why the table showed 'Invalid Date'
   // and 'Inactive' for the active org.
   const orgs = Array.isArray(organizationsData) ? organizationsData : []
-  const membersExtracted = membersData?.data?.members || membersData?.data || []
-  const members = Array.isArray(membersExtracted) ? membersExtracted : []
+  // getMembers also runs through apiGet → extractData, so membersData is
+  // already the array. Reaching for `.data` on it was undefined, so the
+  // Members tab was permanently empty no matter how many people were in
+  // the organization.
+  const members = Array.isArray(membersData) ? membersData : []
 
   return (
     <div className="space-y-8">
@@ -359,7 +421,10 @@ export function OrganizationsPage() {
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+          <Dialog open={createDialogOpen} onOpenChange={(open) => {
+            createOrgMutation.reset()
+            setCreateDialogOpen(open)
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
@@ -374,6 +439,11 @@ export function OrganizationsPage() {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={createForm.handleSubmit(handleCreateOrg)} className="space-y-4">
+                {createOrgMutation.isError && (
+                  <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                    {getApiErrorMessage(createOrgMutation.error, 'Could not create the organization. Please try again.')}
+                  </p>
+                )}
                 <div>
                   <Label htmlFor="name">Organization Name</Label>
                   <Input
@@ -481,7 +551,7 @@ export function OrganizationsPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {selectedOrg.members?.length || 0}
+                        {selectedOrg.memberCount ?? members.length}
                       </div>
                     </CardContent>
                   </Card>
@@ -687,7 +757,7 @@ export function OrganizationsPage() {
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Organization</AlertDialogTitle>
+                            <AlertDialogTitle>Delete organization?</AlertDialogTitle>
                             <AlertDialogDescription>
                               Are you sure you want to delete {selectedOrg.name}?
                               This action cannot be undone and will permanently delete
@@ -698,7 +768,7 @@ export function OrganizationsPage() {
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => deleteOrgMutation.mutate(selectedOrg.id)}
-                              className="bg-red-600 hover:bg-red-700"
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
                               Delete Organization
                             </AlertDialogAction>

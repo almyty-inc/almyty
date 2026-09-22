@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PromotedSkillsService, PromoteRunDto } from './promoted-skills.service';
+import { PromoteRunBodyDto } from './dto/promote-run.dto';
 
 @Controller('promoted-skills')
 @ApiTags('Promoted Skills')
@@ -33,7 +34,7 @@ export class PromotedSkillsController {
   @ApiOperation({ summary: 'Promote a completed agent run into a reusable skill' })
   @ApiResponse({ status: 201, description: 'Skill created (or re-versioned)' })
   async promote(
-    @Body() body: { runId: string } & PromoteRunDto,
+    @Body() body: PromoteRunBodyDto,
     @Request() req: any,
   ) {
     const organizationId = this.orgId(req);
@@ -41,7 +42,7 @@ export class PromotedSkillsController {
       throw new HttpException('runId is required', HttpStatus.BAD_REQUEST);
     }
     const userId = req.user.sub || req.user.id;
-    return this.service.promoteFromRun(body.runId, organizationId, userId, body);
+    return this.service.promoteFromRun(body.runId, organizationId, userId, body as PromoteRunDto);
   }
 
   @Get()

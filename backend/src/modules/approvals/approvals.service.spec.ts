@@ -1,6 +1,7 @@
 import { ApprovalsService } from './approvals.service';
 import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
+import { FakePolicyApprovalsRepo } from './__tests__/fake-policy-approvals';
 
 class FakeApprovalsRepo {
   rows: ApprovalRequest[] = [];
@@ -37,12 +38,38 @@ class FakeApprovalsRepo {
   createQueryBuilder() {
     const self = this;
     let pending: ApprovalRequest[] = self.rows;
+
+    // The update path is modelled honestly, not stubbed: decide() now
+    // flips the row with `WHERE id = ? AND status = 'pending'` and emits
+    // only when that matched, so a fake that always reports affected: 1
+    // would pass while the real race stayed open.
+    let patch: Partial<ApprovalRequest> = {};
+    let targetId: string | undefined;
+    let requiredStatus: string | undefined;
+    let isUpdate = false;
+
     const qb: any = {
-      where: (_clause: string, params: any) => { pending = pending.filter(r => r.status === params.status); return qb; },
-      andWhere: () => qb,
+      update: () => { isUpdate = true; return qb; },
+      set: (values: Partial<ApprovalRequest>) => { patch = values; return qb; },
+      where: (_clause: string, params: any) => {
+        if (isUpdate) targetId = params.id;
+        else pending = pending.filter(r => r.status === params.status);
+        return qb;
+      },
+      andWhere: (_clause: string, params?: any) => {
+        if (isUpdate && params?.pending) requiredStatus = params.pending;
+        return qb;
+      },
       orderBy: () => qb,
       take: (n: number) => { pending = pending.slice(0, n); return qb; },
       getMany: async () => pending,
+      execute: async () => {
+        const row = self.rows.find(r => r.id === targetId);
+        if (!row) return { affected: 0 };
+        if (requiredStatus && row.status !== requiredStatus) return { affected: 0 };
+        Object.assign(row, patch);
+        return { affected: 1 };
+      },
     };
     return qb;
   }
@@ -66,8 +93,14 @@ function makeService() {
   const approvals = new FakeApprovalsRepo();
   const runs = new FakeRunsRepo();
   const policy = new FakePolicy();
-  const svc = new ApprovalsService(approvals as any, runs as any, policy as any);
-  return { svc, approvals, runs, policy };
+  const policyApprovals = new FakePolicyApprovalsRepo();
+  const svc = new ApprovalsService(
+    approvals as any,
+    runs as any,
+    policyApprovals as any,
+    policy as any,
+  );
+  return { svc, approvals, runs, policy, policyApprovals };
 }
 
 describe('ApprovalsService', () => {
@@ -134,6 +167,35 @@ describe('ApprovalsService', () => {
       await expect(svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' })).rejects.toThrow(/already approved/);
     });
 
+    /**
+     * Two reviewers deciding at once.
+     *
+     * A multi-reviewer queue is the designed use case, and the pending
+     * check sits several awaits before the write (canAccess, and the
+     * policy step which writes). Both readers saw 'pending': one
+     * approved, saved and emitted -- which resumed the run and executed
+     * the gated tool call -- and the other then wrote 'rejected' over
+     * it. The row ended up rejected on a request whose action had
+     * already run, and the human-in-the-loop gate meant nothing.
+     */
+    it('lets exactly one of two concurrent decisions win, and only that one emits', async () => {
+      const { svc } = makeService();
+      const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x' });
+
+      const decided: string[] = [];
+      svc.on('approval.decided', (r: any) => decided.push(r.status));
+
+      const results = await Promise.allSettled([
+        svc.approve(row.id, { decidedBy: 'reviewer-a' }, { id: 'reviewer-a' }),
+        svc.reject(row.id, { decidedBy: 'reviewer-b' }, { id: 'reviewer-b' }),
+      ]);
+
+      expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter(r => r.status === 'rejected')).toHaveLength(1);
+      // One decision, one event -- not two contradictory ones.
+      expect(decided).toHaveLength(1);
+    });
+
     it('refuses when policy denies', async () => {
       const { svc, policy } = makeService();
       policy.decision = { allowed: false, reason: 'team lead required' };
@@ -179,6 +241,7 @@ describe('ApprovalsService notifications', () => {
     const svc = new ApprovalsService(
       approvals as any,
       runs as any,
+      new FakePolicyApprovalsRepo() as any,
       policy as any,
       undefined,
       notifications as any,

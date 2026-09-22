@@ -59,13 +59,58 @@ describe('WhatsAppAdapter', () => {
       expect(form.To).toBe('whatsapp:+15551234567');
       expect(form.Body).toBe('reply');
     });
-    it('swallows errors', async () => {
+    /**
+     * Twilio refuses with an HTTP status and a `{code, message}` body.
+     * An opt-out, a number Twilio will not parse, a WhatsApp message
+     * past the 24-hour session window: all of them used to be filed as
+     * a reply the customer received.
+     */
+    it('refuses a non-2xx and keeps Twilio\'s message and code', async () => {
+      fetchMock.setNextResponse({
+        ok: false,
+        status: 400,
+        json: { code: 63016, message: 'Failed to send freeform message because you are outside the allowed window', status: 400 },
+      });
+      await expect(adapter.sendResponse(
+        { twilio_account_sid: 'a', twilio_auth_token: 'b', phone_number: '+1' },
+        { body: 'x' },
+        { from: 'whatsapp:+2' },
+      )).rejects.toThrow(/outside the allowed window.*63016/);
+    });
+
+    it('refuses a created message Twilio already marked failed', async () => {
+      // Twilio can take the message and report the failure on the same
+      // response, via error_code on an otherwise-2xx create.
+      fetchMock.setNextResponse({
+        ok: true,
+        status: 201,
+        json: { sid: 'SM1', status: 'failed', error_code: 63024, error_message: 'Invalid message recipient' },
+      });
+      await expect(adapter.sendResponse(
+        { twilio_account_sid: 'a', twilio_auth_token: 'b', phone_number: '+1' },
+        { body: 'x' },
+        { from: 'whatsapp:+2' },
+      )).rejects.toThrow(/Invalid message recipient/);
+    });
+
+    it('does not swallow a network failure', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('x'));
       await expect(adapter.sendResponse(
         { twilio_account_sid: 'a', twilio_auth_token: 'b', phone_number: '+1' },
         { body: 'x' },
         { from: 'whatsapp:+2' },
-      )).resolves.toBeUndefined();
+      )).rejects.toThrow('x');
+    });
+
+    it('never puts the Twilio auth token in the failure it reports', async () => {
+      fetchMock.setNextResponse({ ok: false, status: 401, json: { code: 20003, message: 'Authenticate' } });
+      const error = await adapter.sendResponse(
+        { twilio_account_sid: 'AC1', twilio_auth_token: 'super-secret-token', phone_number: '+1' },
+        { body: 'x' },
+        { from: 'whatsapp:+2' },
+      ).then(() => null, (e) => e);
+      expect(error).toBeTruthy();
+      expect(error.message).not.toContain('super-secret-token');
     });
   });
 
@@ -116,14 +161,16 @@ describe('WhatsAppAdapter', () => {
       expect(ok).toBe(false);
     });
 
-    it('skips verification when webhook_url is not configured', async () => {
+    it('refuses inbound when webhook_url is not configured', async () => {
+      // Twilio signs the exact URL it called, so without webhook_url the
+      // signature cannot be reconstructed and the request is refused.
       const ok = await adapter.verifyWebhook(twilioPayload, {}, { twilio_auth_token: authToken });
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
     });
 
-    it('skips verification when twilio_auth_token is not configured', async () => {
+    it('refuses inbound when twilio_auth_token is not configured', async () => {
       const ok = await adapter.verifyWebhook(twilioPayload, {}, { webhook_url: webhookUrl });
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
     });
   });
 });

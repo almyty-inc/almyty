@@ -333,6 +333,30 @@ export class NodeSandboxService {
 
     argv.push('--permission');
 
+    // Node 26 brought network under the permission model. Node 24's
+    // `--permission` gated the filesystem, child processes and worker
+    // threads but NOT sockets, so a sandboxed tool's fetch simply worked
+    // and `installSandboxNetGuard` in the worker was the only thing
+    // deciding where it could reach. From Node 26 the runtime denies every
+    // outbound connection with ERR_ACCESS_DENIED unless --allow-net is
+    // given -- which silently breaks every JavaScript tool that makes an
+    // HTTP request, reported to the person as a bare "fetch failed".
+    //
+    // The flag is ALL-OR-NOTHING, verified against Node 26.9.0 rather than
+    // assumed: `--allow-net=127.0.0.1:1` still permits a connection to an
+    // unrelated port, and every other form tried (bare host, host:port, a
+    // private address) behaves identically. Only presence matters. So there
+    // is no scoped variant to reach for, and nothing is gained by passing a
+    // value -- a host list here would read like a policy while enforcing
+    // nothing, which is worse than an honest blanket flag.
+    //
+    // Egress policy therefore lives entirely in the in-worker guard, which
+    // patches dns.lookup, net.Socket.prototype.connect and dgram before any
+    // user code runs and refuses private, loopback, link-local, CGNAT,
+    // multicast and metadata destinations. That is the same arrangement
+    // Node 24 had; this flag restores it rather than loosening it.
+    argv.push('--allow-net');
+
     if (isCompiledPath) {
       // Tight prod scope: only the worker script's own directory
       // and any installed-dependency directories. Nothing else on

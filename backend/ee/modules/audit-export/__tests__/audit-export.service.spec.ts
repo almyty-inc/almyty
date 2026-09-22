@@ -21,15 +21,27 @@ function row(partial: Partial<AuditLog>): AuditLog {
 
 class FakeAuditRepo {
   rows: AuditLog[] = [];
+  lastQb: any = null;
   createQueryBuilder() {
     const self = this;
+    let selected: string[] | null = null;
     const qb: any = {
+      // The export selects only the columns it emits: an AuditLog carries
+      // three json columns, and `changes` (field-level from/to diffs) is
+      // not one of them, so 50k whole rows were materialized to emit a
+      // subset.
+      select: (columns: string[]) => {
+        selected = columns;
+        return qb;
+      },
       where: () => qb,
       andWhere: () => qb,
       orderBy: () => qb,
       take: () => qb,
       getMany: async () => self.rows,
+      selectedColumns: () => selected,
     };
+    self.lastQb = qb;
     return qb;
   }
 }
@@ -71,5 +83,40 @@ describe('AuditExportService', () => {
     repo.rows = [row({})];
     const out = await svc.export('csv', { organizationId: 'org' });
     expect(out.body).toContain('2026-01-02T03:04:05.000Z');
+  });
+
+  /**
+   * 50k rows is the intended use -- the feature exists to lift the
+   * in-app 200 cap so compliance can pull a full window at once. An
+   * AuditLog carries three json columns, and `changes` holds field-level
+   * from/to diffs, so a pipeline-edit row runs to hundreds of KB. None
+   * of `changes` or `metadata` is emitted, so loading whole rows was
+   * ~100MB of entities at a modest average, roughly doubled again by a
+   * pretty-printed stringify and the response copy after it.
+   */
+  it('asks the database only for the columns it emits', async () => {
+    const { svc, repo } = makeService();
+    repo.rows = [row({})];
+
+    await svc.export('json', { organizationId: 'org' });
+
+    const selected: string[] = repo.lastQb.selectedColumns();
+    expect(selected).toBeTruthy();
+    expect(selected).toContain('audit.id');
+    expect(selected).toContain('audit.details');
+    // The heavy columns nothing emits.
+    expect(selected).not.toContain('audit.changes');
+    expect(selected).not.toContain('audit.metadata');
+  });
+
+  it('does not pretty-print the JSON body', async () => {
+    const { svc, repo } = makeService();
+    repo.rows = [row({})];
+
+    const out = await svc.export('json', { organizationId: 'org' });
+
+    // Two-space indentation roughly doubles the largest string in the
+    // process, for a dump nobody reads in an editor.
+    expect(out.body).not.toContain('\n  ');
   });
 });

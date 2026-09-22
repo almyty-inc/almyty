@@ -48,6 +48,14 @@ export enum GatewayType {
   MATRIX = 'matrix',
   IRC = 'irc',
   CHAT_WIDGET = 'chat_widget',
+  /**
+   * A standalone branded chat app on its own subdomain. Distinct from
+   * CHAT_WIDGET: the widget is a bubble embedded in someone else's page,
+   * this is a site of its own. They share an adapter because both
+   * persist replies rather than pushing them, but they are separate
+   * surfaces with separate configuration and separate URLs.
+   */
+  HOSTED_CHAT = 'hosted_chat',
 }
 
 export enum GatewayStatus {
@@ -64,7 +72,12 @@ export interface RateLimitConfig {
   requestsPerDay?: number;
   burstLimit?: number;
   windowSize?: number;
+  /** Messages each signed-in or cookie-identified visitor may send per hour (hosted chat, widget). */
+  perVisitorPerHour?: number;
+  /** Messages each client address may send per hour, hashed, for visitors without an identity. */
+  perIpPerHour?: number;
 }
+
 
 @Entity('gateways')
 @VersionedEntity()
@@ -118,6 +131,14 @@ export class Gateway {
   @Column()
   endpoint: string; // e.g., /gateways/my-mcp-gateway
 
+  /**
+   * Per-type settings. For channel types the secrets (bot token,
+   * signing secret, app secret, ...) live in the credential store:
+   * `credentialId` names the connection and `credentialKeys` lists the
+   * secret names it holds (never values). Inline secret keys are the
+   * read-through shim for rows the startup backfill has not moved yet
+   * (ConsumerSecretBackfillService), resolved by ChannelCredentialService.
+   */
   @Column({ type: 'json' })
   configuration: Record<string, any>;
 
@@ -203,6 +224,15 @@ export class Gateway {
     cascade: true,
   })
   tools: GatewayTool[];
+
+  /**
+   * Virtual — populated by the list query as a correlated COUNT so the
+   * table can show an assignment count without hydrating the relation.
+   * A page of 20 gateways averaging 100 tools is 2,000 nested Tool
+   * entities, each carrying `code`, `parameters` and `examples`, sent to
+   * render one integer per row.
+   */
+  toolCount?: number;
 
   @OneToMany(() => GatewayAuth, gatewayAuth => gatewayAuth.gateway, {
     cascade: true,
@@ -330,7 +360,10 @@ export class Gateway {
       case GatewayType.A2A:
         return {
           ...baseConfig,
-          a2aVersion: this.configuration.a2aVersion || '0.3.0',
+          // Keep this in step with A2A_PROTOCOL_VERSION in
+          // modules/a2a/types/a2a-spec.types.ts. An entity must not import a
+          // module, so the value is duplicated rather than referenced.
+          a2aVersion: this.configuration.a2aVersion || '1.0',
         };
 
       case GatewayType.ACP:

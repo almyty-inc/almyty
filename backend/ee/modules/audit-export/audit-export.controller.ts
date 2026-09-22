@@ -98,7 +98,13 @@ export class AuditExportController {
 
   @Get('streams')
   async listStreams(@Request() req: any) {
-    return { success: true, data: await this.streamService.list(this.orgId(req)) };
+    const rows = await this.streamService.list(this.orgId(req));
+    // The token is the target's shared secret -- a Splunk HEC token, a
+    // Datadog API key, a webhook bearer. Returning the rows as stored put
+    // it in every admin's browser, in their network log, and within reach
+    // of any XSS, for a field the UI never even displays. The write path
+    // already treats it as write-only; this one did not.
+    return { success: true, data: rows.map(({ token, ...rest }) => ({ ...rest, hasToken: Boolean(token) })) };
   }
 
   @Post('streams')

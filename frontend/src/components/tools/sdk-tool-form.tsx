@@ -471,9 +471,9 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
     <div className="space-y-4">
       {/* Package selector */}
       <div>
-        <Label>Package</Label>
+        <Label htmlFor="sdk-package">Package</Label>
         <Select value={selectedPackage} onValueChange={setSelectedPackage}>
-          <SelectTrigger>
+          <SelectTrigger id="sdk-package">
             <SelectValue placeholder="Select a package" />
           </SelectTrigger>
           <SelectContent>
@@ -489,9 +489,9 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
       {/* Export selector */}
       {selectedPackage && (
         <div>
-          <Label>Class / Export</Label>
+          <Label htmlFor="sdk-class-export">Class / Export</Label>
           <Select value={selectedExport} onValueChange={setSelectedExport}>
-            <SelectTrigger>
+            <SelectTrigger id="sdk-class-export">
               <SelectValue placeholder="Select an export" />
             </SelectTrigger>
             <SelectContent>
@@ -540,9 +540,9 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
       {/* Method selector */}
       {currentExport && (
         <div>
-          <Label>Method</Label>
+          <Label htmlFor="sdk-method">Method</Label>
           <Select value={selectedMethodKey} onValueChange={setSelectedMethodKey}>
-            <SelectTrigger>
+            <SelectTrigger id="sdk-method">
               <SelectValue placeholder="Select a method" />
             </SelectTrigger>
             <SelectContent>
@@ -553,7 +553,7 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
                       {entry.chain.length > 0 ? `${entry.chain.join('.')}.` : ''}{entry.method.name}()
                     </span>
                     {entry.method.isAsync && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700">async</Badge>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 dark:bg-green-500/20 dark:text-green-300">async</Badge>
                     )}
                   </div>
                 </SelectItem>
@@ -586,8 +586,8 @@ export function SdkToolForm({ sdkMaps, onConfigChange, onParamsChange }: SdkTool
       {/* Response mapping */}
       {selectedMethodKey && (
         <div>
-          <Label>Response Data Path (optional)</Label>
-          <Input
+          <Label htmlFor="sdk-response-data-path">Response Data Path (optional)</Label>
+          <Input id="sdk-response-data-path"
             placeholder="e.g. data.items"
             value={dataPath}
             onChange={(e) => setDataPath(e.target.value)}

@@ -137,7 +137,7 @@ d('BYO-KMS envelope crypto — LocalStack KMS round-trip', () => {
   });
 
   it('provisions a CMK by wrapping a fresh DEK via real KMS Encrypt', async () => {
-    const view = await provisioning.setCmk(ORG_ID, {
+    const view = await provisioning.attachCmk(ORG_ID, {
       cmkArn,
       awsRegion: REGION,
       enabled: true,
@@ -188,7 +188,7 @@ d('BYO-KMS envelope crypto — LocalStack KMS round-trip', () => {
     // Provision a DIFFERENT org with a DIFFERENT CMK, then try to decrypt
     // org1's value using org2's DEK. The GCM auth tag must reject it.
     resolver.entitled.add(EE_ENTITLEMENTS.BYO_KMS);
-    await provisioning.setCmk(OTHER_ORG_ID, {
+    await provisioning.attachCmk(OTHER_ORG_ID, {
       cmkArn: secondCmkArn,
       awsRegion: REGION,
       enabled: true,
@@ -211,5 +211,35 @@ d('BYO-KMS envelope crypto — LocalStack KMS round-trip', () => {
     expect(stored.startsWith('encrypted:kms:')).toBe(false);
     const back = await bareEnvelope.decryptForOrg('org-no-kms', stored);
     expect(back).toBe('plain-secret');
+  });
+
+  it('reads a secret sealed before a rotation, through real KMS', async () => {
+    resolver.entitled.add(EE_ENTITLEMENTS.BYO_KMS);
+    const plaintext = 'sk-sealed-before-the-rotation';
+    const stored = await envelope.encryptForOrg(ORG_ID, plaintext);
+    const sealingKeyId = stored.split(':')[2];
+
+    // Rotate onto a fresh DEK wrapped by the SECOND real CMK.
+    const view = await provisioning.rotateCmk(ORG_ID, {
+      cmkArn: secondCmkArn,
+      awsRegion: REGION,
+    });
+    expect(view.cmkArn).toBe(secondCmkArn);
+    expect(view.activeKeyId).not.toBe(sealingKeyId);
+    expect(view.retiredKeyIds).toContain(sealingKeyId);
+
+    // Force every DEK to be unwrapped again via real KMS Decrypt.
+    envelope.invalidate(ORG_ID);
+
+    // The pre-rotation secret still reads back — unwrapped with the retired
+    // DEK, which is still wrapped by the FIRST CMK.
+    expect(await envelope.decryptForOrg(ORG_ID, stored)).toBe(plaintext);
+
+    // And new values are sealed under the new key.
+    const fresh = await envelope.encryptForOrg(ORG_ID, 'sk-after-the-rotation');
+    expect(fresh.split(':')[2]).toBe(view.activeKeyId);
+    expect(await envelope.decryptForOrg(ORG_ID, fresh)).toBe(
+      'sk-after-the-rotation',
+    );
   });
 });

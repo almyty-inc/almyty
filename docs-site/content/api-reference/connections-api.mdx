@@ -1,0 +1,129 @@
+# Connections API
+
+> This is the HTTP API reference. For the concepts, see [Connections](/connections) and [Grants](/connections/grants).
+
+REST reference for the connector catalog and connections. Responses never contain a secret value; a connection is returned as its account label, health, scopes, method and owner.
+
+## Endpoints
+
+| Method | Endpoint | Who | Description |
+|--------|----------|-----|-------------|
+| `GET` | `/connectors?kind=` | `connections:read` | Catalog: built-in, adapter-derived and custom connectors. `cloud_iam` methods carry a rendered `quickCreateUrl` when `CONNECTIONS_AWS_CFN_TEMPLATE_URL` and `CONNECTIONS_AWS_TRUSTED_ACCOUNT_ID` are set |
+| `POST` | `/connectors` | admin, `connections:manage` | Define a custom connector; may not shadow a built-in key |
+| `POST` | `/connections/connect/:connectorKey` | `connections:read` (`connections:manage` for an organization owner) | Start a connection |
+| `GET` | `/connections/oauth/callback?code&state` | nobody (the state is the credential) | Browser leg of a sign-in; redirects to `FRONTEND_URL/connections?connection=&status=` when set, JSON otherwise |
+| `POST` | `/connections/connect/:connectorKey/complete` | member | `{ state, code }` headless completion |
+| `GET` | `/connections` | `connections:read` | Masked list; personal connections visible to their owner and to `connections:manage` |
+| `GET` | `/connections/:id` | same | One connection |
+| `POST` | `/connections/:id/validate` | owner or manage | Re-run validation; refreshes health and label |
+| `POST` | `/connections/:id/rotate` | owner or manage | Without `input` returns the form (or a new `authorizeUrl`); with `input` replaces the secret in place |
+| `DELETE` | `/connections/:id` | owner or manage | Revokes at the provider when the connector declares a revoke endpoint, then deletes |
+
+`connections:read` belongs to every role, `connections:manage` to admins and owners; an Enterprise custom role can carry either. `/credentials` and `/oauth2` remain available as primitives.
+
+## Connect
+
+```bash
+curl -X POST https://api.almyty.com/connections/connect/openai \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "owner": "org", "input": { "apiKey": "sk-..." } }'
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `owner` | `org` or `user` | Yes | Organization connection (needs `connections:manage`) or personal (needs `allowUserScopedConnections`) |
+| `method` | string | No | One of the connector's methods; the first (best) by default |
+| `input` | object | For form methods | The method's form fields |
+| `mode` | `headless` | No | For a sign-in connector without a browser: omit the callback and complete with the on-screen code |
+| `name` | string | No | Display name |
+
+A form method validates live and answers `{ pending: false, connection }`. A sign-in method answers `{ pending: true, authorizeUrl, state, completeWith }`; the browser finishes at the callback, or the terminal posts `{ state, code }` to `/complete`.
+
+### Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "pending": false,
+    "connection": {
+      "id": "c3a9...",
+      "connectorKey": "openai",
+      "name": "OpenAI",
+      "method": "api_key",
+      "owner": "org",
+      "accountLabel": "...k3Fz",
+      "health": { "status": "valid", "checkedAt": "2026-09-08T09:00:00Z", "error": null },
+      "scopesGranted": []
+    }
+  }
+}
+```
+
+A connect that fails validation answers `422 CONNECTION_VALIDATION_FAILED` with the provider's error and the connection, kept with health `failed`, so it can be validated again or rotated without redoing the flow.
+
+## Custom connector
+
+```bash
+curl -X POST https://api.almyty.com/connectors \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "lab-vllm",
+    "kind": "inference",
+    "displayName": "Lab vLLM",
+    "connect": [{
+      "type": "api_key",
+      "label": "Endpoint and key",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "baseUrl": { "type": "string", "format": "uri" },
+          "apiKey": { "type": "string", "x-secret": true }
+        },
+        "required": ["baseUrl"]
+      }
+    }],
+    "validation": { "kind": "http", "url": "{{baseUrl}}/models", "method": "GET", "auth": "bearer" }
+  }'
+```
+
+Kinds: `inference`, `deployment`, `memory`, `mcp`, `tool_source`, `channel`, `cloud`, `registry`. Validation kinds: `http`, `format`, `aws_caller_identity`, `aws_assume_role`, `gcp_service_account`, `oauth2_client_credentials`, `s3_bucket`, `mcp_initialize`.
+
+## Grants
+
+Who may use a connection beyond its owner. The rules are on [Grants](/connections/grants); the routes only check membership (`connections:read`), and whether the caller may manage this particular connection is decided per request.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/connections/:id/grants` | List the grants on a connection |
+| `POST` | `/connections/:id/grants` | Grant a user, team, role, agent or workspace the use (or management) of a connection; re-granting the same principal updates it in place |
+| `DELETE` | `/connections/:id/grants/:grantId` | Revoke a grant; returns the removed grant |
+
+```bash
+curl -X POST https://api.almyty.com/connections/c3a9.../grants \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "principalType": "agent", "principalId": "a1b2...", "permission": "use", "expiresAt": "2026-12-31T00:00:00Z" }'
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `principalType` | string | Yes | `user`, `team`, `role`, `agent` or `workspace` |
+| `principalId` | string | Yes | The uuid, or the role name (`owner`, `admin`, `member`, `viewer`) for `role` |
+| `permission` | string | No | `use` (default) or `manage` |
+| `budgetId` | uuid | No | A spend budget of the organization; stored and returned, enforced by the Enterprise governance module |
+| `expiresAt` | ISO 8601 | No | After this the grant counts as absent |
+
+A grant is returned as `{ id, connectionId, principalType, principalId, permission, budgetId, grantedBy, createdAt, expiresAt, expired }`.
+
+Grant errors: `CONNECTION_GRANT_FORBIDDEN`, `GRANT_NOT_FOUND`, `GRANT_PRINCIPAL_INVALID`, `GRANT_PRINCIPAL_NOT_FOUND`, `GRANT_AGENT_NOT_OWNED`, `GRANT_WORKSPACE_NOT_OWNED`, `GRANT_PERMISSION_INVALID`, `GRANT_EXPIRES_INVALID`, `GRANT_EXPIRES_IN_PAST`, `GRANT_BUDGET_NOT_FOUND`. A run refused a connection fails with `403 CONNECTION_NOT_GRANTED` and a `reason`. Granting and revoking write `connection_grant` and `connection_revoke_grant`; every use writes `connection_resolve` with the principal, run, purpose and how the decision was reached.
+
+## Error codes
+
+`CONNECTOR_UNKNOWN`, `CONNECT_METHOD_UNSUPPORTED`, `CONNECT_INPUT_INVALID`, `CONNECTIONS_PERMISSION_REQUIRED`, `NOT_A_MEMBER`, `USER_CONNECTIONS_DISABLED`, `CONNECT_STATE_INVALID`, `CONNECT_EXCHANGE_FAILED`, `CONNECT_DENIED`, `CONNECT_CLIENT_NOT_CONFIGURED`, `CONNECTION_VALIDATION_FAILED`, `CONNECTION_NOT_FOUND`, `CONNECTION_FORBIDDEN`, `CONNECTION_INACTIVE`, `CONNECTOR_INVALID`, `CONNECTOR_KEY_TAKEN`.
+
+## Audit actions
+
+`connection_connect`, `connection_validate`, `connection_rotate`, `connection_disconnect`, `connection_resolve`, `connector_create`, on resource `connection` or `connector`, with the connector key, method, owner and outcome in the details.

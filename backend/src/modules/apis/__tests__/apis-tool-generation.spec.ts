@@ -1,3 +1,5 @@
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
+import { makeCredentialRefFake } from '../../../test/credential-ref.fake';
 /**
  * Tests for tool generation from API operations.
  *
@@ -76,6 +78,7 @@ describe('ApisService - tool generation', () => {
         { provide: AuditLogService, useValue: { logCreate: jest.fn() } },
         { provide: DataSource, useValue: {} },
         { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }) } },
+        { provide: CredentialRefResolver, useValue: makeCredentialRefFake().resolver },
       ],
     }).compile();
 
@@ -83,7 +86,7 @@ describe('ApisService - tool generation', () => {
   });
 
   it('generates tools for all active operations', async () => {
-    const tools = await service.generateToolsFromApi('api-1', 'org-1');
+    const { tools } = await service.generateToolsFromApi('api-1', 'org-1');
     expect(tools).toHaveLength(60);
     expect(toolsService.createFromOperation).toHaveBeenCalledTimes(60);
   });
@@ -192,7 +195,7 @@ describe('ApisService - tool generation', () => {
       apiId: 'api-1',
     })) as any[];
 
-    const tools = await service.generateToolsFromApi('api-1', 'org-1', preloaded);
+    const { tools } = await service.generateToolsFromApi('api-1', 'org-1', preloaded);
     expect(tools).toHaveLength(3);
     expect(toolsService.createFromOperation).toHaveBeenCalledTimes(3);
   });
@@ -202,9 +205,14 @@ describe('ApisService - tool generation', () => {
       .mockResolvedValue({ id: 'tool-ok', name: 'ok' })
       .mockRejectedValueOnce(new Error('DB error'));
 
-    const tools = await service.generateToolsFromApi('api-1', 'org-1');
+    const result = await service.generateToolsFromApi('api-1', 'org-1');
     // 59 succeed, 1 fails (60 ops in fixture)
-    expect(tools.length).toBe(59);
+    expect(result.tools.length).toBe(59);
     expect(toolsService.createFromOperation).toHaveBeenCalledTimes(60);
+    // And it says so, rather than reporting 59 as the whole story. The
+    // count was logged and dropped, so the UI congratulated the user on
+    // 59 tools without mentioning the one that failed.
+    expect(result.failed).toBe(1);
+    expect(result.total).toBe(60);
   });
 });

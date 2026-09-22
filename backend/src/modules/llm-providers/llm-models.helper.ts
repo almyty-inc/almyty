@@ -1,15 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import axios from 'axios';
 
 import { callLlmProviderHttp, llmCallOptionsFor } from './providers/safe-request';
 import { LlmProvider, LlmProviderType } from '../../entities/llm-provider.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { PriceFeedService } from '../model-catalog/pricing/price-feed.service';
+import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 
 @Injectable()
 export class LlmModelsHelper {
   private readonly logger = new Logger(LlmModelsHelper.name);
 
-  constructor(private readonly envelopeCrypto: EnvelopeCryptoService) {}
+  constructor(
+    private readonly envelopeCrypto: EnvelopeCryptoService,
+    // Absent in specs that build the helper by hand and in any module
+    // that does not import ModelCatalogModule; the seed table then applies.
+    @Optional() private readonly priceFeed?: PriceFeedService,
+    @Optional() private readonly secrets?: LlmProviderSecretsHelper,
+  ) {}
 
   async fetchModelsFromProvider(provider: LlmProvider): Promise<Array<{
     id: string;
@@ -20,6 +28,12 @@ export class LlmModelsHelper {
     // Warm the org's DEK cache so the sync getDecryptedApiKey reads below can
     // unwrap a customer-managed key. No-op for non-KMS orgs.
     await this.envelopeCrypto.warmOrg(provider.organizationId);
+    // Credential reference: policy check and a fresh read of the row.
+    if (this.secrets && provider.credentialId) {
+      await this.secrets.withResolvedSecrets(provider, {
+        context: { purpose: 'model_list', resourceType: 'llm_provider', resourceId: provider.id },
+      });
+    }
     try {
       switch (provider.type) {
         case LlmProviderType.OPENAI:
@@ -29,6 +43,55 @@ export class LlmModelsHelper {
         case LlmProviderType.GROQ:
         case LlmProviderType.TOGETHER:
         case LlmProviderType.OPENROUTER:
+        // OpenAI-compatible inference hosts: GET <base>/models (or the
+        // documented override in getModelsUrl). Z.ai, SambaNova and
+        // Fireworks' OpenAI surface do not document a listing at all; a
+        // failed list rejects like every other type (test-connection
+        // reports it) and DefaultModelResolver turns it into
+        // NO_MODEL_CONFIGURED rather than guessing an id.
+        case LlmProviderType.FIREWORKS:
+        case LlmProviderType.CEREBRAS:
+        case LlmProviderType.DEEPINFRA:
+        case LlmProviderType.NOVITA:
+        case LlmProviderType.PERPLEXITY:
+        case LlmProviderType.ZAI:
+        case LlmProviderType.BASETEN:
+        case LlmProviderType.NEBIUS:
+        case LlmProviderType.SAMBANOVA:
+        // Cloud and aggregator surfaces that also serve an OpenAI-shaped
+        // list: Azure's /openai/v1/models, Bedrock's /openai/v1/models
+        // (bearer, no SigV4), Cohere's native /v1/models and the Hugging
+        // Face router's /v1/models. All verified 2026-09-09.
+        case LlmProviderType.AZURE_OPENAI:
+        case LlmProviderType.AWS_BEDROCK:
+        case LlmProviderType.COHERE:
+        case LlmProviderType.HUGGINGFACE:
+        // Moonshot's /v1/models is OpenAI-shaped (with extra
+        // context_length / supports_* fields we ignore).
+        case LlmProviderType.MOONSHOT:
+        // Vendor serverless catalogs. DigitalOcean and Modal list what the
+        // token can reach; RunPod's listing is scoped to the one endpoint
+        // in the URL, so it returns that endpoint's model.
+        case LlmProviderType.AZURE_AI_FOUNDRY:
+        case LlmProviderType.DIGITALOCEAN:
+        case LlmProviderType.RUNPOD:
+        case LlmProviderType.MODAL:
+        // Added 2026-09-10. MiniMax's /v1/models is OpenAI-shaped. Writer
+        // answers {models:[{id,name}]} where name is a display label, which
+        // the parser handles by preferring id. Upstage documents no listing
+        // at all, but the route answers, so it is attempted and a failure
+        // becomes NO_MODEL_CONFIGURED rather than a guessed id.
+        case LlmProviderType.MINIMAX:
+        case LlmProviderType.UPSTAGE:
+        case LlmProviderType.WRITER:
+        // Qianfan documents GET /v2/models returning {data:[...]} with
+        // per-model pricing and context length inline. TokenHub's /models
+        // is undocumented but answers 401 on GET and 405 on POST while a
+        // bogus path 404s, so the route exists; a parse miss falls through
+        // to NO_MODEL_CONFIGURED rather than a guessed id.
+        case LlmProviderType.QIANFAN:
+        case LlmProviderType.HUNYUAN:
+          return this.fetchOpenAIModels(provider);
           return this.fetchOpenAIModels(provider);
         case LlmProviderType.OLLAMA:
           // Native /api/tags — lists locally pulled models. Works
@@ -39,6 +102,22 @@ export class LlmModelsHelper {
           return this.fetchAnthropicModels(provider);
         case LlmProviderType.GOOGLE:
           return this.fetchGoogleModels(provider);
+        // Deliberately NOT listed here, with the reason recorded rather
+        // than a guess shipped:
+        //   qwen       - QwenCloud's compatible-mode enumerates exactly six
+        //                OpenAI APIs and /models is not one of them.
+        //   vertex_ai  - no /models on the endpoints/openapi surface.
+        //   zai,
+        //   sambanova  - no documented listing on either.
+        //   volcengine - Ark has no /models: the vendor's own Python SDK
+        //                ships no models resource, and its auth gate answers
+        //                401 to any path, so attempting it would produce a
+        //                misleading credential error rather than an empty
+        //                list. The customer must also activate each model
+        //                family in the Ark console before its id answers.
+        // For these, `configuration.model` must be set; DefaultModelResolver
+        // reports NO_MODEL_CONFIGURED with the vendor's own reason instead
+        // of naming a model id we cannot know is served.
         default:
           // For other providers, return the hardcoded defaults
           return this.getDefaultCapabilities(provider.type).supportedModels.map(m => ({
@@ -68,23 +147,44 @@ export class LlmModelsHelper {
     // stored providers (401: their key went to OpenAI) and the pre-creation
     // fetchModelsByType probe (empty list, Codestral never surfaced) - and
     // sent foreign API keys to the wrong host. Found live on staging.
-    const apiUrl = provider.getApiUrl() || 'https://api.openai.com/v1';
+    //
+    // getModelsUrl() is not always `<chat base>/models`: DeepInfra and
+    // Cohere document the listing on a different path from their chat base.
+    const url = provider.getApiUrl() ? provider.getModelsUrl() : 'https://api.openai.com/v1/models';
+    // Azure OpenAI takes the key in `api-key`, not `Authorization`; every
+    // other type on this path is a plain Bearer. getAuthHeaders() already
+    // encodes that per type, so reuse it instead of hardcoding Bearer.
+    const { 'Content-Type': _ct, ...authHeaders } = provider.getAuthHeaders();
     // callLlmProviderHttp runs the SSRF gate and applies the shared
     // content / redirect hygiene defaults before delegating to axios.
     const response = await callLlmProviderHttp({
       method: 'GET',
-      url: `${apiUrl}/models`,
-      headers: {
-        'Authorization': `Bearer ${provider.getDecryptedApiKey()}`,
-      },
+      url,
+      headers: authHeaders,
       timeout: 10000,
     });
 
-    const models = response.data?.data || [];
+    // Response shapes in the wild: OpenAI's `{data:[...]}` (most vendors),
+    // a bare array (Together's /v1/models), and `{models:[...]}` for Cohere,
+    // Google and Writer. The id is read from `id` first and `name` second,
+    // which matters: Cohere puts the identifier in `name`, while Writer puts
+    // a display label there ("Palmyra X5") and the real id in `id`, so
+    // reading `name` first would fill the catalog with unusable strings.
+    // Anything else yields an empty list, which the resolver reports as
+    // NO_MODEL_CONFIGURED.
+    const body = response.data;
+    const models: any[] = Array.isArray(body)
+      ? body
+      : Array.isArray(body?.data)
+        ? body.data
+        : Array.isArray(body?.models)
+          ? body.models
+          : [];
 
     // Filter to chat-compatible models and sort by created date (newest first)
     const isOpenAI = provider.type === LlmProviderType.OPENAI;
     const chatModels = models
+      .map((m: any) => ({ ...m, id: m.id ?? m.name }))
       .filter((m: any) => {
         const id = m.id?.toLowerCase() || '';
         // Always exclude non-chat models. 'embed' (not just 'embedding')
@@ -121,9 +221,12 @@ export class LlmModelsHelper {
     owned_by?: string;
   }>> {
     const apiUrl = provider.configuration.apiUrl || 'https://api.anthropic.com/v1';
+    // The list is cursor-paginated and defaults to 20 items, so without an
+    // explicit limit the newest-first pick was made from a truncated page.
+    // 1000 is the documented maximum.
     const response = await callLlmProviderHttp({
       method: 'GET',
-      url: `${apiUrl}/models`,
+      url: `${apiUrl}/models?limit=1000`,
       headers: {
         'x-api-key': provider.getDecryptedApiKey(),
         'anthropic-version': provider.configuration.apiVersion || '2023-06-01',
@@ -155,17 +258,16 @@ export class LlmModelsHelper {
     owned_by?: string;
   }>> {
     const apiKey = provider.getDecryptedApiKey();
-    // URL-encode the apiKey. The previous shape interpolated it raw,
-    // so a key containing `&`, `#`, or a newline would have broken
-    // URL parsing or injected extra query params. Google keys are
-    // normally `[A-Za-z0-9_-]` only, but defence in depth.
-    const target = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey || '')}`;
+    // The key travels in the x-goog-api-key header (Google's documented
+    // scheme) rather than a ?key= query parameter. The base is the
+    // provider's, so a configured apiUrl is honoured here too.
+    const base = (provider.getApiUrl() || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '');
     const response = await callLlmProviderHttp({
       method: 'GET',
-      url: target,
+      url: `${base}/models?pageSize=1000`,
+      headers: apiKey ? { 'x-goog-api-key': apiKey } : {},
       timeout: 10000,
     });
-
     const models = response.data?.models || [];
 
     return models
@@ -319,19 +421,95 @@ export class LlmModelsHelper {
         return { ...openaiCompatible, maxTokens: 128000, supportsVision: true };
 
       case LlmProviderType.AWS_BEDROCK:
-        return { ...baseCapabilities, supportedModels: [], maxTokens: 200000 };
+        // The OpenAI-compatible surface on bedrock-runtime: chat, streaming
+        // and client-side tool calling. Two honest caveats, recorded here
+        // rather than papered over: Anthropic Claude models are NOT served
+        // on this surface (Converse/Invoke only), and server-side tools
+        // (web search and friends) are a bedrock-mantle feature. Vision is
+        // per-model, so it is not claimed at the provider level.
+        return { ...openaiCompatible, maxTokens: 200000 };
 
       case LlmProviderType.COHERE:
+        // Chat rides Cohere's OpenAI-compatible Compatibility API, which
+        // documents streaming, tool use and structured outputs.
         return { ...openaiCompatible, maxTokens: 128000 };
 
       case LlmProviderType.HUGGINGFACE:
-        return { ...baseCapabilities, supportedModels: [], supportsStreaming: true };
+        // The Inference Providers router is OpenAI-compatible: streaming
+        // and tool calling both documented. Actual tool support varies by
+        // the upstream provider a model is routed to; the router's own
+        // /models listing carries a per-provider supports_tools flag.
+        return { ...openaiCompatible, maxTokens: 131072 };
 
       case LlmProviderType.OLLAMA:
         // OpenAI-compatible /v1 surface with tool calling and streaming.
         // Context window varies per local model; 32k is a conservative
         // default users can raise per provider.
         return { ...openaiCompatible, maxTokens: 32768 };
+
+      // OpenAI-compatible inference hosts: tool calling and streaming on
+      // the OpenAI path. maxTokens is a conservative context default
+      // (the served models vary); the model card carries the real value.
+      case LlmProviderType.FIREWORKS:
+      case LlmProviderType.DEEPINFRA:
+      case LlmProviderType.NOVITA:
+      case LlmProviderType.BASETEN:
+      case LlmProviderType.NEBIUS:
+      case LlmProviderType.SAMBANOVA:
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.CEREBRAS:
+        return { ...openaiCompatible, maxTokens: 65536 };
+
+      case LlmProviderType.ZAI:
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.MOONSHOT:
+        // Kimi K3 carries a 1M context window; streaming, standard OpenAI
+        // tools and vision are all documented.
+        return { ...openaiCompatible, maxTokens: 1000000, supportsVision: true };
+
+      case LlmProviderType.QWEN:
+        // Qwen3.8-max is ~1M in. Compatible-mode documents streaming and
+        // standard OpenAI tools; it does NOT document a model listing.
+        return { ...openaiCompatible, maxTokens: 1000000, supportsVision: true };
+
+      case LlmProviderType.VERTEX_AI:
+        // Gemini on Vertex through the OpenAI-compatible surface:
+        // streaming and tool calling both documented.
+        return { ...openaiCompatible, maxTokens: 1000000, supportsVision: true };
+
+      case LlmProviderType.AZURE_AI_FOUNDRY:
+        // The customer's own Foundry deployments; the context window is
+        // whatever model they deployed, so this is a floor, not a claim.
+        return { ...openaiCompatible, maxTokens: 128000, supportsVision: true };
+
+      case LlmProviderType.DIGITALOCEAN:
+        // Streaming and tool calling are not shown in a literal example on
+        // the chat surface, only implied by "OpenAI-compatible". Flagged
+        // here rather than asserted as verified; see
+        // docs/design/call-only-vendors.md.
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.RUNPOD:
+        // Streaming is documented; tool calling is explicitly
+        // "depends on model and vLLM support", so it is per-model rather
+        // than a provider-level guarantee.
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.MODAL:
+        return { ...openaiCompatible, maxTokens: 131072 };
+
+      case LlmProviderType.PERPLEXITY:
+        // The Agent API is Responses-shaped: it streams, and it takes
+        // custom function tools alongside its built-in web search. The
+        // tool wire format is the flat Responses one, not Chat
+        // Completions' nested {type:'function',function:{...}}.
+        return {
+          ...openaiCompatible,
+          maxTokens: 128000,
+          supportedToolFormats: ['openai_responses'],
+        };
 
       default:
         return baseCapabilities;
@@ -340,8 +518,8 @@ export class LlmModelsHelper {
 
   /**
    * Calculate the cost of a provider call in dollars.
-   * Uses configured pricing from metadata if available, otherwise falls back
-   * to default pricing for well-known models.
+   * Explicit metadata pricing wins, then the live price feed, then the
+   * offline seed table.
    */
   calculateProviderCost(provider: LlmProvider, inputTokens: number, outputTokens: number): number {
     // 1. Use the provider's configured pricing from metadata if available
@@ -350,19 +528,43 @@ export class LlmModelsHelper {
       return ((inputTokens / 1000) * modelInfo.inputTokenCost) + ((outputTokens / 1000) * modelInfo.outputTokenCost);
     }
 
-    // 2. Fall back to default pricing for well-known models (per 1K tokens, in dollars)
+    // 2. Feed first, seed table second (per 1K tokens, in dollars)
     const model = (provider.configuration?.model || '').toLowerCase();
-    const pricing = getDefaultModelPricing(model, provider.type);
+    const pricing = this.getModelPricing(model, provider.type);
     if (pricing) {
       return ((inputTokens / 1000) * pricing.input) + ((outputTokens / 1000) * pricing.output);
     }
 
     return 0;
   }
+
+  /**
+   * Price for a (model, providerType) pair in dollars per 1K tokens: the
+   * feed's quote when it has one (feed prices are per 1M, hence the
+   * division), else the offline seed table. Identical to the table alone
+   * when no feed is wired in.
+   */
+  getModelPricing(
+    model: string,
+    providerType: LlmProviderType,
+  ): { input: number; output: number } | null {
+    if (!model) return null;
+    const quote = this.priceFeed?.lookup(providerType, model);
+    if (quote) {
+      return { input: quote.inPerMTok / 1000, output: quote.outPerMTok / 1000 };
+    }
+    return getDefaultModelPricing(model, providerType);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// Default model pricing catalog
+// Default model pricing catalog: OFFLINE SEED ONLY
+//
+// Live prices come from PriceFeedService (LiteLLM + OpenRouter) and win
+// whenever the feed has an entry. This table is the fallback for
+// air-gapped installs (MODEL_PRICE_FEED_DISABLED=true), for a replica
+// that has not fetched yet, and for models absent from both feeds. It is
+// not maintained as a source of truth.
 //
 // Dollars per 1K tokens (published per-1M prices divided by 1000).
 // Substring rules: the lowercased model id is matched against `match`
@@ -370,9 +572,8 @@ export class LlmModelsHelper {
 // more specific ids must precede their prefixes (gpt-4o-mini before
 // gpt-4o, gpt-4.1 before gpt-4, ...).
 //
-// These are list prices for estimation only — reconciliation against
-// provider actuals lives in the provider-usage module. Update the as-of
-// comments when refreshing numbers.
+// These are list prices for estimation only. Reconciliation against
+// provider actuals lives in the provider-usage module.
 // ────────────────────────────────────────────────────────────────────────
 
 export interface DefaultModelPricing {
@@ -408,7 +609,19 @@ const OPENAI_PRICING: DefaultModelPricing[] = [
 ];
 
 // Anthropic list prices as of 2026-01 (docs.anthropic.com pricing).
+// Anthropic list prices as of 2026-09 (claude.com/pricing). Rules are
+// substring matches evaluated in order, so the more specific Opus 4.5+
+// and Haiku 4.5 rules must precede the bare 'claude-opus-4' /
+// 'claude-haiku-4' rules they would otherwise be shadowed by.
 const ANTHROPIC_PRICING: DefaultModelPricing[] = [
+  { match: 'claude-fable-5', input: 0.01, output: 0.05 },
+  { match: 'claude-opus-5', input: 0.005, output: 0.025 },
+  { match: 'claude-sonnet-5', input: 0.002, output: 0.01 },
+  { match: 'claude-haiku-4-5', input: 0.001, output: 0.005 },
+  { match: 'claude-opus-4-5', input: 0.005, output: 0.025 },
+  { match: 'claude-opus-4-6', input: 0.005, output: 0.025 },
+  { match: 'claude-opus-4-7', input: 0.005, output: 0.025 },
+  { match: 'claude-opus-4-8', input: 0.005, output: 0.025 },
   { match: 'claude-3-5-sonnet', input: 0.003, output: 0.015 },
   { match: 'claude-3-7-sonnet', input: 0.003, output: 0.015 },
   { match: 'claude-sonnet-4', input: 0.003, output: 0.015 },
@@ -513,7 +726,7 @@ const COHERE_PRICING: DefaultModelPricing[] = [
  *    before the cross-provider fallback so a locally served
  *    'mistral-large' is never billed at Mistral's hosted list price.
  */
-export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[]> = {
+const SEED_PRICING: Partial<Record<LlmProviderType, DefaultModelPricing[]>> = {
   [LlmProviderType.OPENAI]: OPENAI_PRICING,
   // Azure OpenAI list prices track OpenAI's per-token list prices.
   [LlmProviderType.AZURE_OPENAI]: OPENAI_PRICING,
@@ -542,8 +755,53 @@ export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[
   [LlmProviderType.HUGGINGFACE]: [],
   // Zero-cost by design (local inference) — see doc comment above.
   [LlmProviderType.OLLAMA]: [],
+  // OpenAI-compatible inference hosts added 2026-09: priced by the live
+  // feed only (LiteLLM carries fireworks_ai, cerebras, deepinfra, novita,
+  // perplexity, zai, baseten, nebius and sambanova). No seed rows on
+  // purpose: prices are automatic, and the hosts' rates for shared open
+  // models must not be borrowed from a vendor table (see
+  // HOSTED_OPEN_MODEL_TYPES below).
+  [LlmProviderType.FIREWORKS]: [],
+  [LlmProviderType.CEREBRAS]: [],
+  [LlmProviderType.DEEPINFRA]: [],
+  [LlmProviderType.NOVITA]: [],
+  [LlmProviderType.PERPLEXITY]: [],
+  [LlmProviderType.ZAI]: [],
+  [LlmProviderType.BASETEN]: [],
+  [LlmProviderType.NEBIUS]: [],
+  [LlmProviderType.SAMBANOVA]: [],
+  // No seed prices for any of these: the live feed carries Moonshot and
+  // Qwen, and the rest either price by the customer's own deployment or
+  // have no feed namespace. An unpriced model is surfaced as unpriced
+  // rather than billed at some other vendor's list price.
+  [LlmProviderType.MOONSHOT]: [],
+  [LlmProviderType.MINIMAX]: [],
+  [LlmProviderType.UPSTAGE]: [],
+  [LlmProviderType.WRITER]: [],
+  [LlmProviderType.QIANFAN]: [],
+  [LlmProviderType.HUNYUAN]: [],
+  [LlmProviderType.VOLCENGINE]: [],
+  [LlmProviderType.SPARK]: [],
+  [LlmProviderType.QWEN]: [],
+  [LlmProviderType.VERTEX_AI]: [],
+  [LlmProviderType.AZURE_AI_FOUNDRY]: [],
+  [LlmProviderType.DIGITALOCEAN]: [],
+  [LlmProviderType.RUNPOD]: [],
+  [LlmProviderType.MODAL]: [],
   [LlmProviderType.CUSTOM]: [],
 };
+
+/**
+ * The offline seed, one entry per provider type.
+ *
+ * Only vendors with a hand-written seed table need an entry above.
+ * Everything else defaults to empty, which is correct: live prices come
+ * from the feed, and an empty seed is what a vendor the feed does not
+ * cover should report rather than someone else's numbers.
+ */
+export const DEFAULT_MODEL_PRICING: Record<LlmProviderType, DefaultModelPricing[]> = Object.fromEntries(
+  Object.values(LlmProviderType).map((type) => [type, SEED_PRICING[type] ?? []]),
+) as Record<LlmProviderType, DefaultModelPricing[]>;
 
 /**
  * Cross-provider fallback scan, preserving the historical behavior where
@@ -563,6 +821,29 @@ const GLOBAL_PRICING_FALLBACK: DefaultModelPricing[] = [
 ];
 
 /**
+ * Hosts that serve other vendors' open models at host-specific rates.
+ * Priced by the live feed (LiteLLM lists every one of them); the seed
+ * table stays empty and the cross-provider fallback is skipped for them.
+ */
+export const HOSTED_OPEN_MODEL_TYPES: ReadonlySet<LlmProviderType> = new Set([
+  LlmProviderType.FIREWORKS,
+  LlmProviderType.CEREBRAS,
+  LlmProviderType.DEEPINFRA,
+  LlmProviderType.NOVITA,
+  LlmProviderType.BASETEN,
+  LlmProviderType.NEBIUS,
+  LlmProviderType.SAMBANOVA,
+  // Serverless catalogs and the customer's own cloud: a model here is
+  // billed at this host's rate (or the customer's own deployment cost),
+  // never at the model author's list price.
+  LlmProviderType.DIGITALOCEAN,
+  LlmProviderType.RUNPOD,
+  LlmProviderType.MODAL,
+  LlmProviderType.AZURE_AI_FOUNDRY,
+  LlmProviderType.AWS_BEDROCK,
+]);
+
+/**
  * Default pricing lookup for a (model, providerType) pair.
  * Returns { input, output } in dollars per 1K tokens, or null if unknown.
  */
@@ -577,6 +858,11 @@ export function getDefaultModelPricing(
   // hosted vendor's list price. Explicit per-provider overrides via
   // metadata.modelInfo still apply (handled in calculateProviderCost).
   if (providerType === LlmProviderType.OLLAMA) return null;
+  // Hosted open-model vendors serve the same model ids as each other and
+  // as the model authors, at their own rates. Never price them from a
+  // vendor table via the fallback ('deepseek-v3' on Novita is not billed
+  // at DeepSeek's list price); the live feed prices them per host.
+  if (HOSTED_OPEN_MODEL_TYPES.has(providerType)) return null;
   const rules = DEFAULT_MODEL_PRICING[providerType] ?? [];
   for (const rule of rules) {
     if (model.includes(rule.match)) return { input: rule.input, output: rule.output };

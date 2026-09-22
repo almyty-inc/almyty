@@ -48,9 +48,40 @@ describe('MatrixAdapter', () => {
       expect(fetchMock.calls[0].init.headers['Authorization']).toBe('Bearer tok-1');
       expect(parseSentJson(fetchMock.calls[0])).toEqual({ msgtype: 'm.text', body: 'reply' });
     });
-    it('skips when homeserver_url/access_token/room_id missing', async () => {
-      await adapter.sendResponse({}, { msgtype: 'm.text', body: 'r' }, {});
+    it('refuses rather than skipping when homeserver_url/access_token/room_id are missing', async () => {
+      await expect(adapter.sendResponse({}, { msgtype: 'm.text', body: 'r' }, {})).rejects.toThrow(
+        /homeserver_url, access_token, room_id missing/,
+      );
       expect(fetchMock.calls.length).toBe(0);
+    });
+
+    /**
+     * The client-server API refuses with a status and `{errcode, error}`
+     * — M_FORBIDDEN when the bot is not in the room, M_UNKNOWN_TOKEN on
+     * a logged-out session. Both used to be recorded as sent.
+     */
+    it('refuses a homeserver rejection and keeps its errcode and error', async () => {
+      fetchMock.setNextResponse({
+        ok: false,
+        status: 403,
+        json: { errcode: 'M_FORBIDDEN', error: 'You are not joined to this room' },
+      });
+      await expect(adapter.sendResponse(
+        { homeserver_url: 'https://matrix.org', access_token: 'tok-1' },
+        { msgtype: 'm.text', body: 'r' },
+        { threadId: '!room1:matrix.org' },
+      )).rejects.toThrow(/not joined to this room.*M_FORBIDDEN/);
+    });
+
+    it('never puts the access token in the failure it reports', async () => {
+      fetchMock.setNextResponse({ ok: false, status: 401, json: { errcode: 'M_UNKNOWN_TOKEN', error: 'Invalid access token' } });
+      const error = await adapter.sendResponse(
+        { homeserver_url: 'https://matrix.org', access_token: 'syt-super-secret' },
+        { msgtype: 'm.text', body: 'r' },
+        { threadId: '!room1:matrix.org' },
+      ).then(() => null, (e) => e);
+      expect(error).toBeTruthy();
+      expect(error.message).not.toContain('syt-super-secret');
     });
   });
 });

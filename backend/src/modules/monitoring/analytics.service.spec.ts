@@ -200,3 +200,153 @@ describe('AnalyticsService.getOverview — protocol undercount', () => {
     expect(overview.last24h.requests).toBe(3);
   });
 });
+
+/**
+ * The org scope has to be a predicate on `request_logs.organizationId`, which
+ * `IDX_request_logs_organizationId_timestamp` covers together with timestamp.
+ *
+ * The predicate these queries used to carry --
+ *   (gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)
+ * -- ORs across `gateways` and `request_logs`, which no single index can
+ * satisfy, so Postgres dropped to the plain timestamp index and read every
+ * tenant's logs in the window before hash-joining the other orgs away.
+ */
+describe('AnalyticsService — request_logs org scope is index-shaped', () => {
+  interface Recorded {
+    wheres: string[];
+    joins: string[];
+    selects: string[][];
+  }
+
+  const buildRecording = async () => {
+    const recorded: Recorded = { wheres: [], joins: [], selects: [] };
+
+    const makeQb = () => {
+      const qb: any = {
+        leftJoin: (rel: string) => {
+          recorded.joins.push(rel);
+          return qb;
+        },
+        innerJoin: (rel: string) => {
+          recorded.joins.push(rel);
+          return qb;
+        },
+        select: (arg: any) => {
+          if (Array.isArray(arg)) recorded.selects.push(arg);
+          return qb;
+        },
+        addSelect: () => qb,
+        where: (clause: string) => {
+          recorded.wheres.push(clause);
+          return qb;
+        },
+        andWhere: (clause: string) => {
+          recorded.wheres.push(clause);
+          return qb;
+        },
+        orderBy: () => qb,
+        groupBy: () => qb,
+        skip: () => qb,
+        take: () => qb,
+        getCount: async () => 0,
+        getRawOne: async () => ({ avg: 0, total: '0' }),
+        getRawMany: async () => [],
+        getManyAndCount: async () => [[], 0],
+      };
+      return qb;
+    };
+
+    const repoWithQb = () => ({
+      count: jest.fn().mockResolvedValue(0),
+      createQueryBuilder: jest.fn(() => makeQb()),
+    });
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AnalyticsService,
+        { provide: getRepositoryToken(RequestLog), useValue: repoWithQb() },
+        { provide: getRepositoryToken(UsageMetric), useValue: repoWithQb() },
+        { provide: getRepositoryToken(ToolExecution), useValue: repoWithQb() },
+        { provide: getRepositoryToken(Conversation), useValue: repoWithQb() },
+        { provide: getRepositoryToken(Message), useValue: repoWithQb() },
+        { provide: getRepositoryToken(AuditLog), useValue: repoWithQb() },
+        { provide: getRepositoryToken(AgentRun), useValue: repoWithQb() },
+        { provide: AnalyticsExportHelper, useValue: {} },
+        { provide: AnalyticsSummariesHelper, useValue: {} },
+      ],
+    }).compile();
+
+    return { service: module.get(AnalyticsService), recorded };
+  };
+
+  const unindexable = (clause: string) =>
+    clause.includes('gw.organizationId') || clause.includes("metadata->>'organizationId'");
+
+  it('getOverview scopes all four request_logs tiles on log.organizationId', async () => {
+    const { service, recorded } = await buildRecording();
+
+    await service.getOverview('org-1');
+
+    const orgScopes = recorded.wheres.filter((c) => c.includes('organizationId'));
+    expect(orgScopes.length).toBeGreaterThanOrEqual(4);
+    expect(orgScopes.every((c) => c === 'log.organizationId = :orgId' || c.startsWith('session.'))).toBe(
+      true,
+    );
+    expect(recorded.wheres.some(unindexable)).toBe(false);
+    // No hash join to `gateways` just to find out who owns the row.
+    expect(recorded.joins).not.toContain('log.gateway');
+  });
+
+  it('getTimeline scopes on log.organizationId with no gateway join', async () => {
+    const { service, recorded } = await buildRecording();
+
+    await service.getTimeline('org-1', 'day', 'hour');
+
+    expect(recorded.wheres).toContain('log.organizationId = :orgId');
+    expect(recorded.wheres.some(unindexable)).toBe(false);
+    expect(recorded.joins).not.toContain('log.gateway');
+  });
+
+  it('getRequestLogs scopes on log.organizationId with no gateway join', async () => {
+    const { service, recorded } = await buildRecording();
+
+    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50 });
+
+    expect(recorded.wheres).toContain('log.organizationId = :orgId');
+    expect(recorded.wheres.some(unindexable)).toBe(false);
+    expect(recorded.joins).not.toContain('log.gateway');
+  });
+
+  it('getRequestLogs projects only the columns its mapper emits', async () => {
+    const { service, recorded } = await buildRecording();
+
+    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50 });
+
+    expect(recorded.selects).toHaveLength(1);
+    const projected = recorded.selects[0];
+
+    // The two 10,000-char text columns the mapper never reads.
+    expect(projected).not.toContain('log.requestBody');
+    expect(projected).not.toContain('log.responseBody');
+    // Everything the mapper does read has to survive the projection.
+    for (const col of [
+      'log.id',
+      'log.method',
+      'log.path',
+      'log.statusCode',
+      'log.responseTime',
+      'log.metadata',
+      'log.gatewayId',
+      'log.toolId',
+      'log.userId',
+      'log.userAgent',
+      'log.ipAddress',
+      'log.errorMessage',
+      'log.requestSize',
+      'log.responseSize',
+      'log.timestamp',
+    ]) {
+      expect(projected).toContain(col);
+    }
+  });
+});

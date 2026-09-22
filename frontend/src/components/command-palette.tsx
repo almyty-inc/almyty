@@ -31,6 +31,11 @@ import {
   Plus,
   Store,
   ArrowRight,
+  Cpu,
+  FolderGit2,
+  Package,
+  Shield,
+  BookOpen,
 } from 'lucide-react'
 
 import {
@@ -85,21 +90,27 @@ export function CommandPalette() {
     { id: 'nav-tools', label: 'Tools', icon: Wrench, action: () => go('/tools'), keywords: ['http', 'javascript', 'graphql', 'llm', 'sdk'] },
     { id: 'nav-tool-hub', label: 'Tool Hub', icon: Store, action: () => go('/tool-hub'), keywords: ['templates', 'catalog'] },
     { id: 'nav-apis', label: 'APIs', icon: Globe, action: () => go('/apis'), keywords: ['openapi', 'graphql', 'soap', 'protobuf', 'sdk'] },
+    { id: 'nav-runners', label: 'Runners', icon: Cpu, action: () => go('/runners'), keywords: ['machine', 'daemon', 'execution', 'fleet'] },
+    { id: 'nav-workspaces', label: 'Workspaces', icon: FolderGit2, action: () => go('/workspaces'), keywords: ['checkout', 'sandbox', 'runner'] },
+    { id: 'nav-apps', label: 'Apps', icon: Package, action: () => go('/apps'), keywords: ['factory', 'build', 'distribution', 'desktop', 'binary'] },
+    { id: 'nav-approvals', label: 'Approvals', icon: Shield, action: () => go('/approvals'), keywords: ['review', 'pending', 'gate'] },
     { id: 'nav-credentials', label: 'Credentials', icon: Key, action: () => go('/credentials'), keywords: ['vault', 'secrets', 'access keys'] },
-    { id: 'nav-llm-providers', label: 'Models', icon: Brain, action: () => go('/llm-providers'), keywords: ['openai', 'anthropic', 'claude', 'gpt'] },
+    { id: 'nav-llm-providers', label: 'Models', icon: Brain, action: () => go('/models'), keywords: ['openai', 'anthropic', 'claude', 'gpt', 'catalog', 'routing'] },
     { id: 'nav-memories', label: 'Memory', icon: Database, action: () => go('/memories'), keywords: ['facts', 'preferences'] },
     { id: 'nav-chat', label: 'Chat', icon: MessageSquare, action: () => go('/chat'), keywords: ['conversation'] },
     { id: 'nav-analytics', label: 'Analytics', icon: BarChart3, action: () => go('/analytics'), keywords: ['metrics', 'usage', 'audit', 'requests', 'logs'] },
     { id: 'nav-organizations', label: 'Organizations', icon: Building, action: () => go('/organizations'), keywords: ['teams', 'members', 'orgs'] },
+    { id: 'nav-docs', label: 'Docs', icon: BookOpen, action: () => go('/docs'), keywords: ['help', 'guide', 'reference'] },
     { id: 'nav-settings', label: 'Settings', icon: Settings, action: () => go('/settings'), keywords: ['profile', 'account', 'security'] },
   ]
 
   const actionEntries: Entry[] = [
     { id: 'act-new-agent', label: 'Create Agent', hint: 'Open the visual agent builder', icon: Plus, action: () => go('/agents/new') },
     { id: 'act-new-gateway', label: 'Create Gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways?new=1') },
-    { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, LLM, or SDK', icon: Plus, action: () => go('/tools?new=1') },
+    { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, Model, or SDK', icon: Plus, action: () => go('/tools?new=1') },
     { id: 'act-new-api', label: 'Import API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis?new=1') },
-    { id: 'act-new-provider', label: 'Add LLM Provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/llm-providers?new=1') },
+    { id: 'act-new-provider', label: 'Add provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/models?tab=providers&new=1') },
+    { id: 'act-new-runner', label: 'Register Runner', hint: 'Run agents on your own machine', icon: Plus, action: () => go('/runners/new') },
     { id: 'act-new-credential', label: 'Add Credential', hint: 'Store a vault secret', icon: Plus, action: () => go('/credentials?new=1') },
   ]
 

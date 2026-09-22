@@ -1,6 +1,10 @@
 /**
- * Modal dialog for invoking an agent with custom JSON input.
- * Displays the execution result or error after invocation.
+ * Modal dialog for running an agent with custom JSON input.
+ * Displays the run's output or the reason it failed.
+ *
+ * Copy here says "run" throughout -- the same word the header button,
+ * the Runs tab and the stat cards use. It used to be titled "Invoke
+ * Agent" over a "Run Agent" button, reporting an "Invocation Failed".
  */
 import React, { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -19,6 +23,7 @@ import {
 } from '@/components/ui/dialog'
 
 import { agentsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
 
@@ -36,6 +41,7 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
   const [invokeResult, setInvokeResult] = useState<Record<string, unknown> | null>(null)
 
   const invokeMutation = useMutation({
+    onMutate: () => setInvokeResult(null),
     mutationFn: async () => {
       let input: any
       try {
@@ -45,22 +51,46 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
       }
       return agentsApi.invoke(agent.id, input)
     },
-    onSuccess: (result) => {
+    // A run that finishes is not a run that worked. The endpoint answers
+    // 200 with `status: 'failed'` and an `error` string in the body, and
+    // this used to raise "Execution completed." over it while printing
+    // the whole execution row -- ids and nulls included -- as the result.
+    onSuccess: async (result: any) => {
       setInvokeResult(result)
-      success('Agent Invoked', 'Execution completed.')
-      queryClient.invalidateQueries({ queryKey: ['agent-executions', agent.id] })
-      queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
+      if (result?.status === 'completed') {
+        success('Run finished', 'The agent finished this run.')
+      } else {
+        errorNotif(
+          result?.status === 'cancelled' ? 'Run cancelled' : 'Run failed',
+          result?.error || 'The agent did not finish this run.',
+        )
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['agent-executions', agent.id] }),
+        queryClient.invalidateQueries({ queryKey: ['agent-runs', agent.id] }),
+        queryClient.invalidateQueries({ queryKey: ['agent', agent.id] }),
+        // The list's run count is read from this key, and it went on
+        // saying the old number until a reload.
+        queryClient.invalidateQueries({ queryKey: ['agents'] }),
+        // The run-failure banner at the top of this page reads its own
+        // key with a 15s staleTime, so a run that just failed here did
+        // not raise the banner until that window passed.
+        queryClient.invalidateQueries({ queryKey: ['agent-latest-run', agent.id] }),
+      ])
     },
-    onError: (err: any) => {
-      errorNotif('Invocation Failed', err?.response?.data?.message || err?.message || 'Failed to invoke agent')
+    onError: (err: unknown) => {
+      errorNotif('Run failed', getApiErrorMessage(err, 'Failed to start the run'))
     },
   })
+
+  const failed = !!invokeResult && (invokeResult as any).status !== 'completed'
+  const output = (invokeResult as any)?.output
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Invoke Agent</DialogTitle>
+          <DialogTitle>Run Agent</DialogTitle>
           <DialogDescription>
             Provide input JSON to run "{agent.name}".
           </DialogDescription>
@@ -94,17 +124,53 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
           </Button>
 
           {invokeResult && (
-            <div>
-              <Label>Result</Label>
-              <div className="mt-1">
-                <CodeBlock value={JSON.stringify(invokeResult, null, 2)} language="json" maxHeight="200px" />
-              </div>
+            <div className="space-y-2">
+              {/*
+                What the agent said, or why it did not say anything --
+                the raw execution row is still one click away for
+                debugging, but it is no longer the answer.
+              */}
+              {failed ? (
+                <div role="alert" data-testid="invoke-failed" className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                  {(invokeResult as any).error || 'The agent did not finish this run.'}
+                </div>
+              ) : (
+                <div role="status" aria-live="polite">
+                  <Label>Output</Label>
+                  <div className="mt-1">
+                    {output === null || output === undefined ? (
+                      <p data-testid="invoke-no-output" className="text-sm text-muted-foreground">
+                        The run finished without producing any output.
+                      </p>
+                    ) : typeof output === 'string' ? (
+                      // An agent's answer is prose. Putting it in a code
+                      // editor made a sentence look like a payload.
+                      <p
+                        data-testid="invoke-output-text"
+                        className="whitespace-pre-wrap rounded-md border bg-muted/40 p-3 text-sm"
+                      >
+                        {output}
+                      </p>
+                    ) : (
+                      <CodeBlock value={JSON.stringify(output, null, 2)} language="json" maxHeight="200px" />
+                    )}
+                  </div>
+                </div>
+              )}
+              <details>
+                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                  Full run record
+                </summary>
+                <div className="mt-1">
+                  <CodeBlock value={JSON.stringify(invokeResult, null, 2)} language="json" maxHeight="200px" />
+                </div>
+              </details>
             </div>
           )}
 
-          {invokeMutation.error && (
-            <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-              {(invokeMutation.error as any)?.message || 'Execution failed'}
+          {invokeMutation.isError && (
+            <div role="alert" className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+              {getApiErrorMessage(invokeMutation.error, 'The run failed.')}
             </div>
           )}
         </div>

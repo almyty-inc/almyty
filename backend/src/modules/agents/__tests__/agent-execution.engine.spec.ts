@@ -352,6 +352,33 @@ describe('AgentExecutionEngine', () => {
       expect(result.nodeResults['llm_1'].tokens).toBe(100);
       expect(result.nodeResults['output_1']).toBeDefined();
     });
+
+    // A template typo substitutes an empty string and used to leave nothing
+    // behind but a server-side warning, so the run showed a plausible wrong
+    // answer and no trace of the cause. The reference now reaches the record.
+    it('carries a node\'s unresolved template references onto the run', async () => {
+      const agent = makeAgent();
+      agentExecutionRepo.create.mockReturnValue(makeExecution());
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      nodeExecutor.execute.mockImplementation(async (node: any) => {
+        if (node.type === 'llm_call') {
+          return {
+            output: 'Generated text',
+            unresolvedReferences: ['nodes.llm1.output'],
+          };
+        }
+        return { output: 'Generated text' };
+      });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', { input: { message: 'test' } });
+
+      expect(result.status).toBe(AgentExecutionStatus.COMPLETED);
+      expect(result.nodeResults['llm_1'].unresolvedReferences).toEqual(['nodes.llm1.output']);
+      // Nodes that resolved cleanly are not annotated.
+      expect(result.nodeResults['output_1'].unresolvedReferences).toBeUndefined();
+    });
   });
 
   // ── Sequential execution order ────────────────────────────────────────────
@@ -930,6 +957,33 @@ describe('AgentExecutionEngine', () => {
       expect(llmNodeResult.error).toContain('rate limit');
       expect(llmNodeResult.errorType).toBe('LLM_ERROR');
     });
+
+    it('keeps the MODEL_NOT_FOUND code, model and provider on the node result', async () => {
+      const { ModelNotFoundError } = require('../../llm-providers/model-errors');
+      const agent = makeAgent();
+      const execution = makeExecution();
+      agentExecutionRepo.create.mockReturnValue(execution);
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      nodeExecutor.execute.mockImplementation(async (node: any) => {
+        if (node.type === 'llm_call') {
+          const inner = new ModelNotFoundError('claude-sonnet-4-20250514', 'p1', 'anthropic', 'model: claude-sonnet-4-20250514');
+          throw Object.assign(new Error('LLM call failed: ' + inner.message), { cause: inner, code: inner.code });
+        }
+        return { output: {} };
+      });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', { input: {} });
+
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      expect(result.nodeResults['llm_1']).toMatchObject({
+        errorType: 'LLM_ERROR',
+        errorCode: 'MODEL_NOT_FOUND',
+        errorModel: 'claude-sonnet-4-20250514',
+        errorProviderId: 'p1',
+      });
+    });
   });
 
   // ── Execution record always updated ──────────────────────────────────
@@ -951,6 +1005,62 @@ describe('AgentExecutionEngine', () => {
       expect(result.status).toBe(AgentExecutionStatus.FAILED);
       expect(result.error).toContain('Catastrophic failure');
       expect(agentExecutionRepo.save).toHaveBeenCalled();
+    });
+
+    it('keeps the nodes that succeeded and the real spend when the run crashes', async () => {
+      // The crash path used to save `status` and `error` only — no
+      // nodeResults, no totalCost, no totalTokens — and called
+      // bumpAgentStats with a hardcoded 0. So an unexpected throw threw
+      // away every node that had already succeeded and recorded the run
+      // as free, though the LLM calls it made were billed.
+      const agent = makeAgent();
+      const execution = makeExecution();
+
+      agentExecutionRepo.create.mockReturnValue(execution);
+      // The run completes its nodes, then the final row write blows up —
+      // a DB blip at the end of a run.
+      let saves = 0;
+      agentExecutionRepo.save.mockImplementation((e: any) => {
+        saves += 1;
+        if (saves >= 2) return Promise.reject(new Error('connection terminated unexpectedly'));
+        return Promise.resolve(e);
+      });
+      agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
+
+      const bump = jest
+        .spyOn((engine as any).state, 'bumpAgentStats')
+        .mockResolvedValue(undefined);
+      jest.spyOn((engine as any).logger, 'error').mockImplementation(() => undefined);
+
+      nodeExecutor.execute.mockImplementation(async (node: any) => {
+        switch (node.type) {
+          case 'input':
+            return { output: { message: 'Hello' } };
+          case 'llm_call':
+            return { output: 'answer', cost: 0.05, tokens: 150, executionTime: 200 };
+          case 'output':
+            return { output: 'answer' };
+          default:
+            return { output: null };
+        }
+      });
+
+      const result = await engine.execute(agent, 'org-1', 'user-1', {
+        input: { message: 'Hello' },
+      });
+
+      expect(result.status).toBe(AgentExecutionStatus.FAILED);
+      // Every node that ran is still on the record.
+      expect(Object.keys(result.nodeResults)).toEqual(
+        expect.arrayContaining(['input_1', 'llm_1', 'output_1']),
+      );
+      // And the spend is what was actually billed, not zero.
+      expect(result.totalCost).toBeCloseTo(0.05);
+      expect(result.totalTokens).toBe(150);
+
+      // The stats bump carries the real cost — it was hardcoded to 0 —
+      // and survives the failed row write, which is in its own try.
+      expect(bump).toHaveBeenCalledWith('agent-1', false, expect.any(Number), 0.05);
     });
   });
 

@@ -75,9 +75,63 @@ describe('MicrosoftTeamsAdapter', () => {
       (globalThis as any).fetch = original;
     });
 
-    it('returns silently when serviceUrl/conversationId missing', async () => {
-      await adapter.sendResponse({ bot_id: 'a', bot_password: 'b' }, { type: 'message', text: 'x' }, {});
+    it('refuses rather than returning silently when serviceUrl/conversationId are missing', async () => {
+      await expect(
+        adapter.sendResponse({ bot_id: 'a', bot_password: 'b' }, { type: 'message', text: 'x' }, {}),
+      ).rejects.toThrow(/no serviceUrl/);
       expect(fetchMock.calls.length).toBe(0);
+    });
+
+    it('refuses when the Bot Framework will not issue a token', async () => {
+      // Rotate the bot password and this is what every reply hits; it
+      // used to be an error log and an outbound row saying `processed`.
+      fetchMock.setNextResponse({ ok: false, status: 401, json: { error: 'invalid_client' } });
+      await expect(adapter.sendResponse(
+        { bot_id: 'a', bot_password: 'stale' },
+        { type: 'message', text: 'x' },
+        { metadata: { serviceUrl: 'https://smba.example/teams/', conversationId: 'a:conv1' } },
+      )).rejects.toThrow(/would not issue an access token/);
+    });
+
+    /**
+     * The Connector refuses an activity with a status and
+     * `{error: {code, message}}` — a conversation that no longer exists,
+     * a bot an admin disabled.
+     */
+    it('refuses a Connector rejection and keeps its message and code', async () => {
+      let callIndex = 0;
+      const original = (globalThis as any).fetch;
+      (globalThis as any).fetch = jest.fn(async () => {
+        callIndex++;
+        if (callIndex === 1) {
+          return { ok: true, status: 200, json: async () => ({ access_token: 'tok-123' }), text: async () => '' };
+        }
+        return {
+          ok: false,
+          status: 403,
+          json: async () => ({ error: { code: 'BotDisabledByAdmin', message: 'The bot is disabled by the tenant admin' } }),
+          text: async () => '',
+        };
+      });
+
+      await expect(adapter.sendResponse(
+        { bot_id: 'a', bot_password: 'b' },
+        { type: 'message', text: 'x' },
+        { metadata: { serviceUrl: 'https://smba.example/teams/', conversationId: 'a:conv1' } },
+      )).rejects.toThrow(/disabled by the tenant admin.*BotDisabledByAdmin/);
+
+      (globalThis as any).fetch = original;
+    });
+
+    it('never puts the bot password in the failure it reports', async () => {
+      fetchMock.setNextResponse({ ok: false, status: 401, json: { error: 'invalid_client' } });
+      const error = await adapter.sendResponse(
+        { bot_id: 'a', bot_password: 'app-secret-value' },
+        { type: 'message', text: 'x' },
+        { metadata: { serviceUrl: 'https://smba.example/teams/', conversationId: 'a:conv1' } },
+      ).then(() => null, (e) => e);
+      expect(error).toBeTruthy();
+      expect(error.message).not.toContain('app-secret-value');
     });
   });
 
@@ -187,9 +241,11 @@ describe('MicrosoftTeamsAdapter', () => {
       expect(await adapter.verifyWebhook(teamsActivity, { authorization: 'Bearer not-a-jwt' }, config)).toBe(false);
     });
 
-    it('skips verification when bot_id is not configured', async () => {
+    it('refuses inbound when bot_id is not configured', async () => {
+      // bot_id is the JWT audience, so without it the activity cannot be
+      // attributed to Teams at all.
       const fetchSpy = installJwksFetch();
-      expect(await adapter.verifyWebhook(teamsActivity, {}, {})).toBe(true);
+      expect(await adapter.verifyWebhook(teamsActivity, {}, {})).toBe(false);
       expect(fetchSpy).not.toHaveBeenCalled();
     });
   });

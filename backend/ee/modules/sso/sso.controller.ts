@@ -7,16 +7,12 @@ import {
   Query,
   Req,
   Res,
-  UseGuards,
   Header,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 
 import { Public } from '../../../src/common/decorators/public.decorator';
-import { EntitlementGuard } from '../../../src/modules/licensing/guards/entitlement.guard';
-import { RequiresEntitlement } from '../../../src/modules/licensing/decorators/requires-entitlement.decorator';
-import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 import { AuthService } from '../../../src/modules/auth/auth.service';
 import { SsoService } from './sso.service';
 import { SsoConfigService } from './sso-config.service';
@@ -39,9 +35,13 @@ import {
  */
 @ApiTags('SSO')
 @Controller('sso')
+// No EntitlementGuard here: @Public() means JwtAuthGuard attaches no
+// user, so the guard has no organization to resolve and falls back to
+// the deployment-global license — community — and answers 402 to every
+// paying customer's login. The check lives in
+// SsoConfigService.getDecrypted, which every route below passes through
+// and which knows the org from the URL.
 @Public()
-@UseGuards(EntitlementGuard)
-@RequiresEntitlement(EE_ENTITLEMENTS.SSO)
 export class SsoController {
   constructor(
     private readonly ssoService: SsoService,

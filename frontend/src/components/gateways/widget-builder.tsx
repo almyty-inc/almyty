@@ -49,6 +49,7 @@ import { gatewaysApi, getApiBaseUrl } from '@/lib/api'
 import { useCopy } from '@/lib/clipboard'
 import { useNotifications } from '@/store/app'
 import { buildWidgetEmbedSnippet } from '@/components/agents/detail/channel-setup'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
@@ -179,7 +180,7 @@ export function WidgetBuilder({ gateway }: WidgetBuilderProps) {
       success('Widget saved', 'Embedded widgets pick up the new look within a minute.')
     },
     onError: (err: any) => {
-      errorNotif('Failed to save widget', err?.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to save widget', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 

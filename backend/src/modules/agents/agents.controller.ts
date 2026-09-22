@@ -18,15 +18,14 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { IsString, IsOptional, IsEnum, IsNumber, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Response } from 'express';
 
 import { AgentsService, AgentSearchFilters } from './agents.service';
-import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
 import { AgentRuntimeService } from './agent-runtime.service';
-import { AgentSchedulerService } from './agent-scheduler.service';
-import { AgentAuditService } from './agent-audit.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
@@ -34,6 +33,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AgentStatus } from '../../entities/agent.entity';
+import { AgentRole } from '../../entities/agent-role.entity';
 
 class AgentSearchQueryDto {
   @IsOptional()
@@ -75,11 +75,42 @@ export class AgentsController {
 
   constructor(
     private readonly agentsService: AgentsService,
-    private readonly executionEngine: AgentExecutionEngine,
     private readonly runtimeService: AgentRuntimeService,
-    private readonly schedulerService: AgentSchedulerService,
-    private readonly auditService: AgentAuditService,
+    @InjectRepository(AgentRole) private readonly agentRoles: Repository<AgentRole>,
   ) {}
+
+  /**
+   * Make the queue agree with the heartbeat the agent was just saved with.
+   *
+   * The builder puts `heartbeat` on the ordinary create/update payload and
+   * the service persists it, but the repeatable job is only ever enqueued
+   * by PATCH /agents/:id/heartbeat -- which no frontend code calls. So the
+   * row said heartbeat enabled, the builder reloaded it as enabled, and
+   * the agent never woke up. Nothing restores heartbeat jobs at boot
+   * either, unlike schedules.
+   *
+   * Best-effort: a queue that is briefly unreachable must not fail the
+   * save that already succeeded, and the next save reconciles again.
+   */
+  private async reconcileHeartbeat(agent: any, organizationId: string, dtoHeartbeat: unknown): Promise<void> {
+    if (dtoHeartbeat === undefined) return;
+    try {
+      const heartbeat = agent?.heartbeat;
+      if (heartbeat?.enabled && heartbeat.intervalMinutes) {
+        await this.runtimeService.enableHeartbeat(
+          agent.id,
+          organizationId,
+          heartbeat.intervalMinutes,
+          heartbeat.prompt ?? '',
+        );
+      } else {
+        await this.runtimeService.disableHeartbeat(agent.id, organizationId);
+      }
+    } catch (err: any) {
+      this.logger.warn(`Could not reconcile heartbeat for agent ${agent?.id}: ${err?.message ?? err}`);
+    }
+  }
+
 
   @Post()
   @Roles('member', 'admin', 'owner')
@@ -107,6 +138,7 @@ export class AgentsController {
         organizationId,
         userId,
       );
+      await this.reconcileHeartbeat(agent, organizationId, createAgentDto.heartbeat);
 
       return {
         success: true,
@@ -285,6 +317,7 @@ export class AgentsController {
 
       const userId = req.user.sub || req.user.id;
       const agent = await this.agentsService.updateAgent(id, updateAgentDto, organizationId, userId);
+      await this.reconcileHeartbeat(agent, organizationId, (updateAgentDto as any).heartbeat);
 
       return {
         success: true,
@@ -340,6 +373,15 @@ export class AgentsController {
         error.status || HttpStatus.BAD_REQUEST,
       );
     }
+  }
+
+  @Get(':id/readiness')
+  @Roles('member', 'admin', 'owner')
+  @ApiOperation({ summary: 'Check workflow model setup without making a model call' })
+  async getReadiness(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
+    const organizationId = req.user.currentOrganizationId;
+    if (!organizationId) throw new HttpException('No organization found', HttpStatus.BAD_REQUEST);
+    return { success: true, data: await this.agentsService.getReadiness(id, organizationId, req.user.sub || req.user.id) };
   }
 
   @Post(':id/activate')
@@ -455,6 +497,28 @@ export class AgentsController {
         settings: original.settings,
         status: 'draft',
       } as any, organizationId, req.user.id);
+
+      // Roles live in their own table, so copying the agent row left them
+      // behind -- while `settings.execution.strategyKey` came across. The
+      // copy therefore kept the strategy and lost every role that
+      // strategy needs, and opened on "No roles yet" with every strategy
+      // reporting a missing slot. A duplicate that cannot run is not a
+      // duplicate.
+      const originalRoles = await this.agentRoles.find({ where: { organizationId, agentId: id } });
+      if (originalRoles.length) {
+        await this.agentRoles.save(
+          originalRoles.map(role =>
+            this.agentRoles.create({
+              organizationId,
+              agentId: duplicate.id,
+              key: role.key,
+              displayName: role.displayName,
+              requirement: role.requirement,
+              binding: role.binding,
+            }),
+          ),
+        );
+      }
 
       return {
         success: true,

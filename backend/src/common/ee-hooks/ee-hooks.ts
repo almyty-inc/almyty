@@ -150,3 +150,26 @@ export interface ComplianceEnforcementHook {
    */
   getEnforcement(organizationId: string): Promise<ComplianceEnforcement | null>;
 }
+
+// ── Connections governance (entitlement: connections_governance) ──
+
+export const CONNECTIONS_GOVERNANCE_HOOK = 'EE_CONNECTIONS_GOVERNANCE_HOOK';
+
+/**
+ * Org-wide policy over connections: connector allow/deny lists at
+ * connect time, scope rules at use time. Core calls it `@Optional()`
+ * from the connections service (`beforeConnect`) and the resolver
+ * (`beforeUse`, after the grant check). Refusals throw a
+ * ForbiddenException with `code: CONNECTION_POLICY_DENIED`; an
+ * unlicensed organization is never refused.
+ */
+export interface ConnectionsGovernanceHook {
+  beforeConnect(organizationId: string, connectorKey: string, owner: 'org' | 'user'): Promise<void>;
+  beforeUse(
+    organizationId: string,
+    connection: { id: string; organizationId: string; connectorKey?: string | null; ownerUserId?: string | null; [key: string]: any },
+    principal: { userId?: string; agentId?: string; workspaceId?: string; [key: string]: any },
+    context?: { purpose?: string; resourceType?: string; resourceId?: string; runId?: string; [key: string]: any },
+    decision?: { via?: string | null; grant?: { id?: string; principalType?: string; budgetId?: string | null } | null },
+  ): Promise<void>;
+}

@@ -1,4 +1,4 @@
-import { LlmModelsHelper, DEFAULT_MODEL_PRICING, getDefaultModelPricing } from '../llm-models.helper';
+import { LlmModelsHelper, DEFAULT_MODEL_PRICING, HOSTED_OPEN_MODEL_TYPES, getDefaultModelPricing } from '../llm-models.helper';
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 
@@ -80,7 +80,7 @@ describe('DEFAULT_MODEL_PRICING completeness', () => {
       [LlmProviderType.GROQ]: 'llama-3.3-70b-versatile',
       [LlmProviderType.TOGETHER]: 'meta-llama/llama-3.3-70b-instruct-turbo',
       [LlmProviderType.OPENROUTER]: 'anthropic/claude-sonnet-4',
-      [LlmProviderType.ANTHROPIC]: 'claude-sonnet-4-20250514',
+      [LlmProviderType.ANTHROPIC]: 'claude-sonnet-5',
       [LlmProviderType.GOOGLE]: 'gemini-2.5-flash',
       [LlmProviderType.COHERE]: 'command-r-plus',
     };
@@ -212,5 +212,60 @@ describe('calculateProviderCost', () => {
       MILLION,
     );
     expect(cost).toBe(0);
+  });
+});
+
+describe('Anthropic pricing rules', () => {
+  const price = (model: string) => getDefaultModelPricing(model, LlmProviderType.ANTHROPIC);
+
+  it('prices the current Claude 5 generation and Haiku 4.5', () => {
+    expect(price('claude-sonnet-5')).toEqual({ input: 0.002, output: 0.01 });
+    expect(price('claude-opus-5')).toEqual({ input: 0.005, output: 0.025 });
+    expect(price('claude-fable-5-1')).toEqual({ input: 0.01, output: 0.05 });
+    expect(price('claude-haiku-4-5-20251001')).toEqual({ input: 0.001, output: 0.005 });
+  });
+
+  it('does not let the bare claude-opus-4 rule shadow the cheaper Opus 4.5+ snapshots', () => {
+    for (const model of ['claude-opus-4-5', 'claude-opus-4-6', 'claude-opus-4-7-20260301', 'claude-opus-4-8']) {
+      expect(price(model)).toEqual({ input: 0.005, output: 0.025 });
+    }
+    expect(price('claude-opus-4-1-20250805')).toEqual({ input: 0.015, output: 0.075 });
+  });
+
+  it('keeps the Sonnet 4.x rate for dated Sonnet 4 snapshots', () => {
+    expect(price('claude-sonnet-4-5')).toEqual({ input: 0.003, output: 0.015 });
+  });
+});
+
+describe('OpenAI-compatible inference hosts are priced by the feed, never the seed', () => {
+  const helper = new LlmModelsHelper(makeEnvelopeCryptoMock());
+  const MILLION = 1_000_000;
+
+  it.each([...HOSTED_OPEN_MODEL_TYPES])('%s has an empty seed table', (type) => {
+    expect(DEFAULT_MODEL_PRICING[type]).toEqual([]);
+  });
+
+  it.each([...HOSTED_OPEN_MODEL_TYPES])(
+    '%s never borrows a vendor list price for a shared open model',
+    (type) => {
+      // 'deepseek-v3' on a host is not billed at DeepSeek's own rate.
+      expect(getDefaultModelPricing('deepseek-ai/deepseek-v3', type)).toBeNull();
+      expect(getDefaultModelPricing('gpt-oss-120b', type)).toBeNull();
+      expect(helper.calculateProviderCost(providerWith(type, 'deepseek-ai/deepseek-v3'), MILLION, MILLION)).toBe(0);
+    },
+  );
+
+  it('first-party vendors without seed rows (Perplexity, Z.ai) price only through the feed', () => {
+    expect(DEFAULT_MODEL_PRICING[LlmProviderType.PERPLEXITY]).toEqual([]);
+    expect(DEFAULT_MODEL_PRICING[LlmProviderType.ZAI]).toEqual([]);
+    expect(getDefaultModelPricing('sonar-pro', LlmProviderType.PERPLEXITY)).toBeNull();
+    expect(getDefaultModelPricing('glm-5', LlmProviderType.ZAI)).toBeNull();
+  });
+
+  it('a feed quote prices a hosted open model', () => {
+    const feed = { lookup: jest.fn().mockReturnValue({ inPerMTok: 0.4, outPerMTok: 1.6, currency: 'USD', source: 'feed:litellm', fetchedAt: new Date() }) };
+    const withFeed = new LlmModelsHelper(makeEnvelopeCryptoMock(), feed as any);
+    expect(withFeed.getModelPricing('deepseek-ai/DeepSeek-V3', LlmProviderType.NEBIUS)).toEqual({ input: 0.0004, output: 0.0016 });
+    expect(feed.lookup).toHaveBeenCalledWith(LlmProviderType.NEBIUS, 'deepseek-ai/DeepSeek-V3');
   });
 });

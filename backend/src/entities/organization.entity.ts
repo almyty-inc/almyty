@@ -17,6 +17,7 @@ import { Gateway } from './gateway.entity';
 import { LlmProvider } from './llm-provider.entity';
 import { Conversation } from './conversation.entity';
 import { UsageMetric } from './usage-metric.entity';
+import type { RoutingPolicy } from '../modules/model-catalog/routing/model-router';
 
 export interface OrganizationSettings {
   maxApis?: number;
@@ -31,6 +32,16 @@ export interface OrganizationSettings {
     enabled: boolean;
     endpoints: string[];
   };
+  /** Routing policy an llm_call node that names neither a provider nor a policy falls back to. */
+  defaultRouting?: RoutingPolicy | null;
+  /**
+   * Hosts this organization may reach even though they resolve to a
+   * private or loopback address. Per organization on purpose: the
+   * install-wide env flags it stands next to open every private range to
+   * every organization on the install, which is a far larger hole than
+   * the one anybody is trying to make.
+   */
+  egressAllowlist?: string[];
 }
 
 @Entity('organizations')
@@ -58,7 +69,7 @@ export class Organization {
   @Column({ default: true })
   isActive: boolean;
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: 'jsonb', nullable: true })
   settings: OrganizationSettings;
 
   @Column({ type: 'json', nullable: true })

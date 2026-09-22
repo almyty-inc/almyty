@@ -24,6 +24,7 @@ import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { Tool } from '@/types'
 import { runnerStateVariant, workspaceStatusVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface CodingAgent {
   id: string
@@ -76,7 +77,12 @@ export function RunnerDetailPage() {
     queryKey: ['runner', id],
     queryFn: () => runnersApi.getById(id),
     enabled: !!id,
-    refetchInterval: RUNNER_HEARTBEAT_POLL_MS,
+    // The FSM has no edge out of offline -- a runner that lost its
+    // grace period is deregistered and re-registered, never revived --
+    // so a bare interval polled a record that can never change again
+    // for as long as the tab stayed open.
+    refetchInterval: (query) =>
+      query.state.data?.state === 'offline' ? false : RUNNER_HEARTBEAT_POLL_MS,
   })
 
   useEffect(() => {
@@ -85,11 +91,15 @@ export function RunnerDetailPage() {
     return () => { document.title = 'almyty' }
   }, [runnerQuery.data])
 
+  const runnerOffline = runnerQuery.data?.state === 'offline'
   const workspacesQuery = useQuery<Workspace[]>({
     queryKey: ['workspaces', { runnerId: id }],
     queryFn: () => workspacesApi.getAll(),
     enabled: !!id,
-    refetchInterval: RUNNER_HEARTBEAT_POLL_MS,
+    // An offline runner cannot take new work, and every workspace
+    // pinned to it has already been stranded, so there is nothing
+    // left for this poll to find.
+    refetchInterval: runnerOffline ? false : RUNNER_HEARTBEAT_POLL_MS,
     select: (all) => all.filter(w => w.runnerId === id),
   })
 
@@ -111,7 +121,7 @@ export function RunnerDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['runners'] })
       navigate('/runners')
     },
-    onError: (err: any) => errNotif('Deregister failed', err?.response?.data?.message ?? err.message),
+    onError: (err: any) => errNotif('Deregister failed', getApiErrorMessage(err)),
   })
 
   if (runnerQuery.isLoading) {
@@ -149,7 +159,7 @@ export function RunnerDetailPage() {
         <div className="flex items-center gap-3">
           <Cpu className="h-7 w-7 text-muted-foreground" />
           <div>
-            <h1 className="text-2xl font-bold">{runner.name}</h1>
+            <h1 className="text-4xl font-heading font-extrabold tracking-tight">{runner.name}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant={runnerStateVariant[runner.state]}>{runner.state}</Badge>
               <span className="text-sm text-muted-foreground" title={runner.lastHeartbeatAt ?? ''}>

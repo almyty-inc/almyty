@@ -38,7 +38,7 @@ export function OverviewTab() {
     refetchInterval: 30000,
   })
 
-  const { data: timeline } = useQuery({
+  const { data: timeline, isLoading: loadingTimeline, isError: timelineError } = useQuery({
     queryKey: ['analytics-timeline', currentOrganization?.id],
     queryFn: () => analyticsApi.getTimeline('7d', 'day'),
     enabled: !!currentOrganization,
@@ -101,7 +101,7 @@ export function OverviewTab() {
           />
           <StatCard
             icon={MessageSquare}
-            label="LLM Sessions (24h)"
+            label="Model calls (24h)"
             value={formatNumber(overview.last24h?.llmSessions || 0)}
           />
           <StatCard icon={Globe} label="Requests (7d)" value={formatNumber(overview.last7d?.requests || 0)} />
@@ -112,7 +112,7 @@ export function OverviewTab() {
           />
           <StatCard
             icon={DollarSign}
-            label="LLM Cost (7d)"
+            label="Model cost (7d)"
             value={`$${((overview.last7d?.llmCostCents || 0) / 100).toFixed(4)}`}
           />
         </div>
@@ -132,6 +132,22 @@ export function OverviewTab() {
           <CardTitle className="text-lg">Requests (7 days)</CardTitle>
         </CardHeader>
         <CardContent>
+          {/*
+            The synthesized 7-day zero array below is for the genuine
+            empty-but-loaded case only. Rendering it while the query was
+            in flight -- or after it failed -- drew a confident flat line
+            on zero that is indistinguishable from real quiet traffic,
+            and on a permission or 500 error it stayed there forever.
+          */}
+          {loadingTimeline ? (
+            <div className="flex h-[250px] items-center justify-center">
+              <LoadingSpinner />
+            </div>
+          ) : timelineError ? (
+            <p className="flex h-[250px] items-center justify-center text-sm text-muted-foreground">
+              Couldn&apos;t load the request timeline.
+            </p>
+          ) : (
           <div className="h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={timelineData}>
@@ -149,6 +165,7 @@ export function OverviewTab() {
               </LineChart>
             </ResponsiveContainer>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

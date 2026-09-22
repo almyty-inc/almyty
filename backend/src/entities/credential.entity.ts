@@ -29,12 +29,26 @@ export enum CredentialType {
   GOOGLE_SERVICE_ACCOUNT = 'google_service_account',
   MTLS = 'mtls',
   /**
+   * A code-signing identity. `config` carries `certificate` (the .p12
+   * or .pfx, base64) and `certificatePassword`, plus `apiKeyId`,
+   * `apiIssuer` and `apiKey` for Apple notarisation. Consumed only by
+   * the app build, never sent to an API.
+   */
+  CODE_SIGNING = 'code_signing',
+  /**
    * Credentials used by canonical memory backends. The `config`
    * column carries backend-specific fields (`apiKey`, `baseUrl`,
    * `engine`, `bearer`, `project`, `location`) and is consumed
    * by `BackendCredentialsResolver`.
    */
   MEMORY_BACKEND = 'memory_backend',
+  /**
+   * An S3-compatible object store (AWS S3, R2, MinIO, Spaces) used as an
+   * org-owned model registry. `config` carries `endpoint` (optional,
+   * non-AWS), `region`, `bucket`, `prefix` (optional), `accessKeyId` and
+   * `secretAccessKey`; both keys are encrypted at rest.
+   */
+  S3_COMPATIBLE = 's3_compatible',
 }
 
 @Entity('credentials')
@@ -122,6 +136,31 @@ export class Credential {
   @Column({ type: 'json', nullable: true })
   usedBy: { type: string; id: string; name?: string }[];
 
+  // Connections layer (docs/design/connections.md). A Credential row
+  // with a connectorKey IS a connection: the catalog entry it was made
+  // through, the account the secret resolves to at the provider, and
+  // its last known health. Owner is the org unless ownerUserId is set.
+  @Column({ type: 'varchar', nullable: true })
+  connectorKey: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  ownerUserId: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  accountLabel: string | null;
+
+  @Column({ type: 'varchar', length: 16, default: 'unknown' })
+  healthStatus: 'valid' | 'failed' | 'expired' | 'revoked' | 'quota' | 'unknown';
+
+  @Column({ type: 'timestamp', nullable: true })
+  healthCheckedAt: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  healthError: string | null;
+
+  @Column({ type: 'json', nullable: true })
+  scopesGranted: string[] | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -150,7 +189,7 @@ export class Credential {
    */
   encryptSensitiveData(): void {
     if (this.config && typeof this.config === 'object') {
-      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken', 'headerValue', 'clientSecret', 'bearer', 'serviceAccountJson'];
+      const sensitiveFields = ['password', 'secret', 'token', 'key', 'client_secret', 'apiKey', 'accessToken', 'refreshToken', 'headerValue', 'clientSecret', 'bearer', 'serviceAccountJson', 'certificate', 'privateKey', 'certificatePassword', 'secretAccessKey', 'accessKeyId', 'sessionToken', 'tokenSecret', 'tokenId'];
       const encrypted = { ...this.config };
 
       for (const field of sensitiveFields) {
@@ -188,6 +227,13 @@ export class Credential {
     'password', 'secret', 'token', 'key', 'client_secret', 'apiKey',
     'accessToken', 'refreshToken', 'headerValue', 'clientSecret', 'bearer',
     'serviceAccountJson',
+    // A code-signing certificate carries a private key. Whoever holds
+    // it can sign software as the customer, so it is no less sensitive
+    // than a password and must not sit in plaintext JSON.
+    'certificate', 'privateKey', 'certificatePassword',
+    // S3-compatible registry connections (CredentialType.S3_COMPATIBLE)
+    // and Modal token pairs: both halves of the pair are encrypted.
+    'secretAccessKey', 'accessKeyId', 'sessionToken', 'tokenSecret', 'tokenId',
   ];
 
   /**

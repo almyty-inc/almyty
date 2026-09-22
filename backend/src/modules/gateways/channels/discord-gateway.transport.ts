@@ -13,7 +13,8 @@ import { WebSocket } from 'ws';
 
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { ChannelGatewayService } from './channel-gateway.service';
-import { getChannelConfig, normalizeChannelConfigKeys } from './channel-config.helper';
+import { getChannelConfig, hasChannelSecret } from './channel-config.helper';
+import { ChannelCredentialService } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 
 /**
@@ -116,6 +117,8 @@ interface DiscordConnection {
    * of the DEK cache TTL for the life of the connection.
    */
   botToken: string | null;
+  /** The in-flight store resolution started by connect(); HELLO waits on it when needed. */
+  tokenPending: Promise<void> | null;
   socket: DiscordSocket | null;
   sessionId: string | null;
   resumeUrl: string | null;
@@ -173,6 +176,8 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     // Optional so positional unit tests can construct the transport; when
     // present, decrypts a BYO-KMS gateway's kms bot token via the org's CMK.
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
+    // Optional for the same reason; resolves the gateway's connection.
+    @Optional() private readonly channelCredentials?: ChannelCredentialService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -212,18 +217,39 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
    */
   sync(gateway: Gateway): void {
     if (gateway.type !== GatewayType.DISCORD) return;
-    // Presence check only — inspect the stored (still-encrypted) value
-    // rather than decrypting, so this sync entry point never touches the
-    // CMK. The token is decrypted later, in connect(), at an async seam.
-    const rawToken = normalizeChannelConfigKeys(gateway.configuration).bot_token;
+    // Presence check only — inspect the stored (still-encrypted) value or
+    // the connection reference rather than decrypting, so this sync entry
+    // point never touches the CMK or the store. The token is resolved
+    // later, in connect(), at an async seam.
     const shouldRun =
-      gateway.status === GatewayStatus.ACTIVE &&
-      typeof rawToken === 'string' &&
-      rawToken.length > 0;
+      gateway.status === GatewayStatus.ACTIVE && hasChannelSecret(gateway.configuration, 'bot_token');
     if (shouldRun) {
       this.start(gateway);
     } else {
       this.stop(gateway.id);
+    }
+  }
+
+  /**
+   * The bot token through the credential store (a connection) or the
+   * inline shim. Never throws; a failure leaves `botToken` null and the
+   * HELLO handler decides.
+   */
+  private async resolveBotToken(conn: DiscordConnection): Promise<void> {
+    try {
+      const config = await ChannelCredentialService.resolveWith(
+        this.channelCredentials,
+        this.envelopeCrypto,
+        conn.gateway,
+        'channel_inbound',
+      );
+      if (typeof config.bot_token === 'string' && config.bot_token.length > 0) {
+        conn.botToken = config.bot_token;
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `discord bot token resolution failed (gateway ${conn.gateway.id}): ${err?.message ?? err}`,
+      );
     }
   }
 
@@ -233,6 +259,7 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
     const conn: DiscordConnection = {
       gateway,
       botToken: null,
+      tokenPending: null,
       socket: null,
       sessionId: null,
       resumeUrl: null,
@@ -435,11 +462,12 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
   private connect(conn: DiscordConnection): void {
     if (conn.stopped || !conn.leaseHeld) return;
 
-    // Kick off (non-blocking) a DEK warm for a BYO-KMS gateway so the token
-    // is unwrappable by the time Discord's HELLO arrives (a network round
-    // trip away). No-op for non-KMS orgs. The socket opens synchronously
-    // below regardless, preserving the pre-KMS connect behavior.
-    void this.envelopeCrypto?.warmOrg(conn.gateway.organizationId);
+    // Kick off (non-blocking) the token resolution: through the credential
+    // store when the gateway points at a connection, which also warms a
+    // BYO-KMS gateway's DEK so an inline token is unwrappable by the time
+    // Discord's HELLO arrives (a network round trip away). The socket
+    // opens synchronously below regardless.
+    conn.tokenPending = this.resolveBotToken(conn);
 
     const url =
       conn.canResume && conn.resumeUrl
@@ -488,28 +516,40 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
       case Op.HELLO:
         this.startHeartbeats(conn, socket, payload.d?.heartbeat_interval ?? 41250);
         // Resolve the bot token now (HELLO precedes the IDENTIFY/RESUME
-        // frame). The org's DEK was warmed at connect(), so a BYO-KMS
-        // gateway's `encrypted:kms:` token unwraps via this sync read;
-        // platform / plaintext tokens are unaffected. Cache on conn so the
-        // frames below (and later resumes on the same connection) never
-        // re-decrypt. A cold-cache kms read throws -> recycle rather than
-        // send a bad/empty token.
-        try {
-          conn.botToken =
-            getChannelConfig(conn.gateway.configuration, conn.gateway.organizationId)
-              .bot_token ?? null;
-        } catch (err: any) {
-          this.logger.error(
-            `discord bot token decrypt failed (gateway ${conn.gateway.id}): ${err?.message ?? err}`,
-          );
-          this.recycle(conn, socket, conn.canResume);
+        // frame). connect() started the store resolution; when it has
+        // landed the token is cached on conn and used as is. Otherwise the
+        // inline value (the shim for rows the backfill has not moved) is
+        // read synchronously: the org's DEK was warmed at connect(), so a
+        // BYO-KMS gateway's `encrypted:kms:` token unwraps. A cold-cache
+        // kms read throws -> recycle rather than send a bad/empty token.
+        if (!conn.botToken) {
+          try {
+            conn.botToken =
+              getChannelConfig(conn.gateway.configuration, conn.gateway.organizationId)
+                .bot_token ?? null;
+          } catch (err: any) {
+            this.logger.error(
+              `discord bot token decrypt failed (gateway ${conn.gateway.id}): ${err?.message ?? err}`,
+            );
+            this.recycle(conn, socket, conn.canResume);
+            break;
+          }
+        }
+        if (!conn.botToken && conn.tokenPending) {
+          // The connection holds the token and the store read is still in
+          // flight: identify as soon as it lands, on this socket only.
+          void conn.tokenPending.then(() => {
+            if (conn.stopped || conn.socket !== socket) return;
+            if (!conn.botToken) {
+              this.logger.error(`discord bot token unavailable (gateway ${conn.gateway.id})`);
+              this.recycle(conn, socket, conn.canResume);
+              return;
+            }
+            this.sendResumeOrIdentify(conn, socket);
+          });
           break;
         }
-        if (conn.canResume && conn.sessionId && conn.seq !== null) {
-          this.sendResume(conn, socket);
-        } else {
-          this.sendIdentify(conn, socket);
-        }
+        this.sendResumeOrIdentify(conn, socket);
         break;
       case Op.HEARTBEAT_ACK:
         conn.heartbeatAcked = true;
@@ -573,6 +613,14 @@ export class DiscordGatewayTransport implements OnApplicationBootstrap, OnModule
   // ---------------------------------------------------------------------------
   // Identify / resume / heartbeat
   // ---------------------------------------------------------------------------
+
+  private sendResumeOrIdentify(conn: DiscordConnection, socket: DiscordSocket): void {
+    if (conn.canResume && conn.sessionId && conn.seq !== null) {
+      this.sendResume(conn, socket);
+    } else {
+      this.sendIdentify(conn, socket);
+    }
+  }
 
   private sendIdentify(conn: DiscordConnection, socket: DiscordSocket): void {
     this.sendJson(socket, {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
 import { OrganizationsPage } from '../organizations'
@@ -40,6 +41,8 @@ vi.mock('../../store/organization', () => ({
     currentOrganization: { id: 'current-org', name: 'Current' },
     organizations: [],
     setCurrentOrganization: vi.fn(),
+    upsertOrganization: vi.fn(),
+    removeOrganization: vi.fn(),
   }),
 }))
 
@@ -65,6 +68,26 @@ describe('OrganizationsPage', () => {
     }
   })
 
+  it('keeps the API rejection visible in the creation dialog, preserves input, and clears it on retry', async () => {
+    vi.mocked(organizationsApi.getAll).mockResolvedValue([])
+    vi.mocked(organizationsApi.create).mockRejectedValueOnce({
+      response: { data: { error: { message: 'Organization with this name or slug already exists' } } },
+    }).mockImplementationOnce(() => new Promise(() => {}))
+    const user = userEvent.setup()
+    render(<OrganizationsPage />)
+    await user.click(await screen.findByRole('button', { name: 'Create Organization' }))
+    const dialog = within(screen.getByRole('dialog'))
+    const name = dialog.getByLabelText('Organization Name')
+    await user.type(name, 'QA First Run')
+    await user.click(dialog.getByRole('button', { name: 'Create', exact: true }))
+
+    expect(await dialog.findByRole('alert')).toHaveTextContent('Organization with this name or slug already exists')
+    expect(name).toHaveValue('QA First Run')
+    await user.click(dialog.getByRole('button', { name: 'Create', exact: true }))
+    await waitFor(() => expect(dialog.queryByRole('alert')).not.toBeInTheDocument())
+    expect(dialog.getByRole('button', { name: 'Creating...' })).toBeDisabled()
+  })
+
   it('renders the org row with its real name when given a flat array (post-extractData)', async () => {
     ;(organizationsApi.getAll as any).mockResolvedValue([
       {
@@ -87,5 +110,77 @@ describe('OrganizationsPage', () => {
     // The pre-fix behavior rendered "Invalid Date" because we fell
     // through to a Zustand-store fallback with no createdAt field.
     expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
+  })
+  /**
+   * Two numbers on this page were always wrong. The row subtitle read
+   * `org.members?.length` off a list payload that does not hydrate the
+   * relation, so it said "0 members" for a full organization; the Members
+   * tab reached for `membersData.data` on a value that was already the
+   * array, so it was permanently empty. Both are read straight now.
+   */
+  describe('member numbers', () => {
+    const org = {
+      id: 'org-a',
+      name: 'alpha-org',
+      slug: 'alpha-org',
+      isActive: true,
+      plan: 'free',
+      memberCount: 5,
+      createdAt: '2026-06-01T12:17:57.470Z',
+      updatedAt: '2026-06-02T00:00:00.000Z',
+    }
+
+    it('prints the count the API sent, not zero', async () => {
+      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
+      vi.mocked(organizationsApi.getMembers).mockResolvedValue([] as any)
+
+      render(<OrganizationsPage />)
+
+      expect(await screen.findByText('5 members')).toBeInTheDocument()
+      expect(screen.queryByText('0 members')).not.toBeInTheDocument()
+    })
+
+    it('lists the members the API returned', async () => {
+      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
+      vi.mocked(organizationsApi.getMembers).mockResolvedValue([
+        { id: 'm1', userId: 'u1', role: 'owner', user: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' } },
+      ] as any)
+
+      render(<OrganizationsPage />)
+
+      await userEvent.click(await screen.findByText('alpha-org'))
+      await userEvent.click(await screen.findByRole('tab', { name: /members/i }))
+
+      expect(await screen.findByText(/ada@example.com/i)).toBeInTheDocument()
+    })
+  })
+
+  // The row's onRowClick was the only way into an organization, and a click
+  // handler on a <tr> is invisible to the keyboard. The name is a real
+  // button now, so it is tabbable and opens on Enter.
+  it('opens the organization from the keyboard', async () => {
+    vi.mocked(organizationsApi.getAll).mockResolvedValue([
+      {
+        id: 'org-a',
+        name: 'alpha-org',
+        slug: 'alpha-org',
+        isActive: true,
+        plan: 'free',
+        memberCount: 1,
+        createdAt: '2026-06-01T12:17:57.470Z',
+        updatedAt: '2026-06-02T00:00:00.000Z',
+      },
+    ] as any)
+    vi.mocked(organizationsApi.getMembers).mockResolvedValue([] as any)
+
+    render(<OrganizationsPage />)
+
+    const nameButton = await screen.findByRole('button', { name: 'alpha-org' })
+    nameButton.focus()
+    expect(nameButton).toHaveFocus()
+
+    await userEvent.keyboard('{Enter}')
+
+    expect(await screen.findByRole('tab', { name: /members/i })).toBeInTheDocument()
   })
 })

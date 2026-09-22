@@ -134,6 +134,80 @@ class GatewayToolSearchQueryDto {
   sortOrder?: 'ASC' | 'DESC';
 }
 
+// The PATCH body used to be typed `any`, which meant Nest had no metatype to
+// validate against and the whole request object reached
+// `Object.assign(gatewayTool, dto)` on an entity carrying `gatewayId` and
+// `toolId` columns. That let an admin of their own org repoint an association
+// at a foreign org's tool, or push their own row onto another org's gateway --
+// the same cross-tenant attack that was already closed on associateTool and
+// bulkAssociateTools. `gatewayId` and `toolId` are identity, not
+// configuration: moving an association is a dissociate plus an associate, and
+// both of those re-check the organization. So they are absent here and the
+// pipe refuses them outright.
+export class UpdateGatewayToolBodyDto {
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @IsObject()
+  overrides?: {
+    name?: string;
+    description?: string;
+    parameters?: Record<string, any>;
+    rateLimit?: {
+      requestsPerMinute?: number;
+      requestsPerHour?: number;
+    };
+    timeout?: number;
+    retries?: number;
+    cache?: {
+      enabled: boolean;
+      ttl?: number;
+    };
+  };
+
+  @IsOptional()
+  @IsObject()
+  permissions?: {
+    allowedUsers?: string[];
+    allowedRoles?: string[];
+    allowedOrganizations?: string[];
+    requiredScopes?: string[];
+  };
+
+  @IsOptional()
+  @IsObject()
+  transformations?: {
+    inputMapping?: Record<string, string>;
+    outputMapping?: Record<string, string>;
+    headerMapping?: Record<string, string>;
+  };
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, any>;
+
+  @IsOptional()
+  @IsObject()
+  securityPolicy?: {
+    allowedDomains?: string[];
+    blockedDomains?: string[];
+    maxResponseSizeBytes?: number;
+    allowedHttpMethods?: string[];
+    requireHttps?: boolean;
+  } | null;
+}
+
+// Refusal is asserted locally rather than relying on the global pipe in
+// main.ts, so the gate is exercised by unit tests and survives any change to
+// the bootstrap file.
+export const updateGatewayToolValidationPipe = new ValidationPipe({
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transform: true,
+});
+
 @Controller('gateways')
 @ApiTags('Gateways')
 @ApiBearerAuth()
@@ -272,7 +346,7 @@ export class GatewayToolsController {
   async updateGatewayTool(
     @Param('gatewayId', ParseUUIDPipe) gatewayId: string,
     @Param('gatewayToolId', ParseUUIDPipe) gatewayToolId: string,
-    @Body() updateDto: any,
+    @Body(updateGatewayToolValidationPipe) updateDto: UpdateGatewayToolBodyDto,
     @Request() req: any,
   ) {
     try {

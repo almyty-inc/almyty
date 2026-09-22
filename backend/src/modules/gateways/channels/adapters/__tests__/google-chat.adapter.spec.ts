@@ -41,8 +41,8 @@ describe('GoogleChatAdapter', () => {
   });
 
   describe('verifyWebhook', () => {
-    it('returns true when no verification_token configured', async () => {
-      expect(await adapter.verifyWebhook({}, {}, {})).toBe(true);
+    it('refuses inbound when no verification_token is configured', async () => {
+      expect(await adapter.verifyWebhook({}, {}, {})).toBe(false);
     });
     it('accepts matching bearer token', async () => {
       expect(await adapter.verifyWebhook({}, { authorization: 'Bearer abc' }, { verification_token: 'abc' })).toBe(true);
@@ -65,9 +65,34 @@ describe('GoogleChatAdapter', () => {
         thread: { name: 'spaces/AAA/threads/T1' },
       });
     });
-    it('skips when webhook_url missing', async () => {
-      await adapter.sendResponse({}, { text: 'r' }, {});
+    it('refuses rather than skipping when webhook_url is missing', async () => {
+      await expect(adapter.sendResponse({}, { text: 'r' }, {})).rejects.toThrow(
+        /webhook_url is not configured/,
+      );
       expect(fetchMock.calls.length).toBe(0);
+    });
+
+    /**
+     * Google Chat refuses with a status and `{error: {message, status}}`
+     * — a deleted space, a revoked webhook, a thread name from another
+     * space. Discarding it filed each as a delivered reply.
+     */
+    it('refuses a space-webhook rejection and keeps Google\'s message and status', async () => {
+      fetchMock.setNextResponse({
+        ok: false,
+        status: 404,
+        json: { error: { code: 404, message: 'Requested entity was not found.', status: 'NOT_FOUND' } },
+      });
+      await expect(
+        adapter.sendResponse({ webhook_url: 'https://chat.googleapis.com/v1/spaces/AAA/messages' }, { text: 'r' }, {}),
+      ).rejects.toThrow(/Requested entity was not found.*NOT_FOUND/);
+    });
+
+    it('does not swallow a network failure', async () => {
+      (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('offline'));
+      await expect(
+        adapter.sendResponse({ webhook_url: 'https://chat.googleapis.com/v1/spaces/AAA/messages' }, { text: 'r' }, {}),
+      ).rejects.toThrow('offline');
     });
   });
 });

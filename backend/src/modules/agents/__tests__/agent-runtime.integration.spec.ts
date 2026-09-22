@@ -391,7 +391,10 @@ describe('AgentRuntimeService (integration)', () => {
       expect(result).toBe('done');
       const updatedRun = runStore.find(r => r.id === run.id);
       expect(updatedRun!.status).toBe(AgentRunStatus.FAILED);
-      expect(updatedRun!.error).toBe('MAX_STEPS_EXCEEDED');
+      // Code plus explanation, never a bare stop: the caller can tell
+      // what tripped and what to do about it.
+      expect(updatedRun!.error).toMatch(/^MAX_STEPS_EXCEEDED: /);
+      expect(updatedRun!.metadata?.limitTrip?.code).toBe('MAX_STEPS_EXCEEDED');
     });
 
     it('should fail run when budget exceeded (totalCost is dollars, maxCostCents is cents)', async () => {
@@ -408,7 +411,7 @@ describe('AgentRuntimeService (integration)', () => {
       expect(result).toBe('done');
       const updatedRun = runStore.find(r => r.id === run.id);
       expect(updatedRun!.status).toBe(AgentRunStatus.FAILED);
-      expect(updatedRun!.error).toBe('BUDGET_EXCEEDED');
+      expect(updatedRun!.error).toMatch(/^BUDGET_EXCEEDED: /);
     });
 
     it('should NOT trip budget when dollars are still under the cents cap', async () => {
@@ -428,7 +431,7 @@ describe('AgentRuntimeService (integration)', () => {
 
       const updatedRun = runStore.find(r => r.id === run.id);
       // Should NOT be BUDGET_EXCEEDED — $0.50 is under the $1.00 cap.
-      expect(updatedRun!.error).not.toBe('BUDGET_EXCEEDED');
+      expect(updatedRun!.error ?? '').not.toMatch(/^BUDGET_EXCEEDED/);
     });
 
     it('should trip budget at the exact cent boundary', async () => {
@@ -444,7 +447,7 @@ describe('AgentRuntimeService (integration)', () => {
 
       const result = await service.processStep(run.id);
       let updatedRun = runStore.find(r => r.id === run.id);
-      expect(updatedRun!.error).not.toBe('BUDGET_EXCEEDED');
+      expect(updatedRun!.error ?? '').not.toMatch(/^BUDGET_EXCEEDED/);
 
       // Now bump to exactly the cap.
       updatedRun!.totalCost = 1.0; // $1.00 = 100 cents
@@ -455,7 +458,7 @@ describe('AgentRuntimeService (integration)', () => {
 
       await service.processStep(run.id);
       updatedRun = runStore.find(r => r.id === run.id);
-      expect(updatedRun!.error).toBe('BUDGET_EXCEEDED');
+      expect(updatedRun!.error).toMatch(/^BUDGET_EXCEEDED: /);
     });
 
     it('should fail run when duration exceeded', async () => {
@@ -470,7 +473,7 @@ describe('AgentRuntimeService (integration)', () => {
       expect(result).toBe('done');
       const updatedRun = runStore.find(r => r.id === run.id);
       expect(updatedRun!.status).toBe(AgentRunStatus.FAILED);
-      expect(updatedRun!.error).toBe('TIMEOUT');
+      expect(updatedRun!.error).toMatch(/^TIMEOUT: /);
     });
 
     it('should complete run when LLM returns no tool calls', async () => {
@@ -766,6 +769,9 @@ describe('AgentRuntimeService (integration)', () => {
       expect(
         messageStore.some(m => m.role === 'user' && String(m.content).includes('verification panel')),
       ).toBe(false);
+      expect(
+        messageStore.find(m => m.role === 'assistant' && m.runId === run.id)?.metadata?.internal,
+      ).not.toBe(true);
     });
 
     it('sends the answer back for revision when the panel fails (within budget)', async () => {
@@ -786,6 +792,17 @@ describe('AgentRuntimeService (integration)', () => {
       );
       expect(critique).toBeDefined();
       expect(String(critique!.content)).toContain('missing total');
+      expect(critique!.metadata).toMatchObject({
+        internal: true,
+        internalPurpose: 'verification_revision',
+      });
+      const rejectedDraft = messageStore.find(
+        m => m.role === 'assistant' && m.runId === run.id,
+      );
+      expect(rejectedDraft?.metadata).toMatchObject({
+        internal: true,
+        internalPurpose: 'verification_candidate',
+      });
     });
 
     it('completes anyway once the revision budget is exhausted', async () => {
@@ -804,6 +821,9 @@ describe('AgentRuntimeService (integration)', () => {
       const stored = runStore.find(r => r.id === run.id)!;
       expect(stored.status).toBe(AgentRunStatus.COMPLETED);
       expect(stored.metadata?.verify?.exhausted).toBe(true);
+      expect(
+        messageStore.find(m => m.role === 'assistant' && m.runId === run.id)?.metadata?.internal,
+      ).not.toBe(true);
     });
 
     it('does not run the panel when verify is disabled', async () => {
@@ -864,6 +884,10 @@ describe('AgentRuntimeService (integration)', () => {
       );
       expect(advisory).toBeDefined();
       expect(String(advisory!.content)).toContain('off track');
+      expect(advisory!.metadata).toMatchObject({
+        internal: true,
+        internalPurpose: 'verification_advisory',
+      });
     });
 
     it('skips the final-output gate when on_final_output is not a configured trigger', async () => {

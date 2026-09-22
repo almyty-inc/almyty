@@ -21,6 +21,23 @@ export interface PaginatedUsers {
   totalPages: number;
 }
 
+/** Fields that must never leave the server on a User row. */
+export const USER_SECRET_FIELDS = [
+  'passwordHash',
+  'resetPasswordToken',
+  'resetPasswordExpires',
+  'verificationToken',
+  'twoFactorSecret',
+] as const;
+
+export function stripUserSecrets<T extends Record<string, any>>(user: T): T {
+  for (const field of USER_SECRET_FIELDS) delete (user as any)[field];
+  for (const membership of (user as any).organizationMemberships ?? []) {
+    delete membership?.inviteToken;
+  }
+  return user;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -69,7 +86,13 @@ export class UsersService {
       .getManyAndCount();
 
     return {
-      users,
+      // Raw rows carry passwordHash, resetPasswordToken and the invite
+      // tokens on each membership. The sibling routes in this service all
+      // destructure those away; this one did not, so every admin page
+      // load put bcrypt hashes into a browser cache and any HAR file.
+      // @Exclude() on the entity does not help: no ClassSerializerInterceptor
+      // is registered anywhere in this application.
+      users: users.map(stripUserSecrets),
       total,
       page,
       limit,

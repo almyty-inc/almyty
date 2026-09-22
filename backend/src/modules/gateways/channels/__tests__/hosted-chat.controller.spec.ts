@@ -1,0 +1,452 @@
+import { BadRequestException, HttpException, NotFoundException } from '@nestjs/common';
+
+import { HostedChatController } from '../hosted-chat.controller';
+import { HostedChatService } from '../hosted-chat.service';
+import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gateway.entity';
+import type { EndUser } from '../../../../entities/end-user.entity';
+
+/**
+ * The HTTP layer of the public chat API.
+ *
+ * Every route here is unauthenticated and reachable by anyone on the
+ * internet, so these tests are less about happy paths than about what
+ * the routes refuse: an id the caller supplied, a run they do not own,
+ * a host that is not theirs.
+ */
+describe('HostedChatController', () => {
+  let hostedChat: any;
+  let gatewayRateLimit: any;
+  let agentRuntimeService: any;
+  let controller: HostedChatController;
+  let res: any;
+
+  const gateway = (): Gateway => {
+    const gw = new Gateway();
+    gw.id = 'gw-1';
+    gw.name = 'Acme chat';
+    gw.type = GatewayType.HOSTED_CHAT;
+    gw.status = GatewayStatus.ACTIVE;
+    gw.organizationId = 'org-1';
+    gw.agentId = 'agent-1';
+    gw.configuration = {
+      bot_token: 'xoxb-secret',
+      hostedChat: { slug: 'acme', appName: 'Acme Assistant' },
+    };
+    return gw;
+  };
+
+  const endUser = { id: 'eu-1' } as EndUser;
+
+  const req = (overrides: any = {}) =>
+    ({
+      headers: {},
+      cookies: {},
+      ip: '203.0.113.9',
+      on: jest.fn(),
+      ...overrides,
+    }) as any;
+
+  beforeEach(() => {
+    res = {
+      cookie: jest.fn(),
+      setHeader: jest.fn(),
+      json: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+      flushHeaders: jest.fn(),
+    };
+    hostedChat = {
+      findBySlug: jest.fn(async () => gateway()),
+      findByCustomDomain: jest.fn(async () => null),
+      publicBranding: jest.fn(() => ({ appName: 'Acme Assistant' })),
+      resolveEndUser: jest.fn(async () => ({ endUser, issuedSessionKey: null })),
+      listConversations: jest.fn(async () => []),
+      findConversation: jest.fn(async () => ({ id: 'conv-1', title: 'New chat' })),
+      startConversation: jest.fn(async () => ({ id: 'conv-1', title: 'hello' })),
+      listMessages: jest.fn(async () => []),
+      runBelongsToEndUser: jest.fn(async () => true),
+      authMode: jest.fn(() => 'public_link'),
+      requiresAuth: jest.fn(() => false),
+      isAuthorized: jest.fn(() => true),
+      authModeAvailable: jest.fn(async () => true),
+      deleteConversation: jest.fn(async () => undefined),
+      deleteVisitor: jest.fn(async () => undefined),
+      exportVisitor: jest.fn(async () => ({ exportedAt: 'now', conversations: [] })),
+
+
+    };
+    gatewayRateLimit = { check: jest.fn(async () => ({ limited: false })), checkVisitor: jest.fn(async () => ({ limited: false })) };
+    agentRuntimeService = {
+      startRun: jest.fn(async () => ({ id: 'run-1' })),
+      getRun: jest.fn(async () => ({
+        id: 'run-1',
+        status: 'running',
+        agent: { agentConfig: {} },
+      })),
+      subscribeRunEvents: jest.fn(async (_runId, handler) => {
+        handler({ type: 'run.completed', data: { output: 'done' } });
+      }),
+    };
+    controller = new HostedChatController(hostedChat, gatewayRateLimit, agentRuntimeService);
+  });
+
+  describe('per-visitor rate limit', () => {
+    it('checks the visitor share with the visitor id and hashed address, after the surface ceiling', async () => {
+      await controller.postMessage('acme', { message: 'hi' }, req({ headers: { 'x-forwarded-for': '198.51.100.7' } }), res);
+      expect(gatewayRateLimit.checkVisitor).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), {
+        endUserId: 'eu-1',
+        clientHash: expect.stringMatching(/^[0-9a-f]{32}$/),
+      });
+    });
+
+    it('answers 429 with a visitor-specific code and Retry-After, and starts no run', async () => {
+      gatewayRateLimit.checkVisitor.mockResolvedValue({ limited: true, code: 'VISITOR_RATE_LIMITED', message: 'Too many messages from you (60 per hour). Please wait 40 seconds.', retryAfterSeconds: 40 });
+      const failure = await controller.postMessage('acme', { message: 'hi' }, req(), res).catch((e) => e);
+      expect(failure).toBeInstanceOf(HttpException);
+      expect(failure.getStatus()).toBe(429);
+      expect(failure.getResponse()).toMatchObject({ code: 'VISITOR_RATE_LIMITED' });
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '40');
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    it('keeps the surface ceiling distinguishable from the visitor share', async () => {
+      gatewayRateLimit.check.mockResolvedValue({ limited: true, code: 'SURFACE_RATE_LIMITED', message: 'Gateway rate limit exceeded', retryAfterSeconds: 5 });
+      const failure = await controller.postMessage('acme', { message: 'hi' }, req(), res).catch((e) => e);
+      expect(failure.getResponse()).toMatchObject({ code: 'SURFACE_RATE_LIMITED' });
+      expect(gatewayRateLimit.checkVisitor).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('visitor self-service', () => {
+    it('deletes one conversation, scoped to the cookie visitor', async () => {
+      const out = await controller.deleteConversation('acme', 'conv-1', req(), res);
+      expect(hostedChat.deleteConversation).toHaveBeenCalledWith(endUser, 'conv-1');
+      expect(out).toEqual({ success: true });
+    });
+
+    it('erases the visitor and clears the cookie', async () => {
+      res.clearCookie = jest.fn();
+      await controller.deleteMe('acme', req(), res);
+      expect(hostedChat.deleteVisitor).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), endUser);
+      expect(res.clearCookie).toHaveBeenCalledWith(HostedChatService.SESSION_COOKIE, { path: '/' });
+    });
+
+    it('exports as a download, and counts it against the visitor share', async () => {
+      const out = await controller.exportMe('acme', req(), res);
+      expect(gatewayRateLimit.checkVisitor).toHaveBeenCalled();
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="acme-my-data.json"');
+      expect(out).toMatchObject({ conversations: [] });
+    });
+
+    it('refuses with a stable code when the product switched the right off', async () => {
+      const gw = gateway();
+      (gw.configuration as any).hostedChat.visitorCanDelete = false;
+      (gw.configuration as any).hostedChat.visitorCanExport = false;
+      hostedChat.findBySlug.mockResolvedValue(gw);
+      for (const call of [
+        () => controller.deleteConversation('acme', 'conv-1', req(), res),
+        () => controller.deleteMe('acme', req(), res),
+        () => controller.exportMe('acme', req(), res),
+      ]) {
+        const failure = await call().catch((e) => e);
+        expect(failure.getStatus()).toBe(403);
+        expect(failure.getResponse()).toMatchObject({ code: 'VISITOR_RIGHT_DISABLED' });
+      }
+      expect(hostedChat.deleteConversation).not.toHaveBeenCalled();
+      expect(hostedChat.deleteVisitor).not.toHaveBeenCalled();
+    });
+
+    it('applies the auth gate before any self-service action', async () => {
+      hostedChat.authMode.mockReturnValue('sso');
+      hostedChat.requiresAuth.mockReturnValue(true);
+      hostedChat.isAuthorized.mockReturnValue(false);
+      await expect(controller.deleteMe('acme', req(), res)).rejects.toMatchObject({ status: 401 });
+      expect(hostedChat.deleteVisitor).not.toHaveBeenCalled();
+    });
+
+    it('tells the runtime whether visitor turns may feed shared memory', async () => {
+      await controller.postMessage('acme', { message: 'hi' }, req(), res);
+      const options = agentRuntimeService.startRun.mock.calls[0][4];
+      expect(options.metadata).toEqual({ visitorMemory: false });
+    });
+  });
+
+  describe('visitor auth gate', () => {
+    const requireSso = () => {
+      hostedChat.authMode.mockReturnValue('sso');
+      hostedChat.requiresAuth.mockReturnValue(true);
+    };
+
+    it('admits anyone on a public-link surface without asking who they are', async () => {
+      await controller.listConversations('acme', req(), res);
+      expect(hostedChat.isAuthorized).not.toHaveBeenCalled();
+    });
+
+    it('refuses an anonymous visitor on an SSO surface with a stable code', async () => {
+      requireSso();
+      hostedChat.isAuthorized.mockReturnValue(false);
+      const failure = await controller.listConversations('acme', req(), res).catch((e) => e);
+      expect(failure).toBeInstanceOf(HttpException);
+      expect(failure.getStatus()).toBe(401);
+      expect(failure.getResponse()).toMatchObject({ code: 'AUTH_REQUIRED', authMode: 'sso' });
+    });
+
+    it('gates sending, streaming and transcripts the same way', async () => {
+      requireSso();
+      hostedChat.isAuthorized.mockReturnValue(false);
+      await expect(controller.postMessage('acme', { message: 'hi' }, req(), res)).rejects.toMatchObject({ status: 401 });
+      await expect(controller.messages('acme', 'conv-1', req(), res)).rejects.toMatchObject({ status: 401 });
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    it('admits a visitor signed in the required way', async () => {
+      requireSso();
+      hostedChat.isAuthorized.mockReturnValue(true);
+      const out = await controller.listConversations('acme', req(), res);
+      expect(out.success).toBe(true);
+    });
+
+    it('closes an SSO surface whose organization is not entitled, instead of opening it', async () => {
+      requireSso();
+      hostedChat.authModeAvailable.mockResolvedValue(false);
+      hostedChat.isAuthorized.mockReturnValue(true);
+      const failure = await controller.listConversations('acme', req(), res).catch((e) => e);
+      expect(failure.getStatus()).toBe(503);
+      expect(failure.getResponse()).toMatchObject({ code: 'AUTH_MODE_UNAVAILABLE' });
+    });
+
+    it('reports who the visitor is without gating, so the page can show a sign-in', async () => {
+      requireSso();
+      hostedChat.isAuthorized.mockReturnValue(false);
+      const out = await controller.me('acme', req(), res);
+      expect(out.data).toMatchObject({ authMode: 'sso', authenticated: false, available: true });
+    });
+  });
+
+  describe('session cookie', () => {
+    it('sets an httpOnly cookie with no Domain, so it is scoped per tenant host', async () => {
+      hostedChat.resolveEndUser.mockResolvedValueOnce({ endUser, issuedSessionKey: 'fresh' });
+      await controller.listConversations('acme', req(), res);
+
+      const [name, value, options] = res.cookie.mock.calls[0];
+      expect(name).toBe(HostedChatService.SESSION_COOKIE);
+      expect(value).toBe('fresh');
+      expect(options.httpOnly).toBe(true);
+      // An explicit Domain would let one tenant's app read another's session.
+      expect(options.domain).toBeUndefined();
+    });
+
+    it('does not reissue a cookie for a visitor who already has one', async () => {
+      await controller.listConversations('acme', req({ cookies: { almyty_chat_session: 'known' } }), res);
+      expect(res.cookie).not.toHaveBeenCalled();
+    });
+
+    it('passes the caller cookie through to resolution', async () => {
+      await controller.listConversations('acme', req({ cookies: { almyty_chat_session: 'abc' } }), res);
+      expect(hostedChat.resolveEndUser).toHaveBeenCalledWith(expect.anything(), 'abc', '203.0.113.9');
+    });
+
+    it('prefers the forwarded client IP over the socket peer', async () => {
+      // Behind the ingress, req.ip is the proxy, so per-IP limits would
+      // otherwise bucket every visitor together.
+      await controller.listConversations(
+        'acme',
+        req({ headers: { 'x-forwarded-for': '198.51.100.4, 10.0.0.1' } }),
+        res,
+      );
+      expect(hostedChat.resolveEndUser).toHaveBeenCalledWith(
+        expect.anything(),
+        undefined,
+        '198.51.100.4',
+      );
+    });
+  });
+
+  describe('branding', () => {
+    it('returns presentation fields only', async () => {
+      const result = await controller.branding('acme', res);
+      expect(result.data).toEqual({ appName: 'Acme Assistant' });
+      expect(JSON.stringify(result)).not.toContain('xoxb-secret');
+    });
+
+    it('propagates a 404 for an unknown slug', async () => {
+      hostedChat.findBySlug.mockRejectedValueOnce(new NotFoundException('Chat app not found'));
+      await expect(controller.branding('nope', res)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('by-host resolution', () => {
+    it('resolves a tenant subdomain by slug', async () => {
+      await controller.byHost(req({ headers: { host: 'acme.almyty.app' } }), res);
+      expect(hostedChat.findBySlug).toHaveBeenCalledWith('acme');
+      expect(hostedChat.findByCustomDomain).not.toHaveBeenCalled();
+    });
+
+    it('falls through to a custom domain for a host outside the base domain', async () => {
+      hostedChat.findByCustomDomain.mockResolvedValueOnce(gateway());
+      await controller.byHost(req({ headers: { host: 'chat.acme.com' } }), res);
+      expect(hostedChat.findByCustomDomain).toHaveBeenCalledWith('chat.acme.com');
+    });
+
+    it('404s for a host belonging to nobody', async () => {
+      await expect(
+        controller.byHost(req({ headers: { host: 'evil.example' } }), res),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('varies on Host so a shared cache cannot mix tenants', async () => {
+      await controller.byHost(req({ headers: { host: 'acme.almyty.app' } }), res);
+      expect(res.setHeader).toHaveBeenCalledWith('Vary', 'Host, X-Forwarded-Host');
+    });
+
+    it('prefers the forwarded host, which is what the ingress sets', async () => {
+      await controller.byHost(
+        req({ headers: { host: 'internal-svc', 'x-forwarded-host': 'acme.almyty.app' } }),
+        res,
+      );
+      expect(hostedChat.findBySlug).toHaveBeenCalledWith('acme');
+    });
+  });
+
+  describe('sending a message', () => {
+    it('starts a run attributed to the visitor, not a dashboard user', async () => {
+      // The visitor id goes in endUserId, never in the userId slot.
+      // `conversations.userId` references `users`, and a visitor has no
+      // row there, so passing it as userId made every conversation
+      // write fail — a hosted chat accepted the message and then died
+      // at the first model call.
+      const result = await controller.postMessage('acme', { message: 'hello' }, req(), res);
+      expect(agentRuntimeService.startRun).toHaveBeenCalledWith(
+        'agent-1',
+        'org-1',
+        null,
+        'hello',
+        expect.objectContaining({ conversationId: 'conv-1', endUserId: 'eu-1' }),
+      );
+      expect(result.data).toEqual({ runId: 'run-1', conversationId: 'conv-1' });
+    });
+
+    it('rejects an empty or whitespace message', async () => {
+      for (const message of ['', '   ', undefined]) {
+        await expect(
+          controller.postMessage('acme', { message } as any, req(), res),
+        ).rejects.toThrow(BadRequestException);
+      }
+    });
+
+    it('rejects a message past the length cap', async () => {
+      await expect(
+        controller.postMessage('acme', { message: 'x'.repeat(4001) }, req(), res),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('returns 429 with Retry-After when the surface is rate limited', async () => {
+      gatewayRateLimit.check.mockResolvedValueOnce({ limited: true, retryAfterSeconds: 30 });
+      await expect(
+        controller.postMessage('acme', { message: 'hello' }, req(), res),
+      ).rejects.toMatchObject({ status: 429 });
+      expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '30');
+    });
+
+    it('checks the rate limit before starting any run', async () => {
+      gatewayRateLimit.check.mockResolvedValueOnce({ limited: true });
+      await expect(
+        controller.postMessage('acme', { message: 'hello' }, req(), res),
+      ).rejects.toBeInstanceOf(HttpException);
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    it('continues an existing conversation only through the ownership-scoped lookup', async () => {
+      await controller.postMessage('acme', { message: 'hi', conversationId: 'conv-9' }, req(), res);
+      // Never a bare findOne on the supplied id.
+      expect(hostedChat.findConversation).toHaveBeenCalledWith(endUser, 'conv-9');
+      expect(hostedChat.startConversation).not.toHaveBeenCalled();
+    });
+
+    it('refuses to continue another visitor conversation', async () => {
+      hostedChat.findConversation.mockRejectedValueOnce(new NotFoundException());
+      await expect(
+        controller.postMessage('acme', { message: 'hi', conversationId: 'someone-elses' }, req(), res),
+      ).rejects.toThrow(NotFoundException);
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('streaming', () => {
+    it('requires a runId', async () => {
+      await expect(controller.stream('acme', '', req(), res)).rejects.toThrow(BadRequestException);
+    });
+
+    it('refuses to stream a run the visitor does not own', async () => {
+      // A run id is a UUID, but it still arrives from the caller.
+      hostedChat.runBelongsToEndUser.mockResolvedValueOnce(false);
+      await expect(controller.stream('acme', 'run-9', req(), res)).rejects.toMatchObject({
+        status: 404,
+      });
+      expect(res.setHeader).not.toHaveBeenCalledWith('Content-Type', 'text/event-stream');
+    });
+
+    it('sets the SSE headers and disables proxy buffering', async () => {
+      await controller.stream('acme', 'run-1', req(), res);
+      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
+      // nginx would otherwise buffer the whole stream and deliver it at once.
+      expect(res.setHeader).toHaveBeenCalledWith('X-Accel-Buffering', 'no');
+      expect(agentRuntimeService.getRun).toHaveBeenCalledWith('run-1', 'org-1', 'agent-1');
+    });
+
+    it('streams chunks and completion from the cross-pod event channel', async () => {
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.chunk', data: { content: 'hello' } });
+        handler({ type: 'run.completed', data: { output: 'hello' } });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+
+      expect(agentRuntimeService.subscribeRunEvents).toHaveBeenCalledWith(
+        'run-1',
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('event: token'));
+      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('"content":"hello"'));
+      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('run.completed'));
+      expect(res.end).toHaveBeenCalled();
+    });
+
+    it('does not stream an unverified candidate answer to a public visitor', async () => {
+      agentRuntimeService.getRun.mockResolvedValueOnce({
+        id: 'run-1',
+        status: 'running',
+        agent: {
+          agentConfig: {
+            verify: { enabled: true, checkers: [{ name: 'accuracy' }] },
+          },
+        },
+      });
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.chunk', data: { content: 'rejected draft' } });
+        handler({ type: 'run.completed', data: { output: 'verified answer' } });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+
+      expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('rejected draft'));
+      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('run.completed'));
+    });
+  });
+
+  describe('replaying a conversation', () => {
+    it('loads it through the ownership-scoped lookup', async () => {
+      const result = await controller.messages('acme', 'conv-1', req(), res);
+      expect(hostedChat.findConversation).toHaveBeenCalledWith(endUser, 'conv-1');
+      expect(result.data.conversationId).toBe('conv-1');
+    });
+
+    it('404s on another visitor conversation', async () => {
+      hostedChat.findConversation.mockRejectedValueOnce(new NotFoundException());
+      await expect(controller.messages('acme', 'nope', req(), res)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+});

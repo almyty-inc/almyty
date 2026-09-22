@@ -6,6 +6,7 @@ import {
   ConflictException,
   Logger,
   Inject,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -16,6 +17,9 @@ import { UserOrganization, OrganizationRole } from '../../entities/user-organiza
 import { Team } from '../../entities/team.entity';
 import { UserTeam, TeamRole } from '../../entities/user-team.entity';
 import { User } from '../../entities/user.entity';
+import { CanonicalMemory } from '../memory/canonical/canonical-memory.entity';
+import { CanonicalMemoryWorkspaceConfig } from '../memory/canonical/canonical-memory-config.entity';
+import { CanonicalMemorySoftcapWarning } from '../memory/canonical/canonical-memory-softcap-warning.entity';
 
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
@@ -26,6 +30,33 @@ import { CreateTeamDto } from './dto/create-team.dto';
 import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import * as crypto from 'crypto';
+
+import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
+
+/** Fields on a User row that must never reach another user. */
+export const USER_SECRET_FIELDS = [
+  'passwordHash',
+  'resetPasswordToken',
+  'resetPasswordExpires',
+  'verificationToken',
+  'twoFactorSecret',
+] as const;
+
+/** Remove user credentials from anything carrying loaded member relations. */
+export function stripMemberSecrets<T extends { members?: any[]; settings?: any }>(organization: T): T {
+  for (const membership of organization.members ?? []) {
+    if (membership?.user) for (const field of USER_SECRET_FIELDS) delete membership.user[field];
+    // The membership row carries its own invite token.
+    delete (membership as any).inviteToken;
+  }
+  // Pending invites live in settings and carry single-use invite tokens,
+  // which are as good as a password to whoever holds one.
+  const pending = (organization as any).settings?.pendingInvites;
+  if (Array.isArray(pending)) {
+    (organization as any).settings.pendingInvites = pending.map(({ inviteToken, ...rest }: any) => rest);
+  }
+  return organization;
+}
 
 @Injectable()
 export class OrganizationsService {
@@ -44,18 +75,33 @@ export class OrganizationsService {
     private userRepository: Repository<User>,
     private readonly mailService: MailService,
     @Inject(forwardRef(() => GatewaysService))
-    @Inject(forwardRef(() => GatewaysService))
     private readonly gatewaysService: GatewaysService,
     private readonly invitesHelper: OrganizationsInvitesHelper,
     private readonly teamMembershipHelper: TeamMembershipHelper,
+    // Canonical memory has no organizationId column, so org deletion
+    // clears it by scope_id. @Optional() keeps the unit tests that
+    // construct this service positionally working.
+    @Optional()
+    @InjectRepository(CanonicalMemory)
+    private readonly memoryRepository?: Repository<CanonicalMemory>,
+    @Optional()
+    @InjectRepository(CanonicalMemoryWorkspaceConfig)
+    private readonly memoryConfigRepository?: Repository<CanonicalMemoryWorkspaceConfig>,
+    @Optional()
+    @InjectRepository(CanonicalMemorySoftcapWarning)
+    private readonly memorySoftcapWarningRepository?: Repository<CanonicalMemorySoftcapWarning>,
   ) {}
 
   async create(createOrganizationDto: CreateOrganizationDto, ownerId: string): Promise<Organization> {
+    // Use the value we will persist for the duplicate check as well.
+    // The UI omits this optional field; strict TypeORM rejects an
+    // undefined WHERE value before the first organization can be saved.
+    const slug = createOrganizationDto.slug || this.generateSlug(createOrganizationDto.name);
     // Check if organization name or slug already exists
     const existingOrg = await this.organizationRepository.findOne({
       where: [
         { name: createOrganizationDto.name },
-        { slug: createOrganizationDto.slug },
+        { slug },
       ],
     });
 
@@ -66,7 +112,7 @@ export class OrganizationsService {
     // Create organization
     const organization = this.organizationRepository.create({
       ...createOrganizationDto,
-      slug: createOrganizationDto.slug || this.generateSlug(createOrganizationDto.name),
+      slug,
     });
 
     const savedOrganization = await this.organizationRepository.save(organization);
@@ -102,6 +148,18 @@ export class OrganizationsService {
     return this.findOne(savedOrganization.id);
   }
 
+  /**
+   * The organizations this user belongs to, each carrying how many active
+   * members it has.
+   *
+   * The count is not decoration: the list page prints "N members" per row
+   * and the detail header repeats it. Nothing here loaded `members`, so
+   * `org.members?.length` was undefined and every organization claimed
+   * zero members -- including ones the caller could see a full member
+   * table for on the next tab. Counted with a grouped COUNT rather than
+   * by hydrating the relation, because the rows themselves are not wanted
+   * and each one drags a User with it.
+   */
   async findAll(userId: string): Promise<Organization[]> {
     const memberships = await this.userOrganizationRepository.find({
       where: { userId, isActive: true },
@@ -109,9 +167,47 @@ export class OrganizationsService {
       order: { joinedAt: 'DESC' },
     });
 
-    return memberships.map(membership => membership.organization);
+    const organizations = memberships.map(membership => membership.organization);
+    if (organizations.length === 0) {
+      return organizations;
+    }
+
+    const counts = await this.userOrganizationRepository
+      .createQueryBuilder('membership')
+      .select('membership.organizationId', 'organizationId')
+      .addSelect('COUNT(*)', 'count')
+      .where('membership.organizationId IN (:...ids)', {
+        ids: organizations.map(organization => organization.id),
+      })
+      .andWhere('membership.isActive = :isActive', { isActive: true })
+      .groupBy('membership.organizationId')
+      .getRawMany<{ organizationId: string; count: string }>();
+
+    const byId = new Map(counts.map(row => [row.organizationId, Number(row.count)]));
+    for (const organization of organizations) {
+      (organization as Organization & { memberCount: number }).memberCount =
+        byId.get(organization.id) ?? 0;
+    }
+
+    return organizations;
   }
 
+  /**
+   * Strip every member's credentials from an organization payload.
+   *
+   * `members: { user: true }` loads whole User rows, and this route is
+   * open to `member`. That put each colleague's bcrypt `passwordHash` and,
+   * worse, their live `resetPasswordToken` in the hands of anyone in the
+   * organization -- a token that is a direct account takeover of the
+   * owner, no cracking required. @Exclude() on the entity does nothing
+   * here because no ClassSerializerInterceptor is registered anywhere in
+   * this application, so the decorator has never masked anything.
+   *
+   * Done by deletion rather than by a select list on purpose: a new
+   * secret column added to User later is dropped by the deny-list only if
+   * someone remembers, so the list of what must never ship is kept in one
+   * place and asserted by a test.
+   */
   async findOne(id: string): Promise<Organization> {
     const organization = await this.organizationRepository.findOne({
       where: { id },
@@ -127,7 +223,7 @@ export class OrganizationsService {
       throw new NotFoundException('Organization not found');
     }
 
-    return organization;
+    return stripMemberSecrets(organization);
   }
 
   async findBySlug(slug: string): Promise<Organization> {
@@ -143,7 +239,12 @@ export class OrganizationsService {
       throw new NotFoundException('Organization not found');
     }
 
-    return organization;
+    // Same deny-list as findOne. This loads whole User rows through
+    // `members: { user: true }` and returned them raw -- every member's
+    // bcrypt hash and, worse, their live resetPasswordToken. No route
+    // reaches this today, which is exactly why it is worth closing now:
+    // the next caller inherits the leak silently.
+    return stripMemberSecrets(organization);
   }
 
   async update(id: string, updateOrganizationDto: UpdateOrganizationDto): Promise<Organization> {
@@ -175,15 +276,39 @@ export class OrganizationsService {
       }
     }
 
-    // Update organization
-    Object.assign(organization, updateOrganizationDto);
+    // Settings are patched, not replaced: a client sending only
+    // { settings: { defaultRouting } } must not wipe the limits or the
+    // pending invites other features keep in the same column. A key set
+    // to null clears it.
+    const { settings, ...rest } = updateOrganizationDto;
+    Object.assign(organization, rest);
+    if (settings) {
+      organization.settings = { ...(organization.settings ?? {}), ...settings };
+    }
 
     return this.organizationRepository.save(organization);
   }
 
+  /**
+   * Delete the organization and the data no database cascade can reach.
+   *
+   * Almost everything an organization owns hangs off an `organizationId`
+   * foreign key and goes with the row. Canonical memory does not: the
+   * `memories`, `memory_workspace_config` and `memory_softcap_warnings`
+   * tables are keyed by (scope_type, scope_id) with no organizationId
+   * column and no foreign key, because scope_id is polymorphic. Nothing
+   * else would ever remove those rows — the TTL sweeper only sets
+   * valid_until, and RetentionPolicy has no memory class — so a deleted
+   * tenant's memory content and embeddings would sit in the database
+   * indefinitely.
+   *
+   * scope_id is the organization id for every scope_type
+   * (scopeToOrganizationId is the identity), so one predicate covers all
+   * of them.
+   */
   async delete(id: string): Promise<void> {
     const organization = await this.findOne(id);
-    
+
     // Check if organization has any active APIs or gateways
     if (organization.apis?.length > 0) {
       throw new ForbiddenException('Cannot delete organization with active APIs');
@@ -193,7 +318,32 @@ export class OrganizationsService {
       throw new ForbiddenException('Cannot delete organization with active gateways');
     }
 
+    await this.deleteCanonicalMemory(id);
     await this.organizationRepository.remove(organization);
+  }
+
+  private async deleteCanonicalMemory(organizationId: string): Promise<void> {
+    // Softcap warnings first, then the config, then the memories
+    // themselves: the warnings name a memory_id and the memories
+    // self-reference, so the content goes last.
+    for (const repository of [
+      this.memorySoftcapWarningRepository,
+      this.memoryConfigRepository,
+      this.memoryRepository,
+    ]) {
+      if (!repository) continue;
+      try {
+        await repository.delete({ scopeId: organizationId } as any);
+      } catch (err: any) {
+        // A failed memory delete must not leave the organization row
+        // behind: a half-deleted tenant is worse than a stranded table,
+        // and the next attempt can retry this.
+        this.logger.error(
+          `Failed to delete canonical memory for organization ${organizationId}: ${err.message}`,
+        );
+        throw err;
+      }
+    }
   }
 
   async getMembers(organizationId: string, requestingUserId: string): Promise<any[]> {
@@ -234,13 +384,34 @@ export class OrganizationsService {
   listPendingInvites(...args: Parameters<OrganizationsInvitesHelper['listPendingInvites']>) { return this.invitesHelper.listPendingInvites(...args); }
   revokePendingInvite(...args: Parameters<OrganizationsInvitesHelper['revokePendingInvite']>) { return this.invitesHelper.revokePendingInvite(...args); }
 
-  async removeMember(organizationId: string, userId: string): Promise<void> {
+  async removeMember(organizationId: string, userId: string, actorUserId: string): Promise<void> {
     const membership = await this.userOrganizationRepository.findOne({
       where: { organizationId, userId },
     });
 
     if (!membership) {
       throw new NotFoundException('User is not a member of this organization');
+    }
+
+    // An actor may not evict somebody who outranks them.
+    //
+    // updateMemberRole states this rule and this sibling did not, so the
+    // route reached by `@Roles('admin','owner')` let an admin delete the
+    // organization's owners outright -- everything the rank check on the
+    // role route prevents, reached by removing the owner instead of
+    // demoting them. The last-owner floor below was the only thing in the
+    // way, and it stops at one.
+    const actorMembership = await this.userOrganizationRepository.findOne({
+      where: { organizationId, userId: actorUserId, isActive: true },
+    });
+    if (!actorMembership) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+    if (
+      userId !== actorUserId &&
+      ORGANIZATION_ROLE_RANK[membership.role] < ORGANIZATION_ROLE_RANK[actorMembership.role]
+    ) {
+      throw new ForbiddenException('Cannot remove a member who outranks you');
     }
 
     // Check if user is the last owner
@@ -267,13 +438,8 @@ export class OrganizationsService {
     role: OrganizationRole,
     actorUserId: string,
   ): Promise<void> {
-    // Lower rank value = more privilege.
-    const RANK: Record<OrganizationRole, number> = {
-      [OrganizationRole.OWNER]: 0,
-      [OrganizationRole.ADMIN]: 1,
-      [OrganizationRole.MEMBER]: 2,
-      [OrganizationRole.VIEWER]: 3,
-    };
+    // Lower rank value = more privilege. See ORGANIZATION_ROLE_RANK.
+    const RANK = ORGANIZATION_ROLE_RANK;
 
     const actorMembership = await this.userOrganizationRepository.findOne({
       where: { organizationId, userId: actorUserId, isActive: true },
@@ -471,6 +637,17 @@ export class OrganizationsService {
     actingUserId?: string,
   ): Promise<void> {
     await this.assertTeamInOrg(teamId, organizationId);
+
+    // A team membership for somebody who is not in the organization is
+    // a row that means nothing today -- access still goes through the
+    // org role first -- and a live hole the day anything trusts
+    // user_teams on its own.
+    const orgMembership = await this.userOrganizationRepository.findOne({
+      where: { userId, organizationId, isActive: true },
+    });
+    if (!orgMembership) {
+      throw new NotFoundException('User not found in this organization');
+    }
 
     if (actingUserId) {
       await this.assertCanManageTeam(actingUserId, organizationId, teamId, 'manage-members');

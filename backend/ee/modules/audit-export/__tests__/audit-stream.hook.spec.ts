@@ -10,7 +10,12 @@ describe('AuditStreamHookImpl', () => {
 
   function make(entitled: boolean) {
     const streams = { dispatch: jest.fn(async () => []) };
-    const license = { has: jest.fn((f: string) => entitled && f === 'audit_export') };
+    // hasForOrg, not has(): licensing here is per organization. The hook
+    // used the process-global LicenseService, which is community unless
+    // a license token is in the environment -- and the deployed API sets
+    // only the signing key, so every EE entitlement read as false no
+    // matter what the org had paid for.
+    const license = { hasForOrg: jest.fn(async (_org: string, f: string) => entitled && f === 'audit_export') };
     const hook = new AuditStreamHookImpl(streams as any, license as any);
     return { hook, streams, license };
   }
@@ -20,7 +25,9 @@ describe('AuditStreamHookImpl', () => {
 
     await hook.afterAuditWrite(event);
 
-    expect(license.has).toHaveBeenCalledWith('audit_export');
+    // The org comes off the audit row itself, which is what makes this
+    // per-tenant rather than per-process.
+    expect(license.hasForOrg).toHaveBeenCalledWith('org-1', 'audit_export');
     expect(streams.dispatch).toHaveBeenCalledTimes(1);
     expect(streams.dispatch).toHaveBeenCalledWith(event);
   });

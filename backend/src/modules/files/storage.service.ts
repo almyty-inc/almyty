@@ -2,10 +2,29 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Readable } from 'stream';
 
 export interface StorageProvider {
+  /**
+   * Whether this provider can hand out a URL the browser fetches
+   * directly. S3 can; the local filesystem cannot, and a caller that
+   * needs a working link has to serve the bytes itself.
+   */
+  readonly canPresign: boolean;
   upload(key: string, data: Buffer, contentType: string): Promise<string>;
   download(key: string): Promise<Buffer>;
+  /**
+   * The same bytes as a stream.
+   *
+   * download() reads the whole object into heap, and both download
+   * routes then `res.send(buffer)` -- which copies it again. Uploads are
+   * capped at 50MB, so three concurrent file downloads exhausted a pod
+   * that peaks around 286MB; build artifacts have no cap at all, and an
+   * Electron desktop package is 100-200MB, so one of those was an OOM on
+   * its own. The comment on the files route claiming it "streams the
+   * bytes" was aspirational.
+   */
+  downloadStream(key: string): Promise<Readable>;
   delete(key: string): Promise<void>;
   getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
 }
@@ -50,6 +69,7 @@ function assertSafeStorageKey(key: string): void {
  *      in assertSafeStorageKey still can't escape the uploads dir).
  */
 class LocalStorageProvider implements StorageProvider {
+  readonly canPresign = false;
   private readonly basePath: string;
   private readonly baseUrl: string;
   private readonly resolvedBase: string;
@@ -90,6 +110,10 @@ class LocalStorageProvider implements StorageProvider {
     return fs.readFileSync(filePath);
   }
 
+  async downloadStream(key: string): Promise<Readable> {
+    return fs.createReadStream(this.resolveSafe(key));
+  }
+
   async delete(key: string): Promise<void> {
     const filePath = this.resolveSafe(key);
     if (fs.existsSync(filePath)) {
@@ -97,10 +121,17 @@ class LocalStorageProvider implements StorageProvider {
     }
   }
 
+  /**
+   * A local directory has nothing to sign against, and the URL this
+   * used to return pointed at `/files/:id/download`, a route that takes
+   * a file record's id rather than a storage key. It never resolved.
+   * Callers check `canPresign` and serve the bytes themselves.
+   */
   async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
     assertSafeStorageKey(key);
-    // Local doesn't have signed URLs, return direct path
-    return `${this.baseUrl}/files/${key}/download`;
+    throw new BadRequestException(
+      'This deployment stores files locally, which cannot produce a direct link.',
+    );
   }
 }
 
@@ -108,6 +139,7 @@ class LocalStorageProvider implements StorageProvider {
  * S3-compatible storage provider (works with AWS S3, DigitalOcean Spaces, Cloudflare R2, MinIO, etc.)
  */
 class S3StorageProvider implements StorageProvider {
+  readonly canPresign = true;
   private s3Client: any;
   private bucket: string;
   private cdnUrl: string | null;
@@ -166,6 +198,18 @@ class S3StorageProvider implements StorageProvider {
       chunks.push(Buffer.from(chunk));
     }
     return Buffer.concat(chunks);
+  }
+
+  async downloadStream(key: string): Promise<Readable> {
+    assertSafeStorageKey(key);
+    const { GetObjectCommand } = require('@aws-sdk/client-s3');
+    const response = await this.s3Client.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    }));
+    // The SDK already hands back a stream; the old path only turned it
+    // into a Buffer so the caller could re-send it.
+    return response.Body as Readable;
   }
 
   async delete(key: string): Promise<void> {
@@ -234,6 +278,10 @@ export class StorageService {
     return this.provider.upload(key, data, contentType);
   }
 
+  async downloadStream(key: string): Promise<Readable> {
+    return this.provider.downloadStream(key);
+  }
+
   async download(key: string): Promise<Buffer> {
     return this.provider.download(key);
   }
@@ -244,5 +292,10 @@ export class StorageService {
 
   async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
     return this.provider.getSignedUrl(key, expiresInSeconds);
+  }
+
+  /** Whether getSignedUrl can produce a link, rather than throwing. */
+  get canPresign(): boolean {
+    return this.provider.canPresign;
   }
 }

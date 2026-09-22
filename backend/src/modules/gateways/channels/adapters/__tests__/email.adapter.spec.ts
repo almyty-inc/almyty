@@ -240,9 +240,48 @@ describe('EmailAdapter', () => {
         html: 'reply',
       });
     });
-    it('skips when resend_api_key missing', async () => {
-      await adapter.sendResponse({}, { html: 'r', text: 'r' }, { from: 'a@b', subject: 's' });
+    it('refuses rather than skipping when resend_api_key is missing', async () => {
+      // Nothing was sent, so nothing may be recorded as sent.
+      await expect(
+        adapter.sendResponse({}, { html: 'r', text: 'r' }, { from: 'a@b', subject: 's' }),
+      ).rejects.toThrow(/resend_api_key is not configured/);
       expect(fetchMock.calls.length).toBe(0);
+    });
+
+    it('refuses when the inbound mail gave no address to reply to', async () => {
+      await expect(
+        adapter.sendResponse({ resend_api_key: 're_test' }, { html: 'r', text: 'r' }, { subject: 's' }),
+      ).rejects.toThrow(/no address to reply to/);
+      expect(fetchMock.calls.length).toBe(0);
+    });
+
+    /**
+     * Resend refuses with a status and `{name, message}`. An unverified
+     * sending domain is the common one, and it used to be logged as a
+     * reply the customer received.
+     */
+    it('refuses a Resend rejection and keeps its message and name', async () => {
+      fetchMock.setNextResponse({
+        ok: false,
+        status: 403,
+        json: { statusCode: 403, name: 'validation_error', message: 'The almyty.com domain is not verified' },
+      });
+      await expect(adapter.sendResponse(
+        { resend_api_key: 're_test', reply_from: 'bot@almyty.com' },
+        { html: 'r', text: 'r' },
+        { from: 'a@b', subject: 's' },
+      )).rejects.toThrow(/domain is not verified.*validation_error/);
+    });
+
+    it('never puts the API key in the failure it reports', async () => {
+      fetchMock.setNextResponse({ ok: false, status: 401, json: { name: 'invalid_api_key', message: 'API key is invalid' } });
+      const error = await adapter.sendResponse(
+        { resend_api_key: 're_live_super_secret', reply_from: 'bot@almyty.com' },
+        { html: 'r', text: 'r' },
+        { from: 'a@b', subject: 's' },
+      ).then(() => null, (e) => e);
+      expect(error).toBeTruthy();
+      expect(error.message).not.toContain('re_live_super_secret');
     });
   });
 
@@ -368,8 +407,8 @@ describe('EmailAdapter', () => {
       };
     };
 
-    it('accepts everything when no secret is configured (legacy behavior)', async () => {
-      await expect(adapter.verifyWebhook({ a: 1 }, {}, {})).resolves.toBe(true);
+    it('refuses inbound when no signing secret is configured', async () => {
+      await expect(adapter.verifyWebhook({ a: 1 }, {}, {})).resolves.toBe(false);
     });
 
     it('accepts a correctly signed raw body', async () => {

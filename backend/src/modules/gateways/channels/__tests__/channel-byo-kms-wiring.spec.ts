@@ -15,6 +15,7 @@ import { SlackInstallService } from '../slack-install.service';
 import { ChannelInstallation } from '../../../../entities/channel-installation.entity';
 import { Gateway } from '../../../../entities/gateway.entity';
 import * as crypto from 'crypto';
+import { makeCredentialRefFake } from '../../../../test/credential-ref.fake';
 
 /**
  * BYO-KMS wiring proof for the gateways/channels secret call-sites (the
@@ -191,7 +192,7 @@ describe('BYO-KMS wiring — gateways/channels secrets', () => {
         findOne: jest.fn(async () => null),
         create: jest.fn((data: any) => Object.assign(new ChannelInstallation(), data)),
         save: jest.fn(async (inst: any) => {
-          last = { id: 'inst-1', ...inst };
+          last = Object.assign(inst, { id: inst.id ?? 'inst-1' });
           return last;
         }),
         getLastSaved: () => last,
@@ -201,18 +202,25 @@ describe('BYO-KMS wiring — gateways/channels secrets', () => {
     const gatewayFor = (orgId: string): Gateway =>
       ({ id: 'gw-1', organizationId: orgId } as unknown as Gateway);
 
-    it('(a) CMK org: stores bot_token as encrypted:kms: and resolveCredentials round-trips', async () => {
+    // The credential store shares the real envelope so a CMK org's row is
+    // wrapped by its CMK and a plain org's by the platform key.
+    const makeStore = () => makeCredentialRefFake(undefined, envelope);
+
+    it('(a) CMK org: the credential row stores bot_token as encrypted:kms: and resolveCredentials round-trips', async () => {
       const repoMock = makeRepo();
-      const service = new ChannelInstallationService(repoMock as any, envelope);
+      const store = makeStore();
+      const service = new ChannelInstallationService(repoMock as any, envelope, store.resolver);
 
       await service.upsert(gatewayFor(KMS_ORG), {
         externalTenantId: 'T111',
         credentials: { bot_token: 'xoxb-workspace', bot_user_id: 'U42' },
       });
       const saved = repoMock.getLastSaved();
-      expect(saved.credentials.bot_token.startsWith('encrypted:kms:')).toBe(true);
+      expect(saved.credentials).toBeNull();
+      expect(saved.credentialId).toBe(store.rows[0].id);
+      expect(store.rows[0].config.bot_token.startsWith('encrypted:kms:')).toBe(true);
       // Non-secret credential keys are untouched.
-      expect(saved.credentials.bot_user_id).toBe('U42');
+      expect(store.rows[0].config.bot_user_id).toBe('U42');
 
       // resolveCredentials reads installation.organizationId off the row.
       repoMock.findOne.mockResolvedValue({
@@ -224,16 +232,17 @@ describe('BYO-KMS wiring — gateways/channels secrets', () => {
       expect(creds).toEqual({ bot_token: 'xoxb-workspace', bot_user_id: 'U42' });
     });
 
-    it('(b) non-CMK org: stores encrypted:gcm: and round-trips unchanged', async () => {
+    it('(b) non-CMK org: the credential row stores encrypted:gcm: and round-trips unchanged', async () => {
       const repoMock = makeRepo();
-      const service = new ChannelInstallationService(repoMock as any, envelope);
+      const store = makeStore();
+      const service = new ChannelInstallationService(repoMock as any, envelope, store.resolver);
 
       await service.upsert(gatewayFor(PLAIN_ORG), {
         externalTenantId: 'T222',
         credentials: { bot_token: 'xoxb-workspace' },
       });
       const saved = repoMock.getLastSaved();
-      expect(saved.credentials.bot_token.startsWith('encrypted:gcm:')).toBe(true);
+      expect(store.rows[0].config.bot_token.startsWith('encrypted:gcm:')).toBe(true);
 
       repoMock.findOne.mockResolvedValue({
         ...saved,
@@ -244,15 +253,16 @@ describe('BYO-KMS wiring — gateways/channels secrets', () => {
       expect(creds).toEqual({ bot_token: 'xoxb-workspace' });
     });
 
-    it('(c) historical gcm credentials still decrypt for a now-CMK org', async () => {
+    it('(c) historical gcm credentials on the row still decrypt for a now-CMK org (shim)', async () => {
       const repoMock = makeRepo();
-      const service = new ChannelInstallationService(repoMock as any, envelope);
+      const service = new ChannelInstallationService(repoMock as any, envelope, makeStore().resolver);
       repoMock.findOne.mockResolvedValue({
         id: 'inst-1',
         gatewayId: 'gw-1',
         organizationId: KMS_ORG,
         externalTenantId: 'T333',
         status: 'active',
+        credentialId: null,
         credentials: { bot_token: encryptField('xoxb-legacy') },
       });
       const creds = await service.resolveCredentials('gw-1', 'T333');

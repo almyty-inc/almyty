@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, Optional } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -11,6 +11,7 @@ import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
 import { AgentExecutionEngine, StreamEvent } from '../agents/agent-execution.engine';
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
+import { AgentExecutionCancellationService } from '../agents/agent-execution-cancellation.service';
 
 /**
  * Agent-side endpoint logic for the unified `/:orgSlug/:resourceSlug` controller:
@@ -18,6 +19,7 @@ import { AgentRuntimeService } from '../agents/agent-runtime.service';
  *
  * Lives in its own class so the controller stays a thin dispatcher.
  */
+import { AgentNotActive, agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invocation';
 @Injectable()
 export class UnifiedAgentHelper {
   private readonly logger = new Logger(UnifiedAgentHelper.name);
@@ -30,6 +32,11 @@ export class UnifiedAgentHelper {
     private readonly executionEngine: AgentExecutionEngine,
     private readonly runtimeService: AgentRuntimeService,
     private readonly jwtService: JwtService,
+    // Appended last and @Optional(): a spec constructs this helper
+    // positionally, so a required parameter inserted anywhere above would
+    // silently shift the ones after it.
+    @Optional()
+    private readonly cancellations?: AgentExecutionCancellationService,
   ) {}
 
   async handleAgentRequest(
@@ -49,7 +56,15 @@ export class UnifiedAgentHelper {
       if (agent.toolIds?.length) {
         const toolRepo = this.agentRepository.manager.getRepository(Tool);
         const toolEntities = await toolRepo
-          .find({ where: { id: In(agent.toolIds) }, select: { id: true, name: true, description: true } })
+          // Org-scoped. `agent.toolIds` is a plain string array with no
+          // referential integrity, so an id belonging to another tenant
+          // survives in it — and this response is served to a gateway
+          // client. The MCP equivalents scope by organization for the
+          // same reason.
+          .find({
+            where: { id: In(agent.toolIds), organizationId: agent.organizationId },
+            select: { id: true, name: true, description: true },
+          })
           .catch(() => []);
         tools = toolEntities.map(t => ({ id: t.id, name: t.name, description: t.description }));
       }
@@ -76,6 +91,10 @@ export class UnifiedAgentHelper {
 
     if (action === 'runs' || action.startsWith('runs/')) {
       return this.handleAgentRuns(agent, organization, body, req, res, apiKey, action);
+    }
+
+    if (action === 'executions' || action.startsWith('executions/')) {
+      return this.handleAgentExecutions(agent, organization, req, res, action);
     }
 
     if (req.method === 'GET' && action.startsWith('conversations/')) {
@@ -169,11 +188,31 @@ export class UnifiedAgentHelper {
     res: Response,
     apiKey: ApiKey,
   ) {
-    if (agent.status !== AgentStatus.ACTIVE) {
+    if (!agentIsInvokable(agent)) {
+      const refusal = new AgentNotActive(String(agent.status));
       throw new HttpException(
-        { success: false, message: 'Agent must be active to invoke', error: 'AGENT_NOT_ACTIVE' },
+        { success: false, message: refusal.message, error: refusal.code },
         HttpStatus.BAD_REQUEST,
       );
+    }
+
+    // An autonomous agent has no pipeline graph. Handing it to the
+    // pipeline engine returns a "completed" execution with zero node
+    // results and a null output — which reads to the caller as an agent
+    // that ran and had nothing to say. The dashboard's invoke path
+    // dispatches on mode for exactly this reason; this one did not, so
+    // every autonomous agent published behind a gateway answered
+    // silently with nothing. `/runs` still exists for a caller that
+    // wants the run object directly, but nobody should have to know the
+    // agent's mode to invoke it.
+    if (runsOnAutonomousRuntime(agent)) {
+      const run = await this.runtimeService.startRun(
+        agent.id,
+        organization.id,
+        apiKey.userId ?? null,
+        body.input || body,
+      );
+      return res.json({ success: true, data: run, message: 'Autonomous agent run started' });
     }
 
     const execution = await this.executionEngine.execute(
@@ -204,11 +243,25 @@ export class UnifiedAgentHelper {
     res: Response,
     apiKey: ApiKey,
   ) {
-    if (agent.status !== AgentStatus.ACTIVE) {
+    if (!agentIsInvokable(agent)) {
+      const refusal = new AgentNotActive(String(agent.status));
       return res.status(HttpStatus.BAD_REQUEST).json({
         success: false,
-        message: 'Agent must be active to invoke',
-        error: 'AGENT_NOT_ACTIVE',
+        message: refusal.message,
+        error: refusal.code,
+      });
+    }
+
+    // Streaming is a pipeline-engine feature: the autonomous runtime
+    // publishes its events on the run event stream instead. Say that,
+    // rather than streaming an empty execution.
+    if (runsOnAutonomousRuntime(agent)) {
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        success: false,
+        message:
+          'This agent runs on the autonomous runtime, which streams its events per run. ' +
+          'Start a run with POST /invoke and subscribe to it.',
+        error: 'AGENT_IS_AUTONOMOUS',
       });
     }
 
@@ -217,7 +270,23 @@ export class UnifiedAgentHelper {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
+    // The engine cancels cooperatively on options.signal, and
+    // agent-execution.controller has always wired one to the request. This
+    // path never did: a client that walked away -- Ctrl-C in the chat REPL,
+    // a dropped connection -- left the pipeline running to completion,
+    // writing every event into a dead socket and spending the whole way,
+    // with nobody left to read the answer.
+    const abort = new AbortController();
+    let clientAlive = true;
+    const markClosed = () => {
+      clientAlive = false;
+      if (!abort.signal.aborted) abort.abort();
+    };
+    res.req?.on('close', markClosed);
+    res.req?.on('aborted', markClosed);
+
     const onEvent = (event: StreamEvent) => {
+      if (!clientAlive) return;
       const data = JSON.stringify(event);
       res.write(`event: ${event.type}\ndata: ${data}\n\n`);
     };
@@ -230,9 +299,12 @@ export class UnifiedAgentHelper {
         input: body.input || body,
         variables: body.variables,
         metadata: body.metadata,
+        signal: abort.signal,
       },
       onEvent,
     );
+
+    if (!clientAlive) return;
 
     res.write(
       `event: done\ndata: ${JSON.stringify({ executionId: execution.id, status: execution.status })}\n\n`,
@@ -317,6 +389,46 @@ export class UnifiedAgentHelper {
     }
 
     throw new HttpException(`Unknown runs action: ${subAction}`, HttpStatus.NOT_FOUND);
+  }
+
+  /**
+   * POST /:orgSlug/:agentSlug/executions/:executionId/cancel
+   *
+   * The workflow counterpart of /runs/:id/cancel. A workflow run is an
+   * AgentExecution, not an AgentRun, so the runs route could never stop
+   * one: a client that cancelled without dropping its connection left the
+   * pipeline running and billing.
+   *
+   * Same authentication (already done by the caller), same org scoping and
+   * the same "wrong org reads as not found" answer as the runs route;
+   * additionally asserts the execution belongs to the agent this URL names.
+   */
+  private async handleAgentExecutions(
+    agent: Agent,
+    organization: Organization,
+    req: Request,
+    res: Response,
+    action: string,
+  ) {
+    const parts = action.split('/');
+    const executionId = parts[1];
+    const subAction = parts[2];
+
+    if (req.method === 'POST' && executionId && subAction === 'cancel') {
+      if (!this.cancellations) {
+        throw new HttpException('Execution cancellation is unavailable', HttpStatus.SERVICE_UNAVAILABLE);
+      }
+      const execution = await this.cancellations.cancel(executionId, organization.id, agent.id);
+      return res.json({
+        success: true,
+        data: { id: execution.id, status: execution.status },
+      });
+    }
+
+    throw new HttpException(
+      `Unknown executions action: ${subAction ?? ''}`,
+      HttpStatus.NOT_FOUND,
+    );
   }
 
   private async getConversationMessages(convId: string, organizationId: string, res: Response) {

@@ -1,11 +1,13 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 import { Inject, forwardRef } from '@nestjs/common';
-import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
+import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callPerplexity, callPerplexityStream, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
+import { decideEgress, hostMatches } from '../connections/egress-policy';
+import { llmCallOptionsFor } from './providers/safe-request';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
@@ -20,8 +22,14 @@ import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';
 import { LlmModelsHelper } from './llm-models.helper';
+import { DefaultModelResolver } from './default-model.resolver';
+import { findModelNotFound } from './model-errors';
+import { ModelCatalogService } from '../model-catalog/model-catalog.service';
+
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { Credential } from '../../entities/credential.entity';
+import { LlmProviderSecretsHelper, MASKED_PROVIDER_KEY } from './llm-provider-secrets.helper';
 
 import { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters } from './dto/llm-providers.dto';
 export type { StreamChunk, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, ChatResponse, LlmProviderSearchFilters };
@@ -79,7 +87,7 @@ export function safeErrorBody(errorBody: any): string | null {
  * overwrites the real upstream error with a circular "not healthy
  * because it is not healthy".
  */
-export const LLM_HEALTH_GATE_MESSAGE = 'LLM provider is not healthy';
+export const LLM_HEALTH_GATE_MESSAGE = 'This provider is not healthy';
 
 /**
  * Extract the human-useful upstream provider error from an axios-style
@@ -131,8 +139,17 @@ export class LlmProvidersService {
     private readonly chatHelper: LlmChatHelper,
     private readonly statsHelper: LlmStatsHelper,
     private readonly runner: LlmChatRunnerHelper,
+    private readonly defaultModels: DefaultModelResolver,
+
     private readonly accessPolicy: AccessPolicyService,
     private readonly envelopeCrypto: EnvelopeCryptoService,
+    private readonly secrets: LlmProviderSecretsHelper,
+    // The catalog listens to provider lifecycle (sync on create, on a
+    // configuration change and after a passing health check). Optional:
+    // it arrives through a forwardRef and some specs build this service
+    // without it.
+    @Optional() @Inject(forwardRef(() => ModelCatalogService))
+    private readonly catalog?: ModelCatalogService,
   ) {}
 
   async createProvider(
@@ -156,11 +173,22 @@ export class LlmProvidersService {
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'manage_llm_providers')) {
-        throw new ForbiddenException('User does not have permission to manage LLM providers');
+        throw new ForbiddenException('User does not have permission to manage providers');
       }
 
-      // Validate configuration
-      this.runner.validateProviderConfiguration(createDto.type, createDto.configuration);
+      // Keys never land on the provider row: a pasted key becomes a
+      // Credential row the provider manages, a credentialId points at a
+      // shared connection. Validation sees the key either way.
+      const createAny = createDto as CreateLlmProviderDto & { credentialId?: string | null; usageCredentialId?: string | null };
+      const { configuration, apiKey, usageApiKey } = LlmProviderSecretsHelper.splitKeys(createDto.configuration);
+      this.runner.validateProviderConfiguration(createDto.type, {
+        ...configuration,
+        apiKey: apiKey ?? (createAny.credentialId ? MASKED_PROVIDER_KEY : undefined),
+        usageApiKey,
+      });
+      await this.assertProviderEgressAllowed(createDto.type, configuration as LlmProviderConfig, organizationId);
+      await this.assertModelIsServed(createDto.type, configuration, organizationId, { apiKey, credentialId: createAny.credentialId });
+
 
       // Validate team scoping before persisting.
       await this.accessPolicy.assertCanScopeToTeam(
@@ -174,37 +202,105 @@ export class LlmProvidersService {
       const capabilities = createDto.capabilities || this.modelsHelper.getDefaultCapabilities(createDto.type);
 
       // Create provider
+      const { credentialId: _credentialId, usageCredentialId: _usageCredentialId, ...providerFields } = createAny;
       const provider = this.llmProviderRepository.create({
-        ...createDto,
+        ...providerFields,
+        configuration,
         organizationId,
         capabilities,
         status: LlmProviderStatus.ACTIVE,
       });
 
-      // Encrypt the API key at rest before it touches the DB. Routes through
-      // the org's envelope path: a BYO-KMS org gets encrypted:kms:, every other
-      // org gets the same platform encrypted:gcm: value as before.
-      await provider.encryptSensitiveDataForOrg(this.envelopeCrypto);
+      // Save first so the key rows can name the provider they belong to;
+      // a failure to store the key removes the half-made provider again.
       const savedProvider = await this.llmProviderRepository.save(provider);
+      try {
+        await this.secrets.applyKey(savedProvider, 'inference', { plaintext: apiKey, credentialId: createAny.credentialId ?? undefined });
+        await this.secrets.applyKey(savedProvider, 'usage', { plaintext: usageApiKey, credentialId: createAny.usageCredentialId ?? undefined });
+      } catch (error) {
+        try { await this.llmProviderRepository.remove(savedProvider); } catch { /* best effort */ }
+        throw error;
+      }
+      const withKeys = await this.llmProviderRepository.save(savedProvider);
 
       // Perform initial health check. Pass the org we just created
       // under so the scoped lookup inside performHealthCheck finds
       // the row.
       setTimeout(
-        () => this.performHealthCheck(savedProvider.id, organizationId),
+        () => this.performHealthCheck(withKeys.id, organizationId),
         1000,
       );
+      this.scheduleCatalogSync(withKeys.id, organizationId, 'provider_created');
 
-      this.logger.log(`LLM provider '${savedProvider.name}' created for organization ${organizationId}`);
+      this.logger.log(`LLM provider '${withKeys.name}' created for organization ${organizationId}`);
 
       // Audit log (fire-and-forget)
-      this.auditLogService.logCreate(organizationId, userId, AuditResource.LLM_PROVIDER, savedProvider.id, savedProvider.name, { type: savedProvider.type });
+      this.auditLogService.logCreate(organizationId, userId, AuditResource.LLM_PROVIDER, withKeys.id, withKeys.name, { type: withKeys.type });
 
-      return savedProvider;
+      return withKeys;
 
     } catch (error) {
       this.logger.error(`Failed to create LLM provider: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Refuse a provider whose URL points somewhere private, unless this
+   * organization has said that host is theirs.
+   *
+   * Save time is the right gate: the URL is user-supplied here and used
+   * on every call afterwards, so one check here covers every later
+   * request rather than being re-argued per call site. The DNS-pinning
+   * agent still refuses a name that resolves privately at connect, which
+   * is the case this check cannot see.
+   */
+  private async assertProviderEgressAllowed(
+    type: LlmProviderType,
+    configuration: LlmProviderConfig,
+    organizationId: string,
+  ): Promise<void> {
+    // Never from the request body. The stamp is what lets a name past DNS
+    // pinning at connect, so accepting it as input would let anyone grant
+    // themselves the thing this gate exists to decide.
+    delete (configuration as any).egressApprovedHost;
+
+    // Build the URL the way the entity will, so the gate judges exactly
+    // what the caller will dial rather than a guess at it.
+    const probe = Object.assign(new LlmProvider(), { type, configuration });
+    let url: string;
+    try {
+      url = probe.getApiUrl();
+    } catch {
+      return; // No URL to judge; configuration validation owns that.
+    }
+    if (!url) return;
+
+    // The install-wide escape hatches still apply where they always did:
+    // an operator running Ollama on localhost has already said yes to
+    // private URLs for that provider type across the install.
+    if (llmCallOptionsFor(probe).allowPrivateUrls) return;
+
+    const organization = await this.organizationRepository.findOne({ where: { id: organizationId } });
+    const decision = decideEgress(url, { allowlist: organization?.settings?.egressAllowlist ?? [] });
+    if (!decision.allowed) {
+      throw new BadRequestException({ code: 'EGRESS_NOT_ALLOWED', message: decision.reason });
+    }
+
+    // Record the host whenever the organization has vouched for it, not
+    // only when the string gate needed the allowlist to say yes. A NAME
+    // passes that gate on its own — it is not knowably private until it
+    // resolves — so keying the stamp off the refusal would never fire for
+    // the case the stamp exists to serve.
+    let host: string | undefined;
+    try {
+      host = new URL(url).hostname;
+    } catch {
+      host = undefined;
+    }
+    const allowlist = organization?.settings?.egressAllowlist ?? [];
+    if (host && allowlist.some((pattern) => hostMatches(host as string, pattern))) {
+      configuration.egressApprovedHost = host;
     }
   }
 
@@ -220,7 +316,7 @@ export class LlmProvidersService {
       });
 
       if (!provider) {
-        throw new NotFoundException('LLM provider not found');
+        throw new NotFoundException('Provider not found');
       }
 
       // Authorization: org owner/admin always, team-scoped requires team lead
@@ -237,10 +333,34 @@ export class LlmProvidersService {
         await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, nextVis, nextTeamId);
       }
 
-      // Update configuration
+      // Update configuration. Keys are split off first: the plaintext
+      // never lands on the provider row, it becomes (or rotates) a
+      // Credential row. A credentialId in the body points the provider at
+      // a shared connection; null clears it.
+      const updateAny = updateDto as UpdateLlmProviderDto & { credentialId?: string | null; usageCredentialId?: string | null };
+      let pastedKey: string | undefined;
+      let pastedUsageKey: string | undefined;
       if (updateDto.configuration) {
-        provider.configuration = { ...provider.configuration, ...updateDto.configuration };
-        this.runner.validateProviderConfiguration(provider.type, provider.configuration);
+        const split = LlmProviderSecretsHelper.splitKeys(updateDto.configuration);
+        pastedKey = split.apiKey;
+        pastedUsageKey = split.usageApiKey;
+        provider.configuration = { ...provider.configuration, ...split.configuration };
+      }
+      if (updateDto.configuration) {
+        await this.assertProviderEgressAllowed(provider.type, provider.configuration, organizationId);
+      }
+      if (updateDto.configuration || updateAny.credentialId !== undefined) {
+        this.runner.validateProviderConfiguration(
+          provider.type,
+          this.validationView(provider, { apiKey: pastedKey, usageApiKey: pastedUsageKey, credentialId: updateAny.credentialId }),
+        );
+      }
+      if (updateDto.configuration?.model !== undefined) {
+        await this.assertModelIsServed(provider.type, provider.configuration, organizationId, {
+          apiKey: pastedKey,
+          credentialId: updateAny.credentialId === undefined ? provider.credentialId : updateAny.credentialId,
+          credential: provider.credential,
+        });
       }
 
       // Update other fields
@@ -263,9 +383,13 @@ export class LlmProvidersService {
         provider.teamId = updateDto.teamId;
       }
 
-      // Re-encrypt before persisting (idempotent for an already-encrypted
-      // key that wasn't changed in this update). Org-aware envelope path.
-      await provider.encryptSensitiveDataForOrg(this.envelopeCrypto);
+      // Move the keys: paste -> managed row, credentialId -> shared row,
+      // an inline key still on the row (shim) -> managed row. The org's
+      // envelope is warmed first so a customer-managed inline value can
+      // be read for the move.
+      await this.envelopeCrypto.warmOrg(organizationId);
+      await this.secrets.applyKey(provider, 'inference', { plaintext: pastedKey, credentialId: updateAny.credentialId });
+      await this.secrets.applyKey(provider, 'usage', { plaintext: pastedUsageKey, credentialId: updateAny.usageCredentialId });
       const updatedProvider = await this.llmProviderRepository.save(provider);
 
       // Perform health check after update, scoped to the same org
@@ -274,6 +398,9 @@ export class LlmProvidersService {
         () => this.performHealthCheck(provider.id, organizationId),
         1000,
       );
+      if (updateDto.configuration) {
+        this.scheduleCatalogSync(provider.id, organizationId, 'provider_configuration_changed');
+      }
 
       this.logger.log(`LLM provider '${updatedProvider.name}' updated`);
 
@@ -298,7 +425,7 @@ export class LlmProvidersService {
     });
 
     if (!provider) {
-      throw new NotFoundException('LLM provider not found');
+      throw new NotFoundException('Provider not found');
     }
 
     return includeSecrets ? provider : provider.maskSensitiveData() as LlmProvider;
@@ -315,7 +442,11 @@ export class LlmProvidersService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.llmProviderRepository.createQueryBuilder('provider');
+    // The list is a query builder, where eager relations do not apply;
+    // join the credential rows so the masked view can name the connection.
+    const queryBuilder = this.llmProviderRepository.createQueryBuilder('provider')
+      .leftJoinAndSelect('provider.credential', 'credential')
+      .leftJoinAndSelect('provider.usageCredential', 'usageCredential');
     if (filters.bypassTeamFilter) {
       queryBuilder.where('provider.organizationId = :_orgId', { _orgId: filters.organizationId });
     } else if (filters.caller) {
@@ -381,6 +512,19 @@ export class LlmProvidersService {
       throw new ForbiddenException(decision.reason);
     }
 
+    // Retire the cards while they can still be found by providerId; the
+    // FK nulls it on delete. Kept, not deleted: runs reference card ids.
+    if (this.catalog) {
+      try {
+        await this.catalog.retireProviderCards(organizationId, providerId);
+      } catch (error: any) {
+        this.logger.warn(`Failed to retire catalog cards for provider ${providerId}: ${error.message}`);
+      }
+    }
+
+    // The key rows this provider created go with it; a shared
+    // connection it pointed at stays.
+    await this.secrets.release(provider);
     await this.llmProviderRepository.remove(provider);
 
     this.logger.log(`LLM provider '${provider.name}' deleted`);
@@ -413,8 +557,9 @@ export class LlmProvidersService {
     error?: string;
     details?: Record<string, any>;
   }> {
+    let provider: LlmProvider | null = null;
     try {
-      const provider = await this.llmProviderRepository.findOne({
+      provider = await this.llmProviderRepository.findOne({
         where: { id: providerId, organizationId },
       });
 
@@ -422,11 +567,21 @@ export class LlmProvidersService {
         return { isHealthy: false, error: 'Provider not found' };
       }
 
+      // The policy seam and a fresh read of the credential row, before
+      // the sync key reads inside the runner.
+      await this.secrets.withResolvedSecrets(provider, { context: { purpose: 'health_check', resourceType: 'llm_provider', resourceId: provider.id } });
       const startTime = Date.now();
+
+      // Probe with the provider's configured model, else whatever the
+      // vendor currently serves (DefaultModelResolver). Never a literal:
+      // a fixed id here marked Mistral, Groq and DeepSeek unhealthy with
+      // valid keys, and rotted for Anthropic when the id was retired.
+      const healthCheckModel = await this.defaultModels.resolve(provider);
 
       // Perform a simple health check request
       const testRequest: ChatRequest = {
         messages: [{ role: MessageRole.USER, content: 'Hello' }],
+        model: healthCheckModel,
         maxTokens: 10,
         temperature: 0.1,
       };
@@ -448,6 +603,12 @@ export class LlmProvidersService {
         { isHealthy: true, lastHealthCheckAt: new Date(), lastError: null },
       );
 
+      // The probe was a real call with a real model: that is a validation
+      // run for the matching card, and a good moment to refresh the list.
+      this.recordCatalogValidation(provider, healthCheckModel, { passed: true, latencyMs: responseTime });
+      this.scheduleCatalogSync(provider.id, provider.organizationId, 'health_check');
+      void this.secrets.recordHealth(provider, true);
+
       return {
         isHealthy: true,
         responseTime,
@@ -464,10 +625,17 @@ export class LlmProvidersService {
       // gate's own wording — that would be circular.
       const upstreamMessage = extractUpstreamErrorMessage(error);
 
+      // A retired or mistyped model is a failed validation run for its card.
+      const notFound = findModelNotFound(error);
+      if (notFound) {
+        this.recordCatalogValidation({ id: providerId, organizationId }, notFound.model, { passed: false, error: upstreamMessage });
+      }
+
       // Record a failed health check on the provider row (still
       // org-scoped so we don't touch a foreign provider on errors
       // either). Partial UPDATE for the same race reason.
       if (upstreamMessage !== LLM_HEALTH_GATE_MESSAGE) {
+        void this.secrets.recordHealth({ organizationId, credentialId: provider?.credentialId ?? null }, false, upstreamMessage);
         try {
           await this.llmProviderRepository.update(
             { id: providerId, organizationId },
@@ -603,7 +771,89 @@ export class LlmProvidersService {
     return this.modelsHelper.calculateProviderCost(provider, inputTokens, outputTokens);
   }
 
+  /**
+   * A configured default model must be one the vendor actually serves.
+   * Checked against the live list at save time, because a retired or
+   * mistyped id otherwise only shows up as a 404 on the first real call.
+   * When the vendor cannot list models (unsupported type, listing failed)
+   * there is nothing to check against and the save goes through.
+   */
+  async assertModelIsServed(
+    type: LlmProviderType,
+    configuration: LlmProviderConfig | undefined,
+    organizationId: string,
+    /** The key the probe should use: a pasted plaintext, or the credential the provider points at. */
+    key: { apiKey?: string; credentialId?: string | null; credential?: Credential | null } = {},
+  ): Promise<void> {
+    const model = configuration?.model?.trim();
+    if (!model) return;
+    const probe = Object.assign(new LlmProvider(), { type, configuration: { ...(configuration ?? {}) }, organizationId });
+    if (key.apiKey && key.apiKey !== MASKED_PROVIDER_KEY) {
+      probe.configuration.apiKey = key.apiKey;
+    } else if (key.credentialId) {
+      probe.credentialId = key.credentialId;
+      if (key.credential && key.credential.id === key.credentialId) {
+        probe.credential = key.credential;
+      } else {
+        await this.secrets.withResolvedSecrets(probe, { context: { purpose: 'model_list', resourceType: 'llm_provider' } });
+      }
+    }
+    let listed: Array<{ id: string }>;
+    try {
+      listed = await this.modelsHelper.fetchModelsFromProvider(probe);
+    } catch (err: any) {
+      // A vendor that cannot be listed (no /models, network) leaves nothing
+      // to check against; the first real call reports a wrong id instead.
+      this.logger.debug(`model list unavailable for ${type}: ${err?.message ?? err}`);
+      return;
+    }
+    if (listed.length === 0) return;
+    if (listed.some((m) => m.id === model)) return;
+    const sample = listed.slice(0, 5).map((m) => m.id).join(', ');
+    throw new BadRequestException({
+      code: 'MODEL_NOT_SERVED',
+      message:
+        `Model "${model}" is not served by this ${type} provider. ` +
+        `It may have been retired. Currently available include: ${sample}.`,
+    });
+  }
+
+  /**
+   * What validateProviderConfiguration should see: the configuration
+   * with the key present when the provider has one, on the row (shim),
+   * pasted in this request, or referenced.
+   */
+  private validationView(
+    provider: LlmProvider,
+    incoming: { apiKey?: string; usageApiKey?: string; credentialId?: string | null },
+  ): LlmProviderConfig {
+    const hasRef = incoming.credentialId === undefined ? !!provider.credentialId : !!incoming.credentialId;
+    const apiKey = incoming.apiKey ?? (hasRef || provider.configuration?.apiKey ? MASKED_PROVIDER_KEY : undefined);
+    return { ...provider.configuration, apiKey, usageApiKey: incoming.usageApiKey };
+  }
+
+  // Catalog hooks. The catalog is optional at construction time (forwardRef,
+  // and some specs build this service without it); every hook is
+  // fire-and-forget and logs instead of throwing.
+
+  private scheduleCatalogSync(providerId: string, organizationId: string, reason: string): void {
+    if (!this.catalog) return;
+    void this.catalog.syncInBackground(organizationId, providerId, reason);
+  }
+
+  private recordCatalogValidation(
+    provider: { id: string; organizationId: string },
+    vendorModelId: string | undefined,
+    outcome: { passed: boolean; latencyMs?: number; error?: string },
+  ): void {
+    if (!this.catalog || !vendorModelId) return;
+    void this.catalog
+      .recordExternalValidation(provider.organizationId, provider.id, vendorModelId, { ...outcome, source: 'health_check' })
+      .catch((err) => this.logger.warn(`catalog validation record for ${vendorModelId} failed: ${err?.message ?? err}`));
+  }
+
   // ── Delegations to LlmChatHelper ──
+
   chat(...args: Parameters<LlmChatHelper['chat']>) { return this.chatHelper.chat(...args); }
   validateProviderConfiguration(...args: Parameters<LlmChatRunnerHelper['validateProviderConfiguration']>) { return this.runner.validateProviderConfiguration(...args); }
   callLlmProvider(...args: Parameters<LlmChatRunnerHelper['callLlmProvider']>) { return this.runner.callLlmProvider(...args); }

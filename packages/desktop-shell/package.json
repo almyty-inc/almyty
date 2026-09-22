@@ -1,0 +1,22 @@
+{
+  "name": "@almyty/desktop-shell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The window an almyty app ships in. Branded per build, never published on its own.",
+  "author": "almyty",
+  "license": "Apache-2.0",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "electron": "33.2.0",
+    "electron-builder": "25.1.8",
+    "vitest": "^4.1.0"
+  },
+  "files": [
+    "src/main.js",
+    "src/app-config.json"
+  ]
+}

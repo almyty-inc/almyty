@@ -22,7 +22,9 @@
  * path. Types are re-exported below so no caller needs to update
  * its import path.
  */
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional, ForbiddenException } from '@nestjs/common';
+import { PluginManagerService } from '../plugins/plugin-manager.service';
+import { PluginHookType } from '../plugins/types/plugin.types';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 import * as Redis from 'ioredis';
@@ -31,6 +33,7 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { Api, ApiType } from '../../entities/api.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
+import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
@@ -82,6 +85,16 @@ export class ToolExecutorService {
     private readonly runnerCalls: RunnerCallService,
     private readonly memoryService: CanonicalMemoryService,
     private readonly mcpSources: McpSourcesService,
+    // The reader for `gateway_tools.securityPolicy`. Placed here, after the
+    // other required dependencies and before the optional plugin manager,
+    // so the positional spec harnesses keep the same order for everything
+    // that came before it.
+    @InjectRepository(GatewayTool)
+    private readonly gatewayToolRepository: Repository<GatewayTool>,
+    // Optional and last: PluginsModule is @Global(), but the spec harnesses
+    // for this service construct it positionally, and a plugin pipeline that
+    // is absent must not stop a tool running.
+    @Optional() private readonly pluginManager?: PluginManagerService,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -128,6 +141,27 @@ export class ToolExecutorService {
         throw new Error(`Tool is ${tool.status}, cannot execute`);
       }
 
+      // Resolve the gateway tool's security policy before dispatch.
+      //
+      // `gateway_tools.securityPolicy` had a column, a PATCH endpoint and a
+      // dashboard form, and no reader anywhere in backend/src: a user could
+      // set allowed domains, require-HTTPS and a max response size, watch it
+      // save, and have every setting ignored on the next call. This is where
+      // it is read; the executors enforce it at each outbound request.
+      //
+      // Only the gateway paths carry a gatewayId, which is correct: the
+      // policy is scoped to one tool on one gateway, and a direct API call
+      // or an agent node that did not come through a gateway is not governed
+      // by it. A caller that already holds the row can pass `securityPolicy`
+      // itself (including explicit `null`) to skip this query.
+      if (options.securityPolicy === undefined && options.gatewayId) {
+        const gatewayTool = await this.gatewayToolRepository.findOne({
+          where: { gatewayId: options.gatewayId, toolId: tool.id },
+          select: { id: true, securityPolicy: true },
+        });
+        options = { ...options, securityPolicy: gatewayTool?.securityPolicy ?? null };
+      }
+
       // User permission check (skipped for MCP unauthenticated sessions,
       // where gateway-level auth handles access control).
       if (options.userId) {
@@ -162,6 +196,45 @@ export class ToolExecutorService {
         this.logger.warn(
           `Parameter warnings for tool ${tool.name}: ${sanitization.warnings.join('; ')}`,
         );
+      }
+
+      // Plugins. Every built-in plugin -- pii-filter, security-scanner,
+      // rate-limiter, request-logger, performance-monitor -- was registered
+      // and then invoked by nothing: executeHook had no callers anywhere in
+      // src or ee, so the EE compliance pack's "enforced org-wide" plugins
+      // never ran on a single request and the security counters documented
+      // as emitted here were always zero.
+      //
+      // A disabled plugin is still skipped inside executeHook, so wiring
+      // this changes nothing until an organization enables one or a
+      // compliance policy enforces it.
+      if (this.pluginManager) {
+        const hooked = await this.pluginManager.executeHook(PluginHookType.PRE_TOOL_EXECUTION, {
+          hookType: PluginHookType.PRE_TOOL_EXECUTION,
+          organizationId: options.organizationId,
+          userId: options.userId,
+          requestId: `tool-${tool.id}-${startTime}`,
+          data: parameters,
+          metadata: {
+            timestamp: new Date().toISOString(),
+            plugin: { id: '', name: '', version: '' },
+            execution: { attempt: 1, timeout: 0, startTime },
+            tool: { id: tool.id, name: tool.name },
+          },
+        });
+        const halted = hooked.metadata.halted as
+          | { pluginName: string; code: string; message: string }
+          | undefined;
+        if (halted) {
+          // A plugin that stops the chain is refusing the call. Throwing is
+          // the only honest response: returning a success result with the
+          // original parameters would run the tool the plugin just blocked.
+          throw new ForbiddenException({ code: halted.code, message: halted.message });
+        }
+        // A filter plugin's whole purpose is to rewrite what gets sent, so
+        // the rewritten parameters have to be what the tool, the cache key
+        // and the execution record all see -- not just a local copy.
+        if (hooked.data !== undefined) parameters = hooked.data;
       }
 
       // Tool integrity: refuse to execute if the stored definitionHash
@@ -268,7 +341,11 @@ export class ToolExecutorService {
 
       // Legacy API-operation path (spec-imported tools without a
       // structured *Config). Supports exponential-backoff retries.
-      const maxRetries = options.retries ?? tool.configuration?.retries ?? 3;
+      // A tool that declares its own retry count knows something the
+      // caller does not (a flaky upstream, a slow cold start), so it
+      // wins over the agent-level budget. Order matters: caller default
+      // first would silently discard every per-tool override.
+      const maxRetries = tool.configuration?.retries ?? options.retries ?? 3;
       let lastError: Error | undefined;
 
       while (retryCount <= maxRetries) {
@@ -376,7 +453,7 @@ export class ToolExecutorService {
     if (!operation || !operation.api) {
       throw new BadRequestException(
         `Tool '${tool.name}' has no executable configuration ` +
-          `(no HTTP/JS/GraphQL/SOAP/gRPC/LLM/SDK/runner config and no imported API operation). ` +
+          `(no HTTP/JS/GraphQL/SOAP/gRPC/model/SDK/runner config and no imported API operation). ` +
           `Re-import its API or set a tool configuration.`,
       );
     }

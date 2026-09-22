@@ -6,7 +6,7 @@
   "private": true,
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=24.0.0 <25"
+    "node": ">=26.0.0"
   },
   "scripts": {
     "build": "nest build",
@@ -18,13 +18,19 @@
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
-    "test:full": "RUN_DB_INTEGRATION=1 DATABASE_PORT=5433 DATABASE_PASSWORD=postgres DATABASE_NAME=almyty REDIS_PORT=6380 jest --forceExit",
+    "test:full": "RUN_DB_INTEGRATION=1 DATABASE_HOST=127.0.0.1 DATABASE_PORT=5433 DATABASE_USERNAME=postgres DATABASE_PASSWORD=postgres DATABASE_NAME=almyty_test REDIS_HOST=127.0.0.1 REDIS_PORT=6380 sh -c 'node scripts/ensure-test-db.js && jest --forceExit'",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:db": "RUN_DB_INTEGRATION=1 jest src/test/integration",
+    "test:db": "RUN_DB_INTEGRATION=1 DATABASE_HOST=127.0.0.1 DATABASE_PORT=5433 DATABASE_USERNAME=postgres DATABASE_PASSWORD=postgres DATABASE_NAME=almyty_test REDIS_HOST=127.0.0.1 REDIS_PORT=6380 sh -c 'node scripts/ensure-test-db.js && jest src/test/integration --forceExit'",
+    "ensure:test-db": "node scripts/ensure-test-db.js",
     "test:e2e:staging": "npx tsx test/e2e/agent-runtime.e2e.ts",
+    "verify:ee-di": "node scripts/ee-di-smoke.js",
+    "verify:boot": "npm run build:ee && node scripts/boot-probe.js",
+    "verify:openai-sdk": "npx tsx scripts/test-openai-sdk.ts",
+    "load-test": "npx tsx scripts/load-test.ts",
+    "seed:tool-templates": "npx tsx src/scripts/seed-public-tool-templates.ts",
     "typeorm": "typeorm-ts-node-commonjs",
     "typeorm:migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/config/database.config.ts",
     "typeorm:migration:run": "typeorm-ts-node-commonjs migration:run -d src/config/database.config.ts",
@@ -117,7 +123,7 @@
     "tar-fs": "^3.1.1",
     "cacache": "^18.0.5",
     "lodash": "^4.17.24",
-    "multer": "^2.1.1",
+    "multer": "^2.3.0",
     "uuid": "^14.0.0",
     "undici": "^6.28.0",
     "mem0ai": {

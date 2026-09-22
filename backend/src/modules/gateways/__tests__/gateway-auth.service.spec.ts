@@ -284,6 +284,36 @@ describe('GatewayAuthService', () => {
       expect(result.errorCode).toBe('NO_AUTH_CONFIGURED');
     });
 
+    it('records WHICH auth config refused, not just that something did', async () => {
+      // A gateway commonly has several required configs. Keeping only
+      // `lastError` answered "it was refused" and never "by what", which
+      // is the first question on an auth support ticket.
+      const jwtConfig = { ...mockGatewayAuth, id: 'auth-jwt', type: GatewayAuthType.JWT };
+      const keyConfig = { ...mockGatewayAuth, id: 'auth-key', type: GatewayAuthType.API_KEY };
+      jest
+        .spyOn(gatewayAuthRepository, 'find')
+        .mockResolvedValue([jwtConfig, keyConfig] as any);
+
+      const result = await service.authenticateRequest('gateway-1', {}, {});
+
+      expect(result.isValid).toBe(false);
+      // The last config to produce an error is the deciding one.
+      expect(result.authConfigId).toBe('auth-key');
+      expect(result.authConfigType).toBe(GatewayAuthType.API_KEY);
+      expect(result.triedConfigCount).toBe(2);
+    });
+
+    it('records which config accepted the request', async () => {
+      jest.spyOn(gatewayAuthRepository, 'find').mockResolvedValue([mockGatewayAuth] as any);
+      jest.spyOn(apiKeyRepository, 'findOne').mockResolvedValue(mockApiKey as any);
+
+      const result = await service.authenticateRequest('gateway-1', { 'x-api-key': 'test-key' }, {});
+
+      expect(result.isValid).toBe(true);
+      expect(result.authConfigId).toBe('auth-1');
+      expect(result.authConfigType).toBe(GatewayAuthType.API_KEY);
+    });
+
     it('should skip non-required auth configs', async () => {
       const optionalAuth = { ...mockGatewayAuth, isRequired: false };
       jest.spyOn(gatewayAuthRepository, 'find').mockResolvedValue([optionalAuth] as any);

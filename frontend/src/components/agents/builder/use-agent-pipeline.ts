@@ -45,6 +45,18 @@ export function getDefaultData(type: PipelineNodeType): Record<string, any> {
       return { agentId: '', agentName: '', inputMapping: [] }
     case 'loop':
       return { iterableExpression: '', maxIterations: 100 }
+    case 'verify':
+      // No 'target' key, deliberately. The executor branches on
+      // `config.target !== undefined`, so an empty string is not "unset" --
+      // it is "check the empty string", and the node would stop falling
+      // back to the output of the steps wired into it.
+      return { checkers: [], policy: 'any_fail_blocks' }
+    case 'extract_context':
+      // Same reason, twice over: `sources: ''` fails the node outright
+      // ('has nothing to compress') even when it is correctly wired, and
+      // `instruction: ''` replaces the built-in extraction instruction
+      // with an empty system prompt.
+      return {}
     default:
       return {}
   }

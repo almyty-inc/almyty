@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
 /**
  * Landing route for referral share links (`/r/<code>`).

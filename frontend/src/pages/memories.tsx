@@ -9,13 +9,27 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { memoriesApi, type MemoryTier, type MemoryMode } from '@/lib/api'
+import { formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import { TeamFilter, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
+import { ConnectAccountButton } from '@/components/connections/connect-sheet'
+import type { Connection } from '@/types/connections'
 
 type Item = {
   id: string
@@ -121,6 +135,9 @@ export function MemoriesPage() {
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
+      // The soft-cap warning list is a sibling key, not a descendant,
+      // and storing is exactly what trips a soft cap.
+      qc.invalidateQueries({ queryKey: ['memories', 'softcap-warnings', orgId] })
       setPutOpen(false)
       setDraft({ content: '', tier: 'short', tags: '', mode: 'memory', source_uri: '' })
       notify.success('Memory stored')
@@ -131,11 +148,21 @@ export function MemoriesPage() {
   })
 
   // ── delete ──────────────────────────────────────────────────────────
+  const [memoryToDelete, setMemoryToDelete] = useState<Item | null>(null)
   const removeMut = useMutation({
     mutationFn: ({ id, mode }: { id: string; mode: 'soft' | 'hard' }) => memoriesApi.remove(id, mode),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
-      notify.success('Deleted')
+      // Removing frees capacity, so the soft-cap warnings the sibling
+      // key holds are stale too.
+      qc.invalidateQueries({ queryKey: ['memories', 'softcap-warnings', orgId] })
+      setMemoryToDelete(null)
+      notify.success('Memory deleted')
+    },
+    // Without this a rejected delete left the row in place and said nothing.
+    onError: (err: any) => {
+      setMemoryToDelete(null)
+      notify.error('Failed to delete memory', err?.message ?? String(err))
     },
   })
 
@@ -166,6 +193,12 @@ export function MemoriesPage() {
         `${r.succeeded ?? 0} of ${r.total_source ?? 0} items, ${r.warnings?.length ?? 0} warnings`,
       )
       setTransferOpen(false)
+      // Same reason the config mutation does it: what was transferred and
+      // which backend is healthy both just changed.
+      if (!transfer.dry_run) {
+        qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
+        qc.invalidateQueries({ queryKey: ['memories', 'backends', 'health'] })
+      }
     },
     onError: (err: any) => {
       notify.error('Transfer failed', err.message ?? String(err))
@@ -260,7 +293,7 @@ export function MemoriesPage() {
             <Select value={tierFilter} onValueChange={(v) => setTierFilter(v as any)}>
               <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All tiers</SelectItem>
+                <SelectItem value="all">All scopes</SelectItem>
                 {TIERS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -271,7 +304,14 @@ export function MemoriesPage() {
             />
           </div>
 
-          {list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (
+          {/*
+            A failed fetch is not an empty vault. Collapsing the two told
+            an org with hundreds of memories that it has none, and
+            offered a "New memory" button as the remedy.
+          */}
+          {list.isError ? (
+            <QueryError error={list.error} onRetry={() => list.refetch()} title="Couldn't load memories" />
+          ) : list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (
             <Card><CardContent className="p-0"><EmptyState
               icon={Brain}
               title="No memories yet"
@@ -301,13 +341,13 @@ export function MemoriesPage() {
                         </div>
                         <p className="text-sm whitespace-pre-wrap">{m.content}</p>
                         <p className="text-xs text-muted-foreground mt-2">
-                          {new Date(m.created_at).toLocaleString()} • id {m.id.slice(0, 8)}
+                          {formatDateTime(m.created_at)} • id {m.id.slice(0, 8)}
                         </p>
                       </div>
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => removeMut.mutate({ id: m.id, mode: 'soft' })}
+                        onClick={() => setMemoryToDelete(m)}
                         title="Soft delete"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -380,7 +420,14 @@ export function MemoriesPage() {
                       <CardTitle className="text-base font-mono">{b.id}</CardTitle>
                       <Badge variant={h?.ok ? 'default' : 'outline'} className="flex items-center gap-1">
                         <HeartPulse className="h-3 w-3" />
-                        {h?.ok ? `${h.latency_ms}ms` : 'unconfigured'}
+                        {/*
+                          Three states, not two: a probe in flight and a
+                          backend that did not answer both used to read
+                          as "unconfigured", so almyty-native -- which is
+                          always configured -- showed a config error
+                          while its own health check was still running.
+                        */}
+                        {healthQ.isLoading ? 'checking…' : h?.ok ? `${h.latency_ms}ms` : h ? 'unreachable' : 'unconfigured'}
                       </Badge>
                     </div>
                   </CardHeader>
@@ -409,7 +456,7 @@ export function MemoriesPage() {
         {/* ── Audit ──────────────────────────────────────────────── */}
         <TabsContent value="audit" className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Per-tier soft-cap warnings logged when an agent wrote past the configured byte ceiling.
+            Per-scope soft-cap warnings logged when an agent wrote past the configured byte limit.
             Behavior is set per scope under Backends → Soft-cap behavior.
           </p>
           <ConsolidationCard orgId={orgId} />
@@ -440,7 +487,7 @@ export function MemoriesPage() {
               </div>
               {draft.mode === 'memory' ? (
                 <div>
-                  <Label>Tier</Label>
+                  <Label>Scope</Label>
                   <Select value={draft.tier} onValueChange={(v) => setDraft({ ...draft, tier: v as MemoryTier })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -534,6 +581,39 @@ export function MemoriesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/*
+        The trash button sits inches from the memory body, so deleting used
+        to happen on a single stray click with no way back. Confirm first,
+        quoting enough of the memory that you know which one you picked.
+      */}
+      <AlertDialog
+        open={memoryToDelete !== null}
+        onOpenChange={(open) => { if (!open) setMemoryToDelete(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete memory?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the memory from search and retrieval for every agent in this
+              workspace.{memoryToDelete ? ` It starts "${memoryToDelete.content.slice(0, 80)}${memoryToDelete.content.length > 80 ? '…' : ''}".` : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (memoryToDelete) {
+                  removeMut.mutate({ id: memoryToDelete.id, mode: 'soft' })
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Memory
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -583,6 +663,9 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave }: Co
   const softcap = config?.softcapBehavior ?? 'warn_log'
 
   const externalBackends = backends.filter((b) => b.id !== 'almyty-native')
+  // Accounts connected through the connect sheet during this visit, so the
+  // picker can name them before the credentials list catches up.
+  const [connected, setConnected] = useState<Record<string, Connection>>({})
 
   function patch(next: Partial<typeof routing> | { softcap_behavior?: typeof softcap }) {
     const isSoftcap = 'softcap_behavior' in next
@@ -681,8 +764,19 @@ function ConfigCard({ config, backends, credentials, saving, orgId, onSave }: Co
                     {credentials.map((c) => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                     ))}
+                    {connected[b.id] && !credentials.some((c) => c.id === connected[b.id].id) && (
+                      <SelectItem value={connected[b.id].id}>{connected[b.id].name} (connected account)</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
+                <ConnectAccountButton
+                  kind="memory"
+                  label="Connect"
+                  onConnected={(connection) => {
+                    setConnected((prev) => ({ ...prev, [b.id]: connection }))
+                    patch({ credentials: { ...creds, [b.id]: connection.id } })
+                  }}
+                />
               </div>
             ))}
             {credentials.length === 0 && (
@@ -720,6 +814,7 @@ interface SoftcapWarning {
 // hasn't fired yet.
 function ConsolidationCard({ orgId }: { orgId: string }) {
   const notify = useNotifications()
+  const qc = useQueryClient()
   const [last, setLast] = useState<{ consolidated_facts: number; superseded: number; skipped: boolean; reason?: string } | null>(null)
   const mut = useMutation({
     mutationFn: (force: boolean) =>
@@ -732,9 +827,11 @@ function ConsolidationCard({ orgId }: { orgId: string }) {
       } else {
         notify.success(
           'Consolidation done',
-          `${r.consolidated_facts} fact(s) written, ${r.superseded} short-tier row(s) superseded`,
+          `${r.consolidated_facts} fact(s) written, ${r.superseded} row(s) in short scope superseded`,
         )
       }
+      // The toast counts rows that Browse was still listing unchanged.
+      qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
     },
     onError: (err: any) => notify.error('Consolidation failed', err.message ?? String(err)),
   })
@@ -746,7 +843,7 @@ function ConsolidationCard({ orgId }: { orgId: string }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Distills short-tier memories into durable long-tier facts via the org's LLM provider.
+          Distills short-scope memories into durable long-scope facts via the org's LLM provider.
           Runs hourly when enabled in Backends config; you can also trigger it now.
         </p>
         <div className="flex gap-2">
@@ -796,7 +893,7 @@ function SoftcapAuditList({ orgId, enabled }: { orgId: string; enabled: boolean 
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                memory {w.memoryId.slice(0, 8)} • {new Date(w.at).toLocaleString()}
+                memory {w.memoryId.slice(0, 8)} • {formatDateTime(w.at)}
               </p>
             </div>
           </CardContent>

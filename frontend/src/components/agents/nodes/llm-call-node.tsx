@@ -8,10 +8,14 @@ export function LlmCallNode({ data, selected }: NodeProps) {
       <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-blue-500 !border-blue-600" />
       <div className="px-3 py-2 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 rounded-t-[10px] border-b flex items-center gap-2">
         <Brain className="h-3.5 w-3.5 text-blue-700 dark:text-blue-300" />
-        <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">LLM Call</span>
+        <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">Model Call</span>
       </div>
       <div className="p-3">
-        <div className="text-sm font-medium truncate">{(data.model as string) || 'Select model'}</div>
+        <div className="text-sm font-medium truncate">
+          {data.routing && typeof data.routing === 'object'
+            ? `Routed: ${((data.routing as { objective?: string }).objective) || 'cheapest'}`
+            : (data.model as string) || 'Select model'}
+        </div>
         <div className="text-xs text-muted-foreground truncate mt-0.5">
           {data.systemPrompt ? String(data.systemPrompt).substring(0, 40) + '...' : 'No system prompt'}
         </div>

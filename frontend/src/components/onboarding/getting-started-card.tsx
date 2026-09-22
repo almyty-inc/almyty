@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { onboardingApi, type OnboardingState } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
+import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 /**
  * The three steps that make up the progress ring, in fixed order — the
@@ -19,7 +21,15 @@ import { captureEvent } from '@/lib/analytics'
  * `external_client` is likewise excluded from the ring — it is an optional
  * bonus surfaced once first_call lands (per the spec).
  */
-const CORE_STEPS: {
+/**
+ * The steps the ring counts. `provider` is deliberately NOT one of them
+ * -- it is offered separately as a contextual on-ramp, because the
+ * tool/gateway path does not need a model. Exported so the sidebar pill
+ * counts the same steps: it kept its own list with `provider` added, so
+ * the same org read "0 of 3 complete" on the card and "Setup 0/4" in the
+ * sidebar at the same time.
+ */
+export const CORE_STEPS: {
   key: keyof OnboardingState['steps']
   label: string
   description: string
@@ -42,22 +52,22 @@ const CORE_STEPS: {
   },
   {
     key: 'first_call',
-    label: 'See it work',
-    description: 'Use your tools from Claude Code, live.',
-    cta: 'Try it',
+    label: 'Put an agent in front of it',
+    description: 'One agent, your tools, reachable from chat, a channel, or a coding harness.',
+    cta: 'Build an agent',
     to: '/agents',
   },
 ]
 
 /**
  * Contextual on-ramp, shown outside the ring once a model is missing. It
- * targets the second family of journeys (agents, LLM-backed tools, memory)
+ * targets the second family of journeys (agents, model-backed tools, memory)
  * that genuinely need an almyty-configured model — without forcing it on
  * the tool/gateway hero path that doesn't.
  */
 const MODEL_STEP = {
   label: 'Building agents on almyty?',
-  description: 'Connect a model to power agents, LLM-backed tools, and memory.',
+  description: 'Connect a model to power agents, model-backed tools, and memory.',
   cta: 'Connect a model',
   to: '/llm-providers?new=1',
 }
@@ -119,7 +129,7 @@ export function GettingStartedCard({
           <div>
             <CardTitle className="text-lg">Getting started</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Three steps from an API schema to a live, AI-ready gateway. Open any step and we&apos;ll walk you through.
+              Three steps from an API schema to an agent your users can reach. Open any step and we&apos;ll walk you through.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -181,7 +191,7 @@ export function GettingStartedCard({
                 }`}
               >
                 {done ? (
-                  <div className="flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-600 shrink-0">
+                  <div className="flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300 shrink-0">
                     <Check className="h-4 w-4" />
                   </div>
                 ) : (
@@ -208,7 +218,7 @@ export function GettingStartedCard({
               }`}
             >
               {state.steps.external_client ? (
-                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-600 shrink-0">
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300 shrink-0">
                   <Check className="h-4 w-4" />
                 </div>
               ) : (
@@ -287,15 +297,33 @@ export function useOnboarding(orgId: string | undefined) {
  */
 export function useSeedSampleWorkspace(orgId: string | undefined) {
   const queryClient = useQueryClient()
+  const { success, error: notifyError } = useNotifications()
   return useMutation({
     mutationFn: () => onboardingApi.seedSample(orgId as string),
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       captureEvent('sample_workspace_loaded')
       queryClient.invalidateQueries({ queryKey: ['onboarding', orgId] })
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       queryClient.invalidateQueries({ queryKey: ['tools', orgId] })
       queryClient.invalidateQueries({ queryKey: ['gateways', orgId] })
       queryClient.invalidateQueries({ queryKey: ['agents', orgId] })
+      success(
+        result?.created === false ? 'Sample workspace already loaded' : 'Sample workspace loaded',
+        'A Petstore API, its tools, an MCP gateway and a demo agent are ready.',
+      )
+    },
+    /*
+      The button had no onError at all. The seed 400s -- it did so on
+      every single attempt, because it tried to put draft tools on a
+      gateway -- and the only thing the user saw was the label going back
+      from "Loading…" to "Load sample workspace". Four screens offer this
+      action; all four were silent.
+    */
+    onError: (error: any) => {
+      notifyError(
+        "Couldn't load the sample workspace",
+        getApiErrorMessage(error, 'Nothing was left behind — try again.'),
+      )
     },
   })
 }

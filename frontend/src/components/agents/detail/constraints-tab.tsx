@@ -13,8 +13,11 @@ import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 import { agentConstraintsApi } from '@/lib/api'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { useNotifications } from '@/store/app'
 import type { AgentConstraint } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface ConstraintsTabProps {
   agentId: string
@@ -25,7 +28,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
   const { success, error: errorNotif } = useNotifications()
   const [rule, setRule] = useState('')
 
-  const { data, isLoading } = useQuery<AgentConstraint[]>({
+  const { data, isLoading, isError, error, refetch } = useQuery<AgentConstraint[]>({
     queryKey: ['agent-constraints', agentId],
     queryFn: () => agentConstraintsApi.list(agentId),
   })
@@ -39,14 +42,14 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
       setRule('')
       invalidate()
     },
-    onError: (e: any) => errorNotif('Add failed', e?.response?.data?.message || e?.message),
+    onError: (e: any) => errorNotif('Add failed', getApiErrorMessage(e)),
   })
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) =>
       agentConstraintsApi.setActive(agentId, id, active),
     onSuccess: invalidate,
-    onError: (e: any) => errorNotif('Update failed', e?.response?.data?.message || e?.message),
+    onError: (e: any) => errorNotif('Update failed', getApiErrorMessage(e)),
   })
 
   const removeMutation = useMutation({
@@ -55,7 +58,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
       success('Constraint removed')
       invalidate()
     },
-    onError: (e: any) => errorNotif('Remove failed', e?.response?.data?.message || e?.message),
+    onError: (e: any) => errorNotif('Remove failed', getApiErrorMessage(e)),
   })
 
   return (
@@ -96,10 +99,17 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
           <div className="flex justify-center py-6">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
+        ) : isError ? (
+          // A failed list read used to render as "No constraints yet", which
+          // is the one thing it must not say: the agent may well be running
+          // under constraints the screen is claiming do not exist.
+          <QueryError error={error} onRetry={() => refetch()} title="Couldn't load constraints" />
         ) : constraints.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-4">
-            No constraints yet. Add one above, or enable auto-learn so failures become constraints.
-          </p>
+          <EmptyState
+            icon={ShieldAlert}
+            title="No constraints yet"
+            description="Constraints are hard rules injected into every prompt. Add one above, or turn on auto-learn so failures become constraints by themselves."
+          />
         ) : (
           <div className="space-y-2">
             {constraints.map((c) => (
@@ -121,6 +131,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
                 <Button
                   size="sm"
                   variant="ghost"
+                  aria-label={`Delete constraint: ${c.rule}`}
                   className="text-destructive shrink-0"
                   disabled={removeMutation.isPending}
                   onClick={() => removeMutation.mutate(c.id)}

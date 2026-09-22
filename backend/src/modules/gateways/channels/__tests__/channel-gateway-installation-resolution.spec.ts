@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { EventEmitter } from 'events';
 
 import { ChannelGatewayService } from '../channel-gateway.service';
@@ -40,7 +41,7 @@ describe('ChannelGatewayService installation resolution', () => {
     gateway.status = GatewayStatus.ACTIVE;
     gateway.agentId = 'agent-1';
     gateway.organizationId = 'org-1';
-    gateway.configuration = { bot_token: 'xoxb-gateway-default' };
+    gateway.configuration = { bot_token: 'xoxb-gateway-default', signing_secret: SIGNING_SECRET };
     gateway.totalRequests = 0;
     gateway.successfulRequests = 0;
     return gateway;
@@ -51,7 +52,23 @@ describe('ChannelGatewayService installation resolution', () => {
     event: { type: 'message', text: 'hi there', user: 'U1', channel: 'C1', ts: '111.222' },
   });
 
-  const buildService = (withInstallations: boolean) =>
+  /**
+   * Inbound now fails closed, so every one of these has to arrive
+   * correctly signed or the pipeline refuses it before it ever reaches
+   * installation resolution.
+   */
+  const SIGNING_SECRET = 'installation-resolution-secret';
+  const signedHeaders = (payload: unknown): Record<string, string> => {
+    const timestamp = '1700000000';
+    const basestring = `v0:${timestamp}:${JSON.stringify(payload)}`;
+    return {
+      'x-slack-request-timestamp': timestamp,
+      'x-slack-signature':
+        'v0=' + createHmac('sha256', SIGNING_SECRET).update(basestring).digest('hex'),
+    };
+  };
+
+  const buildService = (withInstallations: boolean, rateLimit?: any) =>
     new ChannelGatewayService(
       gatewayRepository,
       runRepository,
@@ -72,10 +89,17 @@ describe('ChannelGatewayService installation resolution', () => {
       new MatrixAdapter(),
       new IrcAdapter(),
       withInstallations ? installationService : undefined,
+      undefined,
+      rateLimit,
     );
+
 
   beforeEach(() => {
     fetchMock = installFetchMock();
+    // Slack confirms a post in the body, not the status, and the
+    // adapter now refuses anything else — so a harness that wants a
+    // delivered reply has to say so.
+    fetchMock.setNextResponse({ json: { ok: true, ts: '1700000000.200' } });
     emitter = new EventEmitter();
 
     const run: any = { id: 'run-1', metadata: {}, output: 'agent says hi' };
@@ -91,8 +115,19 @@ describe('ChannelGatewayService installation resolution', () => {
       findOne: jest.fn(async () => run),
     };
     eventRepository = {
+      rows: [] as any[],
+      nextId: 1,
       create: jest.fn((data: any) => data),
-      save: jest.fn(async (e: any) => e),
+      save: jest.fn(async (e: any) => {
+        const stored = { id: `evt-${eventRepository.nextId++}`, ...e };
+        eventRepository.rows.push(stored);
+        return stored;
+      }),
+      update: jest.fn(async (where: any, patch: any) => {
+        const target = eventRepository.rows.find((r: any) => r.id === where.id);
+        if (target) Object.assign(target, patch);
+        return { affected: target ? 1 : 0 };
+      }),
     };
     gatewayRepository = {
       save: jest.fn(async (g: any) => g),
@@ -121,7 +156,7 @@ describe('ChannelGatewayService installation resolution', () => {
     installationService.resolveCredentials.mockResolvedValue({ bot_token: 'xoxb-tenant-T777' });
     const service = buildService(true);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
     await completeRunAndFlush();
 
     expect(installationService.resolveCredentials).toHaveBeenCalledWith('gw-1', 'T777');
@@ -134,7 +169,7 @@ describe('ChannelGatewayService installation resolution', () => {
     installationService.resolveCredentials.mockResolvedValue(null);
     const service = buildService(true);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent('T404'), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent('T404'), signedHeaders(slackEvent('T404')));
     await completeRunAndFlush();
 
     expect(installationService.resolveCredentials).toHaveBeenCalledWith('gw-1', 'T404');
@@ -144,7 +179,7 @@ describe('ChannelGatewayService installation resolution', () => {
   it('keeps single-credential behavior when the payload has no tenant id', async () => {
     const service = buildService(true);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent(undefined), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent(undefined), signedHeaders(slackEvent(undefined)));
     await completeRunAndFlush();
 
     expect(installationService.resolveCredentials).not.toHaveBeenCalled();
@@ -154,7 +189,7 @@ describe('ChannelGatewayService installation resolution', () => {
   it('works unchanged when the installation subsystem is absent (optional dependency)', async () => {
     const service = buildService(false);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
     await completeRunAndFlush();
 
     expect(fetchMock.calls[0].init.headers.Authorization).toBe('Bearer xoxb-gateway-default');
@@ -164,11 +199,41 @@ describe('ChannelGatewayService installation resolution', () => {
     installationService.resolveCredentials.mockRejectedValue(new Error('db down'));
     const service = buildService(true);
 
-    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), {});
+    await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
     await completeRunAndFlush();
 
     // Lookup failure degrades to the gateway's own credentials.
     expect(fetchMock.calls[0].init.headers.Authorization).toBe('Bearer xoxb-gateway-default');
+  });
+
+  describe('per-sender share', () => {
+    it('checks the platform sender, not the webhook address, and drops a sender over their share', async () => {
+      const rateLimit = {
+        checkVisitor: jest.fn(async () => ({ limited: true, code: 'VISITOR_RATE_LIMITED', message: 'Too many messages from you (60 per hour). Please wait 30 seconds.' })),
+      };
+      const service = buildService(false, rateLimit);
+
+      await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
+
+      expect(rateLimit.checkVisitor).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), { endUserId: 'U1', clientHash: null });
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+      // The outcome lands on the delivery's own claim row rather than
+      // beside it: a claim left in `received` is one the lease hands to
+      // the platform's next retry.
+      const inbound = eventRepository.rows.find((r: any) => r.direction === 'inbound');
+      expect(inbound.status).toBe('failed');
+      expect(inbound.errorMessage).toMatch(/Too many messages from you/);
+    });
+
+    it('lets a sender under their share through', async () => {
+      const rateLimit = { checkVisitor: jest.fn(async () => ({ limited: false })) };
+      const service = buildService(false, rateLimit);
+
+      await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
+      await completeRunAndFlush();
+
+      expect(agentRuntimeService.startRun).toHaveBeenCalled();
+    });
   });
 
   describe('tenant id extraction', () => {

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource, Repository } from 'typeorm';
-import { VersionsService } from '../versions.service';
+import { VersionsService, DEFAULT_VERSION_PAGE_SIZE, MAX_VERSION_PAGE_SIZE } from '../versions.service';
 import { Version, VersionEvent } from 'typeorm-versions';
 import { versionContext, getVersionOwner } from '../../../common/version-context';
 import { CustomVersionSubscriber } from '../../../common/custom-version-subscriber';
@@ -94,7 +94,54 @@ describe('VersionsService', () => {
       expect(mockRepo.find).toHaveBeenCalledWith({
         where: { itemType: 'Agent', itemId: 'agent-1' },
         order: { timestamp: 'DESC' },
+        skip: 0,
+        take: DEFAULT_VERSION_PAGE_SIZE,
       });
+    });
+
+    it('caps the page size at MAX_VERSION_PAGE_SIZE however large a limit the caller asks for', async () => {
+      (mockRepo.findOne as jest.Mock).mockResolvedValueOnce({
+        id: 'agent-1',
+        organizationId: 'org-1',
+      });
+      (mockRepo.find as jest.Mock).mockResolvedValue([]);
+
+      await service.getVersions('Agent', 'agent-1', 'org-1', { limit: 100000 });
+
+      const args = (mockRepo.find as jest.Mock).mock.calls[0][0];
+      expect(args.take).toBe(MAX_VERSION_PAGE_SIZE);
+      expect(args.take).toBeLessThanOrEqual(200);
+    });
+
+    it('honours a limit below the ceiling and an explicit offset', async () => {
+      (mockRepo.findOne as jest.Mock).mockResolvedValueOnce({
+        id: 'agent-1',
+        organizationId: 'org-1',
+      });
+      (mockRepo.find as jest.Mock).mockResolvedValue([]);
+
+      await service.getVersions('Agent', 'agent-1', 'org-1', { limit: 25, offset: 75 });
+
+      const args = (mockRepo.find as jest.Mock).mock.calls[0][0];
+      expect(args.take).toBe(25);
+      expect(args.skip).toBe(75);
+    });
+
+    it('falls back to the default page size for a non-numeric or non-positive limit', async () => {
+      for (const limit of [NaN, 0, -5]) {
+        (mockRepo.find as jest.Mock).mockClear();
+        (mockRepo.findOne as jest.Mock).mockResolvedValueOnce({
+          id: 'agent-1',
+          organizationId: 'org-1',
+        });
+        (mockRepo.find as jest.Mock).mockResolvedValue([]);
+
+        await service.getVersions('Agent', 'agent-1', 'org-1', { limit });
+
+        const args = (mockRepo.find as jest.Mock).mock.calls[0][0];
+        expect(args.take).toBe(DEFAULT_VERSION_PAGE_SIZE);
+        expect(args.skip).toBe(0);
+      }
     });
 
     it('returns empty array when no versions exist', async () => {

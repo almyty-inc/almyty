@@ -5,6 +5,8 @@ import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
 import { callLlmProviderHttp, callLlmProviderHttpStream } from './safe-request';
+import { requireModel } from '../model-errors';
+
 
 /**
  * Anthropic deprecates sampling params per model generation (e.g.
@@ -54,7 +56,7 @@ export async function callAnthropic(
 
   // Prepare Anthropic request
   const anthropicRequest: Record<string, unknown> = {
-    model: request.model || provider.configuration.model || 'claude-sonnet-4-20250514',
+    model: requireModel(request, provider),
     max_tokens: request.maxTokens || conversation.context?.maxTokens || 1024,
     temperature: request.temperature ?? conversation.context?.temperature,
     top_p: request.topP ?? conversation.context?.topP,
@@ -151,7 +153,7 @@ function buildAnthropicRequestBody(
   const nonSystemMessages = request.messages.filter(msg => msg.role !== MessageRole.SYSTEM && msg.role !== 'system' as MessageRole);
 
   const body: Record<string, unknown> = {
-    model: request.model || provider.configuration.model || 'claude-sonnet-4-20250514',
+    model: requireModel(request, provider),
     max_tokens: request.maxTokens || conversation.context?.maxTokens || 1024,
     temperature: request.temperature ?? conversation.context?.temperature,
     top_p: request.topP ?? conversation.context?.topP,
@@ -332,7 +334,7 @@ export async function callAnthropicStream(
           totalTokens: inputTokens + outputTokens,
         },
         cost,
-        model: modelName || (request.model || provider.configuration.model || 'claude-sonnet-4-20250514'),
+        model: modelName || requireModel(request, provider),
         conversationId: conversation.id,
         messageId: '',
         responseTime,

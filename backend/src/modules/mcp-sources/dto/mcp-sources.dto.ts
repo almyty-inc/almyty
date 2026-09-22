@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsNotEmpty, IsObject, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateMcpSourceDto {
   @IsString()
@@ -28,4 +28,9 @@ export class CreateMcpSourceDto {
   @IsOptional()
   @IsObject()
   headers?: Record<string, string>;
+
+  /** An existing connection to use instead of pasting a token or headers. */
+  @IsOptional()
+  @IsUUID()
+  credentialId?: string;
 }

@@ -71,6 +71,20 @@ interface RunningProcess {
 const RECENT_TAIL_CAP = 8192;
 
 /**
+ * How long an exited process stays addressable before it is forgotten.
+ * Long enough for a caller to collect its exit info and drain its output.
+ */
+const EXITED_PROCESS_RETENTION_MS = 5 * 60 * 1000;
+
+/**
+ * Cap on the pull buffer a reader drains with read().
+ *
+ * Generous enough that a normal read loop never misses output, bounded
+ * so a session nobody drains cannot grow forever.
+ */
+const PULL_BUFFER_CAP = 1024 * 1024;
+
+/**
  * Per-runner process orchestrator.
  *
  * Bookkeeping: every process is namespaced by workspaceId. Cross-
@@ -146,7 +160,15 @@ export class ProcessManager {
 
     adapter.on('data', (chunk: string | Buffer) => {
       const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
-      running.buffer += text;
+      // Capped, like recentTail below it.
+      //
+      // This grew without limit, and it is drained only by read() and
+      // waitForIdle(). Coding sessions use neither -- they subscribe via
+      // observe(), which documents that it does not drain the pull
+      // buffer -- so every byte a coding CLI ever printed stayed in the
+      // daemon's heap. A long claude/codex task emits megabytes, and this
+      // is a process meant to run for weeks.
+      running.buffer = (running.buffer + text).slice(-PULL_BUFFER_CAP);
       // Maintain the status tail as the latest repaint frame. If this chunk
       // contains a frame-reset (erase-display / cursor-home), the prior frame
       // is stale — keep only from the last reset so a since-cleared status line
@@ -166,6 +188,20 @@ export class ProcessManager {
       };
       running.exitInfo = exit;
       resolveExit(exit);
+
+      // Forget it after a grace period.
+      //
+      // The only delete was inside killWorkspace(), which has no
+      // production caller at all -- there is no workspace-release command
+      // -- so every process this daemon ever spawned stayed in the map
+      // with its handle, its adapter (an EventEmitter), its 8KB tail and
+      // its output buffer. That is a leak that compounds over the weeks
+      // this process is meant to run. The delay is so a caller that
+      // wait()s or read()s just after exit still finds the record.
+      const reap = setTimeout(() => {
+        this.processes.delete(processId);
+      }, EXITED_PROCESS_RETENTION_MS);
+      reap.unref?.();
     });
 
     this.processes.set(processId, running);

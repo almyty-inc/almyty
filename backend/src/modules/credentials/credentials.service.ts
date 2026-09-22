@@ -313,8 +313,11 @@ export class CredentialsService {
     const enriched = await batchAsync(keys, 5, async (key) => {
       let agent = null;
       if (key.agentId) {
+        // Org-scoped: a key row predating the check in createAccessKey
+        // can still name a foreign agent, and this listing would print
+        // its name back to whoever asked.
         agent = await this.agentRepository.findOne({
-          where: { id: key.agentId },
+          where: { id: key.agentId, organizationId },
           select: { id: true, name: true },
         });
       }
@@ -353,6 +356,33 @@ export class CredentialsService {
   ): Promise<{ key: ApiKey; plainTextKey: string }> {
     if (!data.name) {
       throw new BadRequestException('Access key name is required');
+    }
+
+    // The gateway and the agent the key is bound to have to be this
+    // organization's.
+    //
+    // Both ids came off the request body and were stamped on the row
+    // unread. The unified endpoint then resolves the gateway from the
+    // key with `where: { id: apiKey.gatewayId, status: ACTIVE }` and no
+    // organization predicate -- so an owner of one tenant could mint a
+    // key naming another tenant's gateway and reach it, auth configs
+    // loaded and the gateway's agent addressed, on the A2A path where
+    // nothing downstream re-checks the owner.
+    if (data.gatewayId) {
+      const gateway = await this.gatewayRepository.findOne({
+        where: { id: data.gatewayId, organizationId },
+      });
+      if (!gateway) {
+        throw new NotFoundException('Gateway not found');
+      }
+    }
+    if (data.agentId) {
+      const agent = await this.agentRepository.findOne({
+        where: { id: data.agentId, organizationId },
+      });
+      if (!agent) {
+        throw new NotFoundException('Agent not found');
+      }
     }
 
     // Generate a plain-text key: almyty_sk_ + 32 random hex chars
@@ -399,32 +429,27 @@ export class CredentialsService {
   // ──────────────────────────────────────────────
 
   private maskCredential(credential: Credential): Credential {
-    const sensitiveFields = [
-      'password',
-      'secret',
-      'token',
-      'key',
-      'client_secret',
-      'apiKey',
-      'accessToken',
-      'refreshToken',
-      'headerValue',
-      'clientSecret',
-    ];
+    // Anything that looks like a secret by name, plus any value that is
+    // encrypted at rest (managed rows carry snake_case channel keys and
+    // nested header maps the name list never knew about).
+    const secretName = /(password|secret|token|apikey|api_key|accesskey|access_key|privatekey|private_key|credential|headervalue|bearer|serviceaccount)/i;
+    const mask = (val: unknown): string => {
+      const s = String(val);
+      if (s.startsWith('encrypted:') || s.length <= 8) return '********';
+      return s.substring(0, 4) + '****' + s.substring(s.length - 4);
+    };
+    const maskObject = (obj: Record<string, any>): Record<string, any> => {
+      const out: Record<string, any> = {};
+      for (const [field, value] of Object.entries(obj)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) out[field] = maskObject(value);
+        else if (typeof value === 'string' && (value.startsWith('encrypted:') || (secretName.test(field) && field !== 'keyName' && field !== 'keyLocation'))) out[field] = mask(value);
+        else out[field] = value;
+      }
+      return out;
+    };
 
     if (credential.config && typeof credential.config === 'object') {
-      const masked = { ...credential.config };
-      for (const field of sensitiveFields) {
-        if (masked[field]) {
-          const val = String(masked[field]);
-          if (val.length > 8) {
-            masked[field] = val.substring(0, 4) + '****' + val.substring(val.length - 4);
-          } else {
-            masked[field] = '********';
-          }
-        }
-      }
-      credential.config = masked;
+      credential.config = maskObject(credential.config);
     }
 
     return credential;

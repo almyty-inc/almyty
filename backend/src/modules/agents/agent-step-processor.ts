@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
-import { In } from 'typeorm';
+import { In, Not } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { ConversationStatus } from '../../entities/conversation.entity';
@@ -12,7 +12,14 @@ import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executo
 import { Agent } from '../../entities/agent.entity';
 import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
 import { AgentContextCompactor } from './agent-context-compactor.helper';
+import { checkRunLimits, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
+import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
+import type { RoutingPolicy } from '../model-catalog/routing/model-router';
+import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
+import { shouldAutoSaveMemory } from './memory-autosave.policy';
+
+
 /**
  * `processStep` was the bulk of AgentRuntimeService — a single 500-line
  * method orchestrating the autonomous-agent inner loop. Splitting it
@@ -25,6 +32,81 @@ import { AgentConstraintsService } from '../agent-constraints/agent-constraints.
  * database fresh on every step — there is no per-instance state on
  * this class.
  */
+
+/**
+ * Per-step input/output cap in the persisted json column. Shared with
+ * the workflow engine's node results via `persist-cap`, so the two
+ * execution shapes truncate at the same size and with the same marker.
+ */
+import { capPersistedPayload } from './persist-cap';
+/**
+ * A run in one of these is finished and no worker may write it back to
+ * running — the same list `AgentRun.isDone()` answers with.
+ */
+const TERMINAL_STATUSES: AgentRunStatus[] = [
+  AgentRunStatus.COMPLETED,
+  AgentRunStatus.FAILED,
+  AgentRunStatus.CANCELLED,
+  AgentRunStatus.TIMEOUT,
+];
+
+/**
+ * The agent columns an autonomous step actually reads.
+ *
+ * `relations: { agent: true }` pulled the whole agent row once per step of
+ * every run, and the two heaviest columns on it — `pipeline` (workflow-only)
+ * and `metadata` (which carries the inline version history) — are never read
+ * on this path. Listing the rest narrows the join without costing a second
+ * query. `agent-columns.spec.ts` fails if a new Agent column is added and
+ * not classified here.
+ */
+export const AGENT_STEP_COLUMNS = {
+  id: true,
+  name: true,
+  description: true,
+  organizationId: true,
+  visibility: true,
+  teamId: true,
+  status: true,
+  version: true,
+  variables: true,
+  settings: true,
+  mode: true,
+  instructions: true,
+  personality: true,
+  heartbeat: true,
+  toolIds: true,
+  modelConfig: true,
+  memoryConfig: true,
+  agentConfig: true,
+  isTemporary: true,
+  parentRunId: true,
+  collaboration: true,
+  webhookUrl: true,
+  totalExecutions: true,
+  successfulExecutions: true,
+  totalCost: true,
+  averageExecutionTime: true,
+  lastExecutedAt: true,
+  createdBy: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+/** Agent columns deliberately left out of AGENT_STEP_COLUMNS. */
+export const AGENT_STEP_COLUMNS_OMITTED = ['pipeline', 'metadata'] as const;
+
+/**
+ * How long a resolved tool set stays usable across steps of a run.
+ *
+ * The same `IN (toolIds)` query ran on every step. A tool definition only
+ * feeds the model's prompt here — ToolExecutorService re-loads the row by id
+ * before it runs anything — so a short window of staleness cannot change what
+ * executes, only how the next prompt describes it.
+ */
+const TOOL_CACHE_TTL_MS = 60_000;
+/** Cap on distinct (org, toolIds) keys held at once. */
+const TOOL_CACHE_MAX_ENTRIES = 200;
 @Injectable()
 export class AgentStepProcessor {
   constructor(
@@ -35,8 +117,36 @@ export class AgentStepProcessor {
     private readonly constraints: AgentConstraintsService,
   ) {}
 
+  /**
+   * Tool sets resolved for (organizationId, toolIds), with the capped payload
+   * of each step memoized alongside. Bounded and TTL'd; see the constants.
+   */
+  private readonly toolCache = new Map<
+    string,
+    { at: number; tools: Awaited<ReturnType<AgentStepProcessor['loadTools']>> }
+  >();
+
+  /**
+   * Per-step-object memo of the capped payload written to Postgres.
+   *
+   * `commitStep` rewrites the whole `steps` array every step, so capping it
+   * from scratch each time re-serialized every prior step's input and output:
+   * step k paid for k payloads, Σk = N²/2 for an N-step run. The step objects
+   * themselves are append-only, so each one only has to be capped once. A
+   * WeakMap keyed on the step object means nothing has to be invalidated and
+   * a finished run's entries are collectable.
+   */
+  private readonly cappedStepCache = new WeakMap<object, any>();
+
   async processStep(runId: string): Promise<'continue' | 'done' | 'waiting'> {
-    const run = await this.s.runRepository.findOne({ where: { id: runId }, relations: { agent: true } });
+    const run = await this.s.runRepository.findOne({
+      where: { id: runId },
+      relations: { agent: true },
+      // Narrow the joined agent: `pipeline` and `metadata` are the two
+      // biggest columns on the row and neither is read on the autonomous
+      // path. Still one query.
+      select: { agent: { ...AGENT_STEP_COLUMNS } } as any,
+    });
     if (!run) {
       this.s.logger.warn(`Run ${runId} not found, skipping`);
       return 'done';
@@ -54,13 +164,28 @@ export class AgentStepProcessor {
     // cost or steps — the loser's UPDATE matches 0 rows and it aborts.
     const expectedStep = run.currentStep;
 
-    // Enforce limits
-    const limitCheck = this.s.misc.checkLimits(run);
+    // The organization used to be loaded twice per step with the identical
+    // query — once inside resolveLimits and again ~80 lines below to build
+    // the system prompt. Load it once and hand it to both.
+    const organization = await this.loadOrganization(run.organizationId);
+
+    // Enforce limits. The trip carries both a machine-readable code and
+    // an explanation, so a caller can decide whether to retry smaller,
+    // raise the ceiling, or escalate, rather than seeing a bare stop.
+    const resolvedLimits = await this.s.misc.resolveLimits(run, organization);
+    const limitCheck = checkRunLimits(run, resolvedLimits);
     if (limitCheck) {
       run.status = AgentRunStatus.FAILED;
-      run.error = limitCheck;
-      await this.s.runRepository.save(run);
-      this.s.emitEvent(runId, 'run.failed', { error: limitCheck });
+      run.error = `${limitCheck.code}: ${limitCheck.message}`;
+      run.metadata = { ...(run.metadata || {}), limitTrip: limitCheck };
+      // Guarded like every other terminal write (see commitStep): the
+      // trip must not overwrite a status that is already final.
+      if (!(await this.commitStep(run, expectedStep))) return 'done';
+      this.s.emitEvent(runId, 'run.failed', {
+        error: run.error,
+        reasonCode: limitCheck.code,
+        reason: limitCheck.message,
+      });
       return 'done';
     }
 
@@ -74,7 +199,9 @@ export class AgentStepProcessor {
       if (totalSiblingCost >= agent.collaboration.rules.maxTotalCost) {
         run.status = AgentRunStatus.FAILED;
         run.error = `Collaboration total cost limit exceeded ($${totalSiblingCost.toFixed(2)} >= $${agent.collaboration.rules.maxTotalCost})`;
-        await this.s.runRepository.save(run);
+        // Guarded like every other terminal write (see commitStep): a run
+        // cancelled while this worker was starting up stays cancelled.
+        if (!(await this.commitStep(run, expectedStep))) return 'done';
         this.s.emitEvent(runId, 'run.failed', { error: run.error });
         return 'done';
       }
@@ -86,10 +213,13 @@ export class AgentStepProcessor {
     }
 
     try {
-      // Load agent's tools from DB
-      const tools = agent.toolIds?.length
-        ? await this.s.toolRepository.find({ where: { id: In(agent.toolIds) } })
-        : [];
+      // Load the agent's tools, org-scoped. `agent.toolIds` is a plain
+      // string array with no referential integrity, so an id from another
+      // tenant survives in it — and these tool names, descriptions and
+      // parameter schemas go straight into the model's prompt. Execution
+      // fails closed in ToolExecutorService, so the scoping here is what
+      // keeps the disclosure from happening in the first place.
+      const tools = await this.resolveTools(agent);
 
       // Recall memories if memory is enabled
       let memoryContext = '';
@@ -121,11 +251,8 @@ export class AgentStepProcessor {
         }
       }
 
-      // Load organization defaults for system prompt
-      const org = await this.s.organizationRepository.findOne({ where: { id: run.organizationId } });
-
-      // Build messages for the LLM
-      let messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, org);
+      // Build messages for the LLM, reusing the organization loaded above.
+      let messages = await this.s.builders.buildMessages(agent, run, tools, memoryContext, organization);
 
       // Compact long-running context (off unless the agent opts in). Folds the
       // old prefix into a summary so per-step token cost doesn't grow unbounded.
@@ -174,20 +301,24 @@ export class AgentStepProcessor {
 
       const allToolDefs = [...llmTools, ...subAgentDefs];
 
-      // Determine the LLM provider
+      // Determine the LLM provider, or the routing policy that picks one
+      // per step. A revision after a verifier rejection may carry a policy
+      // in working memory that skips the candidates already tried.
       const providerId = agent.modelConfig?.providerId;
-      if (!providerId) {
-        throw new Error('Agent has no LLM provider configured (modelConfig.providerId is missing)');
+      const routing: RoutingPolicy | undefined = run.workingMemory?.routing ?? agent.modelConfig?.routing;
+      if (!providerId && !routing) {
+        throw new Error('Agent has no LLM provider configured (modelConfig.providerId or modelConfig.routing is missing)');
       }
 
       // Build the chat request
       const chatRequest: ChatRequest = {
         messages: messages as any[],
-        model: agent.modelConfig?.model,
+        model: routing ? undefined : agent.modelConfig?.model,
         temperature: agent.modelConfig?.temperature,
         maxTokens: agent.modelConfig?.maxTokens,
         tools: allToolDefs.length > 0 ? allToolDefs : undefined,
         skipToolExecution: true, // We handle tool execution ourselves
+        ...(routing ? { routing } : {}),
       };
 
       // Call the LLM
@@ -216,6 +347,10 @@ export class AgentStepProcessor {
       run.totalCost += stepCost;
       run.totalTokens += stepTotalTokens;
 
+      // The user may have cancelled while the model was answering. Stop
+      // here, before a single tool runs, rather than at the next commit.
+      if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
+
       const responseMessage = llmResponse.message;
 
       this.s.emitEvent(runId, 'llm.response', {
@@ -224,6 +359,11 @@ export class AgentStepProcessor {
         toolCalls: responseMessage.toolCalls?.map(tc => ({ id: tc.id, name: tc.name })),
         usage: { inputTokens: stepInputTokens, outputTokens: stepOutputTokens },
         cost: stepCost,
+        // Which card answered, on the live event and not only on the
+        // persisted step. A client watching a run could show the cost as
+        // it accrued but not the model it was accruing on, which is the
+        // half that makes multi-model routing legible.
+        ...(llmResponse.routing ? { routing: llmResponse.routing } : {}),
       });
 
       // Check if the LLM returned tool calls
@@ -283,7 +423,7 @@ export class AgentStepProcessor {
               run.steps.push({
                 type: 'llm_call',
                 input: { messageCount: messages.length, toolCount: allToolDefs.length },
-                output: { status: 'sleeping', reason: toolCall.parameters?.reason },
+                output: { status: 'sleeping', reason: toolCall.parameters?.reason, ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
                 cost: stepCost,
                 tokens: { input: stepInputTokens, output: stepOutputTokens },
                 duration: stepDuration,
@@ -301,7 +441,7 @@ export class AgentStepProcessor {
               run.steps.push({
                 type: 'llm_call',
                 input: { messageCount: messages.length, toolCount: allToolDefs.length },
-                output: { status: 'waiting_input', question: toolCall.parameters?.question },
+                output: { status: 'waiting_input', question: toolCall.parameters?.question, ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
                 cost: stepCost,
                 tokens: { input: stepInputTokens, output: stepOutputTokens },
                 duration: stepDuration,
@@ -405,6 +545,13 @@ export class AgentStepProcessor {
             const execOptions: ToolExecutionOptions = {
               userId: run.userId || 'system',
               organizationId: run.organizationId,
+              // Retries are an agent-level budget decision, not a
+              // per-tool default: a run with a tight wall clock cannot
+              // afford a tool quietly retrying three times with
+              // exponential backoff. The tool's own `retries` still wins
+              // when it sets one, so a genuinely flaky integration can
+              // still override.
+              retries: resolvedLimits.toolErrorRetries,
             };
 
             const toolResult: ToolExecutionResult = await this.s.toolExecutorService.executeTool(
@@ -427,9 +574,12 @@ export class AgentStepProcessor {
             });
 
             if (run.conversationId) {
+              // How much of a failure re-enters context is policy, not a
+              // constant: some tools' errors echo the request payload
+              // back, which is not always something the model should see.
               const toolContent = toolResult.success
                 ? (typeof toolResult.data === 'string' ? toolResult.data : JSON.stringify(toolResult.data))
-                : `Error: ${toolResult.error}`;
+                : formatToolError(toolResult.error, resolvedLimits.toolErrorFeedback);
               const toolMsg = Message.createToolResultMessage(run.conversationId, toolCall.id, toolContent, toolResult.success ? undefined : toolResult.error);
               toolMsg.runId = run.id;
               await this.s.messageRepository.save(toolMsg);
@@ -477,7 +627,7 @@ export class AgentStepProcessor {
         run.steps.push({
           type: 'llm_call',
           input: { messageCount: messages.length, toolCount: allToolDefs.length },
-          output: { toolCalls: responseMessage.toolCalls.map(tc => ({ name: tc.name, hasResult: !!tc.result })) },
+          output: { toolCalls: responseMessage.toolCalls.map(tc => ({ name: tc.name, hasResult: !!tc.result })), ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
           cost: stepCost,
           tokens: { input: stepInputTokens, output: stepOutputTokens },
           duration: stepDuration,
@@ -493,7 +643,7 @@ export class AgentStepProcessor {
         if (!(await this.commitStep(run, expectedStep))) return 'done';
 
         // Auto-save memory if enabled
-        if (agent.memoryConfig?.autoSave) {
+        if (shouldAutoSaveMemory(agent, run)) {
           await this.s.misc.autoSaveMemory(run, agent);
         }
 
@@ -504,11 +654,11 @@ export class AgentStepProcessor {
         // No tool calls — the agent has a final response
         const finalContent = responseMessage.content || '';
 
-        // Persist final assistant message
+        // Prepare the candidate, but do not expose it until verification ends.
+        let finalMsg: Message | null = null;
         if (run.conversationId) {
-          const finalMsg = Message.createAssistantMessage(run.conversationId, finalContent);
+          finalMsg = Message.createAssistantMessage(run.conversationId, finalContent);
           finalMsg.runId = run.id;
-          await this.s.messageRepository.save(finalMsg);
         }
 
         // Autonomous verify gate: a refute-only checker panel reviews the
@@ -525,20 +675,32 @@ export class AgentStepProcessor {
           if (!verifyPanel.passed && revisions < maxLoops) {
             // Send the answer back for revision.
             run.workingMemory = { ...(run.workingMemory || {}), verifyRevisions: revisions + 1 };
+            this.escalateRouteOnVerifyFail(run, agent, verifyPanel, llmResponse);
             const critique = this.verifier.formatFailuresForRevision(
               verifyPanel.failures,
               revisions + 1,
               maxLoops,
             );
+            if (finalMsg) {
+              finalMsg.metadata = {
+                internal: true,
+                internalPurpose: 'verification_candidate',
+              };
+              await this.s.messageRepository.save(finalMsg);
+            }
             if (run.conversationId) {
               const critiqueMsg = Message.createUserMessage(run.conversationId, critique);
               critiqueMsg.runId = run.id;
+              critiqueMsg.metadata = {
+                internal: true,
+                internalPurpose: 'verification_revision',
+              };
               await this.s.messageRepository.save(critiqueMsg);
             }
             run.steps.push({
               type: 'llm_call',
               input: { messageCount: messages.length, toolCount: allToolDefs.length },
-              output: { status: 'revising', content: finalContent.substring(0, 200) },
+              output: { status: 'revising', content: finalContent.substring(0, 200), ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
               cost: stepCost,
               tokens: { input: stepInputTokens, output: stepOutputTokens },
               duration: verifyStepDuration,
@@ -588,6 +750,10 @@ export class AgentStepProcessor {
           };
         }
 
+        // Verification candidates are only committed to customer-visible
+        // history after they pass (or exhaust the configured revision budget).
+        if (finalMsg) await this.s.messageRepository.save(finalMsg);
+
         run.status = AgentRunStatus.COMPLETED;
         run.output = finalContent;
 
@@ -595,7 +761,18 @@ export class AgentStepProcessor {
         run.steps.push({
           type: 'llm_call',
           input: { messageCount: messages.length, toolCount: allToolDefs.length },
-          output: { status: 'completed', content: finalContent.substring(0, 200) },
+          // Routing attribution belongs on this step too. The
+          // tool-calling branch stamps it; this one did not, so the
+          // commonest shape of all — a one-step answer with no tool
+          // calls — recorded a cost with no model behind it, and the
+          // documented invariant that a routed call stamps attribution
+          // on the response, the node result and the audit log was
+          // false for exactly the case people look at most.
+          output: {
+            status: 'completed',
+            content: finalContent.substring(0, 200),
+            ...(llmResponse.routing ? { routing: llmResponse.routing } : {}),
+          },
           cost: stepCost,
           tokens: { input: stepInputTokens, output: stepOutputTokens },
           duration: stepDuration,
@@ -613,7 +790,7 @@ export class AgentStepProcessor {
         await this.s.misc.bumpAgentStats(agent.id, true, run.executionTime, run.totalCost);
 
         // Auto-save memory if enabled
-        if (agent.memoryConfig?.autoSave) {
+        if (shouldAutoSaveMemory(agent, run)) {
           await this.s.misc.autoSaveMemory(run, agent);
         }
 
@@ -622,6 +799,14 @@ export class AgentStepProcessor {
       }
     } catch (error) {
       this.s.logger.error(`Step failed for run ${runId}: ${error.message}`, error.stack);
+
+      // Leave a note on the agent when its model has been retired, so the
+      // dashboard can say "pick a new model" instead of showing one more
+      // failed run. Best effort: never let bookkeeping mask the real error.
+      if (isModelNotFoundError(error)) {
+        await this.flagModelIssue(agent, error);
+      }
+
 
       const stepDuration = Date.now() - stepStart;
       run.steps.push({
@@ -657,16 +842,158 @@ export class AgentStepProcessor {
    * and we return false so the caller aborts without re-counting cost or
    * steps. Returns true when this worker won the step.
    */
+  /**
+   * Record on the agent that its model is no longer served by the vendor.
+   * Best effort: a failure here must not hide the run failure itself.
+   */
+  private async flagModelIssue(agent: Agent, error: unknown): Promise<void> {
+    try {
+      const cause = findModelNotFound(error);
+      const settings = {
+        ...(agent.settings || {}),
+        modelIssue: {
+          code: 'MODEL_NOT_FOUND',
+          model: cause?.model ?? agent.modelConfig?.model ?? 'unknown',
+          providerId: cause?.providerId ?? agent.modelConfig?.providerId,
+          message: cause?.message ?? (error as Error)?.message ?? 'Model not available',
+          detectedAt: new Date().toISOString(),
+        },
+      };
+      await this.s.agentRepository.update({ id: agent.id }, { settings: settings as Record<string, any> });
+      agent.settings = settings;
+    } catch (flagError: any) {
+      this.s.logger.warn(`Could not record model issue on agent ${agent.id}: ${flagError.message}`);
+    }
+  }
+
+  /**
+   * Bound what a step contributes to the persisted row.
+   *
+   * `steps` is a json column that is rewritten whole on every commit, so
+   * a run that grows it linearly writes O(n^2) bytes of TOAST and WAL --
+   * and the pushes carry untruncated tool results, where the HTTP
+   * executor allows 10MB responses and the default ceiling is 100 tool
+   * calls. The in-memory array the current tick reasons over is left
+   * alone; this only bounds what goes to Postgres, the same trade the
+   * request logger already makes with its bodies.
+   *
+   * Capping used to re-run on every prior step at every commit, so step k
+   * re-serialized k payloads -- Σk = N²/2 JSON.stringify passes per run, on
+   * the event loop. Step objects are append-only once pushed, so each one is
+   * capped once and the result is memoized against the step object itself.
+   */
+  private boundStepsForPersist(steps: AgentRun['steps']): AgentRun['steps'] {
+    if (!Array.isArray(steps)) return steps;
+
+    return steps.map((step) => {
+      if (!step || typeof step !== 'object') return step;
+      const memo = this.cappedStepCache.get(step as object);
+      if (memo !== undefined) return memo;
+      const capped = {
+        ...step,
+        input: capPersistedPayload((step as any).input),
+        output: capPersistedPayload((step as any).output),
+      };
+      this.cappedStepCache.set(step as object, capped);
+      return capped;
+    }) as AgentRun['steps'];
+  }
+
+  /**
+   * The run's organization, once per step.
+   *
+   * A ceiling we cannot read must not become a ceiling we ignore, so a
+   * failure here is warned and returns null — resolveRunLimits still clamps
+   * to the operator env floor. Same contract resolveLimits had when it did
+   * this load itself.
+   */
+  private async loadOrganization(organizationId: string) {
+    try {
+      return await this.s.organizationRepository.findOne({ where: { id: organizationId } });
+    } catch (err: any) {
+      this.s.logger.warn(
+        `Could not load organization ${organizationId} for this step: ${err.message}`,
+      );
+      return null;
+    }
+  }
+
+  /** The `IN (toolIds)` query, run once per (org, toolIds) per TTL window. */
+  private async loadTools(agent: Agent) {
+    return this.s.toolRepository.find({
+      where: { id: In(agent.toolIds), organizationId: agent.organizationId },
+    });
+  }
+
+  /**
+   * The agent's tools for this step, served from a short-lived cache.
+   *
+   * The identical query ran on every step of every run. The result only
+   * shapes the prompt — ToolExecutorService re-loads the tool row by id
+   * before executing anything — so a stale entry cannot change what runs.
+   */
+  private async resolveTools(agent: Agent) {
+    if (!agent.toolIds?.length) return [];
+    const key = `${agent.organizationId}:${[...agent.toolIds].sort().join(',')}`;
+    const now = Date.now();
+    const hit = this.toolCache.get(key);
+    if (hit && now - hit.at < TOOL_CACHE_TTL_MS) {
+      // Refresh recency for the LRU eviction below.
+      this.toolCache.delete(key);
+      this.toolCache.set(key, hit);
+      return hit.tools;
+    }
+    const tools = await this.loadTools(agent);
+    this.toolCache.set(key, { at: now, tools });
+    while (this.toolCache.size > TOOL_CACHE_MAX_ENTRIES) {
+      const oldest = this.toolCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.toolCache.delete(oldest);
+    }
+    return tools;
+  }
+
+  /**
+   * Cancellation is a row, not a signal.
+   *
+   * The model call runs for seconds to minutes and nothing looked at the
+   * run again in that window, so a user who cancelled watched the UI go
+   * to cancelled while this worker carried on: it ran the tool calls and
+   * then committed the step -- cancel leaves `currentStep` alone, so the
+   * CAS matched -- writing `running` back over CANCELLED. Look before
+   * spending anything more, and bank the cost of the call already paid
+   * for without touching status or currentStep.
+   */
+  private async abandonIfTerminal(run: AgentRun, expectedStep: number): Promise<AgentRunStatus | null> {
+    const live = await this.s.runRepository.findOne({
+      where: { id: run.id },
+      select: { id: true, status: true },
+    });
+    if (!live || !TERMINAL_STATUSES.includes(live.status)) return null;
+    await this.s.runRepository.update(
+      { id: run.id, currentStep: expectedStep },
+      { totalCost: run.totalCost, totalTokens: run.totalTokens },
+    );
+    this.s.logger.log(`Run ${run.id} is ${live.status}; abandoning step ${expectedStep} instead of finishing it`);
+    return live.status;
+  }
+
   private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {
     const res = await this.s.runRepository.update(
-      { id: run.id, currentStep: expectedStep },
+      // The step number alone was not enough. Cancelling a run sets the
+      // status and leaves `currentStep` where it was, so this CAS still
+      // matched: `status` was written back to running, the step
+      // advanced, and the next one was enqueued -- while the UI said
+      // cancelled and the SSE consumer had already detached. A terminal
+      // status is final, whoever gets there first.
+      { id: run.id, currentStep: expectedStep, status: Not(In(TERMINAL_STATUSES)) },
       {
         status: run.status,
         currentStep: run.currentStep,
         totalCost: run.totalCost,
         totalTokens: run.totalTokens,
         executionTime: run.executionTime,
-        steps: run.steps,
+        steps: this.boundStepsForPersist(run.steps),
         output: run.output,
         error: run.error,
         workingMemory: run.workingMemory,
@@ -682,31 +1009,54 @@ export class AgentStepProcessor {
    * has no checkers (so the caller completes normally). Aggregate checker
    * cost/tokens are added to the run here so the caller doesn't double-count.
    */
+  /**
+   * Tier 2 routing: after a verifier rejection, move the revision to the
+   * next candidate of the route when the policy allows it. Working memory
+   * carries the adjusted policy and the escalation count; the next step
+   * reads it in place of the agent's own policy. No policy, flag off, or
+   * budget spent means the revision stays on the same model.
+   */
+  escalateRouteOnVerifyFail(run: AgentRun, agent: Agent, verifyPanel: { passed: boolean; failures?: any[] }, llmResponse: { routing?: { attempt?: number } } | undefined): void {
+    const activePolicy: RoutingPolicy | undefined = run.workingMemory?.routing ?? agent.modelConfig?.routing;
+    const escalation = decideEscalation(activePolicy, verifyPanel, {
+      attempt: planPosition(llmResponse?.routing?.attempt, activePolicy),
+      escalations: run.workingMemory?.routeEscalations ?? 0,
+    });
+    if (escalation.action !== 'escalate' || !activePolicy) return;
+    run.workingMemory = {
+      ...(run.workingMemory || {}),
+      routing: nextRoutingPolicy(activePolicy, escalation),
+      routeEscalations: (run.workingMemory?.routeEscalations ?? 0) + 1,
+    };
+    this.s.emitEvent(run.id, 'route.escalated', { step: run.currentStep, reason: escalation.reason, nextAttempt: escalation.nextAttempt });
+  }
+
   private async runAutonomousVerify(
     run: AgentRun,
     agent: Agent,
     finalContent: string,
   ): Promise<VerifyPanelResult | null> {
-    const cfg = agent.agentConfig?.verify;
-    if (!cfg?.enabled || !Array.isArray(cfg.checkers) || cfg.checkers.length === 0) {
-      return null;
-    }
-    // on_final_output is the default trigger; skip the gate if it's not configured.
-    if (!(cfg.triggers ?? ['on_final_output']).includes('on_final_output')) {
-      return null;
-    }
-    if (!finalContent.trim()) {
-      // Nothing to check (e.g. the agent ended with an empty message).
-      return null;
-    }
+    if (!this.hasFinalOutputVerification(agent, finalContent)) return null;
+    const cfg = agent.agentConfig!.verify!;
     const panel = await this.verifier.runPanel(
-      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers, policy: cfg.policy },
+      { target: finalContent, spec: cfg.spec, checkers: cfg.checkers!, policy: cfg.policy },
       run.organizationId,
       run.userId,
     );
     run.totalCost += panel.cost;
     run.totalTokens += panel.tokens;
     return panel;
+  }
+
+  private hasFinalOutputVerification(agent: Agent, finalContent: string): boolean {
+    const cfg = agent.agentConfig?.verify;
+    return !!(
+      cfg?.enabled &&
+      Array.isArray(cfg.checkers) &&
+      cfg.checkers.length > 0 &&
+      (cfg.triggers ?? ['on_final_output']).includes('on_final_output') &&
+      finalContent.trim()
+    );
   }
 
   /**
@@ -768,6 +1118,10 @@ export class AgentStepProcessor {
       if (run.conversationId) {
         const msg = Message.createUserMessage(run.conversationId, note);
         msg.runId = run.id;
+        msg.metadata = {
+          internal: true,
+          internalPurpose: 'verification_advisory',
+        };
         await this.s.messageRepository.save(msg);
       }
       this.s.emitEvent(runId, 'verify.advisory', { step: run.currentStep, failures: panel.failures });

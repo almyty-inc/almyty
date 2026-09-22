@@ -20,7 +20,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ExternalLink } from 'lucide-react'
-import { providerUsageApiSupport, usageApiSupported } from './provider-type-config'
+import { providerKeyUrls, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
+import { CredentialSlot, isMaskedKey } from './credential-slot'
+import { BASE_URL_PRIVATE_HOST_HINT, baseUrlSupported } from './schema'
 
 interface EditProviderDialogProps {
   open: boolean
@@ -120,34 +122,80 @@ export function EditProviderDialog({
             </div>
           </div>
 
-          {/* Usage API key — only for types with a supported usage/cost API.
-              Never prefilled: the stored value is masked on read, and an
-              empty field means "keep the existing key" (the page only
-              sends it when non-empty). */}
-          {usageApiSupported(providerToEdit?.type) && (
+          {/* Server URL for the types that have one (ollama, custom); blank
+              keeps the stored value. Sent as configuration.apiUrl. */}
+          {baseUrlSupported(providerToEdit?.type) && (
             <div>
-              <Label htmlFor="editUsageApiKey">Usage API key (admin-scoped, for cost reconciliation)</Label>
+              <Label htmlFor="editApiUrl">Base URL{providerToEdit?.type === 'custom' ? '' : ' (optional)'}</Label>
               <Input
-                id="editUsageApiKey"
-                type="password"
-                autoComplete="off"
-                {...editForm.register('usageApiKey')}
-                placeholder="Leave blank to keep the existing key"
+                id="editApiUrl"
+                {...editForm.register('apiUrl')}
+                placeholder={providerToEdit?.type === 'custom' ? 'https://llm.example.internal/v1' : 'http://localhost:11434'}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                Requires an admin-scoped key (OpenAI sk-admin-..., Anthropic admin key) — the
-                regular inference key cannot read usage/cost reports.{' '}
-                <a
-                  href={providerUsageApiSupport[providerToEdit?.type]?.docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline inline-flex items-center gap-1"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Admin key docs
-                </a>
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">{BASE_URL_PRIVATE_HOST_HINT}</p>
             </div>
+          )}
+
+          {/* Inference key: the connection backing it, or a pasted key.
+              Never prefilled: the stored value is masked on read; the
+              slot writes credentialId (undefined keep / id / null clear)
+              and apiKey (blank keeps the existing key). */}
+          <CredentialSlot
+            label="API key"
+            credentialRef={providerToEdit?.credentialRef}
+            hasStoredKey={isMaskedKey(providerToEdit?.configuration?.apiKey)}
+            connectorKey={providerToEdit?.type}
+            form={editForm}
+            idField="credentialId"
+            keyField="apiKey"
+            keyInputId="editApiKey"
+            keyLabel="New API key"
+            keyPlaceholder="Leave blank to keep the existing key"
+            allowClear={providerToEdit?.type === 'ollama'}
+            keyHelp={providerKeyUrls[providerToEdit?.type] ? (
+              <a
+                href={providerKeyUrls[providerToEdit?.type]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Get your API key
+              </a>
+            ) : undefined}
+          />
+
+          {/* Usage API key: only for types with a supported usage/cost API.
+              Same rules as the inference key: blank keeps, a connection
+              replaces, "Remove" clears. */}
+          {usageApiSupported(providerToEdit?.type) && (
+            <CredentialSlot
+              label="Usage API key"
+              credentialRef={providerToEdit?.usageCredentialRef}
+              hasStoredKey={isMaskedKey(providerToEdit?.configuration?.usageApiKey)}
+              connectorKey={providerToEdit?.type}
+              form={editForm}
+              idField="usageCredentialId"
+              keyField="usageApiKey"
+              keyInputId="editUsageApiKey"
+              keyLabel="Usage API key (admin-scoped, for cost reconciliation)"
+              keyPlaceholder="Leave blank to keep the existing key"
+              keyHelp={
+                <p className="text-xs text-muted-foreground mt-1">
+                  Requires an admin-scoped key (OpenAI sk-admin-..., Anthropic admin key) — the
+                  regular inference key cannot read usage/cost reports.{' '}
+                  <a
+                    href={providerUsageApiSupport[providerToEdit?.type]?.docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline inline-flex items-center gap-1"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Admin key docs
+                  </a>
+                </p>
+              }
+            />
           )}
 
           <div className="flex justify-end gap-2">

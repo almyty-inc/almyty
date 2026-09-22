@@ -40,6 +40,11 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
     };
   }
 
+  /** The Bot Framework activity id, stable across a retried POST. */
+  deliveryId(rawPayload: any): string | undefined {
+    return rawPayload?.id ? `microsoft_teams:${rawPayload.id}` : undefined;
+  }
+
   formatOutbound(response: AdapterResponse): any {
     return {
       type: 'message',
@@ -47,35 +52,55 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * Post the reply as an activity on the conversation.
+   *
+   * The Bot Framework Connector is HTTP-shaped: 200/201 with a
+   * ResourceResponse `{id}` on success, and a 4xx carrying
+   * `{error: {code, message}}` on failure — 401 `Unauthorized` on a
+   * rotated bot password, 403 `BotDisabledByAdmin`, 404 once the
+   * conversation is gone. So the status is the verdict and
+   * `error.message`/`error.code` are the wording to keep.
+   *
+   * A missing serviceUrl or conversationId, and a token request the
+   * Connector refused, are refusals as well: in each case no activity
+   * was posted, and saying so is the difference between a diagnosable
+   * gateway and a silent one.
+   */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
-    try {
-      const serviceUrl = threadContext?.metadata?.serviceUrl || config.service_url;
-      const conversationId = threadContext?.metadata?.conversationId || threadContext?.threadId;
+    const serviceUrl = threadContext?.metadata?.serviceUrl || config.service_url;
+    const conversationId = threadContext?.metadata?.conversationId || threadContext?.threadId;
 
-      if (!serviceUrl || !conversationId) {
-        this.logger.warn('Microsoft Teams: missing serviceUrl or conversationId');
-        return;
-      }
+    if (!serviceUrl || !conversationId) {
+      this.sendFailed(
+        `the activity carried no ${!serviceUrl ? 'serviceUrl' : 'conversationId'} to reply on`,
+      );
+    }
 
-      // Get access token using bot credentials
-      const token = await this.getAccessToken(config.bot_id, config.bot_password);
-      if (!token) {
-        this.logger.error('Microsoft Teams: failed to get access token');
-        return;
-      }
+    // Get access token using bot credentials
+    const token = await this.getAccessToken(config.bot_id, config.bot_password);
+    if (!token) {
+      this.sendFailed('the Bot Framework would not issue an access token for these bot credentials');
+    }
 
-      const fetch = globalThis.fetch || (await import('node-fetch')).default;
-      const url = `${serviceUrl}/v3/conversations/${conversationId}/activities`;
-      await (fetch as any)(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formattedResponse),
-      });
-    } catch (error) {
-      this.logger.error(`Microsoft Teams send failed: ${error.message}`);
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const url = `${serviceUrl}/v3/conversations/${conversationId}/activities`;
+    const res = await (fetch as any)(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(formattedResponse),
+    });
+
+    const answer = await this.readJsonBody(res);
+    const error = answer?.error;
+    if (this.httpRejected(res) || error) {
+      const detail = error?.message ?? `HTTP ${this.httpStatus(res)}`;
+      this.sendFailed(
+        `the Bot Framework refused the reply: ${detail}${error?.code ? ` (${error.code})` : ''}`,
+      );
     }
   }
 
@@ -91,7 +116,10 @@ export class MicrosoftTeamsAdapter extends BaseAdapter {
    * verification is skipped (config is incomplete for sending anyway).
    */
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
-    if (!config.bot_id) return true;
+    // Fail closed: bot_id is the audience the Bot Framework JWT is
+    // checked against, so without it there is nothing to verify the
+    // activity came from Teams rather than from anyone with the URL.
+    if (!config.bot_id) return false;
 
     const authz = headers['authorization'] || (headers as any)['Authorization'] || '';
     if (!authz.startsWith('Bearer ')) return false;

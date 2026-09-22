@@ -1,10 +1,16 @@
 # Multi-stage build for production optimization.
 #
-# Node 24 (Krypton) is the Active LTS and the version our sandbox
-# hardening depends on: `--permission` graduated from experimental
-# in 24 and the flag contract is stable from 24.0 forward. Do not
-# downgrade without also auditing NodeSandboxService's execArgv
-# plumbing — the worker code assumes the stable flag name.
+# Node 26 is what CI runs (.github/workflows/ci.yml) and what every
+# engines.node in this repo declares (>=26.0.0). Keep all three in
+# lockstep — a CI/image split is how the jsdom `localStorage` clash
+# and the `--permission` network gate both hid.
+#
+# The sandbox hardening depends on this runtime: `--permission`
+# graduated from experimental in 24, and from 26 it also gates
+# NETWORK access, so NodeSandboxService must grant net explicitly
+# or every sandboxed JavaScript tool's fetch dies as "fetch failed".
+# Do not change the major without auditing NodeSandboxService's
+# execArgv plumbing.
 FROM node:26-alpine AS base
 
 # Install dependencies only when needed
@@ -59,11 +65,50 @@ RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
 # Copy built application (EE layout: dist-ee/src + dist-ee/ee)
 COPY --from=builder --chown=nestjs:nodejs /app/dist-ee ./dist-ee
 
+# --- Agent-factory build toolchain -------------------------------------------
+# The build processor runs in this pod (a BullMQ consumer), so the tools it
+# shells out to have to be present or every build reports "not installed".
+#
+# bun compiles the terminal app and standalone binary; rcodesign signs and
+# notarises macOS artifacts. Both run cleanly on alpine/musl.
+#
+# NOT here, on purpose: osslsigncode (Windows signing) is not packaged for
+# alpine, and electron-builder (desktop apps) needs a glibc base. Those two
+# belong in the dedicated glibc build-worker image described in
+# docs/builder-image-topology.md; on this image a Windows-signing or desktop
+# build reports a clear "not available on this deployment" rather than a crash.
+ARG TARGETARCH
+RUN apk add --no-cache libgcc libstdc++ curl
+COPY --from=oven/bun:1-alpine /usr/local/bin/bun /usr/local/bin/bun
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+      amd64) RC_ARCH=x86_64 ;; \
+      arm64) RC_ARCH=aarch64 ;; \
+      *) RC_ARCH=x86_64 ;; \
+    esac; \
+    curl -sL "https://github.com/indygreg/apple-platform-rs/releases/download/apple-codesign%2F0.29.0/apple-codesign-0.29.0-${RC_ARCH}-unknown-linux-musl.tar.gz" \
+      | tar xz -C /tmp; \
+    mv /tmp/apple-codesign-*/rcodesign /usr/local/bin/rcodesign; \
+    rm -rf /tmp/apple-codesign-*; \
+    bun --version; \
+    rcodesign --version
+# The terminal client bun compiles. Not a backend Node dependency;
+# the processor only hands bun this path. Pinned to the published
+# @almyty/chat the monorepo currently ships.
+RUN mkdir -p /opt/almyty \
+ && cd /opt/almyty \
+ && npm install --omit=dev --legacy-peer-deps @almyty/chat@1.2.0 \
+ && test -f /opt/almyty/node_modules/@almyty/chat/dist/index.js \
+ && chown -R nestjs:nodejs /opt/almyty
+# -----------------------------------------------------------------------------
+
+
 USER nestjs
 
 EXPOSE 3000
 
 ENV NODE_ENV=production
+ENV APP_BUILD_CLIENT_ENTRY=/opt/almyty/node_modules/@almyty/chat/dist/index.js
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "const http = require('http'); http.get('http://localhost:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"

@@ -100,13 +100,49 @@ describe('WhatsAppCloudAdapter', () => {
       expect(parseSentJson(fetchMock.calls[0]).to).toBe('15551234567');
     });
 
-    it('swallows errors', async () => {
+    /**
+     * The Graph API refuses with an HTTP status and an `error` object.
+     * 131030 — a recipient not on an unverified number's allow-list —
+     * is the one every new WhatsApp gateway hits first, and it used to
+     * be indistinguishable from a delivered reply.
+     */
+    it('refuses a Graph API error and keeps Meta\'s message, code and trace', async () => {
+      fetchMock.setNextResponse({
+        ok: false,
+        status: 400,
+        json: {
+          error: {
+            message: 'Recipient phone number not in allowed list',
+            type: 'OAuthException',
+            code: 131030,
+            error_subcode: 2655007,
+            fbtrace_id: 'Axyz123',
+          },
+        },
+      });
+      await expect(adapter.sendResponse(
+        { access_token: 't', phone_number_id: 'p' },
+        { body: 'x' },
+        { from: '1' },
+      )).rejects.toThrow(/not in allowed list.*131030.*Axyz123/);
+    });
+
+    it('refuses an error body even when the status looked fine', async () => {
+      fetchMock.setNextResponse({ ok: true, status: 200, json: { error: { message: 'Invalid parameter', code: 100 } } });
+      await expect(adapter.sendResponse(
+        { access_token: 't', phone_number_id: 'p' },
+        { body: 'x' },
+        { from: '1' },
+      )).rejects.toThrow(/Invalid parameter/);
+    });
+
+    it('does not swallow a network failure', async () => {
       (globalThis as any).fetch = jest.fn().mockRejectedValue(new Error('graph down'));
       await expect(adapter.sendResponse(
         { access_token: 't', phone_number_id: 'p' },
         { body: 'x' },
         { from: '1' },
-      )).resolves.toBeUndefined();
+      )).rejects.toThrow('graph down');
     });
   });
 
@@ -143,9 +179,11 @@ describe('WhatsAppCloudAdapter', () => {
       expect(ok).toBe(false);
     });
 
-    it('skips verification when app_secret is not configured', async () => {
+    it('refuses inbound when app_secret is not configured', async () => {
+      // Meta always signs inbound, so a missing app_secret is a
+      // misconfiguration rather than a reason to trust the payload.
       const ok = await adapter.verifyWebhook(inboundPayload, {}, {}, '{}');
-      expect(ok).toBe(true);
+      expect(ok).toBe(false);
     });
   });
 

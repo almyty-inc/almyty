@@ -2,8 +2,11 @@ import {
   Controller, Get, Post, Patch, Delete, Body, Param, Request,
   UseGuards, ParseUUIDPipe, HttpStatus, HttpException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { ApiTags, ApiOperation, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 
+import { Agent } from '../../entities/agent.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -14,7 +17,10 @@ import { AgentConstraintsService } from './agent-constraints.service';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AgentConstraintsController {
-  constructor(private readonly service: AgentConstraintsService) {}
+  constructor(
+    private readonly service: AgentConstraintsService,
+    @InjectRepository(Agent) private readonly agents: Repository<Agent>,
+  ) {}
 
   private orgId(req: any): string {
     const organizationId = req.user.currentOrganizationId;
@@ -25,6 +31,20 @@ export class AgentConstraintsController {
       );
     }
     return organizationId;
+  }
+
+  /**
+   * The agent named in the path has to be one of this org's, otherwise the
+   * route writes a row keyed to an agent the caller cannot see.
+   */
+  private async assertAgent(organizationId: string, agentId: string): Promise<void> {
+    const found = await this.agents.count({ where: { id: agentId, organizationId } });
+    if (!found) {
+      throw new HttpException(
+        { success: false, message: 'Agent not found', error: 'AGENT_NOT_FOUND' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
   }
 
   @Get()
@@ -47,8 +67,10 @@ export class AgentConstraintsController {
     if (!body?.rule?.trim()) {
       throw new HttpException('rule is required', HttpStatus.BAD_REQUEST);
     }
+    const organizationId = this.orgId(req);
+    await this.assertAgent(organizationId, agentId);
     const userId = req.user.sub || req.user.id;
-    return this.service.add(this.orgId(req), agentId, body.rule, userId);
+    return this.service.add(organizationId, agentId, body.rule, userId);
   }
 
   @Patch(':id')
@@ -57,12 +79,12 @@ export class AgentConstraintsController {
   @ApiParam({ name: 'id', description: 'Constraint ID' })
   @ApiOperation({ summary: 'Activate or deactivate a constraint' })
   async setActive(
-    @Param('agentId', ParseUUIDPipe) _agentId: string,
+    @Param('agentId', ParseUUIDPipe) agentId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: { active: boolean },
     @Request() req: any,
   ) {
-    return this.service.setActive(id, this.orgId(req), body.active);
+    return this.service.setActive(id, this.orgId(req), body.active, agentId);
   }
 
   @Delete(':id')
@@ -71,11 +93,11 @@ export class AgentConstraintsController {
   @ApiParam({ name: 'id', description: 'Constraint ID' })
   @ApiOperation({ summary: 'Delete a constraint' })
   async remove(
-    @Param('agentId', ParseUUIDPipe) _agentId: string,
+    @Param('agentId', ParseUUIDPipe) agentId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: any,
   ) {
-    await this.service.remove(id, this.orgId(req));
+    await this.service.remove(id, this.orgId(req), agentId);
     return { success: true };
   }
 }

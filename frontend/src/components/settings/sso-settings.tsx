@@ -20,6 +20,7 @@ import { UpgradePrompt } from '@/components/plan-indicator'
 import { useNotifications } from '@/store/app'
 import { useCopySensitive } from '@/lib/clipboard'
 import { ssoApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 type Protocol = 'saml' | 'oidc'
 
@@ -102,7 +103,7 @@ function SsoSettingsForm() {
       await queryClient.invalidateQueries({ queryKey: ['sso-config'] })
     },
     onError: (err: any) =>
-      error('Failed to save', err.response?.data?.message || 'Please try again.'),
+      error('Failed to save', getApiErrorMessage(err, 'Please try again.')),
   })
 
   const rotateTokenMutation = useMutation({
@@ -113,7 +114,7 @@ function SsoSettingsForm() {
       await queryClient.invalidateQueries({ queryKey: ['sso-config'] })
     },
     onError: (err: any) =>
-      error('Failed to generate token', err.response?.data?.message || 'Please try again.'),
+      error('Failed to generate token', getApiErrorMessage(err, 'Please try again.')),
   })
 
   if (isLoading) {
@@ -154,9 +155,9 @@ function SsoSettingsForm() {
           </div>
 
           <div className="space-y-2">
-            <Label>Protocol</Label>
+            <Label htmlFor="sso-protocol">Protocol</Label>
             <Select value={protocol} onValueChange={(v) => set('protocol', v as Protocol)}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger id="sso-protocol" className="w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -273,12 +274,13 @@ function SsoSettingsForm() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>SCIM base URL</Label>
+            <Label htmlFor="sso-scim-base-url">SCIM base URL</Label>
             <div className="flex gap-2">
-              <Input readOnly value={data?.scimBaseUrl || ''} className="font-mono text-xs" />
+              <Input id="sso-scim-base-url" readOnly value={data?.scimBaseUrl || ''} className="font-mono text-xs" />
               <Button
                 variant="outline"
                 size="icon"
+                aria-label="Copy SCIM base URL"
                 onClick={() => copySensitive(data?.scimBaseUrl || '', 'SCIM base URL')}
               >
                 <Copy className="h-4 w-4" />
@@ -288,12 +290,13 @@ function SsoSettingsForm() {
 
           {newToken && (
             <div className="space-y-2">
-              <Label>New SCIM token (shown once)</Label>
+              <Label htmlFor="sso-scim-new-token">New SCIM token (shown once)</Label>
               <div className="flex gap-2">
-                <Input readOnly value={newToken} className="font-mono text-xs" />
+                <Input id="sso-scim-new-token" readOnly value={newToken} className="font-mono text-xs" />
                 <Button
                   variant="outline"
                   size="icon"
+                  aria-label="Copy new SCIM token"
                   onClick={() => copySensitive(newToken, 'SCIM token')}
                 >
                   <Copy className="h-4 w-4" />

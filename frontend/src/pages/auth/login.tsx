@@ -54,7 +54,7 @@ export function LoginPage() {
     // Allow absolute URLs to the API domain (OAuth authorize callbacks)
     try {
       const url = new URL(raw)
-      const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+      const apiBase = import.meta.env.ALMYTY_API_BASE_URL || ''
       if (apiBase && url.origin === new URL(apiBase).origin) return raw
     } catch {}
     return null
@@ -165,7 +165,7 @@ export function LoginPage() {
               className={errors.email ? 'border-red-300' : ''}
             />
             {errors.email && (
-              <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
             )}
           </div>
         </div>
@@ -193,7 +193,7 @@ export function LoginPage() {
               )}
             </button>
             {errors.password && (
-              <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.password.message}</p>
             )}
           </div>
         </div>

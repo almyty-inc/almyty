@@ -26,7 +26,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     console.error('[ErrorBoundary]', error, errorInfo)
     this.props.onError?.(error, errorInfo)
 
-    // Report to Sentry when enabled. No-op when VITE_SENTRY_DSN is unset.
+    // Report to Sentry when enabled. No-op when ALMYTY_SENTRY_DSN is unset.
     captureError(error)
   }
 
