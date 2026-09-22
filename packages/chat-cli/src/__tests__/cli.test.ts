@@ -180,6 +180,7 @@ function target(script: Array<{ type: string; data?: Record<string, unknown> }>,
     async invoke() { return {}; },
     async sendRunInput() {},
     async cancelRun() {},
+    async cancelExecution() {},
   };
 }
 
