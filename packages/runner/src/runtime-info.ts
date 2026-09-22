@@ -12,12 +12,15 @@ import { RunnerRuntimeInfo } from './types.js';
  * either, but only the user can change RunnerConfig values, and
  * only the runtime can produce these values.
  *
- * RUNNER_VERSION should track packages/runner/package.json. Bumping
- * the package version without bumping this constant is a benign
- * mismatch; the constant is what the backend records in the runner
- * row's runtimeInfo.runnerVersion.
+ * RUNNER_VERSION is read from packages/runner/package.json at startup
+ * rather than restated here. As a constant it drifted to 0.1.0 against
+ * a 1.2.0 package, and because this is the value the backend stores in
+ * the runner row's runtimeInfo.runnerVersion, the drift was invisible
+ * locally and wrong everywhere it actually mattered.
  */
-export const RUNNER_VERSION = '0.1.0';
+import { VERSION as RUNNER_VERSION } from './version.js';
+
+export { RUNNER_VERSION };
 
 export interface DetectInputs {
   /** Override binary list. Defaults to the resolved config's list. */

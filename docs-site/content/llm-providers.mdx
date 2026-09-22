@@ -73,7 +73,18 @@ OpenAI-compatible endpoint you point it at.
 
 {/* generated:providers end */}
 
-Each native type ships with the right default `baseUrl`; override it to point at a compatible proxy. For `custom`, set `baseUrl` to the provider's OpenAI-compatible endpoint. The `apiKey` field accepts whatever token the provider expects.
+Each native type ships with the right default base URL; set `configuration.apiUrl` to point at a compatible proxy instead. For `custom`, set `configuration.apiUrl` to the provider's OpenAI-compatible endpoint. The `configuration.apiKey` field accepts whatever token the provider expects.
+
+### Types not in the table above
+
+Four more provider types ship and are selectable in the create form, but have no row above: the table is generated from the provider registry, and these four are still served by the older per-vendor code path. Nothing about configuring them differs. The [vendor reference](/models/providers) carries base URL, auth and model-listing detail for each.
+
+| Type | Vendor | Notes |
+|------|--------|-------|
+| `azure_openai` | Azure OpenAI | Base resolves from your resource name; authenticates with an `api-key` header. Not the same product as `azure_ai_foundry`, which does have a row above. |
+| `vertex_ai` | Google Vertex AI | Authenticates with a short-lived OAuth token minted per call from a service account. Not the same product as `google`, the Gemini Developer API. |
+| `huggingface` | Hugging Face | Bearer `hf_...`; the model list reports per-provider tool support and pricing. |
+| `perplexity` | Perplexity | Bearer key on a Responses-shaped surface, with an unauthenticated model list. |
 
 ### Local models with Ollama
 
@@ -87,16 +98,20 @@ The same provider type also works with [Ollama's hosted service](https://ollama.
 
 ## Configuration reference
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `name` | string | (required) | Display name |
-| `provider` | string | (required) | Provider type, e.g. `openai` or `anthropic` |
-| `apiKey` | string | (required) | Provider API key (encrypted at rest) |
-| `model` | string | (required) | Default model identifier |
-| `baseUrl` | string | `https://api.openai.com/v1` | Override for compatible APIs |
-| `temperature` | number | 0.7 | Sampling temperature (0-2) |
-| `maxTokens` | number | 4096 | Maximum response tokens |
-| `topP` | number | 1.0 | Nucleus sampling |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | yes | Display name, up to 100 characters |
+| `type` | enum | yes | One of the provider types listed above |
+| `configuration` | object | yes | Everything below nests inside it |
+| `description` | string | no | Up to 1000 characters |
+| `configuration.apiKey` | string | no | Provider key, encrypted at rest. Omitted for `ollama` |
+| `configuration.apiUrl` | string | no | Overrides the type's default base URL; the field a compatible proxy goes in. Required for `custom` |
+| `configuration.model` | string | no | Default model. Left blank, it resolves to the vendor's current default by family rather than a hardcoded id |
+| `configuration.maxTokens` | number | no | Sent when set; otherwise the vendor's own default applies |
+| `configuration.temperature` | number | no | Sent when set; otherwise the vendor's own default applies |
+| `configuration.topP` | number | no | Sent when set; otherwise the vendor's own default applies |
+
+There is no top-level `baseUrl`, `apiKey` or `model` field: all three nest under `configuration`, and the base-URL override is named `apiUrl`. See the [LLM Providers API](/api-reference/llm-providers-api) for the full body.
 
 ## Cost tracking
 

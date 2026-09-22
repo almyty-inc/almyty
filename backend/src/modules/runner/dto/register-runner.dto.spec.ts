@@ -66,6 +66,37 @@ describe('RegisterRunnerDto', () => {
     expect(errs).toContain('name:maxLength');
   });
 
+  // The name is published in capability tool names and shown in the
+  // runners list, so it has to stay a single safe token.
+  // RunnerService.register rejects anything else; the DTO declares the
+  // same rule so the refusal is a field-level validation error.
+  it('rejects a name longer than the 64-char rule', async () => {
+    const payload = basePayload();
+    payload.name = 'a'.repeat(65);
+    const errs = await violations(payload);
+    expect(errs).toContain('name:maxLength');
+    expect(errs).toContain('name:matches');
+  });
+
+  it.each(['my laptop', 'build.box', 'hello%', 'a/b', ''])(
+    'rejects a name with characters outside [a-zA-Z0-9_-]: %j',
+    async (name) => {
+      const payload = basePayload();
+      payload.name = name;
+      const errs = await violations(payload);
+      expect(errs).toContain('name:matches');
+    },
+  );
+
+  it.each(['laptop', 'build-box', 'build_box', 'Box9', 'a'.repeat(64)])(
+    'accepts a name matching the rule: %j',
+    async (name) => {
+      const payload = basePayload();
+      payload.name = name;
+      expect(await violations(payload)).toEqual([]);
+    },
+  );
+
   it('rejects bad defaultIsolation', async () => {
     const payload = basePayload();
     (payload.config as any).defaultIsolation = 'wasm';

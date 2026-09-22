@@ -1,0 +1,85 @@
+# Roles and strategies
+
+If activating an agent failed with **Not ready: ... Configure the strategy and roles on the Execution tab**, this page is the fix. Everything it names lives on one tab: open the agent and pick **Execution**, the third tab after Overview and Runs. The not-ready banner has a **Configure execution** button that goes straight there.
+
+The tab holds three cards:
+
+- **Roles**: which model fills each job in this agent.
+- **Strategy**: the shape of the work. A strategy never names a model; roles do that.
+- **Orchestrator**: optional, lets a small model pick the strategy per request.
+
+## What the error means
+
+A role is a named job in the agent, like `principal` or `verifier`, and a binding says which model fills it. A strategy is a shape of work that declares the slots it needs, and it fills them from your roles by matching the role's key to the slot name. Activation refuses when a slot has no role, or a role has no model it can actually call.
+
+| What you saw | What to do |
+|---|---|
+| `Strategy "cascade" needs role slots that are not bound: drafter, verifier.` | Add a role for each named slot, using exactly that name as the key. |
+| `Role "principal" could not be filled: ...` | Either the role is pinned to nothing, or routing found no model. See [when a role cannot be filled](#when-a-role-cannot-be-filled). |
+| `Model node "x" needs role "principal". Add it on the Execution tab.` | A node in the graph names a role the agent does not define. Add that role. |
+| `role "principal" has no available model/provider` | The role is pinned to a model whose provider is gone or inactive. Repin it, or fix the provider under Models. |
+| `the provider for role "principal" is inactive` | The pinned model's provider exists but is switched off. Reactivate it under Models. |
+| `Save this agent as a draft, then configure its model roles before activation.` | Roles are stored per agent, so the agent has to exist first. Save, then come back. |
+
+The check is skipped entirely for autonomous agents, which choose models a different way, so this error only appears on workflow agents.
+
+## Add a role
+
+On the **Roles** card, click **Add role**. The dialog asks for two things:
+
+- **Key**: lowercase letters, digits and underscores, starting with a letter. This is what strategies match slots by, and what nodes reference, so renaming it later breaks those references.
+- **Name (optional)**: a human label. Left blank, it falls back to the key.
+
+The dialog suggests keys for you. When a strategy is already selected, its unbound slots are offered first under **Slots your strategies need**; otherwise you get the common ones: `principal`, `drafter`, `verifier`, `explorer`, `summariser`, `orchestrator`, `panelist_one`, `panelist_two`, `panelist_three`.
+
+A new role is created **routed**, with the cheapest model that fits. Adding, rebinding and removing roles is admin or owner only; members can see the tab and read what it resolves to.
+
+## Pinned or routed
+
+Every role carries one badge saying how it is filled, not whether it is.
+
+- **Routed**: almyty picks the model per run from your catalog, and shows the reason it chose. Use **Let routing choose** to switch a role to this.
+- **Pinned**: one named model, every time. A pinned role never consults routing at all, which is what makes roles usable on an install where routing is off. Use **Pin a model**.
+
+When any role is routed, **Show what each role resolves to now** asks for the current answer without running the agent. That is the quickest way to tell whether a not-ready message is about the role or about your model catalog.
+
+## The built-in strategies
+
+| Strategy | What it does | Roles it needs |
+|---|---|---|
+| **Single call** | One call on one role. The default, and the thing every other shape is measured against. | `principal` |
+| **Cascade** | A cheaper role drafts, a verifier checks, and only a failed check escalates to the principal role. | `drafter`, `verifier`, `principal` |
+| **Best of N** | Three independent attempts on the same role, and a verifier picks the best. | `principal`, `verifier` |
+| **Panel** | Three different roles answer and the shape looks for consensus. Disagreement is the signal. | `panelist_one`, `panelist_two`, `panelist_three` |
+| **Explore, extract, patch** | A cheap role explores in parallel, a summariser compresses what was found into a brief, and the principal role acts on the brief rather than the whole transcript. Marked experimental: whether it saves anything depends on your workload. | `explorer`, `summariser`, `principal`, `verifier` |
+
+Each card shows a coarse **cost** and **latency** band derived from how many model calls the shape makes, the slots it needs (amber when you have no role with that key), and its step count. Picking one saves immediately. Picking none leaves the agent running its own pipeline as drawn.
+
+Your organization can also publish its own strategies, which appear in the same list and override a built-in of the same key.
+
+## When a role cannot be filled
+
+`Role "x" could not be filled` comes with a reason, and each reason has a different fix:
+
+| Reason | Fix |
+|---|---|
+| `pinned to no model` | The role is pinned but no model was chosen. Pin one, or switch it to routing. |
+| `no models are registered for this organization` | Add a model under **Models**. |
+| `no model satisfied it (N rejected: ...)` | Routing found models but none passed the role's policy. Loosen the policy, or add a model that fits. |
+| `it asks to be resolved but routing is not available on this install` | Pin the role to a specific model instead. |
+
+A model only counts as available when it is selectable: active, callable, and with at least one passed validation run. See [Models](/models) for what that means and how to get there.
+
+## Orchestrator
+
+Turning the orchestrator on hands strategy choice to a small model, per request. You give it a role to run as (`orchestrator` by default), a timeout in milliseconds, a fallback strategy for when it does not answer in time, and optionally the list of strategies it is allowed to pick from.
+
+Readiness checks the **fallback** strategy, not whatever the orchestrator might choose at runtime, so the fallback's slots have to be bound before you can activate.
+
+## Ejecting to a graph
+
+**Eject to an editable graph** compiles the selected strategy into ordinary pipeline nodes and writes them onto the agent, after which the strategy is cleared and you edit the graph directly in the [visual builder](/agents/builder). It refuses when the agent already has a pipeline, so ejecting never overwrites a graph somebody drew by hand. The compiled nodes still carry role keys rather than models, so routing keeps filling each role at run time.
+
+## Changing model later
+
+This is what the split is for. A strategy names slots, a node names a role, and only the role names a model. Moving an agent to a different model is a rebinding on the Roles card, not an edit to the graph or to the strategy, and every run records which model each role resolved to and why.

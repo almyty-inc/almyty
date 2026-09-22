@@ -1,6 +1,6 @@
 # Analytics
 
-See what every protocol, tool, agent, and LLM provider is doing in real time. Seven tabs cover different aspects of your organization's activity, and the numbers are live: gateway traffic, tool executions, and agent runs feed the tiles and charts as they happen, with a 30-second refresh on the Overview tab.
+See what every protocol, tool, agent, and model is doing in real time. Eleven tabs cover different aspects of your organization's activity, and the numbers are live: gateway traffic, tool executions, and agent runs feed the tiles and charts as they happen, with a 30-second refresh on the Overview tab.
 
 ![Analytics overview](/screenshots/analytics-overview.png)
 
@@ -8,64 +8,85 @@ See what every protocol, tool, agent, and LLM provider is doing in real time. Se
 
 1. Open **Analytics** in the sidebar.
 2. The **Overview** tab loads by default, showing aggregate metrics.
-3. Use the date range picker in the top-right corner to filter data.
-4. Click any of the seven tabs to drill into a specific area.
-5. Click **Export** on any tab to download the data as CSV.
+3. Click any tab to drill into a specific area. Each tab has its own address (`/analytics/tools`, `/analytics/budgets`, and so on), so a view is linkable.
+4. Tabs that cover a period — Tools, Gateways, Models, Agents — carry their own timeframe selector; Cost switches between today and this month.
+5. Use **Export CSV** or **Export JSON** in the page header to download the request log.
 
 ## Tabs
 
 ### Overview
 
-Top-level metrics: total requests, success rate, average latency, active tools, active gateways, and LLM token usage. Includes a time-series chart of request volume over the selected period.
+Eight tiles over two windows: requests, tool executions, average response time, errors, and model calls for the last 24 hours, then requests, tool executions, and model cost for the last 7 days. Below them, a 7-day line chart of request volume. This tab refreshes itself every 30 seconds.
 
 ### Request Log
 
-Paginated list of every gateway request with timestamp, tool name, protocol, status code, latency, and caller IP. Click a row to see full request and response payloads.
+Paginated list of every gateway request with time, method, path, status, duration, protocol, and caller IP, filterable to successes or errors.
 
 ### Tools
 
-Per-tool breakdown: execution count, success rate, average duration, and last-used time. Sorted by most-used by default. Counts every execution path: direct test runs, MCP `tools/call`, UTCP `execute`, and agent `tool_call` nodes all roll up here.
+Per-tool breakdown: execution count, success rate, average time, and last-used time, over the timeframe you pick. Counts every execution path: direct test runs, MCP `tools/call`, UTCP `execute`, and agent `tool_call` nodes all roll up here.
 
 ![Tools tab](/screenshots/analytics-tools.png)
 
 ### Gateways
 
-Per-gateway breakdown: total requests, success and error counts, and success rate, attributed by protocol (MCP, UTCP, A2A, Skills). Useful for spotting misconfigured or underused gateways.
+Per-gateway breakdown: protocol, total requests, success and error counts, and success rate. Useful for spotting misconfigured or underused gateways.
 
 ![Gateways tab](/screenshots/analytics-gateways.png)
 
-### LLM
+### Models
 
-Per-provider usage: total calls, token counts (input and output), estimated cost, and average latency. Helps track spending across providers.
+Per-provider usage: sessions, messages, input and output tokens, tool calls, and cost. Helps track spending across providers.
+
+### Routing
+
+How well multi-model routing is holding up, per agent. The headline number is the **all-model failure rate** — the share of requests where every model tried failed. It sits next to a deliberately separate number, the share a better routing policy could have won, because one is a ceiling and the other is an opportunity. An agent needs a minimum number of requests where more than one model was tried before a rate is reported; agents below that threshold are named in a second card rather than hidden, so "fine" and "not measured" stay distinguishable.
 
 ### Agents
 
-Per-agent execution metrics: run count (24h and 7d), success rate, average duration, and estimated cost, with a recent-failures list below the table.
+Per-agent execution metrics: status, total executions, 24h and 7d counts, success rate, average time, and cost, with a recent-failures list below the table.
 
 ![Agents tab](/screenshots/analytics-agents.png)
 
+### Cost
+
+What agent runs actually cost. Total spend for today or this month, a spend-over-time bar list, and a per-agent breakdown. Below that, **Provider actual vs our estimate** reconciles almyty's own cost estimate against each provider's authoritative usage API, with a **Sync now** button to re-read the providers. Providers that publish no usage API are listed as unreconcilable rather than shown as zero.
+
+### Budgets
+
+The ceilings behind the Cost tab. Each budget is a cents limit for a period, scoped to the whole organization or to one agent, with a soft threshold that warns and a hard limit that can stop new runs. The table shows period-to-date spend against each limit, and a **Recent budget alerts** panel below records breaches — at most one per period per threshold. Creating, editing, and deleting budgets needs the `admin` or `owner` role; everyone else sees the table without the controls.
+
+### Chargeback
+
+Cost attribution: what each team and each agent spent this period, each with its share of the total, plus a straight-line projection for the rest of the period — presented as a trend, not a commitment. **Chargeback is an enterprise-edition feature**; an organization without the entitlement sees an upgrade prompt here instead of the report.
+
 ### Audit Trail
 
-Chronological log of every sensitive action (create, update, delete, execute) with the acting user, timestamp, resource type, resource ID, and source IP.
+Chronological log of every sensitive action with time, user, action, resource type, resource name, status, duration, and source IP, filterable by resource and action. The log itself is available to everyone; **exporting it is an enterprise-edition feature** and the export buttons are locked without the entitlement.
 
 ![Audit trail](/screenshots/analytics-audit.png)
 
 ## Metrics reference
 
-| Metric | Description |
-|--------|-------------|
-| `totalRequests` | Total gateway requests in the period |
-| `successRate` | Percentage of 2xx responses |
-| `avgLatency` | Average response time in milliseconds |
-| `totalTokens` | Total LLM tokens consumed (input + output) |
-| `estimatedCost` | Estimated LLM cost in USD |
-| `uniqueCallers` | Distinct API keys or IPs that made requests |
-| `errorRate` | Percentage of 4xx and 5xx responses |
+`GET /analytics/overview` is what the Overview tiles read, and it answers with two windows:
+
+| Field | Description |
+|-------|-------------|
+| `last24h.requests` | Gateway requests in the last 24 hours |
+| `last24h.toolExecutions` | Tool executions in the last 24 hours |
+| `last24h.avgResponseTime` | Average response time in milliseconds |
+| `last24h.errors` | Requests that returned an error |
+| `last24h.llmSessions` | Model conversations started |
+| `last7d.requests` | Gateway requests in the last 7 days |
+| `last7d.toolExecutions` | Tool executions in the last 7 days |
+| `last7d.llmCostCents` | Model cost over the last 7 days, in cents |
+
+Per-entity reports — `/analytics/tool-usage`, `/analytics/gateway-usage`, `/analytics/llm-usage`, `/analytics/agent-runs` — each carry their own counts and a `successRate` over the timeframe you ask for.
 
 ## Retention
 
-Usage metrics and request logs are retained for 90 days by default, then pruned by a background sweep. Self-hosted deployments can change the window with the `METRICS_RETENTION_DAYS` environment variable, or set it to `0` to keep everything. See [Self-Hosting](/self-hosting) for the full list of environment variables.
+Nothing is pruned by default: an organization's retention policy starts with every window unset, which means keep forever. Set windows per data class — agent runs, conversations, request logs, usage metrics, audit log, tool executions, notifications — under **Settings → Data retention**, or over REST at `PUT /organizations/:id/retention`. Each window is between 1 and 3650 days, and clearing one goes back to keeping that class forever. An hourly sweep applies whatever the policy says.
 
 ## API
 
-Usage metrics, request logs, audit logs, and CSV export are available over REST. See the [API reference](/api-reference).
+Usage metrics, request logs, audit logs, and CSV or JSON export are available over REST. See the [API reference](/api-reference).

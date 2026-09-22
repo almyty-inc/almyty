@@ -58,28 +58,38 @@ The CLI writes SKILL.md files to each agent's skill directory and registers them
 
 ## SKILL.md format
 
-Each tool produces a markdown file like this:
+Each tool produces a markdown file whose frontmatter carries only `name`, `description`,
+and a `metadata` block:
 
-```markdown
+```yaml
 ---
 name: get_users
 description: Retrieve a list of users with pagination
-endpoint: https://api.almyty.com/utcp/acme/my-skills/tools/get_users/invoke
-method: POST
-auth: bearer
+metadata:
+  author: almyty
+  generated: "true"
+  toolId: "d3b0...-tool-uuid"
+  version: "1"
 ---
-
-# get_users
-
-Retrieve a list of users with pagination.
-
-## Parameters
-
-| Name  | Type    | Required | Description              |
-|-------|---------|----------|--------------------------|
-| page  | integer | no       | Page number              |
-| limit | integer | no       | Items per page (default: 20) |
 ```
+
+The `toolId` is what `almyty-skills run` resolves against, so a skill keeps working after
+a rename. Under the frontmatter the file has a `# get_users` title, the tool's
+description, then `## When to use`, `## HTTP endpoint`, `## Parameters`, `## Example`,
+and `## Invocation` sections.
+
+`## HTTP endpoint` names the **upstream** API the tool wraps — for example
+`GET https://api.example.com/users` — not an almyty URL. Agents do not call it directly;
+`## Invocation` gives them the Skills CLI command, which authenticates with your stored
+almyty credentials and runs the tool through the gateway:
+
+```bash
+npm i -g @almyty/skills   # one-time, skip if already installed
+almyty-skills run acme/my-skills/get_users --limit 10
+```
+
+`npx -y @almyty/skills run ...` works too, at roughly a second of startup overhead per
+call.
 
 ## Supported agents
 

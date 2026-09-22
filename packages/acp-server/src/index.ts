@@ -20,20 +20,34 @@ import { resolveCredentials } from './auth.js';
 import { AlmytyProxy } from './proxy.js';
 import { AlmytyAcpAgent, type JsonRpcResponse, type JsonRpcNotification } from './agent.js';
 import { createLineHandler } from './dispatch.js';
+import { VERSION } from './version.js';
 
 // ── Argument parsing ─────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const HELP_FLAGS = ['--help', '-h'];
+const VERSION_FLAGS = ['--version', '-v'];
+
+// Checked before help so `almyty-acp --version --help` answers the
+// narrower question, and before the no-args branch so asking the server
+// what it is never exits non-zero.
+if (args.some((a) => VERSION_FLAGS.includes(a))) {
+  process.stdout.write(`${VERSION}\n`);
+  process.exit(0);
+}
 
 if (args.some((a) => HELP_FLAGS.includes(a)) || args.length === 0) {
   const text = `
-@almyty/acp-server — Expose any almyty agent via the Agent Client Protocol
+@almyty/acp-server v${VERSION} — Expose any almyty agent via the Agent Client Protocol
 
 Usage:
   almyty-acp <agent>
   almyty-acp my-agent
   almyty-acp acme/my-agent
+
+Options:
+  -h, --help     Show this help.
+  -v, --version  Print the version.
 
 Authentication:
   npx @almyty/auth login
