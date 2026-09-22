@@ -161,7 +161,14 @@ export class GatewaySkillsController {
       const result = await this.toolExecutorService.executeTool(
         toolId,
         body.parameters || {},
-        { userId, organizationId },
+        {
+          userId,
+          organizationId,
+          // The gateway_tool row is already in hand, so hand its security
+          // policy straight to the executor rather than making it re-query.
+          gatewayId,
+          securityPolicy: gatewayTool.securityPolicy ?? null,
+        },
       );
 
       // Increment gateway request counter

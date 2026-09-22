@@ -15,6 +15,7 @@ import { makeEnvelopeCryptoMock } from '../../test/envelope-crypto.mock';
 import { hashCacheObject, sleep as sleepUtil } from './tool-execution-utils';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
+import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Api, ApiType } from '../../entities/api.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
@@ -101,6 +102,15 @@ describe('ToolExecutorService', () => {
           useValue: {
             findOne: jest.fn(),
             createQueryBuilder: jest.fn().mockReturnValue(qbUpdateChain),
+          },
+        },
+        {
+          // The gateway_tools row carrying `securityPolicy`. Null here: a
+          // tool executed without a gatewayId has no gateway policy, which
+          // is what every case in this file exercises.
+          provide: getRepositoryToken(GatewayTool),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(null),
           },
         },
         {

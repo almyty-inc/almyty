@@ -665,6 +665,20 @@ export class GatewayClient {
     );
   }
 
+  /**
+   * Cancel a workflow execution.
+   *
+   * The workflow counterpart of cancelRun. A workflow run is an execution,
+   * not a run, so cancelRun could never stop one -- a Ctrl-C that did not
+   * also drop the SSE connection left the pipeline running and billing.
+   */
+  async cancelExecution(executionId: string): Promise<void> {
+    await this.client.request(
+      `${this.prefix}/executions/${encodeURIComponent(executionId)}/cancel`,
+      { method: 'POST' },
+    );
+  }
+
   async pollRun(
     runId: string,
     options: {
