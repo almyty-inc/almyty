@@ -259,44 +259,6 @@ describe('LlmProvider Entity', () => {
     });
   });
 
-  describe('updateHealthStatus', () => {
-    it('should update health status to unhealthy', () => {
-      provider.updateHealthStatus(false, 'API timeout');
-
-      expect(provider.isHealthy).toBe(false);
-      expect(provider.status).toBe(LlmProviderStatus.ERROR);
-      expect(provider.lastError).toBe('API timeout');
-      expect(provider.lastHealthCheckAt).toBeDefined();
-    });
-
-    it('should update health status to healthy and clear error', () => {
-      provider.status = LlmProviderStatus.ERROR;
-      provider.lastError = 'Previous error';
-
-      provider.updateHealthStatus(true);
-
-      expect(provider.isHealthy).toBe(true);
-      expect(provider.status).toBe(LlmProviderStatus.ACTIVE);
-      expect(provider.lastError).toBeNull();
-    });
-
-    it('should not change status from INACTIVE to ACTIVE on health recovery', () => {
-      provider.status = LlmProviderStatus.INACTIVE;
-
-      provider.updateHealthStatus(true);
-
-      expect(provider.status).toBe(LlmProviderStatus.INACTIVE);
-    });
-
-    it('should not change status from MAINTENANCE', () => {
-      provider.status = LlmProviderStatus.MAINTENANCE;
-
-      provider.updateHealthStatus(false, 'Error');
-
-      expect(provider.status).toBe(LlmProviderStatus.MAINTENANCE);
-    });
-  });
-
   describe('Capability Checks', () => {
     describe('supportsToolUse', () => {
       it('should return true when capabilities indicate support', () => {

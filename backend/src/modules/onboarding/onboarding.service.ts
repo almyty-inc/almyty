@@ -84,9 +84,18 @@ export class OnboardingService {
     };
   }
 
+  /**
+   * Health here is the observation (`isHealthy`), not the operator's
+   * intent (`status`). This read `status: Not(LlmProviderStatus.ERROR)`,
+   * and nothing in the build ever assigns that status -- the health sweep
+   * writes `isHealthy` with a partial UPDATE and deliberately leaves
+   * `status` alone -- so the filter excluded nothing and the onboarding
+   * step counted a provider whose key had been rejected on every call.
+   * Same pair the router uses (model-router.service.ts).
+   */
   private async hasHealthyProvider(organizationId: string): Promise<boolean> {
     const count = await this.providerRepo.count({
-      where: { organizationId, status: Not(LlmProviderStatus.ERROR) },
+      where: { organizationId, status: LlmProviderStatus.ACTIVE, isHealthy: true },
     });
     return count > 0;
   }

@@ -2,7 +2,8 @@ import { NotFoundException } from '@nestjs/common';
 import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
 import { ImportSchemaOptions } from './dto/apis.dto';
-import { validateUrl } from '../../common/security/url-validator';
+import { assertOutboundUrlAllowed } from '../../common/security/safe-fetch';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -377,28 +378,44 @@ export class ApisImportHelper {
     }
   }
 
+  /**
+   * The one door onto a caller-supplied schema URL. Both the REST import
+   * route and the MCP `import_schema` tool come through here.
+   *
+   * The gate has three parts and needs all three:
+   *
+   *   - `assertOutboundUrlAllowed` refuses the string (scheme, credentials,
+   *     literal private/loopback/link-local addresses);
+   *   - the pinned agents refuse the *connection*, because a public name
+   *     whose A record answers 169.254.169.254 passes any string check.
+   *     Pinning at connect leaves no window between the check and the
+   *     socket for the answer to change;
+   *   - `maxRedirects: 0`, because a public URL that 302s to an internal
+   *     host walks straight around a string-only gate.
+   *
+   * These are http.Agents, which is right for axios and useless for
+   * `fetch` -- undici ignores them and wants `ssrfSafeDispatcher`. See
+   * common/security/safe-fetch.ts.
+   */
   async fetchSchemaFromUrl(url: string): Promise<string> {
-    // SSRF guard. Without this the user could ask the server to fetch
-    // http://169.254.169.254/, http://localhost:6379/, file:///etc/passwd,
-    // etc., and we'd dutifully run the request and hand back the body.
-    const validation = validateUrl(url);
-    if (!validation.valid) {
-      throw new BadRequestException(`Refused to fetch schema URL: ${validation.error}`);
+    let safeUrl: string;
+    try {
+      safeUrl = assertOutboundUrlAllowed(url);
+    } catch (error: any) {
+      throw new BadRequestException(`Refused to fetch schema URL: ${error.message}`);
     }
 
     try {
-      const response = await axios.get(url, {
+      const response = await axios.get(safeUrl, {
         timeout: 30000,
         // 15 MB inbound cap. The downstream importSchema enforces a 10 MB
         // schema limit anyway; the slack here covers headers/transfer
         // overhead and lets that error surface a clearer message.
         maxContentLength: 15 * 1024 * 1024,
         maxBodyLength: 15 * 1024 * 1024,
-        // Don't follow redirects — a public URL that 302s to an internal
-        // host would otherwise re-introduce SSRF after the validateUrl
-        // gate. Callers can still chase one-hop redirects themselves if
-        // they need to.
         maxRedirects: 0,
+        httpAgent: ssrfSafeHttpAgent,
+        httpsAgent: ssrfSafeHttpsAgent,
         headers: {
           'Accept': 'application/json, application/yaml, text/yaml, text/plain, application/xml, text/xml',
         },

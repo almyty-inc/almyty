@@ -90,9 +90,21 @@ describe('checkApp', () => {
 
   it('does not demand caps for a gated product', () => {
     // An internal product behind a login has a gate between a stranger
-    // and the spend.
-    const internal = app({ authMode: AppAuthMode.EMAIL_OTP });
-    expect(checkApp(internal, {}).ok).toBe(true);
+    // and the spend. SSO, not email codes: this case used EMAIL_OTP,
+    // which no route can satisfy -- see the next test.
+    const internal = app({ authMode: AppAuthMode.SSO });
+    expect(checkApp(internal, { hasEnterpriseAuth: true }).ok).toBe(true);
+  });
+
+  it('treats an auth mode with no sign-in flow as open', () => {
+    // email_otp and oauth are offered in the UI and implemented nowhere,
+    // so a product on one of them is reachable by anyone who has the
+    // link or the artifact. Fail closed: the caps stay required.
+    for (const mode of [AppAuthMode.EMAIL_OTP, AppAuthMode.OAUTH]) {
+      expect(codes(checkApp(app({ authMode: mode }), {}))).toEqual(
+        expect.arrayContaining(['PUBLIC_NEEDS_COST_CAP', 'PUBLIC_NEEDS_RATE_LIMIT']),
+      );
+    }
   });
 
   it('reports every refusal at once rather than one at a time', () => {

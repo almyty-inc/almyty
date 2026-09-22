@@ -5,9 +5,6 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import axios from 'axios';
-import { assertOutboundUrlAllowed } from '../../common/security/safe-fetch';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { JsonRpcResponse } from './types/mcp.types';
 import { ApisService } from '../apis/apis.service';
 import { ToolsService } from '../tools/tools.service';
@@ -333,20 +330,21 @@ export class AlmytyMcpService {
         if (args.schemaContent) {
           content = String(args.schemaContent);
         } else if (args.schemaUrl) {
-          // Same gate as the HTTP twin of this feature
-          // (apis-import.helper.fetchSchemaFromUrl). Without it this was a
-          // second door onto the same fetch with no SSRF check at all, and
-          // the body came back to the caller as the import's schemaContent.
-          const schemaUrl = assertOutboundUrlAllowed(String(args.schemaUrl));
-          const schemaRes = await axios.get(schemaUrl, {
-            timeout: 30000,
-            maxContentLength: 15 * 1024 * 1024,
-            maxBodyLength: 15 * 1024 * 1024,
-            maxRedirects: 0,
-            httpAgent: ssrfSafeHttpAgent,
-            httpsAgent: ssrfSafeHttpsAgent,
-          });
-          content = typeof schemaRes.data === 'string' ? schemaRes.data : JSON.stringify(schemaRes.data);
+          // Through ApisService, which is the HTTP twin of this feature and
+          // now the only door onto this fetch.
+          //
+          // Two audits found this same bypass. It was a bare
+          // `axios.get(args.schemaUrl, { timeout: 30000 })`: no SSRF gate,
+          // no size cap, no redirect refusal, and the body came back to the
+          // caller as the import's schemaContent. #696 fixed it by gating
+          // and pinning here; this keeps that mechanism but moves it into
+          // `fetchSchemaFromUrl`, which the REST route has always used and
+          // which was NOT pinned -- so #696's version left the two doors
+          // enforcing different rules, with the older one weaker.
+          //
+          // One helper, both callers, so a third entrance cannot be added
+          // later with its own idea of what the gate is.
+          content = await get(ApisService).fetchSchemaFromUrl(String(args.schemaUrl));
         } else {
           throw new Error('import_schema requires either schemaUrl or schemaContent');
         }
