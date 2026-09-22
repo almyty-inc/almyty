@@ -75,12 +75,13 @@ export class IrcAdapter extends BaseAdapter {
       headers['Authorization'] = `Bearer ${config.bridge_token}`;
     }
 
+    this.assertEgress(webhookUrl);
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
-    const res = await (fetch as any)(webhookUrl, {
+    const res = await (fetch as any)(webhookUrl, this.egressInit({
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-    });
+    }));
 
     if (this.httpRejected(res)) {
       const detail = await this.readTextBody(res);

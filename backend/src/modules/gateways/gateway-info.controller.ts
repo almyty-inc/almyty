@@ -198,9 +198,26 @@ export class GatewayInfoController {
   async resolveGateway(
     @Param('orgSlug') orgSlug: string,
     @Param('gatewaySlug') gatewaySlug: string,
+    @Request() req: any,
   ) {
     try {
-      const gateway = await this.gatewaysService.resolveGateway(orgSlug, gatewaySlug);
+      const organizationId = req.user?.currentOrganizationId;
+      if (!organizationId) {
+        throw new HttpException(
+          {
+            success: false,
+            message:
+              'Organization context required. Multi-org users must send the X-Organization-Id header.',
+            error: 'NO_ORGANIZATION',
+          },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      const gateway = await this.gatewaysService.resolveGateway(
+        orgSlug,
+        gatewaySlug,
+        organizationId,
+      );
       return {
         success: true,
         data: {

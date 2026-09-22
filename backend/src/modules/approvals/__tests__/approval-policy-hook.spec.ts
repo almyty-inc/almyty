@@ -167,7 +167,7 @@ describe('ApprovalsService — approval policy hook', () => {
       const row = await svc.create(createInput);
       expect((row.payload as any)._policy).toBeUndefined();
 
-      const decided = await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' });
+      const decided = await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId);
       expect(decided.status).toBe('approved');
       expect(events).toHaveLength(1);
     });
@@ -229,7 +229,7 @@ describe('ApprovalsService — approval policy hook', () => {
       svc.on('approval.progress', (a) => progressEvents.push(a));
 
       const row = await svc.create(createInput);
-      const afterFirst = await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' });
+      const afterFirst = await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId);
 
       expect(afterFirst.status).toBe('pending');
       const state = (afterFirst.payload as any)._policy;
@@ -251,8 +251,8 @@ describe('ApprovalsService — approval policy hook', () => {
       svc.on('approval.decided', (a) => decidedEvents.push(a));
 
       const row = await svc.create(createInput);
-      await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' });
-      const decided = await svc.approve(row.id, { decidedBy: 'u2' }, { id: 'u2' });
+      await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId);
+      const decided = await svc.approve(row.id, { decidedBy: 'u2' }, { id: 'u2' }, row.organizationId);
 
       expect(decided.status).toBe('approved');
       expect(decided.decidedBy).toBe('u2');
@@ -267,10 +267,10 @@ describe('ApprovalsService — approval policy hook', () => {
       const { svc } = makeService(hook);
 
       const row = await svc.create(createInput);
-      await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' });
+      await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId);
 
       await expect(
-        svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }),
+        svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -281,7 +281,7 @@ describe('ApprovalsService — approval policy hook', () => {
       policy.teamRoles.set('u1', 'lead');
 
       const row = await svc.create({ ...createInput, teamId: 't1' });
-      await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' });
+      await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId);
 
       expect(hook.scoreProgress).toHaveBeenCalledWith('org-1', 'pol-1', [
         { approverId: 'u1', roles: ['admin', 'team_lead'] },
@@ -293,7 +293,7 @@ describe('ApprovalsService — approval policy hook', () => {
       const { svc } = makeService(hook);
 
       const row = await svc.create(createInput);
-      const decided = await svc.reject(row.id, { decidedBy: 'u1', decisionReason: 'no' }, { id: 'u1' });
+      const decided = await svc.reject(row.id, { decidedBy: 'u1', decisionReason: 'no' }, { id: 'u1' }, row.organizationId);
 
       expect(decided.status).toBe('rejected');
       expect(hook.scoreProgress).not.toHaveBeenCalled();
@@ -308,7 +308,7 @@ describe('ApprovalsService — approval policy hook', () => {
 
       // License expired between create and approve: hook scores null.
       hook.scoreProgress.mockResolvedValue(null as any);
-      const decided = await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' });
+      const decided = await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId);
 
       expect(decided.status).toBe('approved');
     });
@@ -331,7 +331,7 @@ describe('ApprovalsService — approval policy hook', () => {
       hook.scoreProgress.mockRejectedValue(new Error('boom'));
 
       await expect(
-        svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }),
+        svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId),
       ).rejects.toMatchObject({ status: 503 });
 
       // And the request is still waiting for its quorum.

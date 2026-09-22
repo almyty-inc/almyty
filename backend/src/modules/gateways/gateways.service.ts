@@ -717,13 +717,24 @@ export class GatewaysService {
   /**
    * Resolve a gateway by @orgSlug/gateway-name-slug.
    * Used by the CLI to avoid exposing UUIDs.
+   *
+   * `callerOrganizationId` is the org the request was authorized against.
+   * Org slugs are public — they are in every unified-endpoint URL — so
+   * without this the route answered for any tenant: the role check ran
+   * against the caller's own org while the lookup ran against the slug in
+   * the path, handing back another tenant's gateway id, name, type and
+   * endpoint. Nothing is said about whether the slug exists.
    */
-  async resolveGateway(orgSlug: string, gatewayNameSlug: string): Promise<Gateway> {
+  async resolveGateway(
+    orgSlug: string,
+    gatewayNameSlug: string,
+    callerOrganizationId: string,
+  ): Promise<Gateway> {
     const organization = await this.organizationRepository.findOne({
       where: { slug: orgSlug },
     });
-    if (!organization) {
-      throw new NotFoundException(`Organization not found: ${orgSlug}`);
+    if (!organization || organization.id !== callerOrganizationId) {
+      throw new NotFoundException(`Gateway not found: @${orgSlug}/${gatewayNameSlug}`);
     }
 
     // Try matching by endpoint (which is already a slug like /httpbin-skills-gateway)

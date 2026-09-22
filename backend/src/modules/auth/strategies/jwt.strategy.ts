@@ -7,6 +7,10 @@ import { Repository } from 'typeorm';
 import { Request } from 'express';
 import { User } from '../../../entities/user.entity';
 import { JwtPayload } from '../auth.service';
+import {
+  effectiveMemberships,
+  hasEffectiveMembership,
+} from '../../../common/authorization/membership';
 
 /**
  * Extract JWT from httpOnly cookie first, then fall back to Authorization header.
@@ -69,12 +73,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Token has been revoked');
     }
 
+    // Only rows that actually grant access. A revoked invite keeps its
+    // row (marked inactive) and a pending invite has one before it is
+    // accepted; neither is a membership, here or anywhere else.
+    const memberships = effectiveMemberships(user.organizationMemberships);
+
     // Attach the user's org list.
-    (user as any).organizations = user.organizationMemberships?.map(membership => ({
+    (user as any).organizations = memberships.map(membership => ({
       id: membership.organizationId || membership.organization?.id,
       name: membership.organization?.name,
       role: membership.role,
-    })) || [];
+    }));
 
     // Resolve the ACTIVE organization for this request. Multi-org users
     // must explicitly scope every request via `X-Organization-Id`.
@@ -95,15 +104,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     //     request with a clear "Organization context required" error.
     const headerOrgId = (req.headers?.['x-organization-id'] as string) || undefined;
     if (headerOrgId) {
-      const isMember = user.organizationMemberships?.some(
-        (m) => (m.organizationId || m.organization?.id) === headerOrgId,
-      );
-      if (!isMember) {
+      if (!hasEffectiveMembership(user.organizationMemberships, headerOrgId)) {
         throw new UnauthorizedException('Not a member of the requested organization');
       }
       (user as any).currentOrganizationId = headerOrgId;
-    } else if (user.organizationMemberships?.length === 1) {
-      (user as any).currentOrganizationId = user.organizationMemberships[0].organizationId;
+    } else if (memberships.length === 1) {
+      (user as any).currentOrganizationId = memberships[0].organizationId;
     } else {
       (user as any).currentOrganizationId = undefined;
     }

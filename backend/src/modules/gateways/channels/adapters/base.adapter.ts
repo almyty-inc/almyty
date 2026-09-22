@@ -2,6 +2,11 @@
  * Base adapter pattern for all interface types.
  * Each adapter normalizes inbound messages and formats outbound responses.
  */
+
+import {
+  assertOutboundUrlAllowed,
+  ssrfSafeDispatcher,
+} from '../../../../common/security/safe-fetch';
 export interface NormalizedMessage {
   text: string;
   userId: string;
@@ -41,6 +46,34 @@ export class ChannelSendError extends Error {
 
 export abstract class BaseAdapter {
   abstract readonly type: string;
+
+  /**
+   * Refuse an outbound target the server must not be made to request.
+   *
+   * Six adapters dial a URL out of `gateway.configuration` —
+   * `webhook_url`, `callback_url`, `api_url`, `homeserver_url`,
+   * `service_url` — and that configuration is whatever an org admin
+   * typed. Nothing on the channel write path validated any of it, so a
+   * gateway pointed at `http://169.254.169.254/` sent the agent's reply
+   * there; the webhook adapter additionally put the response body into
+   * its ChannelSendError, which made it a read primitive rather than a
+   * blind one.
+   *
+   * The adapters that talk to a hard-coded vendor host (slack, telegram,
+   * discord, sms, whatsapp, email) do not need this.
+   */
+  protected assertEgress(url: string): string {
+    return assertOutboundUrlAllowed(url);
+  }
+
+  /**
+   * The fetch init every gated adapter send shares: DNS pinned at connect
+   * through undici (`httpAgent` does nothing for `fetch`), and a redirect
+   * refused rather than followed.
+   */
+  protected egressInit<T extends Record<string, any>>(init: T): T {
+    return { ...init, redirect: 'error', dispatcher: ssrfSafeDispatcher };
+  }
 
   /**
    * Normalize an inbound message from the external platform

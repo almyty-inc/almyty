@@ -464,7 +464,12 @@ describe('AlmytyMcpService', () => {
         arguments: { apiId: 'api-1', schemaUrl: 'https://example.com/openapi.json', generateTools: true },
       });
       // Verifies: URL is fetched, then job is queued (not sync import)
-      expect(mockAxiosGet).toHaveBeenCalledWith('https://example.com/openapi.json', { timeout: 30000 });
+      // Gated now: validateUrl + DNS-pinning agents + no redirect, the
+      // same shape the HTTP twin of this feature has always had.
+      expect(mockAxiosGet).toHaveBeenCalledWith(
+        'https://example.com/openapi.json',
+        expect.objectContaining({ timeout: 30000, maxRedirects: 0 }),
+      );
       expect(mockSchemaImportQueue.add).toHaveBeenCalledWith(
         'import',
         expect.objectContaining({
@@ -1562,7 +1567,7 @@ describe('AlmytyMcpService', () => {
     it('decide_approval approves by default and records the caller as the decider', async () => {
       const res = await callTool('decide_approval', { approvalId: 'appr-1', decision: 'approve', reason: 'looks fine' });
       expect(mockApprovalsService.approve).toHaveBeenCalledWith(
-        'appr-1', { decidedBy: 'user-1', decisionReason: 'looks fine' }, { id: 'user-1' },
+        'appr-1', { decidedBy: 'user-1', decisionReason: 'looks fine' }, { id: 'user-1' }, 'org-1',
       );
       expect(mockApprovalsService.reject).not.toHaveBeenCalled();
       expect(parse(res).status).toBe('approved');
@@ -1571,7 +1576,7 @@ describe('AlmytyMcpService', () => {
     it('decide_approval rejects when asked to', async () => {
       const res = await callTool('decide_approval', { approvalId: 'appr-1', decision: 'reject' });
       expect(mockApprovalsService.reject).toHaveBeenCalledWith(
-        'appr-1', { decidedBy: 'user-1', decisionReason: undefined }, { id: 'user-1' },
+        'appr-1', { decidedBy: 'user-1', decisionReason: undefined }, { id: 'user-1' }, 'org-1',
       );
       expect(mockApprovalsService.approve).not.toHaveBeenCalled();
       expect(parse(res).status).toBe('rejected');

@@ -58,7 +58,9 @@ describe('the acting organization is never caller-supplied', () => {
       readFileSync(join(SRC, 'modules', 'auth', 'strategies', 'api-key.strategy.ts'), 'utf8'),
     );
 
-    expect(strategy).toMatch(/stillAMember/);
+    // The check moved into the shared predicate; what matters is that
+    // the key's org is still one the user is a member of.
+    expect(strategy).toMatch(/hasEffectiveMembership\(user\.organizationMemberships, keyOrgId\)/);
   });
 
   it('checks membership before minting an MCP OAuth code for an org slug', () => {
