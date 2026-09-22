@@ -8,6 +8,7 @@ import { OrgLicenseResolver } from '../../../src/modules/licensing/org-license.r
 import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constants';
 
 import { ComplianceService, EffectiveCompliancePolicy } from './compliance.service';
+import { piiCategoriesToSettings } from './pii-categories';
 
 /** How long a resolved org policy is reused before re-reading the DB. */
 const CACHE_TTL_MS = 30_000;
@@ -72,7 +73,12 @@ export class ComplianceEnforcementHookImpl implements ComplianceEnforcementHook 
    * Map the effective policy onto per-plugin settings overrides, mirroring
    * the mapping ComplianceService.getReport presents as enforced controls:
    * the security scanner gets the policy's severity threshold + blocking
-   * mode; the PII filter runs with its registered settings.
+   * mode; the PII filter gets its category selection.
+   *
+   * The PII arm used to be `{}` -- the policy's piiCategories reached this
+   * function and stopped here, so four checkboxes on the settings page
+   * changed nothing about what got masked while the report claimed they
+   * had. Both sides now call piiCategoriesToSettings().
    */
   private toEnforcement(policy: EffectiveCompliancePolicy): ComplianceEnforcement | null {
     if (!policy.enforcedPlugins?.length) return null;
@@ -84,7 +90,7 @@ export class ComplianceEnforcementHookImpl implements ComplianceEnforcementHook 
               severityThreshold: policy.securityThreshold,
               blockOnThreat: policy.blockOnViolation,
             }
-          : {};
+          : piiCategoriesToSettings(policy.piiCategories);
     }
     return { enforcedPlugins, blockOnViolation: policy.blockOnViolation };
   }

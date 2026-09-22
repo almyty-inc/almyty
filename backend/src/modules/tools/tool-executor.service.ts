@@ -37,6 +37,7 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
 import { sanitizeToolParameters } from '../../common/security/input-sanitizer';
 import { verifyToolIntegrity } from '../../common/security/tool-integrity';
+import { decideToolCaller } from '../../common/security/gateway-tool-permissions';
 import { AuditLogService } from '../audit-log/audit-log.service';
 
 import {
@@ -141,7 +142,8 @@ export class ToolExecutorService {
         throw new Error(`Tool is ${tool.status}, cannot execute`);
       }
 
-      // Resolve the gateway tool's security policy before dispatch.
+      // Resolve the gateway tool's security policy and access list before
+      // dispatch.
       //
       // `gateway_tools.securityPolicy` had a column, a PATCH endpoint and a
       // dashboard form, and no reader anywhere in backend/src: a user could
@@ -149,21 +151,34 @@ export class ToolExecutorService {
       // save, and have every setting ignored on the next call. This is where
       // it is read; the executors enforce it at each outbound request.
       //
-      // Only the gateway paths carry a gatewayId, which is correct: the
-      // policy is scoped to one tool on one gateway, and a direct API call
-      // or an agent node that did not come through a gateway is not governed
-      // by it. A caller that already holds the row can pass `securityPolicy`
-      // itself (including explicit `null`) to skip this query.
-      if (options.securityPolicy === undefined && options.gatewayId) {
-        const gatewayTool = await this.gatewayToolRepository.findOne({
+      // `gateway_tools.permissions` was the same story one column over.
+      // GatewayTool.hasPermission() implemented allowedUsers, allowedRoles,
+      // allowedOrganizations and requiredScopes, the PATCH endpoint accepted
+      // all four, and nothing in src or ee ever called the method -- so a
+      // tool restricted to two named users answered anyone who could reach
+      // the gateway.
+      //
+      // Only the gateway paths carry a gatewayId, which is correct: both are
+      // scoped to one tool on one gateway, and a direct API call or an agent
+      // node that did not come through a gateway is not governed by them. A
+      // caller that already holds the row can pass `securityPolicy` itself
+      // (including explicit `null`) to skip re-reading that field, but the
+      // access list is always read here: an access control a caller can opt
+      // out of by passing one unrelated argument is not an access control.
+      let gatewayTool: GatewayTool | null = null;
+      if (options.gatewayId) {
+        gatewayTool = await this.gatewayToolRepository.findOne({
           where: { gatewayId: options.gatewayId, toolId: tool.id },
-          select: { id: true, securityPolicy: true },
+          select: { id: true, securityPolicy: true, permissions: true },
         });
-        options = { ...options, securityPolicy: gatewayTool?.securityPolicy ?? null };
+        if (options.securityPolicy === undefined) {
+          options = { ...options, securityPolicy: gatewayTool?.securityPolicy ?? null };
+        }
       }
 
       // User permission check (skipped for MCP unauthenticated sessions,
       // where gateway-level auth handles access control).
+      let membershipRoles: string[] = [];
       if (options.userId) {
         const user = await this.userRepository.findOne({
           where: { id: options.userId },
@@ -173,6 +188,26 @@ export class ToolExecutorService {
         if (!user?.hasPermissionInOrganization(options.organizationId, 'use_tools')) {
           throw new Error('User does not have permission to use tools in this organization');
         }
+
+        membershipRoles = (user.organizationMemberships ?? [])
+          .filter((m) => m.organizationId === options.organizationId)
+          .map((m) => m.role);
+      }
+
+      // The per-tool access list, if this gateway tool has one. Absent
+      // permissions means "no restriction" so this changes nothing for a
+      // tool nobody has narrowed. An anonymous MCP session reaching a tool
+      // with an explicit allowedUsers list is refused, which is the point
+      // of writing the list. Decided by the pure function rather than the
+      // entity method so it works on whatever the repository returned.
+      const access = decideToolCaller(gatewayTool?.permissions, {
+        userId: options.userId,
+        roles: membershipRoles,
+        organizationId: options.organizationId,
+        scopes: options.scopes,
+      });
+      if (!access.allowed) {
+        throw new Error(`Refused by this gateway tool's permissions: ${access.reason}`);
       }
 
       // Parameter schema validation (if the tool has one).

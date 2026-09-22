@@ -180,8 +180,10 @@ describe('gateway_tools.securityPolicy is enforced at tool-execution time', () =
     expect(result.success).toBe(true);
   });
 
-  it('honours a policy the caller already resolved, without re-querying', async () => {
-    const { service, gatewayToolRepository } = buildExecutor();
+  it('honours a policy the caller already resolved rather than overwriting it', async () => {
+    const { service, gatewayToolRepository } = buildExecutor({
+      gatewayTool: { id: 'gt-1', securityPolicy: { allowedDomains: ['upstream.example.com'] } },
+    });
 
     const result = await service.executeTool('tool-1', {}, {
       ...baseOptions,
@@ -189,7 +191,10 @@ describe('gateway_tools.securityPolicy is enforced at tool-execution time', () =
       securityPolicy: { blockedDomains: ['upstream.example.com'] },
     });
 
-    expect(gatewayToolRepository.findOne).not.toHaveBeenCalled();
+    // The row is still read -- gateway_tools.permissions is an access
+    // control and must not be skippable by passing an unrelated argument --
+    // but the caller's policy wins over the row's.
+    expect(gatewayToolRepository.findOne).toHaveBeenCalled();
     expect(result.success).toBe(false);
     expect(result.error).toContain('blocked-domain list');
     expect(mockedAxios).not.toHaveBeenCalled();

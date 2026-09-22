@@ -49,6 +49,7 @@ describe('AlmytyMcpService', () => {
     findAllByOrganization: jest.fn().mockResolvedValue({ apis: [], total: 0 }),
     create: jest.fn().mockResolvedValue({ id: 'api-1', name: 'Test' }),
     importSchema: jest.fn().mockResolvedValue({ api: {}, schema: {}, operations: [], resources: [], tools: [] }),
+    fetchSchemaFromUrl: jest.fn().mockResolvedValue('{"openapi":"3.0.0"}'),
     remove: jest.fn().mockResolvedValue(undefined),
   };
   const mockToolsService: any = {
@@ -458,18 +459,19 @@ describe('AlmytyMcpService', () => {
       expect(res.result.isError).toBeUndefined();
     });
 
-    it('import_schema fetches URL and passes content to ApisService', async () => {
+    it('import_schema fetches the URL through the SSRF-guarded helper', async () => {
       const res = await call('tools/call', {
         name: 'import_schema',
         arguments: { apiId: 'api-1', schemaUrl: 'https://example.com/openapi.json', generateTools: true },
       });
-      // Verifies: URL is fetched, then job is queued (not sync import)
-      // Gated now: validateUrl + DNS-pinning agents + no redirect, the
-      // same shape the HTTP twin of this feature has always had.
-      expect(mockAxiosGet).toHaveBeenCalledWith(
-        'https://example.com/openapi.json',
-        expect.objectContaining({ timeout: 30000, maxRedirects: 0 }),
-      );
+      // Two assertions merged. This one keeps the MCP half: the tool
+      // delegates and never opens its own connection, so a second gate
+      // cannot drift away from the first. The transport half that #696
+      // asserted here (validateUrl + pinned agents + maxRedirects: 0)
+      // moved with the transport, into the apis-import helper's own spec,
+      // because that is where the axios call now lives.
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+      expect(mockApisService.fetchSchemaFromUrl).toHaveBeenCalledWith('https://example.com/openapi.json');
       expect(mockSchemaImportQueue.add).toHaveBeenCalledWith(
         'import',
         expect.objectContaining({

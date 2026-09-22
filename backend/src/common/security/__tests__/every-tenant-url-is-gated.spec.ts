@@ -41,8 +41,12 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
     ['modules/gateways/channels/adapters/microsoft-teams.adapter.ts', 'service_url', /assertEgress\(/],
     // test-connection probes on the same configuration
     ['modules/gateways/channels/channel-gateway.service.ts', 'webhook_url / api_url / homeserver_url', /safeFetch\(/],
-    // MCP tool surface
-    ['modules/mcp/almyty-mcp.service.ts', 'import_schema schemaUrl', /assertOutboundUrlAllowed\(/],
+    // Schema import. Both doors -- the REST route and the MCP
+    // import_schema tool -- now come through this one helper, so the gate
+    // is asserted where the transport is. #696 gated the MCP copy inline
+    // and left this helper (the older, REST door) unpinned; #697 collapsed
+    // them, which is why the row moved.
+    ['modules/apis/apis-import.helper.ts', 'importSchema url + MCP import_schema schemaUrl', /assertOutboundUrlAllowed\(/],
     // A2A
     ['modules/a2a/a2a-client.service.ts', 'externalAgent.baseRpcUrl', /assertOutboundUrlAllowed\(/],
     // Model deployments — providerConfig
@@ -71,7 +75,7 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
     ['modules/gateways/channels/adapters/irc.adapter.ts', /egressInit/],
     ['modules/gateways/channels/adapters/microsoft-teams.adapter.ts', /egressInit/],
     ['modules/a2a/a2a-client.service.ts', /maxRedirects: 0/],
-    ['modules/mcp/almyty-mcp.service.ts', /maxRedirects: 0/],
+    ['modules/apis/apis-import.helper.ts', /maxRedirects: 0/],
     ['modules/tools/executors/tool-grpc.executor.ts', /maxRedirects: 0/],
     ['modules/model-deployments/adapters/ollama.adapter.ts', /maxRedirects: 0/],
     ['modules/model-deployments/adapters/custom-endpoint.adapter.ts', /maxRedirects: 0/],
@@ -108,6 +112,30 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
     expect(read(join(EE, 'modules/audit-export/audit-stream.service.ts'))).toMatch(
       /redirect: 'error'/,
     );
+  });
+
+  /**
+   * The schema fetch has one door.
+   *
+   * Two audits found the MCP `import_schema` bypass independently, and the
+   * two fixes disagreed: one gated the MCP copy inline, the other routed
+   * it into the helper the REST route already used. Inline left the two
+   * doors enforcing different rules -- the MCP one pinned DNS and the
+   * older REST one did not -- which is the same shape as the original bug
+   * one level up. So: one helper, and the tool must not dial for itself.
+   */
+  it('the schema helper pins DNS, not just the string', () => {
+    const helper = read(join(SRC, 'modules/apis/apis-import.helper.ts'));
+    expect(helper).toMatch(/httpsAgent: ssrfSafeHttpsAgent/);
+    expect(helper).toMatch(/httpAgent: ssrfSafeHttpAgent/);
+  });
+
+  it('the MCP import_schema tool delegates instead of opening its own connection', () => {
+    const mcp = read(join(SRC, 'modules/mcp/almyty-mcp.service.ts'));
+    expect(mcp).toMatch(/fetchSchemaFromUrl\(String\(args\.schemaUrl\)\)/);
+    // The bypass itself, and the inline copy that replaced it: neither
+    // belongs in this file now.
+    expect(mcp).not.toMatch(/axios\.get\(/);
   });
 
   it('names files that exist, so this guard cannot pass by reading nothing', () => {

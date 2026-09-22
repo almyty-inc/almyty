@@ -24,6 +24,22 @@ import { PROVIDER_PROFILES, profileAuthHeaders, profileBaseUrl, providerProfile 
 export enum LlmProviderStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
+  /**
+   * Not assigned anywhere in this build, and deliberately so.
+   *
+   * `status` is the operator's intent; `isHealthy` is what the last probe
+   * observed. The health sweep (llm-providers.service.ts performHealthCheck)
+   * writes isHealthy / lastError with a partial UPDATE and never touches
+   * status, so a provider an operator enabled stays enabled through a
+   * transient upstream failure.
+   *
+   * The entity used to carry an `updateHealthStatus()` that flipped status
+   * to ERROR. It had no callers, so ERROR was never written -- and
+   * onboarding's `status: Not(ERROR)` filter therefore excluded nothing
+   * while reading as a health gate. If you want "is this provider usable",
+   * the pair is `status === ACTIVE && isHealthy`, which is what
+   * checkHealth() and the router already do. Do not filter on this value.
+   */
   ERROR = 'error',
   MAINTENANCE = 'maintenance',
 }
@@ -323,19 +339,6 @@ export class LlmProvider {
     this.totalTokensUsed += tokens;
     this.totalCost += cost;
     this.lastRequestAt = new Date();
-  }
-
-  updateHealthStatus(isHealthy: boolean, error?: string): void {
-    this.isHealthy = isHealthy;
-    this.lastHealthCheckAt = new Date();
-    
-    if (!isHealthy && this.status === LlmProviderStatus.ACTIVE) {
-      this.status = LlmProviderStatus.ERROR;
-      this.lastError = error;
-    } else if (isHealthy && this.status === LlmProviderStatus.ERROR) {
-      this.status = LlmProviderStatus.ACTIVE;
-      this.lastError = null;
-    }
   }
 
   supportsToolUse(): boolean {

@@ -39,6 +39,10 @@ describe('routing rejection reasons speak the product vocabulary', () => {
     ['region not allowed', model({ region: 'us' }), { regions: ['eu'] }],
     ['missing capability', model({ capabilities: { tools: false } }), { capabilities: { tools: true } }],
     ['too expensive', model({ pricing: { inPerMTok: 50, outPerMTok: 100, currency: 'USD' } }), { budgetHeadroomCents: 500 }],
+    ['context unknown', model({ contextLength: null }), { minContextLength: 128_000 }],
+    ['context too small', model({ contextLength: 4_096 }), { minContextLength: 128_000 }],
+    ['price unknown against a cap', model({ pricing: null }), { maxBlendedPricePerMTok: 5 }],
+    ['over the price cap', model({ pricing: { inPerMTok: 50, outPerMTok: 100, currency: 'USD' } }), { maxBlendedPricePerMTok: 5 }],
   ];
 
   it.each(branches)('%s', (_name, card, policy) => {

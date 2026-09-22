@@ -25,6 +25,15 @@ export interface RoutingPolicy {
   regions?: string[];
   /** Capabilities the request needs; each true flag must be present on the card. */
   capabilities?: Partial<ModelCapabilities>;
+  /** Smallest context window the request will accept; a card with an unknown one is skipped. */
+  minContextLength?: number;
+  /**
+   * Hard ceiling on blended price per million tokens. Distinct from
+   * `budgetHeadroomCents`, which is what is left to spend this period:
+   * this one is a property of the job ("never answer this on a frontier
+   * model"), so it holds however much budget remains.
+   */
+  maxBlendedPricePerMTok?: number;
   objective?: RouteObjective;
   /** Explicit order of card ids or vendor model ids; wins over the objective. */
   fallbackChain?: string[];
@@ -87,6 +96,29 @@ export function eligible(card: Model, policy: RoutingPolicy): { ok: true } | { o
   }
   for (const [cap, needed] of Object.entries(policy.capabilities ?? {})) {
     if (needed && !(card.capabilities as any)?.[cap]) return { ok: false, reason: `lacks ${cap}` };
+  }
+  if (policy.minContextLength != null) {
+    // Same rule as regions: a requirement is a statement about the job, so
+    // a card that cannot prove it meets the minimum does not qualify.
+    // Silently accepting an unknown context window is how a 4k card ends
+    // up filling a role that asked for 200k.
+    if (card.contextLength == null) {
+      return { ok: false, reason: `context length unknown, policy requires at least ${policy.minContextLength}` };
+    }
+    if (card.contextLength < policy.minContextLength) {
+      return { ok: false, reason: `context ${card.contextLength} is below the required ${policy.minContextLength}` };
+    }
+  }
+  if (policy.maxBlendedPricePerMTok != null) {
+    const score = priceScore(card);
+    // Unpriced is not free. An explicit ceiling is a cost statement, and a
+    // card with no price cannot prove it sits under one.
+    if (score == null) {
+      return { ok: false, reason: `price unknown, policy caps blended price at $${policy.maxBlendedPricePerMTok}/M` };
+    }
+    if (score > policy.maxBlendedPricePerMTok) {
+      return { ok: false, reason: `blended $${score.toFixed(2)}/M is more than the $${policy.maxBlendedPricePerMTok}/M this policy allows` };
+    }
   }
   if (policy.budgetHeadroomCents != null) {
     const score = priceScore(card);

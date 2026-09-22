@@ -44,7 +44,6 @@ const STATUS_LABEL: Record<string, string> = {
   running: 'Building',
   succeeded: 'Ready',
   failed: 'Failed',
-  cancelled: 'Cancelled',
 }
 
 /**

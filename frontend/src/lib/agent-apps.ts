@@ -231,7 +231,7 @@ export interface BuildPlatform {
   } | null
 }
 
-export type BuildStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type BuildStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
 export interface AppBuild {
   id: string
