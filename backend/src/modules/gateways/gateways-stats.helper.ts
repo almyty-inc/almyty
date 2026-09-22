@@ -9,6 +9,27 @@ import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { GatewaysService } from './gateways.service';
 
+/**
+ * How many metric rows one gateway's stats will look at.
+ *
+ * Enough to be representative of a window, small enough that a busy
+ * gateway cannot take the pod down by having its detail page opened.
+ */
+const METRIC_SAMPLE_LIMIT = 50_000;
+
+/**
+ * How many skill matches one search will answer with.
+ *
+ * The search runs over every tool in the organization; a Stripe-class
+ * import is thousands of them and a one-letter query matches most.
+ */
+const SKILL_SEARCH_LIMIT = 200;
+
+/** The slug form used for org, gateway and tool segments of a skillRef. */
+function slugify(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
 @Injectable()
 export class GatewaysStatsHelper {
   private readonly logger = new Logger(GatewaysStatsHelper.name);
@@ -46,11 +67,18 @@ export class GatewaysStatsHelper {
     // silently returning empty metrics for its entire life.
     // Same class of dead code as the `{$in: ...}` fix in
     // users.service.bulkUpdate and tool-executor.service.
+    // Windowed, and bounded. At two metric rows per HTTP request a busy
+    // gateway writes ~1.7M rows for a `day` window and ~50M for `month`,
+    // all of which were loaded and then filtered in JS -- on the query
+    // the gateway detail page runs on every visit.
     const metrics = await this.usageMetricRepository.find({
       where: {
         gatewayId: gateway.id,
         createdAt: MoreThanOrEqual(since),
       },
+      select: { id: true, type: true, value: true, status: true, userId: true, createdAt: true },
+      order: { createdAt: 'DESC' },
+      take: METRIC_SAMPLE_LIMIT,
     });
 
     const requestMetrics = metrics.filter(m => m.type === 'request_count');
@@ -118,15 +146,23 @@ export class GatewaysStatsHelper {
     const successfulRequests = gateways.reduce((sum, g) => sum + g.successfulRequests, 0);
     const successRate = totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0;
 
-    // Get usage metrics for average response time
-    const metrics = await this.usageMetricRepository.find({
-      where: { organizationId },
-    });
-
-    const responseTimeMetrics = metrics.filter(m => m.type === 'response_time');
-    const averageResponseTime = responseTimeMetrics.length > 0
-      ? responseTimeMetrics.reduce((sum, m) => sum + m.value, 0) / responseTimeMetrics.length
-      : 0;
+    // One average, computed by the database.
+    //
+    // This loaded every usage_metrics row the organization had ever
+    // written -- no window, no take -- to compute a single mean. The
+    // global request-logging interceptor writes two rows per HTTP
+    // request, each with a metadata json blob, so the table grows at
+    // twice the request rate: ~1.7M rows/day at a modest 10 req/s. One
+    // call to this endpoint was enough to OOM the pod within days of an
+    // org going live, and the sibling method above already windows its
+    // own query.
+    const { avg } = await this.usageMetricRepository
+      .createQueryBuilder('metric')
+      .select('AVG(metric.value)', 'avg')
+      .where('metric.organizationId = :organizationId', { organizationId })
+      .andWhere('metric.type = :type', { type: 'response_time' })
+      .getRawOne<{ avg: string | null }>() ?? { avg: null };
+    const averageResponseTime = avg ? Number(avg) : 0;
 
     // Get top gateways by request count
     const topGateways = gateways
@@ -208,52 +244,59 @@ export class GatewaysStatsHelper {
       throw new NotFoundException('Organization not found');
     }
 
-    const orgSlug = organization.slug || organization.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const orgSlug = organization.slug || slugify(organization.name);
 
-    const gateways = await this.gatewayRepository.find({
-      where: { organizationId, status: GatewayStatus.ACTIVE },
-      relations: { tools: { tool: true } },
+    // Match in SQL, and bound the answer.
+    //
+    // This loaded every active gateway with `relations: { tools: { tool:
+    // true } }` -- every Tool entity in the organization, `code`,
+    // `parameters` and `examples` included -- and then did
+    // `toLowerCase().includes()` over them in JS. One ILIKE over the two
+    // columns actually being matched does the same thing on the index
+    // side of the wire, and returns only the columns the result shape
+    // needs.
+    const escaped = query.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+    const rows = await this.gatewayRepository
+      .createQueryBuilder('gateway')
+      .innerJoin('gateway.tools', 'gatewayTool')
+      .innerJoin('gatewayTool.tool', 'tool')
+      .select('gateway.id', 'gatewayId')
+      .addSelect('gateway.name', 'gatewayName')
+      .addSelect('gateway.endpoint', 'gatewayEndpoint')
+      .addSelect('tool.id', 'toolId')
+      .addSelect('tool.name', 'toolName')
+      .addSelect('tool.description', 'toolDescription')
+      .where('gateway.organizationId = :organizationId', { organizationId })
+      .andWhere('gateway.status = :status', { status: GatewayStatus.ACTIVE })
+      .andWhere('gatewayTool.isActive = true')
+      .andWhere('(tool.name ILIKE :q OR tool.description ILIKE :q)', { q: `%${escaped}%` })
+      .orderBy('gateway.name', 'ASC')
+      .addOrderBy('tool.name', 'ASC')
+      .limit(SKILL_SEARCH_LIMIT)
+      .getRawMany<{
+        gatewayId: string;
+        gatewayName: string;
+        gatewayEndpoint: string | null;
+        toolId: string;
+        toolName: string;
+        toolDescription: string | null;
+      }>();
+
+    return rows.map((row) => {
+      const gatewaySlug = row.gatewayEndpoint?.replace(/^\//, '') || slugify(row.gatewayName);
+      const toolSlug = slugify(row.toolName);
+      return {
+        toolId: row.toolId,
+        toolName: row.toolName,
+        toolDescription: row.toolDescription || '',
+        gatewayId: row.gatewayId,
+        gatewayName: row.gatewayName,
+        orgSlug,
+        gatewaySlug,
+        skillRef: `${orgSlug}/${gatewaySlug}/${toolSlug}`,
+      };
     });
-
-    const results: Array<{
-      toolId: string;
-      toolName: string;
-      toolDescription: string;
-      gatewayId: string;
-      gatewayName: string;
-      orgSlug: string;
-      gatewaySlug: string;
-      skillRef: string;
-    }> = [];
-
-    const searchLower = query.toLowerCase();
-
-    for (const gateway of gateways) {
-      const gatewaySlug = gateway.endpoint?.replace(/^\//, '') || gateway.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      const activeTools = gateway.tools?.filter(gt => gt.isActive && gt.tool) || [];
-
-      for (const gt of activeTools) {
-        const tool = gt.tool;
-        const nameMatch = tool.name?.toLowerCase().includes(searchLower);
-        const descMatch = tool.description?.toLowerCase().includes(searchLower);
-
-        if (nameMatch || descMatch) {
-          const toolSlug = tool.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          results.push({
-            toolId: tool.id,
-            toolName: tool.name,
-            toolDescription: tool.description || '',
-            gatewayId: gateway.id,
-            gatewayName: gateway.name,
-            orgSlug,
-            gatewaySlug,
-            skillRef: `${orgSlug}/${gatewaySlug}/${toolSlug}`,
-          });
-        }
-      }
-    }
-
-    return results;
   }
 
 
@@ -275,6 +318,25 @@ export class GatewaysStatsHelper {
     };
   }
 
+  /**
+   * The bucket a timestamp falls in, for a given timeframe.
+   *
+   * Same grouping the per-bucket `filter` used to express inline: local
+   * date + hour, local date, ISO-ish year + week number, or year + month.
+   */
+  private trendBucketKey(d: Date, timeframe: 'hour' | 'day' | 'week' | 'month'): string {
+    switch (timeframe) {
+      case 'hour':
+        return `${d.toDateString()}#${d.getHours()}`;
+      case 'day':
+        return d.toDateString();
+      case 'week':
+        return `${d.getFullYear()}#W${this.getWeekNumber(d)}`;
+      case 'month':
+        return `${d.getFullYear()}#${d.getMonth()}`;
+    }
+  }
+
   calculateRequestTrend(
     metrics: UsageMetric[],
     timeframe: 'hour' | 'day' | 'week' | 'month'
@@ -288,6 +350,23 @@ export class GatewaysStatsHelper {
 
     const interval = intervals[timeframe];
     const trend: Array<{ date: string; requests: number; success: number; failed: number }> = [];
+
+    // One pass over the rows, bucketed by key. This used to re-scan the
+    // whole array once per bucket: a `day` timeframe against the 50,000-row
+    // cap meant 30 x 50,000 Date constructions and toDateString() calls per
+    // page view, synchronous, on the event loop.
+    const buckets = new Map<string, { requests: number; success: number }>();
+    for (const m of metrics) {
+      if (m.type !== 'request_count') continue;
+      const key = this.trendBucketKey(new Date(m.createdAt), timeframe);
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = { requests: 0, success: 0 };
+        buckets.set(key, bucket);
+      }
+      bucket.requests += m.value;
+      if (m.status === 'success') bucket.success += m.value;
+    }
 
     for (let i = interval - 1; i >= 0; i--) {
       let date: Date;
@@ -312,35 +391,15 @@ export class GatewaysStatsHelper {
           break;
       }
 
-      const periodMetrics = metrics.filter(m => {
-        const metricDate = new Date(m.createdAt);
-        switch (timeframe) {
-          case 'hour':
-            return metricDate.getHours() === date.getHours() &&
-                   metricDate.toDateString() === date.toDateString();
-          case 'day':
-            return metricDate.toDateString() === date.toDateString();
-          case 'week':
-            return this.getWeekNumber(metricDate) === this.getWeekNumber(date) &&
-                   metricDate.getFullYear() === date.getFullYear();
-          case 'month':
-            return metricDate.getMonth() === date.getMonth() &&
-                   metricDate.getFullYear() === date.getFullYear();
-          default:
-            return false;
-        }
-      });
-
-      const requestMetrics = periodMetrics.filter(m => m.type === 'request_count');
-      const requests = requestMetrics.reduce((sum, m) => sum + m.value, 0);
-      const success = requestMetrics.filter(m => m.status === 'success').reduce((sum, m) => sum + m.value, 0);
-      const failed = requests - success;
+      const bucket = buckets.get(this.trendBucketKey(date, timeframe));
+      const requests = bucket?.requests ?? 0;
+      const success = bucket?.success ?? 0;
 
       trend.push({
         date: dateKey,
         requests,
         success,
-        failed,
+        failed: requests - success,
       });
     }
 
@@ -353,11 +412,34 @@ export class GatewaysStatsHelper {
     return Math.ceil((date.getDay() + 1 + numberOfDays) / 7);
   }
 
+  /**
+   * Every active gateway of an organization, with the organization.
+   *
+   * Without its tools: this carried `relations: { tools: { tool: true } }`
+   * and neither caller ever read them. `gateway-info`'s all-skills route
+   * uses id/name/endpoint and `gateway.organization`, then asks the skill
+   * generator, which loads the tools it needs itself; `gateway-skills`
+   * used the list for `gateways[0]?.organization` alone and now asks for
+   * the organization directly.
+   */
   async getAllUserGateways(organizationId: string): Promise<Gateway[]> {
     return this.gatewayRepository.find({
       where: { organizationId, status: GatewayStatus.ACTIVE },
-      relations: { tools: { tool: true }, organization: true },
+      relations: { organization: true },
     });
+  }
+
+  /**
+   * The organization a skillRef's `orgSlug` segment comes from.
+   *
+   * Its own lookup because the caller used to reach it through
+   * `getAllUserGateways(...)[0].organization` -- every active gateway,
+   * every tool on each, to read one row that a primary-key lookup
+   * answers. It also stops the slug depending on whether the org happens
+   * to have an active gateway.
+   */
+  async getSkillContextOrganization(organizationId: string): Promise<Organization | null> {
+    return this.organizationRepository.findOne({ where: { id: organizationId } });
   }
 
 }

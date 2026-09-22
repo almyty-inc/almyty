@@ -300,12 +300,12 @@ export function CreateApiDialog({
               ? 'Import a schema to auto-generate operations and tools, or skip this step.'
               : editingApi
                 ? 'Update your API configuration and settings.'
-                : 'Connect an existing API to automatically generate tools for LLM usage.'}
+                : 'Connect an existing API to automatically generate tools your agents can call.'}
           </DialogDescription>
         </DialogHeader>
         {createStep === 'schema' && createdApiForSchema ? (
           <div className="space-y-6">
-            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 dark:bg-green-500/10 dark:border-green-500/30 rounded-lg">
               <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
               <div>
                 <p className="font-medium text-sm">API "{createdApiForSchema.name}" created</p>
@@ -330,8 +330,8 @@ export function CreateApiDialog({
               </TabsList>
               <TabsContent value="file" className="space-y-3 mt-3">
                 <div>
-                  <Label>Schema File</Label>
-                  <Input
+                  <Label htmlFor="create-api-schema-file">Schema File</Label>
+                  <Input id="create-api-schema-file"
                     type="file"
                     accept=".json,.yaml,.yml,.graphql,.gql,.wsdl,.xml,.proto"
                     onChange={(e) => {
@@ -349,7 +349,7 @@ export function CreateApiDialog({
               </TabsContent>
               <TabsContent value="url" className="space-y-3 mt-3">
                 <div>
-                  <Label>Schema URL</Label>
+                  <Label htmlFor="inlineSchemaUrl">Schema URL</Label>
                   <Input
                     id="inlineSchemaUrl"
                     type="url"
@@ -360,7 +360,7 @@ export function CreateApiDialog({
               </TabsContent>
               <TabsContent value="paste" className="space-y-3 mt-3">
                 <div>
-                  <Label>Schema Content</Label>
+                  <Label htmlFor="inlineSchemaContent">Schema Content</Label>
                   <Textarea
                     id="inlineSchemaContent"
                     placeholder="Paste your schema here..."
@@ -422,7 +422,7 @@ export function CreateApiDialog({
                 {...createForm.register('name')}
               />
               {createForm.formState.errors.name && (
-                <p className="text-sm text-red-500 mt-1">
+                <p className="text-sm text-destructive mt-1">
                   {createForm.formState.errors.name.message}
                 </p>
               )}
@@ -610,7 +610,7 @@ export function CreateApiDialog({
                   {...createForm.register('baseUrl')}
                 />
                 {createForm.formState.errors.baseUrl && (
-                  <p className="text-sm text-red-500 mt-1">
+                  <p className="text-sm text-destructive mt-1">
                     {createForm.formState.errors.baseUrl.message}
                   </p>
                 )}

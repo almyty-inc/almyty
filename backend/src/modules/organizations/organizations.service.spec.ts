@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
-import { OrganizationsService } from './organizations.service';
+import { OrganizationsService, USER_SECRET_FIELDS } from './organizations.service';
 import { OrganizationsInvitesHelper } from './organizations-invites.helper';
 import { TeamMembershipHelper } from './team-membership.helper';
 import { Organization } from '../../entities/organization.entity';
@@ -11,6 +11,7 @@ import { Team } from '../../entities/team.entity';
 import { UserTeam } from '../../entities/user-team.entity';
 import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
+import { DataSource, EntitySchema } from 'typeorm';
 
 describe('OrganizationsService', () => {
   let service: OrganizationsService;
@@ -37,6 +38,10 @@ describe('OrganizationsService', () => {
             delete: jest.fn(),
             remove: jest.fn(),
             createQueryBuilder: jest.fn(),
+            // Pending invites are appended by the database now, because
+            // two admins inviting at once both wrote their own full copy
+            // of the array and one invite was silently lost.
+            query: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -131,6 +136,46 @@ describe('OrganizationsService', () => {
   });
 
   describe('create', () => {
+    it('checks the generated slug before saving when the optional slug is omitted', async () => {
+      const savedOrg = { id: 'org-new', name: 'QA First Run', slug: 'qa-first-run' };
+      // Compile the service's real find options through TypeORM, not only
+      // a permissive repository mock. No socket is needed to reproduce
+      // TypeORM's strict undefined-WHERE rejection seen on staging.
+      const ds = new DataSource({
+        type: 'postgres',
+        invalidWhereValuesBehavior: { undefined: 'throw' },
+        entities: [new EntitySchema({
+          name: 'OrganizationQueryProbe',
+          columns: { id: { type: String, primary: true }, name: { type: String }, slug: { type: String } },
+        })],
+      });
+      await (ds as any).buildMetadatas();
+      organizationRepository.findOne.mockImplementationOnce(async (options: any) => {
+        ds.getRepository('OrganizationQueryProbe').createQueryBuilder('org').setFindOptions(options).getSql();
+        return null;
+      }).mockResolvedValueOnce(savedOrg);
+      organizationRepository.create.mockImplementation((value: any) => value);
+      organizationRepository.save.mockResolvedValue(savedOrg);
+
+      await service.create({ name: 'QA First Run' }, 'user-1');
+
+      expect(organizationRepository.findOne).toHaveBeenNthCalledWith(1, {
+        where: [{ name: 'QA First Run' }, { slug: 'qa-first-run' }],
+      });
+      expect(organizationRepository.create).toHaveBeenCalledWith({ name: 'QA First Run', slug: 'qa-first-run' });
+    });
+
+    it('rejects a generated slug collision before attempting an insert', async () => {
+      organizationRepository.findOne.mockImplementation(async ({ where }: any) =>
+        where.some((part: any) => part.slug === 'qa-first-run')
+          ? { id: 'existing-org', name: 'QA-First Run', slug: 'qa-first-run' }
+          : null,
+      );
+
+      await expect(service.create({ name: 'QA First Run' }, 'user-1')).rejects.toThrow(ConflictException);
+      expect(organizationRepository.save).not.toHaveBeenCalled();
+    });
+
     it('should create organization successfully', async () => {
       const createDto = {
         name: 'New Organization',
@@ -203,12 +248,25 @@ describe('OrganizationsService', () => {
       ];
 
       userOrganizationRepository.find.mockResolvedValue(mockMemberships);
+      // findAll also counts members per organization, because the list
+      // page prints that number and used to read it off a relation this
+      // query does not load.
+      userOrganizationRepository.createQueryBuilder = jest.fn(() => ({
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn().mockResolvedValue([{ organizationId: 'org-1', count: '3' }]),
+      }));
 
       const result = await service.findAll('user-1');
 
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe('org-1');
       expect(result[1].id).toBe('org-2');
+      expect((result[0] as any).memberCount).toBe(3);
+      expect((result[1] as any).memberCount).toBe(0);
     });
   });
 
@@ -388,7 +446,7 @@ describe('OrganizationsService', () => {
       userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
       userOrganizationRepository.remove.mockResolvedValue(mockMembership);
 
-      await service.removeMember('org-1', 'user-1');
+      await service.removeMember('org-1', 'user-1', 'actor-1');
 
       expect(userOrganizationRepository.remove).toHaveBeenCalledWith(mockMembership);
     });
@@ -401,9 +459,120 @@ describe('OrganizationsService', () => {
       userOrganizationRepository.findOne.mockResolvedValue(mockMembership);
       userOrganizationRepository.count.mockResolvedValue(1); // Only one owner
 
-      await expect(service.removeMember('org-1', 'user-1'))
+      await expect(service.removeMember('org-1', 'user-1', 'actor-1'))
         .rejects
         .toThrow(ForbiddenException);
+    });
+
+    /**
+     * updateMemberRole refuses to let an actor touch somebody who
+     * outranks them; removeMember did not state the same rule, so the
+     * DELETE route -- open to `admin` -- let an admin evict the
+     * organization's owners. Deleting the membership is strictly worse
+     * than demoting it, and demoting it was the case already refused.
+     */
+    it('refuses to evict a member who outranks the actor', async () => {
+      const target = { id: 'membership-1', role: OrganizationRole.OWNER };
+      const actor = { id: 'membership-2', role: OrganizationRole.ADMIN };
+
+      userOrganizationRepository.findOne
+        .mockResolvedValueOnce(target)
+        .mockResolvedValueOnce(actor);
+      // Two owners, so the last-owner floor is not what refuses this.
+      userOrganizationRepository.count.mockResolvedValue(2);
+
+      await expect(service.removeMember('org-1', 'owner-user', 'admin-user'))
+        .rejects
+        .toThrow(ForbiddenException);
+
+      expect(userOrganizationRepository.remove).not.toHaveBeenCalled();
+    });
+
+    it('lets an owner evict an admin', async () => {
+      const target = { id: 'membership-1', role: OrganizationRole.ADMIN };
+      const actor = { id: 'membership-2', role: OrganizationRole.OWNER };
+
+      userOrganizationRepository.findOne
+        .mockResolvedValueOnce(target)
+        .mockResolvedValueOnce(actor);
+      userOrganizationRepository.remove.mockResolvedValue(target);
+
+      await service.removeMember('org-1', 'admin-user', 'owner-user');
+
+      expect(userOrganizationRepository.remove).toHaveBeenCalledWith(target);
+    });
+
+    it('refuses an actor who is not a member of the organization', async () => {
+      const target = { id: 'membership-1', role: OrganizationRole.MEMBER };
+
+      userOrganizationRepository.findOne
+        .mockResolvedValueOnce(target)
+        .mockResolvedValueOnce(null);
+
+      await expect(service.removeMember('org-1', 'user-1', 'outsider'))
+        .rejects
+        .toThrow(ForbiddenException);
+
+      expect(userOrganizationRepository.remove).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The invite door has to enforce the same rank rule as the role door.
+   * `@Roles('admin','owner')` guards the endpoint and the role came off
+   * the request body unchecked, so an admin could invite an address they
+   * control as OWNER -- the self-escalation updateMemberRole refuses in
+   * so many words, reached one endpoint over.
+   */
+  describe('inviteUser role precedence', () => {
+    it('refuses an admin inviting somebody as owner', async () => {
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1', name: 'Test Org' });
+      userOrganizationRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        role: OrganizationRole.ADMIN,
+      });
+
+      await expect(
+        service.inviteUser(
+          'org-1',
+          { email: 'accomplice@test.com', role: OrganizationRole.OWNER },
+          'admin-user',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(userOrganizationRepository.save).not.toHaveBeenCalled();
+      expect(organizationRepository.query).not.toHaveBeenCalled();
+    });
+
+    it('lets an owner invite somebody as owner', async () => {
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1', name: 'Test Org' });
+      userOrganizationRepository.findOne.mockResolvedValue({
+        id: 'membership-1',
+        role: OrganizationRole.OWNER,
+      });
+      // No existing user with that address -> the settings-based path.
+      userRepository.findOne.mockResolvedValue(null);
+
+      await service.inviteUser(
+        'org-1',
+        { email: 'cofounder@test.com', role: OrganizationRole.OWNER },
+        'owner-user',
+      );
+
+      expect(organizationRepository.query).toHaveBeenCalled();
+    });
+
+    it('refuses an inviter who is not a member of the organization', async () => {
+      organizationRepository.findOne.mockResolvedValue({ id: 'org-1', name: 'Test Org' });
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.inviteUser(
+          'org-1',
+          { email: 'someone@test.com', role: OrganizationRole.MEMBER },
+          'outsider',
+        ),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -600,6 +769,14 @@ describe('OrganizationsService', () => {
     beforeEach(() => {
       organizationRepository.findOne.mockResolvedValue(mockOrg);
       organizationRepository.update.mockResolvedValue({});
+      // inviteUser resolves the inviter's own membership first, to refuse
+      // a role more privileged than their own. Queue an owner for that
+      // first call so each case below exercises what it was written for;
+      // the once-queue is consumed before whatever the case then sets.
+      userOrganizationRepository.findOne.mockResolvedValueOnce({
+        id: 'inviter-membership',
+        role: OrganizationRole.OWNER,
+      });
     });
 
     it('should store pending invite when user email not found', async () => {
@@ -611,6 +788,35 @@ describe('OrganizationsService', () => {
       const result = await service.inviteUser('org-1', { email: 'nonexistent@test.com', role: OrganizationRole.MEMBER }, 'user-1');
 
       expect(result).toHaveProperty('inviteSent');
+    });
+
+    /**
+     * Two admins inviting two different people, or one double-click.
+     *
+     * pendingInvites is an array inside a json column. Reading it,
+     * pushing, and writing the whole settings object back meant both
+     * writers started from the same snapshot and the second overwrote
+     * the first -- one invite gone from the database while its recipient
+     * held a link that would answer "Invalid or expired invitation"
+     * forever, with nothing logging the loss.
+     */
+    it('appends the pending invite in the database rather than rewriting the array', async () => {
+      userRepository.findOne
+        .mockResolvedValueOnce(mockInviter)
+        .mockResolvedValueOnce(null);
+
+      await service.inviteUser('org-1', { email: 'new@test.com', role: OrganizationRole.MEMBER }, 'user-1');
+
+      expect(organizationRepository.query).toHaveBeenCalled();
+      const [sql, params] = (organizationRepository.query as jest.Mock).mock.calls[0];
+      // Appends one element; it must not send a whole array it read.
+      expect(sql).toMatch(/\|\|\s*\$2::jsonb/);
+      expect(JSON.parse(params[1])).toHaveLength(1);
+      // And the old read-modify-write path must be gone.
+      expect(organizationRepository.update).not.toHaveBeenCalledWith(
+        'org-1',
+        expect.objectContaining({ settings: expect.anything() }),
+      );
     });
 
     it('should throw ConflictException when user is already an active member', async () => {
@@ -701,13 +907,51 @@ describe('OrganizationsService', () => {
         .rejects
         .toThrow(NotFoundException);
     });
+
+    /**
+     * findBySlug hydrates `members: { user: true }`, i.e. whole User
+     * rows, and handed them back untouched -- every member's bcrypt hash
+     * and their live resetPasswordToken, which is an account takeover of
+     * whoever holds it. findOne on the next method up strips them; this
+     * one did not.
+     */
+    it('strips member credentials from the slug lookup too', async () => {
+      const mockOrg = {
+        id: 'org-1',
+        slug: 'test-org',
+        members: [
+          {
+            id: 'membership-1',
+            inviteToken: 'invite-token',
+            user: {
+              id: 'user-1',
+              email: 'owner@test.com',
+              passwordHash: 'bcrypt-hash',
+              resetPasswordToken: 'reset-token',
+              resetPasswordExpires: new Date(),
+              verificationToken: 'verify-token',
+              twoFactorSecret: 'totp-secret',
+            },
+          },
+        ],
+      };
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+
+      const result: any = await service.findBySlug('test-org');
+
+      for (const field of USER_SECRET_FIELDS) {
+        expect(result.members[0].user).not.toHaveProperty(field);
+      }
+      expect(result.members[0]).not.toHaveProperty('inviteToken');
+      expect(result.members[0].user.email).toBe('owner@test.com');
+    });
   });
 
   describe('removeMember', () => {
     it('should throw NotFoundException when member not found', async () => {
       userOrganizationRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.removeMember('org-1', 'user-1'))
+      await expect(service.removeMember('org-1', 'user-1', 'actor-1'))
         .rejects
         .toThrow(NotFoundException);
     });
@@ -793,8 +1037,12 @@ describe('OrganizationsService', () => {
   describe('addTeamMember', () => {
     it('should throw ConflictException when user is already a team member', async () => {
       // assertTeamInOrg runs first and must see a team that belongs
-      // to the requested org before the conflict check fires.
+      // to the requested org before the conflict check fires; the org
+      // membership check runs next, and a user who is not in the
+      // organization now gets NotFound rather than reaching the
+      // already-a-team-member branch at all.
       teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+      userOrganizationRepository.findOne.mockResolvedValue({ userId: 'user-1', organizationId: 'org-1', isActive: true });
 
       const module: TestingModule = await Test.createTestingModule({
         providers: [
@@ -830,6 +1078,17 @@ describe('OrganizationsService', () => {
       await expect(localService.addTeamMember('org-1', 'team-1', 'user-1'))
         .rejects
         .toThrow(ConflictException);
+    });
+
+    it('refuses to add somebody who is not in the organization', async () => {
+      // A team membership for a non-member is a row that means nothing
+      // today and a live hole the day anything trusts user_teams alone.
+      teamRepository.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1' });
+      userOrganizationRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.addTeamMember('org-1', 'team-1', 'outsider'))
+        .rejects
+        .toThrow(NotFoundException);
     });
   });
 

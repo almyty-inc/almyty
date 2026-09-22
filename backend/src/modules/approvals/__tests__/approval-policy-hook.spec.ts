@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { ApprovalsService } from '../approvals.service';
 import { ApprovalRequest } from '../../../entities/approval-request.entity';
 import { ApprovalPolicyApproval } from '../../../common/ee-hooks/ee-hooks';
+import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
 
 /**
  * EE hook seam: on create the optional APPROVAL_POLICY_HOOK may attach a
@@ -30,6 +31,49 @@ class FakeApprovalsRepo {
     if (existing >= 0) this.rows[existing] = r;
     else this.rows.push(r);
     return r;
+  }
+
+  /**
+   * Scoped column update. applyPolicyProgress writes only `payload`
+   * this way, so a reviewer's stale `status`/`decidedBy` can never ride
+   * along over the CAS'd flip.
+   */
+  async update(criteria: any, patch: Partial<ApprovalRequest>) {
+    const row = this.rows.find((r) => r.id === criteria.id);
+    if (!row) return { affected: 0 };
+    Object.assign(row, patch);
+    return { affected: 1 };
+  }
+
+  /**
+   * decide() flips the row with `WHERE id = ? AND status = 'pending'`
+   * and emits only when that matched, so two reviewers acting at once
+   * cannot both decide the same request. Modelled rather than stubbed,
+   * so a fake that always reported a hit could not hide the race.
+   */
+  createQueryBuilder() {
+    const self = this;
+    let patch: Partial<ApprovalRequest> = {};
+    let targetId: string | undefined;
+    let requiredStatus: string | undefined;
+
+    const qb: any = {
+      update: () => qb,
+      set: (values: Partial<ApprovalRequest>) => { patch = values; return qb; },
+      where: (_clause: string, params: any) => { targetId = params.id; return qb; },
+      andWhere: (_clause: string, params?: any) => {
+        if (params?.pending) requiredStatus = params.pending;
+        return qb;
+      },
+      execute: async () => {
+        const row = self.rows.find((r) => r.id === targetId);
+        if (!row) return { affected: 0 };
+        if (requiredStatus && row.status !== requiredStatus) return { affected: 0 };
+        Object.assign(row, patch);
+        return { affected: 1 };
+      },
+    };
+    return qb;
   }
 }
 
@@ -93,8 +137,15 @@ function makeService(hook?: any) {
   const approvals = new FakeApprovalsRepo();
   const runs = new FakeRunsRepo();
   const policy = new FakeAccessPolicy();
-  const svc = new ApprovalsService(approvals as any, runs as any, policy as any, hook);
-  return { svc, approvals, runs, policy };
+  const policyApprovals = new FakePolicyApprovalsRepo();
+  const svc = new ApprovalsService(
+    approvals as any,
+    runs as any,
+    policyApprovals as any,
+    policy as any,
+    hook,
+  );
+  return { svc, approvals, runs, policy, policyApprovals };
 }
 
 const createInput = {
@@ -262,15 +313,30 @@ describe('ApprovalsService — approval policy hook', () => {
       expect(decided.status).toBe('approved');
     });
 
-    it('a throwing scoreProgress falls back to the single gate', async () => {
+    /**
+     * A scorer that threw is not a scorer that said "no policy".
+     *
+     * Both used to land as `progress === null`, and null means "fall
+     * back to the OSS single gate" -- so one transient error inside the
+     * EE scorer silently turned a configured 3-of-5 quorum into a single
+     * approver and let the gated tool call run. That is the one outcome
+     * a human-in-the-loop control must never reach by accident, and it
+     * left no signal behind: the row simply read as approved.
+     */
+    it('holds the gate when scoreProgress throws, rather than approving on one vote', async () => {
       const hook = makeQuorumHook();
       const { svc } = makeService(hook);
       const row = await svc.create(createInput);
 
       hook.scoreProgress.mockRejectedValue(new Error('boom'));
-      const decided = await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' });
 
-      expect(decided.status).toBe('approved');
+      await expect(
+        svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }),
+      ).rejects.toMatchObject({ status: 503 });
+
+      // And the request is still waiting for its quorum.
+      const after = await svc.findOne(row.id, { id: 'u1' }, row.organizationId);
+      expect(after.status).toBe('pending');
     });
   });
 });

@@ -8,8 +8,9 @@ import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { ExecutionTab } from '@/components/agents/execution-tab'
 
-import { agentsApi, memoriesApi, filesApi, versionsApi } from '@/lib/api'
+import { api, agentsApi, memoriesApi, filesApi, versionsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type {
@@ -28,6 +29,8 @@ import { AgentHeader } from '@/components/agents/detail/agent-header'
 import { AgentStats } from '@/components/agents/detail/agent-stats'
 import { ModelIssueBanner } from '@/components/agents/detail/model-issue-banner'
 import { RunFailureBanner } from '@/components/agents/detail/run-failure-banner'
+import { ExecutionPlan } from '@/components/agents/detail/execution-plan'
+import { ReadinessBanner, type ReadinessResult } from '@/components/agents/detail/readiness-banner'
 
 
 import { PipelineCanvas } from '@/components/agents/detail/pipeline-canvas'
@@ -39,6 +42,7 @@ import { InterfacesTab } from '@/components/agents/detail/interfaces-tab'
 import { PromotedSkillsTab } from '@/components/agents/detail/promoted-skills-tab'
 import { ConstraintsTab } from '@/components/agents/detail/constraints-tab'
 import { InvokeDialog } from '@/components/agents/detail/invoke-dialog'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 export function AgentDetailPage() {
   useEffect(() => {
@@ -69,9 +73,16 @@ export function AgentDetailPage() {
   })
 
   const agent = agentData as Agent | undefined
+  const workflow = !!agent && agent.mode !== 'autonomous'
+  const readiness = useQuery({
+    queryKey: ['agent-readiness', id, orgId],
+    queryFn: async () => (await api.get(`/agents/${id}/readiness`)).data.data as ReadinessResult,
+    enabled: workflow,
+    retry: false,
+  })
 
   // Fetch executions
-  const { data: executionsData, error: executionsError } = useQuery({
+  const { data: executionsData, error: executionsError, refetch: refetchExecutions } = useQuery({
     queryKey: ['agent-executions', id],
     queryFn: async () => {
       const d = await agentsApi.getExecutions(id!, { limit: 20 })
@@ -146,7 +157,7 @@ export function AgentDetailPage() {
   // store via the workspace scope. We don't filter by agent_id here
   // because canonical scoping is per-workspace; the memory tab can
   // narrow client-side via tags or use search if needed.
-  const { data: memoriesData } = useQuery({
+  const { data: memoriesData, error: memoriesError, refetch: refetchMemories } = useQuery({
     queryKey: ['agent-memories', id, orgId],
     queryFn: async () => {
       if (!orgId) return []
@@ -163,7 +174,7 @@ export function AgentDetailPage() {
   const memories: Memory[] = Array.isArray(memoriesData) ? memoriesData : []
 
   // Fetch files
-  const { data: filesData } = useQuery({
+  const { data: filesData, error: filesError, refetch: refetchFiles } = useQuery({
     queryKey: ['agent-files', id],
     queryFn: async () => {
       const d = await filesApi.getAll({ agentId: id! })
@@ -217,12 +228,16 @@ export function AgentDetailPage() {
     mutationFn: async () => {
       return agentsApi.duplicate(id!)
     },
-    onSuccess: async () => {
-      success('Agent Duplicated', 'A copy has been created.')
-      queryClient.invalidateQueries({ queryKey: ['agents'] })
+    // Land on the copy. Staying put left the page identical to before
+    // the click, so a duplicate that had in fact been created read as a
+    // button that did nothing.
+    onSuccess: async (copy: any) => {
+      success('Agent duplicated', `"${copy?.name ?? 'The copy'}" was created as a draft.`)
+      await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      if (copy?.id) navigate(`/agents/${copy.id}`)
     },
     onError: (err: any) => {
-      errorNotif('Duplicate Failed', err?.response?.data?.message || err?.message || 'Failed to duplicate')
+      errorNotif('Duplicate Failed', getApiErrorMessage(err, 'Failed to duplicate'))
     },
   })
 
@@ -232,11 +247,16 @@ export function AgentDetailPage() {
       success('Agent activated', 'This agent is now active.')
       await queryClient.invalidateQueries({ queryKey: ['agent', id] })
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      // Both of these are on this same page and were invalidated by
+      // nothing anywhere: the new version row and the audit entry
+      // for what you just did stayed invisible until a reload.
+      await queryClient.invalidateQueries({ queryKey: ['entity-versions', 'Agent', id] })
+      await queryClient.invalidateQueries({ queryKey: ['agent-audit-log', id] })
     },
     onError: (err: any) => {
       errorNotif(
         'Could not activate',
-        err?.response?.data?.message || err?.message || 'Failed to activate this agent.',
+        getApiErrorMessage(err, 'Failed to activate this agent.'),
       )
     },
   })
@@ -247,11 +267,16 @@ export function AgentDetailPage() {
       success('Agent deactivated', 'This agent is now inactive.')
       await queryClient.invalidateQueries({ queryKey: ['agent', id] })
       await queryClient.invalidateQueries({ queryKey: ['agents'] })
+      // Both of these are on this same page and were invalidated by
+      // nothing anywhere: the new version row and the audit entry
+      // for what you just did stayed invisible until a reload.
+      await queryClient.invalidateQueries({ queryKey: ['entity-versions', 'Agent', id] })
+      await queryClient.invalidateQueries({ queryKey: ['agent-audit-log', id] })
     },
     onError: (err: any) => {
       errorNotif(
         'Could not deactivate',
-        err?.response?.data?.message || err?.message || 'Failed to deactivate this agent.',
+        getApiErrorMessage(err, 'Failed to deactivate this agent.'),
       )
     },
   })
@@ -332,7 +357,10 @@ export function AgentDetailPage() {
         onInvoke={() => setInvokeDialogOpen(true)}
         onActivate={() => activateMutation.mutate()}
         onDeactivate={() => deactivateMutation.mutate()}
+        activationDisabled={activateMutation.isPending || (workflow && (readiness.isFetching || readiness.isError || !readiness.data?.ready))}
       />
+
+      {workflow && <ReadinessBanner result={readiness.data} pending={readiness.isPending} failed={readiness.isError} onRetry={() => readiness.refetch()} onConfigure={() => setActiveTab('execution')} />}
 
       <ModelIssueBanner agent={agent} />
       <RunFailureBanner agent={agent} executions={executions} />
@@ -343,14 +371,17 @@ export function AgentDetailPage() {
 
       {/* Pipeline Canvas (read-only) -- hidden for autonomous agents */}
       {agent.mode !== 'autonomous' && (
-        <PipelineCanvas flowNodes={flowNodes} flowEdges={flowEdges} />
+        <ExecutionPlan agentId={agent.id} onConfigure={() => setActiveTab('execution')}>
+          <PipelineCanvas flowNodes={flowNodes} flowEdges={flowEdges} />
+        </ExecutionPlan>
       )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="runs">Runs</TabsTrigger>
+          <TabsTrigger value="execution">Execution</TabsTrigger>
           <TabsTrigger value="memory">Memory</TabsTrigger>
           <TabsTrigger value="files">Files</TabsTrigger>
           <TabsTrigger value="interfaces">Interfaces</TabsTrigger>
@@ -358,11 +389,16 @@ export function AgentDetailPage() {
           <TabsTrigger value="constraints">Constraints</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="execution" className="space-y-6">
+          <ExecutionTab agentId={agent.id} />
+        </TabsContent>
+
         <TabsContent value="overview" className="space-y-6">
           <OverviewTab
             agent={agent}
             executions={executions}
             executionsError={executionsError as Error | null}
+            onRetryExecutions={() => refetchExecutions()}
             versions={versions}
             entityVersions={entityVersions}
             auditLog={auditLog}
@@ -378,15 +414,17 @@ export function AgentDetailPage() {
         </TabsContent>
 
         <TabsContent value="runs" className="space-y-4">
-          <RunsTab runs={runs} />
+          <RunsTab runs={runs} agentId={agent.id} />
         </TabsContent>
 
         <TabsContent value="memory" className="space-y-4">
-          <MemoryTab agentId={id!} memories={memories} />
+          {/* The tabs render QueryError when handed a failure; without
+              these props those branches were unreachable. */}
+          <MemoryTab agentId={id!} memories={memories} error={memoriesError} onRetry={() => refetchMemories()} />
         </TabsContent>
 
         <TabsContent value="files" className="space-y-4">
-          <FilesTab agentId={id!} files={files} />
+          <FilesTab agentId={id!} files={files} error={filesError} onRetry={() => refetchFiles()} />
         </TabsContent>
 
         <TabsContent value="interfaces" className="space-y-4">

@@ -123,8 +123,18 @@ export class AgentRuntimeMiscHelper {
    * Resolved at the point of use rather than read off the run, which is
    * what lets tightening org policy take effect on the next step instead
    * of only on runs created afterwards.
+   *
+   * `preloaded` lets a caller that already has the organization in hand skip
+   * the lookup. The step processor does: it used to load the same row twice
+   * per step, once here and once to build the system prompt.
    */
-  async resolveLimits(run: AgentRun): Promise<ResolvedRunLimits> {
+  async resolveLimits(
+    run: AgentRun,
+    preloaded?: Organization | null,
+  ): Promise<ResolvedRunLimits> {
+    if (preloaded !== undefined) {
+      return resolveRunLimits({ organization: preloaded, agent: run.agent, run });
+    }
     let organization: Organization | null = null;
     try {
       organization = await this.organizationRepository.findOne({

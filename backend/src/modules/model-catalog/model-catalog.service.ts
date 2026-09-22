@@ -16,6 +16,7 @@ import { LlmModelsHelper } from '../llm-providers/llm-models.helper';
 import { EndpointProviderHelper } from '../llm-providers/endpoint-provider.helper';
 import { PriceFeedService } from './pricing/price-feed.service';
 import { ModelRouterService } from './routing/model-router.service';
+import { isUniqueViolation } from '../../common/utils/unique-violation';
 
 /** Override as the API accepts it; currency defaults to USD when omitted. */
 export type ModelPricingInput = Omit<ModelPricing, 'currency'> & { currency?: string };
@@ -142,7 +143,7 @@ export class ModelCatalogService {
     let providerType: string | null = null;
     if (input.providerId) {
       const provider = await this.providers.findOne({ where: { id: input.providerId, organizationId } });
-      if (!provider) throw new NotFoundException('LLM provider not found');
+      if (!provider) throw new NotFoundException('Provider not found');
       providerType = provider.type;
     } else {
       providerType = input.endpointRef?.providerType ?? LlmProviderType.CUSTOM;
@@ -157,7 +158,7 @@ export class ModelCatalogService {
         : { organizationId, name: input.name },
     });
     if (duplicate) {
-      throw new BadRequestException({ code: 'MODEL_EXISTS', message: `A card for ${input.vendorModelId} already exists (${duplicate.id})` });
+      throw new BadRequestException({ code: 'MODEL_EXISTS', message: `A model for ${input.vendorModelId} already exists (${duplicate.id})` });
     }
 
     const card = this.models.create({
@@ -181,7 +182,22 @@ export class ModelCatalogService {
       metadata: input.metadata ?? null,
     });
     this.applyFeedPrice(card);
-    const saved = await this.models.save(card);
+    let saved: Model;
+    try {
+      saved = await this.models.save(card);
+    } catch (err: any) {
+      // The duplicate check above is a read; a second POST for the same
+      // card can land between it and this insert. The unique indexes
+      // (models_org_provider_vendor_uq for a provider-backed card,
+      // models_org_name_endpoint_uq for an endpoint-only one) catch it,
+      // and the caller gets the same MODEL_EXISTS it would have got had
+      // its read seen the other row.
+      if (!isUniqueViolation(err)) throw err;
+      throw new BadRequestException({
+        code: 'MODEL_EXISTS',
+        message: `A model for ${input.vendorModelId} already exists`,
+      });
+    }
     this.audit(saved, AuditAction.MODEL_REGISTERED, userId, { providerId: saved.providerId, endpoint: Boolean(saved.endpointRef?.url) });
     return saved;
   }
@@ -218,6 +234,12 @@ export class ModelCatalogService {
         privacyTier: input.privacyTier ?? 'private_cloud',
         region: input.region,
         pricingOverride: input.pricingOverride,
+        // The card records where it is served from, the same field a
+        // deployment fills, minus the deploymentId that marks one we run.
+        // Without this a hand-registered endpoint was indistinguishable
+        // from a vendor key, so it was badged wrong and the "your
+        // endpoint" filter matched nothing.
+        endpointRef: { url: input.url },
         metadata: { endpoint: input.url },
       },
       userId,
@@ -235,7 +257,7 @@ export class ModelCatalogService {
    */
   async syncFromProvider(organizationId: string, providerId: string, userId?: string): Promise<ProviderSyncResult> {
     const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
-    if (!provider) throw new NotFoundException('LLM provider not found');
+    if (!provider) throw new NotFoundException('Provider not found');
     const listed = await this.modelsHelper.fetchModelsFromProvider(provider);
     const existing = await this.models.find({ where: { organizationId, providerId } });
     const byVendorId = new Map(existing.map((m) => [m.vendorModelId, m]));
@@ -257,7 +279,17 @@ export class ModelCatalogService {
         continue;
       }
       const card = this.newProviderCard(provider, m, { syncedFrom: 'provider_list', ownedBy: m.owned_by ?? null });
-      created.push(await this.models.save(card));
+      try {
+        created.push(await this.models.save(card));
+      } catch (err: any) {
+        // Another sync inserted this card between our snapshot and this
+        // write -- the user pressing "Sync models" while the background
+        // sweep covers the same provider is the common case, and the
+        // in-process dedup guard does not span the two call sites (or
+        // two pods). The row exists, which is all we wanted.
+        if (!isUniqueViolation(err)) throw err;
+        skipped++;
+      }
     }
     const retired: Model[] = [];
     if (listed.length > 0) {
@@ -463,7 +495,7 @@ export class ModelCatalogService {
     const card = await this.get(organizationId, id);
     const provider = await this.router.providerFor(card);
     if (!provider) {
-      return this.recordValidation(card, false, 'Card has no callable provider', userId);
+      return this.recordValidation(card, false, 'This model has no callable provider', userId);
     }
     const session = Conversation.createConversation({
       providerId: provider.id.startsWith('endpoint:') ? undefined : provider.id,

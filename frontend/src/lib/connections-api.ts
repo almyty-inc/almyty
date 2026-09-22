@@ -1,3 +1,4 @@
+import { getApiErrorMessage } from './api-error'
 import { apiDel, apiGet, apiPatch, apiPost } from './api'
 import type {
   CompleteConnectBody,
@@ -144,7 +145,7 @@ export function readValidationFailure(error: unknown): ConnectionValidationFailu
 
 export function errorMessage(error: unknown, fallback: string): string {
   const anyErr = error as any
-  return anyErr?.response?.data?.message || anyErr?.response?.data?.error?.message || anyErr?.message || fallback
+  return getApiErrorMessage(anyErr, fallback)
 }
 
 /** Connectors grouped in gallery order; empty kinds are left out. */

@@ -27,21 +27,12 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 
 import { llmProvidersApi } from '@/lib/api'
+import { formatDate, formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { CredentialPicker } from '@/components/credential-picker'
 import { currentProviderFailure } from '@/lib/provider-health'
-
-const providerLogos: Record<string, string> = {
-  openai: '🤖', anthropic: '🧠', google: '✦', mistral: '🔷', xai: '𝕏',
-  deepseek: '🔮', groq: '⚡', together: '🤝', openrouter: '🔀',
-  azure_openai: '☁️', aws_bedrock: '🪨', cohere: '🌀', huggingface: '🤗', custom: '⚙️',
-  fireworks: '✧', cerebras: '◎', deepinfra: '∞', novita: '◈', perplexity: '◇',
-  zai: '❋', baseten: '▣', nebius: '◉', sambanova: '◆',
-}
-
-const statusColors: Record<string, string> = {
-  active: 'bg-green-500', inactive: 'bg-muted-foreground', error: 'bg-red-500', configuring: 'bg-yellow-500',
-}
+import { providerLogos, statusColors } from '@/components/llm-providers/provider-type-config'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 export function LlmProviderDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -95,7 +86,7 @@ export function LlmProviderDetailPage() {
       notifications.success('Updated', 'Provider status changed')
     },
     onError: (error: any) => {
-      notifications.error('Error', error.response?.data?.message || 'Failed to update provider')
+      notifications.error('Error', getApiErrorMessage(error, 'Failed to update provider'))
     },
   })
 
@@ -125,7 +116,7 @@ export function LlmProviderDetailPage() {
     onError: (error: any) => {
       notifications.error(
         'Connection failed',
-        error?.response?.data?.message || error?.message || 'Test request failed',
+        getApiErrorMessage(error, 'Test request failed'),
       )
     },
   })
@@ -152,7 +143,7 @@ export function LlmProviderDetailPage() {
       if (data?.sessionId) setChatSessionId(data.sessionId)
     } catch (err: any) {
       setChatMessages(prev => [...prev, {
-        role: 'assistant', content: `Error: ${err.response?.data?.message || err.message || 'Failed to get response'}`,
+        role: 'assistant', content: `Error: ${getApiErrorMessage(err, 'Failed to get response')}`,
       }])
     } finally {
       setIsSending(false)
@@ -185,9 +176,12 @@ export function LlmProviderDetailPage() {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <p className="text-muted-foreground">Provider not found</p>
-          <Button className="mt-4" onClick={() => navigate('/llm-providers')}>
+          {/* The screen is called Models (sidebar, /models); "AI Models" was
+              a name no screen in the app carries. /llm-providers is only a
+              redirect, so link at the real destination and skip the hop. */}
+          <Button className="mt-4" onClick={() => navigate('/models?tab=providers')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to AI Models
+            Back to Models
           </Button>
         </div>
       </div>
@@ -202,7 +196,7 @@ export function LlmProviderDetailPage() {
     <div className="space-y-8">
       {/* Breadcrumbs */}
       <div className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/llm-providers" className="hover:text-foreground">AI Models</Link>
+        <Link to="/models?tab=providers" className="hover:text-foreground">Models</Link>
         <ChevronRight className="h-3 w-3" />
         <span className="text-foreground">{provider.name}</span>
       </div>
@@ -292,7 +286,7 @@ export function LlmProviderDetailPage() {
                     if (failing) {
                       return (
                         <span className="text-right text-sm font-medium text-red-600" title={failing.message}>
-                          Failing since {new Date(failing.at).toLocaleString()}
+                          Failing since {formatDateTime(failing.at)}
                           <span className="block max-w-[260px] truncate font-normal text-xs text-red-500">{failing.message}</span>
                         </span>
                       )
@@ -310,7 +304,7 @@ export function LlmProviderDetailPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Created:</span>
-                  <span className="text-sm">{new Date(provider.createdAt).toLocaleDateString()}</span>
+                  <span className="text-sm">{formatDate(provider.createdAt)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -331,7 +325,7 @@ export function LlmProviderDetailPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Last Used:</span>
-                  <span className="text-sm">{provider.lastRequestAt ? new Date(provider.lastRequestAt).toLocaleString() : 'Never'}</span>
+                  <span className="text-sm">{provider.lastRequestAt ? formatDateTime(provider.lastRequestAt) : 'Never'}</span>
                 </div>
               </CardContent>
             </Card>
@@ -518,7 +512,7 @@ export function LlmProviderDetailPage() {
                         <span className="text-sm">{err.error}</span>
                         <div className="text-right">
                           <Badge variant="destructive" className="text-xs">{err.count}</Badge>
-                          <div className="text-xs text-muted-foreground">{new Date(err.lastOccurred).toLocaleString()}</div>
+                          <div className="text-xs text-muted-foreground">{formatDateTime(err.lastOccurred)}</div>
                         </div>
                       </div>
                     ))}
@@ -544,7 +538,7 @@ export function LlmProviderDetailPage() {
                   </span>
                 </div>
                 <div className="text-sm text-muted-foreground">
-                  Last check: {provider.lastHealthCheckAt ? new Date(provider.lastHealthCheckAt).toLocaleString() : 'Never'}
+                  Last check: {provider.lastHealthCheckAt ? formatDateTime(provider.lastHealthCheckAt) : 'Never'}
                 </div>
                 <div className="text-sm">Status: {provider.status}</div>
               </CardContent>

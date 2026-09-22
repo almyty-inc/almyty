@@ -123,6 +123,12 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
 
   @Process(ARTIFACT_SWEEP_JOB)
   async sweep(): Promise<void> {
+    // Two kinds of leftover, one schedule. Expired artifacts are bytes
+    // nobody can download any more; stale builds are rows whose worker
+    // died holding them, which the panel still shows as in progress.
+    const abandoned = await this.builds.failStaleBuilds();
+    if (abandoned > 0) this.logger.warn(`Failed ${abandoned} abandoned builds`);
+
     const removed = await this.builds.sweepExpiredArtifacts();
     if (removed > 0) this.logger.log(`Cleared ${removed} expired build artifacts`);
   }

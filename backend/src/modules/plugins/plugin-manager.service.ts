@@ -186,6 +186,17 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
 
         if (pluginResult.nextAction === 'stop') {
           this.logger.debug(`Plugin ${plugin.id} requested stop - halting hook chain`);
+          // Recorded on the context because executeHook returns only the
+          // context: without this a caller cannot tell a chain that ran
+          // clean from one a plugin deliberately stopped, which made a
+          // blocking plugin -- pii-filter, security-scanner, rate-limiter --
+          // unable to block anything even once it was wired up.
+          currentContext.metadata.halted = {
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            code: pluginResult.error?.code ?? 'PLUGIN_HALTED',
+            message: pluginResult.error?.message ?? `Blocked by ${plugin.name}`,
+          };
           break;
         }
 
@@ -401,20 +412,45 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
       // up to `defaultTimeout` (30s) ms afterwards. At high throughput
       // that was a steady leak of unref'd timer handles.
       const timeoutMs = plugin.configuration.settings.timeout || this.config.defaultTimeout;
+      // `.call(pluginModule, ...)` -- a built-in's module IS an instance
+      // (loadPluginModule returns `new Ctor()`) and every one of its
+      // handlers is a prototype method that reaches for `this`. Pulled off
+      // the object and called bare, `this` is undefined in a strict-mode
+      // class body, so the handler threw on its first line. The throw was
+      // swallowed into a success:false result holding the ORIGINAL data,
+      // and executeHook skips the merge for an unsuccessful result -- so
+      // the PII filter redacted nothing, the security scanner blocked
+      // nothing and the request logger logged nothing, on every tool call
+      // for every organization, with no error above debug level. Both
+      // plugins the EE compliance pack enforces were in that set.
       const result: any = await runWithTimeout<any>(
-        handlerFunction(context, plugin.configuration.settings),
+        handlerFunction.call(pluginModule, context, plugin.configuration.settings),
         timeoutMs,
       );
 
+      // A plugin reports through the PluginResult shape: `success`,
+      // `error`, and `modifications` / `logs` nested under `metadata`.
+      // Reading `result.modifications` at the top level and hardcoding
+      // `success: true` dropped all three -- a refusing plugin was
+      // reported as a clean run, the halt reason degraded to the generic
+      // PLUGIN_HALTED, and recordSecurityCounters (which keys off
+      // `error.code === 'SECURITY_THREAT_DETECTED'` and off the
+      // modifications list) could never fire, leaving the security
+      // dashboard's threat and PII counters at the zeros they were
+      // written to replace. External plugins that return the looser
+      // top-level shape still work -- both are accepted.
+      const reported = result?.metadata ?? {};
       return {
-        success: true,
-        data: result.data || context.data,
+        success: result?.success !== false,
+        data: result?.data !== undefined ? result.data : context.data,
+        error: result?.error,
         metadata: {
           executionTime: Date.now() - startTime,
-          modifications: result.modifications || [],
-          logs: result.logs || [],
+          modifications: reported.modifications ?? result?.modifications ?? [],
+          logs: reported.logs ?? result?.logs ?? [],
+          warnings: reported.warnings ?? result?.warnings,
         },
-        nextAction: result.nextAction || 'continue',
+        nextAction: result?.nextAction || 'continue',
       };
 
     } catch (error) {

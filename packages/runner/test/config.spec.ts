@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import { loadConfig, DEFAULTS } from '../src/config.js';
+import { loadConfig, DEFAULTS, describeIsolationPosture } from '../src/config.js';
+import { enforceShellPolicy, enforceSpawnPolicy } from '../src/policy.js';
 
 /**
  * Config layering tests. Every layer claim in the spec gets a test:
@@ -15,11 +16,99 @@ describe('loadConfig', () => {
       exists: () => false,
       readFile: () => '',
     });
-    expect(r.config.defaultIsolation).toBe('container');
-    expect(r.config.networkBlocked).toBe(true);
+    expect(r.config.defaultIsolation).toBe('host');
+    expect(r.config.networkBlocked).toBe(false);
+    // Enforceable, so it stays on: it is a command pattern match, not a
+    // sandbox claim.
     expect(r.config.installBlocked).toBe(true);
     expect(r.binaryProbeList).toEqual(DEFAULTS.binaryProbeList);
     expect(r.backendUrl).toBe('https://api.almyty.com');
+  });
+
+  /**
+   * The defaults and the policy layer have to agree, and for a while they
+   * did not: the defaults asked for container isolation, the policy layer
+   * fails closed because no container runtime is implemented, so
+   * `npx @almyty/runner start --name my-laptop` — the command in the
+   * README, the package README and the /runners/new page — produced a
+   * daemon that registered fine and then refused every single command.
+   *
+   * This is the test that pins the two together. It goes through the real
+   * default config rather than a hand-built one, so a future edit to
+   * DEFAULTS that reintroduces an unrunnable default fails here.
+   */
+  describe('the documented quick start produces a runner that can actually run a command', () => {
+    const quickStart = () =>
+      loadConfig({
+        flags: { name: 'my-laptop' },
+        env: {},
+        exists: () => false,
+        readFile: () => '',
+      }).config;
+
+    it('does not refuse a spawn', () => {
+      expect(() =>
+        enforceSpawnPolicy(quickStart(), { binary: 'git', args: ['status'] }),
+      ).not.toThrow();
+    });
+
+    it('does not refuse a shell exec', () => {
+      expect(() => enforceShellPolicy(quickStart(), 'git status')).not.toThrow();
+    });
+
+    it('still blocks an install, which is the one guard that is enforceable', () => {
+      expect(() => enforceShellPolicy(quickStart(), 'npm install left-pad')).toThrow(
+        /installation is blocked/i,
+      );
+    });
+
+    it('describes the posture as host execution on this machine', () => {
+      const line = describeIsolationPosture(quickStart());
+      expect(line).toMatch(/isolation=host/);
+      expect(line).toMatch(/run on this machine/);
+      expect(line).toMatch(/installs blocked/);
+      // Never a claim of sandboxing the build cannot deliver.
+      expect(line).not.toMatch(/container/i);
+    });
+  });
+
+  /**
+   * Choosing container explicitly stays honest: it refuses rather than
+   * quietly running on the host, and the boot banner says so up front
+   * instead of letting the runner register and fail per command.
+   */
+  describe('an explicitly unrunnable config announces itself at boot', () => {
+    it('warns that container isolation is not implemented', () => {
+      const line = describeIsolationPosture({ ...DEFAULTS.config, defaultIsolation: 'container' });
+      expect(line).toMatch(/NOT IMPLEMENTED/);
+      expect(line).toMatch(/every command will be refused/);
+      expect(line).toMatch(/'host'/);
+    });
+
+    it('warns that networkBlocked cannot be enforced on the host', () => {
+      const line = describeIsolationPosture({ ...DEFAULTS.config, networkBlocked: true });
+      expect(line).toMatch(/networkBlocked=true cannot be enforced/);
+      expect(line).toMatch(/every command will be refused/);
+    });
+
+    it('and the policy layer agrees with both warnings', () => {
+      expect(() =>
+        enforceSpawnPolicy({ ...DEFAULTS.config, defaultIsolation: 'container' }, { binary: 'ls', args: [] }),
+      ).toThrow(/container isolation/i);
+      expect(() =>
+        enforceSpawnPolicy({ ...DEFAULTS.config, networkBlocked: true }, { binary: 'ls', args: [] }),
+      ).toThrow(/networkBlocked/);
+    });
+  });
+
+  it('reports the extra guards it was given', () => {
+    const line = describeIsolationPosture({
+      ...DEFAULTS.config,
+      allowedCwdRoots: ['/tmp/a', '/tmp/b'],
+      denyPatterns: ['rm\\s+-rf'],
+    });
+    expect(line).toMatch(/cwd limited to 2 root\(s\)/);
+    expect(line).toMatch(/1 deny pattern\(s\)/);
   });
 
   it('global file overrides defaults', () => {

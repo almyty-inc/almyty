@@ -141,7 +141,7 @@ export function RegisterEndpointDialog({ open, onOpenChange, onSubmit, submittin
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Register endpoint
+              {submitting ? 'Registering...' : 'Register endpoint'}
             </Button>
           </DialogFooter>
         </form>

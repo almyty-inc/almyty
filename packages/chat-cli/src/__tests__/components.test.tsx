@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from 'ink-testing-library';
+import { render } from './helpers/ink-render.js';
 import { describe, it, expect } from 'vitest';
 import { Header, MessageView, LoadingIndicator } from '../components.js';
 import type { Message } from '../components.js';

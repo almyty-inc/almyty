@@ -7,12 +7,17 @@ import {
   DollarSign,
   Globe,
   MessageSquare,
+  Receipt,
+  Route,
   ScrollText,
+  Wallet,
   Wrench,
   Zap,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { analyticsApi } from '@/lib/api'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -23,10 +28,13 @@ import {
 import { AgentsTab } from '@/components/analytics/agents-tab'
 import { AuditTab } from '@/components/analytics/audit-tab'
 import { CostTab } from '@/components/analytics/cost-tab'
+import { BudgetsTab } from '@/components/analytics/budgets-tab'
 import { GatewaysTab } from '@/components/analytics/gateways-tab'
 import { LlmTab } from '@/components/analytics/llm-tab'
 import { OverviewTab } from '@/components/analytics/overview-tab'
 import { RequestLogTab } from '@/components/analytics/request-log-tab'
+import { RoutingTab } from '@/components/analytics/routing-tab'
+import { ChargebackTab } from '@/components/analytics/chargeback-tab'
 import { ToolsTab } from '@/components/analytics/tools-tab'
 
 const TAB_DEFINITIONS: Array<{
@@ -38,13 +46,17 @@ const TAB_DEFINITIONS: Array<{
   { key: 'requests', label: 'Request Log', icon: Globe },
   { key: 'tools', label: 'Tools', icon: Wrench },
   { key: 'gateways', label: 'Gateways', icon: Zap },
-  { key: 'llm', label: 'LLM', icon: MessageSquare },
+  { key: 'llm', label: 'Models', icon: MessageSquare },
+  { key: 'routing', label: 'Routing', icon: Route },
   { key: 'agents', label: 'Agents', icon: Bot },
   { key: 'cost', label: 'Cost', icon: DollarSign },
+  { key: 'budgets', label: 'Budgets', icon: Wallet },
+  { key: 'chargeback', label: 'Chargeback', icon: Receipt },
   { key: 'audit', label: 'Audit Trail', icon: ScrollText },
 ]
 
 export function AnalyticsPage() {
+  const { error } = useNotifications()
   const location = useLocation()
   const navigate = useNavigate()
   const tab = getAnalyticsTab(location.pathname)
@@ -74,7 +86,9 @@ export function AnalyticsPage() {
       a.click()
       URL.revokeObjectURL(url)
     } catch (err) {
-      console.error('Export failed:', err)
+      // A click that produces no file and no message is indistinguishable
+      // from a click that did not register.
+      error('Export failed', getApiErrorMessage(err, 'The export could not be produced.'))
     }
   }
 
@@ -114,8 +128,11 @@ export function AnalyticsPage() {
       {tab === 'tools' && <ToolsTab />}
       {tab === 'gateways' && <GatewaysTab />}
       {tab === 'llm' && <LlmTab />}
+      {tab === 'routing' && <RoutingTab />}
+      {tab === 'chargeback' && <ChargebackTab />}
       {tab === 'agents' && <AgentsTab />}
       {tab === 'cost' && <CostTab />}
+      {tab === 'budgets' && <BudgetsTab />}
       {tab === 'audit' && <AuditTab />}
     </div>
   )

@@ -23,6 +23,8 @@ function policy(overrides: Partial<RetentionPolicy> = {}): RetentionPolicy {
     requestLogsDays: null,
     usageMetricsDays: null,
     auditLogDays: null,
+    toolExecutionsDays: null,
+    notificationsDays: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -37,7 +39,8 @@ describe('RetentionSweepService', () => {
   let requestLogRepo: any;
   let usageMetricRepo: any;
   let auditLogRepo: any;
-  let gatewayRepo: any;
+  let toolExecutionRepo: any;
+  let notificationRepo: any;
   let auditLogService: any;
   let service: RetentionSweepService;
 
@@ -49,7 +52,8 @@ describe('RetentionSweepService', () => {
     requestLogRepo = mockRepo();
     usageMetricRepo = mockRepo();
     auditLogRepo = mockRepo();
-    gatewayRepo = mockRepo();
+    toolExecutionRepo = mockRepo();
+    notificationRepo = mockRepo();
     auditLogService = { log: jest.fn().mockResolvedValue(null) };
     service = new RetentionSweepService(
       policyRepo,
@@ -59,7 +63,8 @@ describe('RetentionSweepService', () => {
       requestLogRepo,
       usageMetricRepo,
       auditLogRepo,
-      gatewayRepo,
+      toolExecutionRepo,
+      notificationRepo,
       auditLogService,
     );
   });
@@ -86,6 +91,38 @@ describe('RetentionSweepService', () => {
     expect(runRepo.find).not.toHaveBeenCalled();
   });
 
+  /**
+   * tool_executions was the one per-event table with no sweep, while
+   * every sibling had one. Each row keeps `parameters` and `result` as
+   * untruncated json and the HTTP executor allows 10MB responses, so it
+   * is also the table that grows fastest in bytes.
+   */
+  it('sweeps tool executions past the window, like every other class', async () => {
+    toolExecutionRepo.find.mockResolvedValueOnce([{ id: 'e1' }, { id: 'e2' }]).mockResolvedValue([]);
+    toolExecutionRepo.delete.mockResolvedValue({ affected: 2 });
+
+    const counts = await service.sweepOrganization(policy({ toolExecutionsDays: 30 }));
+
+    expect(counts.toolExecutions).toBe(2);
+    expect(toolExecutionRepo.find).toHaveBeenCalled();
+  });
+
+  it('sweeps notifications past the window, the other table nothing swept', async () => {
+    notificationRepo.find.mockResolvedValueOnce([{ id: 'n1' }]).mockResolvedValue([]);
+    notificationRepo.delete.mockResolvedValue({ affected: 1 });
+
+    const counts = await service.sweepOrganization(policy({ notificationsDays: 30 }));
+
+    expect(counts.notifications).toBe(1);
+  });
+
+  it('keeps them forever when no window is set', async () => {
+    const counts = await service.sweepOrganization(policy());
+
+    expect(counts.toolExecutions).toBe(0);
+    expect(toolExecutionRepo.find).not.toHaveBeenCalled();
+  });
+
   it('skips every data class whose day-count is null (keep forever)', async () => {
     const counts = await service.sweepOrganization(policy());
 
@@ -96,6 +133,8 @@ describe('RetentionSweepService', () => {
       requestLogs: 0,
       usageMetrics: 0,
       auditLogs: 0,
+      toolExecutions: 0,
+      notifications: 0,
     });
     expect(runRepo.find).not.toHaveBeenCalled();
     expect(conversationRepo.find).not.toHaveBeenCalled();
@@ -179,21 +218,31 @@ describe('RetentionSweepService', () => {
     );
   });
 
-  it('scopes request logs through the org gateways and skips orgs without gateways', async () => {
-    gatewayRepo.find.mockResolvedValueOnce([]);
-    let counts = await service.sweepOrganization(policy({ requestLogsDays: 14 }));
-    expect(counts.requestLogs).toBe(0);
-    expect(requestLogRepo.find).not.toHaveBeenCalled();
-
-    gatewayRepo.find.mockResolvedValueOnce([{ id: 'gw1' }, { id: 'gw2' }]);
+  it('scopes request logs by their own organizationId, not through the gateways', async () => {
+    // request_logs.gatewayId is ON DELETE SET NULL. Scoping the sweep
+    // through the org's gateways meant deleting a gateway put every log
+    // it wrote out of reach of every retention policy, forever. The
+    // service no longer takes a gateway repository at all, so the hop
+    // cannot come back without changing its signature.
     requestLogRepo.find.mockResolvedValueOnce([{ id: 'log1' }]);
     requestLogRepo.delete.mockResolvedValueOnce({ affected: 1 });
-    counts = await service.sweepOrganization(policy({ requestLogsDays: 14 }));
+
+    const counts = await service.sweepOrganization(policy({ requestLogsDays: 14 }));
 
     expect(counts.requestLogs).toBe(1);
     const where = requestLogRepo.find.mock.calls[0][0].where;
-    expect(where.gatewayId).toEqual(In(['gw1', 'gw2']));
+    expect(where.organizationId).toBe('org-1');
+    expect(where.gatewayId).toBeUndefined();
     expect(where.timestamp).toBeDefined();
+  });
+
+  it('still sweeps request logs for an org that has no gateways left', async () => {
+    requestLogRepo.find.mockResolvedValueOnce([{ id: 'log1' }, { id: 'log2' }]);
+    requestLogRepo.delete.mockResolvedValueOnce({ affected: 2 });
+
+    const counts = await service.sweepOrganization(policy({ requestLogsDays: 14 }));
+
+    expect(counts.requestLogs).toBe(2);
   });
 
   it('deletes old usage metrics and audit logs by org + cutoff', async () => {
@@ -235,7 +284,33 @@ describe('RetentionSweepService', () => {
       requestLogs: 0,
       usageMetrics: 0,
       auditLogs: 0,
+      toolExecutions: 0,
+      notifications: 0,
     });
+  });
+
+  /**
+   * The audit row is the only record that a sweep destroyed anything.
+   * `total` was a hand-written sum of six of the eight SweepCounts keys,
+   * so a sweep that deleted only tool executions and notifications --
+   * the two newest classes, and the two biggest tables -- saw total 0
+   * and wrote no audit row, no notification and no log line at all.
+   */
+  it('audits a sweep that only deleted tool executions and notifications', async () => {
+    toolExecutionRepo.find.mockResolvedValueOnce([{ id: 'e1' }, { id: 'e2' }]).mockResolvedValue([]);
+    toolExecutionRepo.delete.mockResolvedValue({ affected: 2 });
+    notificationRepo.find.mockResolvedValueOnce([{ id: 'n1' }]).mockResolvedValue([]);
+    notificationRepo.delete.mockResolvedValue({ affected: 1 });
+
+    await service.sweepOrganization(
+      policy({ toolExecutionsDays: 30, notificationsDays: 30 }),
+    );
+
+    expect(auditLogService.log).toHaveBeenCalledTimes(1);
+    const entry = auditLogService.log.mock.calls[0][0];
+    expect(entry.action).toBe(AuditAction.RETENTION_SWEEP);
+    expect(entry.details.toolExecutions).toBe(2);
+    expect(entry.details.notifications).toBe(1);
   });
 
   it('writes no audit entry when the sweep deleted nothing', async () => {
@@ -292,7 +367,8 @@ describe('RetentionSweepService', () => {
         requestLogRepo,
         usageMetricRepo,
         auditLogRepo,
-        gatewayRepo,
+        toolExecutionRepo,
+        notificationRepo,
         auditLogService,
         undefined,
         appRepo,
@@ -361,6 +437,41 @@ describe('RetentionSweepService', () => {
       await expect(service.sweepApps('org-1', 30)).resolves.toEqual({ conversations: 0, messages: 0, runs: 0 });
     });
   });
+
+  /**
+   * `version` is the one table the per-org sweep cannot reach.
+   *
+   * It has no organizationId, so no retention policy can name it — while
+   * the version subscriber writes a whole serialized entity on every
+   * update of a @VersionedEntity, and the model reconcile loop saves
+   * several of those every two minutes per deployment whether or not
+   * anything changed. Ten deployments for a year is millions of rows of
+   * JSON that nothing ever deleted.
+   */
+  describe('entity-version snapshots', () => {
+    it('deletes snapshots past the global age, in batches', async () => {
+      policyRepo.query = jest
+        .fn()
+        .mockResolvedValueOnce({ 1: 5000 })
+        .mockResolvedValueOnce({ 1: 12 });
+
+      const deleted = await service.sweepEntityVersions();
+
+      expect(deleted).toBe(5012);
+      // Batched, so one pass cannot lock the table.
+      expect(policyRepo.query).toHaveBeenCalledTimes(2);
+      const [sql, params] = policyRepo.query.mock.calls[0];
+      expect(sql).toMatch(/DELETE FROM "version"/);
+      expect(params[0]).toBeInstanceOf(Date);
+    });
+
+    it('stops as soon as a pass comes back short', async () => {
+      policyRepo.query = jest.fn().mockResolvedValue({ 1: 3 });
+
+      expect(await service.sweepEntityVersions()).toBe(3);
+      expect(policyRepo.query).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 /**
@@ -377,7 +488,8 @@ describe('RetentionSweepService notifications', () => {
       requestLogRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       usageMetricRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
       auditLogRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
-      gatewayRepo: { find: jest.fn().mockResolvedValue([]) },
+      toolExecutionRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
+      notificationRepo: { find: jest.fn().mockResolvedValue([]), delete: jest.fn().mockResolvedValue({ affected: 0 }) },
     };
     const notifications = {
       emit: jest.fn().mockResolvedValue(undefined),
@@ -391,7 +503,8 @@ describe('RetentionSweepService notifications', () => {
       repos.requestLogRepo as any,
       repos.usageMetricRepo as any,
       repos.auditLogRepo as any,
-      repos.gatewayRepo as any,
+      repos.toolExecutionRepo as any,
+      repos.notificationRepo as any,
       { log: jest.fn().mockResolvedValue(null) } as any,
       notifications as any,
     );

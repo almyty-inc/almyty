@@ -135,9 +135,15 @@ export class GatewayToolQueriesHelper {
 
     const associatedToolIds = associatedTools.map(at => at.toolId);
 
+    // Org-scoped. The gateway lookup above proves the caller may see this
+    // gateway; it says nothing about which tools may be offered for it,
+    // and without this clause the "available tools" picker listed every
+    // active tool on the instance — every other tenant's tool names,
+    // descriptions and ids, to any member of any org.
     const queryBuilder = this.toolRepository
       .createQueryBuilder('tool')
-      .where('tool.status = :status', { status: ToolStatus.ACTIVE });
+      .where('tool.organizationId = :organizationId', { organizationId })
+      .andWhere('tool.status = :status', { status: ToolStatus.ACTIVE });
 
     if (associatedToolIds.length > 0) {
       queryBuilder.andWhere('tool.id NOT IN (:...associatedIds)', { associatedIds: associatedToolIds });
@@ -171,8 +177,15 @@ export class GatewayToolQueriesHelper {
         throw new ForbiddenException('User does not have permission to manage gateway tools');
       }
 
+      // Org-scoped, like the gateway above. Without it an org-A admin
+      // holding org-B tool uuids could bulk-associate them: `gateway_tools`
+      // has no organization column, so the row would be accepted, and the
+      // gateway's tool listing has no org filter either — so org B's tool
+      // names, descriptions and parameter schemas would be served to org
+      // A's clients. Execution fails closed in ToolExecutorService, so the
+      // harm is metadata disclosure plus an association that can never run.
       const tools = await this.toolRepository.find({
-        where: { id: In(bulkAssociateDto.toolIds), status: ToolStatus.ACTIVE },
+        where: { id: In(bulkAssociateDto.toolIds), organizationId },
       });
 
       const existingAssociations = await this.gatewayToolRepository.find({
@@ -192,7 +205,21 @@ export class GatewayToolQueriesHelper {
 
         const tool = tools.find(t => t.id === toolId);
         if (!tool) {
-          skipped.push({ toolId, reason: 'Tool not found or not active' });
+          skipped.push({ toolId, reason: 'Tool not found in this organization' });
+          continue;
+        }
+
+        // Status is classified here rather than filtered out of the query
+        // above, so the skip reason can name the state the tool is in.
+        // 'Tool not found or not active' covered both cases, and the
+        // caller that matters -- a user who just generated tools from a
+        // schema, every one of them a draft -- read the one reason that
+        // did not apply.
+        if (tool.status !== ToolStatus.ACTIVE) {
+          skipped.push({
+            toolId,
+            reason: `Tool '${tool.name}' is ${tool.status}; a gateway only serves active tools. Activate it on the Tools page first.`,
+          });
           continue;
         }
 

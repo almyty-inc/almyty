@@ -38,21 +38,22 @@ describe('VersionsTab', () => {
     versionsDelete.mockResolvedValue(undefined)
   })
 
-  it('lists versions with name, base, URI, size and quantizations', async () => {
+  it('lists tracked artifacts with name, base, URI, size and quantizations', async () => {
     versionsList.mockResolvedValue([makeVersion(), makeVersion({ id: 'v-2', name: 'tiny', base: 'llama-3b', registryUri: 'file:///models/tiny@sha1', sizeBytes: null, quantizations: [] })])
     render(<VersionsTab />)
     expect(await screen.findByText('support-bot-v3')).toBeInTheDocument()
     expect(screen.getByText('qwen3-14b')).toBeInTheDocument()
-    expect(screen.getByText('s3://registry/support-bot-v3@e3b0c442')).toBeInTheDocument()
+    expect(screen.getByText('hf://acme/support-bot-v3@e3b0c442')).toBeInTheDocument()
     expect(screen.getByText('27.0 GB')).toBeInTheDocument()
     expect(screen.getByText('awq-int4')).toBeInTheDocument()
     expect(screen.getByText('tiny')).toBeInTheDocument()
   })
 
-  it('shows the empty state and the error state', async () => {
+  it('says plainly in the empty state that most people never need this', async () => {
     versionsList.mockResolvedValue([])
     const { unmount } = render(<VersionsTab />)
-    expect(await screen.findByText('No versions registered')).toBeInTheDocument()
+    expect(await screen.findByText('Nothing tracked here, and most people never need this')).toBeInTheDocument()
+    expect(screen.getByText(/To run a model you only have to name it on a deployment/)).toBeInTheDocument()
     unmount()
     versionsList.mockRejectedValue(new Error('registry down'))
     render(<VersionsTab />)
@@ -77,7 +78,12 @@ describe('VersionsTab', () => {
 
   it('blocks delete while any deployment other than torn_down points at the version', async () => {
     versionsList.mockResolvedValue([makeVersion()])
-    deploymentsList.mockResolvedValue([makeDeployment({ state: 'ready' }), makeDeployment({ id: 'd-failed', state: 'failed' }), makeDeployment({ id: 'd-old', state: 'torn_down' })])
+    const tracked = { modelVersionId: 'v-1', modelRef: null }
+    deploymentsList.mockResolvedValue([
+      makeDeployment({ ...tracked, state: 'ready' }),
+      makeDeployment({ ...tracked, id: 'd-failed', state: 'failed' }),
+      makeDeployment({ ...tracked, id: 'd-old', state: 'torn_down' }),
+    ])
     render(<VersionsTab />)
     fireEvent.click(await screen.findByText('support-bot-v3'))
     await screen.findByText(/2 deployments point at this version/)

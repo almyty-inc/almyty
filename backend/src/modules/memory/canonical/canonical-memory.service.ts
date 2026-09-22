@@ -211,13 +211,50 @@ export class CanonicalMemoryService {
     return result;
   }
 
-  async get(id: string): Promise<MemoryItem | null> {
+  /**
+   * One memory, scoped to the caller's organization.
+   *
+   * `organizationId` is required rather than optional: an id-only lookup
+   * here let any authenticated user on the instance read any other
+   * tenant's memory by guessing or leaking a uuid. Making it optional
+   * would leave the same hole one forgetful call site away.
+   */
+  async get(id: string, organizationId: string): Promise<MemoryItem | null> {
+    const row = await this.repo.findOne({ where: { id, scopeId: organizationId } });
+    return row ? entityToItem(row) : null;
+  }
+
+  /**
+   * For the router's own transfer path, which has already resolved the
+   * scope it is moving and has no caller organization to check against.
+   * NEVER call these from a controller: the whole point of the scoped
+   * methods is that a request cannot reach another tenant's row.
+   */
+  async getForTransfer(id: string): Promise<MemoryItem | null> {
     const row = await this.repo.findOne({ where: { id } });
     return row ? entityToItem(row) : null;
   }
 
-  async delete(id: string, mode: 'soft' | 'hard' = 'soft', actor: { user_id?: string } = {}): Promise<boolean> {
+  async deleteForTransfer(id: string, mode: 'soft' | 'hard' = 'soft'): Promise<boolean> {
     const row = await this.repo.findOne({ where: { id } });
+    if (!row) return false;
+    if (mode === 'hard') await this.repo.delete({ id });
+    else {
+      row.deletedAt = new Date();
+      await this.repo.save(row);
+    }
+    return true;
+  }
+
+  async delete(
+    id: string,
+    organizationId: string,
+    mode: 'soft' | 'hard' = 'soft',
+    actor: { user_id?: string } = {},
+  ): Promise<boolean> {
+    // Scoped for the same reason as get(): unscoped, `?mode=hard` was an
+    // unrecoverable delete of another tenant's memory by uuid alone.
+    const row = await this.repo.findOne({ where: { id, scopeId: organizationId } });
     if (!row) return false;
     if (mode === 'hard') {
       await this.repo.delete({ id });
@@ -248,11 +285,15 @@ export class CanonicalMemoryService {
 
   async supersede(
     oldId: string,
+    organizationId: string,
     newInput: PutInput,
     actor: { user_id?: string } = {},
   ): Promise<{ old: MemoryItem; new: MemoryItem }> {
     const result = await this.dataSource.transaction(async (manager) => {
-      const oldRow = await manager.findOne(CanonicalMemory, { where: { id: oldId } });
+      // Scoped: unscoped, this overwrote another tenant's memory with
+      // attacker-supplied content. Agents read memory as grounding, so
+      // that is prompt injection that persists.
+      const oldRow = await manager.findOne(CanonicalMemory, { where: { id: oldId, scopeId: organizationId } });
       if (!oldRow) throw new MemoryError({ kind: 'not_found', id: oldId });
       if (oldRow.mode !== 'memory') {
         throw new MemoryError({

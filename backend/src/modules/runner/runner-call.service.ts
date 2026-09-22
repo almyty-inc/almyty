@@ -78,13 +78,41 @@ interface EnvelopeSession {
   organizationId: string;
 }
 
+
+/**
+ * Entries kept in the session -> runner cache.
+ *
+ * A miss costs one indexed lookup, so this can be small; it exists only
+ * to stop the map growing for the life of the pod.
+ */
+const SESSION_RUNNER_CACHE_MAX = 10_000;
 @Injectable()
 export class RunnerCallService implements OnModuleDestroy {
   private readonly logger = new Logger(RunnerCallService.name);
   private readonly pending = new Map<string, PendingCall>();
   private readonly envelopeListener: (env: WorkerEnvelope, session?: EnvelopeSession) => void;
-  /** Fast local cache: streamable session id -> runner id (from runner.hello). */
+  /**
+   * Fast local cache: streamable session id -> runner id (from runner.hello).
+   *
+   * Bounded, for the same reason as the twin in CodingRelayService: this
+   * map is fed a fresh entry on every runner.hello, the daemon re-mints a
+   * session on every session-lost (routine against a multi-replica
+   * backend), and nothing here is ever told a session ended. The other
+   * copy got an LRU and this one was left as a map that only grows for
+   * the life of the pod.
+   */
   private readonly sessionRunners = new Map<string, string>();
+
+  /** Re-insert on write so the Map's insertion order is a recency order. */
+  private rememberSession(sessionId: string, runnerId: string): void {
+    this.sessionRunners.delete(sessionId);
+    this.sessionRunners.set(sessionId, runnerId);
+    while (this.sessionRunners.size > SESSION_RUNNER_CACHE_MAX) {
+      const oldest = this.sessionRunners.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.sessionRunners.delete(oldest);
+    }
+  }
 
   private static readonly DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -215,7 +243,25 @@ export class RunnerCallService implements OnModuleDestroy {
     if (env.type === 'event') {
       const payload = env.payload as { kind?: string; runnerId?: string } | undefined;
       if (payload?.kind === 'runner.hello' && payload.runnerId) {
-        this.sessionRunners.set(session.id, payload.runnerId);
+        // The runner id is whatever the daemon put in its own hello;
+        // the organization is what the bearer token on the POST
+        // proved. Binding one to the other without comparing them let
+        // any authenticated session claim another tenant's runner --
+        // and getActiveSession takes the newest connected session, so
+        // the claim became the route every dispatch for that runner
+        // took: agent.spawn, coding.start, shell commands, all
+        // delivered to the claimant instead of the machine.
+        const owned = await this.runners.belongsToOrganization(
+          payload.runnerId,
+          session.organizationId,
+        );
+        if (!owned) {
+          this.logger.warn(
+            `runner.hello claiming runner ${payload.runnerId} refused: not in session's organization`,
+          );
+          return;
+        }
+        this.rememberSession(session.id, payload.runnerId);
         await this.runners.onSessionConnect(payload.runnerId, session.id);
       }
       // runner.draining and other events are observational here.
@@ -230,7 +276,7 @@ export class RunnerCallService implements OnModuleDestroy {
         this.logger.debug(`heartbeat for unmapped session ${session.id} dropped`);
         return;
       }
-      this.sessionRunners.set(session.id, runnerId);
+      this.rememberSession(session.id, runnerId);
       await this.runners.heartbeat(runnerId);
     }
   }

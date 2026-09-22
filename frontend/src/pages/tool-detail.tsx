@@ -15,6 +15,8 @@ import { QueryError } from '@/components/ui/query-error'
 
 import { CodeBlock } from '@/components/ui/code-block'
 import { toolsApi, workspacesApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
+import { formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
@@ -78,17 +80,17 @@ export function ToolDetailPage() {
         fullError: ok ? undefined : response,
       })
       if (ok) {
-        notifications.success('Success', 'Tool executed successfully')
+        notifications.success('Tool executed', 'The run finished successfully.')
       } else {
         notifications.error('Execution failed', response?.error || response?.message || 'Tool execution returned success=false')
       }
     },
     onError: (error: Error & { response?: { data?: Record<string, any>; status?: number }; config?: { url?: string; method?: string } }) => {
-      notifications.error('Error', error.message || 'Failed to execute tool')
+      const message = getApiErrorMessage(error, 'Failed to execute tool')
+      notifications.error('Error', message)
       setExecutionResult({
         success: false,
-        error: error.response?.data?.error || error.message || 'Failed to execute tool',
-        message: error.response?.data?.message,
+        error: message,
         statusCode: error.response?.status,
         url: error.config?.url,
         method: error.config?.method,
@@ -105,7 +107,17 @@ export function ToolDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tool', id] })
       queryClient.invalidateQueries({ queryKey: ['tools'] })
-      notifications.success('Success', 'Tool status updated')
+      notifications.success('Tool status updated', 'The change is live on every gateway serving it.')
+    },
+    // A refused activation -- a draft tool with no code, an org-scope
+    // check, a 403 -- used to stop the spinner, leave the badge on
+    // Draft and say nothing at all, which is indistinguishable from a
+    // dead switch.
+    onError: (err: unknown, { status }) => {
+      notifications.error(
+        status === 'active' ? 'Could not activate tool' : 'Could not deactivate tool',
+        getApiErrorMessage(err, 'The tool status was not changed.'),
+      )
     },
   })
 
@@ -171,15 +183,19 @@ export function ToolDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={() => navigate(`/tools/${id}/edit`)}>
-            <Settings className="h-4 w-4 mr-2" />
-            Edit Tool
-          </Button>
+          {/* "Edit Tool" used to navigate to /tools/:id/edit, a route that
+              does not exist, so it landed on the 404 page. There is no
+              tool-editing UI anywhere in the app -- the API supports it,
+              nothing calls it -- and a button that 404s is a worse answer
+              than no button. Removed rather than left promising something
+              the product cannot do. */}
           <Badge variant={tool.status === 'active' ? 'success' : 'secondary'}>
             {tool.status === 'active' ? 'Active' : tool.status}
           </Badge>
           <Switch
             checked={tool.status === 'active'}
+            aria-label={tool.status === 'active' ? 'Deactivate tool' : 'Activate tool'}
+            disabled={toggleStatusMutation.isPending}
             onCheckedChange={(checked) => {
               toggleStatusMutation.mutate({
                 status: checked ? 'active' : 'inactive',
@@ -564,17 +580,20 @@ export function ToolDetailPage() {
               <div className="space-y-2">
                 {tool.gatewayAssociations && tool.gatewayAssociations.length > 0 ? (
                   tool.gatewayAssociations.map((assoc: GatewayToolAssociation) => (
-                    <div
+                    // A <div onClick> that navigates is invisible to the
+                    // keyboard; a Link keeps the row look and gets focus,
+                    // Enter and cmd-click for free.
+                    <Link
                       key={assoc.id}
-                      className="flex items-center justify-between p-3 border rounded cursor-pointer hover:bg-muted"
-                      onClick={() => navigate(`/gateways/${assoc.gateway?.id}`)}
+                      to={`/gateways/${assoc.gateway?.id}`}
+                      className="flex items-center justify-between p-3 border rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     >
                       <div>
                         <div className="font-medium">{assoc.gateway?.name || 'Unknown'}</div>
                         <div className="text-xs text-muted-foreground">{assoc.gateway?.endpoint || 'No endpoint'}</div>
                       </div>
                       <Badge variant="outline">{assoc.gateway?.type?.toUpperCase() || 'N/A'}</Badge>
-                    </div>
+                    </Link>
                   ))
                 ) : (
                   <div className="text-center py-8">
@@ -618,7 +637,7 @@ export function ToolDetailPage() {
               </div>
               {tool.lastUsedAt && (
                 <p className="text-xs text-muted-foreground mt-4">
-                  Last used: {new Date(tool.lastUsedAt).toLocaleString()}
+                  Last used: {formatDateTime(tool.lastUsedAt)}
                 </p>
               )}
               {(tool.usageCount || 0) === 0 && (

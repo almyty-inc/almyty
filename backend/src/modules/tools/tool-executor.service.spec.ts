@@ -15,6 +15,7 @@ import { makeEnvelopeCryptoMock } from '../../test/envelope-crypto.mock';
 import { hashCacheObject, sleep as sleepUtil } from './tool-execution-utils';
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
+import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Api, ApiType } from '../../entities/api.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
@@ -101,6 +102,15 @@ describe('ToolExecutorService', () => {
           useValue: {
             findOne: jest.fn(),
             createQueryBuilder: jest.fn().mockReturnValue(qbUpdateChain),
+          },
+        },
+        {
+          // The gateway_tools row carrying `securityPolicy`. Null here: a
+          // tool executed without a gatewayId has no gateway policy, which
+          // is what every case in this file exercises.
+          provide: getRepositoryToken(GatewayTool),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(null),
           },
         },
         {
@@ -334,27 +344,73 @@ describe('ToolExecutorService', () => {
   });
 
   describe('getToolExecutionStats', () => {
-    it('should return tool execution statistics', async () => {
-      const mockExecutions = [
-        { success: true, executionTime: 100, cached: false },
-        { success: true, executionTime: 200, cached: true },
-        { success: false, executionTime: 150, cached: false },
-        { success: false, executionTime: 50, cached: false },
-      ];
+    /**
+     * Six scalars, one aggregate query.
+     *
+     * This used to `find()` every matching tool_executions row with no
+     * `select` and no `take` and reduce them in heap. A ToolExecution
+     * carries `parameters` and `result` as untruncated json (the HTTP
+     * executor allows 10MB responses), and `timeframe` is caller-supplied
+     * up to `month` -- a tool at 1 req/s is ~2.6M such rows, reached by
+     * opening its detail page.
+     */
+    const aggregateQb = (row: Record<string, any> | undefined) => {
+      const calls = { selects: [] as string[], wheres: [] as string[], params: {} as any };
+      const qb: any = {
+        select: (expr: string) => {
+          calls.selects.push(expr);
+          return qb;
+        },
+        addSelect: (expr: string) => {
+          calls.selects.push(expr);
+          return qb;
+        },
+        where: (clause: string, params?: any) => {
+          calls.wheres.push(clause);
+          Object.assign(calls.params, params ?? {});
+          return qb;
+        },
+        andWhere: (clause: string, params?: any) => {
+          calls.wheres.push(clause);
+          Object.assign(calls.params, params ?? {});
+          return qb;
+        },
+        getRawOne: jest.fn(async () => row),
+      };
+      toolExecutionRepository.createQueryBuilder.mockReturnValue(qb);
+      return calls;
+    };
 
-      toolExecutionRepository.find.mockResolvedValue(mockExecutions);
+    it('should return tool execution statistics', async () => {
+      // The same four executions as before: 2 of 4 succeeded, mean 125ms,
+      // 1 of 4 served from cache.
+      aggregateQb({
+        total: '4',
+        successful: '2',
+        avgTime: '125',
+        cachedCount: '1',
+        rateLimited: '0',
+      });
 
       const result = await service.getToolExecutionStats('tool-1', 'org-1');
 
       expect(result.totalExecutions).toBe(4);
       expect(result.successfulExecutions).toBe(2);
       expect(result.failedExecutions).toBe(2);
-      expect(result.averageExecutionTime).toBe(125); // (100+200+150+50)/4
-      expect(result.cacheHitRate).toBe(25); // 1/4 cached
+      expect(result.averageExecutionTime).toBe(125);
+      expect(result.cacheHitRate).toBe(25);
+      // The row-returning read is the defect itself.
+      expect(toolExecutionRepository.find).not.toHaveBeenCalled();
     });
 
     it('should handle empty execution history', async () => {
-      toolExecutionRepository.find.mockResolvedValue([]);
+      aggregateQb({
+        total: '0',
+        successful: '0',
+        avgTime: null,
+        cachedCount: '0',
+        rateLimited: '0',
+      });
 
       const result = await service.getToolExecutionStats('tool-1', 'org-1');
 
@@ -365,27 +421,32 @@ describe('ToolExecutorService', () => {
       expect(result.cacheHitRate).toBe(0);
     });
 
-    it('should use a TypeORM MoreThanOrEqual operator on createdAt (not Mongo $gte)', async () => {
-      // Regression: the previous implementation passed `{ $gte: since }`
-      // as the createdAt value, which TypeORM treats as a literal object
-      // comparison — silently matching zero rows regardless of timeframe.
-      // The fix uses TypeORM's MoreThanOrEqual operator. This test
-      // inspects the `find` call to verify the query shape.
-      toolExecutionRepository.find.mockResolvedValue([]);
+    it('bounds the window with a real timestamp predicate, not a Mongo $gte', async () => {
+      // Regression: an earlier implementation passed `{ $gte: since }` as
+      // the createdAt value, which TypeORM treats as a literal object
+      // comparison -- silently matching zero rows regardless of timeframe.
+      const calls = aggregateQb({
+        total: '0',
+        successful: '0',
+        avgTime: null,
+        cachedCount: '0',
+        rateLimited: '0',
+      });
 
       await service.getToolExecutionStats('tool-1', 'org-1', 'day');
 
-      expect(toolExecutionRepository.find).toHaveBeenCalledTimes(1);
-      const findArgs = toolExecutionRepository.find.mock.calls[0][0];
-      expect(findArgs.where.toolId).toBe('tool-1');
-      expect(findArgs.where.organizationId).toBe('org-1');
-      // TypeORM operator objects have a `_type` / `_value` internal shape.
-      // A plain `{$gte: ...}` object does NOT — so checking for a
-      // recognizable operator shape catches a regression to Mongo syntax.
-      const createdAt = findArgs.where.createdAt;
-      expect(createdAt).not.toHaveProperty('$gte');
-      expect(typeof createdAt).toBe('object');
-      expect(createdAt).toBeTruthy();
+      expect(toolExecutionRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
+      expect(calls.wheres).toEqual([
+        'execution.toolId = :toolId',
+        'execution.organizationId = :organizationId',
+        'execution.createdAt >= :since',
+      ]);
+      expect(calls.params.toolId).toBe('tool-1');
+      expect(calls.params.organizationId).toBe('org-1');
+      expect(calls.params.since).toBeInstanceOf(Date);
+      expect(calls.params.since).not.toHaveProperty('$gte');
+      // Every selected expression is an aggregate; nothing projects a column.
+      expect(calls.selects.every((e) => /^(COUNT|AVG|SUM)\(/.test(e))).toBe(true);
     });
   });
 

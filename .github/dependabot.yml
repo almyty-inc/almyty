@@ -51,6 +51,19 @@ updates:
       # v9 is ESM-only and Jest cannot load it.
       - dependency-name: "oauth2-mock-server"
         update-types: ["version-update:semver-major"]
+      # Nest 12 ships ESM-only packages: `"type": "module"` with an
+      # exports map that no longer resolves `@nestjs/common/interfaces`
+      # under this project's `module: commonjs` tsconfig, so every
+      # third-party Nest module's `Pick<ModuleMetadata, 'imports'>`
+      # silently degrades to a required `any`. Terminus 12 additionally
+      # drops the `HealthIndicator` base class and `HealthCheckError`.
+      # And the Nest modules we depend on (@nest-lab/throttler-storage-redis,
+      # @nestjs-modules/ioredis) still cap their peer range at ^11.
+      # Moving to 12 is an ESM migration of the whole backend, not a
+      # version bump — it needs its own PR, not a monthly group. This
+      # arrived inside the group below in #674 and broke development.
+      - dependency-name: "@nestjs/*"
+        update-types: ["version-update:semver-major"]
     groups:
       backend-minor-and-patch:
         applies-to: version-updates
@@ -74,6 +87,13 @@ updates:
       # Table v9 is a breaking API (getCoreRowModel is not a function).
       - dependency-name: "@tanstack/react-table"
         update-types: ["version-update:semver-major"]
+      # jsdom is pinned exactly in package.json, not caret-ranged: 30.1.0
+      # leaks state across tests in the same file for Radix modal layers
+      # (a dropdown opened in one test stops opening in the next), which
+      # failed 19 tests across 9 files in #673. It is a MINOR bump, so a
+      # major-only ignore would not hold it. Unpin only together with a
+      # diagnosis of the 30.1 change; the app itself never runs on jsdom.
+      - dependency-name: "jsdom"
     groups:
       frontend-minor-and-patch:
         applies-to: version-updates
@@ -146,6 +166,22 @@ updates:
 
   - package-ecosystem: "docker"
     directory: "/docs-site"
+    target-branch: "development"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # Repo root: Dockerfile.allinone (the single self-host image,
+  # almyty/almyty). Left uncovered, it sat on node:24-alpine for two
+  # majors after every other image moved to 26 — a self-hoster was
+  # running a different Node than the one the code is tested on, and
+  # nothing said so. scripts/check-node-version.js now fails CI on that
+  # drift; this entry is what keeps the bump arriving on its own.
+  - package-ecosystem: "docker"
+    directory: "/"
     target-branch: "development"
     schedule:
       interval: "monthly"

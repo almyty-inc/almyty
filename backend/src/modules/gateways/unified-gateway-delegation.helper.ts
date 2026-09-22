@@ -111,7 +111,21 @@ export class UnifiedGatewayDelegation {
       if (rate.retryAfterSeconds) {
         res.setHeader('Retry-After', String(rate.retryAfterSeconds));
       }
-      throw new HttpException(rate.message ?? 'Gateway rate limit exceeded', HttpStatus.TOO_MANY_REQUESTS);
+      // Carry the limiter's own code and the bucket that tripped onto the
+      // 429. Throwing the message text alone discarded the one field that
+      // distinguishes a surface ceiling from this visitor's ceiling — the
+      // difference between "the gateway is busy" and "you are sending too
+      // fast", which is the whole answer to the ticket.
+      throw new HttpException(
+        {
+          message: rate.message ?? 'Gateway rate limit exceeded',
+          code: rate.code ?? 'RATE_LIMITED',
+          errorCode: rate.code ?? 'RATE_LIMITED',
+          ...(rate.retryAfterSeconds ? { retryAfter: rate.retryAfterSeconds } : {}),
+          ...(rate.bucket ? { bucket: rate.bucket } : {}),
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     const isDiscovery =
@@ -125,10 +139,14 @@ export class UnifiedGatewayDelegation {
 
     let auth: any = null;
     if (!isDiscovery && !isChannel) {
+      // The org and the gateway (with its auth configs) are already in
+      // hand from the unified controller — hand them over so the resolver
+      // does not repeat both lookups.
       const result = await this.gatewayResolver.resolveAndAuthenticate(
         orgSlug,
         `/${resourceSlug}`,
         req,
+        { organization, gateway },
       );
       auth = result.auth;
     }
@@ -274,28 +292,41 @@ export class UnifiedGatewayDelegation {
         gateway.organizationId,
         userId,
       );
+      // 202 Accepted, not 204: the Streamable HTTP revision names 202 for a
+      // POST that carries only notifications or responses, and the
+      // TypeScript SDK's StreamableHTTPClientTransport branches on
+      // `status === 202` to decide whether to open the server->client SSE
+      // stream after `notifications/initialized`. On a 204 it returns
+      // without error and never opens the stream, so a server-initiated
+      // notification could never be delivered.
       if (result === null) {
-        return res.status(204).end();
+        return res.status(202).end();
       }
-      if (result?.result?.sessionId || incomingSessionId) {
-        res.setHeader('Mcp-Session-Id', result?.result?.sessionId || incomingSessionId);
+      // A batch response is an array; only a single response carries a
+      // session id to echo.
+      const single = Array.isArray(result) ? null : result;
+      if (single?.result?.sessionId || incomingSessionId) {
+        res.setHeader('Mcp-Session-Id', single?.result?.sessionId || incomingSessionId);
       }
       return res.json(result);
     }
 
-    const result = await this.mcpService.handleJsonRpc(
+    const result = await this.mcpService.handleJsonRpcMessage(
       body,
       gateway.organizationId,
       null,
       gateway.id,
     );
 
+    // 202 Accepted for a notification-only POST — see the system-gateway
+    // branch above for why the SDK cares about the exact status.
     if (result === null) {
-      return res.status(204).end();
+      return res.status(202).end();
     }
 
-    if (body?.method === 'initialize' && result?.result) {
-      const sessionId = result.result.sessionId || crypto.randomUUID();
+    const single = Array.isArray(result) ? null : result;
+    if (body?.method === 'initialize' && single?.result) {
+      const sessionId = single.result.sessionId || crypto.randomUUID();
       res.setHeader('Mcp-Session-Id', sessionId);
     } else if (incomingSessionId) {
       res.setHeader('Mcp-Session-Id', incomingSessionId);
@@ -411,7 +442,7 @@ export class UnifiedGatewayDelegation {
 
     if (action === 'execute' && req.method === 'POST') {
       const userId = auth?.userId || (req as any).user?.sub || null;
-      const result = await this.utcpService.executeUtcpTool(body, organization.id, userId);
+      const result = await this.utcpService.executeUtcpTool(body, organization.id, userId, gateway.id);
       this.metrics?.record(MetricType.UTCP_DIRECT_CALL, {
         organizationId: organization.id,
         gatewayId: gateway.id,

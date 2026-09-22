@@ -13,8 +13,9 @@ import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
+import { ToolExecution } from '../../entities/tool-execution.entity';
+import { Notification } from '../../entities/notification.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
-import { Gateway } from '../../entities/gateway.entity';
 import { AgentApp, appPrivacyFrom } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 
@@ -28,6 +29,17 @@ const SWEEP_BATCH = 1000;
 // Bound the work of a single sweep per data class; anything left over is
 // picked up by the next interval.
 const MAX_BATCHES_PER_CLASS = 50;
+
+/**
+ * How long an entity-version snapshot is kept.
+ *
+ * `version` carries no organizationId, so it cannot be a retention-policy
+ * class; this is a deployment-wide floor under it. Long enough that the
+ * Change History panel still has something to show.
+ */
+const VERSION_RETENTION_DAYS = 90;
+const VERSION_SWEEP_BATCH = 5_000;
+const VERSION_SWEEP_MAX_PASSES = 20;
 
 /**
  * Only runs in a terminal state are ever deleted. PENDING, RUNNING,
@@ -47,6 +59,8 @@ export interface SweepCounts {
   messages: number;
   requestLogs: number;
   usageMetrics: number;
+  toolExecutions: number;
+  notifications: number;
   auditLogs: number;
 }
 
@@ -64,11 +78,13 @@ export interface SweepCounts {
  *   and we never depend on the cascade being present.
  * - agent_runs.conversationId and conversations.parentConversationId are
  *   ON DELETE SET NULL — deleting conversations detaches, not deletes.
+ *   Both referencing columns are indexed, so the SET NULL a batch of
+ *   1000 deletes triggers is an index lookup and not a table scan.
  * - Nothing references agent_runs with a DB-level FK (approval_requests
  *   .runId is a soft reference), so run deletion needs no child pass.
- * - request_logs has no organizationId; rows are scoped through the
- *   org's gateways. Logs with a NULL gatewayId are unattributable and
- *   are left alone.
+ * - request_logs carries its own organizationId, so it is swept by that
+ *   column directly. gatewayId is ON DELETE SET NULL, so scoping
+ *   through the org's gateways would lose every log of a deleted one.
  */
 @Injectable()
 export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
@@ -90,8 +106,12 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     private readonly usageMetricRepository: Repository<UsageMetric>,
     @InjectRepository(AuditLog)
     private readonly auditLogRepository: Repository<AuditLog>,
-    @InjectRepository(Gateway)
-    private readonly gatewayRepository: Repository<Gateway>,
+    @Optional()
+    @InjectRepository(ToolExecution)
+    private readonly toolExecutionRepository: Repository<ToolExecution>,
+    @Optional()
+    @InjectRepository(Notification)
+    private readonly notificationRepository: Repository<Notification>,
     private readonly auditLogService: AuditLogService,
     // @Global notifications pipeline; @Optional() keeps existing unit
     // tests (constructed without it) working.
@@ -109,7 +129,9 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     if (process.env.NODE_ENV === 'test') return;
     this.timer = setInterval(() => {
-      this.sweep().catch((err) => {
+      // Both sweeps on the same tick: the per-org one, and the global
+      // version prune the per-org one cannot express.
+      Promise.all([this.sweep(), this.sweepEntityVersions()]).catch((err) => {
         this.logger.warn(`Retention sweep failed: ${err.message}`);
       });
     }, SWEEP_INTERVAL_MS);
@@ -143,6 +165,44 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
     return results;
   }
 
+  /**
+   * Prune entity-version snapshots past a global age.
+   *
+   * `version` is the one table the per-organization sweep structurally
+   * cannot reach: it has no organizationId column, so there is nothing
+   * to scope a policy to. It is also one of the fastest-growing, because
+   * the version subscriber writes a full serialized entity on every
+   * update of a @VersionedEntity — and the model reconcile loop saves
+   * several of those every two minutes per deployment, whether anything
+   * changed or not. Ten deployments running for a year is millions of
+   * rows of whole-entity JSON that nothing ever deleted.
+   *
+   * Age-based and deployment-wide, because that is the only axis this
+   * table offers. Batched so one pass cannot lock the table.
+   */
+  async sweepEntityVersions(now = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - VERSION_RETENTION_DAYS * 86_400_000);
+    let deleted = 0;
+
+    for (let pass = 0; pass < VERSION_SWEEP_MAX_PASSES; pass++) {
+      const result = await this.policyRepository.query(
+        `DELETE FROM "version"
+          WHERE "id" IN (
+            SELECT "id" FROM "version" WHERE "timestamp" < $1 LIMIT $2
+          )`,
+        [cutoff, VERSION_SWEEP_BATCH],
+      );
+      const affected = Array.isArray(result) ? result.length : (result?.[1] ?? 0);
+      deleted += affected;
+      if (affected < VERSION_SWEEP_BATCH) break;
+    }
+
+    if (deleted > 0) {
+      this.logger.log(`Pruned ${deleted} entity-version snapshot(s) older than ${VERSION_RETENTION_DAYS}d`);
+    }
+    return deleted;
+  }
+
   /** Sweep a single org according to its policy. Returns per-class counts. */
   async sweepOrganization(policy: RetentionPolicy): Promise<SweepCounts> {
     const organizationId = policy.organizationId;
@@ -153,6 +213,8 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       requestLogs: 0,
       usageMetrics: 0,
       auditLogs: 0,
+      toolExecutions: 0,
+      notifications: 0,
     };
 
     if (policy.agentRunsDays != null) {
@@ -202,20 +264,39 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       } as FindOptionsWhere<AuditLog>);
     }
 
-    const total =
-      counts.agentRuns +
-      counts.conversations +
-      counts.messages +
-      counts.requestLogs +
-      counts.usageMetrics +
-      counts.auditLogs;
+    // tool_executions had no sweep at all while every sibling table had
+    // one, and it is the table that grows fastest in bytes per row.
+    if (policy.toolExecutionsDays != null && this.toolExecutionRepository) {
+      counts.toolExecutions = await this.batchDelete(this.toolExecutionRepository, {
+        organizationId,
+        createdAt: LessThan(this.cutoff(policy.toolExecutionsDays)),
+      } as FindOptionsWhere<ToolExecution>);
+    }
+
+    // notifications is the other per-event table nothing swept. A
+    // permanently broken 5-minute schedule writes 288 rows a day
+    // forever, and rows outlive any reason to read them.
+    if (policy.notificationsDays != null && this.notificationRepository) {
+      counts.notifications = await this.batchDelete(this.notificationRepository, {
+        organizationId,
+        createdAt: LessThan(this.cutoff(policy.notificationsDays)),
+      } as FindOptionsWhere<Notification>);
+    }
+
+    // Every class the sweep can delete, not a hand-maintained subset.
+    // toolExecutions and notifications were added to SweepCounts but
+    // never to this sum, so a sweep that deleted only those two saw
+    // total === 0 and skipped the audit row, the admin notification and
+    // the log line entirely: rows vanished with no trace anywhere.
+    const total = (Object.values(counts) as number[]).reduce((sum, n) => sum + n, 0);
 
     if (total > 0) {
       this.logger.log(
         `Retention sweep for org ${organizationId}: deleted ` +
           `${counts.agentRuns} run(s), ${counts.conversations} conversation(s), ` +
           `${counts.messages} message(s), ${counts.requestLogs} request log(s), ` +
-          `${counts.usageMetrics} usage metric(s), ${counts.auditLogs} audit log(s)`,
+          `${counts.usageMetrics} usage metric(s), ${counts.auditLogs} audit log(s), ` +
+          `${counts.toolExecutions} tool execution(s), ${counts.notifications} notification(s)`,
       );
       // Deleting records is itself a sensitive action — leave a trace.
       await this.auditLogService.log({
@@ -340,21 +421,17 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * request_logs has no organizationId column; scope through the org's
-   * gateways. Rows with a NULL gatewayId cannot be attributed to an org
-   * and are intentionally left alone.
+   * request_logs carries its own organizationId, so the sweep does not
+   * have to go through the org's gateways to find its rows. That matters
+   * because gatewayId is ON DELETE SET NULL: scoping through gateways
+   * meant a deleted gateway put its logs out of every policy's reach.
    */
   private async sweepRequestLogs(
     organizationId: string,
     cutoff: Date,
   ): Promise<number> {
-    const gateways = await this.gatewayRepository.find({
-      where: { organizationId },
-      select: { id: true },
-    });
-    if (gateways.length === 0) return 0;
     return this.batchDelete(this.requestLogRepository, {
-      gatewayId: In(gateways.map((g) => g.id)),
+      organizationId,
       timestamp: LessThan(cutoff),
     } as FindOptionsWhere<RequestLog>);
   }
@@ -378,7 +455,8 @@ export class RetentionSweepService implements OnModuleInit, OnModuleDestroy {
       const summary =
         `${counts.agentRuns} runs, ${counts.conversations} conversations, ` +
         `${counts.messages} messages, ${counts.requestLogs} request logs, ` +
-        `${counts.usageMetrics} usage metrics, ${counts.auditLogs} audit logs`;
+        `${counts.usageMetrics} usage metrics, ${counts.auditLogs} audit logs, ` +
+        `${counts.toolExecutions} tool executions, ${counts.notifications} notifications`;
       await this.notifications.emit({
         type: 'retention.sweep',
         organizationId,

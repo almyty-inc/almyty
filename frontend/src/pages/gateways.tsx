@@ -91,8 +91,11 @@ export function GatewaysPage() {
     enabled: !!selectedGateway && gatewayDetailsOpen,
   })
 
+  // Same key as the agent builder's tool picker, and under the
+  // ['tools'] prefix the tools page invalidates. It used to be
+  // ['all-tools', orgId], which no mutation anywhere touched.
   const { data: allToolsData } = useQuery({
-    queryKey: ['all-tools', currentOrganization?.id],
+    queryKey: ['tools', currentOrganization?.id, 'all'],
     queryFn: () => toolsApi.getAll(currentOrganization?.id),
     enabled: !!currentOrganization && gatewayDetailsOpen,
   })
@@ -115,7 +118,8 @@ export function GatewaysPage() {
       queryClient.invalidateQueries({ queryKey: ['gateway-tools', selectedGateway?.id] })
       queryClient.invalidateQueries({ queryKey: ['gateways'] })
     },
-    onError: () => errorNotif('Failed to assign tool'),
+    onError: (err: unknown) =>
+      errorNotif('Could not assign the tool', getApiErrorMessage(err, 'The gateway is unchanged.')),
   })
 
   const removeToolMutation = useMutation({
@@ -124,7 +128,8 @@ export function GatewaysPage() {
       queryClient.invalidateQueries({ queryKey: ['gateway-tools', selectedGateway?.id] })
       queryClient.invalidateQueries({ queryKey: ['gateways'] })
     },
-    onError: () => errorNotif('Failed to remove tool'),
+    onError: (err: unknown) =>
+      errorNotif('Could not remove the tool', getApiErrorMessage(err, 'The gateway is unchanged.')),
   })
 
   // Gateways is the protocol page: MCP, A2A, ACP, UTCP, Skills and the
@@ -205,7 +210,7 @@ export function GatewaysPage() {
     onSuccess: async (result) => {
       captureEvent('gateway_deployed')
       // Show success message first
-      success('Success', result?.message || 'Gateway created successfully')
+      success('Gateway created', result?.message || 'It is now serving on its protocol endpoint.')
 
       // Invalidate and refetch gateway queries - wait for completion
       await queryClient.invalidateQueries({ queryKey: ['gateways'] })
@@ -316,7 +321,8 @@ export function GatewaysPage() {
             </div>
           )
         }
-        const toolCount = gateway.tools?.length || 0
+        // The list response carries a COUNT, not the tools themselves.
+        const toolCount = gateway.toolCount ?? gateway.tools?.length ?? 0
         return (
           <div className="text-center text-sm">
             <span className="font-medium">{toolCount}</span>{' '}
@@ -381,7 +387,7 @@ export function GatewaysPage() {
         <div>
           <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Gateways</h1>
           <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(gateways.length, 'gateway')} (${gateways.filter((g: Gateway) => g.status === 'active').length} active) \u00B7 ${pluralized(gateways.filter((g: Gateway) => !g.isSystem).reduce((sum: number, g: Gateway) => sum + (g.tools?.length || 0), 0), 'tool assignment')}`}
+            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(gateways.length, 'gateway')} (${gateways.filter((g: Gateway) => g.status === 'active').length} active) \u00B7 ${pluralized(gateways.filter((g: Gateway) => !g.isSystem).reduce((sum: number, g: Gateway) => sum + (g.toolCount ?? g.tools?.length ?? 0), 0), 'tool assignment')}`}
           </p>
         </div>
         <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>

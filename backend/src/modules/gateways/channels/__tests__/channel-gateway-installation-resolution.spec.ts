@@ -96,6 +96,10 @@ describe('ChannelGatewayService installation resolution', () => {
 
   beforeEach(() => {
     fetchMock = installFetchMock();
+    // Slack confirms a post in the body, not the status, and the
+    // adapter now refuses anything else — so a harness that wants a
+    // delivered reply has to say so.
+    fetchMock.setNextResponse({ json: { ok: true, ts: '1700000000.200' } });
     emitter = new EventEmitter();
 
     const run: any = { id: 'run-1', metadata: {}, output: 'agent says hi' };
@@ -111,8 +115,19 @@ describe('ChannelGatewayService installation resolution', () => {
       findOne: jest.fn(async () => run),
     };
     eventRepository = {
+      rows: [] as any[],
+      nextId: 1,
       create: jest.fn((data: any) => data),
-      save: jest.fn(async (e: any) => e),
+      save: jest.fn(async (e: any) => {
+        const stored = { id: `evt-${eventRepository.nextId++}`, ...e };
+        eventRepository.rows.push(stored);
+        return stored;
+      }),
+      update: jest.fn(async (where: any, patch: any) => {
+        const target = eventRepository.rows.find((r: any) => r.id === where.id);
+        if (target) Object.assign(target, patch);
+        return { affected: target ? 1 : 0 };
+      }),
     };
     gatewayRepository = {
       save: jest.fn(async (g: any) => g),
@@ -202,8 +217,12 @@ describe('ChannelGatewayService installation resolution', () => {
 
       expect(rateLimit.checkVisitor).toHaveBeenCalledWith(expect.objectContaining({ id: 'gw-1' }), { endUserId: 'U1', clientHash: null });
       expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
-      const failed = eventRepository.create.mock.calls.map((c: any) => c[0]).find((e: any) => e.status === 'failed');
-      expect(failed?.errorMessage).toMatch(/Too many messages from you/);
+      // The outcome lands on the delivery's own claim row rather than
+      // beside it: a claim left in `received` is one the lease hands to
+      // the platform's next retry.
+      const inbound = eventRepository.rows.find((r: any) => r.direction === 'inbound');
+      expect(inbound.status).toBe('failed');
+      expect(inbound.errorMessage).toMatch(/Too many messages from you/);
     });
 
     it('lets a sender under their share through', async () => {

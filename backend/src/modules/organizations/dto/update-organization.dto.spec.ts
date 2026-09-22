@@ -98,4 +98,36 @@ describe('UpdateOrganizationDto', () => {
       expect(error.constraints?.organizationSettings).toContain('defaultRouting.objective');
     });
   });
+
+  describe('settings.egressAllowlist', () => {
+    // The value decides whether a private host may be reached, so a bad
+    // shape is worth refusing at the edge rather than discovering when
+    // the gate reads it.
+    it('accepts a list of hosts, including a wildcard', async () => {
+      expect(
+        await violations(UpdateOrganizationDto, { settings: { egressAllowlist: ['localhost', '10.0.0.5', '*.internal.acme.test'] } }),
+      ).toEqual([]);
+    });
+
+    it('accepts it being absent or empty', async () => {
+      expect(await violations(UpdateOrganizationDto, { settings: {} })).toEqual([]);
+      expect(await violations(UpdateOrganizationDto, { settings: { egressAllowlist: [] } })).toEqual([]);
+    });
+
+    it('refuses a bare string, which would make .some() iterate characters', async () => {
+      expect(await violations(UpdateOrganizationDto, { settings: { egressAllowlist: 'localhost' } })).not.toEqual([]);
+    });
+
+    it('refuses a URL, and says so, because it would silently never match a host', async () => {
+      const dto = plainToInstance(UpdateOrganizationDto, {
+        settings: { egressAllowlist: ['http://10.0.0.5:8000/v1'] },
+      });
+      const [error] = await validate(dto);
+      expect(error.constraints?.organizationSettings).toContain('hosts, not URLs');
+    });
+
+    it('refuses an empty entry', async () => {
+      expect(await violations(UpdateOrganizationDto, { settings: { egressAllowlist: ['  '] } })).not.toEqual([]);
+    });
+  });
 });

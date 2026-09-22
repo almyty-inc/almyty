@@ -23,17 +23,28 @@ import {
 } from '@/components/ui/table'
 
 import { filesApi } from '@/lib/api'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
 import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
 import { formatFileSize } from './constants'
 import type { AgentFile } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface FilesTabProps {
   agentId: string
   files: AgentFile[]
+  /**
+   * The files query lives on the agent detail page, so the failure has to be
+   * handed down: without it a fetch that failed rendered the same "no files
+   * uploaded yet" line as an agent that genuinely has none, and the user
+   * re-uploaded files that were already there.
+   */
+  error?: unknown
+  onRetry?: () => void
 }
 
-export function FilesTab({ agentId, files }: FilesTabProps) {
+export function FilesTab({ agentId, files, error, onRetry }: FilesTabProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -47,7 +58,7 @@ export function FilesTab({ agentId, files }: FilesTabProps) {
       queryClient.invalidateQueries({ queryKey: ['agent-files', agentId] })
     },
     onError: (err: any) => {
-      errorNotif('Upload Failed', err?.response?.data?.message || err?.message || 'Failed to upload file')
+      errorNotif('Upload Failed', getApiErrorMessage(err, 'Failed to upload file'))
     },
   })
 
@@ -86,10 +97,20 @@ export function FilesTab({ agentId, files }: FilesTabProps) {
         </div>
       </CardHeader>
       <CardContent>
-        {files.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            No files uploaded yet. Upload files to make them available to this agent.
-          </p>
+        {error ? (
+          <QueryError error={error} onRetry={onRetry} title="Couldn't load files" />
+        ) : files.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No files uploaded yet"
+            description="Upload a file and this agent can read it during a run — a spec, a price list, a sample payload."
+            action={
+              <Button onClick={() => fileInputRef.current?.click()} disabled={uploadFileMutation.isPending}>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload file
+              </Button>
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -125,6 +146,7 @@ export function FilesTab({ agentId, files }: FilesTabProps) {
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
+                        aria-label={`Download ${file.name}`}
                         onClick={async () => {
                           try {
                             const response = await filesApi.download(file.id)

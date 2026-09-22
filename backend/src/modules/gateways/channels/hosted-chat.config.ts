@@ -196,6 +196,8 @@ export const HOSTED_CHAT_REFUSALS = Object.freeze({
   DISCLOSURE_REMOVAL_NOT_ENTITLED:
     'Removing the AI disclosure requires the white-label entitlement (EU AI Act Art. 50).',
   AUTH_MODE_NOT_ENTITLED: 'That sign-in method requires a commercial licence.',
+  WHITE_LABEL_NOT_ENTITLED:
+    'Removing the almyty mark requires the white-label entitlement.',
 });
 
 export type HostedChatRefusalCode = keyof typeof HOSTED_CHAT_REFUSALS;
@@ -255,9 +257,22 @@ export function canPublishHostedChat(
     refuse('AUTH_MODE_NOT_ENTITLED');
   }
 
-  // An empty string is an explicit removal; null means "use the default
-  // line", which is always allowed.
-  const removesDisclosure = config.aiDisclosure !== null && config.aiDisclosure.trim() === '';
+  // The flag itself was never checked here -- only disclosure removal
+  // was -- so an unentitled org could turn white label on and the mark
+  // would come off the published page.
+  if (config.whiteLabel && !context.hasWhiteLabel) {
+    refuse('WHITE_LABEL_NOT_ENTITLED');
+  }
+
+  // An empty string is an explicit removal; null or absent means "use
+  // the default line", which is always allowed.
+  //
+  // `typeof` rather than `!== null`: undefined passes a null check and
+  // then `.trim()` throws a TypeError, which createGateway and
+  // updateGateway surface as a 500. The zod schema defaults the field so
+  // the normal API path never gets there, but a config assembled
+  // anywhere else — a migration, a seed, an MCP call — does.
+  const removesDisclosure = typeof config.aiDisclosure === 'string' && config.aiDisclosure.trim() === '';
   if (removesDisclosure && !context.hasWhiteLabel) {
     refuse('DISCLOSURE_REMOVAL_NOT_ENTITLED');
   }

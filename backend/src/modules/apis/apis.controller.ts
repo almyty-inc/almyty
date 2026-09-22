@@ -31,7 +31,6 @@ import { ApisService } from './apis.service';
 import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
 import { CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto } from './dto/api.dto';
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
-import { SchemaParserService } from '../schema-parser/schema-parser.service';
 
 @Controller('apis')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -39,7 +38,6 @@ export class ApisController {
   constructor(
     private readonly apisService: ApisService,
     private readonly credentialService: CredentialService,
-    private readonly schemaParserService: SchemaParserService,
     @InjectQueue('schema-import') private readonly schemaImportQueue: Queue,
   ) {}
 
@@ -47,13 +45,18 @@ export class ApisController {
   @Roles('member', 'admin', 'owner')
   async findAll(
     @Request() req,
-    @Query('organizationId') organizationId?: string,
     @Query('type') type?: ApiType,
     @Query('status') status?: ApiStatus,
     @Query('page') page = 1,
     @Query('limit') limit = 10,
   ) {
-    const orgId = organizationId || req.user.currentOrganizationId;
+    // The session's org, never a query parameter. RolesGuard
+    // deliberately ignores a query-supplied organizationId, so the role
+    // check ran against the caller's own org while the handler queried
+    // whichever one they asked for -- and an Api row carries `headers`
+    // and `authentication`, which routinely hold API keys. Every other
+    // handler in this controller already reads it from the session.
+    const orgId = req.user.currentOrganizationId;
     if (!orgId) {
       throw new BadRequestException('Organization ID is required');
     }
@@ -286,6 +289,23 @@ export class ApisController {
     const job = await this.schemaImportQueue.getJob(jobId);
 
     if (!job) {
+      // The queue keeps only the last `removeOnFail` failures and loses
+      // them all on a Redis restart, so an import that failed a while ago
+      // has no job to read. The reason is on the api row, which is why it
+      // is written there — answering 404 for a failure we recorded would
+      // be the record existing and the endpoint refusing to say so.
+      if (api.lastImportError) {
+        return {
+          success: true,
+          data: {
+            status: 'failed',
+            progress: 0,
+            error: api.lastImportError,
+            failedAt: api.lastImportFailedAt ?? null,
+          },
+          message: 'Import failed',
+        };
+      }
       throw new NotFoundException('Job not found');
     }
 
@@ -315,7 +335,7 @@ export class ApisController {
         data: {
           status: 'failed',
           progress: 0,
-          error: job.failedReason,
+          error: job.failedReason || api.lastImportError,
         },
         message: 'Import failed',
       };
@@ -383,7 +403,9 @@ export class ApisController {
       if (state !== lastState || progressNum !== lastProgress) {
         const payload: any = { state, progress: progressNum };
         if (state === 'completed') payload.result = job.returnvalue;
-        if (state === 'failed') payload.error = job.failedReason;
+        // The durable column as a fallback: a retried job can reach a
+        // failed state with its reason not yet flushed to Redis.
+        if (state === 'failed') payload.error = job.failedReason || api.lastImportError;
         res.write(`event: progress\ndata: ${JSON.stringify(payload)}\n\n`);
         lastProgress = progressNum;
         lastState = state;

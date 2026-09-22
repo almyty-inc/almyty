@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
 import { analyticsApi, auditExportApi, auditLogsApi } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
@@ -49,7 +50,7 @@ function AuditExportButtons({
       if (action) params.action = action
       await auditExportApi.download(format, params)
     } catch (err: any) {
-      error('Export failed', err?.response?.data?.message || 'Could not export the audit log.')
+      error('Export failed', getApiErrorMessage(err, 'Could not export the audit log.'))
     } finally {
       setBusy(null)
     }
@@ -69,8 +70,16 @@ function AuditExportButtons({
   )
 }
 
+import { TABLE_HEAD_CLASS as TH } from './constants'
 import { formatMs, formatNumber } from './format'
 import { StatCard } from './stat-card'
+import { getApiErrorMessage } from '@/lib/api-error'
+
+/** A figure, or a dash when the query behind it did not answer. */
+function auditFigure(summary: any, key: string, value: number | undefined): string {
+  if (summary?.unavailable?.includes(key)) return '—'
+  return formatNumber(value || 0)
+}
 
 export function AuditTab() {
   const { currentOrganization } = useOrganizationStore()
@@ -78,14 +87,26 @@ export function AuditTab() {
   const [auditResourceFilter, setAuditResourceFilter] = useState('')
   const [auditActionFilter, setAuditActionFilter] = useState('')
 
-  const { data: auditSummary, isLoading: loadingAuditSummary } = useQuery({
+  const {
+    data: auditSummary,
+    isLoading: loadingAuditSummary,
+    isError: summaryError,
+    error: summaryErrorObj,
+    refetch: refetchSummary,
+  } = useQuery({
     queryKey: ['analytics-audit-summary', currentOrganization?.id],
     queryFn: () => analyticsApi.getAuditSummary(),
     enabled: !!currentOrganization,
     refetchInterval: 30000,
   })
 
-  const { data: auditLogs, isLoading: loadingAuditLogs } = useQuery({
+  const {
+    data: auditLogs,
+    isLoading: loadingAuditLogs,
+    isError: logsError,
+    error: logsErrorObj,
+    refetch: refetchLogs,
+  } = useQuery({
     queryKey: [
       'analytics-audit-logs',
       currentOrganization?.id,
@@ -109,28 +130,54 @@ export function AuditTab() {
         <div className="flex items-center justify-center h-48">
           <LoadingSpinner size="lg" />
         </div>
+      ) : summaryError ? (
+        // The summary used to render `null` on failure, so the whole
+        // card row vanished with no explanation and nothing to retry.
+        <QueryError
+          error={summaryErrorObj}
+          onRetry={() => refetchSummary()}
+          title="Couldn't load the audit summary"
+        />
       ) : auditSummary ? (
         <>
+          {/*
+            "0 events today" and "the query failed" are the same picture
+            without this. On a compliance surface that distinction is the
+            whole point, so the API now says when a figure could not be
+            read and the cards show a dash instead of a confident zero.
+          */}
+          {auditSummary.partial && (
+            <div
+              data-testid="audit-summary-partial"
+              className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm"
+            >
+              <Activity className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <p className="text-amber-800 dark:text-amber-300">
+                Some figures could not be read just now, so they are shown as &mdash; rather than zero. Reload to try
+                again.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard
               icon={ScrollText}
               label="Actions Today"
-              value={formatNumber(auditSummary.totals?.today || 0)}
+              value={auditFigure(auditSummary, 'today', auditSummary.totals?.today)}
             />
             <StatCard
               icon={Activity}
               label="Actions This Week"
-              value={formatNumber(auditSummary.totals?.thisWeek || 0)}
+              value={auditFigure(auditSummary, 'thisWeek', auditSummary.totals?.thisWeek)}
             />
             <StatCard
               icon={Activity}
               label="Actions This Month"
-              value={formatNumber(auditSummary.totals?.thisMonth || 0)}
+              value={auditFigure(auditSummary, 'thisMonth', auditSummary.totals?.thisMonth)}
             />
             <StatCard
               icon={Users}
               label="Active Users"
-              value={String(auditSummary.topUsers?.length || 0)}
+              value={auditFigure(auditSummary, 'topUsers', auditSummary.topUsers?.length)}
             />
           </div>
 
@@ -209,8 +256,8 @@ export function AuditTab() {
             <option value="credential">Credential</option>
             <option value="user">User</option>
             <option value="organization">Organization</option>
-            <option value="llm_provider">LLM Provider</option>
-            <option value="llm_session">LLM Session</option>
+            <option value="llm_provider">Provider</option>
+            <option value="llm_session">Model call</option>
           </select>
         </div>
         <div className="flex items-center gap-1.5">
@@ -270,53 +317,62 @@ export function AuditTab() {
         <div className="flex items-center justify-center h-48">
           <LoadingSpinner size="lg" />
         </div>
+      ) : logsError ? (
+        // A failed fetch used to fall through to "No audit log entries
+        // yet". On a compliance surface an unreadable log must never be
+        // presented as an empty one.
+        <QueryError
+          error={logsErrorObj}
+          onRetry={() => refetchLogs()}
+          title="Couldn't load the audit log"
+        />
       ) : auditLogs?.data?.length > 0 ? (
         <>
           <div className="rounded-lg border bg-card overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-left text-muted-foreground bg-muted">
-                  <th className="px-3 py-2 font-medium">Time</th>
-                  <th className="px-3 py-2 font-medium">User</th>
-                  <th className="px-3 py-2 font-medium">Action</th>
-                  <th className="px-3 py-2 font-medium">Resource</th>
-                  <th className="px-3 py-2 font-medium">Name</th>
-                  <th className="px-3 py-2 font-medium">Status</th>
-                  <th className="px-3 py-2 font-medium text-right">Duration</th>
-                  <th className="px-3 py-2 font-medium">IP</th>
+                <tr className="border-b text-left bg-muted">
+                  <th className={TH}>Time</th>
+                  <th className={TH}>User</th>
+                  <th className={TH}>Action</th>
+                  <th className={TH}>Resource</th>
+                  <th className={TH}>Name</th>
+                  <th className={TH}>Status</th>
+                  <th className={`${TH} text-right`}>Duration</th>
+                  <th className={TH}>IP</th>
                 </tr>
               </thead>
               <tbody>
                 {auditLogs.data.map((entry: AuditLogEntry) => (
                   <tr key={entry.id} className="border-b last:border-0 hover:bg-muted/30 text-xs">
-                    <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                       {new Date(entry.createdAt).toLocaleString()}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground truncate max-w-[150px]">
+                    <td className="px-4 py-3 text-muted-foreground truncate max-w-[150px]">
                       {entry.userEmail || entry.userId?.slice(0, 8) || '--'}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       <Badge variant="outline" className="text-[10px] capitalize">
                         {entry.action.replace(/_/g, ' ')}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       <Badge variant="secondary" className="text-[10px] capitalize">
                         {entry.resourceType.replace(/_/g, ' ')}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2 font-medium truncate max-w-[200px]">
+                    <td className="px-4 py-3 font-medium truncate max-w-[200px]">
                       {entry.resourceName || entry.resourceId?.slice(0, 8) || '--'}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-3">
                       {entry.status ? (
                         <span
                           className={cn(
                             'font-medium',
                             entry.status === 'success'
-                              ? 'text-green-600'
+                              ? 'text-green-600 dark:text-green-400'
                               : entry.status === 'error'
-                                ? 'text-red-600'
+                                ? 'text-red-600 dark:text-red-400'
                                 : 'text-muted-foreground',
                           )}
                         >
@@ -326,10 +382,10 @@ export function AuditTab() {
                         '--'
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right text-muted-foreground">
+                    <td className="px-4 py-3 text-right text-muted-foreground">
                       {entry.duration ? formatMs(entry.duration) : '--'}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground font-mono">
+                    <td className="px-4 py-3 text-muted-foreground font-mono">
                       {entry.ipAddress || '--'}
                     </td>
                   </tr>

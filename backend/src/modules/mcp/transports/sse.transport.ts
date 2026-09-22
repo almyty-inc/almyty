@@ -5,6 +5,7 @@ import { EventEmitter } from 'events';
 import { McpService } from '../mcp.service';
 import { McpSessionService } from '../mcp-session.service';
 import { JsonRpcRequest, JsonRpcResponse, McpSession } from '../types/mcp.types';
+import { randomUUID } from 'crypto';
 
 export interface SseConnection {
   id: string;
@@ -47,7 +48,11 @@ export class SseTransport extends EventEmitter {
     userId?: string,
     serverId?: string,
   ): Promise<string> {
-    const connectionId = `sse_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // randomUUID, not Date.now()+Math.random(): the id is what a POST to
+    // this connection is addressed by, and Math.random() is not a CSPRNG
+    // -- an attacker who opens their own connection samples the same
+    // generator and can predict neighbouring ids.
+    const connectionId = `sse_${randomUUID()}`;
     
     // Create MCP session
     const session = this.mcpSessionService.createSession(organizationId, 'sse', userId);
@@ -71,9 +76,29 @@ export class SseTransport extends EventEmitter {
 
     this.connections.set(connectionId, connection);
 
-    // Send initial connection event
+    // MCP 2024-11-05 "HTTP with SSE" transport: the FIRST event on the
+    // stream MUST be `endpoint`, and its `data` is the bare URI the
+    // client POSTs its JSON-RPC messages to -- a raw URI, not JSON.
+    // Both official SDKs resolve it relative to the SSE URL and reject
+    // a cross-origin result, so a same-origin relative path is emitted.
+    //
+    // This used to send a single `event: connected` frame carrying
+    // `session.id`. Nothing could drive the transport: the SDKs only
+    // resolve their handshake from an `endpoint` listener, and the id in
+    // that frame was the MCP session id while POSTs are addressed by
+    // `connectionId` -- so even a hand-rolled client reading `connected`
+    // got -32001 Connection not found.
+    this.sendEvent(connectionId, 'endpoint', this.buildMessageEndpoint(response, connectionId));
+
+    // Informational frame kept after the spec handshake for almyty's own
+    // clients. Unknown event names are ignored by the TypeScript SDK and
+    // merely logged by the Python one, so it is safe to trail the
+    // mandatory `endpoint` event. It now carries BOTH identifiers so it
+    // can no longer hand out the wrong one.
     this.sendEvent(connectionId, 'connected', {
+      connectionId,
       sessionId: session.id,
+      messageEndpoint: this.buildMessageEndpoint(response, connectionId),
       protocolVersion: '2024-11-05',
       serverInfo: {
         name: 'almyty',
@@ -127,11 +152,33 @@ export class SseTransport extends EventEmitter {
   }
 
   // Handle incoming JSON-RPC requests via POST to SSE endpoint
+  /**
+   * `callerOrganizationId` is required: the connection is not proof of
+   * who is posting to it.
+   *
+   * This ran the JSON-RPC under `connection.organizationId` and
+   * `connection.userId` and returned the result in the poster's own HTTP
+   * response, so posting to somebody else's connection id enumerated and
+   * EXECUTED tools in their organization. Connection ids were
+   * `Date.now()` plus `Math.random()`, which is not a CSPRNG and can be
+   * sampled by opening your own connection.
+   *
+   * A foreign id answers exactly as an unknown one, so this does not
+   * confirm which ids exist.
+   */
   async handleSseMessage(
     connectionId: string,
     message: JsonRpcRequest,
+    callerOrganizationId?: string,
   ): Promise<JsonRpcResponse> {
     const connection = this.connections.get(connectionId);
+    if (connection && callerOrganizationId && connection.organizationId !== callerOrganizationId) {
+      return {
+        jsonrpc: '2.0',
+        id: message.id,
+        error: { code: -32001, message: 'Connection not found' },
+      };
+    }
     if (!connection) {
       return {
         jsonrpc: '2.0',
@@ -174,6 +221,41 @@ export class SseTransport extends EventEmitter {
     }
   }
 
+  /**
+   * The URI a client must POST its JSON-RPC messages to, as carried by
+   * the spec's `endpoint` event.
+   *
+   * Deliberately a PATH-RELATIVE URI, resolved by the client against the
+   * SSE URL it actually opened. An absolute path cannot work here: the
+   * ingress rewrites `/api(/|$)(.*)` to `/$2` and the vite dev proxy does
+   * the same, so a client that opened `https://tenant/api/mcp/sse` reaches
+   * an Express that only ever sees `/mcp/sse`. Anything absolute this
+   * server builds would drop the `/api` the client needs, and point at a
+   * path the ingress does not route. Relative resolution restores whatever
+   * prefix the client used, and lands on the same origin — which both
+   * official SDKs require.
+   *
+   * There is one POST route, `…/mcp/sse/:connectionId/message`, while the
+   * stream can be opened at `…/mcp/sse` or `…/mcp/servers/:serverId/sse`,
+   * so the climb back up to the `mcp/` directory is computed rather than
+   * assumed.
+   */
+  private buildMessageEndpoint(response: Response, connectionId: string): string {
+    const target = `sse/${encodeURIComponent(connectionId)}/message`;
+    const raw = (response.req?.originalUrl ?? response.req?.url ?? '') as string;
+    const path = raw.split('?')[0];
+    const marker = path.indexOf('/mcp/');
+    if (marker < 0) {
+      // Not a path this transport recognises; an absolute URI is the best
+      // guess left, and is correct wherever no prefix is being stripped.
+      return `/mcp/${target}`;
+    }
+    // Segments below the `mcp/` directory, excluding the final one (which
+    // relative resolution replaces anyway).
+    const depth = path.slice(marker + '/mcp/'.length).split('/').length - 1;
+    return `${'../'.repeat(depth)}${target}`;
+  }
+
   // Utility methods
   private sendEvent(connectionId: string, event: string, data: any): void {
     const connection = this.connections.get(connectionId);
@@ -182,7 +264,10 @@ export class SseTransport extends EventEmitter {
     }
 
     try {
-      const eventData = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+      // A string payload is written verbatim: the `endpoint` event's data
+      // is a bare URI, not a JSON document. Everything else is JSON.
+      const payload = typeof data === 'string' ? data : JSON.stringify(data);
+      const eventData = `event: ${event}\ndata: ${payload}\n\n`;
       connection.response.write(eventData);
       // Intentionally NOT updating lastClientActivity — see field doc.
     } catch (error) {

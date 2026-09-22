@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug } from 'lucide-react'
+import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,6 +16,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -61,6 +62,7 @@ import { CreateToolDialog } from '@/components/tools/create-tool-dialog'
 import { AddMcpServerDialog } from '@/components/tools/add-mcp-server-dialog'
 import { McpSourcesPanel } from '@/components/tools/mcp-sources-panel'
 import { ToolExecutionDialog } from '@/components/tools/tool-execution-dialog'
+import { PublishToolDialog, isPublishable } from '@/components/tools/publish-tool-dialog'
 import { ToolHubPage } from '@/pages/tool-hub'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
@@ -73,12 +75,17 @@ import { useMemo } from 'react'
 
 // Form Schema for manual tool creation
 import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface Tool {
   id: string
   name: string
   description?: string
   type: string
+  // Read all over this page (row subtitle, detail dialog) but never
+  // declared, so every read went through an `any`. Publishing needs it
+  // typed: only an HTTP tool can become a template.
+  executionMethod?: string | null
   status: string
   operation?: {
     method?: string
@@ -137,10 +144,9 @@ export function ToolsPage() {
   const PAGE_SIZE = 10
   const [selectedTool, setSelectedTool] = useState<Tool | null>(null)
   const [deletingTool, setDeletingTool] = useState<Tool | null>(null)
-  const [toolForSettings, setToolForSettings] = useState<Tool | null>(null)
+  const [publishingTool, setPublishingTool] = useState<Tool | null>(null)
   const [toolForExecution, setToolForExecution] = useState<Tool | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
-  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false)
   const [isExecutionDialogOpen, setIsExecutionDialogOpen] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isAddMcpDialogOpen, setIsAddMcpDialogOpen] = useState(false)
@@ -241,11 +247,67 @@ export function ToolsPage() {
     mutationFn: (id: string) => toolsApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
-      notifications.success('Success', 'Tool deleted successfully')
+      notifications.success('Tool deleted', 'The tool has been removed.')
       setDeletingTool(null)
     },
     onError: (error: any) => {
-      notifications.error('Error', error.message || 'Failed to delete tool')
+      notifications.error('Could not delete the tool', getApiErrorMessage(error, 'The tool is still there.'))
+    },
+  })
+
+  const [selectedToolIds, setSelectedToolIds] = useState<Set<string>>(new Set())
+
+  /*
+    Bulk activation, by loop rather than by a new endpoint.
+
+    There is no bulk activate route: POST /organizations/:org/tools/:id/activate
+    is the only one. The MCP control plane's `activate_tool` already
+    handles `toolIds` the same way -- it loops the single-tool service
+    method and reports each id -- so looping here keeps one server-side
+    code path, one authorization check per tool and per-tool reasons,
+    instead of adding a second route that would have to re-derive all of
+    that. An 18-operation import is 18 short requests, which is fine; if
+    imports ever run to hundreds, a real bulk route is the change to make.
+  */
+  const activateToolsMutation = useMutation({
+    mutationFn: async (toolIds: string[]) => {
+      const orgId = currentOrganization?.id || ''
+      const results = await Promise.allSettled(
+        toolIds.map((toolId) => toolsApi.activate(toolId, orgId)),
+      )
+      return {
+        activated: results.filter((r) => r.status === 'fulfilled').length,
+        failed: results
+          .map((r, index) => ({ r, toolId: toolIds[index] }))
+          .filter(({ r }) => r.status === 'rejected')
+          .map(({ r, toolId }) => ({
+            toolId,
+            reason: getApiErrorMessage((r as PromiseRejectedResult).reason, 'Activation failed.'),
+          })),
+      }
+    },
+    onSuccess: ({ activated, failed }) => {
+      queryClient.invalidateQueries({ queryKey: ['tools'] })
+      setSelectedToolIds(new Set())
+      if (failed.length === 0) {
+        notifications.success(
+          activated === 1 ? 'Tool activated' : `${activated} tools activated`,
+          'Active tools can be assigned to a gateway.',
+        )
+        return
+      }
+      const detail = [...new Set(failed.map((f) => f.reason))].slice(0, 2).join(' ')
+      if (activated === 0) {
+        notifications.error('Could not activate', detail)
+      } else {
+        notifications.warning(
+          `${activated} of ${activated + failed.length} tools activated`,
+          detail,
+        )
+      }
+    },
+    onError: (error: any) => {
+      notifications.error('Could not activate', getApiErrorMessage(error, 'Please try again.'))
     },
   })
 
@@ -345,12 +407,27 @@ return new Promise((resolve, reject) => {
         };
       }
 
+      // The Authentication block was collected, rendered, and never
+      // sent, so every hand-built HTTP tool executed unauthenticated --
+      // and there is no tool edit UI, so it could not be added later
+      // either. The backend stores it nested (`{ type, config }`), while
+      // the form holds it flat, hence the reshape.
+      const inlineAuth =
+        authConfig.type === 'bearer' && authConfig.bearerToken
+          ? { type: 'bearer', config: { token: authConfig.bearerToken } }
+          : authConfig.type === 'apiKey' && authConfig.apiKey
+            ? { type: 'apiKey', config: { key: authConfig.apiKey, headerName: 'X-API-Key' } }
+            : authConfig.type === 'basic' && authConfig.username
+              ? { type: 'basic', config: { username: authConfig.username, password: authConfig.password } }
+              : null;
+
       const payload: any = {
         ...data,
         type,
         parameters: toolParameters,
         executionMethod,
         llmConfig: llmConfigPayload,
+        ...(inlineAuth ? { authConfig: inlineAuth } : {}),
       };
 
       // HTTP tools: send httpConfig, no code
@@ -368,7 +445,7 @@ return new Promise((resolve, reject) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tools'] })
-      notifications.success('Success', 'Tool created successfully')
+      notifications.success('Tool created', 'It is ready to assign to a gateway.')
       setIsCreateDialogOpen(false)
       createForm.reset()
       setToolParameters({ type: 'object', properties: {} })
@@ -378,10 +455,7 @@ return new Promise((resolve, reject) => {
       setExecutionMethod('http')
     },
     onError: (error: any) => {
-      const msg = error.response?.data?.error?.message
-        ?? error.response?.data?.message
-        ?? error.message
-        ?? 'Failed to create tool'
+      const msg = getApiErrorMessage(error, 'Failed to create tool')
       notifications.error('Error', msg)
     },
   })
@@ -392,7 +466,7 @@ return new Promise((resolve, reject) => {
     onSuccess: (response: any) => {
       setExecutionResult(response)
       if (response.success) {
-        notifications.success('Success', 'Tool executed successfully')
+        notifications.success('Tool executed', 'The run finished successfully.')
       } else {
         notifications.error('Execution Failed', response.error || 'Tool execution failed')
       }
@@ -447,7 +521,58 @@ return new Promise((resolve, reject) => {
     navigate(`/tools/${tool.id}`)
   }
 
+  /*
+    Selection is held here rather than inside DataTable because DataTable
+    keeps its row selection private and exposes no way to read it, and a
+    bulk action needs the ids.
+  */
+  const visibleSelectedIds = filteredTools
+    .filter((tool: Tool) => selectedToolIds.has(tool.id))
+    .map((tool: Tool) => tool.id)
+  const selectableDraftIds = filteredTools
+    .filter((tool: Tool) => tool.status !== 'active')
+    .map((tool: Tool) => tool.id)
+
+  const toggleToolSelected = (toolId: string, selected: boolean) =>
+    setSelectedToolIds((current) => {
+      const next = new Set(current)
+      if (selected) next.add(toolId)
+      else next.delete(toolId)
+      return next
+    })
+
   const columns = [
+    {
+      id: 'select',
+      header: () => (
+        <Checkbox
+          checked={
+            visibleSelectedIds.length > 0 && visibleSelectedIds.length === filteredTools.length
+              ? true
+              : visibleSelectedIds.length > 0
+                ? 'indeterminate'
+                : false
+          }
+          onCheckedChange={(value) =>
+            setSelectedToolIds(
+              value ? new Set(filteredTools.map((tool: Tool) => tool.id)) : new Set<string>(),
+            )
+          }
+          aria-label="Select all tools"
+        />
+      ),
+      cell: ({ row }: any) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectedToolIds.has(row.original.id)}
+            onCheckedChange={(value) => toggleToolSelected(row.original.id, !!value)}
+            aria-label={`Select ${row.original.name}`}
+          />
+        </div>
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
     {
       accessorKey: 'name',
       header: 'Name',
@@ -480,7 +605,7 @@ return new Promise((resolve, reject) => {
                 />
               </div>
               <div className="text-sm text-muted-foreground truncate">
-                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'LLM Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
+                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
               </div>
             </div>
           </div>
@@ -496,25 +621,93 @@ return new Promise((resolve, reject) => {
         return <Badge variant={variant}>{status === 'active' ? 'Active' : 'Inactive'}</Badge>
       },
     },
-    createActionsColumn<Tool>(
-      (tool) => handleViewDetails(tool),
-      (tool) => setDeletingTool(tool),
-      [
-        {
-          label: 'View Details',
-          onClick: (tool) => handleViewDetails(tool),
-        },
-        {
-          label: 'Test Tool',
-          onClick: (tool) => {
-            setToolForExecution(tool)
-            setExecutionParameters({})
-            setExecutionResult(null)
-            setIsExecutionDialogOpen(true)
-          },
-        },
-      ]
-    ),
+    createActionsColumn<Tool>({
+      cell: ({ row }: any) => {
+        const tool: Tool = row.original
+        const isActive = tool.status === 'active'
+
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
+                <span className="sr-only">Actions</span>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleViewDetails(tool)
+                }}
+              >
+                View Details
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setToolForExecution(tool)
+                  setExecutionParameters({})
+                  setExecutionResult(null)
+                  setIsExecutionDialogOpen(true)
+                }}
+              >
+                Test Tool
+              </DropdownMenuItem>
+              {/*
+                Activate, here, on the row.
+
+                Every tool generated from a schema is a draft, and a
+                gateway only serves active tools -- so this was the one
+                action a new user had to take, and the only place in the
+                product that offered it was a toggle on a single tool's
+                detail page. An eighteen-operation import meant eighteen
+                page visits, and nothing said so.
+              */}
+              {!isActive && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    activateToolsMutation.mutate([tool.id])
+                  }}
+                >
+                  Activate
+                </DropdownMenuItem>
+              )}
+              {/*
+                Publish, here, on the row.
+
+                Nothing in the product wrote a tool template, so the Tool
+                Hub tab was a permanent empty state. This is the authoring
+                path: a working tool becomes a template your organization
+                can install anywhere. Offered only for HTTP tools, because
+                that is the only shape a template carries back into a tool
+                that can execute.
+              */}
+              {isPublishable(tool) && (
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setPublishingTool(tool)
+                  }}
+                >
+                  Publish to Hub
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setDeletingTool(tool)
+                }}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
+    }),
   ]
 
   if (!currentOrganization) {
@@ -582,17 +775,77 @@ return new Promise((resolve, reject) => {
             <p className="text-muted-foreground mb-6 text-center max-w-md">
               Generate tools from API schemas automatically. Create your first tool by importing an API.
             </p>
-            <Button size="lg" asChild>
-              <a href="/apis">
-                <Plus className="mr-2 h-4 w-4" />
-                Go to APIs
-              </a>
-            </Button>
+            {/*
+              The sample offer belongs here, on the branch that actually
+              renders. It was only on the DataTable's emptyState, which
+              this `tools.length === 0` branch pre-empts -- so on the one
+              page where a new user has no tools at all, the button was
+              unreachable.
+            */}
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button size="lg" asChild>
+                <a href="/apis">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Go to APIs
+                </a>
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                onClick={() => seedSample.mutate()}
+                disabled={seedSample.isPending || !currentOrganization}
+              >
+                {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
+            {/*
+              Bulk activation bar. Drafts are the normal state of a fresh
+              import, so the count of drafts on screen is shown even
+              before anything is selected -- that is the fact the product
+              used to keep to itself.
+            */}
+            {(visibleSelectedIds.length > 0 || selectableDraftIds.length > 0) && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-3">
+                <p className="text-sm text-muted-foreground">
+                  {visibleSelectedIds.length > 0
+                    ? `${visibleSelectedIds.length} selected.`
+                    : `${selectableDraftIds.length} tool${selectableDraftIds.length === 1 ? ' is a draft' : 's are drafts'}. A gateway only serves active tools.`}
+                </p>
+                <div className="flex items-center gap-2">
+                  {visibleSelectedIds.length === 0 ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedToolIds(new Set(selectableDraftIds))}
+                    >
+                      Select the drafts
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedToolIds(new Set())}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    disabled={visibleSelectedIds.length === 0 || activateToolsMutation.isPending}
+                    onClick={() => activateToolsMutation.mutate(visibleSelectedIds)}
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    {activateToolsMutation.isPending ? 'Activating…' : 'Activate selected'}
+                  </Button>
+                </div>
+              </div>
+            )}
             <DataTable
               columns={columns}
               data={filteredTools}
@@ -842,126 +1095,14 @@ return new Promise((resolve, reject) => {
       </Dialog>
 
       {/* Tool Settings Dialog */}
-      <Dialog open={isSettingsDialogOpen} onOpenChange={setIsSettingsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <Settings className="h-5 w-5" />
-              Tool Settings
-            </DialogTitle>
-            <DialogDescription>
-              Configure {toolForSettings?.name} execution settings
-            </DialogDescription>
-          </DialogHeader>
-
-          {toolForSettings && (
-            <div className="space-y-6">
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-sm font-medium mb-3">Execution Configuration</h4>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium">Timeout (ms)</label>
-                      <Input
-                        type="number"
-                        defaultValue={toolForSettings.configuration?.timeout || 30000}
-                        className="mt-1"
-                        placeholder="30000"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Maximum time in milliseconds to wait for tool execution
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium">Retries</label>
-                      <Input
-                        type="number"
-                        defaultValue={toolForSettings.configuration?.retries || 3}
-                        className="mt-1"
-                        min="0"
-                        max="10"
-                        placeholder="3"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Number of retry attempts on failure
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium">Rate Limit (requests/min)</label>
-                      <Input
-                        type="number"
-                        defaultValue={60}
-                        className="mt-1"
-                        min="1"
-                        placeholder="60"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Maximum number of requests per minute
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium mb-3">Caching</h4>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="text-sm font-medium">Enable Cache</label>
-                      <p className="text-xs text-muted-foreground">
-                        Cache successful responses for faster repeated requests
-                      </p>
-                    </div>
-                    <Switch
-                      defaultChecked={toolForSettings.configuration?.cache?.enabled}
-                    />
-                  </div>
-                  <div className="mt-3">
-                    <label className="text-sm font-medium">Cache TTL (seconds)</label>
-                    <Input
-                      type="number"
-                      defaultValue={300}
-                      className="mt-1"
-                      placeholder="300"
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium mb-3">Authentication</h4>
-                  <Select defaultValue="inherit">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select authentication" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="inherit">Inherit from API</SelectItem>
-                      <SelectItem value="none">None</SelectItem>
-                      <SelectItem value="bearer">Bearer Token</SelectItem>
-                      <SelectItem value="api-key">API Key</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsSettingsDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={() => {
-                  notifications.success('Settings Updated', 'Tool configuration saved successfully')
-                  setIsSettingsDialogOpen(false)
-                }}>
-                  Save Settings
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* The Tool Settings dialog lived here. It could never open --
+          nothing ever called setIsSettingsDialogOpen(true) -- and if it
+          had, every field was uncontrolled and "Save Settings" only
+          raised a success toast: no mutation, no request. A dialog that
+          reports success without saving is worse than a missing one,
+          because the person believes the setting took. Timeout, retries,
+          rate limit, cache and per-tool auth genuinely have no UI; that
+          is now visibly true rather than faked. */}
 
       {/* Tool Execution Dialog */}
       <ToolExecutionDialog
@@ -974,6 +1115,10 @@ return new Promise((resolve, reject) => {
         executeToolMutation={executeToolMutation}
       />
 
+      <PublishToolDialog
+        tool={publishingTool}
+        onOpenChange={(open) => !open && setPublishingTool(null)}
+      />
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog
@@ -982,7 +1127,7 @@ return new Promise((resolve, reject) => {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogTitle>Delete tool?</AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently delete the tool "{deletingTool?.name}". This
               action cannot be undone.

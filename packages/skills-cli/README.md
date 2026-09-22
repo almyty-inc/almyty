@@ -1,12 +1,17 @@
 # @almyty/skills
 
-Install and manage almyty skills in 30+ AI coding agents (Claude Code, Cursor, Windsurf, Copilot, Codex, and more).
+Turn any API in your almyty gateways into a `SKILL.md` your coding agent
+reads on its next session. 30 agents are recognised — Claude Code,
+Codex, Cursor, Windsurf, GitHub Copilot, Gemini CLI, Amp, Cline,
+Continue, Goose, Junie, Roo Code, Trae, OpenHands, OpenCode, Augment and
+more — plus the universal `.agents/skills/` convention.
 
 ## Quick start
 
 ```bash
 $ npx @almyty/auth login
 $ npx @almyty/skills gateways
+$ npx @almyty/skills install org/gateway --dry-run   # see the exact files
 $ npx @almyty/skills install org/gateway
 ```
 
@@ -14,21 +19,28 @@ $ npx @almyty/skills install org/gateway
 
 | Command | Description |
 |---------|-------------|
-| `gateways` | List your gateways |
-| `list` | List all available skills |
-| `list org/gateway` | List skills from one gateway |
-| `search <query>` | Search skills by keyword |
-| `install org/gateway` | Install all skills from a gateway |
-| `install org/gateway/skill` | Install a single skill |
-| `installed` | Show locally installed skills |
-| `remove` | Remove all installed skills |
-| `run org/gateway/skill [--key value]` | Execute a skill |
-| `daemon [--interval 60]` | Sync all skills on a schedule |
-| `watch org/gateway [--interval 60]` | Watch a specific gateway for changes |
+| `gateways` | Your gateways, and the ref to install each |
+| `list` | Every skill available to you |
+| `list org/gateway` | Skills from one gateway |
+| `search <query>` | Search your gateways' skills by keyword |
+| `install org/gateway` | Install every skill from a gateway |
+| `install org/gateway/skill` | Install one skill |
+| `installed` | Skills this CLI has installed in this directory |
+| `remove` | Remove every skill this CLI installed here |
+| `run org/gateway/skill [--key value]` | Execute one skill and print its result |
+| `daemon [--interval 60]` | Re-sync every skill on a timer |
+| `watch org/gateway [--interval 60]` | Re-sync one gateway on a timer |
+
+`login`, `logout` and `whoami` moved to `@almyty/auth`; typing them here
+prints where they went and exits `2`.
 
 ## References
 
-Skills are referenced as `org/gateway` or `org/gateway/skill`:
+A skill is `org/gateway/skill`, a whole gateway is `org/gateway`, and a
+gateway UUID also works. A leading `@` is optional — `@acme/petstore`
+and `acme/petstore` are the same. A bare name is treated as a search,
+and installs only when it matches exactly one skill; an ambiguous name
+lists the matches and exits `2` rather than guessing.
 
 ```bash
 $ npx @almyty/skills install acme/petstore
@@ -37,72 +49,133 @@ $ npx @almyty/skills run acme/petstore/get-pet --id 123
 
 ## Where skills get installed
 
-`install` writes a `SKILL.md` file per skill into one or more agent
-directories. The CLI detects agents at two scopes:
+`install` writes one `SKILL.md` per skill into one or more agent
+directories, at `<skillsDir>/<skill-name>/SKILL.md`. The CLI detects
+agents at two scopes:
 
 - **Project scope** — a config dir exists in the current project
-  (e.g. `./.codex/`). Skills install to `./.codex/skills/`, only
+  (e.g. `./.codex/`). Skills install to `./.codex/skills/`, so only
   this checkout sees them.
 - **Home scope** — a config dir exists in your home directory
-  (e.g. `~/.codex/`). Skills install to `~/.codex/skills/`, every
-  project the agent opens picks them up.
+  (e.g. `~/.codex/`). Skills install to `~/.codex/skills/`, so every
+  project that agent opens picks them up.
 
-Default behavior:
+**Installing overwrites a `SKILL.md` of the same name** in the target
+directory. Nothing else in those directories is touched, and `remove`
+only deletes directories whose `SKILL.md` carries almyty's own
+`metadata.author: almyty` marker. `install` prints the directories it is
+about to write to before it writes anything, reports how many files it
+replaced, and `--dry-run` lists every path and writes nothing:
 
-- **Interactive (TTY, no flags):** the picker lists every detected
-  agent at both scopes (each labeled `(project)` or `(home)`),
-  every other supported agent as opt-in, the universal
-  `.agents/skills/` convention, and a custom-path option. Pick any
-  combination.
-- **`--yes` or non-TTY:** project-detected agents + `.agents/skills/`.
+```bash
+$ npx @almyty/skills install acme/petstore --dry-run
+
+acme/petstore (12 skill(s)) — dry run, nothing will be written:
+  Codex: /work/proj/.codex/skills
+  Universal (.agents/skills): /work/proj/.agents/skills
+
+  Codex: 12 skill file(s) would go to /work/proj/.codex/skills
+      /work/proj/.codex/skills/get-pet/SKILL.md
+      …
+
+Dry run: 24 skill file(s) across 2 target(s), 3 of them replacing an existing file.
+Re-run without --dry-run to write them.
+```
+
+### Choosing targets
+
+- **Interactive terminal, no target flag:** a multi-select picker lists
+  every detected agent at both scopes (labelled `(project)` or
+  `(home)`), every other supported agent as opt-in, the universal
+  `.agents/skills/` convention, and a custom-path option.
+- **`--yes`, `--json`, CI, or a pipe:** the picker is skipped and
+  install writes to the project-detected agents plus `.agents/skills/`.
   Home-detected agents are NOT installed automatically — pass
-  `--global` to opt in.
+  `--global`.
 - **`--global` alone:** every home-detected agent. No project install.
-- **`--all`:** every project-detected agent + universal. Combine
-  with `--global` to also include home-detected.
-- **`--agent <name>`:** install to a specific agent. Picks the
-  detected scope (project preferred). With `--global`, prefers
-  home. If neither is detected, creates the project-scope dir
-  (the agent will pick it up on next scan).
+- **`--all`:** every project-detected agent plus universal. Combine with
+  `--global` to include home-detected too.
+- **`--agent <name>`:** the named agent at whichever scope it is
+  detected in (project preferred). With `--global`, prefers home. If it
+  is detected nowhere, creates the project-scope directory so the agent
+  picks it up on its next scan.
 
 | Flag | Meaning |
 |------|---------|
-| `--agent <name>`, `-a` | Install to the named agent. Repeatable. Partial-match. |
+| `--agent <name>`, `-a` | Install to the named agent. Repeatable, partial-match. |
 | `--agent '*'` | Every known agent at project scope, regardless of detection. |
 | `--path <dir>`, `-p` | Custom skills directory. Repeatable. Bypasses detection. |
 | `--all` | Every project-detected agent + `.agents/skills/`. |
-| `--global`, `-G` | Use home scope (`~/.<agent>/skills/`). Modifier on `--agent`, or standalone for "every home-detected". |
+| `--global`, `-G` | Home scope (`~/.<agent>/skills/`). A modifier on `--agent`, or standalone for "every home-detected". |
 | `--yes`, `-y` | Skip the picker; use the non-interactive defaults. |
-
-Examples:
+| `--dry-run` | Print every file `install` would write, and write nothing. |
 
 ```bash
-$ npx @almyty/skills install acme/petstore                          # interactive picker
-$ npx @almyty/skills install acme/petstore --all                    # every project-detected
-$ npx @almyty/skills install acme/petstore --all --global           # project AND home detected
-$ npx @almyty/skills install acme/petstore --global                 # only home-detected agents
-$ npx @almyty/skills install acme/petstore -a codex                 # codex at whichever scope it lives
-$ npx @almyty/skills install acme/petstore -a codex --global        # force codex at ~/.codex/skills
-$ npx @almyty/skills install acme/petstore --agent '*' -y           # every known agent at project
-$ npx @almyty/skills install acme/petstore -p ./agents/skills       # custom directory
+$ npx @almyty/skills install acme/petstore                     # interactive picker
+$ npx @almyty/skills install acme/petstore --all               # every project-detected
+$ npx @almyty/skills install acme/petstore --all --global      # project AND home detected
+$ npx @almyty/skills install acme/petstore --global            # only home-detected agents
+$ npx @almyty/skills install acme/petstore -a codex            # codex, at whichever scope it lives
+$ npx @almyty/skills install acme/petstore -a codex --global   # force ~/.codex/skills
+$ npx @almyty/skills install acme/petstore --agent '*' -y      # every known agent, project scope
+$ npx @almyty/skills install acme/petstore -p ./agents/skills  # a directory you name
 ```
 
-The 25+ supported agents include Claude Code, Codex, Cursor, Windsurf,
-GitHub Copilot, Gemini CLI, Amp, Cline, Continue, Goose, Junie, Roo
-Code, Trae, OpenHands, OpenCode, Augment, and others. See
-`src/agents.ts` for the full registry — each entry maps a detection
-directory to the `<dir>/skills` path that agent reads on session start.
+`src/agents.ts` is the registry: each entry maps a detection directory
+to the `<dir>/skills` path that agent reads on session start.
+
+## Other options
+
+| Flag | Description |
+|------|-------------|
+| `--interval <s>`, `-i` | `daemon`/`watch` poll interval (default `60`) |
+| `--url <url>` | API URL (default `https://api.almyty.com`) |
+| `--dir <path>` | Project directory (default: cwd) |
+| `--json` | Machine-readable output on every read command |
+| `--help`, `-h` | Show help |
+| `--version`, `-v` | Print the version |
+
+Both `--flag value` and `--flag=value` are accepted. `run` forwards
+every flag the CLI does not own to the skill as a parameter, so
+`run acme/pet/get-pet --petId 123` sends `{ petId: "123" }`.
+
+`run` prints its result as JSON always — the result *is* data. Every
+other read command prints for humans by default and takes `--json`.
+
+## Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | success |
+| `1` | unexpected error |
+| `2` | usage error (bad flags, unknown command, ambiguous ref) |
+| `3` | not authenticated — run `npx @almyty/auth login` |
+| `4` | no such gateway or skill |
+| `5` | the skill ran and failed |
 
 ## Configuration
 
-Create `.almytyrc` in your project or home directory:
+`.almytyrc`, JSON, in the project directory or `$HOME`:
 
 ```json
 {
+  "skillsDir": ".agents/skills",
+  "agents": ["Codex", "Claude Code"],
   "url": "https://api.almyty.com",
-  "token": "your-token"
+  "interval": 60
 }
 ```
+
+| Key | Effect |
+|-----|--------|
+| `skillsDir` | Install here and skip agent detection entirely |
+| `agents` | Whitelist of agent names (partial match) to install to |
+| `url` | API URL |
+| `interval` | `daemon`/`watch` poll interval, in seconds |
+
+There is **no credential key**. The token lives only in
+`~/.almyty/credentials.json` (written by `npx @almyty/auth login`) or in
+`ALMYTY_TOKEN`.
 
 ## Environment variables
 
@@ -110,11 +183,18 @@ Create `.almytyrc` in your project or home directory:
 |----------|-------------|
 | `ALMYTY_TOKEN` | Auth token override |
 | `ALMYTY_URL` | API URL override |
-| `ALMYTY_SKILLS_DIR` | Custom directory for installed skill files |
+| `ALMYTY_SKILLS_DIR` | Install directory override; wins over `.almytyrc` |
+| `ALMYTY_NON_INTERACTIVE=1` | Never prompt, even in a terminal |
+| `CI` | Any truthy value has the same effect |
+| `NO_COLOR` | Drops colour from the interactive picker |
 
 ## Authentication
 
-Requires `npx @almyty/auth login` first. Reads credentials from `~/.almyty/credentials.json`.
+Run `npx @almyty/auth login` once. `search` and `list` are org-scoped —
+they look through the gateways your account can see, so there is no
+credential-free public index to search. With no credential, every
+command that talks to the API prints the login instruction and exits
+`3`; `installed` and `remove` are local and need none.
 
 ## About almyty
 

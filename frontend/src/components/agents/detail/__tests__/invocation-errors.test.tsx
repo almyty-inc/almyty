@@ -36,11 +36,11 @@ describe('agent invocation errors', () => {
     vi.mocked(agentsApi.invoke).mockRejectedValue(wrappedError)
   })
 
-  it('shows the wrapped backend reason inline and in the Invoke dialog notification', async () => {
+  it('shows the wrapped backend reason inline and in the run dialog notification', async () => {
     renderWithProviders(<InvokeDialog agent={agent} open onOpenChange={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: 'Run Agent' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Agent must be active to invoke')
-    expect(notifications.error).toHaveBeenCalledWith('Invocation Failed', 'Agent must be active to invoke')
+    expect(notifications.error).toHaveBeenCalledWith('Run failed', 'Agent must be active to invoke')
     expect(screen.getByRole('button', { name: 'Run Agent' })).toBeEnabled()
   })
 
@@ -61,7 +61,7 @@ describe('agent invocation errors', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(await screen.findByRole('alert')).toHaveTextContent('Agent must be active to invoke')
     expect(input).toHaveValue('hello')
-    expect(notifications.error).toHaveBeenCalledWith('Invocation Failed', 'Agent must be active to invoke')
+    expect(notifications.error).toHaveBeenCalledWith('Run failed', 'Agent must be active to invoke')
   })
 
   it('preserves useful local invalid-JSON errors without invoking the API', async () => {

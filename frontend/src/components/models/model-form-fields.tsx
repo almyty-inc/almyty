@@ -17,7 +17,7 @@ import {
   MODEL_PRIVACY_TIER_LABELS,
 } from '@/types/models'
 
-/** Privacy tier select bound to a react-hook-form field named `privacyTier`. */
+/** Privacy select bound to a react-hook-form field named `privacyTier`. */
 export function PrivacyTierField<T extends FieldValues>({ control, name, id = 'privacyTier' }: { control: Control<T>; name: Path<T>; id?: string }) {
   return (
     <Controller
@@ -25,10 +25,10 @@ export function PrivacyTierField<T extends FieldValues>({ control, name, id = 'p
       name={name}
       render={({ field }) => (
         <div>
-          <Label htmlFor={id}>Privacy tier</Label>
+          <Label htmlFor={id}>Privacy</Label>
           <Select value={field.value || ''} onValueChange={field.onChange}>
-            <SelectTrigger id={id} className="mt-1" aria-label="Privacy tier">
-              <SelectValue placeholder="Select tier" />
+            <SelectTrigger id={id} className="mt-1" aria-label="Privacy">
+              <SelectValue placeholder="Select" />
             </SelectTrigger>
             <SelectContent>
               {MODEL_PRIVACY_TIERS.map((tier) => (
@@ -36,7 +36,7 @@ export function PrivacyTierField<T extends FieldValues>({ control, name, id = 'p
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground mt-1">Where the model runs. Routing policies use it as a ceiling: local, then private cloud, then public.</p>
+          <p className="text-xs text-muted-foreground mt-1">Where the model runs. A routing policy can require this or stricter: local, then private cloud, then public.</p>
         </div>
       )}
     />

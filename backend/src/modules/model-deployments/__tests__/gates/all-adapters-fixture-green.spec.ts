@@ -66,7 +66,7 @@ describe('gate 3: every registered adapter is contract-clean in fixture mode', (
     // The describe() payload is what GET /model-adapters serves; every entry is form-ready.
     for (const entry of registry.describe()) {
       expect(entry.displayName).toBeTruthy();
-      expect(entry.capabilities.registrySources).toContain('s3');
+      expect(entry.capabilities.registrySources.length).toBeGreaterThan(0);
       expect(entry.configSchema.type).toBe('object');
     }
   });

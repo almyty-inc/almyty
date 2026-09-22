@@ -6,8 +6,7 @@ import type { AlmytyClient, GatewayClient, AgentInfo, StreamEvent } from '@almyt
 import type { Message, Choice } from './components.js';
 import {
   Header,
-  MessageView,
-  LoadingIndicator,
+  MessageWindow,
   AgentSelector,
   CodingModeIndicator,
   ChoiceSelector,
@@ -19,9 +18,15 @@ import {
   getSuggestion,
   ALIASES,
   classifyInput,
+  continuationOf,
   buildCodeChoices,
   type CodeChoice,
 } from './commands.js';
+import { explainError, type ErrorContext } from './errors.js';
+import { addUsage, formatUsage, type Usage } from './stream.js';
+import { runTurn, type TurnResult } from './turn.js';
+import { appendHistory, loadHistory, walkHistory } from './history.js';
+import { usableRows } from './viewport.js';
 
 // ── App state ──────────────────────────────────────────────────
 
@@ -45,15 +50,21 @@ export interface CodingSessionState {
 // Mutable module-level variable; written by ChatApp, read by main() after exit
 export let exitMessage = '';
 
+/** Rows the header, separator, prompt and status bar take off the top. */
+const CHROME_ROWS = 10;
+
 // ── Chat app ────────────────────────────────────────────────────
 
-export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
+export function ChatApp({ client, initialAgent, gw, resumeConversationId, errorContext }: {
   client: AlmytyClient;
   initialAgent: AgentInfo;
   gw: GatewayClient;
   resumeConversationId?: string;
+  errorContext?: ErrorContext;
 }) {
   const { exit } = useApp();
+  const agentRef = `${gw.orgSlug}/${gw.agentSlug}`;
+  const errCtx: ErrorContext = { agentRef, ...errorContext };
   const [state, setState] = useState<AppState>({
     agent: initialAgent,
     messages: [],
@@ -62,6 +73,16 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
     conversationId: resumeConversationId ?? null,
     pendingRunId: null,
   });
+
+  // Assistant text arriving right now, drawn below the transcript and
+  // committed as a message when the turn ends.
+  const [streaming, setStreaming] = useState('');
+  const [sessionUsage, setSessionUsage] = useState<Usage>({ cost: 0, tokens: 0, steps: 0 });
+  const [lastRunId, setLastRunId] = useState<string | null>(null);
+  // Lines of a message being typed across several Enter presses.
+  const [draft, setDraft] = useState<string[]>([]);
+  // Redrawn on resize so the visible window matches the new size.
+  const [size, setSize] = useState({ rows: process.stdout.rows, columns: process.stdout.columns });
 
   // Load conversation history on resume
   useEffect(() => {
@@ -77,15 +98,29 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
             text: m.content,
           }));
         setState(s => ({ ...s, messages: msgs, loading: false }));
-      } catch {
-        setState(s => ({ ...s, loading: false }));
+      } catch (err) {
+        setState(s => ({
+          ...s,
+          loading: false,
+          messages: [...s.messages, { role: 'error', text: explainError(err, { ...errCtx, what: 'history' }) }],
+        }));
       }
     })();
   }, [resumeConversationId]);
+
+  // ink redraws on resize, but the window arithmetic needs the new
+  // numbers in state to recompute with them.
+  useEffect(() => {
+    const onResize = () => setSize({ rows: process.stdout.rows, columns: process.stdout.columns });
+    process.stdout.on('resize', onResize);
+    return () => { process.stdout.off('resize', onResize); };
+  }, []);
+
   const [input, setInput] = useState('');
   const [paletteCursor, setPaletteCursor] = useState(0);
-  // Input history derived from conversation — includes resumed messages
-  const inputHistory = state.messages.filter(m => m.role === 'user').map(m => m.text);
+  // Input history persisted across sessions, so up-arrow works in a
+  // fresh session and survives /clear.
+  const [inputHistory, setInputHistory] = useState<string[]>(() => loadHistory());
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [showPicker, setShowPicker] = useState(false);
   const [pickerAgents, setPickerAgents] = useState<AgentInfo[]>([]);
@@ -94,6 +129,8 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
   // Pending runner x CLI pick for /code when multiple targets exist.
   const [codeChoices, setCodeChoices] = useState<{ choices: CodeChoice[]; task: string } | null>(null);
   const codingAbortRef = useRef<AbortController | null>(null);
+  // The in-flight turn, so Ctrl-C can stop it server-side.
+  const runAbortRef = useRef<AbortController | null>(null);
 
   // Command palette matches
   const slashMatches = input.startsWith('/') && !input.includes(' ')
@@ -101,7 +138,50 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
     : [];
   const paletteOpen = input.startsWith('/') && slashMatches.length > 0;
 
+  const addMessage = useCallback((msg: Message) => {
+    setState(s => ({ ...s, messages: [...s.messages, msg] }));
+  }, []);
+
+  const quit = useCallback(() => {
+    setState(s => {
+      exitMessage = s.conversationId
+        ? `\nTo resume: almyty chat ${agentRef} --resume ${s.conversationId}\n`
+        : '';
+      return s;
+    });
+    exit();
+  }, [exit, agentRef]);
+
   useInput((ch, key) => {
+    // Ctrl-C and Ctrl-D come first: they have to work while a run is in
+    // flight, which is the only moment cancelling means anything.
+    if (key.ctrl && ch === 'c') {
+      if (runAbortRef.current) {
+        // Cancels the run where it runs, not just where it is watched.
+        runAbortRef.current.abort();
+        runAbortRef.current = null;
+        return;
+      }
+      if (codingAbortRef.current) {
+        codingAbortRef.current.abort();
+        codingAbortRef.current = null;
+        setCoding(null);
+        addMessage({ role: 'info', text: 'left coding mode (the session keeps running)' });
+        return;
+      }
+      if (input) {
+        setInput('');
+        setDraft([]);
+        return;
+      }
+      quit();
+      return;
+    }
+    if (key.ctrl && ch === 'd') {
+      quit();
+      return;
+    }
+
     if (state.loading) return;
 
     // Command palette navigation
@@ -123,21 +203,16 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
     }
 
     // Input history — up/down arrows always, like Claude Code
-    if (key.upArrow && inputHistory.length > 0) {
-      const newIdx = Math.min(historyIdx + 1, inputHistory.length - 1);
-      setHistoryIdx(newIdx);
-      setInput(inputHistory[inputHistory.length - 1 - newIdx]);
+    if (key.upArrow) {
+      const walked = walkHistory(inputHistory, historyIdx, 'up');
+      setHistoryIdx(walked.idx);
+      if (walked.value) setInput(walked.value);
       return;
     }
     if (key.downArrow) {
-      if (historyIdx > 0) {
-        const newIdx = historyIdx - 1;
-        setHistoryIdx(newIdx);
-        setInput(inputHistory[inputHistory.length - 1 - newIdx]);
-      } else if (historyIdx === 0) {
-        setHistoryIdx(-1);
-        setInput('');
-      }
+      const walked = walkHistory(inputHistory, historyIdx, 'down');
+      setHistoryIdx(walked.idx);
+      setInput(walked.value);
       return;
     }
   });
@@ -146,10 +221,6 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
   const handleInputChange = useCallback((val: string) => {
     setInput(val);
     setPaletteCursor(0);
-  }, []);
-
-  const addMessage = useCallback((msg: Message) => {
-    setState(s => ({ ...s, messages: [...s.messages, msg] }));
   }, []);
 
   // ── Coding session helpers (chat-to-runner bridge) ──────────────
@@ -208,13 +279,13 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
         }
       }, ac.signal).catch((err: any) => {
         if (ac.signal.aborted) return;
-        addMessage({ role: 'error', text: `coding stream lost: ${err.message}` });
+        addMessage({ role: 'error', text: `coding stream lost: ${explainError(err, errCtx)}` });
         codingAbortRef.current = null;
         setCoding(null);
       });
     } catch (err: any) {
       setState(s => ({ ...s, loading: false }));
-      addMessage({ role: 'error', text: err.message });
+      addMessage({ role: 'error', text: explainError(err, errCtx) });
     }
   }, [client, addMessage, appendCodingOutput]);
 
@@ -226,20 +297,91 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
     addMessage({ role: 'info', text: note });
   }, [addMessage]);
 
+  // ── Turns ───────────────────────────────────────────────────────
+
+  /** Send one message and stream the answer into the transcript. */
+  const sendMessage = useCallback(async (text: string) => {
+    addMessage({ role: 'user', text });
+    setStreaming('');
+    setState(s => ({ ...s, loading: true, loadingLabel: 'Thinking' }));
+
+    const ac = new AbortController();
+    runAbortRef.current = ac;
+
+    let result: TurnResult | undefined;
+    try {
+      result = await runTurn(gw, text, {
+        mode: state.agent.mode,
+        conversationId: state.conversationId ?? undefined,
+        pendingRunId: state.pendingRunId ?? undefined,
+        signal: ac.signal,
+        hooks: {
+          partial: setStreaming,
+          activity: (activity) => addMessage(activity),
+          label: (label) => setState(s => ({ ...s, loadingLabel: label })),
+        },
+      });
+    } catch (err) {
+      runAbortRef.current = null;
+      setStreaming('');
+      setState(s => ({ ...s, loading: false, pendingRunId: null }));
+      addMessage({ role: 'error', text: explainError(err, { ...errCtx, what: 'run' }) });
+      return;
+    }
+
+    runAbortRef.current = null;
+    setStreaming('');
+    setState(s => ({
+      ...s,
+      loading: false,
+      conversationId: result!.conversationId ?? s.conversationId,
+      pendingRunId: result!.pendingRunId ?? null,
+    }));
+    if (result.runId) setLastRunId(result.runId);
+    setSessionUsage(u => addUsage(u, result!.usage));
+
+    if (result.text) addMessage({ role: 'agent', text: result.text });
+
+    const attribution = formatUsage(result.usage);
+    if (attribution) addMessage({ role: 'info', text: attribution });
+
+    if (result.status === 'failed') {
+      addMessage({ role: 'error', text: result.error ?? 'The run failed' });
+    } else if (result.status === 'cancelled') {
+      addMessage({ role: 'info', text: 'cancelled — the run was stopped server-side too' });
+    } else if (result.status === 'waiting_input') {
+      addMessage({ role: 'info', text: 'the agent is waiting for your answer' });
+    }
+  }, [state.agent.mode, state.conversationId, state.pendingRunId, gw, addMessage]);
+
   const handleSubmit = useCallback(async (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return;
+    // A line ending in a backslash keeps the message open.
+    const continuation = continuationOf(value);
+    if (continuation !== null) {
+      setDraft(d => [...d, continuation]);
+      setInput('');
+      return;
+    }
+
+    const submitted = draft.length ? [...draft, value].join('\n') : value;
+    if (draft.length) setDraft([]);
+
+    const trimmed = submitted.trim();
+    if (!trimmed) { setInput(''); return; }
     setInput('');
     setHistoryIdx(-1);
+    appendHistory(trimmed);
+    setInputHistory(h => (h[h.length - 1] === trimmed ? h : [...h, trimmed]));
 
-    // Slash commands
-    if (trimmed.startsWith('/')) {
+    // Slash commands. A multi-line paste is never one, even if its
+    // first character is a slash.
+    if (classifyInput(trimmed, coding !== null) === 'command') {
       const [raw, ...args] = trimmed.slice(1).split(/\s+/);
       const cmd = resolveSlash(raw);
 
       if (!cmd) {
         addMessage({ role: 'error', text: `Unknown command: /${raw}` });
-        addMessage({ role: 'info', text: `Commands: /help /agents /runners /code /clear /quit` });
+        addMessage({ role: 'info', text: '/help lists every command.' });
         return;
       }
 
@@ -249,26 +391,81 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
 
       switch (cmd) {
         case 'quit':
-          const agentRef = `${gw.orgSlug}/${gw.agentSlug}`;
-          exitMessage = state.conversationId
-            ? `\nTo resume: npx @almyty/chat ${agentRef} --resume ${state.conversationId}\n`
-            : '';
-          exit();
+          quit();
           return;
         case 'clear':
+          // Honest about what it does: the server-side conversation is
+          // untouched, so the agent still remembers. /new forgets.
           setState(s => ({ ...s, messages: [] }));
+          addMessage({ role: 'info', text: 'transcript cleared on screen — the agent still has this conversation. /new starts a fresh one.' });
           return;
+        case 'new':
+          setState(s => ({ ...s, messages: [], conversationId: null, pendingRunId: null }));
+          setSessionUsage({ cost: 0, tokens: 0, steps: 0 });
+          setLastRunId(null);
+          addMessage({ role: 'info', text: 'new conversation — the agent has no memory of the last one' });
+          return;
+        case 'resume':
+          if (!state.conversationId) {
+            addMessage({ role: 'info', text: 'No conversation yet — send a message first.' });
+            return;
+          }
+          addMessage({ role: 'info', text: `almyty chat ${agentRef} --resume ${state.conversationId}` });
+          return;
+        case 'cost': {
+          const line = formatUsage(sessionUsage);
+          addMessage({ role: 'info', text: line ? `this session: ${line}` : 'Nothing spent yet this session.' });
+          return;
+        }
+        case 'model': {
+          const config = (state.agent.modelConfig ?? {}) as Record<string, any>;
+          const routing = config.routing as Record<string, any> | undefined;
+          if (routing) {
+            const summary = [routing.role, routing.rationale, routing.strategy].filter(Boolean).join(' · ');
+            addMessage({ role: 'info', text: `routed per run${summary ? ` — ${summary}` : ''}; the answering model is shown after each turn` });
+          } else if (config.model) {
+            addMessage({ role: 'info', text: `${config.model}${config.providerId ? ` · provider ${String(config.providerId).slice(0, 8)}` : ''}` });
+          } else {
+            addMessage({ role: 'info', text: 'No model configured on this agent. It will not answer until one is chosen in the dashboard.' });
+          }
+          if (sessionUsage.model) addMessage({ role: 'info', text: `last answered by ${sessionUsage.model}` });
+          return;
+        }
+        case 'trace': {
+          if (!lastRunId) {
+            addMessage({ role: 'info', text: 'No run to trace yet.' });
+            return;
+          }
+          setState(s => ({ ...s, loading: true, loadingLabel: 'Loading trace' }));
+          try {
+            const run = await gw.getRun(lastRunId);
+            setState(s => ({ ...s, loading: false }));
+            const steps = Array.isArray(run.steps) ? run.steps : [];
+            if (!steps.length) {
+              addMessage({ role: 'info', text: `run ${lastRunId.slice(0, 8)} · ${run.status} · no steps recorded` });
+              return;
+            }
+            addMessage({ role: 'info', text: `run ${lastRunId.slice(0, 8)} · ${run.status} · ${steps.length} step${steps.length === 1 ? '' : 's'}` });
+            steps.forEach((step: any, i) => {
+              const bits = [step.type];
+              if (step.input?.tool) bits.push(step.input.tool);
+              if (typeof step.cost === 'number' && step.cost) bits.push(`$${step.cost.toFixed(4)}`);
+              if (step.duration) bits.push(`${Math.round(step.duration)}ms`);
+              if (step.error) bits.push(`error: ${step.error}`);
+              addMessage({ role: step.error ? 'error' : 'tool', text: `${i + 1}. ${bits.join(' · ')}` });
+            });
+          } catch (err) {
+            setState(s => ({ ...s, loading: false }));
+            addMessage({ role: 'error', text: explainError(err, errCtx) });
+          }
+          return;
+        }
         case 'help':
-          addMessage({ role: 'info', text: '/agents     browse and switch agents' });
-          addMessage({ role: 'info', text: '/tools      show available tools' });
-          addMessage({ role: 'info', text: '/runners    list your runners + coding CLIs' });
-          addMessage({ role: 'info', text: '/code       run a coding task on a runner' });
-          addMessage({ role: 'info', text: '/code-stop  stop the active coding session' });
-          addMessage({ role: 'info', text: '/esc        leave coding mode (session keeps running)' });
-          addMessage({ role: 'info', text: '/clear      clear conversation' });
-          addMessage({ role: 'info', text: '/help       show this help' });
-          addMessage({ role: 'info', text: '/quit       exit' });
-          addMessage({ role: 'info', text: 'Tab to autocomplete commands.' });
+          for (const name of SLASH_COMMANDS) {
+            addMessage({ role: 'info', text: `/${name.padEnd(11)}${COMMAND_DESCS[name] ?? ''}` });
+          }
+          addMessage({ role: 'info', text: 'Tab completes · up/down walk history · end a line with \\ to keep typing' });
+          addMessage({ role: 'info', text: 'Ctrl-C cancels the running answer, again to exit · Ctrl-D exits' });
           return;
         case 'tools': {
           const tools = state.agent.tools;
@@ -287,26 +484,36 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
           const target = args.join(' ').trim();
           if (target) {
             setState(s => ({ ...s, loading: true, loadingLabel: 'Switching' }));
-            const found = await client.findAgentByNameOrId(target);
-            setState(s => ({ ...s, loading: false }));
-            if (!found) {
-              addMessage({ role: 'error', text: `Agent "${target}" not found` });
-              return;
+            try {
+              const found = await client.findAgentByNameOrId(target);
+              setState(s => ({ ...s, loading: false }));
+              if (!found) {
+                addMessage({ role: 'error', text: `No agent called "${target}". /agents with no argument lists them.` });
+                return;
+              }
+              setState(s => ({
+                ...s,
+                agent: found,
+                messages: [],
+                conversationId: null,
+                pendingRunId: null,
+              }));
+            } catch (err) {
+              setState(s => ({ ...s, loading: false }));
+              addMessage({ role: 'error', text: explainError(err, errCtx) });
             }
-            setState(s => ({
-              ...s,
-              agent: found,
-              messages: [],
-              conversationId: null,
-              pendingRunId: null,
-            }));
             return;
           }
           setState(s => ({ ...s, loading: true, loadingLabel: 'Loading' }));
-          const agents = await client.listAgents();
-          setState(s => ({ ...s, loading: false }));
-          setPickerAgents(agents);
-          setShowPicker(true);
+          try {
+            const agents = await client.listAgents();
+            setState(s => ({ ...s, loading: false }));
+            setPickerAgents(agents);
+            setShowPicker(true);
+          } catch (err) {
+            setState(s => ({ ...s, loading: false }));
+            addMessage({ role: 'error', text: explainError(err, errCtx) });
+          }
           return;
         }
         case 'runners': {
@@ -324,7 +531,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
             }
           } catch (err: any) {
             setState(s => ({ ...s, loading: false }));
-            addMessage({ role: 'error', text: err.message });
+            addMessage({ role: 'error', text: explainError(err, errCtx) });
           }
           return;
         }
@@ -354,7 +561,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
             setCodeChoices({ choices, task });
           } catch (err: any) {
             setState(s => ({ ...s, loading: false }));
-            addMessage({ role: 'error', text: err.message });
+            addMessage({ role: 'error', text: explainError(err, errCtx) });
           }
           return;
         }
@@ -366,7 +573,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
           try {
             await client.stopCodingSession(coding.runnerId, coding.sessionId);
           } catch (err: any) {
-            addMessage({ role: 'error', text: err.message });
+            addMessage({ role: 'error', text: explainError(err, errCtx) });
           }
           leaveCodingMode('coding session stopped');
           return;
@@ -390,117 +597,13 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
       try {
         await client.sendCodingInput(coding.runnerId, coding.sessionId, trimmed);
       } catch (err: any) {
-        addMessage({ role: 'error', text: err.message });
+        addMessage({ role: 'error', text: explainError(err, errCtx) });
       }
       return;
     }
 
-    // Regular message
-    addMessage({ role: 'user', text: trimmed });
-    setState(s => ({ ...s, loading: true, loadingLabel: 'Thinking' }));
-
-    try {
-      if (state.agent.mode === 'autonomous') {
-        let runId: string;
-
-        if (state.pendingRunId) {
-          await gw.sendRunInput(state.pendingRunId, trimmed);
-          runId = state.pendingRunId;
-          setState(s => ({ ...s, pendingRunId: null }));
-        } else {
-          const run = await gw.startRun(trimmed, {
-            conversationId: state.conversationId ?? undefined,
-          });
-          runId = run.id;
-          if (run.conversationId) {
-            setState(s => ({ ...s, conversationId: run.conversationId! }));
-          }
-        }
-
-        // Stream events — show tool calls, sub-agents, chunks in real time
-        let streamedContent = '';
-        const result = await gw.streamRun(runId, (event: StreamEvent) => {
-          switch (event.type) {
-            case 'llm.started':
-              setState(s => ({ ...s, loadingLabel: 'Thinking' }));
-              break;
-            case 'llm.chunk': {
-              const chunk = (event.data as any).content;
-              if (chunk) streamedContent += chunk;
-              break;
-            }
-            case 'llm.response':
-              setState(s => ({ ...s, loadingLabel: 'Processing' }));
-              break;
-            case 'tool.started': {
-              const toolName = (event.data as any).tool;
-              if (toolName) {
-                setState(s => ({ ...s, loading: false }));
-                addMessage({ role: 'tool', text: toolName });
-                setState(s => ({ ...s, loading: true, loadingLabel: `Running ${toolName}` }));
-              }
-              break;
-            }
-            case 'tool.result': {
-              const tool = (event.data as any).tool;
-              const success = (event.data as any).success;
-              if (tool) {
-                addMessage({ role: 'info', text: `${tool} ${success ? 'completed' : 'failed'}` });
-              }
-              break;
-            }
-            case 'step.completed':
-              break;
-            case 'run.completed': {
-              const output = (event.data as any).output;
-              if (output) {
-                const text = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
-                streamedContent = text;
-              }
-              break;
-            }
-            case 'run.failed': {
-              const error = (event.data as any).error;
-              addMessage({ role: 'error', text: error || 'Run failed' });
-              break;
-            }
-          }
-        });
-
-        setState(s => ({ ...s, loading: false }));
-
-        // If still running after stream, poll to completion
-        let finalResult = result;
-        if (result.status === 'running') {
-          finalResult = await gw.pollRun(runId);
-        }
-
-        // Show final output
-        if (finalResult.status === 'completed') {
-          const text = streamedContent
-            || (finalResult.output != null ? (typeof finalResult.output === 'string' ? finalResult.output : JSON.stringify(finalResult.output, null, 2)) : '');
-          if (text) addMessage({ role: 'agent', text });
-        } else if (finalResult.status === 'waiting_input') {
-          setState(s => ({ ...s, pendingRunId: runId }));
-          addMessage({ role: 'info', text: 'Waiting for your input' });
-        } else if (finalResult.status === 'failed' && !streamedContent) {
-          addMessage({ role: 'error', text: finalResult.error || 'Run failed' });
-        }
-      } else {
-        // Workflow: synchronous invoke
-        const result = await gw.invoke({ message: trimmed });
-        setState(s => ({ ...s, loading: false }));
-        const output = result?.output ?? result?.data?.output ?? result;
-        if (output != null) {
-          const text = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
-          addMessage({ role: 'agent', text });
-        }
-      }
-    } catch (err: any) {
-      setState(s => ({ ...s, loading: false }));
-      addMessage({ role: 'error', text: err.message });
-    }
-  }, [state.agent, state.conversationId, state.pendingRunId, client, addMessage, exit, coding, startCoding, leaveCodingMode]);
+    await sendMessage(trimmed);
+  }, [state.agent, state.conversationId, state.pendingRunId, client, gw, addMessage, quit, coding, startCoding, leaveCodingMode, sendMessage, draft, sessionUsage, lastRunId, agentRef]);
 
   const handlePickerSelect = useCallback((agent: AgentInfo) => {
     setShowPicker(false);
@@ -513,8 +616,6 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
       pendingRunId: null,
     }));
   }, [state.agent.id]);
-
-  const suggestion = getSuggestion(input);
 
   if (showPicker) {
     return (
@@ -548,17 +649,24 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
     );
   }
 
+  const transcriptRows = usableRows(size.rows, CHROME_ROWS + (paletteOpen ? slashMatches.length : 0));
+  const separatorWidth = Math.min(Math.max(size.columns || 80, 20), 120);
+  const sessionLine = formatUsage(sessionUsage);
+
   return (
     <Box flexDirection="column">
       {/* Header */}
       <Header agent={state.agent} conversationId={state.conversationId} />
 
-      {/* Messages */}
-      <Box flexDirection="column" flexGrow={1} paddingRight={2} overflow="hidden">
-        {state.messages.map((msg, i) => (
-          <MessageView key={i} msg={msg} />
-        ))}
-        {state.loading && <LoadingIndicator label={state.loadingLabel} />}
+      {/* Messages, bounded to what the terminal can show */}
+      <Box flexDirection="column" paddingRight={2}>
+        <MessageWindow
+          messages={state.messages}
+          loading={state.loading}
+          loadingLabel={state.loadingLabel}
+          maxRows={transcriptRows}
+          streaming={streaming}
+        />
       </Box>
 
       {/* Command palette */}
@@ -566,7 +674,7 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
         <Box flexDirection="column" paddingLeft={2}>
           {slashMatches.map((cmd, i) => {
             const active = i === paletteCursor;
-            const padded = `/${cmd}`.padEnd(10);
+            const padded = `/${cmd}`.padEnd(12);
             const desc = COMMAND_DESCS[cmd] ?? '';
             const line = `${active ? '❯' : ' '} ${padded} ${desc}`;
             return <Text key={cmd} color={active ? '#8b5cf6' : undefined} bold={active} wrap="truncate">{line}</Text>;
@@ -578,12 +686,12 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
       {coding && <CodingModeIndicator agent={coding.agent} runner={coding.runnerName} />}
       {/* Separator */}
       <Box>
-        <Text dimColor>{'─'.repeat(Math.min(process.stdout.columns || 80, 120))}</Text>
+        <Text dimColor>{'─'.repeat(separatorWidth)}</Text>
       </Box>
 
       {/* Input */}
       <Box paddingX={1} paddingY={1}>
-        <Text color={coding ? '#22d3ee' : '#8b5cf6'}>❯ </Text>
+        <Text color={coding ? '#22d3ee' : '#8b5cf6'}>{draft.length ? '… ' : '❯ '}</Text>
         <Box flexGrow={1}>
           <TextInput
             value={input}
@@ -605,11 +713,13 @@ export function ChatApp({ client, initialAgent, gw, resumeConversationId }: {
 
       {/* Status */}
       <Box paddingX={1}>
-        <Text dimColor>
+        <Text dimColor wrap="truncate">
           {state.agent.name}
           {state.agent.tools?.length ? ` · ${state.agent.tools.length} tools` : ''}
           {state.conversationId ? ` · ${state.conversationId.slice(0, 8)}` : ''}
+          {sessionLine ? ` · ${sessionLine}` : ''}
           {coding ? ` · coding:${coding.agent}@${coding.runnerName}` : ''}
+          {state.loading ? ' · ctrl-c cancels' : ''}
         </Text>
       </Box>
     </Box>

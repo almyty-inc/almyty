@@ -128,7 +128,7 @@ export class HostedChatController {
     return {
       success: true,
       data: {
-        ...this.hostedChat.publicBranding(gateway),
+        ...(await this.hostedChat.publicBranding(gateway)),
         slug: hostedChatConfigFrom(gateway.configuration).slug,
       },
     };
@@ -141,7 +141,7 @@ export class HostedChatController {
     // Short cache: branding changes should show up quickly after a save,
     // but this is the first request of every page load.
     res.setHeader('Cache-Control', 'public, max-age=30');
-    return { success: true, data: this.hostedChat.publicBranding(gateway) };
+    return { success: true, data: await this.hostedChat.publicBranding(gateway) };
   }
 
   @Get(':slug/me')

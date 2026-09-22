@@ -30,6 +30,11 @@ const ORG_ENTITLEMENT_TTL_MS = 30_000;
 export class OrgLicenseResolver {
   private readonly logger = new Logger(OrgLicenseResolver.name);
   private readonly cache = new Map<string, CacheEntry>();
+  /**
+   * When each org was last invalidated, so a resolution that started
+   * before a plan change cannot install its stale snapshot afterwards.
+   */
+  private readonly invalidatedAt = new Map<string, number>();
 
   constructor(
     @InjectRepository(Organization)
@@ -48,9 +53,9 @@ export class OrgLicenseResolver {
       return this.licenseService.resolveToken(null);
     }
 
-    const now = Date.now();
+    const startedAt = Date.now();
     const cached = this.cache.get(organizationId);
-    if (cached && cached.expiresAt > now) {
+    if (cached && cached.expiresAt > startedAt) {
       return cached.snapshot;
     }
 
@@ -66,10 +71,16 @@ export class OrgLicenseResolver {
     }
 
     const snapshot = this.licenseService.resolveToken(token);
-    this.cache.set(organizationId, {
-      snapshot,
-      expiresAt: now + ORG_ENTITLEMENT_TTL_MS,
-    });
+    // An upgrade or downgrade that committed while the org row was being
+    // read had nothing to invalidate yet, and this snapshot predates it:
+    // serve it, but do not put it in front of the next 30 seconds of
+    // entitlement checks.
+    if ((this.invalidatedAt.get(organizationId) ?? 0) < startedAt) {
+      this.cache.set(organizationId, {
+        snapshot,
+        expiresAt: Date.now() + ORG_ENTITLEMENT_TTL_MS,
+      });
+    }
     return snapshot;
   }
 
@@ -79,8 +90,21 @@ export class OrgLicenseResolver {
     return snapshot.entitlements.includes(entitlement);
   }
 
-  /** Drop the cached snapshot for an org (e.g. right after a plan change). */
+  /**
+   * Drop the cached snapshot for an org, e.g. right after a plan change.
+   *
+   * Also records WHEN, because deleting an entry is not enough: a
+   * resolution already waiting on the org row has nothing cached to
+   * delete, and used to install its pre-change snapshot the moment it
+   * came back. Note this is still process-local — other replicas serve
+   * their own snapshot until its TTL runs out.
+   */
   invalidate(organizationId: string): void {
     this.cache.delete(organizationId);
+    const now = Date.now();
+    for (const [org, at] of this.invalidatedAt) {
+      if (at + ORG_ENTITLEMENT_TTL_MS < now) this.invalidatedAt.delete(org);
+    }
+    this.invalidatedAt.set(organizationId, now);
   }
 }

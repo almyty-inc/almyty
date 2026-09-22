@@ -20,28 +20,29 @@ import { useCopy } from '@/lib/clipboard'
 import { useNotifications } from '@/store/app'
 import {
   HOSTED_CHAT_DEFAULTS,
-  canPublishHostedChat,
+  hostedChatSaveCheck,
   hostedChatConfigFrom,
   hostedChatUrl,
   slugError,
   type HostedChatConfig,
 } from './hosted-chat-config'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 /**
  * The visual builder for a tenant's hosted chat app.
  *
- * The publish rules are shown, not hidden: a public link with no cost
- * cap or no rate limits cannot go live, and this says so before the
- * operator hits save rather than after the API refuses. The same check
- * runs on the backend, which is what actually enforces it; this exists
- * so the reason is visible while it is still fixable.
+ * The blockers it shows are the ones the operator can act on: the
+ * subdomain, and the entitlement refusals the server enforces on write.
+ * It used to also show the public-link cost cap and rate-limit refusals,
+ * reading both from gateway properties that do not exist -- so they were
+ * permanently unsatisfiable and Save was permanently disabled. Those
+ * ceilings belong to an agent app, not a gateway, and the server does not
+ * judge them here either (see SERVER_ENFORCED_REFUSALS).
  */
 export interface HostedChatBuilderProps {
   gateway: {
     id: string
     configuration?: Record<string, any> | null
-    rateLimits?: { perEndUser?: number | null; perIp?: number | null } | null
-    costCapCents?: number | null
   }
   /** Org entitlements, which gate white-label and the sso auth mode. */
   entitlements?: { whiteLabel?: boolean; enterpriseAuth?: boolean }
@@ -62,14 +63,11 @@ export function HostedChatBuilder({ gateway, entitlements = {} }: HostedChatBuil
 
   const publishCheck = useMemo(
     () =>
-      canPublishHostedChat(form, {
-        costCapCents: gateway.costCapCents ?? null,
-        perEndUserRateLimit: gateway.rateLimits?.perEndUser ?? null,
-        perIpRateLimit: gateway.rateLimits?.perIp ?? null,
+      hostedChatSaveCheck(form, {
         hasWhiteLabel: entitlements.whiteLabel,
         hasEnterpriseAuth: entitlements.enterpriseAuth,
       }),
-    [form, gateway.costCapCents, gateway.rateLimits, entitlements],
+    [form, entitlements],
   )
 
   const slugMessage = slugError(form.slug)
@@ -85,7 +83,7 @@ export function HostedChatBuilder({ gateway, entitlements = {} }: HostedChatBuil
       queryClient.invalidateQueries({ queryKey: ['gateway', gateway.id] })
     },
     onError: (err: any) =>
-      errorNotif('Save failed', err?.response?.data?.message || 'Could not save the chat app.'),
+      errorNotif('Save failed', getApiErrorMessage(err, 'Could not save the chat app.')),
   })
 
   const addPrompt = () => {
@@ -242,7 +240,7 @@ export function HostedChatBuilder({ gateway, entitlements = {} }: HostedChatBuil
                     placeholder="Track my order"
                     aria-label="New suggested prompt"
                   />
-                  <Button type="button" variant="outline" onClick={addPrompt}>
+                  <Button aria-label="Add suggested prompt" type="button" variant="outline" onClick={addPrompt}>
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>

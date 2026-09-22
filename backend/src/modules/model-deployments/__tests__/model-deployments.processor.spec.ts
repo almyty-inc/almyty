@@ -30,7 +30,25 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
       desired: { replicas: 1, minScale: 0, maxScale: 1 }, providerConfig: { token: 'valid', simulate: 'none' },
       externalRef: null, actual: null, state: 'pending', budgetId: null, createdBy: 'u-1', createdAt: new Date(), updatedAt: new Date(),
     });
-    deployments = { findOne: jest.fn(async () => row), save: jest.fn(async (r: any) => r), find: jest.fn(async () => [row]) };
+    deployments = {
+      findOne: jest.fn(async () => row),
+      save: jest.fn(async (r: any) => r),
+      // Column-scoped write: the reconcile loop writes only what it owns.
+      update: jest.fn(async (_criteria: any, patch: Record<string, any>) => { Object.assign(row, patch); return { affected: 1 }; }),
+      find: jest.fn(async () => [row]),
+      // The claim the processor takes before a minutes-long deploy, so
+      // the sweep and a retry cannot both deploy the same model.
+      createQueryBuilder: jest.fn(() => {
+        const qb: any = {
+          update: () => qb,
+          set: (values: Record<string, any>) => { Object.assign(row, values); return qb; },
+          where: () => qb,
+          andWhere: () => qb,
+          execute: async () => ({ affected: 1 }),
+        };
+        return qb;
+      }),
+    };
     versions = { findOne: jest.fn(async () => ({ id: 'v-1', name: 'qwen', base: 'qwen3-0.6b', registryUri: 's3://r/q@1', quantizations: [], manifestSha: 'x' })) };
     models = { findOne: jest.fn(async () => ({ id: 'm-1', organizationId: 'org-1', pricingOverride: null })), save: jest.fn(async (m: any) => m) };
     budgets = { findOne: jest.fn(async () => null) };
@@ -49,6 +67,28 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
     expect(transitions).toEqual(['deploying', 'ready']);
   });
 
+  it('deploys a row that names its model inline, without ever reading a version', async () => {
+    row.modelVersionId = null;
+    row.modelRef = 'hf://Qwen/Qwen3-0.6B@main';
+    row.modelBase = 'qwen3-0.6b';
+    const deploySpy = jest.spyOn(stub, 'deploy');
+    const out = await processor.reconcile('d-1');
+    expect(versions.findOne).not.toHaveBeenCalled();
+    expect(out?.state).toBe('ready');
+    expect(deploySpy).toHaveBeenCalledWith(
+      expect.objectContaining({ version: expect.objectContaining({ registryUri: 'hf://Qwen/Qwen3-0.6B@main', base: 'qwen3-0.6b' }) }),
+      expect.anything(),
+    );
+  });
+
+  it('fails a row that names no model at all rather than deploying nothing', async () => {
+    row.modelVersionId = null;
+    row.modelRef = null;
+    versions.findOne.mockResolvedValue(null);
+    const out = await processor.reconcile('d-1');
+    expect(out?.state).toBe('failed');
+    expect(out?.lastError).toMatch(/names no model/i);
+  });
   it('scales when desired replicas differ from actual', async () => {
     await processor.reconcile('d-1');
     row.desired = { ...row.desired, replicas: 0 };
@@ -68,6 +108,27 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
     expect(out?.desired.replicas).toBe(0);
     expect(service.audit).toHaveBeenCalledWith(expect.anything(), 'model_deployment_budget_stop', null, expect.objectContaining({ limitCents: 1 }));
     expect(notifications.emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'model.deployment.budget_stop' }));
+  });
+
+  it('never prices a catalog card that belongs to another organization', async () => {
+    // A deployment carries whatever modelId its creator sent, so the card
+    // read in chargeBudget has to be organization-scoped like the two in
+    // fillCard/clearCard. Unscoped, one org's reconcile loop rewrote the
+    // pricing on another org's card.
+    stub.costSnapshot = async () => ({
+      spentCents: 5,
+      ratePerHourCents: 10,
+      observedAt: new Date(),
+      perToken: { inPerMTok: 1, outPerMTok: 2, currency: 'USD' },
+    });
+    models.findOne.mockImplementation(async ({ where }: any) =>
+      where.organizationId === 'org-1' ? null : { id: 'm-1', organizationId: 'org-2', pricingOverride: null },
+    );
+
+    await processor.reconcile('d-1');
+
+    expect(models.findOne).toHaveBeenCalledWith({ where: { id: 'm-1', organizationId: 'org-1' } });
+    expect(models.save).not.toHaveBeenCalled();
   });
 
   it('marks a deployment orphaned when the provider forgot it', async () => {

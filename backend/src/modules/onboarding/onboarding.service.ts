@@ -109,21 +109,19 @@ export class OnboardingService {
 
   /**
    * Earliest successful gateway request OR agent run for the org.
-   * RequestLog has no direct org column; it is scoped through its
-   * gateway (or a metadata.organizationId stamp), matching the
-   * analytics service's own scoping.
+   *
+   * Scoped on `request_logs.organizationId`, which
+   * `IDX_request_logs_organizationId_timestamp` covers with the
+   * timestamp this orders by. The older
+   * `(gw.organizationId = ... OR log.metadata->>'organizationId' = ...)`
+   * ORed across `gateways` and `request_logs`, so no index could serve
+   * it and an unbounded read of every tenant's logs answered a
+   * checklist tick.
    */
   private async firstSuccessfulCall(organizationId: string): Promise<RequestLog | null> {
     return this.requestLogRepo
       .createQueryBuilder('log')
-      .leftJoin('log.gateway', 'gw')
-      .where(
-        // gw.organizationId is uuid; log.metadata->>'organizationId' is text.
-        // Bind the metadata side as a separate TEXT param so Postgres doesn't
-        // infer the shared param as uuid (which throws: text = uuid).
-        "(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)",
-        { orgId: organizationId, orgIdText: organizationId },
-      )
+      .where('log.organizationId = :orgId', { orgId: organizationId })
       .andWhere('log.statusCode >= 200 AND log.statusCode < 300')
       .orderBy('log.timestamp', 'ASC')
       .getOne();
@@ -132,14 +130,7 @@ export class OnboardingService {
   private async hasExternalClientCall(organizationId: string): Promise<boolean> {
     const count = await this.requestLogRepo
       .createQueryBuilder('log')
-      .leftJoin('log.gateway', 'gw')
-      .where(
-        // gw.organizationId is uuid; log.metadata->>'organizationId' is text.
-        // Bind the metadata side as a separate TEXT param so Postgres doesn't
-        // infer the shared param as uuid (which throws: text = uuid).
-        "(gw.organizationId = :orgId OR log.metadata->>'organizationId' = :orgIdText)",
-        { orgId: organizationId, orgIdText: organizationId },
-      )
+      .where('log.organizationId = :orgId', { orgId: organizationId })
       .andWhere('log.statusCode >= 200 AND log.statusCode < 300')
       .andWhere('log.gatewayId IS NOT NULL')
       .andWhere(

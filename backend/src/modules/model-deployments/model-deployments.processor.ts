@@ -21,12 +21,22 @@ const DEFAULT_CRON = '*/2 * * * *';
 const REGISTER_INTERVAL_MS = 10 * 60 * 1000;
 /** A deployment the provider no longer knows, past this age, is torn down as an orphan. */
 const ORPHAN_GRACE_MS = 30 * 60 * 1000;
+/**
+ * How long a deploy claim is honoured. Longer than the slowest provider
+ * deploy (Modal's own timeout is 30 minutes), so a live deploy is never
+ * taken over, but finite: a pod that died mid-deploy must not leave the
+ * row `deploying` with no endpoint and no way back.
+ */
+const DEPLOY_CLAIM_LEASE_MS = 45 * 60 * 1000;
 /** Nothing to reconcile: the row is finished, whatever a stale job thinks. */
 const TERMINAL_STATES: ModelDeploymentState[] = ['torn_down', 'orphaned'];
 /** Consecutive read failures before a still-existing endpoint is called failed. */
 const MAX_TRANSIENT_ERRORS = 3;
 /** Errors that say the deployment itself is wrong, not the connection to the provider. */
 const TERMINAL_ERROR_CODES = ['ADAPTER_UNSUPPORTED_ARCHITECTURE', 'ADAPTER_UNSUPPORTED_SOURCE', 'ADAPTER_UNSUPPORTED_OPERATION', 'CREDENTIAL_NOT_FOUND', 'CREDENTIAL_INACTIVE', 'CREDENTIAL_EXPIRED', 'CONNECTION_NOT_GRANTED'];
+
+/** What the reconcile loop is allowed to write, by column. */
+type ObservedColumns = Partial<Pick<ModelDeployment, 'state' | 'actual' | 'externalRef' | 'lastError' | 'lastReconcileAt' | 'desired'>>;
 
 /**
  * The only thing that talks to adapters.
@@ -97,6 +107,23 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
   }
 
   /**
+   * The reconcile loop writes only the columns it owns.
+   *
+   * `save(entity)` writes back every column whose in-memory value
+   * differs from the row, and a tick holds its copy of the deployment
+   * across provider calls that run for seconds. A teardown committed in
+   * that window used to be pushed straight back out: the stale `desired`
+   * erased `teardownRequested`, the next tick reconciled the endpoint
+   * back to ready, and a paid GPU kept billing long after the user's
+   * request had returned 200. Desired state belongs to the controllers;
+   * `state`, `actual`, `externalRef` and the error fields belong here.
+   */
+  private async writeObserved(d: ModelDeployment, fields: ObservedColumns): Promise<ModelDeployment> {
+    await this.deployments.update({ id: d.id }, fields);
+    return d;
+  }
+
+  /**
    * A read that failed is not the same as an endpoint that failed. A
    * timeout or a 503 keeps the row observable (degraded, still swept) and
    * only becomes terminal after MAX_TRANSIENT_ERRORS in a row, so one
@@ -111,7 +138,7 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
       d.lastReconcileAt = new Date();
       d.actual = { ...(d.actual ?? {}), consecutiveErrors: ((d.actual?.consecutiveErrors as number | undefined) ?? 0) + 1, lastErrorAt: new Date().toISOString() };
       this.logger.warn(`Teardown of ${d.id} failed, will retry: ${message}`);
-      return this.deployments.save(d);
+      return this.writeObserved(d, { lastError: d.lastError, lastReconcileAt: d.lastReconcileAt, actual: d.actual });
     }
     const terminal = TERMINAL_ERROR_CODES.includes(error?.code);
     const consecutive = ((d.actual?.consecutiveErrors as number | undefined) ?? 0) + 1;
@@ -123,7 +150,7 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     d.lastError = message.slice(0, 2000);
     d.lastReconcileAt = new Date();
     d.actual = { ...(d.actual ?? {}), consecutiveErrors: consecutive, lastErrorAt: new Date().toISOString() };
-    const saved = await this.deployments.save(d);
+    const saved = await this.writeObserved(d, { state: d.state, lastError: d.lastError, lastReconcileAt: d.lastReconcileAt, actual: d.actual });
     this.logger.warn(`Reconcile of ${d.id} failed (${consecutive}/${MAX_TRANSIENT_ERRORS}): ${message}`);
     if (from !== 'degraded') this.service.audit(saved, AuditAction.MODEL_DEPLOYMENT_TRANSITION, null, { from, to: 'degraded', error: d.lastError, consecutiveErrors: consecutive });
     await this.clearCard(saved, 'deployment is degraded');
@@ -184,20 +211,76 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
         d.externalRef = null;
         d.actual = { ...(d.actual ?? {}), state: 'stopped', message: 'endpoint removed' };
         await this.clearCard(d, 'deployment torn down', true);
-        d.desired = { ...d.desired, teardownRequested: false } as ModelDeployment['desired'];
-        return this.transition(d, d.state, 'torn_down');
+        // Clearing the flag is a desired-state change this loop does own,
+        // so it merges into the row as it stands now rather than this
+        // tick's copy: a scale or a second teardown committed while the
+        // provider delete was in flight has to survive.
+        const fresh = await this.deployments.findOne({ where: { id: d.id } });
+        d.desired = { ...(fresh?.desired ?? d.desired), teardownRequested: false } as ModelDeployment['desired'];
+        const from = d.state;
+        d.state = 'torn_down';
+        d.lastReconcileAt = new Date();
+        await this.writeObserved(d, { state: d.state, lastReconcileAt: d.lastReconcileAt, externalRef: null, actual: d.actual, desired: d.desired });
+        if (from !== 'torn_down') this.service.audit(d, AuditAction.MODEL_DEPLOYMENT_TRANSITION, null, { from, to: 'torn_down' });
+        return d;
       }
 
       if (!d.externalRef) {
         // Nothing exists yet: deploy.
-        const version = await this.versions.findOne({ where: { id: d.modelVersionId } });
-        if (!version) return this.fail(d, 'model version missing');
-        await this.transition(d, d.state, 'deploying');
+        // Either a registered version, or the model named as config on
+        // the deployment itself. Most deployments are the latter.
+        const version = d.modelVersionId ? await this.versions.findOne({ where: { id: d.modelVersionId } }) : null;
+        if (d.modelVersionId && !version) return this.fail(d, 'model version missing');
+        if (!version && !d.modelRef) return this.fail(d, 'deployment names no model');
+        const model = version
+          ? { id: version.id, name: version.name, registryUri: version.registryUri, base: version.base, quantizations: version.quantizations, manifestSha: version.manifestSha }
+          : { id: d.id, name: d.modelRef as string, registryUri: d.modelRef as string, base: d.modelBase ?? '', quantizations: [] as string[], manifestSha: null };
+        // Claim the row before deploying.
+        //
+        // adapter.deploy() is a provider call that can run for minutes
+        // (Modal's timeout is 30). Two readers -- the 2-minute sweep and
+        // a user pressing retry, or two API replicas -- both saw
+        // externalRef null and both deployed. The second save overwrote
+        // externalRef, so the first endpoint became a paid GPU resource
+        // no row points at: the orphan check only notices deployments
+        // the PROVIDER has forgotten, never one the database has.
+        //
+        // The claim is a lease, not a latch. A pod that died inside
+        // adapter.deploy() left the row `deploying` with a null
+        // externalRef, and `state != 'deploying'` could never match
+        // again, so the deployment was stuck for good with nothing at
+        // the provider and nothing in the queue able to retry it. Past
+        // DEPLOY_CLAIM_LEASE_MS -- longer than the slowest provider
+        // deploy -- the stale claim is taken over.
+        const claim = await this.deployments
+          .createQueryBuilder()
+          .update()
+          .set({ state: 'deploying', lastReconcileAt: new Date() })
+          .where('id = :id', { id: d.id })
+          .andWhere('(state != :deploying OR "lastReconcileAt" IS NULL OR "lastReconcileAt" < :staleClaim)', {
+            deploying: 'deploying',
+            staleClaim: new Date(Date.now() - DEPLOY_CLAIM_LEASE_MS),
+          })
+          .execute();
+        if (!claim.affected) {
+          this.logger.log(`Deployment ${d.id} is already being deployed elsewhere; leaving it alone`);
+          return d;
+        }
+        // The claim IS the transition, so it still gets audited -- the
+        // row moved pending -> deploying and the trail has to say so.
+        const cameFrom = d.state;
+        d.state = 'deploying';
+        d.lastReconcileAt = new Date();
+        this.service.audit(d, AuditAction.MODEL_DEPLOYMENT_TRANSITION, null, {
+          from: cameFrom,
+          to: 'deploying',
+        });
+
         const ref = await adapter.deploy(
           {
             deploymentId: d.id,
             organizationId: d.organizationId,
-            version: { id: version.id, name: version.name, registryUri: version.registryUri, base: version.base, quantizations: version.quantizations, manifestSha: version.manifestSha },
+            version: model,
             desired: d.desired,
             providerConfig: stripSecrets(d.getDecryptedProviderConfig()),
           },
@@ -205,7 +288,7 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
         );
         d.externalRef = ref;
         d.lastError = null;
-        await this.deployments.save(d);
+        await this.writeObserved(d, { externalRef: d.externalRef, lastError: null });
       }
 
       const actual = await adapter.readEndpoint(d.externalRef as EndpointRef, creds);
@@ -244,7 +327,7 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     d.state = to;
     d.lastReconcileAt = new Date();
     if (details) d.actual = { ...(d.actual ?? {}), ...details };
-    const saved = await this.deployments.save(d);
+    const saved = await this.writeObserved(d, { state: d.state, lastReconcileAt: d.lastReconcileAt, ...(details ? { actual: d.actual } : {}) });
     if (from !== to) this.service.audit(saved, AuditAction.MODEL_DEPLOYMENT_TRANSITION, null, { from, to, ...(details ?? {}) });
     return saved;
   }
@@ -254,7 +337,7 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     d.state = 'failed';
     d.lastError = message.slice(0, 2000);
     d.lastReconcileAt = new Date();
-    const saved = await this.deployments.save(d);
+    const saved = await this.writeObserved(d, { state: d.state, lastError: d.lastError, lastReconcileAt: d.lastReconcileAt });
     this.service.audit(saved, AuditAction.MODEL_DEPLOYMENT_TRANSITION, null, { from, to: 'failed', error: d.lastError });
     await this.clearCard(saved, 'deployment failed');
     return saved;
@@ -268,14 +351,14 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     const age = Date.now() - new Date(firstMissing).getTime();
     if (d.state === 'deploying' && age < ORPHAN_GRACE_MS) {
       d.actual = { ...(d.actual ?? {}), missingSince: firstMissing };
-      await this.deployments.save(d);
+      await this.writeObserved(d, { actual: d.actual, lastReconcileAt: d.lastReconcileAt });
       return d;
     }
     const from = d.state;
     d.state = 'orphaned';
     d.lastError = 'endpoint no longer exists at the provider';
     d.actual = { ...(d.actual ?? {}), missingSince: firstMissing };
-    const saved = await this.deployments.save(d);
+    const saved = await this.writeObserved(d, { state: d.state, lastError: d.lastError, actual: d.actual, lastReconcileAt: d.lastReconcileAt });
     this.service.audit(saved, AuditAction.MODEL_DEPLOYMENT_ORPHAN_TEARDOWN, null, { from, to: 'orphaned', missingSince: firstMissing });
     await this.clearCard(saved, 'endpoint no longer exists at the provider', true);
     return saved;
@@ -346,7 +429,10 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     const snapshot = await adapter.costSnapshot(d.externalRef, creds);
     d.actual = { ...(d.actual ?? {}), spentCents: snapshot.spentCents, ratePerHourCents: snapshot.ratePerHourCents, costObservedAt: snapshot.observedAt };
     if (snapshot.perToken && d.modelId) {
-      const card = await this.models.findOne({ where: { id: d.modelId } });
+      // Org-scoped like every other card read here. A deployment carries
+      // whatever modelId its creator sent, so an unscoped lookup would let
+      // one organization overwrite the pricing on another organization's card.
+      const card = await this.models.findOne({ where: { id: d.modelId, organizationId: d.organizationId } });
       if (card && !card.pricingOverride) {
         card.pricing = { inPerMTok: snapshot.perToken.inPerMTok, outPerMTok: snapshot.perToken.outPerMTok, currency: snapshot.perToken.currency };
         card.pricingSource = 'adapter';
@@ -354,14 +440,19 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
         await this.models.save(card);
       }
     }
-    await this.deployments.save(d);
+    await this.writeObserved(d, { actual: d.actual, lastReconcileAt: d.lastReconcileAt });
     if (!d.budgetId) return;
     const budget = await this.budgets.findOne({ where: { id: d.budgetId, organizationId: d.organizationId } });
     if (!budget || !budget.active) return;
     if (snapshot.spentCents >= budget.limitCents && (d.desired.replicas ?? 1) > 0) {
-      d.desired = { ...d.desired, replicas: 0 };
       await adapter.scale(d.externalRef, 0, creds);
-      await this.deployments.save(d);
+      // The cap is one of the two places the reconcile loop does own a
+      // desired-state change, so it merges into the row as it stands
+      // now: a teardown or a manual scale committed during the provider
+      // calls above must not be overwritten by this tick's copy.
+      const fresh = await this.deployments.findOne({ where: { id: d.id } });
+      d.desired = { ...(fresh?.desired ?? d.desired), replicas: 0 };
+      await this.writeObserved(d, { desired: d.desired });
       this.service.audit(d, AuditAction.MODEL_DEPLOYMENT_BUDGET_STOP, null, { spentCents: snapshot.spentCents, limitCents: budget.limitCents, budgetId: budget.id });
       void this.notifications
         ?.emit({

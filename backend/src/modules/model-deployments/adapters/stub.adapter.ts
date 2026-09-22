@@ -45,7 +45,7 @@ export class StubAdapter implements ModelProviderAdapter {
       dedicated: false,
       scaleToZero: true,
       regions: ['eu', 'us'],
-      registrySources: ['s3', 'local'],
+      registrySources: ['hub', 's3', 'local'],
     };
   }
 

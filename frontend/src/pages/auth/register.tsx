@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/auth'
 import { useNotifications } from '@/store/app'
 import { apiPost, referralsApi } from '@/lib/api'
 import { CaptchaWidget, isCaptchaEnabled } from '@/components/auth/captcha-widget'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
@@ -87,7 +88,7 @@ export function RegisterPage() {
       navigate('/dashboard')
     } catch (err: any) {
       const message =
-        err.response?.data?.message || 'Please check your information and try again.'
+        getApiErrorMessage(err, 'Please check your information and try again.')
       setRegisterError(message)
       error('Registration failed', message)
     }
@@ -109,7 +110,7 @@ export function RegisterPage() {
               className={errors.firstName ? 'border-red-300' : ''}
             />
             {errors.firstName && (
-              <p className="mt-2 text-sm text-red-600">{errors.firstName.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.firstName.message}</p>
             )}
           </div>
         </div>
@@ -126,7 +127,7 @@ export function RegisterPage() {
               className={errors.lastName ? 'border-red-300' : ''}
             />
             {errors.lastName && (
-              <p className="mt-2 text-sm text-red-600">{errors.lastName.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.lastName.message}</p>
             )}
           </div>
         </div>
@@ -143,7 +144,7 @@ export function RegisterPage() {
               className={errors.email ? 'border-red-300' : ''}
             />
             {errors.email && (
-              <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
             )}
           </div>
         </div>
@@ -159,7 +160,7 @@ export function RegisterPage() {
               className={errors.organizationName ? 'border-red-300' : ''}
             />
             {errors.organizationName && (
-              <p className="mt-2 text-sm text-red-600">{errors.organizationName.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.organizationName.message}</p>
             )}
           </div>
         </div>
@@ -187,7 +188,7 @@ export function RegisterPage() {
               )}
             </button>
             {errors.password && (
-              <p className="mt-2 text-sm text-red-600">{errors.password.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.password.message}</p>
             )}
           </div>
         </div>
@@ -215,7 +216,7 @@ export function RegisterPage() {
               )}
             </button>
             {errors.confirmPassword && (
-              <p className="mt-2 text-sm text-red-600">{errors.confirmPassword.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.confirmPassword.message}</p>
             )}
           </div>
         </div>
@@ -228,18 +229,20 @@ export function RegisterPage() {
             className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
           />
           <Label htmlFor="terms" className="ml-2 block text-sm text-foreground">
+            {/*
+              These were <a href="#">: focus stops that scrolled to the top of
+              the page and nothing else, on a checkbox you cannot submit
+              without. There is no /terms or /privacy route yet, so they read
+              as plain text until there is something real to point at.
+            */}
             I agree to the{' '}
-            <a href="#" className="text-primary hover:text-primary/80">
-              Terms of Service
-            </a>{' '}
+            <span className="font-medium">Terms of Service</span>{' '}
             and{' '}
-            <a href="#" className="text-primary hover:text-primary/80">
-              Privacy Policy
-            </a>
+            <span className="font-medium">Privacy Policy</span>
           </Label>
         </div>
         {errors.terms && (
-          <p className="text-sm text-red-600">{errors.terms.message}</p>
+          <p className="text-sm text-destructive">{errors.terms.message}</p>
         )}
 
         {captchaEnabled && (

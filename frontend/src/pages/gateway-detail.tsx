@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 
 import { gatewaysApi, toolsApi } from '@/lib/api'
+import { useEntitlements } from '@/hooks/use-entitlement'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 
@@ -36,12 +37,14 @@ import {
 } from '@/components/gateways/detail/channel-config-form'
 import { WidgetBuilder } from '@/components/gateways/widget-builder'
 import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 export function GatewayDetailPage() {
+  const entitlements = useEntitlements()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { currentOrganization } = useOrganizationStore()
-  const { success, error: errorNotif } = useNotifications()
+  const { success, error: errorNotif, warning } = useNotifications()
   const queryClient = useQueryClient()
 
   const [removeAllToolsDialogOpen, setRemoveAllToolsDialogOpen] = useState(false)
@@ -83,7 +86,7 @@ export function GatewayDetailPage() {
       success('Tool assigned', 'Tool has been assigned to the gateway successfully.')
     },
     onError: (err: any) => {
-      errorNotif('Failed to assign tool', err.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to assign tool', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -97,21 +100,56 @@ export function GatewayDetailPage() {
       success('Tool removed', 'Tool has been removed from the gateway successfully.')
     },
     onError: (err: any) => {
-      errorNotif('Failed to remove tool', err.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to remove tool', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
   const bulkAssignToolsMutation = useMutation({
     mutationFn: ({ toolIds }: { toolIds: string[] }) =>
       gatewaysApi.bulkAssignTools(id!, toolIds),
-    onSuccess: async () => {
+    /*
+      Report what actually attached.
+
+      The endpoint answers 200 with `{ associated, skipped }` and skips
+      every tool that is not active -- which, right after a schema
+      import, is every tool. This handler ignored `skipped` and fired
+      "Tools have been assigned to the gateway successfully" over a
+      gateway that had just been given nothing. A user could not even
+      suspect the draft problem, because the product told them it had
+      worked.
+    */
+    onSuccess: async (result: any) => {
       await queryClient.invalidateQueries({ queryKey: ['gateway-tools', id] })
       await queryClient.invalidateQueries({ queryKey: ['gateway', id] })
       await queryClient.invalidateQueries({ queryKey: ['gateways'] })
-      success('Tools assigned', 'Tools have been assigned to the gateway successfully.')
+
+      const assigned: any[] = result?.associated ?? []
+      const skipped: Array<{ toolId: string; reason: string }> = result?.skipped ?? []
+
+      if (skipped.length === 0) {
+        success(
+          'Tools assigned',
+          `${assigned.length} tool${assigned.length === 1 ? '' : 's'} assigned to the gateway.`,
+        )
+        return
+      }
+
+      // One sentence for the reason people will actually hit, rather than
+      // a list of identical lines: the reasons are per-tool but they
+      // repeat.
+      const reasons = [...new Set(skipped.map((s) => s.reason))]
+      const detail =
+        `${skipped.length} of ${assigned.length + skipped.length} could not be assigned. ` +
+        reasons.slice(0, 2).join(' ')
+
+      if (assigned.length === 0) {
+        errorNotif('No tools were assigned', detail)
+      } else {
+        warning(`${assigned.length} of ${assigned.length + skipped.length} tools assigned`, detail)
+      }
     },
     onError: (err: any) => {
-      errorNotif('Failed to assign tools', err.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to assign tools', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -124,7 +162,7 @@ export function GatewayDetailPage() {
       success('All tools removed', 'All tools have been removed from the gateway.')
     },
     onError: (err: any) => {
-      errorNotif('Failed to remove tools', err.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to remove tools', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -140,7 +178,7 @@ export function GatewayDetailPage() {
       setEditDialogOpen(false)
     },
     onError: (err: any) => {
-      errorNotif('Failed to update gateway', err.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to update gateway', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -154,7 +192,7 @@ export function GatewayDetailPage() {
       success('Channel configuration saved', 'Credentials have been encrypted and stored.')
     },
     onError: (err: any) => {
-      errorNotif('Failed to save channel config', err.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to save channel config', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -168,7 +206,7 @@ export function GatewayDetailPage() {
       setSecurityTarget(null)
     },
     onError: (err: any) => {
-      errorNotif('Failed to update security policy', err.response?.data?.message || 'Please try again.')
+      errorNotif('Failed to update security policy', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -295,6 +333,32 @@ export function GatewayDetailPage() {
         </div>
       </div>
 
+      {/*
+        Webhook registration failed and nothing said so.
+
+        Telling a platform where to deliver inbound messages happens
+        fire-and-forget after the gateway is saved, so a rejected
+        setWebhook -- bad token, unreachable PUBLIC_API_URL -- left the
+        gateway reading "Active" while no message could ever arrive. The
+        failure was recorded on the gateway and read by nothing.
+      */}
+      {['failed', 'skipped'].includes((gateway as any)?.metadata?.webhookRegistration?.status) && (
+        <div
+          data-testid="webhook-registration-failed"
+          className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4"
+        >
+          <Info className="h-5 w-5 text-destructive mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium text-destructive">This channel is not receiving messages</p>
+            <p className="text-sm text-destructive/90">
+              {(gateway as any).metadata.webhookRegistration.error ||
+                'The platform rejected the webhook registration.'}{' '}
+              Fix the credential below and save again to retry.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* System gateway banner */}
       {gateway.isSystem && (
         <div className="flex items-start gap-3 rounded-lg border border-violet-200 bg-violet-50 p-4 dark:border-violet-800 dark:bg-violet-950/30">
@@ -348,11 +412,25 @@ export function GatewayDetailPage() {
           gateway={{
             id: gateway.id,
             configuration: gateway.configuration,
-            costCapCents: (gateway as any).costCapCents ?? null,
-            rateLimits: {
-              perEndUser: (gateway as any).rateLimits?.requestsPerMinute ?? null,
-              perIp: (gateway as any).rateLimits?.requestsPerHour ?? null,
-            },
+          }}
+          /*
+            No costCapCents and no rateLimits here on purpose. Both were
+            read through `as any` off properties a Gateway has never had,
+            so both arrived undefined, the builder's public-link checks
+            could never pass, and Save stayed disabled for every hosted
+            chat app. The server does not judge those two either -- see
+            ENTITLEMENT_REFUSALS in gateways.service.ts.
+          */
+          /*
+            Without these the builder defaulted both to undefined, so the
+            white-label toggle was hard-disabled and the SSO auth mode
+            permanently refused -- for every organization, including the
+            ones that had bought them. The whole hosted-chat SSO
+            controller existed to serve a mode nothing could select.
+          */
+          entitlements={{
+            whiteLabel: entitlements.has('white_label'),
+            enterpriseAuth: entitlements.has('sso'),
           }}
         />
       )}

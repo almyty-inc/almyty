@@ -6,11 +6,13 @@ import { Repository } from 'typeorm';
 
 import { ModelDeployment, ModelDeploymentDesired, ModelDeploymentState } from '../../entities/model-deployment.entity';
 import { ModelVersion } from '../../entities/model-version.entity';
+import { Model } from '../../entities/model.entity';
 import { Credential } from '../../entities/credential.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { AdapterRegistry } from './adapters/adapter.registry';
+import { ModelSource, canRun, readModelSource, schemesFor } from './model-source';
 import { AdapterCredentials } from './adapters/adapter.interface';
 import { ModelRegistryService } from '../model-registry/model-registry.service';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
@@ -19,13 +21,29 @@ export const MODEL_RECONCILE_QUEUE = 'model-reconcile';
 export const MODEL_RECONCILE_JOB = 'reconcile';
 
 export interface CreateDeploymentDto {
-  modelVersionId: string;
+  /**
+   * The model to run, as configuration: hf://org/repo@sha for a Hugging
+   * Face repository, bedrock:// fireworks:// together:// and the rest for
+   * a model that already lives on that platform, s3:// or gs:// for
+   * artifacts a provider reads itself. Either this or modelVersionId.
+   */
+  model?: string;
+  /** Architecture family, when the adapter checks it and the reference does not carry one. */
+  base?: string;
+  /** A registered version instead, for operators who track their own artifacts. */
+  modelVersionId?: string;
   providerType: string;
   desired?: ModelDeploymentDesired;
   providerConfig?: Record<string, any>;
   /** Credential in the vault whose decrypted config is handed to the adapter. */
   credentialId?: string | null;
   budgetId?: string | null;
+  /**
+   * The catalog card this endpoint will fill once it is ready. Checked
+   * against the organization at create: a card id that is a typo, or
+   * belongs to somebody else, is refused rather than saved onto a
+   * deployment that then reaches ready and lights nothing up.
+   */
   modelId?: string | null;
 }
 
@@ -48,6 +66,11 @@ export class ModelDeploymentsService {
     @Optional() private readonly auditLog?: AuditLogService,
     @Optional() private readonly registry?: ModelRegistryService,
     @Optional() private readonly credentialRefs?: CredentialRefResolver,
+    // Last and optional only so the positional constructions in the specs
+    // keep working; the module always provides it (Model is in forFeature)
+    // and a guard test asserts that, so the card check below is never a
+    // silent no-op in a running server.
+    @Optional() @InjectRepository(Model) private readonly models?: Repository<Model>,
   ) {}
 
   async list(organizationId: string): Promise<ModelDeployment[]> {
@@ -63,16 +86,49 @@ export class ModelDeploymentsService {
   /** Validate against the adapter's capabilities and schema, persist desired state, enqueue a reconcile. */
   async create(organizationId: string, userId: string | null, dto: CreateDeploymentDto): Promise<ModelDeployment> {
     const adapter = this.adapters.get(dto.providerType);
-    if (!adapter) throw new BadRequestException({ code: 'ADAPTER_UNKNOWN', message: `Unknown deployment adapter: ${dto.providerType}` });
-    const version = await this.versions.findOne({ where: { id: dto.modelVersionId, organizationId } });
-    if (!version) throw new NotFoundException('Model version not found');
+    if (!adapter) throw new BadRequestException({ code: 'ADAPTER_UNKNOWN', message: `Unknown deployment provider: ${dto.providerType}` });
+    // A registered version is optional. Naming the model is configuration.
+    const version = dto.modelVersionId
+      ? await this.versions.findOne({ where: { id: dto.modelVersionId, organizationId } })
+      : null;
+    if (dto.modelVersionId && !version) throw new NotFoundException('Model version not found');
+    // Same rule for the catalog card the endpoint will fill: it has to be
+    // this organization's. Unchecked, a typo saved quietly and the
+    // deployment reached ready with nothing to light up, and a card id
+    // belonging to another organization was written onto the row.
+    if (dto.modelId && this.models) {
+      const card = await this.models.findOne({ where: { id: dto.modelId, organizationId } });
+      if (!card) throw new NotFoundException('Model card not found');
+    }
+    const reference = version?.registryUri ?? dto.model;
+    if (!reference) {
+      throw new BadRequestException({ code: 'MODEL_REQUIRED', message: 'Name the model to run with `model`, or point at a registered version with `modelVersionId`' });
+    }
 
     const caps = adapter.capabilities();
-    if (caps.architectures !== 'any' && !caps.architectures.some((a) => version.base.startsWith(a))) {
+    let source: ModelSource;
+    try {
+      source = readModelSource(reference);
+    } catch (err: any) {
+      throw new BadRequestException({ code: err?.code ?? 'REGISTRY_URI_INVALID', message: err?.message ?? String(err) });
+    }
+    // Where the model lives decides who can run it, and that is settled
+    // here rather than by a provider error mid-deployment.
+    const runnable = canRun(adapter.key, caps, source);
+    if (runnable.ok === false) {
+      throw new BadRequestException({
+        code: 'ADAPTER_UNSUPPORTED_SOURCE',
+        message: `${adapter.displayName} cannot run ${reference}: ${runnable.reason}`,
+        accepts: schemesFor(adapter.key, caps).map((s) => `${s}://`),
+      });
+    }
+
+    const base = version?.base ?? dto.base ?? null;
+    if (caps.architectures !== 'any' && base && !caps.architectures.some((a) => base.startsWith(a))) {
       // Refused at submit, not at provider error: this is what the pre-submit warning is for.
       throw new BadRequestException({
         code: 'ADAPTER_UNSUPPORTED_ARCHITECTURE',
-        message: `${adapter.displayName} cannot serve ${version.base}; it supports ${caps.architectures.join(', ')}`,
+        message: `${adapter.displayName} cannot serve ${base}; it supports ${caps.architectures.join(', ')}`,
       });
     }
     const desired = dto.desired ?? {};
@@ -98,7 +154,9 @@ export class ModelDeploymentsService {
 
     const deployment = this.deployments.create({
       organizationId,
-      modelVersionId: version.id,
+      modelVersionId: version?.id ?? null,
+      modelRef: version ? null : source.raw,
+      modelBase: version ? null : base,
       modelId: dto.modelId ?? null,
       providerType: adapter.key,
       desired: { replicas: 1, minScale: caps.scaleToZero ? 0 : 1, maxScale: 1, ...desired },
@@ -174,8 +232,13 @@ export class ModelDeploymentsService {
       if (k !== 'credentialId' && ModelDeployment.isSecretKey(k) && typeof v === 'string' && !/^registry/i.test(k)) creds[k] = v;
     }
     if (this.registry) {
+      // The reference is the version's when there is one and the
+      // deployment's own when the model was named inline. Keying this on
+      // modelVersionId alone left an s3:// deployment with no registry
+      // keys, which is exactly the Bedrock and SageMaker case.
       const version = deployment.modelVersionId ? await this.versions.findOne({ where: { id: deployment.modelVersionId } }) : null;
-      if (version?.registryUri?.startsWith('s3://')) {
+      const reference = version?.registryUri ?? deployment.modelRef ?? '';
+      if (reference.startsWith('s3://')) {
         creds = { ...creds, ...(await this.registry.adapterCredentialsFor(deployment.organizationId)) };
       }
     }
@@ -184,7 +247,9 @@ export class ModelDeploymentsService {
 
   async enqueue(deploymentId: string): Promise<void> {
     try {
-      await this.queue.add(MODEL_RECONCILE_JOB, { deploymentId }, { jobId: `reconcile-${deploymentId}-${Date.now()}`, removeOnComplete: true, removeOnFail: 50 });
+      await this.queue.add(MODEL_RECONCILE_JOB, { deploymentId }, { // Deterministic, so a retry or a double-click collapses into one job
+      // rather than racing the sweep to deploy the same model twice.
+      jobId: `reconcile-${deploymentId}`, removeOnComplete: true, removeOnFail: 50 });
     } catch (err: any) {
       // The repeatable sweep will pick it up; a queue hiccup must not fail the request.
       this.logger.warn(`Could not enqueue reconcile for ${deploymentId}: ${err.message}`);
@@ -199,7 +264,7 @@ export class ModelDeploymentsService {
         action,
         resourceType: AuditResource.MODEL_DEPLOYMENT,
         resourceId: d.id,
-        resourceName: `${d.providerType}:${d.modelVersionId}`,
+        resourceName: `${d.providerType}:${d.modelVersionId ?? d.modelRef ?? "?"}`,
         details: { state: d.state, providerType: d.providerType, ...details },
       })
       .catch(() => undefined);

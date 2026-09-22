@@ -126,6 +126,10 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      '/strategies': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       '/model-adapters': {
         target: apiTarget,
         changeOrigin: true,
@@ -165,6 +169,20 @@ export default defineConfig({
         changeOrigin: true,
         bypass: bypassHtmlGetRequests,
       },
+      // Enterprise surfaces. These live in backend/ee rather than
+      // backend/src, which is why they had no rule for so long: the
+      // dev-proxy check only walked backend/src and reported everything
+      // covered while every EE screen answered index.html in local dev.
+      '/rbac': { target: apiTarget, changeOrigin: true },
+      '/compliance': { target: apiTarget, changeOrigin: true },
+      '/approval-policies': { target: apiTarget, changeOrigin: true },
+      '/audit-export': { target: apiTarget, changeOrigin: true },
+      '/chargeback': { target: apiTarget, changeOrigin: true },
+      '/billing': { target: apiTarget, changeOrigin: true },
+      '/byo-kms': { target: apiTarget, changeOrigin: true },
+      '/kms': { target: apiTarget, changeOrigin: true },
+      '/scim': { target: apiTarget, changeOrigin: true },
+      '/sso': { target: apiTarget, changeOrigin: true },
       '/mcp': {
         target: apiTarget,
         changeOrigin: true,

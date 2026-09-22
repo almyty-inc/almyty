@@ -121,8 +121,14 @@ export class UnifiedEndpointController {
 
     // Find the gateway this key belongs to
     const gateway = await this.gatewayRepository.findOne({
+      // organizationId on BOTH branches. The key carries a gatewayId that
+      // was stamped on it at mint time, and without this predicate a key
+      // naming another tenant's gateway id resolved that tenant's gateway --
+      // auth configs loaded and its agent addressed. The sibling below
+      // survived only because it re-scopes the agent afterwards; this path
+      // had no such second check.
       where: apiKey.gatewayId
-        ? { id: apiKey.gatewayId, status: GatewayStatus.ACTIVE }
+        ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE }
         : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
       relations: { authConfigs: true },
     });
@@ -211,8 +217,14 @@ export class UnifiedEndpointController {
     }
 
     const gateway = await this.gatewayRepository.findOne({
+      // organizationId on BOTH branches. The key carries a gatewayId that
+      // was stamped on it at mint time, and without this predicate a key
+      // naming another tenant's gateway id resolved that tenant's gateway --
+      // auth configs loaded and its agent addressed. The sibling below
+      // survived only because it re-scopes the agent afterwards; this path
+      // had no such second check.
       where: apiKey.gatewayId
-        ? { id: apiKey.gatewayId, status: GatewayStatus.ACTIVE }
+        ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE }
         : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
       relations: { authConfigs: true },
     });
@@ -239,6 +251,10 @@ export class UnifiedEndpointController {
    * Resolves org, then finds gateway or agent by slug/name.
    */
   @All(':orgSlug/:resourceSlug')
+  // Its three siblings here all carry this; this one did not, so the same
+  // gateway traffic was rate-limited or not depending on whether the path had
+  // a trailing segment.
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   async handleRequest(
     @Param('orgSlug') orgSlug: string,
     @Param('resourceSlug') resourceSlug: string,
@@ -362,6 +378,35 @@ export class UnifiedEndpointController {
       .where('agent.organizationId = :organizationId', { organizationId })
       .andWhere('LOWER(agent.name) = LOWER(:name)', { name: deslugified })
       .getOne();
-    return agent;
+    if (agent) return agent;
+
+    // Last resort: slugify each name the way the client does and compare.
+    //
+    // Undoing hyphens into spaces only reverses names made of letters,
+    // digits and spaces. The Integration snippet builds its URL with
+    // `name.toLowerCase().replace(/[^a-z0-9]+/g, '-')`, so every agent
+    // whose name carries punctuation -- "Support Bot (Copy)", "v1.2",
+    // "Ann's agent" -- was handed a copy-pasteable URL that 404'd. The
+    // three lookups above are indexed and answer the common case; this
+    // one runs only when they all miss.
+    const candidates = await this.agentRepository.find({
+      where: { organizationId },
+      select: { id: true, name: true },
+    });
+    const wanted = slugifyName(slugOrName);
+    const match = candidates.find(candidate => slugifyName(candidate.name) === wanted);
+    return match ? this.agentRepository.findOne({ where: { id: match.id, organizationId } }) : null;
   }
+}
+
+/**
+ * The client's slug rule, so both ends agree on what a name looks like in
+ * a URL. Leading and trailing separators are dropped: "(Copy)" would
+ * otherwise leave a bare hyphen hanging off the end.
+ */
+export function slugifyName(name: string): string {
+  return (name ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }

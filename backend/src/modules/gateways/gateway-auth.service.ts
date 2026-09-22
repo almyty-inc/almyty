@@ -1,7 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -9,7 +8,6 @@ import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity
 import { Gateway } from '../../entities/gateway.entity';
 import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
-import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 import { compileSafeRegex, boundRegexInput } from '../../common/security/regex-safety';
 
 import { GatewayAuthValidators } from './gateway-auth-validators.helper';
@@ -95,7 +93,34 @@ export interface AuthenticationResult {
   organizationId?: string;
   error?: string;
   errorCode?: string;
+  /**
+   * Which gateway_auths row decided this outcome — the config that
+   * accepted the request, or on a refusal the one whose rejection is
+   * being reported. A gateway commonly has several required configs and
+   * only the last error used to survive, so a support ticket ("my key
+   * stopped working") had no way to say *which* of the gateway's auth
+   * methods refused. Never forwarded to the client; it goes to the log
+   * line and `request_logs.metadata`.
+   */
+  authConfigId?: string;
+  /** Auth type of `authConfigId` (api_key, oauth2, jwt, ...). */
+  authConfigType?: string;
+  /** How many required configs were tried before giving up. */
+  triedConfigCount?: number;
   metadata?: Record<string, any>;
+}
+
+/** Config keys on a gateway auth row that are credentials, not settings. */
+const AUTH_SECRET_KEYS = ['secret', 'clientSecret', 'privateKey', 'password', 'token'];
+
+/** Replace secret values with a presence flag the UI can still render. */
+export function maskAuthSecrets(configuration: any): any {
+  if (!configuration || typeof configuration !== 'object') return configuration;
+  const masked: Record<string, any> = { ...configuration };
+  for (const key of AUTH_SECRET_KEYS) {
+    if (masked[key] !== undefined && masked[key] !== null && masked[key] !== '') masked[key] = '••••••••';
+  }
+  return masked;
 }
 
 @Injectable()
@@ -107,13 +132,8 @@ export class GatewayAuthService {
     private gatewayAuthRepository: Repository<GatewayAuth>,
     @InjectRepository(Gateway)
     private gatewayRepository: Repository<Gateway>,
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
     @InjectRepository(ApiKey)
     private apiKeyRepository: Repository<ApiKey>,
-    @InjectRepository(OAuthAccessToken)
-    private oauthAccessTokenRepository: Repository<OAuthAccessToken>,
-    private jwtService: JwtService,
     private readonly validators: GatewayAuthValidators,
   ) {}
 
@@ -210,10 +230,21 @@ export class GatewayAuthService {
       throw new NotFoundException('Gateway not found');
     }
 
-    return this.gatewayAuthRepository.find({
+    const rows = await this.gatewayAuthRepository.find({
       where: { gatewayId },
       order: { createdAt: 'ASC' },
     });
+
+    // configuration.secret is the gateway's JWT signing key, stored in
+    // plaintext, and this route is open to `member`. Returning it let any
+    // member mint gateway JWTs with any claims they liked -- a complete
+    // bypass of gateway authentication for every consumer. The sibling
+    // API-key route already uses an explicit select; this one returned
+    // the row as stored.
+    return rows.map((row) => ({
+      ...row,
+      configuration: maskAuthSecrets(row.configuration),
+    })) as typeof rows;
   }
 
   async deleteGatewayAuth(authId: string, organizationId: string): Promise<void> {
@@ -236,14 +267,27 @@ export class GatewayAuthService {
     headers: Record<string, string>,
     query: Record<string, string>,
     body?: any,
-    clientIp?: string
+    clientIp?: string,
+    preloadedAuthConfigs?: GatewayAuth[]
   ): Promise<AuthenticationResult> {
     try {
-      // Get all active auth configs for the gateway
-      const authConfigs = await this.gatewayAuthRepository.find({
-        where: { gatewayId, isActive: true },
-        order: { createdAt: 'ASC' },
-      });
+      // Get all active auth configs for the gateway.
+      //
+      // `gateway` is loaded because validateOAuth2 compares the access
+      // token's organizationId against the gateway's owning org. Without
+      // the relation that comparison had nothing to compare against.
+      //
+      // The resolver reaches here holding the same rows off the gateway's
+      // `authConfigs` relation (with the inverse side attached); when it
+      // hands them over this query is skipped entirely. Every other caller
+      // omits the argument and the query runs as before.
+      const authConfigs =
+        preloadedAuthConfigs ??
+        (await this.gatewayAuthRepository.find({
+          where: { gatewayId, isActive: true },
+          relations: { gateway: true },
+          order: { createdAt: 'ASC' },
+        }));
 
       if (authConfigs.length === 0) {
         // No auth configs = deny by default. Gateways must have explicit auth configured.
@@ -272,28 +316,48 @@ export class GatewayAuthService {
         };
       }
 
-      // Try each required auth method — any one succeeding is enough
+      // Try each required auth method — any one succeeding is enough.
+      // Which config decided is carried out with the result: keeping only
+      // `lastError` answered "it was refused" but never "by what", which
+      // is the first question on an auth support ticket.
       let lastError = 'No valid authentication provided';
       let lastErrorCode = 'NO_AUTH';
+      let decidingConfigId: string | undefined;
+      let decidingConfigType: string | undefined;
 
       for (const authConfig of requiredConfigs) {
         const result = await this.validators.validateAuthConfig(authConfig, headers, query, body, clientIp);
 
         if (result.isValid) {
-          return result;
+          return {
+            ...result,
+            authConfigId: result.authConfigId ?? authConfig.id,
+            authConfigType: result.authConfigType ?? authConfig.type,
+            triedConfigCount: requiredConfigs.length,
+          };
         }
 
         if (result.error) {
           lastError = result.error;
           lastErrorCode = result.errorCode || 'AUTH_FAILED';
+          decidingConfigId = authConfig.id;
+          decidingConfigType = authConfig.type;
         }
       }
 
       // All required auth methods failed
+      this.logger.warn(
+        `Gateway ${gatewayId} auth refused: ${lastErrorCode} by config ` +
+          `${decidingConfigId ?? 'none'} (${decidingConfigType ?? 'n/a'}) ` +
+          `after ${requiredConfigs.length} required config(s)`,
+      );
       return {
         isValid: false,
         error: lastError,
         errorCode: lastErrorCode,
+        authConfigId: decidingConfigId,
+        authConfigType: decidingConfigType,
+        triedConfigCount: requiredConfigs.length,
       };
 
     } catch (error) {

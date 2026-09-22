@@ -12,6 +12,23 @@ describe('GatewayProtocolService', () => {
   let gatewayToolRepository: any;
   let toolExecutorService: any;
 
+  /** What the single by-name gateway_tool lookup answers with. */
+  let resolvedGatewayTool: any = null;
+  /** What tools/list gets back when it asks for the gateway's tools. */
+  let listedGatewayTools: any[] = [];
+  let recordedToolWheres: string[] = [];
+  let recordedToolParams: Record<string, any> = {};
+
+  const fakeGatewayTool = (name: string) => ({
+    toolId: 'tool-1',
+    isActive: true,
+    getEffectiveName: jest.fn().mockReturnValue(name),
+    getEffectiveDescription: jest.fn().mockReturnValue('Test tool description'),
+    getEffectiveParameters: jest.fn().mockReturnValue({ param1: { type: 'string' } }),
+    getEffectiveTimeout: jest.fn().mockReturnValue(30000),
+    getEffectiveRetries: jest.fn().mockReturnValue(3),
+  });
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -26,6 +43,7 @@ describe('GatewayProtocolService', () => {
           provide: getRepositoryToken(GatewayTool),
           useValue: {
             find: jest.fn(),
+            createQueryBuilder: jest.fn(),
           },
         },
         {
@@ -41,6 +59,31 @@ describe('GatewayProtocolService', () => {
     gatewayRepository = module.get(getRepositoryToken(Gateway));
     gatewayToolRepository = module.get(getRepositoryToken(GatewayTool));
     toolExecutorService = module.get(ToolExecutorService);
+
+    // A call resolves its one gateway_tool by name in SQL now, rather
+    // than hydrating every tool of the gateway and scanning the array.
+    resolvedGatewayTool = null;
+    listedGatewayTools = [];
+    gatewayToolRepository.find.mockImplementation(async () => listedGatewayTools);
+    gatewayToolRepository.createQueryBuilder.mockImplementation(() => {
+      const qb: any = {
+        innerJoinAndSelect: () => qb,
+        where: (clause: string, params?: any) => {
+          recordedToolWheres.push(clause);
+          Object.assign(recordedToolParams, params ?? {});
+          return qb;
+        },
+        andWhere: (clause: string, params?: any) => {
+          recordedToolWheres.push(clause);
+          Object.assign(recordedToolParams, params ?? {});
+          return qb;
+        },
+        getOne: async () => resolvedGatewayTool,
+      };
+      return qb;
+    });
+    recordedToolWheres = [];
+    recordedToolParams = {};
   });
 
   describe('basic functionality', () => {
@@ -108,7 +151,7 @@ describe('GatewayProtocolService', () => {
           method: 'tools/list',
         },
       };
-
+      resolvedGatewayTool = fakeGatewayTool('testTool');
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
 
       const response = await service.handleProtocolRequest(mcpRequest);
@@ -145,6 +188,7 @@ describe('GatewayProtocolService', () => {
         userId: 'user-1',
       };
 
+      resolvedGatewayTool = fakeGatewayTool('testTool');
       gatewayRepository.findOne.mockResolvedValue(mockGateway);
       toolExecutorService.executeTool.mockResolvedValue({
         success: true,
@@ -232,6 +276,7 @@ describe('GatewayProtocolService', () => {
         body: mcpRequest,
       };
 
+      listedGatewayTools = [fakeGatewayTool('testTool')];
       gatewayRepository.findOne.mockResolvedValue(mockMCPGateway);
 
       const response = await service.handleProtocolRequest(request);
@@ -261,6 +306,7 @@ describe('GatewayProtocolService', () => {
         userId: 'user-1',
       };
 
+      resolvedGatewayTool = fakeGatewayTool('testTool');
       gatewayRepository.findOne.mockResolvedValue(mockMCPGateway);
       toolExecutorService.executeTool.mockResolvedValue({
         success: true,
@@ -296,6 +342,7 @@ describe('GatewayProtocolService', () => {
         userId: 'user-1',
       };
 
+      resolvedGatewayTool = fakeGatewayTool('testTool');
       gatewayRepository.findOne.mockResolvedValue(mockMCPGateway);
       toolExecutorService.executeTool.mockResolvedValue({
         success: false,
@@ -487,6 +534,7 @@ describe('GatewayProtocolService', () => {
         userId: 'user-1',
       };
 
+      resolvedGatewayTool = fakeGatewayTool('testTool');
       gatewayRepository.findOne.mockResolvedValue(mockUTCPGateway);
       toolExecutorService.executeTool.mockResolvedValue({
         success: true,
@@ -623,6 +671,7 @@ describe('GatewayProtocolService', () => {
         body: mcpRequest,
       };
 
+      resolvedGatewayTool = fakeGatewayTool('testTool');
       gatewayRepository.findOne.mockResolvedValue(mockMCPGateway);
       toolExecutorService.executeTool.mockRejectedValue(new Error('Execution failed'));
 
@@ -804,6 +853,98 @@ describe('GatewayProtocolService', () => {
 
       expect(mockWs.close).toHaveBeenCalledWith(1011, 'Internal server error');
     });
+
+  /**
+   * One gateway tool call must not cost the whole catalogue.
+   *
+   * `handleProtocolRequest` loaded the gateway with
+   * `relations: { tools: { tool: true } }`, so a 200-tool gateway
+   * hydrated 200 GatewayTool plus 200 Tool entities -- each carrying
+   * `code`, `parameters` and `examples` -- on every request, including a
+   * `tools/call` that then picked one out with `Array.prototype.find`.
+   */
+  describe('tool resolution shape', () => {
+    const mcpGateway = {
+      id: 'gateway-1',
+      type: GatewayType.MCP,
+      organizationId: 'org-1',
+      canAcceptRequests: jest.fn().mockReturnValue(true),
+      configuration: { capabilities: {} },
+    };
+
+    const callRequest: ProtocolRequest = {
+      gatewayId: 'gateway-1',
+      method: 'mcp',
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'testTool', arguments: {} },
+      },
+      userId: 'user-1',
+    };
+
+    it('never asks the gateway query for its tools', async () => {
+      resolvedGatewayTool = fakeGatewayTool('testTool');
+      gatewayRepository.findOne.mockResolvedValue(mcpGateway);
+      toolExecutorService.executeTool.mockResolvedValue({
+        success: true,
+        data: 'ok',
+        executionTime: 1,
+        cached: false,
+        retryCount: 0,
+      });
+
+      await service.handleProtocolRequest(callRequest);
+
+      const [options] = gatewayRepository.findOne.mock.calls[0];
+      expect(options.relations).toEqual({ authConfigs: true });
+      expect(options.relations).not.toHaveProperty('tools');
+    });
+
+    it('resolves the named tool with one predicate in SQL', async () => {
+      resolvedGatewayTool = fakeGatewayTool('testTool');
+      gatewayRepository.findOne.mockResolvedValue(mcpGateway);
+      toolExecutorService.executeTool.mockResolvedValue({
+        success: true,
+        data: 'ok',
+        executionTime: 1,
+        cached: false,
+        retryCount: 0,
+      });
+
+      await service.handleProtocolRequest(callRequest);
+
+      expect(gatewayToolRepository.createQueryBuilder).toHaveBeenCalledTimes(1);
+      // The same rule getEffectiveName() applies, expressed as SQL.
+      expect(recordedToolWheres).toContain('gatewayTool.isActive = true');
+      expect(recordedToolWheres).toContain(
+        "COALESCE(gatewayTool.overrides ->> 'name', tool.name) = :name",
+      );
+      expect(recordedToolParams.name).toBe('testTool');
+      expect(recordedToolParams.gatewayId).toBe('gateway-1');
+      // And the whole-set load is not used on a call at all.
+      expect(gatewayToolRepository.find).not.toHaveBeenCalled();
+    });
+
+    it('still loads the whole set for tools/list, and only there', async () => {
+      listedGatewayTools = [fakeGatewayTool('a'), fakeGatewayTool('b')];
+      gatewayRepository.findOne.mockResolvedValue(mcpGateway);
+
+      const response = await service.handleProtocolRequest({
+        gatewayId: 'gateway-1',
+        method: 'mcp',
+        body: { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+      });
+
+      expect(response.data?.result.tools).toHaveLength(2);
+      expect(gatewayToolRepository.find).toHaveBeenCalledWith({
+        where: { gatewayId: 'gateway-1', isActive: true },
+        relations: { tool: true },
+      });
+      expect(gatewayToolRepository.createQueryBuilder).not.toHaveBeenCalled();
+    });
   });
 
+});
 });

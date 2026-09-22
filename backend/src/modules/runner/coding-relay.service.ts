@@ -34,15 +34,56 @@ export interface CodingEvent {
  * (fine for single-replica and dev); cross-pod fanout would ride the same
  * Redis bridge the transport already has and is deliberately deferred.
  */
+
+/**
+ * Entries kept in the session -> runner cache.
+ *
+ * A miss costs one indexed lookup, so this can be small; it exists only
+ * to keep the map from growing for the life of the pod.
+ */
+const SESSION_RUNNER_CACHE_MAX = 10_000;
+
+/**
+ * The transport hands each envelope the session it arrived on. `id` is
+ * the streamable session id; `organizationId` is the tenant the bearer
+ * token on that POST proved, and is the only trustworthy thing in the
+ * pair -- everything inside the envelope payload was written by
+ * whoever is holding the session.
+ */
+interface EnvelopeSession {
+  id: string;
+  organizationId: string;
+}
 @Injectable()
 export class CodingRelayService implements OnModuleDestroy {
   private readonly logger = new Logger(CodingRelayService.name);
   private readonly emitter = new EventEmitter();
-  /** Fast local cache: streamable session id -> runner id (from runner.hello). */
+  /**
+   * Fast local cache: streamable session id -> runner id (from runner.hello).
+   *
+   * Bounded, because nothing tells it when a session ends. The transport
+   * that owns those ids garbage-collects its own map on a timer, and this
+   * cache was never informed -- while a fresh entry lands on every
+   * runner.hello, and the daemon re-mints a session on every session-lost,
+   * which its own comments describe as routine against a multi-replica
+   * backend. Entries are tiny, so this only bites a pod that stays up for
+   * months; an LRU cap is the cheap way to make that impossible.
+   */
   private readonly sessionRunners = new Map<string, string>();
+
+  /** Re-insert on read so the Map's insertion order is a recency order. */
+  private rememberSession(sessionId: string, runnerId: string): void {
+    this.sessionRunners.delete(sessionId);
+    this.sessionRunners.set(sessionId, runnerId);
+    while (this.sessionRunners.size > SESSION_RUNNER_CACHE_MAX) {
+      const oldest = this.sessionRunners.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      this.sessionRunners.delete(oldest);
+    }
+  }
   private readonly envelopeListener: (
     env: WorkerEnvelope,
-    session?: { id: string },
+    session?: EnvelopeSession,
   ) => void;
 
   constructor(
@@ -79,7 +120,7 @@ export class CodingRelayService implements OnModuleDestroy {
     return this.emitter.listenerCount(`coding:${runnerId}`);
   }
 
-  private async onEnvelope(env: WorkerEnvelope, session?: { id: string }): Promise<void> {
+  private async onEnvelope(env: WorkerEnvelope, session?: EnvelopeSession): Promise<void> {
     if (env.type !== 'event') return;
     const payload = env.payload as
       | { kind?: string; runnerId?: string; sessionId?: string }
@@ -88,8 +129,26 @@ export class CodingRelayService implements OnModuleDestroy {
 
     // Piggyback on runner.hello to learn the session -> runner mapping
     // without a DB round trip per event.
+    //
+    // The claimed runner id is checked against the organization the
+    // session's bearer token proved, the same as in RunnerCallService.
+    // Caching the claim unverified let a session in one organization
+    // bind itself to another tenant's runner, and every coding.output
+    // it then posted was relayed onto that runner's SSE channel -- so
+    // the victim's chat window showed output the victim's machine
+    // never produced.
     if (payload.kind === 'runner.hello' && payload.runnerId && session) {
-      this.sessionRunners.set(session.id, payload.runnerId);
+      const owned = await this.runners.belongsToOrganization(
+        payload.runnerId,
+        session.organizationId,
+      );
+      if (!owned) {
+        this.logger.warn(
+          `runner.hello claiming runner ${payload.runnerId} refused: not in session's organization`,
+        );
+        return;
+      }
+      this.rememberSession(session.id, payload.runnerId);
       return;
     }
     if (!payload.kind.startsWith('coding.')) return;
@@ -103,7 +162,7 @@ export class CodingRelayService implements OnModuleDestroy {
       this.logger.debug(`coding event for unmapped session ${session.id} dropped`);
       return;
     }
-    this.sessionRunners.set(session.id, runnerId);
+    this.rememberSession(session.id, runnerId);
     this.emitter.emit(`coding:${runnerId}`, payload as CodingEvent);
   }
 }

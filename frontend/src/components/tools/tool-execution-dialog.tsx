@@ -56,8 +56,8 @@ export function ToolExecutionDialog({
                 /* API tools: show path/query/body split */
                 <div className="space-y-3">
                   <div>
-                    <label className="text-sm font-medium">Path Parameters</label>
-                    <Input
+                    <label htmlFor="exec-path-params" className="text-sm font-medium">Path Parameters</label>
+                    <Input id="exec-path-params"
                       placeholder='{"petId": "1"}'
                       value={JSON.stringify(executionParameters.path || {})}
                       onChange={(e) => {
@@ -71,8 +71,8 @@ export function ToolExecutionDialog({
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium">Query Parameters</label>
-                    <Input
+                    <label htmlFor="exec-query-params" className="text-sm font-medium">Query Parameters</label>
+                    <Input id="exec-query-params"
                       placeholder='{"status": "available"}'
                       value={JSON.stringify(executionParameters.query || {})}
                       onChange={(e) => {
@@ -86,8 +86,8 @@ export function ToolExecutionDialog({
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium">Body</label>
-                    <textarea
+                    <label htmlFor="exec-body" className="text-sm font-medium">Body</label>
+                    <textarea id="exec-body"
                       placeholder='{"name": "Rex", "status": "available"}'
                       value={JSON.stringify(executionParameters.body || {}, null, 2)}
                       onChange={(e) => {
@@ -103,8 +103,8 @@ export function ToolExecutionDialog({
               ) : (
                 /* Custom/LLM/other tools: single parameters input */
                 <div>
-                  <label className="text-sm font-medium">Parameters (JSON)</label>
-                  <textarea
+                  <label htmlFor="exec-parameters-json" className="text-sm font-medium">Parameters (JSON)</label>
+                  <textarea id="exec-parameters-json"
                     placeholder={(() => {
                       const props = (toolForExecution as any).parameters?.properties
                       if (props && Object.keys(props).length > 0) {
@@ -194,7 +194,7 @@ export function ToolExecutionDialog({
 
                 {executionResult.success ? (
                   <div className="space-y-2">
-                    <div className="bg-green-50 border border-green-200 rounded p-3">
+                    <div className="bg-green-50 border border-green-200 dark:bg-green-500/10 dark:border-green-500/30 rounded p-3">
                       <pre className="text-xs overflow-x-auto">
                         {JSON.stringify(executionResult.data, null, 2)}
                       </pre>
@@ -207,9 +207,9 @@ export function ToolExecutionDialog({
                     )}
                   </div>
                 ) : (
-                  <div className="bg-red-50 border border-red-200 rounded p-3">
-                    <p className="text-sm text-red-900 font-medium">Error:</p>
-                    <p className="text-xs text-red-700 mt-1">{executionResult.error}</p>
+                  <div className="bg-red-50 border border-red-200 dark:bg-destructive/10 dark:border-destructive/30 rounded p-3">
+                    <p className="text-sm text-red-900 dark:text-red-200 font-medium">Error:</p>
+                    <p className="text-xs text-red-700 dark:text-red-300 mt-1">{executionResult.error}</p>
                   </div>
                 )}
               </div>

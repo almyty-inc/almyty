@@ -9,6 +9,8 @@ import {
 import { Request, Response } from 'express';
 import { QueryFailedError, EntityNotFoundError } from 'typeorm';
 
+import { getRequestContext, getRequestId } from '../request-context';
+
 /**
  * Errors body-parser raises before the route handler runs. They are plain
  * Errors with a 4xx `status` and a machine-readable `type` (see
@@ -18,6 +20,12 @@ interface BodyParserError extends Error {
   status: number;
   type: string;
 }
+
+/**
+ * Keys the filter owns in the error body. Everything else on an
+ * exception payload belongs to whoever threw it and is forwarded.
+ */
+const RESERVED_ERROR_KEYS = new Set(['code', 'message', 'statusCode', 'timestamp', 'path', 'error']);
 
 const BODY_PARSER_MESSAGES: Record<string, string> = {
   'entity.too.large': 'Request body too large',
@@ -31,6 +39,44 @@ const BODY_PARSER_MESSAGES: Record<string, string> = {
   'stream.not.readable': 'Invalid request stream',
   'parameters.too.many': 'Too many parameters',
 };
+
+/**
+ * Postgres SQLSTATE classes, plus the socket-level codes the driver
+ * raises before it ever gets a SQLSTATE, that mean "the database is not
+ * answering" rather than "your data is wrong".
+ *
+ *   08xxx  connection exception
+ *   53xxx  insufficient resources (out of connections, disk, memory)
+ *   57P01  admin shutdown        57P02  crash shutdown
+ *   57P03  cannot connect now    57014  query cancelled (statement timeout)
+ *   40001  serialization failure 40P01  deadlock detected
+ *
+ * A constraint violation (23xxx), an undefined column (42xxx) or a bad
+ * cast (22xxx) is not here: those really are 4xx.
+ */
+const DB_UNAVAILABLE_SQLSTATES = new Set([
+  '57P01', '57P02', '57P03', '57014', '40001', '40P01',
+]);
+const DB_UNAVAILABLE_DRIVER_CODES = new Set([
+  'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'EHOSTUNREACH', 'ENOTFOUND',
+]);
+
+export function isConnectionClassDatabaseError(exception: unknown): boolean {
+  const err = exception as any;
+  const driver = err?.driverError ?? err;
+  const code = driver?.code ?? err?.code;
+  if (typeof code === 'string') {
+    if (DB_UNAVAILABLE_DRIVER_CODES.has(code)) return true;
+    if (DB_UNAVAILABLE_SQLSTATES.has(code)) return true;
+    if (/^(08|53)/.test(code)) return true;
+  }
+  // TypeORM raises these as plain Errors with no SQLSTATE at all when the
+  // pool itself is gone, so the message is the only signal available.
+  const message = String(driver?.message ?? err?.message ?? '');
+  return /connection terminated|connection ended|pool is draining|timeout exceeded when trying to connect|Client has encountered a connection error|too many clients/i.test(
+    message,
+  );
+}
 
 function isBodyParserError(exception: unknown): exception is BodyParserError {
   if (!(exception instanceof Error)) return false;
@@ -78,6 +124,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     let status: number;
     let message: string;
     let code: string;
+    /** Extra fields the thrower put on the payload, forwarded as-is. */
+    let details: Record<string, unknown> = {};
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -93,6 +141,17 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ? String((exResponse as any).code)
         : this.getCodeFromStatus(status);
 
+      // Anything else on the payload is the thrower's own structured
+      // detail, meant for the client: `accepts` on an unsupported source,
+      // `retryAfter`, a field list. Forward it rather than discarding it.
+      if (typeof exResponse === 'object' && exResponse !== null) {
+        details = Object.fromEntries(
+          Object.entries(exResponse as Record<string, unknown>).filter(
+            ([k]) => !RESERVED_ERROR_KEYS.has(k),
+          ),
+        );
+      }
+
       // Flatten array messages from ValidationPipe
       if (Array.isArray(message)) {
         message = message.join('; ');
@@ -103,11 +162,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         response.setHeader('WWW-Authenticate', (exception as any).wwwAuthenticate);
       }
     } else if (exception instanceof QueryFailedError) {
-      status = HttpStatus.BAD_REQUEST;
-      message = 'Database operation failed';
-      code = 'DATABASE_ERROR';
+      // A constraint violation is the client's fault; a dead pool, a
+      // refused socket or a statement timeout is ours. Mapping both to
+      // 400 meant a database outage was counted as a client error,
+      // never reported to Sentry, and invisible to any 5xx-rate alert.
+      const connectionClass = isConnectionClassDatabaseError(exception);
+      status = connectionClass
+        ? HttpStatus.SERVICE_UNAVAILABLE
+        : HttpStatus.BAD_REQUEST;
+      message = connectionClass
+        ? 'Service temporarily unavailable'
+        : 'Database operation failed';
+      code = connectionClass ? 'DATABASE_UNAVAILABLE' : 'DATABASE_ERROR';
       this.logger.error(
-        `Database error on ${request.method} ${request.path}: ${(exception as any).message}`,
+        `Database error on ${request.method} ${request.path}: ` +
+          `${(exception as any).code ?? 'no-code'} ${(exception as any).message}`,
         (exception as any).stack,
       );
     } else if (exception instanceof EntityNotFoundError) {
@@ -137,6 +206,20 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       this.logger.error(`Unknown error on ${request.method} ${request.path}`, exception);
     }
 
+    // The correlation id of this request. Answered to the client so a
+    // person can quote it ("it said Internal server error, request
+    // a1b2c3"), echoed as a header so a browser devtools capture has it
+    // too, and the same id every log line for this request carries — so
+    // a 500 the user saw has exactly one grep.
+    const requestId = getRequestId() ?? (request as any).requestId ?? null;
+    if (requestId) {
+      try {
+        response.setHeader('X-Request-Id', requestId);
+      } catch {
+        // Already sent — the body still carries it.
+      }
+    }
+
     // Report server-side failures (5xx) to Sentry — including thrown
     // HttpExceptions that resolve to a 5xx (e.g. ServiceUnavailable). 4xx
     // are client errors and are never reported. Log a structured 5xx line
@@ -146,24 +229,95 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       this.logger.error(
         `5xx on ${request.method} ${request.path} -> ${status}: ${message}`,
       );
-      this.captureToSentry(exception);
+      this.captureToSentry(exception, request, status, code, requestId);
     }
 
     response.status(status).json({
+      // A sibling copy of the reason, at the top level.
+      //
+      // 63 frontend files read `response.data.message` and this filter
+      // only ever set `error.message`, so every one of them fell through
+      // to a generic string: a signup rejected for "Organization name
+      // must be at least 2 characters long" told the person "Please check
+      // your information and try again", and the shared QueryError
+      // component showed axios's "Request failed with status code 400" in
+      // 27 places. Fixing the readers one at a time leaves the next one
+      // to make the same mistake; answering in both shapes does not.
+      //
+      // `success: false` for the same reason -- the success envelope has
+      // it, and code that branches on it treated an error body as a
+      // success because the key was simply absent.
+      success: false,
+      message,
+      ...(requestId ? { requestId } : {}),
       error: {
         code,
         message,
         statusCode: status,
         timestamp: new Date().toISOString(),
         path: request.path,
+        ...(requestId ? { requestId } : {}),
+        // Whatever else the thrower attached to the payload. Without this
+        // the body was rebuilt from five fixed fields, so a handler that
+        // threw `{ code, message, accepts }` to tell the client what it
+        // could have sent instead had that stripped on the way out, and
+        // the unit test asserting it passed because it never crossed the
+        // wire. Reserved keys are excluded so they cannot be overridden.
+        ...details,
       },
     });
   }
 
-  private captureToSentry(exception: unknown): void {
+  /**
+   * Send the error to Sentry with the scope that makes it filterable.
+   *
+   * `captureException(exception)` on its own produced an event with no
+   * organization, no user and no request id, so the question a Sentry
+   * alert exists to answer — "which customer is hitting this?" — had no
+   * answer, and two unrelated 500s on different tenants looked like one
+   * issue. Tags are set on an isolated scope so they cannot leak into a
+   * concurrent request's event.
+   */
+  private captureToSentry(
+    exception: unknown,
+    request: Request,
+    status: number,
+    code: string,
+    requestId: string | null,
+  ): void {
     try {
       const Sentry = require('@sentry/node');
-      if (Sentry.isInitialized?.()) {
+      if (!Sentry.isInitialized?.()) return;
+
+      const ctx = getRequestContext();
+      const user = (request as any)?.user;
+      const organizationId = ctx?.organizationId ?? user?.currentOrganizationId ?? null;
+
+      const withScope = (scope: any) => {
+        if (requestId) scope.setTag('request_id', requestId);
+        if (organizationId) scope.setTag('organization_id', organizationId);
+        if (ctx?.runId) scope.setTag('run_id', ctx.runId);
+        if (ctx?.gatewayId) scope.setTag('gateway_id', ctx.gatewayId);
+        scope.setTag('error_code', code);
+        scope.setTag('http_status', String(status));
+        scope.setTag('http_route', `${request.method} ${request.path}`);
+        // Id only — never an email or a name. An error report is not a
+        // place to widen who holds personal data.
+        if (user?.id) scope.setUser({ id: user.id });
+        scope.setContext?.('request', {
+          method: request.method,
+          path: request.path,
+          requestId,
+          organizationId,
+        });
+        Sentry.captureException(exception);
+      };
+
+      if (typeof Sentry.withIsolationScope === 'function') {
+        Sentry.withIsolationScope(withScope);
+      } else if (typeof Sentry.withScope === 'function') {
+        Sentry.withScope(withScope);
+      } else {
         Sentry.captureException(exception);
       }
     } catch {
@@ -178,11 +332,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       case 403: return 'FORBIDDEN';
       case 404: return 'NOT_FOUND';
       case 409: return 'CONFLICT';
-      case 422: return 'UNPROCESSABLE_ENTITY';
       case 413: return 'PAYLOAD_TOO_LARGE';
       case 415: return 'UNSUPPORTED_MEDIA_TYPE';
       case 422: return 'UNPROCESSABLE_ENTITY';
       case 429: return 'RATE_LIMITED';
+      case 500: return 'INTERNAL_ERROR';
+      case 501: return 'NOT_IMPLEMENTED';
+      case 502: return 'BAD_GATEWAY';
+      case 503: return 'SERVICE_UNAVAILABLE';
+      case 504: return 'GATEWAY_TIMEOUT';
     }
+    // There was no default, so a 500 or 503 HttpException thrown without
+    // an explicit code returned undefined and JSON.stringify dropped the
+    // `code` key entirely — the client got an error body with no machine
+    // -readable reason at all. Never return undefined from here.
+    if (status >= 500) return 'INTERNAL_ERROR';
+    if (status >= 400) return 'REQUEST_FAILED';
+    return 'ERROR';
   }
 }

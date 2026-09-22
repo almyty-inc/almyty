@@ -24,6 +24,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { cn } from '@/lib/utils'
+import { getApiErrorMessage } from '@/lib/api-error'
 import {
   disclosureLine,
   downloadBlob,
@@ -136,9 +137,22 @@ function SignInScreen({
 
 export function HostedChatPage({ slug }: HostedChatPageProps) {
   const [conversationId, setConversationId] = useState<string | null>(null)
+  /**
+   * The thread on screen right now, readable from a stream handler.
+   *
+   * A reply streams into the thread it was sent from, and the visitor can
+   * open a different conversation while it is in flight. Without this the
+   * old run's tokens appended to whatever was now displayed, and its
+   * final transcript reconcile overwrote the newly opened thread
+   * entirely.
+   */
+  const activeThreadRef = useRef<string | null>(null)
   const [messages, setMessages] = useState<PendingMessage[]>([])
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  // Opening a past conversation is a round trip; without this the page fell
+  // back to the empty state and looked like the thread had no messages.
+  const [loadingThread, setLoadingThread] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<'conversation' | 'visitor' | null>(null)
@@ -204,8 +218,25 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
     async (id: string) => {
       setSidebarOpen(false)
       setConversationId(id)
-      const thread = await hostedChatApi.messages(slug, id)
-      setMessages(thread.messages)
+      setError(null)
+      // Clear the old thread and flag the fetch: without a pending flag the
+      // visitor stared at the greeting for the whole round trip, as if the
+      // conversation they clicked were empty.
+      setMessages([])
+      setLoadingThread(true)
+      try {
+        const thread = await hostedChatApi.messages(slug, id)
+        setMessages(thread.messages)
+      } catch (err: any) {
+        // Previously uncaught: the rejection went unhandled, setMessages never
+        // ran, and the next message the visitor sent was posted into a thread
+        // whose history was invisible to them. Drop back to a new conversation
+        // and say what happened instead.
+        setConversationId(null)
+        setError(getApiErrorMessage(err, 'That conversation could not be opened. Please try again.'))
+      } finally {
+        setLoadingThread(false)
+      }
     },
     [slug],
   )
@@ -214,6 +245,8 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
     streamRef.current?.close()
     setConversationId(null)
     setMessages([])
+    // Starting fresh cancels any "opening conversation" spinner still on screen.
+    setLoadingThread(false)
     setError(null)
     setSidebarOpen(false)
   }, [])
@@ -225,11 +258,7 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       const exported = await hostedChatApi.exportData(slug)
       downloadBlob(exported.blob, exported.filename)
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message ||
-          err?.response?.data?.error?.message ||
-          'Your data could not be downloaded. Please try again.',
-      )
+      setError(getApiErrorMessage(err, 'Your data could not be downloaded. Please try again.'))
     } finally {
       setVisitorAction(null)
     }
@@ -253,15 +282,17 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         reloadAfterVisitorDeletion()
       }
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message ||
-          err?.response?.data?.error?.message ||
-          'Your data could not be deleted. Please try again.',
-      )
+      setError(getApiErrorMessage(err, 'Your data could not be deleted. Please try again.'))
     } finally {
       setVisitorAction(null)
     }
   }, [confirmDelete, conversationId, refetchConversations, slug, startNew])
+
+  // One place keeps the ref and the state in step, so a stream handler
+  // can never read a stale thread id.
+  useEffect(() => {
+    activeThreadRef.current = conversationId
+  }, [conversationId])
 
   const send = useCallback(async () => {
     const text = draft.trim()
@@ -287,6 +318,12 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         conversationId ?? undefined,
       )
       setConversationId(threadId)
+      // Synchronously too: the effect that mirrors state into this ref
+      // runs after render, and the stream handlers below are registered
+      // in this same tick. Without this a brand-new conversation would
+      // compare against the previous (or null) thread and drop its own
+      // tokens.
+      activeThreadRef.current = threadId
 
       // Placeholder the reply streams into, so the page shows progress
       // rather than a frozen input.
@@ -308,6 +345,10 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
       streamRef.current = source
 
       source.addEventListener('token', (event) => {
+        // Only if the visitor is still looking at the thread this run
+        // belongs to. Switching conversations mid-stream used to append
+        // the old reply's tokens into whatever was now on screen.
+        if (activeThreadRef.current !== threadId) return
         const payload = JSON.parse((event as MessageEvent).data || '{}')
         const chunk = payload.token ?? payload.text ?? payload.content ?? ''
         if (!chunk) return
@@ -324,6 +365,17 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         finished = true
         source.close()
         setSending(false)
+
+        // The visitor moved to another conversation while this was in
+        // flight. The stream still has to close and release the composer
+        // -- closing it from openConversation would leave `sending` stuck
+        // true forever, because only these handlers clear it -- but it
+        // must not write the finished thread over the one now on screen.
+        if (activeThreadRef.current !== threadId) {
+          refetchConversations();
+          return;
+        }
+
         // The stream carries progress; the transcript is the source of
         // truth, so reconcile once rather than trusting accumulated
         // chunks (a reconnect or a non-streaming run would otherwise
@@ -376,7 +428,7 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
           ? err?.response?.data?.error?.message || "You've sent a lot of messages in a short time. Please wait a moment."
           : status === 429
             ? 'This assistant is busy right now. Please try again in a moment.'
-            : err?.response?.data?.message || 'Something went wrong. Please try again.',
+            : getApiErrorMessage(err, 'Something went wrong. Please try again.'),
       )
       // Drop the optimistic user turn: leaving it implies it was sent.
       setMessages((current) => current.filter((m) => !m.id.startsWith('local-')))
@@ -416,7 +468,7 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
   }
 
   const disclosure = disclosureLine(branding)
-  const showEmpty = messages.length === 0
+  const showEmpty = messages.length === 0 && !loadingThread
   const hasHistory = (conversations?.length ?? 0) > 0
 
   return (
@@ -467,7 +519,18 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         </header>
 
         <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4">
-          {showEmpty ? (
+          {loadingThread ? (
+            /* Fetching a past thread used to render the greeting/empty state
+               for the whole round trip, so clicking a conversation looked
+               like it had opened an empty one. Show that we are loading it. */
+            <div
+              role="status"
+              aria-label="Loading conversation"
+              className="flex flex-1 items-center justify-center py-10"
+            >
+              <LoadingSpinner />
+            </div>
+          ) : showEmpty ? (
             <EmptyState
               branding={branding}
               onPick={(prompt) => {

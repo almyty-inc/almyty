@@ -1,8 +1,12 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { ModelDeployment } from '../../../entities/model-deployment.entity';
 import { AdapterRegistry } from '../adapters/adapter.registry';
 import { StubAdapter } from '../adapters/stub.adapter';
+import { TogetherAdapter } from '../adapters/together.adapter';
 import { ModelDeploymentsService, validateAgainstSchema } from '../model-deployments.service';
 
 describe('validateAgainstSchema', () => {
@@ -51,6 +55,51 @@ describe('ModelDeploymentsService', () => {
     expect(queue.add).not.toHaveBeenCalled();
   });
 
+  it('takes the model as configuration, with no version registered anywhere', async () => {
+    const d = await service.create('org-1', 'u-1', { model: 'hf://Qwen/Qwen3-0.6B@main', base: 'qwen3-0.6b', providerType: 'stub', providerConfig: { token: 'valid' } });
+    expect(versions.findOne).not.toHaveBeenCalled();
+    expect(d.modelVersionId).toBeNull();
+    expect(d.modelRef).toBe('hf://Qwen/Qwen3-0.6B@main');
+    expect(d.modelBase).toBe('qwen3-0.6b');
+    expect(queue.add).toHaveBeenCalled();
+  });
+
+  it('runs a model that already lives on a provider, which needs no pin', async () => {
+    // create() only reads capabilities and the config schema; nothing here reaches the network.
+    registry.register(new TogetherAdapter({ get: jest.fn(), post: jest.fn() } as any));
+    const d = await service.create('org-1', 'u-1', { model: 'together://acme/qwen3-tuned', providerType: 'together', providerConfig: { apiKey: 'k' } });
+    expect(d.modelRef).toBe('together://acme/qwen3-tuned');
+    expect(d.modelVersionId).toBeNull();
+  });
+
+  it('refuses a model the provider cannot read, and says what it does accept', async () => {
+    // The stub declares hub, s3 and local, so gs:// is outside it.
+    await expect(
+      service.create('org-1', 'u-1', { model: 'gs://bucket/qwen@17', base: 'qwen3-0.6b', providerType: 'stub', providerConfig: { token: 'valid' } }),
+    ).rejects.toMatchObject({ response: { code: 'ADAPTER_UNSUPPORTED_SOURCE', accepts: expect.arrayContaining(['hf://', 's3://', 'file://']) } });
+    expect(deployments.save).not.toHaveBeenCalled();
+  });
+
+  it('refuses a provider reference aimed at a different provider', async () => {
+    await expect(
+      service.create('org-1', 'u-1', { model: 'bedrock://arn:aws:bedrock:us-east-1:1:imported-model/abc', providerType: 'stub', providerConfig: { token: 'valid' } }),
+    ).rejects.toMatchObject({ response: { code: 'ADAPTER_UNSUPPORTED_SOURCE' } });
+  });
+
+  it('refuses an unpinned artifact and a deployment that names no model at all', async () => {
+    await expect(
+      service.create('org-1', 'u-1', { model: 'hf://Qwen/Qwen3-0.6B', providerType: 'stub', providerConfig: { token: 'valid' } }),
+    ).rejects.toMatchObject({ response: { code: 'REGISTRY_URI_INVALID' } });
+    await expect(
+      service.create('org-1', 'u-1', { providerType: 'stub', providerConfig: { token: 'valid' } } as any),
+    ).rejects.toMatchObject({ response: { code: 'MODEL_REQUIRED' } });
+  });
+
+  it('prefers the registered version over an inline model when both are given', async () => {
+    const d = await service.create('org-1', 'u-1', { modelVersionId: 'v-1', model: 'hf://Qwen/Qwen3-0.6B@main', providerType: 'stub', providerConfig: { token: 'valid' } });
+    expect(d.modelVersionId).toBe('v-1');
+    expect(d.modelRef).toBeNull();
+  });
   it('saves desired state with secrets encrypted, defaults scale-to-zero, and enqueues a reconcile', async () => {
     const d = await service.create('org-1', 'u-1', { modelVersionId: 'v-1', providerType: 'stub', providerConfig: { token: 'valid', image: 'x' }, budgetId: null });
     expect(d.state).toBe('pending');
@@ -80,6 +129,20 @@ describe('ModelDeploymentsService', () => {
     expect(credentials.findOne).toHaveBeenCalledWith({ where: { id: 'c-1', organizationId: 'org-1' } });
   });
 
+  it('hands the registry keys to a deployment whose s3 model was named inline, not only to a registered version', async () => {
+    const modelRegistry = { adapterCredentialsFor: jest.fn(async () => ({ registryBucket: 'b', registryAccessKeyId: 'ak', registrySecretAccessKey: 'sk' })) } as any;
+    const withRegistry = new ModelDeploymentsService(deployments, versions, credentials, queue, registry, envelope, { log: jest.fn(async () => null) } as any, modelRegistry);
+
+    const inline = Object.assign(new ModelDeployment(), { organizationId: 'org-1', modelVersionId: null, modelRef: 's3://acme/qwen@etag', providerConfig: {} });
+    expect(await withRegistry.credentialsFor(inline)).toMatchObject({ registryBucket: 'b' });
+    expect(versions.findOne).not.toHaveBeenCalled();
+
+    // A hub model needs no bucket, so nothing is resolved for it.
+    modelRegistry.adapterCredentialsFor.mockClear();
+    const hub = Object.assign(new ModelDeployment(), { organizationId: 'org-1', modelVersionId: null, modelRef: 'hf://Qwen/Qwen3-0.6B@main', providerConfig: {} });
+    expect(await withRegistry.credentialsFor(hub)).toEqual({});
+    expect(modelRegistry.adapterCredentialsFor).not.toHaveBeenCalled();
+  });
   it('with the credential store wired, the vault entry resolves through it and a refused row refuses the deploy', async () => {
     const credentialRefs = {
       resolve: jest.fn().mockResolvedValue({ config: { token: 'from-store', region: 'eu' } }),
@@ -93,5 +156,36 @@ describe('ModelDeploymentsService', () => {
 
     credentialRefs.resolve.mockRejectedValueOnce(Object.assign(new Error('inactive'), { code: 'CREDENTIAL_INACTIVE' }));
     await expect(withRefs.credentialsFor(d)).rejects.toMatchObject({ code: 'CREDENTIAL_INACTIVE' });
+  });
+
+  it('refuses a catalog card that is not this organization’s, and wires the repository that checks it', async () => {
+    // `--card <id>` on `almyty models deploy` lands here as dto.modelId.
+    // It used to be saved unchecked: a typo produced a deployment that
+    // reached ready and lit nothing up, and an id from another
+    // organization went onto the row.
+    const models = { findOne: jest.fn(async ({ where }: any) => (where.id === 'm-1' && where.organizationId === 'org-1' ? { id: 'm-1' } : null)) };
+    const withCards = new ModelDeploymentsService(
+      deployments, versions, credentials, queue, registry, envelope,
+      { log: jest.fn(async () => null) } as any, undefined, undefined, models as any,
+    );
+
+    await expect(
+      withCards.create('org-1', 'u-1', { modelVersionId: 'v-1', providerType: 'stub', providerConfig: { token: 'valid' }, modelId: 'm-other' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(models.findOne).toHaveBeenCalledWith({ where: { id: 'm-other', organizationId: 'org-1' } });
+    expect(deployments.save).not.toHaveBeenCalled();
+
+    const ok = await withCards.create('org-1', 'u-1', { modelVersionId: 'v-1', providerType: 'stub', providerConfig: { token: 'valid' }, modelId: 'm-1' });
+    expect(ok.modelId).toBe('m-1');
+  });
+
+  it('the module hands the service that repository, so the card check is not dead code', () => {
+    // The parameter is @Optional() only so the positional constructions in
+    // these specs keep compiling. If the module stopped providing Model,
+    // every check above would pass while the server checked nothing.
+    const service = readFileSync(join(__dirname, '..', 'model-deployments.service.ts'), 'utf-8');
+    expect(service).toMatch(/@InjectRepository\(Model\)[^\n]*models\?: Repository<Model>/);
+    const module = readFileSync(join(__dirname, '..', 'model-deployments.module.ts'), 'utf-8');
+    expect(module).toMatch(/forFeature\(\[[^\]]*\bModel\b[^\]]*\]\)/);
   });
 });

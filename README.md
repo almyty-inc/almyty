@@ -74,7 +74,7 @@ Two ways to self-host:
 
 **Import** any API schema. Each operation becomes a tool. ([docs](https://docs.almyty.com))
 
-**Build** agents visually or let them run autonomously. 10 node types, 14 LLM providers. ([docs](https://docs.almyty.com/agents))
+**Build** agents visually or let them run autonomously. 12 node types, 39 LLM providers. ([docs](https://docs.almyty.com/agents))
 
 **Deploy** tools and agents behind gateways. One endpoint, every protocol. ([docs](https://docs.almyty.com/gateways/mcp))
 
@@ -87,26 +87,38 @@ npm i -g @almyty/cli
 almyty login                              # one-time browser login
 ```
 
-Or invoke any individual CLI directly via `npx`:
+Every command, through the umbrella:
 
 ```bash
+almyty                                    # short tour; `almyty help` for the full reference
 almyty agents list                        # list agents in your org
+almyty agents run my-agent --watch        # run one, streaming, with cost and the model that answered
 almyty chat my-agent                      # interactive REPL with an agent
+almyty models list --selectable           # model cards the router may pick
+almyty models route --objective cheapest  # what the router would choose, and what it passed over
+almyty connections connectors             # what can be connected, and how
 almyty skills install @acme/petstore      # install tools as Agent Skills into Claude Code, Cursor, etc.
 almyty mcp                                # run almyty as an MCP server proxy
+almyty acp                                # run almyty as an ACP agent
 almyty runner start --name laptop         # register this machine as a runner
+almyty completion zsh                     # shell completion; bash and fish too
 ```
 
-Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/runner`) and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
+Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agents`, `@almyty/chat`, `@almyty/models`, `@almyty/connections`, `@almyty/skills`, `@almyty/mcp-server`, `@almyty/acp-server`, `@almyty/runner`) and the umbrella delegates to whichever you call. See the [CLI docs](https://docs.almyty.com/cli/authentication) for the full reference.
+
+**Scripting.** Every read command takes `--json` and writes nothing but JSON to stdout. Every CLI shares one exit-code table: `0` ok, `1` unexpected, `2` usage, `3` not authenticated, `4` not found, `5` the operation ran and failed — so a script can tell a stale login from a crash from an agent that ran and returned an error. `NO_COLOR` and `CI` are honoured, and `ALMYTY_NON_INTERACTIVE=1` blocks every prompt.
+
+**Debugging a run from the terminal.** `almyty agents inspect <agent> <runId>` shows an autonomous run step by step — which model answered each step, what it cost, how long it took. `almyty agents trace <agent> <execId>` does the same hop by hop for a workflow execution, and flags a hop where the provider served a different model from the one requested. Both show what the router passed over and why, and a hop whose cost the provider did not report reads `cost opaque` rather than `$0`.
 
 **Versioning.** The CLI packages share one version line and release together as a suite (`@almyty/* 1.x`). That is separate from the platform's own versioning, which is the Docker images and `v0.x` git tags. Any CLI 1.x works with platform 0.1 and later, so the two numbers moving independently is expected.
 
 ### Skills
 
-Install almyty tools as [Agent Skills](https://agentskills.io) into 30+ coding agents (Claude Code, Cursor, Copilot, Windsurf, …):
+Install almyty tools as [Agent Skills](https://agentskills.io) into 30 coding agents (Claude Code, Cursor, Copilot, Windsurf, …):
 
 ```bash
 npx @almyty/skills install @acme/petstore
+npx @almyty/skills install @acme/petstore --dry-run   # show every file it would write first
 ```
 
 ### MCP
@@ -115,11 +127,15 @@ Almyty serves every tool and agent as MCP at `/{org}/{gateway}` (Streamable HTTP
 
 ### Runners
 
-A runner is a long-running daemon that registers your machine with almyty and executes process / shell / file ops on it, scoped to a workspace. Tools published by the runner appear in the catalog automatically; agents call them like any other tool, dispatch flows over a persistent Streamable HTTP connection. The wedge: one agent workflow orchestrating any CLI coding agent (Claude Code, Codex, gemini, aider) in one coherent session.
+A runner is a long-running daemon that registers **any machine you control** with almyty — your laptop, a build box, a GPU host, a server inside your own network — and runs process / shell / file work there, scoped to a workspace. The code, the credentials and the output never leave that machine; almyty sends the command and reads the result. Tools the runner publishes appear in the catalog automatically, and agents call them like any other tool over a persistent Streamable HTTP connection.
+
+That is the general capability. One thing it is particularly good at is driving a CLI coding agent (Claude Code, Codex, gemini, aider) against a real checkout in one coherent session.
 
 ```bash
 npx @almyty/runner start --name my-laptop
 ```
+
+By default the runner uses **host isolation**: dispatched commands run as the user who started it, on that machine. Package installs are refused by default, and `allowedCwdRoots` / `denyPatterns` narrow it further — see [the runner README](packages/runner/README.md#what-that-command-lets-almyty-do-to-your-machine), which the daemon also summarizes at boot.
 
 Or open `/runners/new` in the UI for a guided setup. See [docs/runner.md](docs/runner.md) for architecture and [docs/runner-demo.md](docs/runner-demo.md) for an end-to-end walkthrough.
 

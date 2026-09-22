@@ -12,8 +12,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { EmptyState } from '@/components/ui/empty-state'
 
 import { organizationsApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 
 interface MembersAndTeamsTabProps {
@@ -21,10 +23,13 @@ interface MembersAndTeamsTabProps {
 }
 
 export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) {
-  const { success, error } = useNotifications()
+  const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
   const [createTeamDialogOpen, setCreateTeamDialogOpen] = useState(false)
   const [inviteMemberDialogOpen, setInviteMemberDialogOpen] = useState(false)
+  // Confirmed before it happens: removing someone cuts their access
+  // immediately and there is no undo.
+  const [memberToRemove, setMemberToRemove] = useState<any>(null)
   const [addToTeamDialogOpen, setAddToTeamDialogOpen] = useState(false)
   const [editTeamDialogOpen, setEditTeamDialogOpen] = useState(false)
   const [selectedTeam, setSelectedTeam] = useState<any>(null)
@@ -76,24 +81,52 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       setNewTeamDescription('')
     },
     onError: (err: any) => {
-      error('Failed to create team', err.response?.data?.message || 'Please try again.')
+      error('Failed to create team', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
   // Invite member mutation
+  // The delete button on each member row had no onClick at all, while
+  // organizationsApi.removeMember existed and was already used on the
+  // /organizations page -- which is not in the sidebar, so Settings is
+  // where anyone would actually look.
+  const removeMemberMutation = useMutation({
+    mutationFn: (userId: string) => organizationsApi.removeMember(organizationId!, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-members', organizationId] })
+      success('Member removed', 'They no longer have access to this organization.')
+      setMemberToRemove(null)
+    },
+    onError: (err: any) => {
+      error('Could not remove member', getApiErrorMessage(err, 'The member was not removed.'))
+      setMemberToRemove(null)
+    },
+  })
+
   const inviteMemberMutation = useMutation({
     mutationFn: (data: { email: string; role: string }) =>
       organizationsApi.addMember(organizationId!, data),
-    onSuccess: () => {
+    // The mail service returns false rather than throwing when the
+    // provider rejects the send, and this reported "Invitation has been
+    // sent" over it -- with a pending-invite row appearing, so the admin
+    // had no reason to suspect the teammate would never hear from them.
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['organization-members', organizationId] })
       queryClient.invalidateQueries({ queryKey: ['organization-pending-invites', organizationId] })
-      success('Member invited', 'Invitation has been sent.')
+      if (result?.inviteSent === false) {
+        warning(
+          'Invite created, email not delivered',
+          'They are invited, but the email could not be sent. Share the invite link with them directly.',
+        )
+      } else {
+        success('Member invited', 'Invitation has been sent.')
+      }
       setInviteMemberDialogOpen(false)
       setNewMemberEmail('')
       setNewMemberRole('member')
     },
     onError: (err: any) => {
-      error('Failed to invite member', err.response?.data?.message || 'Please try again.')
+      error('Failed to invite member', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -107,7 +140,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       success('Invite revoked', 'The pending invite has been revoked.')
     },
     onError: (err: any) => {
-      error('Failed to revoke invite', err.response?.data?.message || 'Please try again.')
+      error('Failed to revoke invite', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -123,7 +156,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       setSelectedMemberRole('member')
     },
     onError: (err: any) => {
-      error('Failed to add member to team', err.response?.data?.message || 'Please try again.')
+      error('Failed to add member to team', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -140,7 +173,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       setEditTeamDialogOpen(false)
     },
     onError: (err: any) => {
-      error('Failed to update team', err.response?.data?.message || 'Please try again.')
+      error('Failed to update team', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -153,7 +186,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       success('Role updated', 'Team member role has been updated successfully.')
     },
     onError: (err: any) => {
-      error('Failed to update role', err.response?.data?.message || 'Please try again.')
+      error('Failed to update role', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -167,7 +200,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       success('Team deleted', 'Team has been deleted successfully.')
     },
     onError: (err: any) => {
-      error('Failed to delete team', err.response?.data?.message || 'Please try again.')
+      error('Failed to delete team', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -180,7 +213,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
       success('Member removed', 'Member has been removed from the team.')
     },
     onError: (err: any) => {
-      error('Failed to remove member', err.response?.data?.message || 'Please try again.')
+      error('Failed to remove member', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -346,8 +379,15 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         {member.role}
                       </Badge>
                       {member.role !== 'owner' && (
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="h-3 w-3" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Remove ${member.firstName} ${member.lastName} from the organization`}
+                          data-testid={`remove-member-${member.userId ?? member.id}`}
+                          disabled={removeMemberMutation.isPending}
+                          onClick={() => setMemberToRemove(member)}
+                        >
+                          <Trash2 className="h-3 w-3 text-destructive" />
                         </Button>
                       )}
                     </div>
@@ -382,6 +422,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                       <Button
                         variant="ghost"
                         size="sm"
+                        aria-label={`Revoke invite for ${invite.email}`}
                         onClick={() => revokeInviteMutation.mutate(invite.id)}
                         disabled={revokeInviteMutation.isPending}
                         title="Revoke invite"
@@ -456,17 +497,17 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             {teamsLoading ? (
               <LoadingSpinner />
             ) : teams.length === 0 ? (
-              <div className="text-center py-8">
-                <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">No teams yet</h3>
-                <p className="text-muted-foreground mb-4">
-                  Create teams to organize your organization members
-                </p>
-                <Button onClick={() => setCreateTeamDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create First Team
-                </Button>
-              </div>
+              <EmptyState
+                icon={Users}
+                title="No teams yet"
+                description="Create teams to organize your organization members"
+                action={
+                  <Button onClick={() => setCreateTeamDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create First Team
+                  </Button>
+                }
+              />
             ) : (
               <div className="space-y-3">
                 {teams.map((team: any) => (
@@ -493,6 +534,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         <Button 
                           variant="ghost" 
                           size="sm"
+                          aria-label={`Add a member to ${team.name}`}
                           onClick={() => openAddToTeamDialog(team)}
                           title="Add member"
                         >
@@ -501,6 +543,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         <Button 
                           variant="ghost" 
                           size="sm"
+                          aria-label={`Edit team ${team.name}`}
                           onClick={() => openEditTeamDialog(team)}
                           title="Edit team"
                         >
@@ -509,6 +552,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         <Button
                           variant="ghost"
                           size="sm"
+                          aria-label={`Delete team ${team.name}`}
                           disabled={team.isDefault || deleteTeamMutation.isPending}
                           title={team.isDefault ? 'Default team cannot be deleted' : 'Delete team'}
                           onClick={() => {
@@ -562,6 +606,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                                 <Button
                                   variant="ghost"
                                   size="sm"
+                                  aria-label={`Remove ${member.user?.firstName || 'member'} from ${team.name}`}
                                   disabled={removeFromTeamMutation.isPending}
                                   title="Remove from team"
                                   onClick={() => {
@@ -598,9 +643,9 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label>Select Member</Label>
+            <Label htmlFor="members-select-member">Select Member</Label>
             <Select value={selectedMemberToAdd} onValueChange={setSelectedMemberToAdd}>
-              <SelectTrigger>
+              <SelectTrigger id="members-select-member">
                 <SelectValue placeholder="Choose a member" />
               </SelectTrigger>
               <SelectContent>
@@ -615,9 +660,9 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             </Select>
           </div>
           <div>
-            <Label>Role in Team</Label>
+            <Label htmlFor="members-role-in-team">Role in Team</Label>
             <Select value={selectedMemberRole} onValueChange={setSelectedMemberRole}>
-              <SelectTrigger>
+              <SelectTrigger id="members-role-in-team">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -681,6 +726,32 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
         </div>
       </DialogContent>
     </Dialog>
+      <Dialog open={!!memberToRemove} onOpenChange={(open) => !open && setMemberToRemove(null)}>
+        <DialogContent data-testid="remove-member-dialog">
+          <DialogHeader>
+            <DialogTitle>
+              Remove {memberToRemove?.firstName} {memberToRemove?.lastName}?
+            </DialogTitle>
+            <DialogDescription>
+              They lose access to this organization immediately. Anything they created stays, and you can invite them
+              again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setMemberToRemove(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              data-testid="confirm-remove-member"
+              disabled={removeMemberMutation.isPending}
+              onClick={() => removeMemberMutation.mutate(memberToRemove.userId ?? memberToRemove.id)}
+            >
+              {removeMemberMutation.isPending ? 'Removing...' : 'Remove member'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

@@ -108,22 +108,32 @@ describe('SignalAdapter', () => {
       );
       expect(parseSentJson(fetchMock.calls[0]).recipients).toEqual(['+15551230000']);
     });
-    it('logs but does not throw when the bridge rejects the send', async () => {
-      fetchMock.setNextResponse({ ok: false, status: 400, text: 'bad request' });
+    /**
+     * The bridge is HTTP and its body can be anything, so the status is
+     * the verdict and the text is the detail worth keeping. This one
+     * already noticed the rejection — it just logged it and returned,
+     * which the dispatch path could not tell from a delivered reply.
+     */
+    it('refuses when the bridge rejects the send, with its status and body', async () => {
+      fetchMock.setNextResponse({ ok: false, status: 400, text: 'Unregistered user' });
       await expect(
         adapter.sendResponse(
           { api_url: 'http://x', phone_number: '+1' },
           { message: 'r' },
           { userId: '+2' },
         ),
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow(/400.*Unregistered user/);
     });
-    it('skips when api_url or phone_number missing', async () => {
-      await adapter.sendResponse({}, { message: 'r' }, { userId: '+1' });
+    it('refuses rather than skipping when api_url or phone_number is missing', async () => {
+      await expect(adapter.sendResponse({}, { message: 'r' }, { userId: '+1' })).rejects.toThrow(
+        /api_url is not configured/,
+      );
       expect(fetchMock.calls.length).toBe(0);
     });
-    it('skips when no recipient available', async () => {
-      await adapter.sendResponse({ api_url: 'http://x', phone_number: '+1' }, { message: 'r' }, {});
+    it('refuses rather than skipping when no recipient is available', async () => {
+      await expect(
+        adapter.sendResponse({ api_url: 'http://x', phone_number: '+1' }, { message: 'r' }, {}),
+      ).rejects.toThrow(/no sender or group to reply to/);
       expect(fetchMock.calls.length).toBe(0);
     });
   });

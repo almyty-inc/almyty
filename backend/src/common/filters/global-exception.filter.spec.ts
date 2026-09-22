@@ -188,3 +188,233 @@ describe('GlobalExceptionFilter — Sentry 5xx reporting', () => {
     }
   });
 });
+
+describe('GlobalExceptionFilter: structured detail reaches the client', () => {
+  let filter: GlobalExceptionFilter;
+  let mockResponse: any;
+  let mockHost: any;
+
+  const body = () => mockResponse.json.mock.calls[0][0].error;
+
+  beforeEach(() => {
+    filter = new GlobalExceptionFilter();
+    jest.spyOn((filter as any).logger, 'error').mockImplementation(() => undefined);
+    mockResponse = { setHeader: jest.fn(), status: jest.fn().mockReturnThis(), json: jest.fn().mockReturnThis() };
+    mockHost = {
+      switchToHttp: jest.fn().mockReturnValue({
+        getResponse: jest.fn().mockReturnValue(mockResponse),
+        getRequest: jest.fn().mockReturnValue({ method: 'POST', path: '/model-deployments', headers: {} }),
+      }),
+    };
+  });
+
+  /**
+   * The body used to be rebuilt from five fixed fields, so a handler that
+   * threw `{ code, message, accepts }` to tell the caller what it could
+   * have sent had `accepts` stripped on the way out. The service spec
+   * asserting it passed, because it never crossed the wire, and the UI
+   * panel that renders it was dead code against a live server.
+   */
+  it('forwards the fields a handler attached, not just code and message', () => {
+    filter.catch(
+      new BadRequestException({
+        code: 'ADAPTER_UNSUPPORTED_SOURCE',
+        message: 'Hugging Face Inference Endpoints cannot run s3://weights/x@e3b0',
+        accepts: ['hf://'],
+      }),
+      mockHost,
+    );
+    expect(body()).toMatchObject({
+      code: 'ADAPTER_UNSUPPORTED_SOURCE',
+      message: expect.stringContaining('cannot run s3://'),
+      accepts: ['hf://'],
+      statusCode: 400,
+      path: '/model-deployments',
+    });
+  });
+
+  it('keeps its own fields authoritative, so a payload cannot forge the status or the path', () => {
+    filter.catch(
+      new BadRequestException({ code: 'X', message: 'm', statusCode: 200, path: '/elsewhere', timestamp: 'nope' }),
+      mockHost,
+    );
+    expect(body()).toMatchObject({ statusCode: 400, path: '/model-deployments' });
+    expect(body().timestamp).not.toBe('nope');
+  });
+
+  it('adds nothing when the payload carries nothing extra', () => {
+    filter.catch(new NotFoundException('Deployment not found'), mockHost);
+    expect(Object.keys(body()).sort()).toEqual(['code', 'message', 'path', 'statusCode', 'timestamp']);
+  });
+
+  it('leaves a ValidationPipe payload alone, whose keys are all reserved', () => {
+    filter.catch(new BadRequestException({ statusCode: 400, message: ['a must be a string', 'b is required'], error: 'Bad Request' }), mockHost);
+    expect(body().message).toBe('a must be a string; b is required');
+    expect(Object.keys(body()).sort()).toEqual(['code', 'message', 'path', 'statusCode', 'timestamp']);
+  });
+
+  describe('the reason is readable in both shapes', () => {
+    it('puts the message at the top level as well as under error', () => {
+      // 63 frontend files read response.data.message and this filter only
+      // set error.message, so every one of them showed a generic string
+      // instead of the reason the server gave. Answering in both shapes
+      // fixes them all at once and cannot be got wrong by the next reader.
+      filter.catch(new BadRequestException('Organization name must be at least 2 characters long'), mockHost as any);
+
+      const body = mockResponse.json.mock.calls[0][0];
+      expect(body.message).toBe('Organization name must be at least 2 characters long');
+      expect(body.error.message).toBe(body.message);
+    });
+
+    it('marks the body as not successful, so code branching on it is not fooled', () => {
+      filter.catch(new BadRequestException('nope'), mockHost as any);
+      expect(mockResponse.json.mock.calls[0][0].success).toBe(false);
+    });
+  });
+});
+
+/**
+ * The four defects that made a 500 uninvestigable: no id the user could
+ * quote, a Sentry event with no organization/user/request tag, a lost
+ * database connection reported as a client 400, and a `code` key dropped
+ * off the response entirely for an uncoded 5xx.
+ */
+describe('GlobalExceptionFilter — correlation, DB classification, codes', () => {
+  const { QueryFailedError } = require('typeorm');
+  const { runWithRequestContext } = require('../request-context');
+
+  let filter: GlobalExceptionFilter;
+  let mockResponse: any;
+  let mockRequest: any;
+  let mockHost: any;
+
+  const body = () => mockResponse.json.mock.calls[0][0];
+
+  beforeEach(() => {
+    filter = new GlobalExceptionFilter();
+    jest.spyOn((filter as any).logger, 'error').mockImplementation(() => undefined);
+    sentryMock.isInitialized.mockReset().mockReturnValue(true);
+    sentryMock.captureException.mockReset();
+    (sentryMock as any).withIsolationScope = jest.fn((fn: any) =>
+      fn({
+        setTag: jest.fn(),
+        setUser: jest.fn(),
+        setContext: jest.fn(),
+      }),
+    );
+
+    mockResponse = {
+      setHeader: jest.fn(),
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+    mockRequest = { method: 'POST', path: '/agents', headers: {} };
+    mockHost = {
+      switchToHttp: jest.fn().mockReturnValue({
+        getResponse: jest.fn().mockReturnValue(mockResponse),
+        getRequest: jest.fn().mockReturnValue(mockRequest),
+      }),
+    };
+  });
+
+  it('gives the user a request id to quote, on the body and the header', () => {
+    runWithRequestContext({ requestId: 'req-abc-123' }, () => {
+      filter.catch(new Error('boom'), mockHost);
+    });
+
+    expect(mockResponse.setHeader).toHaveBeenCalledWith('X-Request-Id', 'req-abc-123');
+    expect(body().requestId).toBe('req-abc-123');
+    expect(body().error.requestId).toBe('req-abc-123');
+    // Still no internal detail in the message itself.
+    expect(body().message).toBe('Internal server error');
+  });
+
+  it('tags the Sentry event with organization, user and request id', () => {
+    const tags: Record<string, string> = {};
+    let capturedUser: any = null;
+    (sentryMock as any).withIsolationScope = jest.fn((fn: any) =>
+      fn({
+        setTag: (k: string, v: string) => {
+          tags[k] = v;
+        },
+        setUser: (u: any) => {
+          capturedUser = u;
+        },
+        setContext: jest.fn(),
+      }),
+    );
+    mockRequest.user = { id: 'user-9', currentOrganizationId: 'org-7', email: 'a@b.test' };
+
+    runWithRequestContext(
+      { requestId: 'req-xyz', organizationId: 'org-7', runId: 'run-5' },
+      () => filter.catch(new Error('boom'), mockHost),
+    );
+
+    expect(tags.request_id).toBe('req-xyz');
+    expect(tags.organization_id).toBe('org-7');
+    expect(tags.run_id).toBe('run-5');
+    expect(tags.http_status).toBe('500');
+    expect(tags.error_code).toBe('INTERNAL_ERROR');
+    expect(capturedUser).toEqual({ id: 'user-9' });
+    // An error report must not widen who holds personal data.
+    expect(JSON.stringify(capturedUser)).not.toContain('a@b.test');
+    expect(sentryMock.captureException).toHaveBeenCalledTimes(1);
+  });
+
+  it('classifies a lost database connection as 503 and reports it', () => {
+    const err = new QueryFailedError('SELECT 1', [], {
+      code: 'ECONNREFUSED',
+      message: 'connect ECONNREFUSED 10.0.0.5:5432',
+    } as any);
+
+    filter.catch(err, mockHost);
+
+    expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.SERVICE_UNAVAILABLE);
+    expect(body().error.code).toBe('DATABASE_UNAVAILABLE');
+    // A 5xx-rate alert can only see a database outage if it is a 5xx.
+    expect(sentryMock.captureException).toHaveBeenCalledTimes(1);
+  });
+
+  it('classifies an admin shutdown (57P01) as 503', () => {
+    const err = new QueryFailedError('SELECT 1', [], {
+      code: '57P01',
+      message: 'terminating connection due to administrator command',
+    } as any);
+    filter.catch(err, mockHost);
+    expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.SERVICE_UNAVAILABLE);
+  });
+
+  it('still treats a constraint violation as a client 400 and does not report it', () => {
+    const err = new QueryFailedError('INSERT ...', [], {
+      code: '23505',
+      message: 'duplicate key value violates unique constraint "tools_name_uq"',
+    } as any);
+
+    filter.catch(err, mockHost);
+
+    expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
+    expect(body().error.code).toBe('DATABASE_ERROR');
+    expect(sentryMock.captureException).not.toHaveBeenCalled();
+  });
+
+  it('always answers a code, even for an uncoded 5xx HttpException', () => {
+    filter.catch(new HttpException('upstream exploded', 502), mockHost);
+
+    const sent = body();
+    expect(sent.error.code).toBe('BAD_GATEWAY');
+    // `code: undefined` was silently dropped by JSON.stringify, leaving a
+    // client with an error body carrying no machine-readable reason.
+    expect(Object.keys(sent.error)).toContain('code');
+    expect(sent.error.code).toBeDefined();
+  });
+
+  it('answers a code for a 503 HttpException with no explicit code', () => {
+    filter.catch(new HttpException('maintenance', 503), mockHost);
+    expect(body().error.code).toBe('SERVICE_UNAVAILABLE');
+  });
+
+  it('answers a code for a status with no case at all', () => {
+    filter.catch(new HttpException('teapot', 418), mockHost);
+    expect(body().error.code).toBe('REQUEST_FAILED');
+  });
+});

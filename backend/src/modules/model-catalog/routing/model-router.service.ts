@@ -9,6 +9,7 @@ import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { RouteCandidate, RoutingPolicy, selectCandidates } from './model-router';
+import { getRequestContext } from '../../../common/request-context';
 
 /** Weight of a new sample in the p50 average. */
 const LATENCY_P50_ALPHA = 0.2;
@@ -49,6 +50,13 @@ export interface ResolvedCandidate extends RouteCandidate {
 export interface RoutePlan {
   candidates: ResolvedCandidate[];
   rejected: Array<{ modelId: string; reason: string }>;
+}
+
+/** The same blended figure the cheapest objective ranks on, or null when unpriced. */
+function blendedPrice(card: Model): number | null {
+  const p = card.effectivePricing();
+  if (!p) return null;
+  return p.inPerMTok * 0.75 + p.outPerMTok * 0.25;
 }
 
 export class NoRouteError extends Error {
@@ -101,6 +109,59 @@ export class ModelRouterService {
     }
     return { candidates: resolved, rejected };
   }
+  /**
+   * The same plan, shaped for a human and carrying no secrets.
+   *
+   * `plan()` returns resolved providers because the runner needs them to
+   * make a call. A preview must never hand a provider row to an HTTP
+   * response: those carry credentials. This returns only what a person
+   * needs to understand the decision, which is also all the policy editor
+   * renders.
+   */
+  async preview(
+    organizationId: string,
+    policy: RoutingPolicy = {},
+    principal?: { id: string },
+  ): Promise<{
+    candidates: Array<{ modelId: string; name: string; vendorModelId: string; providerType: string | null; rationale: string; blendedPricePerMTok: number | null; privacyTier: string; region: string | null }>;
+    rejected: Array<{ modelId: string; reason: string }>;
+  }> {
+    const plan = await this.plan(organizationId, policy, principal);
+    return {
+      candidates: plan.candidates.map((c) => ({
+        modelId: c.modelId,
+        name: c.card.name,
+        vendorModelId: c.vendorModelId,
+        providerType: c.card.providerType ?? null,
+        rationale: c.rationale,
+        blendedPricePerMTok: blendedPrice(c.card),
+        privacyTier: c.card.privacyTier,
+        region: c.card.region ?? null,
+      })),
+      rejected: plan.rejected,
+    };
+  }
+
+  /**
+   * The provider for one named model. A lookup, deliberately not a plan.
+   *
+   * A filled role names a concrete model, so asking the router to "choose"
+   * between one candidate would still be routing, and a pinned role must
+   * never route. This resolves the card to something callable and nothing
+   * more. See docs/design/layers.md, L4.
+   */
+  async providerForModelId(
+    organizationId: string,
+    modelId: string,
+    principal?: { id: string },
+  ): Promise<{ card: Model; provider: LlmProvider }> {
+    const card = await this.models.findOne({ where: { id: modelId, organizationId } });
+    if (!card) throw new Error(`Model ${modelId} is not in this organization's catalog`);
+    const provider = await this.providerFor(card, principal);
+    if (!provider) throw new Error(`Model ${card.name} has no callable provider`);
+    return { card, provider };
+  }
+
   /**
    * The stored provider a card is called through. Endpoint-backed cards
    * carry one too (written when the deployment reached ready, or when the
@@ -165,9 +226,36 @@ export class ModelRouterService {
     }
   }
 
-  /** Fire-and-forget audit row: which card answered and why. */
-  recordRoute(organizationId: string, attribution: RouteAttribution, context?: { userId?: string; conversationId?: string }): void {
+  /**
+   * Fire-and-forget audit row: which card answered, why, and what it
+   * cost.
+   *
+   * The row used to carry a model and a rationale but no cost, no
+   * tokens, no run and no node — while `audit_logs` has had a `cost`
+   * column all along that this writer left null. So the one table that
+   * records a per-call model decision could not answer "spend by model
+   * last week", and a routed call could not be tied back to the run that
+   * made it. `runId`/`nodeId` come from the correlation scope rather than
+   * from a parameter: the engine opens that scope around the run and
+   * around each node, so this is correct at every call site instead of
+   * at the ones someone remembered to thread.
+   */
+  recordRoute(
+    organizationId: string,
+    attribution: RouteAttribution,
+    context?: {
+      userId?: string;
+      conversationId?: string;
+      cost?: number;
+      tokens?: number;
+      runId?: string;
+      nodeId?: string;
+    },
+  ): void {
     if (!this.auditLog) return;
+    const scope = getRequestContext();
+    const runId = context?.runId ?? scope?.runId ?? undefined;
+    const nodeId = context?.nodeId ?? scope?.nodeId ?? undefined;
     void this.auditLog
       .log({
         organizationId,
@@ -176,6 +264,9 @@ export class ModelRouterService {
         resourceType: AuditResource.MODEL,
         resourceId: attribution.modelId,
         resourceName: attribution.vendorModelId,
+        // The dedicated column, so spend-by-model is a SUM and not a
+        // json extraction.
+        ...(typeof context?.cost === 'number' ? { cost: context.cost } : {}),
         details: {
           modelVersionId: attribution.modelVersionId,
           providerId: attribution.providerId,
@@ -184,6 +275,11 @@ export class ModelRouterService {
           tried: attribution.tried,
           rejected: attribution.rejected.length,
           conversationId: context?.conversationId,
+          ...(typeof context?.cost === 'number' ? { cost: context.cost } : {}),
+          ...(typeof context?.tokens === 'number' ? { tokens: context.tokens } : {}),
+          ...(runId ? { runId } : {}),
+          ...(nodeId ? { nodeId } : {}),
+          ...(scope?.requestId ? { requestId: scope.requestId } : {}),
         },
       })
       .catch((err) => this.logger.warn(`route audit failed: ${err?.message ?? err}`));

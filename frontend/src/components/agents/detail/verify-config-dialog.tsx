@@ -23,13 +23,14 @@ import {
 import { agentsApi, llmProvidersApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 type Policy = 'all_pass' | 'majority' | 'any_fail_blocks'
 type Trigger = 'on_final_output' | 'every_n_steps' | 'on_tool_result'
 interface Checker { name: string; providerId: string; model: string; instructions: string }
 
 const TRIGGERS: { id: Trigger; label: string }[] = [
-  { id: 'on_final_output', label: 'On final output (gate + revise)' },
+  { id: 'on_final_output', label: 'On final output (block + revise)' },
   { id: 'every_n_steps', label: 'Every N steps (advisory)' },
   { id: 'on_tool_result', label: 'On tool result (advisory)' },
 ]
@@ -106,7 +107,7 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
       queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
       setOpen(false)
     },
-    onError: (e: any) => errorNotif('Save failed', e?.response?.data?.message || e?.message),
+    onError: (e: any) => errorNotif('Save failed', getApiErrorMessage(e)),
   })
 
   return (
@@ -136,9 +137,9 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
             <>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Merge policy</Label>
+                  <Label htmlFor="verify-merge-policy">Merge policy</Label>
                   <Select value={policy} onValueChange={(p) => setPolicy(p as Policy)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="verify-merge-policy"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="any_fail_blocks">Any fail blocks</SelectItem>
                       <SelectItem value="majority">Majority</SelectItem>
@@ -214,6 +215,7 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
                         size="sm"
                         variant="ghost"
                         className="text-destructive shrink-0"
+                        aria-label="Remove reviewer"
                         onClick={() => setCheckers((cur) => cur.filter((_, idx) => idx !== i))}
                       >
                         <Trash2 className="h-3.5 w-3.5" />

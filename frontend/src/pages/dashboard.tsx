@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import {
   Activity,
   AlertTriangle,
@@ -11,11 +11,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
 import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi, onboardingApi } from '@/lib/api'
 import { GettingStartedCard, useOnboarding, useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
 import { useProductTour } from '@/components/onboarding/product-tour'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
+import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 import { useAuthStore } from '@/store/auth'
 import { pluralize } from '@/lib/utils'
 import type { RequestLog } from '@/types'
@@ -42,6 +45,7 @@ export function DashboardPage() {
 
   const { currentOrganization } = useOrganizationStore()
   const orgId = currentOrganization?.id
+  const { error: notifyError } = useNotifications()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
@@ -81,27 +85,58 @@ export function DashboardPage() {
       })
       queryClient.invalidateQueries({ queryKey: ['onboarding', orgId] })
     },
+    // Without this a refused dismiss left the card sitting there with
+    // no explanation, so the only reading was that Dismiss is broken.
+    onError: (err: unknown) =>
+      notifyError(
+        'Could not dismiss getting started',
+        getApiErrorMessage(err, 'The card is still here. Please try again.'),
+      ),
   })
 
-  const { data: gatewaysData, isLoading: loadingGateways } = useQuery({
+  const {
+    data: gatewaysData,
+    isLoading: loadingGateways,
+    isError: gatewaysFailed,
+    error: gatewaysError,
+    refetch: refetchGateways,
+  } = useQuery({
     queryKey: ['gateways', orgId],
     queryFn: () => gatewaysApi.getAll(),
     enabled: !!currentOrganization,
   })
 
-  const { data: toolsData, isLoading: loadingTools } = useQuery({
+  const {
+    data: toolsData,
+    isLoading: loadingTools,
+    isError: toolsFailed,
+    error: toolsError,
+    refetch: refetchTools,
+  } = useQuery({
     queryKey: ['tools', orgId],
     queryFn: () => toolsApi.getAll(orgId),
     enabled: !!currentOrganization,
   })
 
-  const { data: apisData, isLoading: loadingApis } = useQuery({
+  const {
+    data: apisData,
+    isLoading: loadingApis,
+    isError: apisFailed,
+    error: apisError,
+    refetch: refetchApis,
+  } = useQuery({
     queryKey: ['apis'],
     queryFn: () => apisApi.getAll(),
     enabled: !!currentOrganization,
   })
 
-  const { data: agentsData, isLoading: loadingAgents } = useQuery({
+  const {
+    data: agentsData,
+    isLoading: loadingAgents,
+    isError: agentsFailed,
+    error: agentsError,
+    refetch: refetchAgents,
+  } = useQuery({
     queryKey: ['agents', orgId],
     queryFn: () => agentsApi.getAll(),
     enabled: !!currentOrganization,
@@ -113,7 +148,35 @@ export function DashboardPage() {
     enabled: !!orgId,
   })
 
-  const isLoading = loadingGateways && loadingTools && loadingApis && loadingAgents
+  // Any one of these still loading means the numbers below are not the
+  // truth yet. With `&&`, visiting Gateways and then Dashboard inside
+  // the 30s staleTime made one query fresh, which let the whole page
+  // render "0 APIs · 0 Tools · 0 Gateways · 0 Agents" until the other
+  // three landed -- on an org with plenty of all four.
+  const isLoading = loadingGateways || loadingTools || loadingApis || loadingAgents
+
+  // A failed count is not a count of zero. None of these queries used to
+  // expose `isError`, so on a failure `isLoading` was false and `data`
+  // undefined: the extraction below produced empty arrays and the page told
+  // a fully populated org it had "0 APIs · 0 Tools · 0 Gateways · 0 Agents",
+  // Getting-Started card and all. Say we could not load it, and offer a retry.
+  const failed = gatewaysFailed || toolsFailed || apisFailed || agentsFailed
+  const loadError = gatewaysError ?? toolsError ?? apisError ?? agentsError
+
+  if (failed) {
+    return (
+      <QueryError
+        error={loadError}
+        title="We couldn't load your dashboard"
+        onRetry={() => {
+          void refetchGateways()
+          void refetchTools()
+          void refetchApis()
+          void refetchAgents()
+        }}
+      />
+    )
+  }
 
   if (isLoading) {
     return (
@@ -230,23 +293,29 @@ export function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
+                  {/*
+                    These two were <div onClick> styled as links -- and they are
+                    the only remediation path offered for "no authentication
+                    configured", so a keyboard user had no way to act on the
+                    warning at all. Real links fix that and get cmd-click too.
+                  */}
                   {apisWithNoTools.length > 0 && (
-                    <div
-                      className="flex items-center gap-2 text-sm text-amber-600 cursor-pointer hover:underline"
-                      onClick={() => navigate('/apis')}
+                    <Link
+                      to="/apis"
+                      className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
                       <span>{apisWithNoTools.length} API(s) have no generated tools</span>
-                    </div>
+                    </Link>
                   )}
                   {gatewaysWithNoAuth.length > 0 && (
-                    <div
-                      className="flex items-center gap-2 text-sm text-amber-600 cursor-pointer hover:underline"
-                      onClick={() => navigate('/gateways')}
+                    <Link
+                      to="/gateways"
+                      className="flex items-center gap-2 text-sm text-amber-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
                     >
                       <AlertTriangle className="h-4 w-4 shrink-0" />
                       <span>{gatewaysWithNoAuth.length} gateway(s) have no authentication configured</span>
-                    </div>
+                    </Link>
                   )}
                 </div>
               </CardContent>

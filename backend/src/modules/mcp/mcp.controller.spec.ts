@@ -10,6 +10,7 @@ describe('McpController', () => {
   beforeEach(async () => {
     const mockMcpService = {
       handleJsonRpc: jest.fn(),
+      handleJsonRpcMessage: jest.fn(),
       healthCheck: jest.fn(),
     };
 
@@ -29,7 +30,6 @@ describe('McpController', () => {
     controller = module.get<McpController>(McpController);
     mcpService = module.get(McpService);
   });
-
   describe('handleMcp', () => {
     it('should handle MCP request successfully', async () => {
       const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
@@ -45,16 +45,59 @@ describe('McpController', () => {
         result: { tools: [] },
       };
 
-      mcpService.handleJsonRpc.mockResolvedValue(mockResponse);
+      (mcpService as any).handleJsonRpcMessage.mockResolvedValue(mockResponse);
 
       const result = await controller.handleMcp(mockRequest, mockBody);
 
       expect(result).toBe(mockResponse);
-      expect(mcpService.handleJsonRpc).toHaveBeenCalledWith(
+      // The batch-aware entry point: the body of this route may be an array.
+      expect((mcpService as any).handleJsonRpcMessage).toHaveBeenCalledWith(
         mockBody,
         'org-1',
         'user-1'
       );
+    });
+
+    it('passes a JSON-RPC batch straight through', async () => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      const batch = [
+        { jsonrpc: '2.0' as const, id: 1, method: 'ping' },
+        { jsonrpc: '2.0' as const, id: 2, method: 'ping' },
+      ];
+      (mcpService as any).handleJsonRpcMessage.mockResolvedValue([]);
+
+      await controller.handleMcp(mockRequest, batch);
+
+      expect((mcpService as any).handleJsonRpcMessage).toHaveBeenCalledWith(batch, 'org-1', 'user-1');
+    });
+  });
+
+  // `0` is a legal JSON-RPC id. `body.id || 1` rewrote it to `1` on every
+  // one of these REST-style wrappers, so the response came back correlated
+  // to an id the client never sent.
+  describe('request id 0', () => {
+    it.each([
+      ['callTool', 'tools/call'],
+      ['listTools', 'tools/list'],
+      ['initialize', 'initialize'],
+      ['ping', 'ping'],
+      ['getPrompt', 'prompts/get'],
+    ])('%s preserves id 0', async (route, method) => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 0, result: {} } as any);
+
+      await (controller as any)[route](mockRequest, { id: 0, params: {} });
+
+      expect(mcpService.handleJsonRpc.mock.calls[0][0]).toMatchObject({ method, id: 0 });
+    });
+
+    it('still defaults a missing id to 1', async () => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      mcpService.handleJsonRpc.mockResolvedValue({ jsonrpc: '2.0', id: 1, result: {} } as any);
+
+      await controller.listTools(mockRequest, { params: {} });
+
+      expect(mcpService.handleJsonRpc.mock.calls[0][0]).toMatchObject({ id: 1 });
     });
   });
 
@@ -330,7 +373,33 @@ describe('McpController', () => {
       expect(result.capabilities.tools).toBeDefined();
       expect(result.capabilities.resources).toBeDefined();
       expect(result.capabilities.prompts).toBeDefined();
-      expect(result.transports.http).toContain('/api/mcp');
+      expect(result.transports.http).toContain('/mcp');
+    });
+
+    // `/api` is a same-origin prefix a tenant host uses, and the ingress
+    // (rewrite-target /$2) and the vite dev proxy both strip it before this
+    // server sees a request. BASE_URL already names the API origin, whose
+    // ingress routes `/` straight through, so `${BASE_URL}/api/mcp` named a
+    // path with no route behind it.
+    it('advertises transport URLs without the stripped /api prefix', async () => {
+      const result = await controller.wellKnown();
+
+      expect(result.transports.http).not.toContain('/api/');
+      expect(result.transports.sse).not.toContain('/api/');
+      expect(result.transports.websocket).not.toContain('/api/');
+      expect(result.transports.sse).toMatch(/\/mcp\/sse$/);
+    });
+
+    // The handshake advertises listChanged: false for all three, and
+    // broadcastNotification sends nothing, so a `true` here was doubly
+    // false. This document is read by humans, which is exactly why it
+    // has to match.
+    it('advertises listChanged exactly as the handshake does', async () => {
+      const result = await controller.wellKnown();
+
+      expect(result.capabilities.tools.listChanged).toBe(false);
+      expect(result.capabilities.resources.listChanged).toBe(false);
+      expect(result.capabilities.prompts.listChanged).toBe(false);
     });
   });
 

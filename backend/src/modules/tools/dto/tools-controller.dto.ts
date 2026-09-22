@@ -30,6 +30,18 @@ export class CreateToolBodyDto {
   @IsObject()
   authConfig?: any;
 
+  /**
+   * The API this tool's path is relative to.
+   *
+   * The service validates it and the entity has the column, but this DTO
+   * did not list it -- and with forbidNonWhitelisted on, sending it
+   * would have 400'd the whole request. So "Link to API" could never
+   * reach the server by any route.
+   */
+  @IsOptional()
+  @IsString()
+  apiId?: string;
+
   @IsOptional()
   @IsObject()
   configuration?: {
@@ -197,6 +209,20 @@ export class UpdateToolBodyDto {
   @IsOptional()
   @IsObject()
   grpcConfig?: any;
+
+  /**
+   * Per-tool auth overrides.
+   *
+   * `updateTool` has handled this since the protocol-config fix
+   * (tools.service.ts: `if (updateToolDto.authConfig !== undefined)`),
+   * and CreateToolBodyDto accepts it, but this DTO did not list it --
+   * so with forbidNonWhitelisted on, a PUT carrying authConfig was
+   * rejected outright and the handling was unreachable. Same shape as
+   * the apiId note on the create body above.
+   */
+  @IsOptional()
+  @IsObject()
+  authConfig?: any;
 
   @IsOptional()
   @IsArray()

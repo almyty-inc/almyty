@@ -163,7 +163,7 @@ export function PolicyDialog({ open, onOpenChange, policy, initialKind, onSaved 
               </div>
               <div className="flex items-center gap-3">
                 <Switch id="policy-approved-only" checked={values.approvedConnectorsOnly} onCheckedChange={(approvedConnectorsOnly) => patch({ approvedConnectorsOnly })} disabled={busy} />
-                <Label htmlFor="policy-approved-only" className="font-normal">Approved connectors only (needs an allow list for organization connections)</Label>
+                <Label htmlFor="policy-approved-only" className="font-normal">Approved connectors only (needs an allowed-connectors policy for organization connections)</Label>
               </div>
               <p className="text-xs text-muted-foreground">Scope rules always require organization-owned connections; personal connections are refused for these principals.</p>
             </>
@@ -211,7 +211,7 @@ export function PolicyDialog({ open, onOpenChange, policy, initialKind, onSaved 
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
             <Button type="submit" disabled={busy}>
               {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-              {editing ? 'Save policy' : 'Add policy'}
+              {busy ? 'Saving...' : editing ? 'Save policy' : 'Add policy'}
             </Button>
           </DialogFooter>
         </form>

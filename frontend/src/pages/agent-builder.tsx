@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -19,12 +20,14 @@ import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
+import { validateWorkflowGraph, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 
 import { agentsApi, llmProvidersApi, toolsApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import type { Agent, PipelineNode, PipelineEdge } from '@/types'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
   { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } },
@@ -94,15 +97,25 @@ export function AgentBuilderPage() {
   }, [isEditing])
 
   // Fetch existing agent when editing
-  const { data: agentData, isLoading: isLoadingAgent } = useQuery({
+  const {
+    data: agentData,
+    isLoading: isLoadingAgent,
+    isError: agentError,
+    error: agentErrorValue,
+    refetch: refetchAgent,
+  } = useQuery({
     queryKey: ['agent', id],
     queryFn: () => agentsApi.getById(id!),
     enabled: isEditing,
   })
 
-  // Fetch available tools (for autonomous mode)
+  // Under the ['tools'] prefix, so a tool created or deleted on the
+  // tools page (which invalidates ['tools']) shows up here. This used
+  // to be a key of its own -- ['tools-list', orgId] -- that nothing
+  // invalidated, so a tool created with the toast "ready to assign to
+  // a gateway" was missing from this picker.
   const { data: rawTools } = useQuery({
-    queryKey: ['tools-list', currentOrganization?.id],
+    queryKey: ['tools', currentOrganization?.id, 'all'],
     queryFn: () => toolsApi.getAll(currentOrganization?.id),
     enabled: !!currentOrganization?.id,
   })
@@ -210,6 +223,10 @@ export function AgentBuilderPage() {
   }, [isEditing, agentData, pipeline.initialized, pipeline.setNodes, pipeline.setEdges, pipeline.setInitialized, templateId, templatesData])
 
   // ── Validation ──────────────────────────────────────────────────────────
+  // The graph rules live in validateWorkflowGraph, which mirrors the server's
+  // AgentValidationHelper: everything it reports is a reason the save would
+  // 400 anyway, so it costs no valid graph a save and earns the user the
+  // answer before the round trip instead of after it.
   const validationErrors = useMemo(() => {
     const errors: string[] = []
 
@@ -218,22 +235,14 @@ export function AgentBuilderPage() {
     }
 
     if (agentMode === 'workflow') {
-      const hasInput = pipeline.nodes.some((n) => n.type === 'input')
-      const hasOutput = pipeline.nodes.some((n) => n.type === 'output')
-      if (!hasInput) {
-        errors.push('Pipeline must have at least one Input node')
-      }
-      if (!hasOutput) {
-        errors.push('Pipeline must have at least one Output node')
-      }
-
-      // Check that all LLM call nodes have a provider selected or a routing policy
-      const llmNodes = pipeline.nodes.filter((n) => n.type === 'llm_call')
-      for (const llmNode of llmNodes) {
-        if (!llmNode.data?.providerId && !llmNode.data?.routing) {
-          errors.push(`LLM Call node "${llmNode.id}" is missing a provider or a routing policy`)
-        }
-      }
+      errors.push(
+        ...validateWorkflowGraph(pipeline.nodes as GraphNode[], pipeline.edges as GraphEdge[], {
+          // An organization default makes a bare Model Call node legitimate:
+          // the engine resolves it, and the server's validator never had an
+          // llm_call rule to begin with.
+          hasDefaultRouting: Boolean(currentOrganization?.settings?.defaultRouting),
+        }),
+      )
     } else {
       // Autonomous mode validation
       if (!agentInstructions.trim()) {
@@ -245,7 +254,7 @@ export function AgentBuilderPage() {
     }
 
     return errors
-  }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes])
+  }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
 
   const canSave = validationErrors.length === 0
 
@@ -329,7 +338,7 @@ export function AgentBuilderPage() {
       }
     },
     onError: (err: any) => {
-      errorNotif('Save Failed', err?.response?.data?.message || err?.message || 'Failed to save agent')
+      errorNotif('Save Failed', getApiErrorMessage(err, 'Failed to save agent'))
     },
   })
 
@@ -365,6 +374,25 @@ export function AgentBuilderPage() {
     )
   }
 
+  // An agent that no longer exists.
+  //
+  // The init effect only runs when `agentData` is present, and its other
+  // branches are for the create path, so a 404 left the canvas empty,
+  // the name field blank and a validation banner up -- with nothing
+  // saying the agent was gone, and Save still PATCHing an id that is not
+  // there. The detail page already guards this; the builder did not.
+  if (isEditing && agentError) {
+    return (
+      <div className="p-6">
+        <QueryError
+          error={agentErrorValue}
+          onRetry={() => refetchAgent()}
+          title="Couldn't open that agent"
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-64px)]">
       {/* Top Bar */}
@@ -396,7 +424,10 @@ export function AgentBuilderPage() {
         <div className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 shrink-0">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-            <ul className="text-xs text-destructive space-y-0.5">
+            {/* Capped: mirroring the server means a badly wired graph can
+                report several problems at once, and an uncapped list pushed
+                the canvas off the screen. */}
+            <ul className="text-xs text-destructive space-y-0.5 max-h-24 overflow-y-auto">
               {validationErrors.map((err, i) => (
                 <li key={i}>{err}</li>
               ))}
@@ -431,6 +462,9 @@ export function AgentBuilderPage() {
         />
       ) : (
         <CanvasArea
+          // Restores the position the graph was saved at. buildPipeline has
+          // always written this and nothing read it back.
+          savedViewport={agentData?.pipeline?.viewport}
           nodes={pipeline.nodes}
           edges={pipeline.edges}
           onNodesChange={pipeline.onNodesChange}

@@ -24,6 +24,11 @@ export class MatrixAdapter extends BaseAdapter {
     };
   }
 
+  /** The Matrix event id, globally unique and stable on replay. */
+  deliveryId(rawPayload: any): string | undefined {
+    return rawPayload?.event_id ? `matrix:${rawPayload.event_id}` : undefined;
+  }
+
   formatOutbound(response: AdapterResponse): any {
     return {
       msgtype: 'm.text',
@@ -31,32 +36,51 @@ export class MatrixAdapter extends BaseAdapter {
     };
   }
 
+  /**
+   * PUT the reply into the room.
+   *
+   * The client-server API is HTTP-shaped: 200 with `{event_id}` on
+   * success, and a 4xx carrying `{errcode, error}` on failure —
+   * `M_FORBIDDEN` when the bot is not joined to the room,
+   * `M_UNKNOWN_TOKEN` on a logged-out access token, `M_LIMIT_EXCEEDED`
+   * when rate limited. So the status is the verdict and
+   * `errcode`/`error` are the wording to keep — the same pair
+   * `testConnection` reads off whoami.
+   */
   async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
-    try {
-      const homeserverUrl = config.homeserver_url;
-      const accessToken = config.access_token;
-      const roomId = threadContext?.threadId || config.room_id;
+    const homeserverUrl = config.homeserver_url;
+    const accessToken = config.access_token;
+    const roomId = threadContext?.threadId || config.room_id;
 
-      if (!homeserverUrl || !accessToken || !roomId) {
-        this.logger.warn('Matrix: homeserver_url, access_token, or room_id not configured');
-        return;
-      }
+    if (!homeserverUrl || !accessToken || !roomId) {
+      const missing = [
+        !homeserverUrl && 'homeserver_url',
+        !accessToken && 'access_token',
+        !roomId && 'room_id',
+      ].filter(Boolean).join(', ');
+      this.sendFailed(`${missing} missing, so the reply could not be sent`);
+    }
 
-      const txnId = `m${Date.now()}`;
-      const encodedRoomId = encodeURIComponent(roomId);
-      const url = `${homeserverUrl}/_matrix/client/r0/rooms/${encodedRoomId}/send/m.room.message/${txnId}`;
+    const txnId = `m${Date.now()}`;
+    const encodedRoomId = encodeURIComponent(roomId);
+    const url = `${homeserverUrl}/_matrix/client/r0/rooms/${encodedRoomId}/send/m.room.message/${txnId}`;
 
-      const fetch = globalThis.fetch || (await import('node-fetch')).default;
-      await (fetch as any)(url, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formattedResponse),
-      });
-    } catch (error) {
-      this.logger.error(`Matrix send failed: ${error.message}`);
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    const res = await (fetch as any)(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(formattedResponse),
+    });
+
+    const body = await this.readJsonBody(res);
+    if (this.httpRejected(res) || body?.errcode) {
+      const detail = body?.error ?? `HTTP ${this.httpStatus(res)}`;
+      this.sendFailed(
+        `the homeserver refused the reply: ${detail}${body?.errcode ? ` (${body.errcode})` : ''}`,
+      );
     }
   }
 

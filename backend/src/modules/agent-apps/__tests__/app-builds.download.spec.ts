@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { AppBuild, BuildStatus } from '../../../entities/app-build.entity';
 import { AppBuildsService, DOWNLOAD_URL_TTL_SECONDS } from '../app-builds.service';
+import { Readable } from 'stream';
 
 /**
  * Handing back a link that actually resolves.
@@ -37,10 +38,14 @@ function makeService(opts: {
   canPresign: boolean;
   bytes?: Buffer;
 }) {
+  // Piped, not buffered: a desktop package is 100-200MB with no size cap
+  // on this path, so reading one into heap and then res.send()ing it
+  // (which copies) was an OOM by itself.
   const storage = {
     canPresign: opts.canPresign,
     getSignedUrl: jest.fn().mockResolvedValue('https://cdn.example/object?sig=abc'),
     download: jest.fn().mockResolvedValue(opts.bytes ?? Buffer.from('binary')),
+    downloadStream: jest.fn(async () => Readable.from([opts.bytes ?? Buffer.from('binary')])),
   };
 
   const service = new AppBuildsService(
@@ -125,8 +130,12 @@ describe('AppBuildsService artifact', () => {
 
     const result = await service.artifact(ORG, 'build-1');
 
-    expect(result.body).toBe(bytes);
-    expect(storage.download).toHaveBeenCalledWith(`app-builds/${ORG}/app-1/build-1.AppImage`);
+    const chunks: Buffer[] = [];
+    for await (const chunk of result.body) chunks.push(Buffer.from(chunk));
+    expect(Buffer.concat(chunks)).toEqual(bytes);
+    expect(storage.downloadStream).toHaveBeenCalledWith(`app-builds/${ORG}/app-1/build-1.AppImage`);
+    // Never the buffering path, whatever the artifact's size.
+    expect(storage.download).not.toHaveBeenCalled();
   });
 
   it('names the file after the product, not the row id', async () => {

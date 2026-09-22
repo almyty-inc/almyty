@@ -39,8 +39,75 @@ export class McpToolHandler {
     @Optional() private readonly metrics?: MetricsRecorderService,
   ) {}
 
-  async handleToolsList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
-    const cacheKey = `mcp:tools:${organizationId}:${gatewayId || 'all'}`;
+  // Resolve how a tool listing should be scoped.
+  //
+  // `bypassTeamFilter: true` skips AccessPolicyService.applyListFilter and
+  // filters on organization alone. That is only defensible where something
+  // else already gates access -- on the gateway path, gateway membership
+  // does. The gateway-less path (McpController, and every transport) has no
+  // gateway, so the bypass there handed the caller every tool in the org,
+  // including team-scoped tools they hold no membership for. Use the real
+  // caller when there is one, and refuse rather than fall back to the
+  // unscoped read when there is neither a gateway nor a caller.
+  private listScope(
+    gatewayId?: string,
+    caller?: { id: string },
+  ): { bypassTeamFilter: true } | { caller: { id: string } } {
+    if (gatewayId) {
+      return { bypassTeamFilter: true };
+    }
+    if (caller?.id) {
+      return { caller };
+    }
+    throw this.createError(
+      JsonRpcErrorCode.INVALID_REQUEST,
+      'Tool listing requires an authenticated caller or a gateway scope',
+    );
+  }
+
+  /** MCP tools/list page size. Also the DB page size on the org-wide path. */
+  private static readonly TOOLS_PAGE_SIZE = 100;
+
+  /**
+   * Parse the `cursor` of a tools/list request into a row offset.
+   *
+   * Every cursor this server mints is a multiple of the page size, so
+   * anything else is a cursor it did not issue. The MCP spec's answer to an
+   * unrecognised cursor is -32602 Invalid params, which is also what keeps
+   * the offset exactly expressible as a database page.
+   */
+  private parseListCursor(raw: unknown): number {
+    if (raw === undefined || raw === null || raw === '') {
+      return 0;
+    }
+    const cursor = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+    if (
+      !Number.isInteger(cursor) ||
+      cursor < 0 ||
+      cursor % McpToolHandler.TOOLS_PAGE_SIZE !== 0
+    ) {
+      throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, `Invalid cursor: ${raw}`);
+    }
+    return cursor;
+  }
+
+  async handleToolsList(
+    params: any,
+    organizationId: string,
+    gatewayId?: string,
+    caller?: { id: string },
+  ): Promise<any> {
+    const pageSize = McpToolHandler.TOOLS_PAGE_SIZE;
+    const cursor = this.parseListCursor(params?.cursor);
+
+    // The cache key carries the caller on the gateway-less path: the listing
+    // is now team-scoped per caller, so a single org-wide key would serve one
+    // member's scoped list to another. It also carries the cursor, because
+    // the cached VALUE is one page — without it a `cursor=100` request was
+    // served page 0 from cache.
+    const cacheKey = gatewayId
+      ? `mcp:tools:${organizationId}:${gatewayId}:cursor:${cursor}`
+      : `mcp:tools:${organizationId}:user:${caller?.id ?? 'none'}:cursor:${cursor}`;
     try {
       const cached = await this.redis.get(cacheKey);
       if (cached) {
@@ -51,6 +118,10 @@ export class McpToolHandler {
     }
 
     let tools: any[];
+    // Whether `tools` is already just this page (DB-side) or the whole set
+    // that still has to be sliced here.
+    let prePaged = false;
+    let totalCount: number | undefined;
 
     if (gatewayId) {
       const gatewayTools = await this.gatewayToolRepository.find({
@@ -60,8 +131,21 @@ export class McpToolHandler {
       tools = gatewayTools.map((gt: any) => gt.tool).filter(Boolean);
       this.logger.log(`[GATEWAY-SCOPE] Returning ${tools.length} tools for gateway ${gatewayId}`);
     } else {
-      const result = await this.toolsService.getTools({ organizationId, bypassTeamFilter: true });
+      // Page at the database, and ask for the page actually being served.
+      // This used to call getTools() with no `limit`, taking its default of
+      // 20, and then slice that to a page size of 100 — so an org with more
+      // than 20 tools was silently truncated, and because the slice could
+      // never exceed the page size the `nextCursor` branch never fired and
+      // the client had no way to reach the rest.
+      const result = await this.toolsService.getTools({
+        organizationId,
+        page: Math.floor(cursor / pageSize) + 1,
+        limit: pageSize,
+        ...this.listScope(gatewayId, caller),
+      });
       tools = result.tools;
+      prePaged = true;
+      totalCount = typeof result.total === 'number' ? result.total : cursor + tools.length;
     }
 
     const mcpTools: McpTool[] = tools.map(tool => ({
@@ -74,10 +158,9 @@ export class McpToolHandler {
     }));
 
     // Cursor-based pagination
-    const cursor = params?.cursor ? parseInt(params.cursor, 10) : 0;
-    const pageSize = 100;
-    const paged = mcpTools.slice(cursor, cursor + pageSize);
-    const nextCursor = cursor + pageSize < mcpTools.length ? String(cursor + pageSize) : undefined;
+    const paged = prePaged ? mcpTools : mcpTools.slice(cursor, cursor + pageSize);
+    const total = prePaged ? (totalCount as number) : mcpTools.length;
+    const nextCursor = cursor + paged.length < total ? String(cursor + paged.length) : undefined;
 
     const result: any = { tools: paged };
     if (nextCursor) {
@@ -93,11 +176,16 @@ export class McpToolHandler {
     return result;
   }
 
-  async handleToolsDiscover(params: any, organizationId: string, gatewayId?: string): Promise<any> {
+  async handleToolsDiscover(
+    params: any,
+    organizationId: string,
+    gatewayId?: string,
+    caller?: { id: string },
+  ): Promise<any> {
     const category = params?.category as string | undefined;
     const depth = (params?.depth as string) || 'categories';
 
-    const tools = await this.getToolsForScope(organizationId, gatewayId);
+    const tools = await this.getToolsForScope(organizationId, gatewayId, caller);
 
     const categories = await this.toolCategoryRepository.find({
       where: { organizationId, isActive: true },
@@ -151,7 +239,12 @@ export class McpToolHandler {
     };
   }
 
-  async handleToolsSearch(params: any, organizationId: string, gatewayId?: string): Promise<any> {
+  async handleToolsSearch(
+    params: any,
+    organizationId: string,
+    gatewayId?: string,
+    caller?: { id: string },
+  ): Promise<any> {
     const query = params?.query as string;
     const limit = Math.min(params?.limit || 20, 100);
     const page = params?.page || 1;
@@ -166,7 +259,7 @@ export class McpToolHandler {
       status: ToolStatus.ACTIVE,
       page,
       limit,
-      bypassTeamFilter: true,
+      ...this.listScope(gatewayId, caller),
     });
 
     let tools = result.tools;
@@ -238,6 +331,7 @@ export class McpToolHandler {
     params: McpCallToolRequest,
     organizationId: string,
     userId?: string,
+    gatewayId?: string,
   ): Promise<McpCallToolResult> {
     if (!params.name) {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Tool name is required');
@@ -246,7 +340,7 @@ export class McpToolHandler {
     let tool = await this.toolsService.findByName(params.name, organizationId);
 
     if (!tool) {
-      const allTools = await this.toolsService.getTools({ organizationId, bypassTeamFilter: true });
+      const allTools = await this.toolsService.getTools({ organizationId, ...this.listScope(undefined, userId ? { id: userId } : undefined) });
       tool = allTools.tools.find(t => this.sanitizeToolName(t.name) === params.name);
 
       if (!tool) {
@@ -258,7 +352,14 @@ export class McpToolHandler {
       const result = await this.toolExecutorService.executeTool(
         tool.id,
         params.arguments || {},
-        { userId: userId || null, organizationId },
+        {
+          userId: userId || null,
+          organizationId,
+          // The gateway this call arrived through. The executor uses it to
+          // load `gateway_tools.securityPolicy` for this tool and enforce it
+          // on the outbound request; without it the policy is invisible here.
+          gatewayId: gatewayId ?? null,
+        },
       );
 
       this.metrics?.record(MetricType.MCP_TOOL_CALL, {
@@ -347,7 +448,11 @@ export class McpToolHandler {
     return sanitized;
   }
 
-  async getToolsForScope(organizationId: string, gatewayId?: string): Promise<Tool[]> {
+  async getToolsForScope(
+    organizationId: string,
+    gatewayId?: string,
+    caller?: { id: string },
+  ): Promise<Tool[]> {
     if (gatewayId) {
       const gatewayTools = await this.gatewayToolRepository.find({
         where: { gatewayId, isActive: true },
@@ -355,7 +460,7 @@ export class McpToolHandler {
       });
       return gatewayTools.map((gt: any) => gt.tool).filter(Boolean);
     }
-    const result = await this.toolsService.getTools({ organizationId, status: ToolStatus.ACTIVE, bypassTeamFilter: true });
+    const result = await this.toolsService.getTools({ organizationId, status: ToolStatus.ACTIVE, ...this.listScope(gatewayId, caller) });
     return result.tools;
   }
 

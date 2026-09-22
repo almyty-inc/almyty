@@ -84,6 +84,26 @@ export interface UpdateGatewayToolDto {
   } | null;
 }
 
+// The only fields a PATCH may write. `id`, `gatewayId` and `toolId` are
+// identity, `usageCount`/`lastUsedAt`/`associatedAt` are bookkeeping, and none
+// of them belong in an update body -- see IDENTITY_GATEWAY_TOOL_FIELDS below.
+export const UPDATABLE_GATEWAY_TOOL_FIELDS = [
+  'isActive',
+  'overrides',
+  'permissions',
+  'transformations',
+  'metadata',
+  'securityPolicy',
+] as const;
+
+// Repointing an association at another gateway or another tool is not an
+// update: it either grafts a foreign org's tool into the caller's gateway
+// listing, or pushes the caller's own row onto another org's gateway, which
+// injects attacker-chosen tool names and descriptions into that tenant's
+// agents and MCP clients. The correct operation is dissociate plus associate,
+// and both of those re-check the organization.
+export const IDENTITY_GATEWAY_TOOL_FIELDS = ['id', 'gatewayId', 'toolId', 'gateway', 'tool'] as const;
+
 export interface BulkAssociateToolsDto {
   toolIds: string[];
   isActive?: boolean;
@@ -161,17 +181,34 @@ export class GatewayToolService {
         throw new NotFoundException('Gateway not found');
       }
 
-      // Verify tool exists
+      // Verify the tool exists AND belongs to this organization. The
+      // gateway above is org-scoped and the permission check below is
+      // too; the tool was not, so an org-A admin holding an org-B tool
+      // uuid could write a gateway_tools row across tenants — and
+      // `gateway_tools` has no organization column, so nothing at the
+      // storage layer rejected it either. The gateway then served org
+      // B's tool name, description and parameter schema to org A's
+      // clients. Execution itself fails closed in ToolExecutorService,
+      // but the metadata had already leaked.
       const tool = await this.toolRepository.findOne({
-        where: { id: createGatewayToolDto.toolId },
+        where: { id: createGatewayToolDto.toolId, organizationId },
       });
 
       if (!tool) {
         throw new NotFoundException('Tool not found');
       }
 
+      // Name the actual problem. 'Can only associate active tools' did not
+      // say which state the tool was in, that every tool generated from a
+      // schema starts as a draft, or where the fix lives -- so the one
+      // refusal a new user is guaranteed to hit read as a bug in the
+      // gateway rather than a step they had not taken yet.
       if (tool.status !== ToolStatus.ACTIVE) {
-        throw new BadRequestException('Can only associate active tools');
+        throw new BadRequestException(
+          `Tool '${tool.name}' is ${tool.status}, and a gateway only serves active tools. ` +
+            'Tools generated from a schema start as drafts: open Tools, select them and ' +
+            'use "Activate selected", then assign them here.',
+        );
       }
 
       // Check if association already exists
@@ -242,8 +279,32 @@ export class GatewayToolService {
         throw new ForbiddenException('User does not have permission to manage gateway tools');
       }
 
-      // Update the association
-      Object.assign(gatewayTool, updateGatewayToolDto);
+      // Refuse, rather than silently drop, an attempt to move this row to a
+      // different gateway or a different tool.
+      for (const field of IDENTITY_GATEWAY_TOOL_FIELDS) {
+        if (
+          Object.prototype.hasOwnProperty.call(updateGatewayToolDto, field) &&
+          (updateGatewayToolDto as any)[field] !== (gatewayTool as any)[field]
+        ) {
+          throw new ForbiddenException(
+            `Gateway tool association field '${field}' cannot be updated; dissociate and re-associate instead`,
+          );
+        }
+      }
+
+      // Assign only whitelisted fields. A blanket Object.assign would write any
+      // column the caller names, including the identity columns above.
+      for (const field of UPDATABLE_GATEWAY_TOOL_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(updateGatewayToolDto, field)) {
+          (gatewayTool as any)[field] = (updateGatewayToolDto as any)[field];
+        }
+      }
+
+      // Re-assert the org binding after assignment, so nothing that runs above
+      // can leave a row pointing at a gateway outside the caller's org.
+      if (gatewayTool.gateway.organizationId !== organizationId) {
+        throw new ForbiddenException('Gateway tool association is not owned by this organization');
+      }
 
       const updatedAssociation = await this.gatewayToolRepository.save(gatewayTool);
 

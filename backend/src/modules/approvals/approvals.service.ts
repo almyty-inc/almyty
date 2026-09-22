@@ -1,11 +1,13 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional, Inject } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, ServiceUnavailableException, Optional, Inject, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
 import { EventEmitter } from 'events';
 
 import { ApprovalRequest, ApprovalStatus } from '../../entities/approval-request.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { ApprovalPolicyApprovalRecord } from '../../entities/approval-policy-approval.entity';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { isUniqueViolation } from '../../common/utils/unique-violation';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
@@ -48,18 +50,35 @@ const MAX_TTL_SECONDS = 7 * 24 * 60 * 60; // 7d
  *      result (approve) or marks it CANCELLED (reject).
  *
  * Auto-expiry: a sweep flips pending rows past expiresAt to 'expired'
- * and treats them as rejections. Currently lives as a method here;
- * a BullMQ scheduled job is the obvious follow-up.
+ * and treats them as rejections, on an interval started here.
+ *
+ * The sweep existed as a method with no caller at all, which made
+ * `expiresAt` decorative: nobody approves, nothing flips the row,
+ * 'approval.decided' never fires, and the run waits in WAITING_APPROVAL
+ * forever -- the stuck-run reaper only looks at RUNNING, so nothing else
+ * caught it either. An interval here rather than a BullMQ job because
+ * that is the shape the sibling sweeps already use
+ * (AgentRunReaperService, the workspace TTL sweep).
  */
+/** How often pending approvals are checked against their expiresAt. */
+const EXPIRY_SWEEP_INTERVAL_MS = 60_000;
+
 @Injectable()
-export class ApprovalsService extends EventEmitter {
+export class ApprovalsService extends EventEmitter implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ApprovalsService.name);
+  private sweepTimer?: NodeJS.Timeout;
 
   constructor(
     @InjectRepository(ApprovalRequest)
     private readonly approvals: Repository<ApprovalRequest>,
     @InjectRepository(AgentRun)
     private readonly runs: Repository<AgentRun>,
+    // One row per collected approval, unique on (requestId, approverId) —
+    // the authoritative record of who has approved a policy-governed
+    // request, in place of an accumulator in the request's payload that
+    // two concurrent reviewers wrote over each other.
+    @InjectRepository(ApprovalPolicyApprovalRecord)
+    private readonly policyApprovals: Repository<ApprovalPolicyApprovalRecord>,
     private readonly accessPolicy: AccessPolicyService,
     // EE hook (approval_policy): multi-step / quorum policies. Absent in
     // the community build — @Optional() resolves to undefined and the
@@ -75,6 +94,23 @@ export class ApprovalsService extends EventEmitter {
     private readonly notifications?: NotificationsService,
   ) {
     super();
+  }
+
+  onModuleInit(): void {
+    this.sweepTimer = setInterval(() => {
+      this.sweepExpired().catch((err) => {
+        this.logger.warn(`Approval expiry sweep failed: ${err.message}`);
+      });
+    }, EXPIRY_SWEEP_INTERVAL_MS);
+    // Don't hold the event loop open for it, matching the other sweeps.
+    this.sweepTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.sweepTimer) {
+      clearInterval(this.sweepTimer);
+      this.sweepTimer = undefined;
+    }
   }
 
   /**
@@ -116,7 +152,24 @@ export class ApprovalsService extends EventEmitter {
       status: 'pending' as ApprovalStatus,
       expiresAt,
     } as Partial<ApprovalRequest>);
-    const saved = await this.approvals.save(row);
+    // `approval_requests_run_toolcall_uq` is the guard that makes this
+    // idempotent: a stalled `next-step` job redelivered alongside the
+    // original used to produce two gates for one tool call and two
+    // approval notifications. Losing the insert race is an answer, not a
+    // failure — the winner already paused the run, emitted and notified
+    // — so return their row rather than surfacing a 500 on a request the
+    // caller is entitled to make.
+    let saved: ApprovalRequest;
+    try {
+      saved = await this.approvals.save(row);
+    } catch (err: any) {
+      if (!isUniqueViolation(err) || !input.toolCallId) throw err;
+      const raced = await this.approvals.findOne({
+        where: { runId: input.runId, toolCallId: input.toolCallId },
+      });
+      if (!raced) throw err;
+      return raced;
+    }
 
     // Pause the run.
     await this.runs.update({ id: input.runId }, { status: AgentRunStatus.WAITING_APPROVAL });
@@ -157,11 +210,42 @@ export class ApprovalsService extends EventEmitter {
       if (stillPending) return stillPending;
     }
 
+    // The flip IS the guard.
+    //
+    // The pending check above happens several awaits before this write
+    // (canAccess, and applyPolicyProgress which writes), and a
+    // multi-reviewer queue is the designed use case -- so two reviewers
+    // acting at once both read 'pending'. One approved, saved, and
+    // emitted, which resumed the run and executed the gated tool call;
+    // the other then wrote 'rejected' over it. The row ended up
+    // rejected on a request whose action had already run, the initiator
+    // got two contradictory notifications, and the human-in-the-loop
+    // gate was defeated. Only the writer who actually moved the row off
+    // 'pending' emits.
+    const decidedAt = new Date();
+    const claim = await this.approvals
+      .createQueryBuilder()
+      .update()
+      .set({
+        status: next,
+        decidedBy: decision.decidedBy,
+        decidedAt,
+        decisionReason: decision.decisionReason ?? null,
+      })
+      .where('id = :id', { id: row.id })
+      .andWhere('status = :pending', { pending: 'pending' })
+      .execute();
+
+    if (!claim.affected) {
+      const current = await this.approvals.findOne({ where: { id: row.id } });
+      throw new BadRequestException(`approval already ${current?.status ?? 'decided'}`);
+    }
+
     row.status = next;
     row.decidedBy = decision.decidedBy;
-    row.decidedAt = new Date();
+    row.decidedAt = decidedAt;
     row.decisionReason = decision.decisionReason ?? null;
-    const saved = await this.approvals.save(row);
+    const saved = row;
 
     this.emit('approval.decided', saved);
     this.notifyDecided(saved).catch(() => {});
@@ -199,6 +283,19 @@ export class ApprovalsService extends EventEmitter {
    * the caller then skips the status flip. Returns null when the OSS
    * single-gate flip should proceed: no hook, no recorded policy, policy
    * gone / unlicensed (hook scores null), or the policy is satisfied.
+   *
+   * The collected approvals are rows in `approval_policy_approvals`, one
+   * per approver, unique on (requestId, approverId) — not a list in the
+   * request's payload. A list meant every reviewer read it, appended
+   * itself and wrote the whole thing back, and two reviewers acting at
+   * once (the designed use case for a quorum) each wrote over the
+   * other: on a 3-of-N gate holding [A], B wrote [A,B] and C, loaded
+   * before B committed, wrote [A,C]. B's approval was gone, so either
+   * the quorum never completed and a properly approved request expired
+   * denied, or the erased approver dropped out of the repeat-approver
+   * guard and one human satisfied a 3-of-3 twice over. An INSERT per
+   * approval cannot overwrite anyone, and the index — not a list
+   * lookup — is what refuses a second approval from the same person.
    */
   private async applyPolicyProgress(
     row: ApprovalRequest,
@@ -207,16 +304,39 @@ export class ApprovalsService extends EventEmitter {
     const state = (row.payload as Record<string, any> | null)?._policy;
     if (!this.approvalPolicyHook || !state?.policyId) return null;
 
-    const prior: ApprovalPolicyApproval[] = Array.isArray(state.approvals)
-      ? state.approvals
-      : [];
-    if (prior.some((a) => a.approverId === caller.id)) {
-      throw new BadRequestException('caller has already approved this request');
-    }
     const roles = await this.resolveApproverRoles(caller.id, row);
-    const collected = [...prior, { approverId: caller.id, roles }];
 
-    let progress: ApprovalPolicyProgress | null = null;
+    // The INSERT is the guard. A repeat approver is rejected by the
+    // unique index, which holds no matter how many reviewers are in
+    // flight, rather than by a read of a list that a concurrent write
+    // can erase.
+    try {
+      await this.policyApprovals.insert({
+        requestId: row.id,
+        organizationId: row.organizationId,
+        approverId: caller.id,
+        roles,
+      });
+    } catch (err: any) {
+      // A unique violation here is the index saying this person has
+      // already approved.
+      if (isUniqueViolation(err)) {
+        throw new BadRequestException('caller has already approved this request');
+      }
+      throw err;
+    }
+
+    const collected = await this.collectPolicyApprovals(row);
+
+    // A scorer that THREW is not a scorer that said "no policy".
+    //
+    // Both used to end here as `progress === null`, and null falls back
+    // to the OSS single gate -- so one transient error turned a
+    // configured 3-of-5 or multi-step gate into a single approver, and
+    // the gated tool call ran. That is the one outcome a human-in-the-
+    // loop control must never produce by accident. The request stays
+    // pending instead, and the caller is told to try again.
+    let progress: ApprovalPolicyProgress | null;
     try {
       progress = await this.approvalPolicyHook.scoreProgress(
         row.organizationId,
@@ -224,10 +344,17 @@ export class ApprovalsService extends EventEmitter {
         collected,
       );
     } catch (err: any) {
-      this.logger.warn(`approval policy scoring failed: ${err?.message ?? err}`);
+      this.logger.error(`approval policy scoring failed: ${err?.message ?? err}`);
+      throw new ServiceUnavailableException({
+        success: false,
+        code: 'APPROVAL_POLICY_UNAVAILABLE',
+        message:
+          'This request is governed by an approval policy that could not be evaluated just now. It is still pending -- try again.',
+      });
     }
-    // No progress (unlicensed / policy deleted / hook failure) → fall back
-    // to the OSS single gate: this approval decides the request.
+
+    // A genuine null -- unlicensed, or the policy was deleted -- is the
+    // designed degradation to the OSS single gate.
     if (!progress) return null;
 
     row.payload = {
@@ -236,9 +363,51 @@ export class ApprovalsService extends EventEmitter {
     };
     if (progress.satisfied) return null;
 
-    const saved = await this.approvals.save(row);
-    this.emit('approval.progress', saved);
-    return saved;
+    // Only the payload column, and only the derived snapshot in it: the
+    // authoritative approvals are the rows, so a concurrent reviewer
+    // writing their own snapshot a moment later costs nothing and is
+    // recomputed on the next decision. A save() of the whole entity
+    // here would additionally write this reviewer's stale `status` and
+    // `decidedBy` back over whatever the CAS'd flip below committed.
+    await this.approvals.update({ id: row.id }, { payload: row.payload });
+    this.emit('approval.progress', row);
+    return row;
+  }
+
+  /**
+   * Every approval collected for a request, oldest first.
+   *
+   * Reads the rows, and folds in anything a request still carries in
+   * `payload._policy.approvals` so a row written that way is still
+   * counted. Deduped by approverId with the row winning, because the
+   * row is the one the unique index protects.
+   */
+  private async collectPolicyApprovals(
+    row: ApprovalRequest,
+  ): Promise<ApprovalPolicyApproval[]> {
+    const rows = await this.policyApprovals.find({
+      where: { requestId: row.id },
+      order: { createdAt: 'ASC' },
+    });
+    const byApprover = new Map<string, ApprovalPolicyApproval>();
+    const inPayload = (row.payload as Record<string, any> | null)?._policy?.approvals;
+    if (Array.isArray(inPayload)) {
+      for (const entry of inPayload) {
+        if (entry?.approverId) {
+          byApprover.set(entry.approverId, {
+            approverId: entry.approverId,
+            roles: Array.isArray(entry.roles) ? entry.roles : [],
+          });
+        }
+      }
+    }
+    for (const record of rows) {
+      byApprover.set(record.approverId, {
+        approverId: record.approverId,
+        roles: Array.isArray(record.roles) ? record.roles : [],
+      });
+    }
+    return [...byApprover.values()];
   }
 
   /**
@@ -300,15 +469,28 @@ export class ApprovalsService extends EventEmitter {
     const expired = await this.approvals.find({
       where: { status: 'pending', expiresAt: LessThan(now) },
     });
+    let flipped = 0;
     for (const row of expired) {
+      // Same conditional flip as decide(): this sweep could otherwise
+      // stamp 'expired' and emit over a request that was approved and
+      // resumed a moment earlier.
+      const claim = await this.approvals
+        .createQueryBuilder()
+        .update()
+        .set({ status: 'expired', decidedAt: now, decisionReason: 'approval expired' })
+        .where('id = :id', { id: row.id })
+        .andWhere('status = :pending', { pending: 'pending' })
+        .execute();
+      if (!claim.affected) continue;
+
       row.status = 'expired';
       row.decidedAt = now;
       row.decisionReason = 'approval expired';
-      await this.approvals.save(row);
+      flipped++;
       this.emit('approval.decided', row);
       this.notifyDecided(row).catch(() => {});
     }
-    return expired.length;
+    return flipped;
   }
 
   // ── Notifications (best-effort, fire-and-forget) ─────────────────

@@ -20,6 +20,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
 import { AgentAppsService, CreateAppDto, UpdateAppDto } from './agent-apps.service';
 import { AppBuildsService, RequestBuildDto } from './app-builds.service';
+import {
+  CreateAppBodyDto,
+  RequestBuildBodyDto,
+  UpdateAppBodyDto,
+} from './dto/agent-apps-controller.dto';
 import { platformsFor, signingRequirementFor } from './build-targets';
 import { downloadedFilename, handoffFor } from './build-handoff';
 
@@ -62,8 +67,8 @@ export class AgentAppsController {
   @Post()
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Create an app' })
-  async create(@Body() body: CreateAppDto, @Request() req: any) {
-    return { success: true, data: await this.apps.create(this.org(req), body) };
+  async create(@Body() body: CreateAppBodyDto, @Request() req: any) {
+    return { success: true, data: await this.apps.create(this.org(req), body as CreateAppDto) };
   }
 
   @Get(':slug')
@@ -90,8 +95,8 @@ export class AgentAppsController {
   @Patch(':slug')
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update an app' })
-  async update(@Param('slug') slug: string, @Body() body: UpdateAppDto, @Request() req: any) {
-    return { success: true, data: await this.apps.update(this.org(req), slug, body) };
+  async update(@Param('slug') slug: string, @Body() body: UpdateAppBodyDto, @Request() req: any) {
+    return { success: true, data: await this.apps.update(this.org(req), slug, body as UpdateAppDto) };
   }
 
   @Delete(':slug')
@@ -261,7 +266,7 @@ export class AgentAppsController {
   @ApiOperation({ summary: 'Build a downloadable artifact' })
   async requestBuild(
     @Param('slug') slug: string,
-    @Body() body: RequestBuildDto,
+    @Body() body: RequestBuildBodyDto,
     @Request() req: any,
   ) {
     return {
@@ -269,7 +274,7 @@ export class AgentAppsController {
       data: await this.builds.request(
         this.org(req),
         slug,
-        body,
+        body as RequestBuildDto,
         req.user?.email ?? req.user?.id ?? null,
       ),
     };
@@ -331,14 +336,15 @@ export class AgentAppsController {
     @Request() req: any,
     @Res() res: Response,
   ) {
-    const { body, filename } = await this.builds.artifact(this.org(req), buildId);
+    const { body, filename, bytes } = await this.builds.artifact(this.org(req), buildId);
 
     // An executable is never rendered inline, and the name is quoted
     // because a product slug can contain characters a bare header
     // value would end at.
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${filename.replace(/"/g, '')}"`);
-    res.setHeader('Content-Length', String(body.length));
-    res.send(body);
+    if (bytes) res.setHeader('Content-Length', String(bytes));
+    body.on('error', () => res.destroy());
+    body.pipe(res);
   }
 }

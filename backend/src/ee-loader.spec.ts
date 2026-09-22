@@ -27,9 +27,13 @@ describe('loadEeModules', () => {
         'AuditExportModule',
         'ApprovalPoliciesModule',
         'BillingModule',
-        'EeStubsModule',
         'ComplianceModule',
         'ChargebackModule',
+        // EeStubsModule is gone: its last controller was a /byo-kms stub
+        // returning 501 "not yet implemented" long after BYO-KMS shipped
+        // under /kms, so an Enterprise customer following the documented
+        // route was told the feature they paid for does not exist.
+        'ConnectionsGovernanceModule',
       ]),
     );
   });

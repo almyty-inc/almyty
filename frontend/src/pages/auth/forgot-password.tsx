@@ -9,6 +9,7 @@ import { authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 const forgotSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
@@ -44,8 +45,10 @@ export function ForgotPasswordPage() {
       setSent(true)
     } catch (err: any) {
       setSubmitError(
-        err?.response?.data?.message ||
+        getApiErrorMessage(
+          err,
           'Something went wrong sending your reset link. Please try again.',
+        ),
       )
     }
   }
@@ -87,7 +90,7 @@ export function ForgotPasswordPage() {
               className={errors.email ? 'border-red-300' : ''}
             />
             {errors.email && (
-              <p className="mt-2 text-sm text-red-600">{errors.email.message}</p>
+              <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>
             )}
           </div>
         </div>

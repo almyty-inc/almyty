@@ -22,6 +22,7 @@ import {
 
 import { promotedSkillsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface PromoteRunDialogProps {
   runId: string
@@ -53,7 +54,7 @@ export function PromoteRunDialog({ runId }: PromoteRunDialogProps) {
       reset()
     },
     onError: (e: any) => {
-      errorNotif('Promotion failed', e?.response?.data?.message || e?.message || 'Could not promote run')
+      errorNotif('Promotion failed', getApiErrorMessage(e, 'Could not promote run'))
     },
   })
 

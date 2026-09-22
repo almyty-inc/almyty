@@ -48,6 +48,17 @@ interface ToolGroup {
   assignedCount: number
 }
 
+/**
+ * Whether a gateway can be given this tool at all.
+ *
+ * GatewayToolService refuses anything that is not active, and every tool
+ * generated from a schema starts as a draft — so without this the picker
+ * offered Assign on tools it knew would be refused.
+ */
+function isToolAssignable(tool: any): boolean {
+  return !tool.status || tool.status === 'active'
+}
+
 function getToolApiKey(tool: any): string {
   return tool.metadata?.sourceApi?.id || tool.apiId || '__custom__'
 }
@@ -125,11 +136,17 @@ export function GatewayToolsTab({
   }
 
   const handleSelectAll = (group: ToolGroup) => {
-    const allAssigned = group.assignedCount === group.tools.length
+    const assignable = group.tools.filter(isToolAssignable)
+    const allAssigned =
+      assignable.length > 0 && assignable.every((tool) => isToolAssigned(tool.id))
     if (allAssigned) {
-      for (const tool of group.tools) onRemove(tool.id)
-    } else {
       for (const tool of group.tools) {
+        if (isToolAssigned(tool.id)) onRemove(tool.id)
+      }
+    } else {
+      // Only the assignable ones: select-all used to fire an Assign for
+      // every draft in the group, each of which came back a 400.
+      for (const tool of assignable) {
         if (!isToolAssigned(tool.id)) onAssign(tool.id)
       }
     }
@@ -258,6 +275,7 @@ export function GatewayToolsTab({
                     <div className="border-t">
                       {group.tools.map((tool: any) => {
                         const assigned = isToolAssigned(tool.id)
+                        const assignable = isToolAssignable(tool)
 
                         return (
                           <div
@@ -265,7 +283,32 @@ export function GatewayToolsTab({
                             className="flex items-center justify-between px-4 py-3 border-b last:border-b-0"
                           >
                             <div className="flex-1 min-w-0 pl-7">
-                              <div className="font-medium text-sm">{tool.name}</div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium text-sm">{tool.name}</span>
+                                {/*
+                                  Badged, not hidden.
+
+                                  This list had no status filter at all, so
+                                  it offered Assign on tools the gateway was
+                                  always going to refuse -- and right after a
+                                  schema import that is every tool, since
+                                  generated tools are drafts. Filtering them
+                                  out would have been worse: the user would
+                                  see an empty picker moments after being
+                                  told their tools were created, with nothing
+                                  to explain the gap. So show them, say what
+                                  state they are in, and say where it is
+                                  fixed.
+                                */}
+                                {!assignable && (
+                                  <Badge
+                                    variant="outline"
+                                    className="shrink-0 border-amber-400/50 text-amber-600 dark:text-amber-400"
+                                  >
+                                    {tool.status === 'draft' ? 'Draft' : tool.status}
+                                  </Badge>
+                                )}
+                              </div>
                               <div className="text-xs text-muted-foreground truncate">
                                 {(tool.description || 'No description').replace(
                                   /^Auto-generated tool for\s+/i,
@@ -283,6 +326,7 @@ export function GatewayToolsTab({
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  aria-label={`Configure security policy for ${tool.name}`}
                                   onClick={() => {
                                     const gt = gatewayTools.find(
                                       (gt: any) => gt.toolId === tool.id || gt.tool?.id === tool.id,
@@ -304,7 +348,14 @@ export function GatewayToolsTab({
                                   if (assigned) onRemove(tool.id)
                                   else onAssign(tool.id)
                                 }}
-                                disabled={assignPending || removePending}
+                                disabled={
+                                  assignPending || removePending || (!assigned && !assignable)
+                                }
+                                title={
+                                  !assigned && !assignable
+                                    ? `This tool is ${tool.status}. Activate it on the Tools page — select it there and use "Activate selected" — then assign it here.`
+                                    : undefined
+                                }
                               >
                                 {assigned ? 'Remove' : 'Assign'}
                               </Button>

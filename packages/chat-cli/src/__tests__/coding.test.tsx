@@ -8,7 +8,7 @@
  * tested directly, the components are render-tested.
  */
 import React from 'react';
-import { render } from 'ink-testing-library';
+import { render } from './helpers/ink-render.js';
 import { describe, it, expect } from 'vitest';
 
 import { resolveSlash, classifyInput, buildCodeChoices } from '../commands.js';

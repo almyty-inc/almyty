@@ -37,7 +37,7 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
           <ShieldAlert className="h-4 w-4 text-destructive" />
         )}
         <Badge variant="outline" className="text-[10px]">verify</Badge>
-        <Badge variant="outline" className="text-[10px]">{advisory ? 'mid-run' : 'gate'}</Badge>
+        <Badge variant="outline" className="text-[10px]">{advisory ? 'mid-run' : 'blocking'}</Badge>
         {typeof out.revision === 'number' && (
           <Badge variant="outline" className="text-[10px]">revision {out.revision}</Badge>
         )}

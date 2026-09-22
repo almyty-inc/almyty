@@ -1,10 +1,13 @@
 # Template Expressions
 
 Wire data between pipeline nodes without writing glue code. A template
-expression pulls a value from the invocation input or from another node's output,
-using `{{...}}` syntax, resolved at runtime just before each node executes. Type
-`{{` in any node config field and the builder autocompletes the available
-sources.
+expression pulls a value out of the invocation input, another node's output, or
+an agent variable, using `{{...}}` syntax, resolved at run time just before each
+node executes.
+
+It is a lookup language, not a scripting language: a dot path and nothing else.
+No function calls, no arithmetic, no array indexing, and no comparisons inside
+the braces.
 
 ![Template expressions in node config](/screenshots/agent-builder.png)
 
@@ -23,14 +26,18 @@ the data structure using dot notation.
 |--------|--------|-------------|
 | **Input** | `{{input.property}}` | The agent's invocation payload |
 | **Node output** | `{{nodes.<id>.output}}` | Output of any upstream node |
-| **Loop context** | `{{loop.item}}`, `{{loop.index}}` | Current item and index inside a Loop node |
+| **Variables** | `{{variables.key}}` | An agent-level variable |
+
+There is no loop context. A Loop node outputs its whole array in one pass and
+does not re-run the nodes after it per item, so `{{loop.item}}` and
+`{{loop.index}}` name nothing and resolve to an empty string. See
+[Loop](/agents/node-types#loop).
 
 ### Input Data
 
 ```
 {{input.message}}          // Top-level property
 {{input.user.name}}        // Nested property
-{{input.items[0].title}}   // Array access
 ```
 
 ### Node Outputs
@@ -38,18 +45,25 @@ the data structure using dot notation.
 ```
 {{nodes.llm_1.output}}          // Full output of node llm_1
 {{nodes.tool_1.output.data}}    // Nested property
-{{nodes.transform_1.output}}    // Transform result
+{{nodes.transform_1.output}}    // A transform node's rendered string
 ```
 
-### Loop Context
+### What a Path May Contain
 
-Inside a Loop node's body:
+Each segment is letters, digits, underscores and hyphens, and segments are
+separated by dots. Anything else is rejected and the node throws
+`Template expression contains invalid characters`. That rules out array
+indexing — `{{input.items[0].title}}` is an error, not an empty value — along
+with calls such as `{{Date.now()}}` and comparisons written inside the braces.
 
-```
-{{loop.item}}         // Current item being iterated
-{{loop.index}}        // Zero-based index
-{{loop.item.name}}    // Property of the current item
-```
+A segment that is exactly `__proto__`, `constructor`, `prototype`, `process`,
+`require`, `import`, `global`, `window`, `Function` or `eval` is rejected as
+well. A segment that merely contains one of those words is fine:
+`{{nodes.processor.output}}` and `{{input.importItems}}` both resolve.
+
+Only own properties are read, so nothing reached through a prototype resolves.
+An expression may be at most 500 characters, and a whole template at most
+10,000.
 
 ## In the UI
 
@@ -57,10 +71,9 @@ Template expressions are used in node configuration fields throughout the
 builder:
 
 1. Click a node on the canvas to open its config panel
-2. In any text field that supports expressions (prompts, mappings, parameters), type `{{`
-3. Autocomplete suggests available upstream nodes and input properties
-4. Select or type the full expression path
-5. Use the **Test** panel to verify expressions resolve correctly with sample input
+2. Type the expression into any field that takes one — prompts, mappings, parameters
+3. An LLM Call node lists the expressions it found in your prompts, so you can check them at a glance
+4. Use the **Test** panel in the builder's top bar to run the pipeline and see what each one resolved to
 
 ## Examples
 
@@ -81,54 +94,57 @@ Based on the search results ({{nodes.tool_1.output.count}} found),
 here is a summary: {{nodes.llm_1.output}}
 ```
 
-### JSON Construction in Transform Nodes
+### Composing a Value in a Transform Node
 
-```javascript
-const query = "{{input.query}}";
-const results = {{nodes.tool_1.output}};
-return {
-  query,
-  resultCount: results.length,
-  summary: results.map(r => r.title).join(", ")
-};
+A Transform node renders its template and outputs the result:
+
 ```
+Query "{{input.query}}" returned {{nodes.tool_1.output.count}} results.
+```
+
+The output is text. A template shaped like a JSON object produces a JSON
+string rather than an object, so a downstream
+`{{nodes.transform_1.output.count}}` resolves to an empty string instead of a
+number.
 
 ## Type Handling
 
-| Expression Target | Resolved Type |
-|-------------------|--------------|
-| String property | `string` |
-| Number property | `number` |
-| Object | `object` (JSON) |
-| Array | `array` (JSON) |
-| Boolean property | `boolean` |
-| Null/undefined | `null` |
+Inside a template string every resolved value is rendered to text — numbers and
+booleans with `String()`, objects and arrays with `JSON.stringify`. A value of
+`null` or `undefined` renders as an empty string, which is also what a path
+that does not exist produces.
 
-When an expression is used inside a string (like a prompt template), non-string
-values are serialized to JSON automatically.
+Two fields read a raw value instead and keep its type:
 
-When an expression is the entire value of a field (like a Transform node's
-input), the original type is preserved.
+| Where | Field |
+|-------|-------|
+| Output node | `source`, a bare dot path with no braces |
+| Loop node | `iterableExpression`, when it is a single `{{...}}` reference and nothing else |
+
+Everywhere else — prompts, transform templates, tool parameters, sub-agent
+input mappings, an output node's `mapping` — the result is a string.
 
 ## Error Handling
 
 | Scenario | Behavior |
 |----------|----------|
-| Node does not exist | Pipeline validation catches this before execution |
-| Node has not executed yet | Topological sorting prevents this for valid pipelines |
-| Node returned an error | Downstream node receives `null`; the failure is recorded in the execution log |
+| Path does not exist | Resolves to an empty string. A warning is logged; the run does not fail |
+| Node id is misspelled | The same — an empty string, silently, in the prompt or parameter |
+| Path contains invalid characters or a blocked segment | The node throws and the run fails there |
+| Upstream node failed | Every node downstream of it is skipped, so the expression is never resolved |
 
-To handle optional data, use JavaScript in Transform nodes:
-
-```javascript
-const data = {{nodes.tool_1.output}};
-const name = data?.name || "Unknown";
-return { name };
-```
+The empty resolution is the one to watch for, because nothing reports it: a
+prompt with a mistyped path is sent with a hole in it and the model answers
+anyway. Run the pipeline from the **Test** panel and read what each expression
+resolved to before activating the agent.
 
 ## Best Practices
 
-1. **Keep expressions simple**: use Transform nodes for complex data manipulation
-2. **Validate your schema**: define Input node schemas to catch bad data early
-3. **Use meaningful node IDs**: `search_api` is clearer than `tool_1` in expressions
-4. **Test incrementally**: use the agent test panel to verify expressions resolve correctly
+1. **Keep expressions to a path**: there is nothing else available, so shape the
+   data in the node that produces it — ask an LLM Call node for JSON, or pick a
+   tool that returns the field you want
+2. **Validate your schema**: define an Input node schema to catch bad data early
+3. **Use meaningful node IDs**: `search_api` reads better than `tool_1` in an
+   expression, and a renamed node breaks every expression pointing at it
+4. **Test incrementally**: an expression that resolves to nothing does not fail
+   the run, so check the Test panel rather than assuming

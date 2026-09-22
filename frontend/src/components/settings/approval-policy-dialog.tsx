@@ -187,7 +187,7 @@ export function ApprovalPolicyDialog({
                 {...form.register('name')}
               />
               {errors.name && (
-                <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>
+                <p className="text-sm text-destructive mt-1">{errors.name.message}</p>
               )}
             </div>
 
@@ -211,7 +211,7 @@ export function ApprovalPolicyDialog({
                 Highest priority wins when several policies match.
               </p>
               {errors.priority && (
-                <p className="text-sm text-red-500 mt-1">{errors.priority.message}</p>
+                <p className="text-sm text-destructive mt-1">{errors.priority.message}</p>
               )}
             </div>
 
@@ -272,7 +272,7 @@ export function ApprovalPolicyDialog({
                     {...form.register(`match.${i}.attr` as const)}
                   />
                   {errors.match?.[i]?.attr && (
-                    <p className="text-sm text-red-500 mt-1">
+                    <p className="text-sm text-destructive mt-1">
                       {errors.match[i]?.attr?.message}
                     </p>
                   )}
@@ -335,7 +335,7 @@ export function ApprovalPolicyDialog({
             </div>
 
             {errors.steps?.message && (
-              <p className="text-sm text-red-500">{errors.steps.message}</p>
+              <p className="text-sm text-destructive">{errors.steps.message}</p>
             )}
 
             {stepsArray.fields.map((field, i) => (
@@ -347,7 +347,7 @@ export function ApprovalPolicyDialog({
                     {...form.register(`steps.${i}.name` as const)}
                   />
                   {errors.steps?.[i]?.name && (
-                    <p className="text-sm text-red-500 mt-1">
+                    <p className="text-sm text-destructive mt-1">
                       {errors.steps[i]?.name?.message}
                     </p>
                   )}
@@ -359,7 +359,7 @@ export function ApprovalPolicyDialog({
                     {...form.register(`steps.${i}.approverRole` as const)}
                   />
                   {errors.steps?.[i]?.approverRole && (
-                    <p className="text-sm text-red-500 mt-1">
+                    <p className="text-sm text-destructive mt-1">
                       {errors.steps[i]?.approverRole?.message}
                     </p>
                   )}
@@ -373,7 +373,7 @@ export function ApprovalPolicyDialog({
                     {...form.register(`steps.${i}.minApprovals` as const, { valueAsNumber: true })}
                   />
                   {errors.steps?.[i]?.minApprovals && (
-                    <p className="text-sm text-red-500 mt-1">
+                    <p className="text-sm text-destructive mt-1">
                       {errors.steps[i]?.minApprovals?.message}
                     </p>
                   )}

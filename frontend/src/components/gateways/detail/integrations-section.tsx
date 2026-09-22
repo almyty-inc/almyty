@@ -72,7 +72,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BookOpen className="h-5 w-5 text-purple-500" />
+              <BookOpen className="h-5 w-5 text-violet-500" />
               Skills Installation
             </CardTitle>
             <CardDescription>
@@ -85,7 +85,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-2">Run in your project root:</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{installCommand}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(installCommand, 'install-cmd')}>
+                <Button aria-label="Copy install command" size="sm" variant="outline" onClick={() => copyToClipboard(installCommand, 'install-cmd')}>
                   {copiedField === 'install-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -95,7 +95,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-2">Auto-sync skills when tools change:</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{watchCommand}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(watchCommand, 'watch-cmd')}>
+                <Button aria-label="Copy watch command" size="sm" variant="outline" onClick={() => copyToClipboard(watchCommand, 'watch-cmd')}>
                   {copiedField === 'watch-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -105,7 +105,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-2">Authenticate once (or use ALMYTY_TOKEN env var):</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{loginCommand}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(loginCommand, 'login-cmd')}>
+                <Button aria-label="Copy login command" size="sm" variant="outline" onClick={() => copyToClipboard(loginCommand, 'login-cmd')}>
                   {copiedField === 'login-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -162,7 +162,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-1">POST with JSON-RPC 2.0 payloads</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{mcpEndpoint}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(mcpEndpoint, 'mcp-endpoint')}>
+                <Button aria-label="Copy MCP JSON-RPC endpoint URL" size="sm" variant="outline" onClick={() => copyToClipboard(mcpEndpoint, 'mcp-endpoint')}>
                   {copiedField === 'mcp-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -172,7 +172,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-1">Server-Sent Events for streaming</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{sseEndpoint}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(sseEndpoint, 'sse-endpoint')}>
+                <Button aria-label="Copy MCP SSE transport URL" size="sm" variant="outline" onClick={() => copyToClipboard(sseEndpoint, 'sse-endpoint')}>
                   {copiedField === 'sse-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -181,7 +181,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <Label className="text-sm font-medium">Discovery</Label>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{discoveryUrl}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'discovery')}>
+                <Button aria-label="Copy MCP discovery URL" size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'discovery')}>
                   {copiedField === 'discovery' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -221,7 +221,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground">Run in your terminal:</p>
               <div className="flex gap-2">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">claude mcp add {(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')} --transport http {mcpEndpoint}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`claude mcp add ${(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')} --transport http ${mcpEndpoint}`, 'claude-code-cmd')}>
+                <Button aria-label="Copy Claude Code install command" size="sm" variant="outline" onClick={() => copyToClipboard(`claude mcp add ${(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')} --transport http ${mcpEndpoint}`, 'claude-code-cmd')}>
                   {copiedField === 'claude-code-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -271,7 +271,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <Label className="text-sm font-medium">Discovery (public)</Label>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{discoveryUrl}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'a2a-discovery')}>
+                <Button aria-label="Copy A2A discovery URL" size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'a2a-discovery')}>
                   {copiedField === 'a2a-discovery' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -281,7 +281,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-1">POST to register, GET to list</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{a2aBase}/agents</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${a2aBase}/agents`, 'a2a-agents')}>
+                <Button aria-label="Copy A2A agent registration URL" size="sm" variant="outline" onClick={() => copyToClipboard(`${a2aBase}/agents`, 'a2a-agents')}>
                   {copiedField === 'a2a-agents' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -291,7 +291,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-1">POST to send messages between agents</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{a2aBase}/messages</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${a2aBase}/messages`, 'a2a-messages')}>
+                <Button aria-label="Copy A2A messaging URL" size="sm" variant="outline" onClick={() => copyToClipboard(`${a2aBase}/messages`, 'a2a-messages')}>
                   {copiedField === 'a2a-messages' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -328,7 +328,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-1">POST with JSON-RPC 2.0 payloads (initialize, session/new, session/prompt, etc.)</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{acpBase}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(acpBase, 'acp-endpoint')}>
+                <Button aria-label="Copy ACP JSON-RPC endpoint URL" size="sm" variant="outline" onClick={() => copyToClipboard(acpBase, 'acp-endpoint')}>
                   {copiedField === 'acp-endpoint' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -338,7 +338,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-1">GET to retrieve agent capabilities, auth methods, and skills</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{discoveryUrl}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'acp-discovery')}>
+                <Button aria-label="Copy ACP discovery URL" size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'acp-discovery')}>
                   {copiedField === 'acp-discovery' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -395,7 +395,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground">Run in your terminal:</p>
               <div className="flex gap-2">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{acpServerCmd}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(acpServerCmd, 'acp-server-cmd')}>
+                <Button aria-label="Copy ACP server command" size="sm" variant="outline" onClick={() => copyToClipboard(acpServerCmd, 'acp-server-cmd')}>
                   {copiedField === 'acp-server-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -427,7 +427,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <Label className="text-sm font-medium">Discovery (public)</Label>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{discoveryUrl}</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'utcp-discovery')}>
+                <Button aria-label="Copy UTCP discovery URL" size="sm" variant="outline" onClick={() => copyToClipboard(discoveryUrl, 'utcp-discovery')}>
                   {copiedField === 'utcp-discovery' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -437,7 +437,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-1">POST to execute a tool via UTCP</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{utcpBase}/execute</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${utcpBase}/execute`, 'utcp-execute')}>
+                <Button aria-label="Copy UTCP execute tool URL" size="sm" variant="outline" onClick={() => copyToClipboard(`${utcpBase}/execute`, 'utcp-execute')}>
                   {copiedField === 'utcp-execute' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
@@ -447,7 +447,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <p className="text-xs text-muted-foreground mb-1">GET to retrieve the UTCP manual</p>
               <div className="flex gap-2 mt-1">
                 <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{utcpBase}/manual</code>
-                <Button size="sm" variant="outline" onClick={() => copyToClipboard(`${utcpBase}/manual`, 'utcp-manual')}>
+                <Button aria-label="Copy UTCP tool manual URL" size="sm" variant="outline" onClick={() => copyToClipboard(`${utcpBase}/manual`, 'utcp-manual')}>
                   {copiedField === 'utcp-manual' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>

@@ -99,6 +99,46 @@ export const BUILT_IN_TOOLS = {
 /** Interval between orphaned-emitter sweeps. */
 const RUNTIME_EMITTER_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 
+
+/** Page size for GET /agents/:id/runs when the caller does not ask for one. */
+export const DEFAULT_RUNS_PAGE_SIZE = 20;
+/**
+ * Hard ceiling on one page of runs. Matches the ceiling `tools.service.ts`
+ * and `gateways.service.ts` already apply to their own list endpoints.
+ */
+export const MAX_RUNS_PAGE_SIZE = 100;
+
+/**
+ * Columns the runs list response emits. `workingMemory` is deliberately
+ * absent — it is the run's scratch state, is never rendered in the list, and
+ * is one of the larger json columns on the row.
+ */
+export const AGENT_RUN_LIST_COLUMNS = {
+  id: true,
+  agentId: true,
+  organizationId: true,
+  userId: true,
+  endUserId: true,
+  conversationId: true,
+  mode: true,
+  status: true,
+  steps: true,
+  currentStep: true,
+  maxSteps: true,
+  input: true,
+  output: true,
+  error: true,
+  totalCost: true,
+  totalTokens: true,
+  executionTime: true,
+  recursionDepth: true,
+  toolCallCount: true,
+  metadata: true,
+  limits: true,
+  parentRunId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 @Injectable()
 export class AgentRuntimeService implements OnModuleInit {
   readonly logger = new Logger(AgentRuntimeService.name);
@@ -377,17 +417,29 @@ export class AgentRuntimeService implements OnModuleInit {
   }
 
   /**
-   * List runs for an agent
+   * List runs for an agent.
+   *
+   * `limit` is caller-set, so it needs a ceiling: `?limit=100000` used to put
+   * 100,000 rows in heap each carrying its full `steps` array. The number is
+   * the same one `tools.service.ts` and `gateways.service.ts` already use.
+   * `workingMemory` is projected away — it is the run's scratch state and
+   * nothing in the list response emits it.
    */
   async listRuns(agentId: string, organizationId: string, page = 1, limit = 20) {
-    const skip = (page - 1) * limit;
+    const take = Math.min(
+      Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : DEFAULT_RUNS_PAGE_SIZE,
+      MAX_RUNS_PAGE_SIZE,
+    );
+    const currentPage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const skip = (currentPage - 1) * take;
     const [data, total] = await this.runRepository.findAndCount({
       where: { agentId, organizationId },
       order: { createdAt: 'DESC' },
+      select: AGENT_RUN_LIST_COLUMNS,
       skip,
-      take: limit,
+      take,
     });
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return { data, total, page: currentPage, limit: take, totalPages: Math.ceil(total / take) };
   }
 
   /**
@@ -515,7 +567,16 @@ export class AgentRuntimeService implements OnModuleInit {
     if (approval.status === 'approved') {
       run.status = AgentRunStatus.RUNNING;
       await this.runRepository.save(run);
-      await this.runtimeQueue.add('next-step', { runId: run.id }, {
+      // Same seq-from-timestamp rule as the resume path above, and for
+      // the same reason. Without a seq the processor read it as 0 and
+      // enqueued the next step as `step:<runId>:1` -- an id already in
+      // Redis from before the pause, which Bull drops silently. The run
+      // then sat RUNNING with nothing queued until the reaper timed it
+      // out half an hour later with a misleading "worker likely
+      // terminated".
+      const resumeSeq = Date.now();
+      await this.runtimeQueue.add('next-step', { runId: run.id, seq: resumeSeq }, {
+        jobId: `step:${run.id}:${resumeSeq}`,
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
         removeOnComplete: 100,

@@ -4,8 +4,10 @@ import { Repository } from 'typeorm';
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 import { Inject, forwardRef } from '@nestjs/common';
-import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
+import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callPerplexity, callPerplexityStream, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
+import { decideEgress, hostMatches } from '../connections/egress-policy';
+import { llmCallOptionsFor } from './providers/safe-request';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
@@ -85,7 +87,7 @@ export function safeErrorBody(errorBody: any): string | null {
  * overwrites the real upstream error with a circular "not healthy
  * because it is not healthy".
  */
-export const LLM_HEALTH_GATE_MESSAGE = 'LLM provider is not healthy';
+export const LLM_HEALTH_GATE_MESSAGE = 'This provider is not healthy';
 
 /**
  * Extract the human-useful upstream provider error from an axios-style
@@ -171,7 +173,7 @@ export class LlmProvidersService {
       });
 
       if (!user?.hasPermissionInOrganization(organizationId, 'manage_llm_providers')) {
-        throw new ForbiddenException('User does not have permission to manage LLM providers');
+        throw new ForbiddenException('User does not have permission to manage providers');
       }
 
       // Keys never land on the provider row: a pasted key becomes a
@@ -184,6 +186,7 @@ export class LlmProvidersService {
         apiKey: apiKey ?? (createAny.credentialId ? MASKED_PROVIDER_KEY : undefined),
         usageApiKey,
       });
+      await this.assertProviderEgressAllowed(createDto.type, configuration as LlmProviderConfig, organizationId);
       await this.assertModelIsServed(createDto.type, configuration, organizationId, { apiKey, credentialId: createAny.credentialId });
 
 
@@ -242,6 +245,65 @@ export class LlmProvidersService {
     }
   }
 
+  /**
+   * Refuse a provider whose URL points somewhere private, unless this
+   * organization has said that host is theirs.
+   *
+   * Save time is the right gate: the URL is user-supplied here and used
+   * on every call afterwards, so one check here covers every later
+   * request rather than being re-argued per call site. The DNS-pinning
+   * agent still refuses a name that resolves privately at connect, which
+   * is the case this check cannot see.
+   */
+  private async assertProviderEgressAllowed(
+    type: LlmProviderType,
+    configuration: LlmProviderConfig,
+    organizationId: string,
+  ): Promise<void> {
+    // Never from the request body. The stamp is what lets a name past DNS
+    // pinning at connect, so accepting it as input would let anyone grant
+    // themselves the thing this gate exists to decide.
+    delete (configuration as any).egressApprovedHost;
+
+    // Build the URL the way the entity will, so the gate judges exactly
+    // what the caller will dial rather than a guess at it.
+    const probe = Object.assign(new LlmProvider(), { type, configuration });
+    let url: string;
+    try {
+      url = probe.getApiUrl();
+    } catch {
+      return; // No URL to judge; configuration validation owns that.
+    }
+    if (!url) return;
+
+    // The install-wide escape hatches still apply where they always did:
+    // an operator running Ollama on localhost has already said yes to
+    // private URLs for that provider type across the install.
+    if (llmCallOptionsFor(probe).allowPrivateUrls) return;
+
+    const organization = await this.organizationRepository.findOne({ where: { id: organizationId } });
+    const decision = decideEgress(url, { allowlist: organization?.settings?.egressAllowlist ?? [] });
+    if (!decision.allowed) {
+      throw new BadRequestException({ code: 'EGRESS_NOT_ALLOWED', message: decision.reason });
+    }
+
+    // Record the host whenever the organization has vouched for it, not
+    // only when the string gate needed the allowlist to say yes. A NAME
+    // passes that gate on its own — it is not knowably private until it
+    // resolves — so keying the stamp off the refusal would never fire for
+    // the case the stamp exists to serve.
+    let host: string | undefined;
+    try {
+      host = new URL(url).hostname;
+    } catch {
+      host = undefined;
+    }
+    const allowlist = organization?.settings?.egressAllowlist ?? [];
+    if (host && allowlist.some((pattern) => hostMatches(host as string, pattern))) {
+      configuration.egressApprovedHost = host;
+    }
+  }
+
   async updateProvider(
     providerId: string,
     updateDto: UpdateLlmProviderDto,
@@ -254,7 +316,7 @@ export class LlmProvidersService {
       });
 
       if (!provider) {
-        throw new NotFoundException('LLM provider not found');
+        throw new NotFoundException('Provider not found');
       }
 
       // Authorization: org owner/admin always, team-scoped requires team lead
@@ -283,6 +345,9 @@ export class LlmProvidersService {
         pastedKey = split.apiKey;
         pastedUsageKey = split.usageApiKey;
         provider.configuration = { ...provider.configuration, ...split.configuration };
+      }
+      if (updateDto.configuration) {
+        await this.assertProviderEgressAllowed(provider.type, provider.configuration, organizationId);
       }
       if (updateDto.configuration || updateAny.credentialId !== undefined) {
         this.runner.validateProviderConfiguration(
@@ -360,7 +425,7 @@ export class LlmProvidersService {
     });
 
     if (!provider) {
-      throw new NotFoundException('LLM provider not found');
+      throw new NotFoundException('Provider not found');
     }
 
     return includeSecrets ? provider : provider.maskSensitiveData() as LlmProvider;

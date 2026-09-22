@@ -42,7 +42,15 @@ describe('LlmChatRunnerHelper.callRouted', () => {
     expect(res.routing).toEqual({
       modelId: 'a', modelVersionId: 'v-a', vendorModelId: 'cheap', providerId: 'p-a', rationale: 'cheapest', attempt: 1, tried: [], rejected: [{ modelId: 'z', reason: 'lacks vision' }],
     });
-    expect(router.recordRoute).toHaveBeenCalledWith('org', res.routing, { userId: 'u', conversationId: 'conv' });
+    // The audit row gets what the call cost, not just which model
+    // answered: `audit_logs.cost` was left null and "spend by model last
+    // week" had no query.
+    expect(router.recordRoute).toHaveBeenCalledWith('org', res.routing, {
+      userId: 'u',
+      conversationId: 'conv',
+      cost: 0,
+      tokens: 2,
+    });
     expect(router.recordLatency).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'p-a' }), 1);
   });
 
@@ -78,7 +86,7 @@ describe('LlmChatRunnerHelper.callRouted', () => {
   });
 
   it('fails with NO_ROUTE when nothing is eligible', async () => {
-    const { runner } = build({ candidates: [], rejected: [{ modelId: 'a', reason: 'not selectable' }] }, jest.fn());
+    const { runner } = build({ candidates: [], rejected: [{ modelId: 'a', reason: 'not usable yet' }] }, jest.fn());
     await expect(runner.callLlmProvider(provider('x'), { messages: [], routing: {} }, session, [])).rejects.toMatchObject({ code: 'NO_ROUTE' });
   });
 

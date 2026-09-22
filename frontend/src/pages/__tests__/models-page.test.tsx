@@ -33,7 +33,7 @@ describe('ModelsPage', () => {
     expect(screen.getByRole('heading', { name: 'Models' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Catalog' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'Deployments' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Versions' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Tracked artifacts' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Providers' })).toBeInTheDocument()
     expect(screen.getByText('catalog-tab-content')).toBeInTheDocument()
   })

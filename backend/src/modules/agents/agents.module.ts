@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 
+import { AgentRole } from '../../entities/agent-role.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
@@ -19,6 +20,7 @@ import { AgentFile } from '../../entities/file.entity';
 
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
+import { AgentExecutionCancellationService } from './agent-execution-cancellation.service';
 import { AgentExecutionStateHelper } from './agent-execution-state.helper';
 import { AgentOpenAIStreamHelper } from './agent-openai-stream.helper';
 import { AgentNodeExecutor } from './agent-node-executor';
@@ -49,6 +51,16 @@ import { AgentRunsController } from './agent-runs.controller';
 import { AgentOpenAICompatController } from './agent-openai-compat.controller';
 
 import { LlmProvidersModule } from '../llm-providers/llm-providers.module';
+import { ModelCatalogModule } from '../model-catalog/model-catalog.module';
+import { AgentRolesService } from './agent-roles.service';
+import { AgentReadinessService } from './agent-readiness.service';
+import { AgentRolesController } from './agent-roles.controller';
+import { StrategiesController } from './strategies/strategies.controller';
+import { AgentExecutionSettingsController } from './agent-execution-settings.controller';
+import { AgentAnthropicCompatController } from './agent-anthropic-compat.controller';
+import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolver';
+import { OrchestratorService } from './strategies/orchestrator.service';
+import { Strategy } from '../../entities/strategy.entity';
 import { AgentConstraintsModule } from '../agent-constraints/agent-constraints.module';
 import { ToolsModule } from '../tools/tools.module';
 import { MemoryModule } from '../memory/memory.module';
@@ -61,6 +73,8 @@ import { BudgetsModule } from '../budgets/budgets.module';
   imports: [
     TypeOrmModule.forFeature([
       Agent,
+      AgentRole,
+      Strategy,
       AgentExecution,
       AgentRun,
       Tool,
@@ -78,6 +92,12 @@ import { BudgetsModule } from '../budgets/budgets.module';
     BullModule.registerQueue({ name: 'agent-scheduler' }),
     BullModule.registerQueue({ name: 'agent-runtime' }),
     forwardRef(() => LlmProvidersModule),
+    // ModelRouterService is exported ONLY here. Without this import the
+    // @Optional() router injections in AgentRolesService and
+    // OrchestratorService resolve to undefined and every resolved role
+    // answers "routing is not available on this install" -- a silence
+    // that looked like a missing license rather than a missing import.
+    forwardRef(() => ModelCatalogModule),
     forwardRef(() => ToolsModule),
     forwardRef(() => MemoryModule),
     forwardRef(() => A2AModule),
@@ -86,8 +106,10 @@ import { BudgetsModule } from '../budgets/budgets.module';
     AgentConstraintsModule,
     BudgetsModule,
   ],
-  providers: [AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper],
-  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController],
-  exports: [AgentsService, AgentExecutionEngine, AgentRuntimeService],
+  providers: [AgentReadinessService, AgentRunReaperService, OrchestratorService, StrategyPipelineResolver,
+    AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService],
+  controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController],
+  exports: [
+    AgentRolesService, AgentsService, AgentExecutionEngine, AgentRuntimeService, AgentExecutionCancellationService],
 })
 export class AgentsModule {}

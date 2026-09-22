@@ -21,8 +21,14 @@ export function IntegrationSnippets({ agent }: IntegrationSnippetsProps) {
   const { currentOrganization } = useOrganizationStore()
 
   const apiBase = window.location.origin.replace('app.', 'api.')
-  const orgSlug = currentOrganization?.slug || currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
-  const agentRef = agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  // Trailing separators are dropped: a name ending in punctuation --
+  // "Support Bot (Copy)" -- otherwise produced a URL with a bare hyphen
+  // hanging off the end, which is both ugly and, until the resolver was
+  // taught this same rule, a 404.
+  const slugify = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  const orgSlug = currentOrganization?.slug || (currentOrganization?.name && slugify(currentOrganization.name)) || 'org'
+  const agentRef = slugify(agent.name)
   const unifiedUrl = `${apiBase}/${orgSlug}/${agentRef}`
   const snippets: Record<string, string> = {
     curl: `# Unified endpoint

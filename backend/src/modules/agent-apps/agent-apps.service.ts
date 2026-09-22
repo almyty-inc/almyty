@@ -43,6 +43,7 @@ import {
 } from './distribution-publish';
 import { GatewaysService } from '../gateways/gateways.service';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
+import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 
 
 export interface CreateAppDto {
@@ -59,6 +60,13 @@ export interface CreateAppDto {
 }
 
 export type UpdateAppDto = Partial<CreateAppDto> & { isActive?: boolean };
+
+/**
+ * Ceiling on one page of apps. The list is not caller-paginated; this only
+ * stops an organization with an unbounded number of products from putting
+ * all of them in heap at once.
+ */
+export const MAX_APPS_PER_PAGE = 200;
 
 /**
  * The factory floor: creating, configuring and shipping agent products.
@@ -92,8 +100,111 @@ export class AgentAppsService {
     const apps = await this.appRepository.find({
       where: { organizationId },
       order: { createdAt: 'DESC' },
+      take: MAX_APPS_PER_PAGE,
     });
-    return Promise.all(apps.map(async (app) => ({ ...app, health: await this.health(organizationId, app.agentIds ?? []) })));
+
+    // The health of every app's agents in three queries rather than
+    // 1 + 2 x (apps x agents). This used to issue two findOnes per agent of
+    // every app, plus a name lookup per failure: 20 apps x 3 agents was 121
+    // queries per page load, against the two largest tables in the schema.
+    const agentIds = [...new Set(apps.flatMap((app) => app.agentIds ?? []))];
+    const latest = await this.latestActivityByAgent(organizationId, agentIds);
+    const failingIds = [...latest.entries()]
+      .filter(([, a]) => a.status === 'failed' || a.status === 'timeout')
+      .map(([agentId]) => agentId);
+    const names = await this.agentNames(organizationId, failingIds);
+
+    return apps.map((app) => ({
+      ...app,
+      health: this.healthFrom(app.agentIds ?? [], latest, names),
+    }));
+  }
+
+  /**
+   * The most recent execution or run per agent, whichever is later.
+   *
+   * One windowed `DISTINCT ON (agentId)` per table: Postgres keeps only the
+   * first row of each agent's `createdAt DESC` ordering, so this is the same
+   * answer the per-agent findOne pair produced, in two queries instead of
+   * two per agent.
+   */
+  private async latestActivityByAgent(
+    organizationId: string,
+    agentIds: string[],
+  ): Promise<Map<string, { status: string; createdAt: Date; error?: string | null }>> {
+    const latest = new Map<string, { status: string; createdAt: Date; error?: string | null }>();
+    if (!agentIds.length) return latest;
+
+    const newest = <T extends { agentId: string; status: string; createdAt: Date; error?: string | null }>(
+      rows: T[],
+    ) => {
+      for (const row of rows) {
+        const current = latest.get(row.agentId);
+        if (!current || new Date(row.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+          latest.set(row.agentId, { status: row.status, createdAt: row.createdAt, error: row.error });
+        }
+      }
+    };
+
+    const [executions, runs] = await Promise.all([
+      this.executionRepository
+        .createQueryBuilder('execution')
+        .select(['execution.agentId', 'execution.status', 'execution.createdAt', 'execution.error'])
+        .where('execution.organizationId = :organizationId', { organizationId })
+        .andWhere('execution.agentId IN (:...agentIds)', { agentIds })
+        .distinctOn(['"execution"."agentId"'])
+        .orderBy('execution.agentId', 'ASC')
+        .addOrderBy('execution.createdAt', 'DESC')
+        .getMany(),
+      this.runRepository
+        .createQueryBuilder('run')
+        .select(['run.agentId', 'run.status', 'run.createdAt', 'run.error'])
+        .where('run.organizationId = :organizationId', { organizationId })
+        .andWhere('run.agentId IN (:...agentIds)', { agentIds })
+        .distinctOn(['"run"."agentId"'])
+        .orderBy('run.agentId', 'ASC')
+        .addOrderBy('run.createdAt', 'DESC')
+        .getMany(),
+    ]);
+
+    newest(executions as any[]);
+    newest(runs as any[]);
+    return latest;
+  }
+
+  /** Display names for the agents a failure will be reported against. */
+  private async agentNames(
+    organizationId: string,
+    agentIds: string[],
+  ): Promise<Map<string, string>> {
+    if (!agentIds.length) return new Map();
+    const agents = await this.agentRepository.find({
+      where: { id: In(agentIds), organizationId },
+      select: { id: true, name: true },
+    });
+    return new Map(agents.map((a) => [a.id, a.name]));
+  }
+
+  /** The same verdict `health()` reaches, from already-loaded rows. */
+  private healthFrom(
+    agentIds: string[],
+    latest: Map<string, { status: string; createdAt: Date; error?: string | null }>,
+    names: Map<string, string>,
+  ): AppHealth {
+    for (const agentId of agentIds) {
+      const activity = latest.get(agentId);
+      if (!activity) continue;
+      if (activity.status === 'failed' || activity.status === 'timeout') {
+        return {
+          state: 'failing',
+          agentId,
+          agentName: names.get(agentId) ?? agentId,
+          at: activity.createdAt,
+          message: activity.error ?? `Last run ${activity.status}`,
+        };
+      }
+    }
+    return { state: 'ok' };
   }
 
   /**
@@ -273,6 +384,13 @@ export class AgentAppsService {
       // SSO is an enterprise entitlement; until this was passed in, every
       // SSO app was refused at publish whether the org had it or not.
       hasEnterpriseAuth: this.orgLicense ? await this.orgLicense.hasForOrg(app.organizationId, 'sso') : false,
+      // And the same for white label, which was left out when the SSO
+      // half above was fixed -- so WHITE_LABEL_NOT_ENTITLED and
+      // DISCLOSURE_REMOVAL_NOT_ENTITLED refused every app, entitled or
+      // not, for exactly the reason the comment above describes.
+      hasWhiteLabel: this.orgLicense
+        ? await this.orgLicense.hasForOrg(app.organizationId, EE_ENTITLEMENTS.WHITE_LABEL)
+        : false,
       ...context,
     };
   }
@@ -362,6 +480,25 @@ export class AgentAppsService {
       throw new BadRequestException(refusals.map((r) => r.message).join(' '));
     }
 
+    // Stand the gateway up but keep it quiet, record it on the
+    // distribution, and only then let it answer.
+    //
+    // The gateway used to be created ACTIVE — routable the instant it
+    // committed — and the distribution row saved afterwards, with no
+    // transaction. A pod evicted between the two left a Slack or
+    // WhatsApp surface answering customers while the distribution said
+    // not-live and carried no gatewayId, and unpublishDistribution
+    // resolves the gateway through that id, so the product had no
+    // handle on the thing that was talking.
+    //
+    // Activating last inverts the worst case instead of transacting
+    // over it: a crash now leaves a distribution marked LIVE in front
+    // of a gateway that is not answering. That is visible in the UI,
+    // takes no messages, and republishing (which is idempotent and
+    // reactivates by endpoint, not by gatewayId) fixes it. A
+    // transaction would not help with the half that matters — the
+    // gateway's own platform-side registration is not a database
+    // write and cannot be rolled back.
     const gateway = await this.gateways.upsertForDistribution(
       {
         name: gatewayNameFor(app, target),
@@ -378,11 +515,16 @@ export class AgentAppsService {
       },
       organizationId,
       userId,
+      { activate: false },
     );
 
     distribution.gatewayId = gateway.id;
     distribution.status = DistributionStatus.LIVE;
-    return this.distributionRepository.save(distribution);
+    const saved = await this.distributionRepository.save(distribution);
+
+    await this.gateways.activateGateway(gateway.id, organizationId, userId);
+
+    return saved;
   }
 
   /**

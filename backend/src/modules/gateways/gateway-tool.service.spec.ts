@@ -206,8 +206,12 @@ describe('GatewayToolService', () => {
       expect(gatewayRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'gateway-1', organizationId: 'org-1' },
       });
+      // Org-scoped, like the gateway lookup above it. Unscoped, an
+      // org-A admin holding an org-B tool uuid could write a
+      // cross-tenant gateway_tools row — and that table has no
+      // organization column, so nothing below rejected it either.
       expect(toolRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 'tool-1' },
+        where: { id: 'tool-1', organizationId: 'org-1' },
       });
       expect(gatewayToolRepository.create).toHaveBeenCalledWith({
         gatewayId: 'gateway-1',
@@ -246,6 +250,29 @@ describe('GatewayToolService', () => {
       await expect(
         service.associateTool('gateway-1', createGatewayToolDto, 'org-1', 'user-1')
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('names draft, and the bulk activation that clears it, when refusing a generated tool', async () => {
+      // 'Can only associate active tools' never said which state the
+      // tool was in or where to change it -- and since every tool
+      // generated from a schema is a draft, this is the first refusal a
+      // new user sees on the advertised path.
+      const mockGateway = { id: 'gateway-1', organizationId: 'org-1' };
+      const mockTool = { id: 'tool-1', name: 'listPets', status: ToolStatus.DRAFT };
+
+      gatewayRepository.findOne.mockResolvedValue(mockGateway);
+      toolRepository.findOne.mockResolvedValue(mockTool);
+
+      await expect(
+        service.associateTool('gateway-1', createGatewayToolDto, 'org-1', 'user-1')
+      ).rejects.toThrow(BadRequestException);
+
+      const error = await service
+        .associateTool('gateway-1', createGatewayToolDto, 'org-1', 'user-1')
+        .catch((e) => e);
+      expect(error.message).toContain('listPets');
+      expect(error.message).toContain('draft');
+      expect(error.message).toContain('Activate selected');
     });
 
     it('should throw BadRequestException for existing association', async () => {
@@ -521,6 +548,56 @@ describe('GatewayToolService', () => {
       expect(result.skipped.some(s => s.toolId === 'tool-3')).toBe(true);
     });
 
+    it('names the state a skipped draft tool is in, and where to fix it', async () => {
+      // Every tool generated from a schema starts as a draft, so this is
+      // the skip reason a new user is guaranteed to hit. 'Tool not found
+      // or not active' covered both cases at once and read as the wrong
+      // one -- a user who had just generated eighteen tools was told they
+      // did not exist.
+      const mockGateway = { id: 'gateway-1', name: 'Test Gateway', organizationId: 'org-1' };
+      const mockUser = { id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) };
+
+      gatewayRepository.findOne.mockResolvedValue(mockGateway);
+      userRepository.findOne.mockResolvedValue(mockUser);
+      toolRepository.find.mockResolvedValue([
+        { id: 'tool-1', name: 'listPets', status: ToolStatus.DRAFT },
+        { id: 'tool-2', name: 'getPetById', status: ToolStatus.DRAFT },
+        { id: 'tool-3', name: 'addPet', status: ToolStatus.ACTIVE },
+      ]);
+      gatewayToolRepository.find.mockResolvedValue([]);
+      gatewayToolRepository.create.mockImplementation((data) => ({ id: `new-${data.toolId}`, ...data }));
+      gatewayToolRepository.save.mockImplementation((data) => Promise.resolve(data));
+
+      const result = await service.bulkAssociateTools('gateway-1', bulkDto, 'org-1', 'user-1');
+
+      expect(result.associated).toHaveLength(1);
+      const draftSkip = result.skipped.find(s => s.toolId === 'tool-1');
+      expect(draftSkip?.reason).toContain('listPets');
+      expect(draftSkip?.reason).toContain('draft');
+      expect(draftSkip?.reason).toMatch(/Activate/i);
+      // A tool that genuinely is not in this org reads differently.
+      expect(draftSkip?.reason).not.toContain('not found');
+    });
+
+    it('distinguishes a tool that is not in the organization from one that is a draft', async () => {
+      const mockGateway = { id: 'gateway-1', name: 'Test Gateway', organizationId: 'org-1' };
+      const mockUser = { id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) };
+
+      gatewayRepository.findOne.mockResolvedValue(mockGateway);
+      userRepository.findOne.mockResolvedValue(mockUser);
+      // tool-2 and tool-3 are absent from this organization entirely.
+      toolRepository.find.mockResolvedValue([
+        { id: 'tool-1', name: 'listPets', status: ToolStatus.DRAFT },
+      ]);
+      gatewayToolRepository.find.mockResolvedValue([]);
+
+      const result = await service.bulkAssociateTools('gateway-1', bulkDto, 'org-1', 'user-1');
+
+      expect(result.skipped.find(s => s.toolId === 'tool-2')?.reason)
+        .toBe('Tool not found in this organization');
+      expect(result.skipped.find(s => s.toolId === 'tool-1')?.reason).toContain('draft');
+    });
+
     it('should handle save errors gracefully', async () => {
       const mockGateway = { id: 'gateway-1', name: 'Test Gateway', organizationId: 'org-1' };
       const mockUser = { id: 'user-1', hasPermissionInOrganization: jest.fn().mockReturnValue(true) };
@@ -791,7 +868,9 @@ describe('GatewayToolService', () => {
       const result = await service.getAvailableTools('gateway-1', 'org-1');
 
       expect(result).toBe(mockAvailableTools);
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith('tool.status = :status', { status: ToolStatus.ACTIVE });
+      // Org first, then status: the candidate set is this org's tools.
+      expect(mockQueryBuilder.where).toHaveBeenCalledWith('tool.organizationId = :organizationId', { organizationId: 'org-1' });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('tool.status = :status', { status: ToolStatus.ACTIVE });
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
         'tool.id NOT IN (:...associatedIds)',
         { associatedIds: ['tool-1', 'tool-2'] }
@@ -817,7 +896,12 @@ describe('GatewayToolService', () => {
       const result = await service.getAvailableTools('gateway-1', 'org-1');
 
       expect(result).toBe(mockAvailableTools);
-      expect(mockQueryBuilder.andWhere).not.toHaveBeenCalled();
+      // No associations to exclude, so no NOT IN clause. The status
+      // filter still rides on andWhere behind the org predicate.
+      expect(mockQueryBuilder.andWhere).not.toHaveBeenCalledWith(
+        'tool.id NOT IN (:...associatedIds)',
+        expect.anything(),
+      );
     });
 
     it('should throw NotFoundException when gateway not found', async () => {

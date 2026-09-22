@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
-import { callOpenAI, callAnthropic, callGoogle, callCohere, callHuggingFace, callCustomProvider } from './providers';
+import { callOpenAI, callAnthropic, callGoogle, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { makeEnvelopeCryptoMock } from '../../test/envelope-crypto.mock';
@@ -1700,6 +1700,7 @@ describe('LlmProvidersService', () => {
       it('should validate AWS Bedrock configuration', () => {
         expect(() => {
           service['validateProviderConfiguration'](LlmProviderType.AWS_BEDROCK, {
+            apiKey: 'bedrock-api-key',
             bedrock: { region: 'us-east-1' },
           });
         }).not.toThrow();
@@ -1709,6 +1710,17 @@ describe('LlmProvidersService', () => {
         expect(() => {
           service['validateProviderConfiguration'](LlmProviderType.AWS_BEDROCK, {});
         }).toThrow(BadRequestException);
+      });
+
+      it('rejects a Bedrock provider with a region but no API key', () => {
+        // The OpenAI-compatible surface authenticates with a Bedrock API
+        // key as a bearer token. Accepting a region alone is how a provider
+        // that could never answer used to save cleanly.
+        expect(() => {
+          service['validateProviderConfiguration'](LlmProviderType.AWS_BEDROCK, {
+            bedrock: { region: 'us-east-1' },
+          });
+        }).toThrow(/requires a Bedrock API key/);
       });
 
       it('should validate Custom provider configuration', () => {
@@ -1864,8 +1876,9 @@ describe('LlmProvidersService', () => {
       it('should look up tools scoped to the calling organization', async () => {
         // Regression: the lookup was `{ name: toolCall.name }` with NO
         // org filter — an LLM in org A could resolve and execute a tool
-        // named e.g. `send_email` from org B.
-        toolRepository.findOne.mockResolvedValue(null);
+        // named e.g. `send_email` from org B. The lookup is now one
+        // batched query for the whole turn, still org-scoped.
+        toolRepository.find.mockResolvedValue([]);
 
         const toolCalls: any[] = [
           { id: 'call-1', name: 'send_email', parameters: {} },
@@ -1874,9 +1887,10 @@ describe('LlmProvidersService', () => {
 
         await service['executeToolCalls'](toolCalls, session as any, 'org-1');
 
-        expect(toolRepository.findOne).toHaveBeenCalledWith({
-          where: { name: 'send_email', organizationId: 'org-1' },
+        expect(toolRepository.find).toHaveBeenCalledWith({
+          where: [{ name: 'send_email', organizationId: 'org-1' }],
         });
+        expect(toolRepository.findOne).not.toHaveBeenCalled();
         // Tool was not found in our org → mark as error, do NOT execute.
         expect(toolCalls[0].error).toContain('not found');
         expect(toolExecutorService.executeTool).not.toHaveBeenCalled();
@@ -1916,7 +1930,7 @@ describe('LlmProvidersService', () => {
         name: 'get_weather',
       };
 
-      toolRepository.findOne.mockResolvedValue(mockTool);
+      toolRepository.find.mockResolvedValue([{ ...mockTool, organizationId: 'org-1' }]);
       toolExecutorService.executeTool.mockRejectedValue(new Error('Tool execution failed'));
 
       const toolCalls: any = [
@@ -1934,7 +1948,7 @@ describe('LlmProvidersService', () => {
     });
 
     it('should set error when tool not found during execution', async () => {
-      toolRepository.findOne.mockResolvedValue(null);
+      toolRepository.find.mockResolvedValue([]);
 
       const toolCalls: any = [
         {
@@ -2426,74 +2440,6 @@ describe('LlmProvidersService', () => {
     });
   });
 
-  describe('callCohere', () => {
-    it('should call Cohere API successfully', async () => {
-      const mockProvider = {
-        id: 'provider-1',
-        type: LlmProviderType.COHERE,
-        configuration: { apiKey: 'test-key', model: 'command', timeout: 30000 },
-        getApiUrl: jest.fn().mockReturnValue('https://api.cohere.ai/v1'),
-        getAuthHeaders: jest.fn().mockReturnValue({ 'Authorization': 'Bearer test-key' }),
-      };
-
-      const mockAxios = require('axios');
-      mockAxios.default = jest.fn().mockResolvedValue({
-        data: {
-          text: 'Response from Cohere',
-          finish_reason: 'COMPLETE',
-        },
-      });
-
-      const chatRequest: ChatRequest = {
-        messages: [
-          { role: MessageRole.USER, content: 'Previous message' },
-          { role: MessageRole.ASSISTANT, content: 'Previous response' },
-          { role: MessageRole.USER, content: 'Current message' },
-        ],
-      };
-
-      const mockSession = { id: 'session-1', context: {} };
-
-      jest.spyOn(service as any, 'calculateProviderCost').mockReturnValue(0.001);
-
-      const result = await callCohere(mockProvider as any, chatRequest, mockSession as any, [], Date.now(), () => 0.001);
-
-      expect(result.message.content).toBe('Response from Cohere');
-    });
-  });
-
-  describe('callHuggingFace', () => {
-    it('should call HuggingFace API successfully', async () => {
-      const mockProvider = {
-        id: 'provider-1',
-        type: LlmProviderType.HUGGINGFACE,
-        configuration: { apiKey: 'test-key', model: 'gpt2', timeout: 30000 },
-        getApiUrl: jest.fn().mockReturnValue('https://api-inference.huggingface.co/models'),
-        getAuthHeaders: jest.fn().mockReturnValue({ 'Authorization': 'Bearer test-key' }),
-      };
-
-      const mockAxios = require('axios');
-      mockAxios.default = jest.fn().mockResolvedValue({
-        data: [
-          {
-            generated_text: 'user: Hello\nassistant: Hello! How can I help you?',
-          },
-        ],
-      });
-
-      const chatRequest: ChatRequest = {
-        messages: [{ role: MessageRole.USER, content: 'Hello' }],
-      };
-
-      const mockSession = { id: 'session-1', context: {} };
-
-      const result = await callHuggingFace(mockProvider as any, chatRequest, mockSession as any, [], Date.now());
-
-      expect(result.message.content).toBeDefined();
-      expect(result.cost).toBe(0); // HuggingFace is free
-    });
-  });
-
   describe('callCustomProvider', () => {
     it('should call custom provider with OpenAI format', async () => {
       const mockProvider = {
@@ -2796,7 +2742,7 @@ describe('LlmProvidersService', () => {
         name: 'get_weather',
       };
 
-      toolRepository.findOne.mockResolvedValue(mockTool);
+      toolRepository.find.mockResolvedValue([{ ...mockTool, organizationId: 'org-1' }]);
       toolExecutorService.executeTool.mockResolvedValue({
         success: true,
         data: { temperature: 72 },
@@ -2827,7 +2773,7 @@ describe('LlmProvidersService', () => {
         name: 'get_weather',
       };
 
-      toolRepository.findOne.mockResolvedValue(mockTool);
+      toolRepository.find.mockResolvedValue([{ ...mockTool, organizationId: 'org-1' }]);
       toolExecutorService.executeTool.mockResolvedValue({
         success: false,
         error: 'API timeout',
@@ -2854,7 +2800,7 @@ describe('LlmProvidersService', () => {
         name: 'get_weather',
       };
 
-      toolRepository.findOne.mockResolvedValue(mockTool);
+      toolRepository.find.mockResolvedValue([{ ...mockTool, organizationId: 'org-1' }]);
       toolExecutorService.executeTool.mockResolvedValue({
         success: true,
         data: { temperature: 72 },

@@ -5,7 +5,6 @@ import { useForm } from 'react-hook-form'
 
 import { render } from '../../../test/setup'
 import { EditProviderDialog } from '../edit-provider-dialog'
-import { ProviderDetailsSheet } from '../provider-details-sheet'
 import { CredentialRefSummary, isMaskedKey } from '../credential-slot'
 
 vi.mock('@/lib/api', () => ({
@@ -135,21 +134,5 @@ describe('EditProviderDialog credential slots', () => {
     render(<EditHarness provider={withRef} onUpdate={vi.fn()} />)
     const slot = within(screen.getByTestId('credential-slot-credentialId'))
     expect(slot.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
-  })
-})
-
-describe('ProviderDetailsSheet configuration tab', () => {
-  it('shows the credential references instead of a key field', async () => {
-    const provider: any = {
-      ...withRef,
-      status: 'active', organizationId: 'org', totalRequests: 0, successfulRequests: 0, totalTokensUsed: 0, totalCost: 0, isHealthy: true, createdAt: '', updatedAt: '',
-      usageCredentialRef: { id: 'conn-adm', name: 'OpenAI admin', connectorKey: 'openai', healthStatus: 'unknown' },
-    }
-    render(<ProviderDetailsSheet selectedProvider={provider} onClose={() => {}} providerMetrics={null} toggleProviderStatusMutation={{ isPending: false, mutate: vi.fn() } as any} onOpenTestDialog={() => {}} />)
-    await userEvent.click(screen.getByRole('tab', { name: 'Config' }))
-    const refs = await screen.findAllByTestId('credential-ref')
-    expect(refs[0]).toHaveTextContent('OpenAI prod')
-    expect(refs[1]).toHaveTextContent('OpenAI admin')
-    expect(screen.queryByDisplayValue('***masked***')).not.toBeInTheDocument()
   })
 })

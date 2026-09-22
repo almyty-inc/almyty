@@ -148,6 +148,67 @@ For these the connector declares the existing `format` validation, which
 checks field shapes and puts every URL through the SSRF guard without
 opening a connection.
 
+## CLI
+
+`@almyty/connections`, documented in `packages/connections-cli/README.md`.
+Every read command takes `--json`.
+
+```
+npx @almyty/connections connectors [--kind inference|deployment|memory|mcp|tool_source|channel|cloud|registry]
+npx @almyty/connections list
+npx @almyty/connections get <id>
+npx @almyty/connections connect <connectorKey> [--method m] [--owner org|user] [--name n]
+                               [--input-file <path>] [--input-stdin] [--input '<json>']
+                               [--headless] [--open]
+npx @almyty/connections complete <connectorKey> --state s --code c
+npx @almyty/connections validate <id>
+npx @almyty/connections rotate <id> [--input-file <path>] [--input-stdin] [--headless] [--open]
+npx @almyty/connections disconnect <id>
+npx @almyty/connections grants <id>
+npx @almyty/connections grant <id> --principal user|team|role|agent|workspace --to <principalId>
+                               [--permission use|manage] [--expires <iso8601>]
+npx @almyty/connections revoke <id> <grantId>
+```
+
+`connect` picks the connector's best method unless `--method` names another,
+which is the same "best first" order the connect sheet renders. For a form
+method it prints the connector's own guidance and the page where the key is
+created, then prompts for each field.
+
+**No secret is taken as a flag value.** argv is visible in `ps`, kept in shell
+history and echoed by most CI runners, so a key that travelled that way has to
+be treated as disclosed. In order of preference: the connector's sign-in flow
+where it has one (nothing is typed), the prompt (the default; `x-secret`
+fields are read without echo), `--input-file <path>`, or `--input-stdin`.
+`--input '<json>'` remains for the fields a connector does not mark
+`x-secret` and is refused the moment it carries one that is, naming the field
+and the safe alternatives without repeating the value.
+
+Unattended runs are handled rather than hung. Without a terminal to prompt on,
+`connect` and `rotate` say so and name the two input flags, instead of reading
+end-of-file and submitting an empty form the provider then rejects for an
+unrelated reason. `--input-stdin` with a terminal on stdin is refused for the
+same reason.
+
+`--headless` sends `mode: 'headless'`, and the printed instruction follows the
+`completeWith` the API answers with: a code to paste into `complete` when the
+provider prints one (OpenRouter), and "approve in the browser, it finishes on
+its own" when the flow completes on the callback (Slack). The two are not
+interchangeable — the callback consumes the state, so `complete` cannot finish
+a browser flow.
+
+`rotate` carries the whole exchange through: a pasted-key connector answers a
+rotate with the form, which the CLI prompts for and sends back, so the secret
+is actually replaced. A sign-in connector returns a new authorize URL.
+
+`validate` exits non-zero unless the health comes back `valid`, so it works as
+a check, and prints the next step for the status it got: rotate for `failed`,
+`expired` and `revoked`; nothing to rotate for `quota`, where the credential
+is fine and the account is out of allowance.
+
+Exit codes are the suite's shared table: 0 success, 1 unexpected, 2 usage,
+3 not authenticated, 4 not found, 5 the operation ran and failed.
+
 ## Custom connectors
 
 Admins can add connectors the catalog does not have: any
@@ -209,3 +270,44 @@ allow-list with the date they go away.
 Not yet on a reference, listed on that allow-list: outbound webhook
 secrets, standalone HTTP tool auth, the audit stream token and the SSO
 client secret and SCIM token.
+
+## Reaching a private host
+
+A provider URL that points at a private, loopback or link-local address is
+refused when you save it. That covers the addresses a string can be known
+by: `http://10.0.0.5/v1`, `http://localhost:8000`, `http://127.0.0.1`,
+`http://169.254.169.254`.
+
+If the endpoint really is on your network, add its host to the
+organization's allowlist and save again:
+
+```http
+PATCH /organizations/{id}
+{ "settings": { "egressAllowlist": ["10.0.0.5", "localhost", "*.internal.acme.test"] } }
+```
+
+Hosts, not URLs. A leading `*.` matches one label or more. The allowlist is
+per organization on purpose: the install-wide `OLLAMA_ALLOW_PRIVATE_URLS`
+and `LLM_ALLOW_PRIVATE_URLS` flags it stands beside open every private
+range to every organization on the install, which is a far larger hole
+than the one anybody is trying to make. Those flags still work where they
+always did.
+
+**What this check cannot do.** A hostname is not known to be private until
+it resolves, so `http://gpu-1.internal/v1` passes the save-time check. It
+is refused later instead: every outbound call resolves through an agent
+that re-validates the address it actually got, before a socket opens. That
+also defeats the `/etc/hosts` trick — pointing a public-looking name at an
+internal address and sending a matching `Host` header — because the name
+is never what we judge.
+
+Allowlisting a hostname works end to end. When you save a provider whose
+host is on the allowlist, that one host is recorded on the provider, and
+the connect-time check makes the same exception for that name and no
+other. Every other name the process resolves is checked as strictly as
+before.
+
+The record is never taken from a request body — it is the thing that lets
+a name past the resolution check, so accepting it as input would hand the
+decision to whoever is asking. Remove a host from the allowlist and the
+record is dropped the next time that provider is saved.

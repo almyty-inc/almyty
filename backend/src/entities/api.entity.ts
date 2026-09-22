@@ -68,6 +68,22 @@ export class Api {
   organizationId: string;
 
   /**
+   * Why the last schema import failed, and when.
+   *
+   * The reason used to live only in Redis, read back as
+   * `job.failedReason`. Imports are enqueued with `removeOnFail: 50`, so
+   * after fifty further failures — or one Redis restart — a user asking
+   * "why did my import fail?" got nothing at all, for an operation that
+   * can take minutes and fail for a dozen legible reasons. Postgres is
+   * where the answer belongs.
+   */
+  @Column({ type: 'text', nullable: true })
+  lastImportError: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastImportFailedAt: Date | null;
+
+  /**
    * Team-scoping. visibility='org' (default) is org-wide; 'team'
    * requires teamId. Constraint enforced at DB level via
    * 1745340000000-TeamScopingPerEntity. Listing filters use

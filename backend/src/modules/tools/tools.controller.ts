@@ -455,7 +455,7 @@ export class ToolsController {
     @Request() req: any,
   ) {
     try {
-      const tool = await this.toolGeneratorService.regenerateToolFromOperation(toolId);
+      const tool = await this.toolGeneratorService.regenerateToolFromOperation(toolId, organizationId);
 
       return {
         success: true,

@@ -4,15 +4,22 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  JoinColumn,
+  ManyToOne,
   ManyToMany,
   TreeParent,
   TreeChildren,
   Tree,
+  Index,
+  Unique,
 } from 'typeorm';
 import { Tool } from './tool.entity';
+import { Organization } from './organization.entity';
 
 @Entity('tool_categories')
 @Tree('closure-table')
+@Index('IDX_tool_categories_organizationId', ['organizationId'])
+@Unique('UQ_tool_categories_org_slug', ['organizationId', 'slug'])
 export class ToolCategory {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -23,11 +30,18 @@ export class ToolCategory {
   @Column({ nullable: true })
   description: string;
 
-  @Column({ unique: true })
+  // Unique per organization, not per install — see
+  // `@Unique` above. A globally unique slug means the first tenant to
+  // take "web" takes it from everyone else.
+  @Column()
   slug: string;
 
-  @Column()
+  @Column({ type: 'uuid' })
   organizationId: string;
+
+  @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'organizationId' })
+  organization: Organization;
 
   @Column({ nullable: true })
   icon: string; // Icon name or URL

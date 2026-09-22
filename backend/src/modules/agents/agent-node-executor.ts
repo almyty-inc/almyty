@@ -4,7 +4,9 @@ import { Repository } from 'typeorm';
 
 import { AgentTemplateResolver, ExecutionContext } from './agent-template-resolver';
 import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
+import { extractUpstreamErrorMessage, safeErrorBody } from '../llm-providers/llm-providers.service';
 import type { RouteAttribution } from '../model-catalog/routing/model-router.service';
+import { ModelRouterService } from '../model-catalog/routing/model-router.service';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { Organization } from '../../entities/organization.entity';
 
@@ -15,16 +17,57 @@ import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
 import { AgentSubAgentExecutors } from './agent-subagent-executors.helper';
 import { AgentVerifierHelper, VerifyPolicy } from './agent-verifier.helper';
+import {
+  EXTRACT_CONTEXT_INSTRUCTION,
+  ExtractedContext,
+  ExtractedContextInvalid,
+  parseExtractedContext,
+} from './strategies/extract-context';
+import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from './input-schema';
 
 export interface NodeExecutionResult {
   output: any;
   cost?: number;
   tokens?: number;
+  /**
+   * The prompt/completion split behind `tokens`. Providers return it
+   * (LLMResponse.usage), but every layer above collapsed it into one
+   * number, so the OpenAI-compatible route had no honest value for
+   * `prompt_tokens`/`completion_tokens` and reported zeros. Optional
+   * because a non-llm node has no split to report.
+   */
+  inputTokens?: number;
+  outputTokens?: number;
   executionTime?: number;
   /** Which catalog card answered, when the node was routed rather than pinned to a provider. */
   routing?: RouteAttribution;
+  /**
+   * What the node was actually given, after every template was resolved:
+   * the prompt messages an llm_call sent, the parameters a tool_call
+   * passed. No node result recorded its input before, on success or on
+   * failure, so a failing node's resolved prompt existed nowhere and the
+   * run could not be reproduced from its record. Capped by the engine
+   * before it is persisted.
+   */
+  resolvedInput?: unknown;
+  /**
+   * Which provider and model answered, whether or not the router chose
+   * them. `routing` only lands for a routed call, so a node pinned to a
+   * provider recorded cost and tokens with no model attached to them —
+   * which is why "spend by model last week" had no query.
+   */
+  providerId?: string;
+  model?: string;
+  /**
+   * Template references in this node's config that resolved to nothing and
+   * were substituted with an empty string. A typo -- `{{nodes.llm1.output}}`
+   * for `{{nodes.llm_1.output}}` -- used to leave nothing behind but a
+   * server-side warning, so the node produced a prompt with a hole in it and
+   * a plausible, wrong answer that nobody could trace back to the typo.
+   * Carried onto the run record so it is visible where the run is debugged.
+   */
+  unresolvedReferences?: string[];
 }
-
 
 export interface NodeExecutionOptions {
   organizationId: string;
@@ -41,11 +84,57 @@ export interface NodeExecutionOptions {
    * layer so a cancel doesn't wait out a 30s upstream timeout.
    */
   signal?: AbortSignal;
+  /**
+   * The agent's roles, filled once for this run (L4). A node naming a
+   * roleKey reads its model from here rather than deciding again, which
+   * is what keeps a pinned role away from the router and lets a run
+   * always name the concrete model behind each role.
+   */
+  resolvedRoles?: Array<{ key: string; modelId: string; via: 'pinned' | 'resolved'; rationale?: string }>;
 }
 /** How long an organization's default routing policy is reused before it is read again. */
 const DEFAULT_ROUTING_TTL_MS = 30_000;
 
 // Verify-node types (VerifyPolicy, etc.) now live with the shared verifier.
+
+/**
+ * Unwrap a well-formed quoted string literal.
+ *
+ * The condition builder in the UI writes the operand it was given as a quoted
+ * literal, while the template resolver substitutes the other side unquoted, so
+ * the executor has to take the quotes back off before it compares the two.
+ *
+ * "Well-formed" means the value opens and closes with the same quote character
+ * and contains no unescaped occurrence of it in between -- so a value that
+ * merely starts and ends with a quote (`'a' + 'b'`, or an LLM answer that is
+ * itself a quotation) is left alone rather than being silently truncated.
+ */
+function unquoteLiteral(value: string): string {
+  if (value.length < 2) return value;
+  const quote = value[0];
+  if ((quote !== "'" && quote !== '"') || value[value.length - 1] !== quote) {
+    return value;
+  }
+
+  const inner = value.slice(1, -1);
+  let unescaped = '';
+  for (let i = 0; i < inner.length; i++) {
+    const char = inner[i];
+    if (char === '\\' && i + 1 < inner.length) {
+      const next = inner[i + 1];
+      if (next === quote || next === '\\') {
+        unescaped += next;
+        i++;
+        continue;
+      }
+    }
+    // An unescaped copy of the delimiter means this was never one literal.
+    if (char === quote) return value;
+    unescaped += char;
+  }
+
+  return unescaped;
+}
 
 @Injectable()
 export class AgentNodeExecutor {
@@ -66,6 +155,9 @@ export class AgentNodeExecutor {
     private readonly verifier: AgentVerifierHelper,
     // Optional so the many specs that build the executor without it keep
     // working; without it there is simply no organization default.
+    // Optional: an install with no catalog still runs agents whose nodes
+    // name a providerId directly. Only a node naming a role needs it.
+    @Optional() private readonly modelRouter?: ModelRouterService,
     @Optional() @InjectRepository(Organization)
     private readonly organizationRepository?: Repository<Organization>,
   ) {}
@@ -104,13 +196,33 @@ export class AgentNodeExecutor {
     userId?: string,
     options?: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
-    const startTime = Date.now();
     const execOptions: NodeExecutionOptions = {
       organizationId,
       userId,
       ...options,
     };
 
+    // Each node gets its own sink, so two nodes running side by side in a
+    // layer cannot collect each other's unresolved references. The copy
+    // shares `nodes`, `input` and `variables` by reference, so everything a
+    // node reads or writes through the context still behaves as before.
+    const unresolvedReferences: string[] = [];
+    const nodeContext: ExecutionContext = { ...context, unresolvedReferences };
+
+    const result = await this.dispatch(node, nodeContext, organizationId, userId, execOptions);
+
+    return unresolvedReferences.length > 0
+      ? { ...result, unresolvedReferences }
+      : result;
+  }
+
+  private async dispatch(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    organizationId: string,
+    userId: string | undefined,
+    execOptions: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
     switch (node.type) {
       case 'input':
         return this.executeInputNode(node, context);
@@ -145,6 +257,9 @@ export class AgentNodeExecutor {
       case 'verify':
         return this.executeVerifyNode(node, context, organizationId, userId, execOptions);
 
+      case 'extract_context':
+        return this.executeExtractContextNode(node, context, organizationId, userId, execOptions);
+
       default:
         throw new Error(`Unsupported node type: ${node.type}`);
     }
@@ -154,7 +269,18 @@ export class AgentNodeExecutor {
     node: AgentPipelineNode,
     context: ExecutionContext,
   ): Promise<NodeExecutionResult> {
-    // The input node simply passes through the execution input
+    // The input node declares the run's contract, so this is where it is
+    // held to. A schema that constrains nothing — the builder's default
+    // `{type: 'object', properties: {}}` — is treated as "unspecified"
+    // rather than "must be an object", because an agent answering a chat
+    // surface should not start refusing its own input the moment somebody
+    // opens the schema editor and closes it again.
+    const schema = (node.data || node.config || {}).schema;
+    if (schemaConstrainsAnything(schema)) {
+      const problems = schemaProblems(schema, context.input);
+      if (problems.length) throw new InputSchemaViolation(problems);
+    }
+
     return {
       output: context.input,
     };
@@ -209,24 +335,6 @@ export class AgentNodeExecutor {
     options?: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
     const config = node.data || node.config || {};
-    const startTime = Date.now();
-
-    // Resolve provider ID. A node may instead carry a routing policy and
-    // let the catalog pick the model per call; a node with neither uses
-    // the organization's default policy when one is set.
-    const providerId = config.providerId;
-    let routing: RoutingPolicy | undefined = config.routing && typeof config.routing === 'object' ? config.routing : undefined;
-    let routingSource = routing ? 'node' : undefined;
-    if (!providerId && !routing) {
-      const orgDefault = await this.defaultRoutingFor(organizationId);
-      if (orgDefault) {
-        routing = orgDefault;
-        routingSource = 'organization default';
-      }
-    }
-    if (!providerId && !routing) {
-      throw new Error(`LLM call node '${node.id}' is missing 'providerId' or 'routing' in config, and the organization has no default routing policy`);
-    }
 
     // Resolve prompts using template resolver
     const systemPrompt = config.systemPrompt
@@ -250,12 +358,81 @@ export class AgentNodeExecutor {
     }
     messages.push({ role: 'user' as any, content: userPrompt });
 
+    return this.callModelForNode(node, config, messages, organizationId, userId, options);
+  }
+
+  /**
+   * The model call a node makes: role/provider/routing resolution, the
+   * chat itself, and the accounting on the way out.
+   *
+   * Shared so that `llm_call`, `extract_context` and a `merge` node's
+   * judge cannot drift in how they fill a role or attribute a routed
+   * call. They differ only in what they say and in what they do with the
+   * answer, which is where the difference belongs.
+   */
+  private async callModelForNode(
+    node: AgentPipelineNode,
+    config: Record<string, any>,
+    messages: ChatRequest['messages'],
+    organizationId: string,
+    userId?: string,
+    options?: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
+    const startTime = Date.now();
+    const which = `${node.type} node '${node.id}'`;
+
+    // A node may name a role instead of a provider or a policy. The role
+    // was filled once for the whole run (L4), so this is a lookup, not a
+    // second routing decision: a pinned role must never reach the router,
+    // and calling plan() here would be exactly that. The per-node model
+    // field stays valid and is used when no role is named.
+    const roleKey = typeof config.roleKey === 'string' ? config.roleKey : undefined;
+    const filledRole = roleKey ? options?.resolvedRoles?.find((r) => r.key === roleKey) : undefined;
+    if (roleKey && !filledRole) {
+      throw new Error(
+        `The ${which} names role '${roleKey}', which this agent does not define. ` +
+          'Add the role, or give the node a providerId or routing policy.',
+      );
+    }
+
+    // Resolve provider ID. A node may instead carry a routing policy and
+    // let the catalog pick the model per call; a node with neither uses
+    // the organization's default policy when one is set.
+    const providerId = config.providerId;
+    let routing: RoutingPolicy | undefined = config.routing && typeof config.routing === 'object' ? config.routing : undefined;
+    let routingSource = routing ? 'node' : undefined;
+    if (!filledRole && !providerId && !routing) {
+      const orgDefault = await this.defaultRoutingFor(organizationId);
+      if (orgDefault) {
+        routing = orgDefault;
+        routingSource = 'organization default';
+      }
+    }
+    if (!filledRole && !providerId && !routing) {
+      throw new Error(`The ${which} is missing 'providerId' or 'routing' in config, and the organization has no default routing policy`);
+    }
+
     // Build chat request — thread the agent-execution signal in
     // so the LLM HTTP call and its embedded tool-call loop both
     // abort on client disconnect.
+    // A filled role names the model. Looked up, never planned: see the
+    // comment on roleKey above.
+    let roleProviderId: string | undefined;
+    let roleModel: string | undefined;
+    if (filledRole) {
+      if (!this.modelRouter) {
+        throw new Error(
+          `The ${which} names role '${filledRole.key}', but the model catalog is not available on this install`,
+        );
+      }
+      const { card, provider } = await this.modelRouter.providerForModelId(organizationId, filledRole.modelId, userId ? { id: userId } : undefined);
+      roleProviderId = provider.id;
+      roleModel = card.vendorModelId;
+    }
+
     const chatRequest: ChatRequest = {
       messages,
-      model: config.model,
+      model: roleModel ?? config.model,
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       toolIds: config.toolIds,
@@ -264,36 +441,70 @@ export class AgentNodeExecutor {
     };
 
 
-    this.logger.log(`[NODE_EXEC] Executing LLM call node '${node.id}' with provider=${providerId ?? `routed (${routingSource})`}, model=${config.model ?? (routing ? 'routed' : 'default')}`);
+    this.logger.log(`[NODE_EXEC] Executing ${which} with provider=${roleProviderId ? `role ${filledRole!.key} (${filledRole!.via})` : providerId ?? `routed (${routingSource})`}, model=${config.model ?? (routing ? 'routed' : 'default')}`);
 
     let response: ChatResponse;
     try {
       // The chat() method handles the full agentic tool call loop internally
       response = await this.llmProvidersService.chat(
-        providerId,
+        roleProviderId ?? providerId,
         chatRequest,
         organizationId,
         userId,
       );
     } catch (err: any) {
-      const detail = err.response?.data?.error?.message || err.response?.data?.message || err.response?.data || err.message;
-      this.logger.error(`[NODE_EXEC] LLM call failed for node '${node.id}': ${JSON.stringify(detail)}`);
+      // A provider error body can echo the request back, Authorization
+      // header included, so it never reaches a log line or a persisted
+      // `error` column unredacted. extractUpstreamErrorMessage picks the
+      // same candidate the old code did but redacts and caps it; the
+      // body goes through safeErrorBody for the same reason. What lands
+      // here ends up in nodeResults[nodeId].error and
+      // agent_executions.error, which are read back in the UI.
+      const detail = extractUpstreamErrorMessage(err);
+      const safeBody = safeErrorBody(err.response?.data);
+      this.logger.error(
+        `[NODE_EXEC] LLM call failed for node '${node.id}': ${detail}${safeBody ? ` body=${safeBody}` : ''}`,
+      );
       // Keep the typed cause (e.g. ModelNotFoundError) reachable: the
       // scheduler and the UI act on its code, not on the message text.
+      // The resolved prompt rides along so the engine can persist the
+      // input of a node that FAILED — the case where being able to
+      // reproduce the call matters most.
       throw Object.assign(
-        new Error(`LLM call failed: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`),
-        { cause: err, code: err?.code },
+        new Error(`LLM call failed: ${detail}`),
+        {
+          cause: err,
+          code: err?.code,
+          resolvedInput: { messages },
+          attemptedProviderId: roleProviderId ?? providerId ?? undefined,
+          attemptedModel: roleModel ?? config.model,
+        },
       );
 
     }
 
     const executionTime = Date.now() - startTime;
 
+    // Attribution for the spend, whether or not the router chose the
+    // model. `routing` only lands for a routed call, so a node pinned to
+    // a provider recorded a cost and a token count with no model and no
+    // provider attached — which is why there was no query that answered
+    // "spend by model last week".
+    const answeredProviderId =
+      response.routing?.providerId ?? roleProviderId ?? providerId ?? undefined;
+    const answeredModel =
+      response.model || response.routing?.vendorModelId || roleModel || config.model;
+
     return {
       output: response.message.content || response.message,
       cost: response.cost || 0,
       tokens: response.usage?.totalTokens || 0,
+      inputTokens: response.usage?.inputTokens || 0,
+      outputTokens: response.usage?.outputTokens || 0,
       executionTime,
+      resolvedInput: { messages },
+      ...(answeredProviderId ? { providerId: answeredProviderId } : {}),
+      ...(answeredModel ? { model: answeredModel } : {}),
       ...(response.routing ? { routing: response.routing } : {}),
     };
 
@@ -342,12 +553,17 @@ export class AgentNodeExecutor {
     const executionTime = Date.now() - startTime;
 
     if (!result.success) {
-      throw new Error(result.error || 'Tool execution failed');
+      // The resolved parameters ride on the error so a failed tool call's
+      // input is persisted too, not just its message.
+      throw Object.assign(new Error(result.error || 'Tool execution failed'), {
+        resolvedInput: { toolId, parameters: resolvedParams },
+      });
     }
 
     return {
       output: result.data,
       executionTime,
+      resolvedInput: { toolId, parameters: resolvedParams },
     };
   }
 
@@ -368,13 +584,41 @@ export class AgentNodeExecutor {
     const resolved = this.templateResolver.resolve(expression, context);
     const resolvedStr = typeof resolved === 'string' ? resolved : String(resolved);
 
-    // Try to evaluate as a comparison expression (e.g. "overweight == overweight", "29.4 > 25")
     let result: boolean;
-    const comparisonMatch = resolvedStr.match(/^(.+?)\s*(===?|!==?|>=?|<=?)\s*(.+)$/);
-    if (comparisonMatch) {
+    // Checked before the comparison form: this one is anchored to the whole
+    // expression, so it cannot swallow a real comparison, while a haystack
+    // containing "==" could otherwise be mistaken for one.
+    const methodMatch = resolvedStr.match(
+      /^(!?)\s*(.+)\.(includes|startsWith|endsWith)\(\s*(.*?)\s*\)$/s,
+    );
+    // Try to evaluate as a comparison expression (e.g. "overweight == overweight", "29.4 > 25")
+    const comparisonMatch = methodMatch
+      ? null
+      : resolvedStr.match(/^(.+?)\s*(===?|!==?|>=?|<=?)\s*(.+)$/);
+
+    if (methodMatch) {
+      // contains / does not contain / starts with / ends with. The builder
+      // offers these four; nothing evaluated them, so they fell through to the
+      // truthiness branch below and a non-empty string always took the true
+      // branch -- the leading "!" included, since it is just a character.
+      const [, negate, receiver, method, rawArg] = methodMatch;
+      const haystack = unquoteLiteral(receiver.trim());
+      const needle = unquoteLiteral(rawArg.trim());
+      const matched =
+        method === 'includes'
+          ? haystack.includes(needle)
+          : method === 'startsWith'
+            ? haystack.startsWith(needle)
+            : haystack.endsWith(needle);
+      result = negate === '!' ? !matched : matched;
+    } else if (comparisonMatch) {
       const [, left, op, right] = comparisonMatch;
-      const lVal = left.trim();
-      const rVal = right.trim();
+      // The visual builder emits the right-hand side as a quoted literal
+      // ("{{...}} === 'positive'") while the template resolver substitutes the
+      // left-hand side unquoted. Comparing them raw made every string equality
+      // built in the builder false, and every "not equals" true.
+      const lVal = unquoteLiteral(left.trim());
+      const rVal = unquoteLiteral(right.trim());
       const lNum = parseFloat(lVal);
       const rNum = parseFloat(rVal);
       const isNumeric = !isNaN(lNum) && !isNaN(rNum);
@@ -401,6 +645,16 @@ export class AgentNodeExecutor {
         default:
           result = Boolean(resolved);
       }
+    } else if (/^!?\s*.+\.\s*[A-Za-z_$][\w$]*\s*\(.*\)$/s.test(resolvedStr)) {
+      // The whole expression looks like a method call, but not one we
+      // implement. Falling through to truthiness would make an expression we
+      // could not evaluate silently take the true branch -- exactly how the
+      // four operators above stayed broken for so long. Refuse instead.
+      throw new Error(
+        `Condition node '${node.id}' uses an expression this engine cannot evaluate: ` +
+          `'${resolvedStr}'. Supported operators are ==, ===, !=, !==, >, <, >=, <=, ` +
+          'includes(), startsWith() and endsWith().',
+      );
     } else if (typeof resolved === 'string') {
       // Simple boolean check: "true", "1", non-empty => true; "false", "0", "" => false
       const lower = resolvedStr.toLowerCase().trim();
@@ -506,18 +760,49 @@ export class AgentNodeExecutor {
   }
 
   /**
-   * Execute a merge node — collects outputs from all incoming edges and applies a merge strategy.
+   * Execute a merge node — collects outputs from all incoming edges and
+   * applies a merge strategy.
+   *
+   * The two judged strategies (`best_of_n`, `consensus`) take their model
+   * the same way an `llm_call` node does: a `roleKey`, a `providerId`, a
+   * routing policy, or the organization default, in that order. They used
+   * to insist on `judgeConfig.providerId` and nothing else, which made
+   * both unreachable from a compiled strategy — the compiler names a role
+   * and never a provider, on purpose, so `best_of_n` and `panel` threw
+   * "requires judgeConfig.providerId" the moment they reached the merge.
+   * `judgeConfig` still works for a hand-drawn graph that pins a provider.
    */
   private async executeMergeNode(
     node: AgentPipelineNode,
     context: ExecutionContext,
     options: NodeExecutionOptions,
   ): Promise<NodeExecutionResult> {
-    const { strategy, judgeConfig } = node.data || node.config || {};
+    const config = node.data || node.config || {};
+    const { strategy, judgeConfig } = config;
     const startTime = Date.now();
 
     // Collect outputs from all incoming edges
     const incomingOutputs = this.getIncomingOutputs(node, context, options.edges);
+
+    /** What the judge is: the node's own role/provider, with judgeConfig as the pinned override. */
+    const judgeCall = (messages: ChatRequest['messages']) =>
+      this.callModelForNode(
+        node,
+        {
+          roleKey: config.roleKey,
+          providerId: judgeConfig?.providerId,
+          model: judgeConfig?.model ?? config.model,
+          routing: judgeConfig?.routing ?? config.routing,
+          temperature: judgeConfig?.temperature,
+          maxTokens: judgeConfig?.maxTokens,
+        },
+        messages,
+        options.organizationId,
+        options.userId,
+        options,
+      );
+
+    const asText = (o: any): string => (typeof o === 'string' ? o : JSON.stringify(o));
 
     switch (strategy) {
       case 'first_response':
@@ -533,61 +818,112 @@ export class AgentNodeExecutor {
         };
 
       case 'best_of_n': {
-        if (!judgeConfig?.providerId) {
-          throw new Error(`Merge node '${node.id}' with strategy 'best_of_n' requires judgeConfig.providerId`);
+        // One candidate is not a choice. Judging it anyway would spend a
+        // call to rediscover the only answer there is.
+        if (incomingOutputs.length < 2) {
+          return {
+            output: incomingOutputs[0],
+            executionTime: Date.now() - startTime,
+          };
         }
+        // `judgePrompt` is what the builder's Judge Prompt box writes.
+        // It was read by nothing: anyone who typed a judging rubric in
+        // the UI had it silently discarded in favour of the default.
+        const prompt =
+          config.judgePrompt ||
+          judgeConfig?.prompt ||
+          `You are a judge. Pick the best response from these options:\n\n${incomingOutputs.map((o: any, i: number) => `Option ${i + 1}: ${asText(o)}`).join('\n\n')}\n\nRespond with ONLY the number of the best option.`;
+        const judged = await judgeCall([{ role: 'user' as any, content: prompt }]);
 
-        const prompt = judgeConfig.prompt ||
-          `You are a judge. Pick the best response from these options:\n\n${incomingOutputs.map((o: any, i: number) => `Option ${i + 1}: ${JSON.stringify(o)}`).join('\n\n')}\n\nRespond with ONLY the number of the best option.`;
-
-        const judgeResult = await this.llmProvidersService.chat(
-          judgeConfig.providerId,
-          {
-            messages: [{ role: 'user' as any, content: prompt }],
-            model: judgeConfig.model,
-            signal: options.signal,
-          },
-          options.organizationId,
-          options.userId,
-        );
-
-        const executionTime = Date.now() - startTime;
-        const pick = parseInt(judgeResult?.message?.content || '1') - 1;
-        const selectedIndex = Math.max(0, Math.min(pick, incomingOutputs.length - 1));
+        const answer = typeof judged.output === 'string' ? judged.output : asText(judged.output);
+        const pick = parseInt(answer, 10);
+        const selectedIndex = Number.isNaN(pick)
+          ? 0
+          : Math.max(0, Math.min(pick - 1, incomingOutputs.length - 1));
 
         return {
+          ...judged,
           output: incomingOutputs[selectedIndex],
-          cost: judgeResult?.cost || 0,
-          tokens: judgeResult?.usage?.totalTokens || 0,
-          executionTime,
+          executionTime: Date.now() - startTime,
         };
       }
 
       case 'consensus': {
-        if (!judgeConfig?.providerId) {
-          throw new Error(`Merge node '${node.id}' with strategy 'consensus' requires judgeConfig.providerId`);
+        // "Disagreement is the signal" only means something if the
+        // agreement is measured. The judge is asked for both: how many of
+        // the answers agree, and the combined answer. `consensusThreshold`
+        // then decides whether that counted as consensus — it is a
+        // configurable field with a control in the builder, and before
+        // this it was read by nothing.
+        const threshold =
+          typeof config.consensusThreshold === 'number' ? config.consensusThreshold : 0.5;
+
+        if (incomingOutputs.length < 2) {
+          return {
+            output: {
+              answer: incomingOutputs[0],
+              agreement: 1,
+              consensusReached: 1 >= threshold,
+              threshold,
+              responses: incomingOutputs.length,
+            },
+            executionTime: Date.now() - startTime,
+          };
         }
 
-        const prompt = `Analyze these responses and provide a consensus answer that combines the best elements:\n\n${incomingOutputs.map((o: any, i: number) => `Response ${i + 1}: ${JSON.stringify(o)}`).join('\n\n')}\n\nProvide a single consensus response.`;
+        const prompt = [
+          'Several responses to the same question follow. Do two things.',
+          '',
+          '1. Count how many of them agree on the substance of the answer — the',
+          '   size of the largest group that says the same thing. Disagreement on',
+          '   wording is not disagreement.',
+          '2. Write the answer that group gives.',
+          '',
+          'Reply with a single JSON object and nothing else:',
+          '  {"agreeing": <integer>, "answer": "<the answer>"}',
+          '',
+          ...incomingOutputs.map((o: any, i: number) => `Response ${i + 1}: ${asText(o)}`),
+        ].join('\n');
 
-        const result = await this.llmProvidersService.chat(
-          judgeConfig.providerId,
-          {
-            messages: [{ role: 'user' as any, content: prompt }],
-            model: judgeConfig.model,
-            signal: options.signal,
-          },
-          options.organizationId,
-          options.userId,
-        );
+        const judged = await judgeCall([{ role: 'user' as any, content: prompt }]);
+        const raw = typeof judged.output === 'string' ? judged.output : asText(judged.output);
 
-        const executionTime = Date.now() - startTime;
+        let agreeing: number | undefined;
+        let answer: string = raw;
+        const start = raw.indexOf('{');
+        const end = raw.lastIndexOf('}');
+        if (start !== -1 && end > start) {
+          try {
+            const parsed = JSON.parse(raw.slice(start, end + 1));
+            if (typeof parsed.agreeing === 'number') agreeing = parsed.agreeing;
+            if (typeof parsed.answer === 'string') answer = parsed.answer;
+          } catch {
+            // Keep the raw answer. A judge that did not return JSON still
+            // said something useful, and losing it to report a parse
+            // failure would be the worse trade — but the agreement is then
+            // genuinely unknown, and says so below rather than defaulting
+            // to a number nobody measured.
+          }
+        }
+
+        const agreement =
+          agreeing === undefined
+            ? undefined
+            : Math.max(0, Math.min(agreeing, incomingOutputs.length)) / incomingOutputs.length;
 
         return {
-          output: result?.message?.content,
-          cost: result?.cost || 0,
-          tokens: result?.usage?.totalTokens || 0,
-          executionTime,
+          ...judged,
+          output: {
+            answer,
+            agreement,
+            // Unknown agreement is not consensus. A downstream condition
+            // node branching on this must not read "we could not tell" as
+            // "they agreed".
+            consensusReached: agreement !== undefined && agreement >= threshold,
+            threshold,
+            responses: incomingOutputs.length,
+          },
+          executionTime: Date.now() - startTime,
         };
       }
 
@@ -619,9 +955,34 @@ export class AgentNodeExecutor {
           outputs.push(sourceOutput);
         }
       }
+
+      if (incomingEdges.length > 0) {
+        // The graph names this node's upstreams, so they are the only honest
+        // answer. Falling through to "every other node's output, in insertion
+        // order" used to hand a merge whose branches had all failed some
+        // unrelated node's value -- typically the input node's, i.e. the run's
+        // own payload echoed back -- which the output node then captured, so
+        // the run was saved COMPLETED. It was also nondeterministic, since
+        // insertion order under a fan-out is Promise.all settle order.
+        if (outputs.length === 0) {
+          const states = incomingEdges
+            .map(e => {
+              const upstream = context.nodes[e.source];
+              if (!upstream) return `${e.source} (did not run)`;
+              return `${e.source} (${upstream.status ?? 'no output'})`;
+            })
+            .join(', ');
+          throw new Error(
+            `Node '${node.id}' has no upstream output to work with: ${states}. ` +
+              'Every step feeding this one failed, was skipped, or produced nothing.',
+          );
+        }
+        return outputs;
+      }
     }
 
-    // Fallback: if no edges provided or no outputs found, gather all node outputs
+    // No edges recorded for this node at all (or no edge list supplied):
+    // nothing declares what feeds it, so gather what the run has produced.
     if (outputs.length === 0) {
       for (const [nodeId, nodeResult] of Object.entries(context.nodes)) {
         if (nodeId !== node.id && nodeResult.output !== undefined) {
@@ -683,11 +1044,42 @@ export class AgentNodeExecutor {
         : JSON.stringify(config.spec, null, 2)
       : '';
 
+    // A checker that names a role has to be turned into a provider before the
+    // panel sees it. The compiler emits role-named checkers for every verify
+    // step in a strategy, and runChecker reads only `providerId` -- so a
+    // checker with a roleKey and no providerId returned verdict 'error',
+    // mergeVerdicts turned an all-error panel into 'fail', and the cascade
+    // strategy escalated to the expensive role on every single run while
+    // reporting a completed run with a failed check. Resolved here, the same
+    // way callModelForNode resolves a node's own role.
+    const resolvedCheckers = await Promise.all(
+      checkers.map(async (checker: any) => {
+        if (checker?.providerId || !checker?.roleKey) return checker;
+        const filled = options?.resolvedRoles?.find((r) => r.key === checker.roleKey);
+        if (!filled) {
+          throw new Error(
+            `Verify node '${node.id}' has a checker naming role '${checker.roleKey}', which this agent does not define.`,
+          );
+        }
+        if (!this.modelRouter) {
+          throw new Error(
+            `Verify node '${node.id}' has a checker naming role '${checker.roleKey}', but the model catalog is not available on this install`,
+          );
+        }
+        const { card, provider } = await this.modelRouter.providerForModelId(
+          organizationId,
+          filled.modelId,
+          userId ? { id: userId } : undefined,
+        );
+        return { ...checker, providerId: provider.id, model: checker.model ?? card.vendorModelId };
+      }),
+    );
+
     // The checker panel (fan-out, per-checker provider/model, verdict merge)
     // is owned by the shared verifier so the autonomous step processor reuses
     // the same logic.
     const panel = await this.verifier.runPanel(
-      { target, spec, checkers, policy },
+      { target, spec, checkers: resolvedCheckers, policy },
       organizationId,
       userId,
       options?.signal,
@@ -706,6 +1098,93 @@ export class AgentNodeExecutor {
       tokens: panel.tokens,
       executionTime: Date.now() - startTime,
     };
+  }
+
+  /**
+   * Execute an extract_context node — one call that compresses what the
+   * incoming steps learned into a small structured brief, which later
+   * steps read instead of every transcript.
+   *
+   * The step exists so that compression is visible: it carries its own
+   * cost, and the saving in explore-extract-patch is the expensive role
+   * downstream reading a brief rather than N rollouts. So the call itself
+   * goes through the same path as an llm_call node — same role lookup,
+   * same routing attribution, same accounting — and this method adds only
+   * the instruction and the parse.
+   *
+   * Config (node.data || node.config), every field optional:
+   *   roleKey / providerId / model / routing / temperature / maxTokens
+   *   task     — what the brief is for; defaults to the run input
+   *   sources  — what to compress; defaults to the incoming node outputs
+   *   instruction — overrides the built-in extraction instruction
+   *
+   * A brief that does not parse fails the node. Falling back to passing
+   * the raw transcripts through would look like a cheap extraction while
+   * handing the expensive role the full context the step was meant to
+   * spare it.
+   */
+  private async executeExtractContextNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    organizationId: string,
+    userId?: string,
+    options?: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
+    const config = node.data || node.config || {};
+
+    const asText = (value: any): string =>
+      typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value, null, 2);
+    const field = (value: any): string =>
+      typeof value === 'string' ? this.templateResolver.resolve(value, context) : asText(value);
+
+    const task = config.task !== undefined ? field(config.task) : asText(context.input);
+    const sources =
+      config.sources !== undefined
+        ? field(config.sources)
+        : this.getIncomingOutputs(node, context, options?.edges).map(asText).join('\n\n---\n\n');
+
+    if (!sources.trim()) {
+      throw new Error(
+        `Extract context node '${node.id}' has nothing to compress: give it 'sources', ` +
+          'or put it downstream of a step that produces output.',
+      );
+    }
+
+    const messages: ChatRequest['messages'] = [
+      {
+        role: 'system' as any,
+        content:
+          typeof config.instruction === 'string' ? config.instruction : EXTRACT_CONTEXT_INSTRUCTION,
+      },
+      {
+        role: 'user' as any,
+        content: [
+          'Task:',
+          task.trim() || '(not given)',
+          '',
+          'Attempts to compress:',
+          sources,
+        ].join('\n'),
+      },
+    ];
+
+    const result = await this.callModelForNode(node, config, messages, organizationId, userId, options);
+
+    const raw = typeof result.output === 'string' ? result.output : asText(result.output);
+    let brief: ExtractedContext;
+    try {
+      brief = parseExtractedContext(raw);
+    } catch (err) {
+      // Keep the typed cause reachable: the code is what the UI and the
+      // step processor branch on, and the raw answer is what a user needs
+      // to see to understand why the extraction was rejected.
+      throw Object.assign(new Error((err as Error).message), {
+        cause: err,
+        code: (err as ExtractedContextInvalid).code,
+      });
+    }
+
+    return { ...result, output: brief };
   }
 
 }

@@ -60,6 +60,32 @@ function requirePlatformMetricsToken(authHeader: string | undefined): void {
   }
 }
 
+/**
+ * The caller's active organization, or a refusal.
+ *
+ * `JwtStrategy` leaves `currentOrganizationId` undefined for a user who
+ * belongs to more than one org and did not send `X-Organization-Id`, so
+ * every handler that scopes by it has to refuse rather than read the
+ * value. Passing the undefined straight through made
+ * `getActiveAlerts(undefined)` skip its org filter entirely and answer
+ * with every tenant's alerts — the same hole `AnalyticsController` was
+ * fixed for, left open on the three alert endpoints below.
+ */
+function requireOrg(req: any): string {
+  const organizationId = req.user?.currentOrganizationId;
+  if (!organizationId) {
+    throw new HttpException(
+      {
+        success: false,
+        message: 'Organization context required. Multi-org users must send the X-Organization-Id header.',
+        error: 'NO_ORGANIZATION',
+      },
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+  return organizationId;
+}
+
 @Controller('monitoring')
 export class MonitoringController {
   private readonly logger = new Logger(MonitoringController.name);
@@ -108,7 +134,7 @@ export class MonitoringController {
   @Get('/alerts')
   @UseGuards(JwtAuthGuard)
   async getAlerts(@Request() req) {
-    const organizationId = req.user?.currentOrganizationId;
+    const organizationId = requireOrg(req);
     const data = await this.monitoringService.getActiveAlerts(organizationId);
     return { success: true, data, message: 'Active alerts retrieved successfully' };
   }
@@ -152,7 +178,7 @@ export class MonitoringController {
   @Get('/stats/live')
   @UseGuards(JwtAuthGuard)
   async getLiveStats(@Request() req) {
-    const organizationId = req.user?.currentOrganizationId;
+    const organizationId = requireOrg(req);
     const alerts = await this.monitoringService.getActiveAlerts(organizationId);
 
     const data = {
@@ -175,7 +201,7 @@ export class MonitoringController {
   @Get('/enterprise/dashboard')
   @UseGuards(JwtAuthGuard)
   async getEnterpriseDashboard(@Request() req) {
-    const organizationId = req.user?.currentOrganizationId;
+    const organizationId = requireOrg(req);
     const alerts = await this.monitoringService.getActiveAlerts(organizationId);
 
     const data = {

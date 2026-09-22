@@ -22,6 +22,7 @@ import {
   buildWidgetEmbedSnippet,
   getGatewaySlug,
 } from './channel-setup'
+import { getApiErrorMessage } from '@/lib/api-error'
 
 interface ChannelSetupPanelProps {
   gateway: Gateway
@@ -53,7 +54,12 @@ export function ChannelSetupPanel({ gateway }: ChannelSetupPanelProps) {
     },
   })
   const testResult = testMutation.isError
-    ? { ok: false, detail: 'Test request failed' }
+    ? {
+        ok: false,
+        // The backend says which credential is missing or which host
+        // refused; a fixed sentence threw all of that away.
+        detail: getApiErrorMessage(testMutation.error, 'Test request failed'),
+      }
     : testMutation.data
 
   return (

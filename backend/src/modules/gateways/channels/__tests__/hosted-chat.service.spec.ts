@@ -109,23 +109,47 @@ describe('HostedChatService', () => {
   });
 
   describe('publicBranding', () => {
-    it('returns presentation fields only', () => {
-      const branding = service.publicBranding(gateway());
+    it('returns presentation fields only', async () => {
+      const branding = await service.publicBranding(gateway());
       expect(branding.appName).toBe('Acme Assistant');
       expect(branding.primaryColor).toBe('#22d3ee');
     });
 
-    it('never leaks a credential from the same configuration blob', () => {
-      const serialised = JSON.stringify(service.publicBranding(gateway()));
+    it('never leaks a credential from the same configuration blob', async () => {
+      const serialised = JSON.stringify(await service.publicBranding(gateway()));
       expect(serialised).not.toContain('xoxb-super-secret');
       expect(serialised).not.toContain('re_secret');
       expect(serialised).not.toContain('bot_token');
     });
 
-    it('falls back to defaults for a surface with no hosted chat block', () => {
+    it('falls back to defaults for a surface with no hosted chat block', async () => {
       const bare = gateway();
       bare.configuration = { bot_token: 'xoxb' };
-      expect(service.publicBranding(bare).appName).toBe('Assistant');
+      expect((await service.publicBranding(bare)).appName).toBe('Assistant');
+    });
+
+    /**
+     * A licence that has lapsed has lapsed on the read path too.
+     *
+     * Publishing gates white label and disclosure removal, and nothing
+     * re-checked them afterwards — so an org that bought Enterprise,
+     * turned white label on and then downgraded kept the almyty mark off
+     * its public page indefinitely, and the EU AI Act Art. 50 disclosure
+     * off with it.
+     */
+    it('puts the mark and the disclosure back when the entitlement is gone', async () => {
+      const surface = gateway();
+      surface.configuration.hostedChat = {
+        ...(surface.configuration.hostedChat ?? {}),
+        whiteLabel: true,
+        aiDisclosure: '',
+      };
+
+      const branding = await service.publicBranding(surface);
+
+      expect(branding.whiteLabel).toBe(false);
+      // Null is "use the default line", which is what an unentitled org gets.
+      expect(branding.aiDisclosure).toBeNull();
     });
   });
 
@@ -166,9 +190,11 @@ describe('HostedChatService', () => {
 
     it('exports the visitor record and every conversation with its messages', async () => {
       conversationRepository.find.mockResolvedValue([{ id: 'c1', title: 'Order', status: 'active', createdAt: new Date('2026-02-01') }]);
+      // One query returns every conversation's messages, so each row has to
+      // say which conversation it belongs to.
       messageRepository.find.mockResolvedValue([
-        { role: 'user', content: 'hi', createdAt: new Date('2026-02-01'), metadata: {} },
-        { role: 'assistant', content: 'hello', createdAt: new Date('2026-02-01'), metadata: {} },
+        { conversationId: 'c1', role: 'user', content: 'hi', createdAt: new Date('2026-02-01'), metadata: {} },
+        { conversationId: 'c1', role: 'assistant', content: 'hello', createdAt: new Date('2026-02-01'), metadata: {} },
       ]);
 
       const out: any = await service.exportVisitor(gateway(), visitor);
@@ -177,6 +203,8 @@ describe('HostedChatService', () => {
       expect(out.conversations).toHaveLength(1);
       expect(out.conversations[0].messages.map((m: any) => m.content)).toEqual(['hi', 'hello']);
       expect(conversationRepository.find).toHaveBeenCalledWith(expect.objectContaining({ where: { endUserId: 'eu-1' } }));
+      // One query for all of them, not one per conversation.
+      expect(messageRepository.find).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -382,7 +410,7 @@ describe('HostedChatService', () => {
   describe('findByCustomDomain', () => {
     it('resolves an active, verified custom domain', async () => {
       const gw = gateway();
-      qb.getOne.mockResolvedValueOnce(gw);
+      qb.getMany.mockResolvedValueOnce([gw]);
       await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBe(gw);
       expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), {
         hostname: 'chat.acme.com',
@@ -398,8 +426,16 @@ describe('HostedChatService', () => {
     });
 
     it('returns null rather than throwing for an unknown domain', async () => {
-      qb.getOne.mockResolvedValueOnce(null);
+      qb.getMany.mockResolvedValueOnce([]);
       await expect(service.findByCustomDomain('nope.example')).resolves.toBeNull();
+    });
+
+    it('refuses to serve a hostname two live gateways claim', async () => {
+      // Same fail-closed rule as findBySlug: a hostname is a global
+      // public address, and picking one of two claimants would put a
+      // tenant's agent and conversations under somebody else's URL.
+      qb.getMany.mockResolvedValueOnce([gateway(), gateway({ id: 'gw-2' } as any)]);
+      await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBeNull();
     });
 
     it('returns null for an empty hostname without touching the database', async () => {
