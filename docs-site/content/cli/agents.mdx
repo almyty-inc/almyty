@@ -130,7 +130,9 @@ $ npx @almyty/agents run research-bot \
     --max-duration-ms 300000
 ```
 
-These limits apply server-side. If any limit is hit, the run terminates with status `limit_reached` and returns whatever output has been produced so far.
+These limits apply server-side, and they only ever tighten: the organization's settings and the operator's `RUN_LIMIT_*` ceiling still apply, so a flag can lower a ceiling but never raise one.
+
+If a limit is hit, the run terminates with status `failed` and an error of the form `CODE: explanation`. The codes are `MAX_STEPS_EXCEEDED`, `BUDGET_EXCEEDED`, `TIMEOUT`, `TOKEN_LIMIT_EXCEEDED`, `TOOL_CALL_LIMIT_EXCEEDED`, `RECURSION_DEPTH_EXCEEDED`, and `CONTEXT_BUDGET_EXCEEDED`. The same pair is stored on the run's metadata under `limitTrip`, and whatever output the run produced up to that point is kept.
 
 These are defaults, not ceilings. The values above apply when no scope sets anything; the operator's environment sets a hard ceiling on top (`RUN_LIMIT_MAX_DURATION_MS`, 3600000 out of the box), and the organization and the agent may tighten further. A flag can only lower the limit that resolution already arrived at, never raise it past the operator ceiling. See [Run limits](/run-limits).
 
