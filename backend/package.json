@@ -38,7 +38,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
-    "@apidevtools/swagger-parser": "^12.1.0",
+    "@apidevtools/swagger-parser": "^13.0.0",
     "@aws-sdk/client-kms": "^3.1136.0",
     "@getzep/zep-cloud": "^3.28.0",
     "@grpc/grpc-js": "^1.14.5",
