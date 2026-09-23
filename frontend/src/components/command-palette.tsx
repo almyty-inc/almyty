@@ -2,13 +2,9 @@
  *
  * Two kinds of entries:
  *   1. Navigation  — every top-level sidebar item routes here.
- *   2. Quick actions — "Create Agent", "Create Gateway", etc.
- *      These are just navigation entries with a verb prefix; the
- *      individual list pages already pop their own create dialogs
- *      when hit with `?new=1`, `/new`, or the `+` button. The
- *      simplest usable version routes to the list page and lets
- *      the user click through; adding deep-link query params later
- *      is an iterative polish.
+ *   2. Quick actions — "Create agent", "Create gateway", etc.
+ *      Each one goes straight to that flow's own page (/gateways/new,
+ *      /tools/new, ...). Create flows are pages, not dialogs.
  *
  * The palette is mounted once at the root of DashboardLayout.
  * A global keydown listener on ⌘K / Ctrl+K toggles the dialog.
@@ -108,15 +104,15 @@ export function CommandPalette() {
   ]
 
   const actionEntries: Entry[] = [
-    { id: 'act-new-agent', label: 'Create Agent', hint: 'Open the visual agent builder', icon: Plus, action: () => go('/agents/new') },
+    { id: 'act-new-agent', label: 'Create agent', hint: 'Open the visual agent builder', icon: Plus, action: () => go('/agents/new') },
     { id: 'act-import-agent', label: 'Import agent', hint: 'From an exported agent JSON', icon: Plus, action: () => go('/agents/import') },
-    { id: 'act-new-gateway', label: 'Create Gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways?new=1') },
-    { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, Model, or SDK', icon: Plus, action: () => go('/tools?new=1') },
-    { id: 'act-new-api', label: 'Import API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis?new=1') },
+    { id: 'act-new-gateway', label: 'Create gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways/new') },
+    { id: 'act-new-tool', label: 'Create tool', hint: 'HTTP, JavaScript, GraphQL, Model, or SDK', icon: Plus, action: () => go('/tools/new') },
+    { id: 'act-new-api', label: 'Connect API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis/new') },
     { id: 'act-new-model', label: 'Add model', hint: 'From a provider, a server you run, or your cloud', icon: Plus, action: () => go('/models/new') },
     { id: 'act-new-provider', label: 'Add inference provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/llm-providers/new') },
-    { id: 'act-new-runner', label: 'Register Runner', hint: 'Run agents on your own machine', icon: Plus, action: () => go('/runners/new') },
-    { id: 'act-new-credential', label: 'Add Credential', hint: 'Store a vault secret', icon: Plus, action: () => go('/credentials?new=1') },
+    { id: 'act-new-runner', label: 'Register runner', hint: 'Run agents on your own machine', icon: Plus, action: () => go('/runners/new') },
+    { id: 'act-new-credential', label: 'Add credential', hint: 'Store a vault secret', icon: Plus, action: () => go('/credentials/new') },
   ]
 
   return (

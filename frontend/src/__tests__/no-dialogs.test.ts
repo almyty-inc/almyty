@@ -132,6 +132,21 @@ describe('no dialogs', () => {
     expect(users.filter((p) => !exempt(p))).toEqual([])
   })
 
+  it('in-app links go straight to a create page, never through ?new=1', () => {
+    // `?new=1` survives only as a redirect for old bookmarks
+    // (useNewParamRedirect). A palette entry, onboarding step or button
+    // that still links through it bounces via a list page first.
+    const offenders: string[] = []
+    for (const { path, text } of sources) {
+      // The two hooks that handle the parameter describe it in comments.
+      if (exempt(path) || path.startsWith('hooks/use-')) continue
+      for (const m of text.matchAll(/['"`][^'"`\n]*[?&]new=1[^'"`\n]*['"`]/g)) {
+        offenders.push(`${path}: ${m[0]}`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
   it('the exemptions are still needed (remove an entry once its area lands)', () => {
     const stale = OTHER_WORKSTREAMS.filter(
       (prefix) =>
