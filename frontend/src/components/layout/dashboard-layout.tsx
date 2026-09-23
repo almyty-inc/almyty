@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Sun,
   Moon,
+  Monitor,
   Key,
   Database,
   Store,
@@ -43,10 +44,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore } from '@/store/auth'
 import { useOrganizationStore } from '@/store/organization'
 import { useAppStore, useNotifications } from '@/store/app'
+import { Theme, applyTheme, subscribeToSystemTheme } from '@/lib/theme'
 import { getInitials } from '@/lib/utils'
 import { CommandPalette } from '@/components/command-palette'
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts'
@@ -116,10 +123,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { currentOrganization, organizations, setCurrentOrganization, fetchOrganizations } = useOrganizationStore()
   const queryClient = useQueryClient()
   const { sidebarOpen, setSidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse } = useAppStore()
-  const [darkMode, setDarkMode] = useState(() => {
-    // Dark is the default; only light if explicitly stored
-    return localStorage.getItem('theme') !== 'light'
-  })
+  const { theme, setTheme } = useAppStore()
 
   // Ensure sidebar starts closed on mobile (safety net for store default)
   useEffect(() => {
@@ -128,16 +132,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [])
 
+  // Apply the stored preference, and keep following the OS for as long as
+  // the preference IS the OS. Someone whose machine flips at sunset expects
+  // the open tab to flip with it, not on next reload.
+  //
+  // index.html already set the class before first paint, so this is a
+  // re-assertion rather than the first word -- which is why there is no
+  // flash here.
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark')
-      document.documentElement.classList.remove('light')
-      localStorage.setItem('theme', 'dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-      localStorage.setItem('theme', 'light')
-    }
-  }, [darkMode])
+    applyTheme(theme)
+    if (theme !== 'system') return
+    return subscribeToSystemTheme(() => applyTheme('system'))
+  }, [theme])
 
   // Check authentication and redirect if not logged in (only after hydration)
   // Check authentication and redirect if not logged in: only after the
@@ -429,10 +435,37 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setDarkMode(!darkMode)}>
-                  {darkMode ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-                  <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
-                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    {theme === 'light' ? (
+                      <Sun className="mr-2 h-4 w-4" />
+                    ) : theme === 'dark' ? (
+                      <Moon className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Monitor className="mr-2 h-4 w-4" />
+                    )}
+                    <span>Appearance</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuRadioGroup
+                      value={theme}
+                      onValueChange={(value) => setTheme(value as Theme)}
+                    >
+                      <DropdownMenuRadioItem value="light">
+                        <Sun className="mr-2 h-4 w-4" />
+                        <span>Light</span>
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="dark">
+                        <Moon className="mr-2 h-4 w-4" />
+                        <span>Dark</span>
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="system">
+                        <Monitor className="mr-2 h-4 w-4" />
+                        <span>System</span>
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
