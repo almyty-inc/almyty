@@ -50,6 +50,8 @@ const ConnectionConnectPage = lazy(() => import('@/pages/connection-pages').then
 const ConnectionDetailRoutePage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionDetailRoutePage })))
 const CustomConnectorNewPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.CustomConnectorNewPage })))
 const ConnectionPolicyPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionPolicyPage })))
+const OrganizationNewPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationNewPage })))
+const OrganizationDetailPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationDetailPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
 const OrganizationsPage = lazy(() => import('@/pages/organizations').then(m => ({ default: m.OrganizationsPage })))
 const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatPage })))
@@ -189,6 +191,8 @@ function App() {
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/connections" element={<ConnectionsRedirect />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
+          <Route path="/organizations/new" element={<OrganizationNewPage />} />
+          <Route path="/organizations/:id" element={<OrganizationDetailPage />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           {/* Unknown authed path → a real 404 inside the shell, NOT a
