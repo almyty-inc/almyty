@@ -7,6 +7,7 @@ import { AgentExecutionStateHelper } from '../agent-execution-state.helper';
 import { AgentWebhookService } from '../agent-webhook.service';
 import { Agent, AgentPipeline, AgentPipelineNode, AgentStatus } from '../../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus } from '../../../entities/agent-execution.entity';
+import { fakeExecutionRepo } from './agent-execution.fixtures';
 
 /**
  * That a decision node actually routes.
@@ -137,11 +138,13 @@ describe('a decision node runs only the branch it chose', () => {
           useValue: { save: jest.fn(), findOne: jest.fn(), createQueryBuilder: jest.fn().mockReturnValue(qb) },
         },
         {
+          // The shared table-backed fake, not a hand-rolled create/save pair.
+          // The engine's terminal writes are a compare-and-set update(); a
+          // double without update() sent every run down the crash path, and
+          // one whose save() hands back the caller's own object cannot show
+          // a guarded write working at all.
           provide: getRepositoryToken(AgentExecution),
-          useValue: {
-            create: jest.fn().mockReturnValue(execution),
-            save: jest.fn().mockImplementation((e: any) => Promise.resolve(e)),
-          },
+          useValue: fakeExecutionRepo([execution]),
         },
         { provide: AgentNodeExecutor, useValue: nodeExecutor },
         { provide: AgentWebhookService, useValue: { sendExecutionWebhook: jest.fn().mockResolvedValue(undefined) } },
