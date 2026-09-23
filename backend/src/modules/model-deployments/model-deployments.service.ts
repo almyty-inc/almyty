@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { ModelDeployment, ModelDeploymentDesired, ModelDeploymentState } from '../../entities/model-deployment.entity';
 import { ModelVersion } from '../../entities/model-version.entity';
 import { Model } from '../../entities/model.entity';
+import { SpendBudget } from '../../entities/spend-budget.entity';
 import { Credential } from '../../entities/credential.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -71,6 +72,11 @@ export class ModelDeploymentsService {
     // and a guard test asserts that, so the card check below is never a
     // silent no-op in a running server.
     @Optional() @InjectRepository(Model) private readonly models?: Repository<Model>,
+    // Same shape as `models` above, and last for the same reason: optional
+    // only so the positional constructions in the specs keep working. The
+    // module provides it and a guard test asserts the wiring, so the
+    // budget check above is never a silent no-op in a running server.
+    @Optional() @InjectRepository(SpendBudget) private readonly budgets?: Repository<SpendBudget>,
   ) {}
 
   async list(organizationId: string): Promise<ModelDeployment[]> {
@@ -99,6 +105,15 @@ export class ModelDeploymentsService {
     if (dto.modelId && this.models) {
       const card = await this.models.findOne({ where: { id: dto.modelId, organizationId } });
       if (!card) throw new NotFoundException('Model card not found');
+    }
+    // And for the spend budget that caps this deployment. An id that is a
+    // typo, or belongs to another organization, satisfied the foreign key
+    // and saved quietly; the reconcile loop then looked it up scoped to
+    // the deployment's own organization, found nothing, and returned. The
+    // deployment ran with no cap at all, and nothing anywhere said so.
+    if (dto.budgetId && this.budgets) {
+      const budget = await this.budgets.findOne({ where: { id: dto.budgetId, organizationId } });
+      if (!budget) throw new NotFoundException('Spend budget not found');
     }
     const reference = version?.registryUri ?? dto.model;
     if (!reference) {

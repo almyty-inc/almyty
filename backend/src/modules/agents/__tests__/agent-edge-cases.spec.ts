@@ -88,6 +88,8 @@ describe('Agent Edge Cases', () => {
     agentExecutionRepo = {
       create: jest.fn(),
       save: jest.fn(),
+      // Terminal writes are a guarded UPDATE now (see commitTerminal).
+      update: jest.fn(async () => ({ affected: 1 })),
     };
 
     const mockNodeExecutor = {

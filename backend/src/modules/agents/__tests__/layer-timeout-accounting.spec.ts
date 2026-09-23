@@ -90,6 +90,13 @@ describe('AgentExecutionEngine - a layer that times out', () => {
     agentExecutionRepo = {
       create: jest.fn().mockReturnValue(execution),
       save: jest.fn(async (e: any) => e),
+      // Terminal writes are a guarded UPDATE now (see commitTerminal);
+      // apply the partial so assertions on the persisted cost still see
+      // what the engine wrote.
+      update: jest.fn(async (_criteria: any, partial: any) => {
+        Object.assign(execution, partial);
+        return { affected: 1 };
+      }),
     };
 
     nodeExecutor = {

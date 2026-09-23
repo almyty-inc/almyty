@@ -12,11 +12,36 @@ export function ensureTestKey(): void {
   process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'unit-test-key-32-bytes-minimum-len';
 }
 
+/**
+ * Enough of TypeORM's FindOperator to drive the real queries: `In(...)`,
+ * `IsNull()` and `Not(...)` wrapping either. The sweep asks for failed
+ * rows that still have an endpoint as `externalRef: Not(IsNull())`, and a
+ * fake that compared the operator object by identity answered "no rows",
+ * which looks exactly like a broken sweep.
+ */
+function operatorMatches(op: any, value: any): boolean {
+  switch (op._type) {
+    case 'in':
+      return (op._value as any[]).includes(value);
+    case 'isNull':
+      return value === null || value === undefined;
+    case 'not':
+      return !matchesValue(op._value, value);
+    default:
+      return op._value === value;
+  }
+}
+
+function isOperator(v: any): boolean {
+  return !!v && typeof v === 'object' && '_type' in v;
+}
+
+function matchesValue(expected: any, value: any): boolean {
+  return isOperator(expected) ? operatorMatches(expected, value) : expected === value;
+}
+
 function matches(row: any, where: Record<string, any> | undefined): boolean {
-  return Object.entries(where ?? {}).every(([k, v]) => {
-    if (v && typeof v === 'object' && '_type' in v && Array.isArray(v._value)) return v._value.includes(row[k]);
-    return row[k] === v;
-  });
+  return Object.entries(where ?? {}).every(([k, v]) => matchesValue(v, row[k]));
 }
 
 export interface FakeRepo<T extends { id?: string }> {

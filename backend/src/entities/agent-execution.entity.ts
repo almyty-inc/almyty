@@ -20,6 +20,22 @@ export enum AgentExecutionStatus {
   TIMEOUT = 'timeout',
 }
 
+/**
+ * Statuses a workflow execution never leaves.
+ *
+ * Shared, because three separate things now have to agree on the same
+ * list: the cancellation service (which refuses to cancel a row that is
+ * already one of these), the engine (whose terminal writes are guarded on
+ * the row NOT already being one of these) and the execution reaper (which
+ * only sweeps rows that are not).
+ */
+export const TERMINAL_EXECUTION_STATUSES: readonly AgentExecutionStatus[] = [
+  AgentExecutionStatus.COMPLETED,
+  AgentExecutionStatus.FAILED,
+  AgentExecutionStatus.CANCELLED,
+  AgentExecutionStatus.TIMEOUT,
+];
+
 @Entity('agent_executions')
 @Index(['agentId', 'createdAt'])
 @Index(['organizationId', 'createdAt'])

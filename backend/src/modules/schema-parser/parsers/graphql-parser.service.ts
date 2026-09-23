@@ -19,6 +19,34 @@ import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../
 /** Hard cap on GraphQL SDL input size — memory DoS protection. */
 const MAX_SDL_BYTES = 5 * 1024 * 1024; // 5 MB
 
+/**
+ * Ceiling on how many property nodes one parse may emit.
+ *
+ * Input size does not bound output size here. Field expansion is
+ * quadratic — every field of every type is expanded one level deep, so
+ * a type with N fields of a type with M fields costs N x M objects —
+ * and N and M are each linear in the SDL. A 194 KB document therefore
+ * produces 64 million objects and a V8 heap OOM, which is a process
+ * abort: the `catch` in `parseSchema` never runs, and because the
+ * BullMQ processor shares a process with the HTTP server the whole
+ * backend goes down with it.
+ *
+ * For scale, GitHub's GraphQL schema (one of the largest public ones,
+ * ~1500 types) lands around a quarter of this. Exhausting the budget is
+ * not an error: expansion simply stops, and the remaining object types
+ * come out in the same shape the existing depth cap already produces.
+ */
+const MAX_EXPANDED_PROPERTY_NODES = 1_000_000;
+
+/** Mutable expansion allowance, shared across one parse. */
+interface ExpansionBudget {
+  left: number;
+}
+
+function newExpansionBudget(): ExpansionBudget {
+  return { left: MAX_EXPANDED_PROPERTY_NODES };
+}
+
 @Injectable()
 export class GraphQLParserService implements SchemaParser {
   private readonly logger = new Logger(GraphQLParserService.name);
@@ -30,8 +58,12 @@ export class GraphQLParserService implements SchemaParser {
       }
       const schema = buildSchema(rawSchema);
 
-      const operations = await this.extractOperationsFromGraphQL(schema);
-      const resources = await this.extractResourcesFromGraphQL(schema);
+      // One budget for the whole parse: operations and resources draw
+      // from the same allowance, so the total emitted is bounded even
+      // when a schema concentrates its size in one of the two.
+      const budget = newExpansionBudget();
+      const operations = await this.extractOperationsFromGraphQL(schema, budget);
+      const resources = await this.extractResourcesFromGraphQL(schema, budget);
 
       return {
         version: '1.0.0', // GraphQL doesn't have versioning in schema
@@ -115,7 +147,10 @@ export class GraphQLParserService implements SchemaParser {
     return resources;
   }
 
-  private async extractOperationsFromGraphQL(schema: GraphQLSchema): Promise<ParsedOperation[]> {
+  private async extractOperationsFromGraphQL(
+    schema: GraphQLSchema,
+    budget: ExpansionBudget = newExpansionBudget(),
+  ): Promise<ParsedOperation[]> {
     const operations: ParsedOperation[] = [];
 
     // Extract queries
@@ -123,7 +158,7 @@ export class GraphQLParserService implements SchemaParser {
     if (queryType) {
       const queryFields = queryType.getFields();
       for (const [fieldName, field] of Object.entries(queryFields)) {
-        operations.push(this.createOperationFromField(fieldName, field, 'query'));
+        operations.push(this.createOperationFromField(fieldName, field, 'query', budget));
       }
     }
 
@@ -132,7 +167,7 @@ export class GraphQLParserService implements SchemaParser {
     if (mutationType) {
       const mutationFields = mutationType.getFields();
       for (const [fieldName, field] of Object.entries(mutationFields)) {
-        operations.push(this.createOperationFromField(fieldName, field, 'mutation'));
+        operations.push(this.createOperationFromField(fieldName, field, 'mutation', budget));
       }
     }
 
@@ -141,14 +176,19 @@ export class GraphQLParserService implements SchemaParser {
     if (subscriptionType) {
       const subscriptionFields = subscriptionType.getFields();
       for (const [fieldName, field] of Object.entries(subscriptionFields)) {
-        operations.push(this.createOperationFromField(fieldName, field, 'subscription'));
+        operations.push(this.createOperationFromField(fieldName, field, 'subscription', budget));
       }
     }
 
     return operations;
   }
 
-  private createOperationFromField(fieldName: string, field: GraphQLField<any, any>, operationType: string): ParsedOperation {
+  private createOperationFromField(
+    fieldName: string,
+    field: GraphQLField<any, any>,
+    operationType: string,
+    budget: ExpansionBudget = newExpansionBudget(),
+  ): ParsedOperation {
     return {
       operationId: `${operationType}_${fieldName}`,
       name: fieldName,
@@ -165,7 +205,7 @@ export class GraphQLParserService implements SchemaParser {
           variables: {
             type: 'object',
             description: 'GraphQL variables',
-            properties: this.extractArgumentsAsProperties(field.args),
+            properties: this.extractArgumentsAsProperties(field.args, budget),
           },
         },
       },
@@ -175,7 +215,7 @@ export class GraphQLParserService implements SchemaParser {
           schema: {
             type: 'object',
             properties: {
-              data: this.convertGraphQLTypeToJsonSchema(field.type),
+              data: this.convertGraphQLTypeToJsonSchema(field.type, 0, budget),
               errors: {
                 type: 'array',
                 items: {
@@ -195,12 +235,15 @@ export class GraphQLParserService implements SchemaParser {
     };
   }
 
-  private extractArgumentsAsProperties(args: readonly GraphQLArgument[]): Record<string, any> {
+  private extractArgumentsAsProperties(
+    args: readonly GraphQLArgument[],
+    budget: ExpansionBudget = newExpansionBudget(),
+  ): Record<string, any> {
     const properties: Record<string, any> = {};
 
     for (const arg of args) {
       properties[arg.name] = {
-        ...this.convertGraphQLTypeToJsonSchema(arg.type),
+        ...this.convertGraphQLTypeToJsonSchema(arg.type, 0, budget),
         // Preserve the original GraphQL type signature ("ID!",
         // "[String!]!", "Int") so downstream consumers (the skill
         // generator's query template builder, and any UI showing
@@ -226,7 +269,10 @@ export class GraphQLParserService implements SchemaParser {
     return graphqlType.name || 'String';
   }
 
-  private async extractResourcesFromGraphQL(schema: GraphQLSchema): Promise<ParsedResource[]> {
+  private async extractResourcesFromGraphQL(
+    schema: GraphQLSchema,
+    budget: ExpansionBudget = newExpansionBudget(),
+  ): Promise<ParsedResource[]> {
     const resources: ParsedResource[] = [];
     const typeMap = schema.getTypeMap();
 
@@ -240,7 +286,7 @@ export class GraphQLParserService implements SchemaParser {
 
         for (const [fieldName, field] of Object.entries(fields)) {
           properties[fieldName] = {
-            ...this.convertGraphQLTypeToJsonSchema(field.type),
+            ...this.convertGraphQLTypeToJsonSchema(field.type, 0, budget),
             description: field.description,
             required: false, // GraphQL handles this differently
           };
@@ -280,6 +326,7 @@ export class GraphQLParserService implements SchemaParser {
   private convertGraphQLTypeToJsonSchema(
     graphqlType: any,
     depth = 0,
+    budget: ExpansionBudget = newExpansionBudget(),
   ): Record<string, any> {
     // Handle NonNull types: unwrap and recurse on the inner type.
     // Use isNonNullType explicitly — the previous shape branched on
@@ -292,14 +339,14 @@ export class GraphQLParserService implements SchemaParser {
     // GraphQL API actually expected an array. Handle NonNull and
     // List as distinct shapes, in the right order.
     if (isNonNullType(graphqlType)) {
-      return this.convertGraphQLTypeToJsonSchema(graphqlType.ofType, depth);
+      return this.convertGraphQLTypeToJsonSchema(graphqlType.ofType, depth, budget);
     }
 
     // Handle List types
     if (isListType(graphqlType)) {
       return {
         type: 'array',
-        items: this.convertGraphQLTypeToJsonSchema(graphqlType.ofType, depth),
+        items: this.convertGraphQLTypeToJsonSchema(graphqlType.ofType, depth, budget),
       };
     }
 
@@ -339,13 +386,28 @@ export class GraphQLParserService implements SchemaParser {
         type: 'object',
         description: graphqlType.description,
       };
-      if (depth < 1) {
+      // Expanding one level costs |fields| nodes, and this function is
+      // called once per field of every type — so the unbudgeted version
+      // emitted |A.fields| x |T.fields| objects. `type A { f0..f7999: T }
+      // type T { g0..g7999: String }` is a 194 KB SDL and 64 million
+      // objects: a V8 heap OOM, which aborts the process rather than
+      // raising something the catch block could turn into a 400.
+      //
+      // The budget is shared across the whole parse and consumed by
+      // every node emitted, so total output is bounded no matter how the
+      // schema distributes its fields. Running out degrades to the same
+      // shape a depth-capped type already produces — `{type:'object'}`
+      // with no field list — which downstream consumers already handle.
+      if (depth < 1 && budget.left > 0) {
         const fields = (graphqlType as GraphQLObjectType).getFields();
         const properties: Record<string, any> = {};
         for (const [name, field] of Object.entries(fields)) {
+          if (budget.left <= 0) break;
+          budget.left--;
           properties[name] = this.convertGraphQLTypeToJsonSchema(
             field.type,
             depth + 1,
+            budget,
           );
         }
         out.properties = properties;

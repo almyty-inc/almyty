@@ -29,11 +29,15 @@
  */
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { parentPort, workerData } from 'worker_threads';
-import { createRequire, builtinModules } from 'module';
+import { createRequire, builtinModules, registerHooks } from 'module';
+import { pathToFileURL } from 'url';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { WorkerInput, WorkerOutput } from './types';
-import { installSandboxNetGuard } from './sandbox-net-guard';
+import {
+  installSandboxNetGuard,
+  lockSandboxNetGuard,
+} from './sandbox-net-guard';
 
 /**
  * ALLOWLIST of Node built-ins that user sandbox code may require().
@@ -134,6 +138,12 @@ async function run() {
   // net/http/https/dgram. This patches the prototypes in place so
   // every subsequent require sees the patched version.
   installSandboxNetGuard({ testAllow: testNetAllow });
+  // Seal it. The guard is a module in the same realm and the same
+  // require cache as the tool code about to run, and both its install
+  // and reset entry points are exports — so without this, user code
+  // could reach into the cache, reset the guard and re-install it with
+  // a blanket `testAllow`. Confirmed reachable; see lockSandboxNetGuard.
+  lockSandboxNetGuard();
 
   // Step 2 — scrub process.env before user code runs. The worker thread
   // inherits the backend's environment by default, which means every
@@ -159,6 +169,58 @@ async function run() {
     } catch {
       /* give up; denylist above is still in place */
     }
+  }
+
+  // Step 2b — close the two routes that reach a built-in WITHOUT
+  // going through `sandboxRequire`.
+  //
+  // The allowlist below is a real runtime hook, not a source scan, so
+  // `require(['f','s'].join(''))` is correctly refused. But it only
+  // ever saw the `require` function injected as a parameter of the
+  // AsyncFunction. The function BODY is ordinary script text in this
+  // realm, and these never touched that injected parameter:
+  //
+  //     await import('node:net')                       // and 'node:fs', 'node:child_process'
+  //     process.mainModule.require('net')
+  //     (await import('node:module')).createRequire('/x.js')('net')
+  //     process.getBuiltinModule('fs')
+  //
+  // so the allowlist protected nothing the permission model did not
+  // already protect, while being the stated first line of defence for
+  // `net`, `dns` and `worker_threads`.
+  //
+  // `module.registerHooks` is in-thread and synchronous, and it sits
+  // under `import()`, `createRequire` and `mainModule.require` alike.
+  // `context.parentURL` says who is importing, which is what lets this
+  // keep the deliberate carve-out documented on ALLOWED_MODULES: an
+  // installed dependency that internally requires `http` still gets it
+  // (its parentURL is inside node_modules), while the tool's own code
+  // — whose parentURL is this worker script — is held to the list.
+  const selfUrl = pathToFileURL(__filename).href;
+  registerHooks({
+    resolve(specifier: string, context: any, nextResolve: any) {
+      const fromUserCode = !context?.parentURL || context.parentURL === selfUrl;
+      if (fromUserCode) {
+        const bare = specifier.startsWith('node:')
+          ? specifier.slice(5)
+          : specifier;
+        if (builtinModules.includes(bare) && !ALLOWED_MODULES.has(specifier)) {
+          throw new Error(
+            `Module "${specifier}" is not allowed in the sandbox.`,
+          );
+        }
+      }
+      return nextResolve(specifier, context);
+    },
+  });
+
+  // `process.getBuiltinModule` hands back a built-in directly — no
+  // specifier resolution, so no hook runs. It is a plain own property
+  // of `process`, and nothing in this worker or in the guard uses it.
+  try {
+    delete (process as any).getBuiltinModule;
+  } catch {
+    /* non-configurable on some build — the hook still covers the rest */
   }
 
   // Step 3 — build the allowlisted require. First try resolving

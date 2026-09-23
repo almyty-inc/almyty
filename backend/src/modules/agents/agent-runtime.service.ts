@@ -480,8 +480,10 @@ export class AgentRuntimeService implements OnModuleInit {
   /**
    * Cancel a run. Optional agentId argument asserts the run belongs
    * to that agent (for the /agents/:id/runs/:runId/cancel route).
+   * Optional userId names who did it on the audit row; both are appended
+   * last so no existing positional caller shifts.
    */
-  async cancelRun(runId: string, organizationId: string, agentId?: string): Promise<AgentRun> {
+  async cancelRun(runId: string, organizationId: string, agentId?: string, userId?: string): Promise<AgentRun> {
     const run = await this.getRun(runId, organizationId, agentId);
     if (run.isDone()) {
       throw new BadRequestException('Run is already completed');
@@ -489,6 +491,30 @@ export class AgentRuntimeService implements OnModuleInit {
     run.status = AgentRunStatus.CANCELLED;
     await this.runRepository.save(run);
     this.emitEvent(runId, 'run.cancelled', {});
+
+    // RUN_CANCEL was declared on AuditAction and emitted by nothing.
+    // Cancelling stops work the organization is paying for and any member
+    // can do it, so it leaves a row like every other sensitive action.
+    // Fire and forget, for the same reason run_start is.
+    this.auditLogService
+      ?.log({
+        organizationId,
+        userId,
+        action: AuditAction.RUN_CANCEL,
+        resourceType: AuditResource.AGENT_RUN,
+        resourceId: run.id,
+        details: {
+          kind: 'autonomous_run',
+          agentId: run.agentId,
+          cancelledAtStep: run.currentStep,
+          totalCost: run.totalCost,
+          totalTokens: run.totalTokens,
+        },
+      })
+      .catch((err: any) => {
+        this.logger.warn(`Could not audit cancel for run ${run.id}: ${err?.message}`);
+      });
+
     return run;
   }
 

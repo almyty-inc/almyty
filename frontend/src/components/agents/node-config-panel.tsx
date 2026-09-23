@@ -103,6 +103,7 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
         {nodeType === 'loop' && <LoopConfig node={node} updateData={updateData} />}
         {nodeType === 'verify' && <VerifyConfig node={node} updateData={updateData} />}
         {nodeType === 'extract_context' && <ExtractContextConfig node={node} updateData={updateData} />}
+        {nodeType === 'decision' && <DecisionConfig key={node.id} node={node} updateData={updateData} />}
       </div>
 
       {/* Footer: delete */}
@@ -1434,6 +1435,257 @@ function ExtractContextConfig({ node, updateData }: { node: Node; updateData: Up
           that does not parse fails the node.
         </p>
       </div>
+    </div>
+  )
+}
+
+// --- Decision Config ---
+
+interface DecisionOption {
+  id: string
+  description?: string
+  abstain?: boolean
+}
+
+interface DecisionQuestion {
+  id?: string
+  type?: 'choice' | 'score' | 'boolean'
+  prompt?: string
+  options?: DecisionOption[]
+  optionsOrderPolicy?: 'asis' | 'permute2' | 'prior_debias'
+}
+
+// `boolean` is a contract type but the node refuses it: a boolean question
+// declares no options, so it has no abstain edge and the threshold protects
+// nothing. It is offerable only on a node that already carries it, so an
+// imported graph can be read and corrected rather than silently failing.
+const DECISION_TYPES = [
+  { value: 'choice', label: 'Choice - pick one declared option' },
+  { value: 'score', label: 'Score - pick one ordered level' },
+] as const
+
+// Same rule: only `asis` is served today, and the node refuses the other two
+// by name rather than quietly serving the declared order.
+const DECISION_ORDER_POLICIES = [{ value: 'asis', label: 'As written' }] as const
+
+function DecisionConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+  const question = ((node.data.question as DecisionQuestion) || {}) as DecisionQuestion
+  const options: DecisionOption[] = Array.isArray(question.options) ? question.options : []
+  const thresholds = (node.data.thresholds as Record<string, number>) || {}
+  const type = question.type || 'choice'
+  const isBoolean = type === 'boolean'
+  const abstainCount = options.filter((o) => o?.abstain === true).length
+  const orderPolicy = question.optionsOrderPolicy || 'asis'
+  const unservedOrderPolicy = orderPolicy !== 'asis'
+
+  const patchQuestion = (patch: Partial<DecisionQuestion>) => {
+    updateData('question', { ...question, ...patch })
+  }
+  const patchOption = (index: number, patch: Partial<DecisionOption>) => {
+    patchQuestion({ options: options.map((o, i) => (i === index ? { ...o, ...patch } : o)) })
+  }
+  const addOption = () => {
+    patchQuestion({ options: [...options, { id: '' }] })
+  }
+  const removeOption = (index: number) => {
+    patchQuestion({ options: options.filter((_, i) => i !== index) })
+  }
+  // Exactly one abstain option, enforced here rather than left to the
+  // backend to refuse: marking a second one silently unmarks the first.
+  const markAbstain = (index: number) => {
+    patchQuestion({ options: options.map((o, i) => ({ ...o, abstain: i === index ? true : undefined })) })
+  }
+  const setThreshold = (optionId: string, raw: string) => {
+    const next = { ...thresholds }
+    if (raw === '') delete next[optionId]
+    else next[optionId] = Number(raw)
+    updateData('thresholds', Object.keys(next).length > 0 ? next : undefined)
+  }
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label htmlFor="decision-question-id">Question ID</Label>
+        <Input
+          id="decision-question-id"
+          className="mt-1 font-mono text-xs"
+          value={question.id || ''}
+          onChange={(e) => patchQuestion({ id: e.target.value })}
+          placeholder="decision"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          Answers come back keyed by this id.
+        </p>
+      </div>
+
+      <div>
+        <Label htmlFor="decision-type">Question type</Label>
+        <Select value={type} onValueChange={(v) => patchQuestion({ type: v as DecisionQuestion['type'] })}>
+          <SelectTrigger id="decision-type" className="mt-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DECISION_TYPES.map((t) => (
+              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+            ))}
+            {isBoolean && (
+              <SelectItem value="boolean">Boolean - refused by this node</SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+        {isBoolean && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            This node refuses a boolean question at run time: it declares no options, so it has
+            no abstain edge and no threshold to clear. Ask it as a choice with yes / no /
+            abstain options instead.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <Label htmlFor="decision-prompt">Prompt</Label>
+        <Textarea
+          id="decision-prompt"
+          className="mt-1 text-xs"
+          rows={3}
+          value={question.prompt || ''}
+          onChange={(e) => patchQuestion({ prompt: e.target.value })}
+          placeholder="Does this ticket describe a billing problem?"
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          The question asked of the state wired into this node. It is answered with a
+          distribution over the options below, not with prose.
+        </p>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between">
+          <Label>Options</Label>
+          <span className="text-xs text-muted-foreground">{options.length}</span>
+        </div>
+
+        {abstainCount === 0 && (
+          <p className="text-xs text-muted-foreground mt-1">
+            No abstain option. Every choice question needs one — without it the node cannot
+            answer "the state does not say" and returns its best-scoring wrong option
+            instead.
+          </p>
+        )}
+
+        <div className="mt-2 space-y-2">
+          {options.map((option, i) => (
+            <div key={i} className="rounded-lg border p-2 space-y-2 bg-background">
+              <div className="flex items-center gap-1">
+                <Input
+                  className="text-xs font-mono"
+                  aria-label={`Option ${i + 1} id`}
+                  placeholder="option id"
+                  value={option.id || ''}
+                  onChange={(e) => patchOption(i, { id: e.target.value })}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  aria-label={`Remove option ${i + 1}`}
+                  onClick={() => removeOption(i)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+
+              <Input
+                className="text-xs"
+                aria-label={`Option ${i + 1} description`}
+                placeholder="what this option means (optional)"
+                value={option.description || ''}
+                onChange={(e) => patchOption(i, { description: e.target.value || undefined })}
+              />
+
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id={`decision-abstain-${i}`}
+                    aria-label={`Option ${i + 1} is the abstain option`}
+                    checked={option.abstain === true}
+                    onCheckedChange={(checked) =>
+                      checked ? markAbstain(i) : patchOption(i, { abstain: undefined })
+                    }
+                  />
+                  <Label htmlFor={`decision-abstain-${i}`} className="text-xs font-normal">
+                    Abstain
+                  </Label>
+                </div>
+
+                {option.abstain !== true && (
+                  <div className="flex items-center gap-1">
+                    <Label
+                      htmlFor={`decision-threshold-${i}`}
+                      className="text-xs font-normal text-muted-foreground"
+                    >
+                      Threshold
+                    </Label>
+                    <Input
+                      id={`decision-threshold-${i}`}
+                      className="text-xs w-20"
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      aria-label={`Option ${i + 1} threshold`}
+                      value={
+                        typeof thresholds[option.id] === 'number' ? String(thresholds[option.id]) : ''
+                      }
+                      onChange={(e) => setThreshold(option.id, e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          <Button variant="outline" size="sm" className="w-full" onClick={addOption}>
+            Add Option
+          </Button>
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="decision-order-policy">Option order</Label>
+        <Select
+          value={orderPolicy}
+          onValueChange={(v) => patchQuestion({ optionsOrderPolicy: v as DecisionQuestion['optionsOrderPolicy'] })}
+        >
+          <SelectTrigger id="decision-order-policy" className="mt-1">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DECISION_ORDER_POLICIES.map((p) => (
+              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+            ))}
+            {unservedOrderPolicy && (
+              <SelectItem value={orderPolicy}>{orderPolicy} - refused by this node</SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground mt-1">
+          Where an option sits in the prompt moves the answer on its own, so the order they
+          happen to be written in is a confound. Only <code>asis</code> is served today.
+        </p>
+        {unservedOrderPolicy && (
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            This node refuses <code>{orderPolicy}</code> at run time rather than quietly serving
+            the declared order, because a caller who asked for the order to be debiased cannot
+            tell from the distribution that it was not.
+          </p>
+        )}
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        The node leaves by the edge of the winning option. An answer that scores below that
+        option's threshold leaves by <code>abstain</code> instead, so a low-confidence guess
+        is never handed downstream as a decision.
+      </p>
     </div>
   )
 }

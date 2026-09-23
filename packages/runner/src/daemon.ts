@@ -9,9 +9,10 @@ import { describeIsolationPosture, loadConfig } from './config.js';
 import { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
 import { createDefaultAdapterFactory, ProcessManager } from './process-manager.js';
 import { StreamableClient, envelope } from './streamable-client.js';
-import { WorkerEnvelope, RequestPayload, ResponsePayload, WORKER_ERROR_CODES } from './protocol.js';
+import { WorkerEnvelope, RequestPayload, ResponsePayload, HeartbeatPayload, WORKER_ERROR_CODES } from './protocol.js';
 import { dispatchHandler, HandlerContext } from './handlers.js';
 import { CodingSessionManager } from './coding-sessions.js';
+import { WorkspaceReclaimer } from './workspace-reclaimer.js';
 
 const STATE_DIR = join(homedir(), '.almyty', 'runner');
 const PID_FILE = join(STATE_DIR, 'daemon.pid');
@@ -42,7 +43,9 @@ export interface DaemonStatus {
  *   4. POST /runners/register with the snapshot.
  *   5. Open the Streamable HTTP stream and start dispatching incoming
  *      envelopes to handlers.
- *   6. Heartbeat every 30s.
+ *   6. Heartbeat every 30s, and reconcile workspaces against the set
+ *      of still-active ones the backend returns in each ack — killing
+ *      processes for workspaces that have been released or expired.
  *   7. On SIGTERM / SIGINT: send a final shutdown envelope, wait
  *      briefly for in-flight responses, then exit.
  *
@@ -54,6 +57,7 @@ export class RunnerDaemon {
   private client: StreamableClient | null = null;
   private processes: ProcessManager | null = null;
   private coding: CodingSessionManager | null = null;
+  private reclaimer: WorkspaceReclaimer | null = null;
   private runnerId: string | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private status: DaemonStatus | null = null;
@@ -127,6 +131,15 @@ export class RunnerDaemon {
       void this.client?.send(envelope('event', payload)).catch((err: any) => {
         process.stderr.write(`coding event send failed: ${err?.message ?? err}\n`);
       });
+    });
+    // Workspace cleanup. Each heartbeat ack carries the set of
+    // workspaces the backend still lists as active; anything this
+    // machine is still hosting outside that set gets its processes
+    // killed. Reclaims are announced on stdout, not silently: these are
+    // the user's own processes on the user's own machine.
+    this.reclaimer = new WorkspaceReclaimer(this.processes, {
+      info: (line) => process.stdout.write(`${line}\n`),
+      warn: (line) => process.stderr.write(`${line}\n`),
     });
 
     // Open the Streamable HTTP stream.
@@ -207,9 +220,18 @@ export class RunnerDaemon {
         this.handleRequest(env as WorkerEnvelope<RequestPayload>).catch(err => {
           process.stderr.write(`request handling error: ${err.message}\n`);
         });
+        return;
       }
-      // Heartbeat / event envelopes from the server are observational;
-      // the runner doesn't react to them in v1.0.
+      if (env.type === 'heartbeat') {
+        // Heartbeat ack: carries the workspaces the backend still lists
+        // as active. Everything about the decision to kill (including
+        // deciding not to) lives in the reclaimer.
+        void this.reclaimer?.onAck(env).catch(err => {
+          process.stderr.write(`workspace reconcile failed: ${err?.message ?? err}\n`);
+        });
+        return;
+      }
+      // Other server-side event envelopes are observational.
     });
     this.client.on('reconnect', info => {
       process.stderr.write(`reconnecting (attempt ${info.attempt}, delay ${info.delayMs}ms): ${info.reason}\n`);
@@ -257,7 +279,12 @@ export class RunnerDaemon {
   private async heartbeat(): Promise<void> {
     if (!this.client || !this.processes) return;
     const inUse = this.processes.inUse();
-    await this.client.send(envelope('heartbeat', { ts: Date.now(), inUse }));
+    const env = envelope<HeartbeatPayload>('heartbeat', { ts: Date.now(), inUse });
+    // Remember the beat before it goes out: the backend can answer
+    // faster than the await resolves, and an ack we cannot correlate to
+    // a heartbeat we sent is ignored.
+    this.reclaimer?.noteSent(env.id, Date.now());
+    await this.client.send(env);
     this.updateState({ inUseProcesses: inUse });
   }
 

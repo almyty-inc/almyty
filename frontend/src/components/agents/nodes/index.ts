@@ -10,6 +10,7 @@ export { SubAgentNode } from './sub-agent-node'
 export { LoopNode } from './loop-node'
 export { VerifyNode } from './verify-node'
 export { ExtractContextNode } from './extract-context-node'
+export { DecisionNode } from './decision-node'
 
 import type { NodeTypes } from '@xyflow/react'
 import { InputNode } from './input-node'
@@ -24,6 +25,7 @@ import { ParallelNode } from './parallel-node'
 import { SubAgentNode } from './sub-agent-node'
 import { VerifyNode } from './verify-node'
 import { ExtractContextNode } from './extract-context-node'
+import { DecisionNode } from './decision-node'
 
 // Every type the engine runs and the strategy compiler can emit. A type
 // missing here reaches React Flow unregistered, which draws nothing: an
@@ -42,6 +44,7 @@ export const nodeTypes: NodeTypes = {
   sub_agent: SubAgentNode,
   verify: VerifyNode,
   extract_context: ExtractContextNode,
+  decision: DecisionNode,
 }
 
 export type PipelineNodeType = keyof typeof nodeTypes
@@ -59,4 +62,5 @@ export const NODE_TYPE_CONFIG: Record<PipelineNodeType, { label: string; color: 
   sub_agent: { label: 'Sub-Agent', color: 'bg-violet-500', description: 'Run another agent' },
   verify: { label: 'Verify', color: 'bg-emerald-500', description: 'Check an answer against a spec' },
   extract_context: { label: 'Extract Context', color: 'bg-sky-500', description: 'Compress prior steps into a brief' },
+  decision: { label: 'Decision', color: 'bg-cyan-500', description: 'Ask a typed question over declared options' },
 }
