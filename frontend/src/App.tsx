@@ -30,21 +30,53 @@ import { usePageviews } from '@/hooks/use-pageviews'
 
 // Lazy-loaded pages — code-split into separate chunks
 const DashboardPage = lazy(() => import('@/pages/dashboard').then(m => ({ default: m.DashboardPage })))
+const GuidePage = lazy(() => import('@/pages/guide').then(m => ({ default: m.GuidePage })))
 const GatewaysPage = lazy(() => import('@/pages/gateways').then(m => ({ default: m.GatewaysPage })))
 const GatewayDetailPage = lazy(() => import('@/pages/gateway-detail').then(m => ({ default: m.GatewayDetailPage })))
+const GatewayNewPage = lazy(() => import('@/pages/gateway-new').then(m => ({ default: m.GatewayNewPage })))
+const GatewayEditPage = lazy(() => import('@/pages/gateway-edit').then(m => ({ default: m.GatewayEditPage })))
+const AppNewPage = lazy(() => import('@/pages/app-new').then(m => ({ default: m.AppNewPage })))
+const AppDistributionNewPage = lazy(() => import('@/pages/app-distribution-new').then(m => ({ default: m.AppDistributionNewPage })))
+const AppDistributionPage = lazy(() => import('@/pages/app-distribution').then(m => ({ default: m.AppDistributionPage })))
+const AppSigningNewPage = lazy(() => import('@/pages/app-signing-new').then(m => ({ default: m.AppSigningNewPage })))
 const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisPage })))
 const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ default: m.ApiDetailPage })))
+const ApiNewPage = lazy(() => import('@/pages/api-new').then(m => ({ default: m.ApiNewPage })))
+const ApiEditPage = lazy(() => import('@/pages/api-edit').then(m => ({ default: m.ApiEditPage })))
+const ApiImportPage = lazy(() => import('@/pages/api-import').then(m => ({ default: m.ApiImportPage })))
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
+const ToolNewPage = lazy(() => import('@/pages/tool-new').then(m => ({ default: m.ToolNewPage })))
+const ToolPublishPage = lazy(() => import('@/pages/tool-publish').then(m => ({ default: m.ToolPublishPage })))
+const McpServerNewPage = lazy(() => import('@/pages/mcp-server-new').then(m => ({ default: m.McpServerNewPage })))
+const LlmProvidersPage = lazy(() => import('@/pages/llm-providers').then(m => ({ default: m.LlmProvidersPage })))
 const LlmProviderDetailPage = lazy(() => import('@/pages/llm-provider-detail').then(m => ({ default: m.LlmProviderDetailPage })))
+const LlmProviderNewPage = lazy(() => import('@/pages/llm-provider-new').then(m => ({ default: m.LlmProviderNewPage })))
+const LlmProviderEditPage = lazy(() => import('@/pages/llm-provider-edit').then(m => ({ default: m.LlmProviderEditPage })))
 const ModelsPage = lazy(() => import('@/pages/models').then(m => ({ default: m.ModelsPage })))
+const ModelNewPage = lazy(() => import('@/pages/model-new').then(m => ({ default: m.ModelNewPage })))
+const ModelDetailPage = lazy(() => import('@/pages/model-detail').then(m => ({ default: m.ModelDetailPage })))
+const HostedModelPage = lazy(() => import('@/pages/hosted-model').then(m => ({ default: m.HostedModelPage })))
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ default: m.AnalyticsPage })))
 const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
+const CredentialNewPage = lazy(() => import('@/pages/credential-new').then(m => ({ default: m.CredentialNewPage })))
+const AccessKeyNewPage = lazy(() => import('@/pages/credential-new').then(m => ({ default: m.AccessKeyNewPage })))
+const MemoryNewPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryNewPage })))
+const MemoryTransferPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryTransferPage })))
+const AnalyticsBudgetPage = lazy(() => import('@/pages/analytics-budget').then(m => ({ default: m.AnalyticsBudgetPage })))
+const ApprovalPolicyPage = lazy(() => import('@/pages/approval-policy').then(m => ({ default: m.ApprovalPolicyPage })))
+const ConnectionConnectPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionConnectPage })))
+const ConnectionDetailRoutePage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionDetailRoutePage })))
+const CustomConnectorNewPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.CustomConnectorNewPage })))
+const ConnectionPolicyPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionPolicyPage })))
+const OrganizationNewPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationNewPage })))
+const OrganizationDetailPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationDetailPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
 const OrganizationsPage = lazy(() => import('@/pages/organizations').then(m => ({ default: m.OrganizationsPage })))
 const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatPage })))
 const AgentsPage = lazy(() => import('@/pages/agents').then(m => ({ default: m.AgentsPage })))
 const AgentBuilderPage = lazy(() => import('@/pages/agent-builder').then(m => ({ default: m.AgentBuilderPage })))
+const AgentImportPage = lazy(() => import('@/pages/agent-import').then(m => ({ default: m.AgentImportPage })))
 const AgentDetailPage = lazy(() => import('@/pages/agent-detail').then(m => ({ default: m.AgentDetailPage })))
 const RunnersPage = lazy(() => import('@/pages/runners').then(m => ({ default: m.RunnersPage })))
 const ApprovalsPage = lazy(() => import('@/pages/approvals').then(m => ({ default: m.ApprovalsPage })))
@@ -59,6 +91,7 @@ const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({
 const CliLoginPage = lazy(() => import('@/pages/cli-login').then(m => ({ default: m.CliLoginPage })))
 const ReferralRedirectPage = lazy(() => import('@/pages/referral-redirect').then(m => ({ default: m.ReferralRedirectPage })))
 const NotificationsPage = lazy(() => import('@/pages/notifications').then(m => ({ default: m.NotificationsPage })))
+const ShortcutsPage = lazy(() => import('@/pages/shortcuts').then(m => ({ default: m.ShortcutsPage })))
 const NotFoundPage = lazy(() => import('@/pages/not-found').then(m => ({ default: m.NotFoundPage })))
 
 // Layout wrapper that mounts once via parent Route + Outlet, so
@@ -76,21 +109,14 @@ function DashboardLayoutOutlet() {
   )
 }
 
-// The providers list moved under Models as a tab. Old links (command
-// palette history, onboarding cards, bookmarks) still land there, with the
-// query string intact so `?new=1` keeps opening the add-provider dialog.
-function LlmProvidersRedirect() {
-  const location = useLocation()
-  const params = new URLSearchParams(location.search)
-  params.set('tab', 'providers')
-  return <Navigate to={`/models?${params.toString()}`} replace />
-}
-
 // The OAuth callback for the Connections layer lands the browser on
-// /connections?connection=<id>&status=...; the gallery lives under Settings.
+// /connections?connection=<id>&status=...; the connection has a page of its
+// own under Settings, and without an id the gallery is the place to look.
 function ConnectionsRedirect() {
   const location = useLocation()
-  return <Navigate to={`/settings/connections${location.search}`} replace />
+  const id = new URLSearchParams(location.search).get('connection')
+  const to = id ? `/settings/connections/${encodeURIComponent(id)}` : '/settings/connections'
+  return <Navigate to={`${to}${location.search}`} replace />
 }
 
 import { HostedChatPage } from '@/pages/hosted-chat'
@@ -133,17 +159,31 @@ function App() {
             inside the layout reliably reflects the active child. */}
         <Route element={<DashboardLayoutOutlet />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/guide" element={<GuidePage />} />
           <Route path="/gateways" element={<GatewaysPage />} />
+          <Route path="/gateways/new" element={<GatewayNewPage />} />
+          <Route path="/gateways/:id/edit" element={<GatewayEditPage />} />
           <Route path="/gateways/:id" element={<GatewayDetailPage />} />
           <Route path="/apis" element={<ApisPage />} />
+          <Route path="/apis/new" element={<ApiNewPage />} />
           <Route path="/apis/:id" element={<ApiDetailPage />} />
+          <Route path="/apis/:id/edit" element={<ApiEditPage />} />
+          <Route path="/apis/:id/import" element={<ApiImportPage />} />
           <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/tools/new" element={<ToolNewPage />} />
+          <Route path="/tools/mcp-servers/new" element={<McpServerNewPage />} />
           <Route path="/tools/:id" element={<ToolDetailPage />} />
+          <Route path="/tools/:id/publish" element={<ToolPublishPage />} />
           <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/apps" element={<AppsPage />} />
+          <Route path="/apps/new" element={<AppNewPage />} />
           <Route path="/apps/:slug" element={<AppDetailPage />} />
+          <Route path="/apps/:slug/distributions/new" element={<AppDistributionNewPage />} />
+          <Route path="/apps/:slug/distributions/:target" element={<AppDistributionPage />} />
+          <Route path="/apps/:slug/distributions/:target/signing/new" element={<AppSigningNewPage />} />
           <Route path="/agents/new" element={<AgentBuilderPage />} />
+          <Route path="/agents/import" element={<AgentImportPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/agents/:id/edit" element={<AgentBuilderPage />} />
           <Route path="/runners" element={<RunnersPage />} />
@@ -154,16 +194,38 @@ function App() {
           <Route path="/workspaces/:id" element={<WorkspaceDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/models" element={<ModelsPage />} />
-          <Route path="/llm-providers" element={<LlmProvidersRedirect />} />
+          <Route path="/models/new" element={<ModelNewPage />} />
+          <Route path="/models/hosting/:deploymentId" element={<HostedModelPage />} />
+          <Route path="/models/:id" element={<ModelDetailPage />} />
+          <Route path="/llm-providers" element={<LlmProvidersPage />} />
+          <Route path="/llm-providers/new" element={<LlmProviderNewPage />} />
+          <Route path="/llm-providers/:id/edit" element={<LlmProviderEditPage />} />
           <Route path="/llm-providers/:id" element={<LlmProviderDetailPage />} />
+          <Route path="/analytics/budgets/new" element={<AnalyticsBudgetPage />} />
+          <Route path="/analytics/budgets/:budgetId/edit" element={<AnalyticsBudgetPage />} />
           <Route path="/analytics/*" element={<AnalyticsPage />} />
           <Route path="/memories" element={<MemoriesPage />} />
+          <Route path="/memories/new" element={<MemoryNewPage />} />
+          <Route path="/memories/transfer" element={<MemoryTransferPage />} />
+          <Route path="/credentials/new" element={<CredentialNewPage />} />
+          <Route path="/credentials/access-keys/new" element={<AccessKeyNewPage />} />
           <Route path="/credentials/*" element={<CredentialsPage />} />
+          <Route path="/settings/approvals/policies/new" element={<ApprovalPolicyPage />} />
+          <Route path="/settings/approvals/policies/:policyId" element={<ApprovalPolicyPage />} />
+          <Route path="/settings/connections/connect" element={<ConnectionConnectPage />} />
+          <Route path="/settings/connections/connect/:connectorKey" element={<ConnectionConnectPage />} />
+          <Route path="/settings/connections/custom/new" element={<CustomConnectorNewPage />} />
+          <Route path="/settings/connections/policies/new" element={<ConnectionPolicyPage />} />
+          <Route path="/settings/connections/policies/:policyId" element={<ConnectionPolicyPage />} />
+          <Route path="/settings/connections/:id" element={<ConnectionDetailRoutePage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/connections" element={<ConnectionsRedirect />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
+          <Route path="/organizations/new" element={<OrganizationNewPage />} />
+          <Route path="/organizations/:id" element={<OrganizationDetailPage />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/shortcuts" element={<ShortcutsPage />} />
           {/* Unknown authed path → a real 404 inside the shell, NOT a
               silent redirect to the dashboard (which read as "my page
               vanished"). Sits inside the DashboardLayout parent route

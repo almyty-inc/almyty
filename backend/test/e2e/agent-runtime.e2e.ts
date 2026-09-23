@@ -505,9 +505,9 @@ async function test05_SequentialCollaboration(): Promise<TestResult> {
       instructions: 'Coordinate agents to research and edit content.',
       collaboration: {
         strategy: 'sequential',
-        agents: [
-          { agentId: researcher.id, role: 'researcher' },
-          { agentId: editor.id, role: 'editor' },
+        participants: [
+          { kind: 'agent', agentId: researcher.id, role: 'researcher' },
+          { kind: 'agent', agentId: editor.id, role: 'editor' },
         ],
       },
     });
@@ -554,11 +554,11 @@ async function test06_ParallelCollaborationWithJudge(): Promise<TestResult> {
       instructions: 'Coordinate agents in parallel and have the judge synthesize their outputs.',
       collaboration: {
         strategy: 'parallel',
-        agents: [
-          { agentId: agent1.id, role: 'pro' },
-          { agentId: agent2.id, role: 'con' },
+        participants: [
+          { kind: 'agent', agentId: agent1.id, role: 'pro' },
+          { kind: 'agent', agentId: agent2.id, role: 'con' },
         ],
-        judgeAgentId: judge.id,
+        judge: { kind: 'agent', agentId: judge.id },
       },
     });
     created.push(orchestrator.id);
@@ -605,9 +605,9 @@ async function test07_RaceCollaboration(): Promise<TestResult> {
       instructions: 'Race agents: the first to finish wins.',
       collaboration: {
         strategy: 'race',
-        agents: [
-          { agentId: fast.id, role: 'fast' },
-          { agentId: slow.id, role: 'slow' },
+        participants: [
+          { kind: 'agent', agentId: fast.id, role: 'fast' },
+          { kind: 'agent', agentId: slow.id, role: 'slow' },
         ],
       },
     });
@@ -654,11 +654,11 @@ async function test08_DebateCollaboration(): Promise<TestResult> {
       instructions: 'Run a debate between agents.',
       collaboration: {
         strategy: 'debate',
-        agents: [
-          { agentId: proAgent.id, role: 'pro' },
-          { agentId: conAgent.id, role: 'con' },
+        participants: [
+          { kind: 'agent', agentId: proAgent.id, role: 'pro' },
+          { kind: 'agent', agentId: conAgent.id, role: 'con' },
         ],
-        judgeAgentId: judge.id,
+        judge: { kind: 'agent', agentId: judge.id },
         maxRounds: 2,
       },
     });

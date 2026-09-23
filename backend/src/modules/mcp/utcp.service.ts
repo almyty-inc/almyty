@@ -19,6 +19,7 @@ import { Api } from '../../entities/api.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
+import { resourceServableThroughGateway } from '../gateways/private-gateway';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { ToolsService } from '../tools/tools.service';
@@ -117,9 +118,14 @@ export class UtcpService {
       where: { gatewayId: gateway.id, isActive: true },
       relations: { tool: true },
     });
+    // The manual is served (and cached) per gateway, not per caller, so a
+    // private tool is only listed on a gateway that is private to the
+    // tool's own owner. Attaching one elsewhere is refused at write time;
+    // this catches rows that predate that or a gateway flipped since.
     return assignments
       .map((a) => a.tool)
-      .filter((t): t is Tool => !!t && t.status === ToolStatus.ACTIVE);
+      .filter((t): t is Tool => !!t && t.status === ToolStatus.ACTIVE)
+      .filter((t) => resourceServableThroughGateway(gateway, t));
   }
 
   /**

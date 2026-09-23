@@ -45,6 +45,12 @@ export interface ResolvedConfig {
   config: RunnerConfig;
   binaryProbeList: string[];
   backendUrl: string;
+  /**
+   * The organization to register in, sent as X-Organization-Id. Needed
+   * when the logged-in user belongs to more than one organization; the
+   * backend refuses an organization the user is not a member of.
+   */
+  organizationId?: string;
 }
 
 export interface RunnerInfo {

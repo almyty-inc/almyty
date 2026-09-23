@@ -3,6 +3,7 @@ import { Pin, Route, Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { cn } from '@/lib/utils'
 
 /**
@@ -58,6 +59,7 @@ export function RolesPanel({
   loading,
   error,
 }: RolesPanelProps) {
+  const { confirm, dialog: confirmDialog } = useConfirm()
   if (loading) {
     return (
       <div data-testid="roles-loading" className="space-y-2 p-4">
@@ -162,7 +164,15 @@ export function RolesPanel({
                   size="sm"
                   variant="ghost"
                   data-testid={`remove-role-${role.key}`}
-                  onClick={() => onRemoveRole(role.key)}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: 'Remove this role?',
+                      description: `Steps that call the "${role.key}" role will fail until it is added again.`,
+                      confirmLabel: 'Remove role',
+                      destructive: true,
+                    })
+                    if (ok) onRemoveRole(role.key)
+                  }}
                 >
                   Remove
                 </Button>
@@ -176,6 +186,7 @@ export function RolesPanel({
           Add a role
         </Button>
       )}
+      {confirmDialog}
     </div>
   )
 }

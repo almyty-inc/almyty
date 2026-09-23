@@ -22,7 +22,7 @@
  * path. Types are re-exported below so no caller needs to update
  * its import path.
  */
-import { Injectable, Logger, BadRequestException, Optional, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PluginManagerService } from '../plugins/plugin-manager.service';
 import { PluginHookType } from '../plugins/types/plugin.types';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -64,6 +64,20 @@ export {
   GraphQLRequest,
   SOAPRequest,
 };
+
+/**
+ * May a call made on behalf of `userId` execute `tool`? Only private
+ * tools are decided here: they run for their owner (`createdBy`) alone,
+ * and a call with no known user is refused. Org and team tools are
+ * gated by the listing and gateway layers in front of the executor.
+ */
+export function isPrivateToolCallAllowed(
+  tool: Pick<Tool, 'visibility' | 'createdBy'>,
+  userId: string | null | undefined,
+): boolean {
+  if (tool.visibility !== 'private') return true;
+  return !!userId && !!tool.createdBy && tool.createdBy === userId;
+}
 
 @Injectable()
 export class ToolExecutorService {
@@ -208,6 +222,14 @@ export class ToolExecutorService {
       });
       if (!access.allowed) {
         throw new Error(`Refused by this gateway tool's permissions: ${access.reason}`);
+      }
+
+      // A private tool runs for its owner and nobody else, whichever
+      // surface the call came through (REST, an agent run, a gateway, MCP).
+      // A call with no known user cannot be the owner's. Answered as a
+      // missing tool so the refusal does not confirm it exists.
+      if (!isPrivateToolCallAllowed(tool, options.userId)) {
+        throw new NotFoundException('Tool not found');
       }
 
       // Apply this gateway tool's input mapping before anything reads the
@@ -617,7 +639,9 @@ export class ToolExecutorService {
         cfg.method,
         callParams,
         workspaceId,
-        { signal: options.signal, timeoutMs: tool.configuration?.timeout },
+        // The caller rides along so the runner's own visibility is checked
+        // at dispatch too, not only the tool row's.
+        { signal: options.signal, timeoutMs: tool.configuration?.timeout, callerUserId: options.userId ?? null },
       );
       if (!response.ok) {
         return {

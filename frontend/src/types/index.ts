@@ -251,6 +251,9 @@ export interface HealthCheckConfig {
   timeout?: number
 }
 
+/** Who can see and use a resource: its owner only, one team, or the whole organization. */
+export type ResourceVisibility = 'private' | 'team' | 'org'
+
 // API Types
 export interface Api {
   id: string
@@ -274,6 +277,10 @@ export interface Api {
   updatedAt: string
   organization: Organization
   tools: Tool[]
+  /** 'private' = only its owner (ownerUserId) can see or use it. */
+  visibility?: ResourceVisibility
+  teamId?: string | null
+  ownerUserId?: string | null
 }
 
 export enum ApiType {
@@ -363,6 +370,10 @@ export interface Tool {
   api?: Api
   gatewayTools: GatewayTool[]
   usageMetrics: UsageMetric[]
+  /** 'private' = only its owner (createdBy) can see or use it. */
+  visibility?: ResourceVisibility
+  teamId?: string | null
+  createdBy?: string | null
   httpConfig?: {
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
     path: string

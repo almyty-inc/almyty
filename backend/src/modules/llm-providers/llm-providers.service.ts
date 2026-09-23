@@ -26,7 +26,8 @@ import { DefaultModelResolver } from './default-model.resolver';
 import { findModelNotFound } from './model-errors';
 import { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
-import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { AccessPolicyService, normaliseVisibility } from '../../common/authorization/access-policy.service';
+import { assertProviderUsableBy } from './private-provider';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Credential } from '../../entities/credential.entity';
 import { LlmProviderSecretsHelper, MASKED_PROVIDER_KEY } from './llm-provider-secrets.helper';
@@ -186,17 +187,29 @@ export class LlmProvidersService {
         apiKey: apiKey ?? (createAny.credentialId ? MASKED_PROVIDER_KEY : undefined),
         usageApiKey,
       });
-      await this.assertProviderEgressAllowed(createDto.type, configuration as LlmProviderConfig, organizationId);
-      await this.assertModelIsServed(createDto.type, configuration, organizationId, { apiKey, credentialId: createAny.credentialId });
-
-
       // Validate team scoping before persisting.
       await this.accessPolicy.assertCanScopeToTeam(
         userId,
         organizationId,
-        (createDto as any).visibility,
-        (createDto as any).teamId,
+        createDto.visibility,
+        createDto.teamId,
       );
+      const scope = normaliseVisibility(createDto.visibility, createDto.teamId);
+      // Before anything reads the key (the model probe below does): a
+      // private connection only backs a provider private to its owner.
+      await this.secrets.assertKeysServable(
+        {
+          organizationId,
+          visibility: scope.visibility,
+          ownerUserId: userId,
+          credentialId: createAny.credentialId ?? null,
+          usageCredentialId: createAny.usageCredentialId ?? null,
+        },
+        userId,
+      );
+
+      await this.assertProviderEgressAllowed(createDto.type, configuration as LlmProviderConfig, organizationId);
+      await this.assertModelIsServed(createDto.type, configuration, organizationId, { apiKey, credentialId: createAny.credentialId, principal: { id: userId } });
 
       // Set default capabilities if not provided
       const capabilities = createDto.capabilities || this.modelsHelper.getDefaultCapabilities(createDto.type);
@@ -209,6 +222,11 @@ export class LlmProvidersService {
         organizationId,
         capabilities,
         status: LlmProviderStatus.ACTIVE,
+        visibility: scope.visibility,
+        teamId: scope.teamId,
+        // Always record who made it: a private provider needs its owner,
+        // and one flipped to private later keeps its creator.
+        ownerUserId: userId,
       });
 
       // Save first so the key rows can name the provider they belong to;
@@ -217,6 +235,9 @@ export class LlmProvidersService {
       try {
         await this.secrets.applyKey(savedProvider, 'inference', { plaintext: apiKey, credentialId: createAny.credentialId ?? undefined });
         await this.secrets.applyKey(savedProvider, 'usage', { plaintext: usageApiKey, credentialId: createAny.usageCredentialId ?? undefined });
+        // A pasted key becomes a row this provider manages; it takes the
+        // provider's scope, so a private provider's key is private too.
+        await this.secrets.syncManagedScope(savedProvider);
       } catch (error) {
         try { await this.llmProviderRepository.remove(savedProvider); } catch { /* best effort */ }
         throw error;
@@ -319,6 +340,9 @@ export class LlmProvidersService {
         throw new NotFoundException('Provider not found');
       }
 
+      // Another user's private provider does not exist for this caller.
+      assertProviderUsableBy(provider, userId);
+
       // Authorization: org owner/admin always, team-scoped requires team lead
       const decision = await this.accessPolicy.canAccess({ id: userId }, provider, 'manage');
       if (!decision.allowed) {
@@ -338,6 +362,21 @@ export class LlmProvidersService {
       // Credential row. A credentialId in the body points the provider at
       // a shared connection; null clears it.
       const updateAny = updateDto as UpdateLlmProviderDto & { credentialId?: string | null; usageCredentialId?: string | null };
+      // A newly referenced connection is checked against the scope the
+      // provider is about to have, before the model probe below reads it.
+      if (updateAny.credentialId || updateAny.usageCredentialId) {
+        await this.secrets.assertKeysServable(
+          {
+            id: provider.id,
+            organizationId,
+            visibility: (updateDto.visibility ?? provider.visibility) as LlmProvider['visibility'],
+            ownerUserId: provider.ownerUserId ?? userId,
+            credentialId: updateAny.credentialId ?? null,
+            usageCredentialId: updateAny.usageCredentialId ?? null,
+          },
+          userId,
+        );
+      }
       let pastedKey: string | undefined;
       let pastedUsageKey: string | undefined;
       if (updateDto.configuration) {
@@ -360,6 +399,7 @@ export class LlmProvidersService {
           apiKey: pastedKey,
           credentialId: updateAny.credentialId === undefined ? provider.credentialId : updateAny.credentialId,
           credential: provider.credential,
+          principal: { id: userId },
         });
       }
 
@@ -373,14 +413,24 @@ export class LlmProvidersService {
         provider.metadata = { ...provider.metadata, ...updateDto.metadata };
       }
 
-      // Team-scoping fields (visibility + teamId) from the dashboard
-      // VisibilityField. Clear a dangling teamId when visibility flips
-      // back to 'org'.
-      if (updateDto.visibility !== undefined) {
-        provider.visibility = updateDto.visibility;
-        provider.teamId = updateDto.visibility === 'team' ? (updateDto.teamId ?? null) : null;
-      } else if (updateDto.teamId !== undefined && provider.visibility === 'team') {
-        provider.teamId = updateDto.teamId;
+      // Scope (visibility + teamId) from the dashboard VisibilityField.
+      // 'org' and 'private' carry no teamId.
+      if (updateDto.visibility !== undefined || updateDto.teamId !== undefined) {
+        const scope = normaliseVisibility(
+          updateDto.visibility ?? provider.visibility,
+          updateDto.teamId !== undefined ? updateDto.teamId : provider.teamId,
+        );
+        provider.visibility = scope.visibility;
+        provider.teamId = scope.teamId;
+      }
+      if (provider.visibility === 'private') {
+        // Only the recorded owner can make a provider private; a row made
+        // before owners were recorded becomes the caller's.
+        if (!provider.ownerUserId) {
+          provider.ownerUserId = userId;
+        } else if (provider.ownerUserId !== userId) {
+          throw new ForbiddenException('Only the provider\'s owner can make it private');
+        }
       }
 
       // Move the keys: paste -> managed row, credentialId -> shared row,
@@ -390,6 +440,10 @@ export class LlmProvidersService {
       await this.envelopeCrypto.warmOrg(organizationId);
       await this.secrets.applyKey(provider, 'inference', { plaintext: pastedKey, credentialId: updateAny.credentialId });
       await this.secrets.applyKey(provider, 'usage', { plaintext: pastedUsageKey, credentialId: updateAny.usageCredentialId });
+      // A private connection only backs a provider private to its owner,
+      // and the key rows the provider manages take the provider's scope.
+      await this.secrets.assertKeysServable(provider, userId);
+      await this.secrets.syncManagedScope(provider);
       const updatedProvider = await this.llmProviderRepository.save(provider);
 
       // Perform health check after update, scoped to the same org
@@ -415,10 +469,18 @@ export class LlmProvidersService {
     }
   }
 
+  /**
+   * Load a provider of the organization. `caller` is who is asking:
+   * another user's private provider is reported exactly like a missing
+   * one (org admins included). Pass null for a path with no known user --
+   * a private provider is then not found either. Omit it only on internal
+   * paths that act on a row already authorized upstream.
+   */
   async getProvider(
     providerId: string,
     organizationId: string,
-    includeSecrets = false
+    includeSecrets = false,
+    caller?: { id: string } | null,
   ): Promise<LlmProvider> {
     const provider = await this.llmProviderRepository.findOne({
       where: { id: providerId, organizationId },
@@ -427,10 +489,10 @@ export class LlmProvidersService {
     if (!provider) {
       throw new NotFoundException('Provider not found');
     }
+    if (caller !== undefined) assertProviderUsableBy(provider, caller?.id);
 
     return includeSecrets ? provider : provider.maskSensitiveData() as LlmProvider;
   }
-
   async getProviders(filters: LlmProviderSearchFilters): Promise<{
     providers: LlmProvider[];
     total: number;
@@ -448,9 +510,11 @@ export class LlmProvidersService {
       .leftJoinAndSelect('provider.credential', 'credential')
       .leftJoinAndSelect('provider.usageCredential', 'usageCredential');
     if (filters.bypassTeamFilter) {
+      // A system listing acts for nobody, so it never sees a private provider.
       queryBuilder.where('provider.organizationId = :_orgId', { _orgId: filters.organizationId });
+      queryBuilder.andWhere("provider.visibility <> 'private'");
     } else if (filters.caller) {
-      await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'provider');
+      await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'provider', { ownerColumn: 'ownerUserId' });
     } else {
       throw new Error('getProviders requires either caller or bypassTeamFilter');
     }
@@ -504,7 +568,8 @@ export class LlmProvidersService {
     organizationId: string,
     userId: string
   ): Promise<void> {
-    const provider = await this.getProvider(providerId, organizationId);
+    // Another user's private provider is not found, not forbidden.
+    const provider = await this.getProvider(providerId, organizationId, false, { id: userId });
 
     // Authorization: org owner/admin always, team-scoped requires team lead
     const decision = await this.accessPolicy.canAccess({ id: userId }, provider, 'manage');
@@ -783,7 +848,7 @@ export class LlmProvidersService {
     configuration: LlmProviderConfig | undefined,
     organizationId: string,
     /** The key the probe should use: a pasted plaintext, or the credential the provider points at. */
-    key: { apiKey?: string; credentialId?: string | null; credential?: Credential | null } = {},
+    key: { apiKey?: string; credentialId?: string | null; credential?: Credential | null; principal?: { id: string } } = {},
   ): Promise<void> {
     const model = configuration?.model?.trim();
     if (!model) return;
@@ -795,7 +860,7 @@ export class LlmProvidersService {
       if (key.credential && key.credential.id === key.credentialId) {
         probe.credential = key.credential;
       } else {
-        await this.secrets.withResolvedSecrets(probe, { context: { purpose: 'model_list', resourceType: 'llm_provider' } });
+        await this.secrets.withResolvedSecrets(probe, { principal: key.principal, context: { purpose: 'model_list', resourceType: 'llm_provider' } });
       }
     }
     let listed: Array<{ id: string }>;

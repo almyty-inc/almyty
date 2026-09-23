@@ -36,6 +36,7 @@ import { ChannelInstallationService } from './channel-installation.service';
 import { ChannelCredentialService, ChannelUsePurpose } from './channel-credential.service';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { outboundFailureDetail, safeFetch } from '../../../common/security/safe-fetch';
+import { isPrivateGateway } from '../private-gateway';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -157,6 +158,13 @@ export class ChannelGatewayService {
   ): Promise<void> {
     if (!gateway.isActive()) {
       this.logger.warn(`Webhook received for inactive gateway: ${gateway.id}`);
+      return;
+    }
+    // A channel is reached by people who do not sign in to almyty, so a
+    // private one has nobody it may answer; the write path refuses them,
+    // and one that exists anyway stays silent.
+    if (isPrivateGateway(gateway)) {
+      this.logger.warn(`Inbound message refused for private gateway: ${gateway.id}`);
       return;
     }
 
@@ -649,7 +657,7 @@ export class ChannelGatewayService {
    */
   async findWidgetGateway(gatewayId: string): Promise<Gateway> {
     const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId } });
-    if (!gateway || gateway.type !== GatewayType.CHAT_WIDGET || !gateway.isActive()) {
+    if (!gateway || gateway.type !== GatewayType.CHAT_WIDGET || !gateway.isActive() || isPrivateGateway(gateway)) {
       throw new NotFoundException('Widget gateway not found or inactive');
     }
     return gateway;

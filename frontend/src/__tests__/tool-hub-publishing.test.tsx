@@ -111,7 +111,7 @@ describe('Tool Hub', () => {
     render(<ToolHubPage />)
 
     fireEvent.click(await screen.findByLabelText('Retract List widgets'))
-    fireEvent.click(await screen.findByRole('button', { name: /^retract$/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /^retract template$/i }))
 
     await waitFor(() => expect(toolHubApi.deleteTemplate).toHaveBeenCalledWith('tpl-own'))
   })
@@ -134,23 +134,29 @@ describe('Tool Hub', () => {
  * A feature nothing reaches is the dominant defect here, and the hub was
  * the example: correct code, wired end to end, with no caller. This reads
  * the page source rather than mounting it -- mounting the tools page pulls
- * in CodeMirror and a dozen dialogs -- and checks the publish action is
- * actually on the row and the dialog is actually rendered.
+ * in CodeMirror and the data table -- and checks the publish action is
+ * actually on the row and the publish page is actually routed.
  */
 describe('publishing is reachable from the tools page', () => {
-  const source = readFileSync(
-    join(__dirname, '..', 'pages', 'tools.tsx'),
-    'utf8',
-  )
+  const read = (...p: string[]) => readFileSync(join(__dirname, '..', ...p), 'utf8')
+  const source = read('pages/tools.tsx')
 
-  it('offers Publish to Hub in the row menu, gated on the tool being publishable', () => {
+  it('offers Publish to hub in the row menu, gated on the tool being publishable', () => {
     expect(source).toContain('isPublishable(tool)')
-    expect(source).toContain('setPublishingTool(tool)')
-    expect(source).toMatch(/Publish to Hub/)
+    expect(source).toContain('navigate(`/tools/${tool.id}/publish`)')
+    expect(source).toMatch(/Publish to hub/)
   })
 
-  it('renders the publish dialog', () => {
-    expect(source).toMatch(/<PublishToolDialog\b/)
-    expect(source).toContain("from '@/components/tools/publish-tool-dialog'")
+  it('the publish page is routed and renders the form', () => {
+    expect(read('App.tsx')).toMatch(/path="\/tools\/:id\/publish" element=\{<ToolPublishPage \/>\}/)
+    const page = read('pages/tool-publish.tsx')
+    expect(page).toMatch(/<PublishToolForm\b/)
+    expect(page).toContain("from '@/components/tools/publish-tool-form'")
+  })
+
+  it('the tool page links to it too', () => {
+    const detail = read('pages/tool-detail.tsx')
+    expect(detail).toContain('isPublishable(tool)')
+    expect(detail).toContain('/publish`')
   })
 })

@@ -99,11 +99,16 @@ export class RunnerDaemon {
     // effective config, which we use to confirm what limits the backend
     // applied. After registration we switch to Streamable HTTP for the
     // long-lived connection.
+    // Who this runner belongs to is decided by the backend from the
+    // bearer token (the user who ran `almyty-auth login`), never from
+    // anything in this body: the name is a label. X-Organization-Id picks
+    // among that user's organizations and is refused for any other.
     const regResp = await fetch(`${backendUrl}/runners/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${credentials.token}`,
+        ...(resolved.organizationId ? { 'X-Organization-Id': resolved.organizationId } : {}),
       },
       body: JSON.stringify({
         name: resolved.name,
@@ -143,7 +148,11 @@ export class RunnerDaemon {
     });
 
     // Open the Streamable HTTP stream.
-    this.client = new StreamableClient({ baseUrl: backendUrl, token: credentials.token });
+    this.client = new StreamableClient({
+      baseUrl: backendUrl,
+      token: credentials.token,
+      organizationId: resolved.organizationId,
+    });
     this.wireClient();
 
     // First POST mints the session id; send a hello envelope so the

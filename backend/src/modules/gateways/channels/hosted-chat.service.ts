@@ -17,6 +17,7 @@ import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { OrgLicenseResolver } from '../../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
+import { isPrivateGateway } from '../private-gateway';
 
 import {
   CustomDomainConfig,
@@ -102,7 +103,9 @@ export class HostedChatService {
       .andWhere("gateway.configuration -> 'hostedChat' ->> 'slug' = :slug", { slug: normalized })
       .getMany();
 
-    const active = gateways.filter((gateway) => gateway.isActive());
+    // Private gateways are never public surfaces (refused at write time);
+    // one that exists anyway is not served.
+    const active = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway));
 
     // A tenant slug is a global public address. If bad historic data or
     // a concurrent publish ever leaves more than one live claimant,
@@ -502,7 +505,9 @@ export class HostedChatService {
       })
       .getMany();
 
-    const active = gateways.filter((gateway) => gateway.isActive());
+    // Private gateways are never public surfaces (refused at write time);
+    // one that exists anyway is not served.
+    const active = gateways.filter((gateway) => gateway.isActive() && !isPrivateGateway(gateway));
 
     // Same fail-closed rule as findBySlug. A hostname is a global public
     // address too, and nothing claims one exclusively: the only thing

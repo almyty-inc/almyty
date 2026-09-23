@@ -75,7 +75,7 @@ export interface AgentTechnicalDocumentation {
       edgeCount: number;
       nodeTypes: Record<string, number>;
     } | null;
-    collaboration: { strategy: string; agentCount: number } | null;
+    collaboration: { strategy: string; participantCount: number; agentCount: number; modelCount: number } | null;
   };
   humanOversight: {
     approvalGate: {
@@ -260,7 +260,9 @@ export class AgentTechDocHelper {
         collaboration: agent.collaboration?.strategy
           ? {
               strategy: agent.collaboration.strategy,
-              agentCount: agent.collaboration.agents?.length ?? 0,
+              participantCount: agent.collaboration.participants?.length ?? 0,
+              agentCount: (agent.collaboration.participants ?? []).filter((p) => p.kind === 'agent').length,
+              modelCount: (agent.collaboration.participants ?? []).filter((p) => p.kind === 'model').length,
             }
           : null,
       },
@@ -437,7 +439,10 @@ export class AgentTechDocHelper {
       );
     }
     if (c.collaboration) {
-      lines.push(`- Collaboration: ${c.collaboration.strategy} with ${c.collaboration.agentCount} agents`);
+      const { strategy, participantCount, agentCount, modelCount } = c.collaboration;
+      lines.push(
+        `- Collaboration: ${strategy} with ${participantCount} participants (${agentCount} agents, ${modelCount} models)`,
+      );
     }
     lines.push('');
 

@@ -26,6 +26,7 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateApiGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ApisService } from './apis.service';
 import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
@@ -33,7 +34,7 @@ import { CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSd
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 
 @Controller('apis')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateApiGuard)
 export class ApisController {
   constructor(
     private readonly apisService: ApisService,
@@ -80,7 +81,7 @@ export class ApisController {
       if (!organizationId) {
         throw new HttpException({ success: false, message: 'No organization found' }, HttpStatus.BAD_REQUEST);
       }
-      const api = await this.apisService.createHttpApi(body, organizationId);
+      const api = await this.apisService.createHttpApi(body, organizationId, req.user.sub || req.user.id);
       return { success: true, data: api, message: 'Custom HTTP API created' };
     } catch (error) {
       throw new HttpException(
@@ -99,7 +100,7 @@ export class ApisController {
       if (!organizationId) {
         throw new HttpException({ success: false, message: 'No organization found' }, HttpStatus.BAD_REQUEST);
       }
-      const api = await this.apisService.createSdkApi(body, organizationId);
+      const api = await this.apisService.createSdkApi(body, organizationId, req.user.sub || req.user.id);
       return { success: true, data: api, message: 'SDK API created. Installing packages...' };
     } catch (error) {
       throw new HttpException(
@@ -115,7 +116,7 @@ export class ApisController {
     try {
       const orgId = req.user?.currentOrganizationId;
       if (!orgId) throw new BadRequestException('Organization context required');
-      const api = await this.apisService.findOne(id, orgId);
+      const api = await this.apisService.findOne(id, orgId, { id: req.user.sub || req.user.id });
       if (!api) throw new NotFoundException('API not found');
       return { success: true, data: api.sdkMaps || {} };
     } catch (error) {
@@ -129,7 +130,7 @@ export class ApisController {
   @Get(':id')
   @Roles('member', 'admin', 'owner')
   async findOne(@Request() req, @Param('id') id: string) {
-    const api = await this.apisService.findOne(id, req.user.currentOrganizationId);
+    const api = await this.apisService.findOne(id, req.user.currentOrganizationId, { id: req.user.sub || req.user.id });
 
     if (!api) {
       throw new NotFoundException('API not found');
@@ -187,7 +188,7 @@ export class ApisController {
     @UploadedFile() file?: any,
   ) {
     const orgId = req.user.currentOrganizationId;
-    const api = await this.apisService.findOne(id, orgId);
+    const api = await this.apisService.findOne(id, orgId, { id: req.user.sub || req.user.id });
 
     if (!api) {
       throw new NotFoundException('API not found');

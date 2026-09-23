@@ -1,3 +1,4 @@
+import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LlmSessionsController } from './llm-sessions.controller';
 import { LlmModelsHelper } from './llm-models.helper';
@@ -6,6 +7,7 @@ import { LlmProvidersController } from './llm-providers.controller';
 import { LlmProvidersService } from './llm-providers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateProviderGuard } from './private-provider.guard';
 
 describe('LlmProvidersController', () => {
   let controller: LlmProvidersController;
@@ -46,6 +48,8 @@ describe('LlmProvidersController', () => {
     .overrideGuard(JwtAuthGuard)
     .useValue({ canActivate: jest.fn(() => true) })
     .overrideGuard(RolesGuard)
+    .useValue({ canActivate: jest.fn(() => true) })
+    .overrideGuard(PrivateProviderGuard)
     .useValue({ canActivate: jest.fn(() => true) })
     .compile();
 
@@ -269,7 +273,7 @@ describe('LlmProvidersController', () => {
       const result = await controller.getProvider('provider-1', 'true', mockRequest);
 
       expect(result.success).toBe(true);
-      expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', true);
+      expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', true, expect.anything());
     });
 
     it('should return provider without secrets for member', async () => {
@@ -285,7 +289,7 @@ describe('LlmProvidersController', () => {
       const result = await controller.getProvider('provider-1', 'true', mockRequest);
 
       expect(result.success).toBe(true);
-      expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', false);
+      expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', false, expect.anything());
     });
   });
 
@@ -390,6 +394,35 @@ describe('LlmProvidersController', () => {
       expect(result.data[0].id).toBe('gpt-4');
     });
   });
+
+    // A vendor rejecting the stored key answers 401. Passed through, that
+    // is this API's 401, and the dashboard signs the user out on it: the
+    // model picker opening on a provider with a bad key logged you out.
+    it("does not answer with the vendor's 401 when the provider rejects its key", async () => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      llmProvidersService.getProvider.mockResolvedValue({ id: 'provider-1', type: 'anthropic' } as any);
+      const vendorError = Object.assign(new Error('Request failed with status code 401'), { status: 401, response: { status: 401 } });
+      modelsHelper.fetchModelsFromProvider.mockRejectedValue(vendorError);
+
+      const failure = await controller.getProviderModels('provider-1', mockRequest).catch((e) => e);
+      expect(failure).toBeInstanceOf(HttpException);
+      expect(failure.getStatus()).toBe(HttpStatus.BAD_GATEWAY);
+      expect(failure.getResponse().message).toBe('Request failed with status code 401');
+    });
+
+    it('keeps the status of our own refusals, such as a provider that is not in this org', async () => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      llmProvidersService.getProvider.mockRejectedValue(new NotFoundException('Provider not found'));
+      const failure = await controller.getProviderModels('provider-1', mockRequest).catch((e) => e);
+      expect(failure.getStatus()).toBe(HttpStatus.NOT_FOUND);
+    });
+
+    it("does not answer a chat with the vendor's 401 either", async () => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      llmProvidersService.chat.mockRejectedValue(Object.assign(new Error('Request failed with status code 401'), { status: 401 }));
+      const failure = await controller.chat('provider-1', { messages: [] } as any, mockRequest).catch((e) => e);
+      expect(failure.getStatus()).toBe(HttpStatus.BAD_GATEWAY);
+    });
 
   // Error handling tests for all branches
   describe('createProvider - error handling', () => {

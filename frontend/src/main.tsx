@@ -2,7 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
 import App from './App.tsx'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
@@ -41,13 +41,17 @@ const queryClient = new QueryClient({
   },
 })
 
+// A data router, not <BrowserRouter>: create and configure flows are pages,
+// and a page with unsaved changes asks before it is left (useLeaveGuard).
+// react-router's useBlocker only works under a data router. App keeps its
+// own <Routes>; the single splat route just hands it every path.
+const router = createBrowserRouter([{ path: '*', element: <App /> }])
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <QueryClientProvider client={queryClient}>
-        <App />
-        <ReactQueryDevtools initialIsOpen={false} />
-      </QueryClientProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   </React.StrictMode>,
 )

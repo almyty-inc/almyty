@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { QueryError } from '@/components/ui/query-error'
+import { EmptyState } from '@/components/ui/empty-state'
+import { useNavigate } from 'react-router-dom'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
   AlertDialog,
@@ -44,6 +46,7 @@ interface CategoryRollup {
 }
 
 export function ToolHubPage() {
+  const navigate = useNavigate()
   useEffect(() => {
     document.title = 'Tool Hub | almyty'
     return () => { document.title = 'almyty' }
@@ -160,14 +163,11 @@ export function ToolHubPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Tool Hub</h1>
-          <p className="text-muted-foreground">
-            Install tool templates, and publish your own for the rest of your organization.
-          </p>
-        </div>
-      </div>
+      {/* Rendered as the Tools page's "Tool Hub" tab, under that page's
+          header: a second gradient page title here read as a new page. */}
+      <p className="text-sm text-muted-foreground">
+        Install tool templates, and publish your own for the rest of your organization.
+      </p>
 
       {/* Search and Filters */}
       <div className="flex items-center gap-4">
@@ -218,22 +218,17 @@ export function ToolHubPage() {
           title="Couldn't load the Tool Hub"
         />
       ) : providers.length === 0 && templates.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Store className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">Nothing published yet</h3>
-            <p className="text-muted-foreground mb-4 text-center max-w-md">
-              Your hub fills up when someone publishes a tool into it. Open Tools,
-              pick a working HTTP tool, and choose Publish to Hub — credentials are
-              stripped on the way.
-            </p>
-            <Button variant="outline" onClick={() => window.location.href = '/tools'}>
-              Go to Tools
+        <EmptyState
+          variant="panel"
+          icon={Store}
+          title="Nothing published yet"
+          description="Your hub fills up when someone publishes a tool into it. Open My tools, pick a working HTTP tool, and choose Publish to hub — credentials are stripped on the way."
+          action={
+            <Button variant="outline" onClick={() => navigate('/tools')}>
+              Go to my tools
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : (
         <div className="space-y-4">
           {/* Templates this organization published */}
@@ -333,7 +328,7 @@ export function ToolHubPage() {
                           disabled={installProviderMutation.isPending}
                         >
                           <Download className="h-3 w-3 mr-1" />
-                          Install All
+                          Install all
                         </Button>
                         {expandedProvider === provider.provider
                           ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -409,7 +404,7 @@ export function ToolHubPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">
-                  {searchQuery ? 'Search Results' : 'All Templates'}
+                  {searchQuery ? 'Search results' : 'All templates'}
                 </CardTitle>
                 <CardDescription>
                   {templates.length} template{templates.length !== 1 ? 's' : ''} found
@@ -463,10 +458,11 @@ export function ToolHubPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={() => retractingTemplate && retractMutation.mutate(retractingTemplate.id)}
               disabled={retractMutation.isPending}
             >
-              {retractMutation.isPending ? 'Retracting…' : 'Retract'}
+              {retractMutation.isPending ? 'Retracting…' : 'Retract template'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

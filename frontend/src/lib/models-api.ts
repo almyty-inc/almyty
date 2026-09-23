@@ -2,7 +2,6 @@ import { apiGet, apiPost, apiPatch, apiDel } from './api'
 import type {
   ListModelsQuery,
   ModelCard,
-  RegisterEndpointBody,
   RegisterModelBody,
   SyncModelsResult,
   UpdateModelBody,
@@ -20,8 +19,6 @@ export const modelsApi = {
   get: (id: string) => apiGet<ModelCard>(`/models/${id}`),
 
   register: (body: RegisterModelBody) => apiPost<ModelCard>('/models', body),
-
-  registerEndpoint: (body: RegisterEndpointBody) => apiPost<ModelCard>('/models/register-endpoint', body),
 
   /** One provider when given; every configured provider when omitted. */
   sync: (providerId?: string) =>
@@ -55,7 +52,7 @@ export const PRICING_SOURCE_LABELS: Record<string, string> = {
   'feed:litellm': 'LiteLLM feed',
   'feed:openrouter': 'OpenRouter feed',
   native: 'Provider',
-  adapter: 'Deployment',
+  adapter: 'Reported by your cloud',
   manual: 'Override',
   unpriced: 'No price',
 }

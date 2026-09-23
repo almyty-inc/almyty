@@ -77,7 +77,8 @@ test.describe('Top-level nav renders without error', () => {
     { label: 'Gateways', path: '/gateways' },
     { label: 'Agents', path: '/agents' },
     { label: 'Credentials', path: '/credentials' },
-    { label: 'Models', path: '/llm-providers' },
+    { label: 'Models', path: '/models' },
+    { label: 'Inference providers', path: '/llm-providers' },
     { label: 'Memory', path: '/memories' },
     { label: 'Analytics', path: '/analytics' },
     { label: 'Settings', path: '/settings' },
@@ -111,21 +112,13 @@ test.describe('Command palette', () => {
 })
 
 test.describe('Keyboard shortcuts', () => {
-  test('? opens shortcuts dialog', async () => {
+  test('? opens the shortcuts page', async () => {
     await page.goto('/dashboard')
     await page.locator('main#main-content').waitFor()
     await page.keyboard.press('Shift+Slash')
-    await expect(page.getByRole('heading', { name: /keyboard shortcuts/i })).toBeVisible({ timeout: 5_000 })
-    // Close via the dialog's X button (Radix Escape handling is unreliable
-    // in headless chromium — the dialog stays open after keyboard Escape).
-    const closeBtn = page.getByRole('dialog').getByRole('button', { name: /close/i }).first()
-    if (await closeBtn.isVisible().catch(() => false)) {
-      await closeBtn.click()
-    } else {
-      // Fallback: click outside the dialog to dismiss
-      await page.locator('body').click({ position: { x: 5, y: 5 }, force: true })
-    }
-    await page.waitForTimeout(500)
+    await expect(page).toHaveURL(/\/shortcuts$/, { timeout: 5_000 })
+    await expect(page.getByRole('heading', { name: /keyboard shortcuts/i })).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 })
 
@@ -147,30 +140,26 @@ test.describe('A11y landmarks', () => {
   })
 })
 
-test.describe('Create dialogs open from deep-link', () => {
-  // Every list page supports `?new=1` as a deep-link to open its
-  // Create dialog. These tests verify that landing on each list
-  // page with that param actually renders a dialog with the expected
-  // heading — catches silent regressions in the `useCreateDeepLink`
-  // hook wiring on any page.
+test.describe('Create pages open from deep-link', () => {
+  // Create flows that became pages keep their old `?new=1` links working
+  // by forwarding to the page.
   const deepLinks = [
-    { label: 'Create API', path: '/apis?new=1', heading: /create .*api|add .*api|new api|import api/i },
-    { label: 'Create Tool', path: '/tools?new=1', heading: /create tool|new tool/i },
-    { label: 'Create Gateway', path: '/gateways?new=1', heading: /create gateway|new gateway/i },
-    { label: 'Add Credential', path: '/credentials?new=1', heading: /add credential|new credential|create credential/i },
-    { label: 'Add LLM Provider', path: '/llm-providers?new=1', heading: /add provider|new provider|create provider|add llm/i },
+    { label: 'Add inference provider', path: '/llm-providers?new=1', lands: /\/llm-providers\/new$/, heading: 'Add inference provider' },
+    { label: 'Connect API', path: '/apis?new=1', lands: /\/apis\/new$/, heading: 'Connect API' },
+    { label: 'Create tool', path: '/tools?new=1', lands: /\/tools\/new$/, heading: 'Create tool' },
+    { label: 'Add model', path: '/models?new=1', lands: /\/models\/new$/, heading: 'Add model' },
+    { label: 'Create gateway', path: '/gateways?new=1', lands: /\/gateways\/new$/, heading: 'Create gateway' },
+    { label: 'Create app', path: '/apps?new=1', lands: /\/apps\/new$/, heading: 'Create app' },
+    { label: 'Add credential', path: '/credentials?new=1', lands: /\/credentials\/new$/, heading: 'Add credential' },
+    { label: 'Create organization', path: '/organizations?new=1', lands: /\/organizations\/new$/, heading: 'Create organization' },
   ]
 
   for (const link of deepLinks) {
     test(link.label, async () => {
       await page.goto(link.path)
-      await expect(page.locator('main#main-content')).toBeVisible({ timeout: 15_000 })
-      // Radix Dialog has role="dialog" on the content root.
-      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 })
-      // Close the dialog to reset state for the next test (Escape
-      // is the universal close for Radix Dialog).
-      await page.keyboard.press('Escape')
-      await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5_000 })
+      await expect(page).toHaveURL(link.lands)
+      await expect(page.getByRole('heading', { name: link.heading, level: 1 })).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByRole('dialog')).toHaveCount(0)
     })
   }
 })

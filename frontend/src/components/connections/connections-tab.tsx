@@ -1,11 +1,13 @@
 /**
  * Settings > Connections: the gallery of connectors grouped by kind, each
  * with its best connect method and the connections that already exist
- * underneath; the custom-connector dialog; the org toggle for user-scoped
- * connections; the connect sheet and the connection detail sheet.
+ * underneath, and the org toggle for user-scoped connections. Connecting,
+ * a connection's detail and adding a custom connector are pages of their
+ * own under /settings/connections/.
  */
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { ExternalLink, Plug, Plus, Search, User, Users } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -38,17 +40,10 @@ import {
   type Connection,
   type Connector,
 } from '@/types/connections'
-import { ConnectSheet, CONNECTORS_QUERY_KEY } from './connect-sheet'
-import { ConnectionDetailSheet, CONNECTIONS_QUERY_KEY } from './connection-detail-sheet'
-import { CustomConnectorDialog } from './custom-connector-dialog'
+import { CONNECTORS_QUERY_KEY } from './connect-sheet'
+import { CONNECTIONS_PATH, CONNECTIONS_QUERY_KEY } from './connection-detail'
 import { ConnectionHealthBadge } from './health-badge'
 import { ConnectionsGovernanceSection } from '@/components/connections-governance/governance-section'
-
-interface SheetState {
-  open: boolean
-  connectorKey?: string
-  rotate?: Connection | null
-}
 
 export function ConnectionsTab() {
   const queryClient = useQueryClient()
@@ -57,9 +52,6 @@ export function ConnectionsTab() {
   const orgId = currentOrganization?.id
 
   const [search, setSearch] = useState('')
-  const [sheet, setSheet] = useState<SheetState>({ open: false })
-  const [customOpen, setCustomOpen] = useState(false)
-  const [detailId, setDetailId] = useState<string | null>(null)
 
   const connectorsQuery = useQuery({
     queryKey: CONNECTORS_QUERY_KEY,
@@ -126,14 +118,6 @@ export function ConnectionsTab() {
   )
   const groups = useMemo(() => groupConnectorsByKind(visible, CONNECTOR_KINDS), [visible])
 
-  const detail = detailId ? connections.find((c) => c.id === detailId) ?? null : null
-  const detailConnector = detail ? allConnectors.find((c) => c.key === detail.connectorKey) ?? null : null
-
-  const onConnected = (connection: Connection) => {
-    queryClient.invalidateQueries({ queryKey: CONNECTIONS_QUERY_KEY })
-    notifications.success(sheet.rotate ? 'Secret rotated' : 'Connected', `${connection.name} is ${connection.health?.status === 'valid' ? 'valid and ' : ''}ready to use.`)
-  }
-
   const loading = connectorsQuery.isLoading || connectionsQuery.isLoading
 
   return (
@@ -144,13 +128,17 @@ export function ConnectionsTab() {
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search connectors and connections" className="pl-9" aria-label="Search connections" />
         </div>
         <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => setCustomOpen(true)}>
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Add custom connector
+          <Button variant="outline" asChild>
+            <Link to={`${CONNECTIONS_PATH}/custom/new`}>
+              <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Add custom connector
+            </Link>
           </Button>
-          <Button type="button" onClick={() => setSheet({ open: true })}>
-            <Plug className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Connect
+          <Button asChild>
+            <Link to={`${CONNECTIONS_PATH}/connect`}>
+              <Plug className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              Connect
+            </Link>
           </Button>
         </div>
       </div>
@@ -182,16 +170,13 @@ export function ConnectionsTab() {
       )}
 
       {!loading && !connectorsQuery.isError && groups.length === 0 && (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
+        <EmptyState
+          variant="panel"
               icon={Plug}
               title={search ? 'No connector matches' : 'No connectors yet'}
               description={search ? 'Try another name or kind.' : 'The catalog is empty. Add a custom connector to get started.'}
-              action={!search ? <Button type="button" variant="outline" onClick={() => setCustomOpen(true)}>Add custom connector</Button> : undefined}
+              action={!search ? <Button variant="outline" asChild><Link to={`${CONNECTIONS_PATH}/custom/new`}>Add custom connector</Link></Button> : undefined}
             />
-          </CardContent>
-        </Card>
       )}
 
       {groups.map((group) => (
@@ -208,8 +193,6 @@ export function ConnectionsTab() {
                 key={connector.key}
                 connector={connector}
                 connections={connectionsByConnector.get(connector.key) ?? []}
-                onConnect={() => setSheet({ open: true, connectorKey: connector.key })}
-                onOpenConnection={(c) => setDetailId(c.id)}
               />
             ))}
           </div>
@@ -217,27 +200,6 @@ export function ConnectionsTab() {
       ))}
 
       <ConnectionsGovernanceSection />
-
-      <ConnectSheet
-        open={sheet.open}
-        onOpenChange={(open) => setSheet((prev) => ({ ...prev, open }))}
-        connectorKey={sheet.connectorKey}
-        rotateConnection={sheet.rotate ?? null}
-        onConnected={onConnected}
-      />
-
-      <ConnectionDetailSheet
-        connection={detail}
-        connector={detailConnector}
-        open={!!detail}
-        onOpenChange={(open) => !open && setDetailId(null)}
-        onRotate={(connection) => {
-          setDetailId(null)
-          setSheet({ open: true, connectorKey: connection.connectorKey, rotate: connection })
-        }}
-      />
-
-      <CustomConnectorDialog open={customOpen} onOpenChange={setCustomOpen} onCreated={(key) => setSheet({ open: true, connectorKey: key })} />
     </div>
   )
 }
@@ -245,11 +207,10 @@ export function ConnectionsTab() {
 interface ConnectorCardProps {
   connector: Connector
   connections: Connection[]
-  onConnect: () => void
-  onOpenConnection: (connection: Connection) => void
 }
 
-export function ConnectorCard({ connector, connections, onConnect, onOpenConnection }: ConnectorCardProps) {
+/** A connector in the gallery; Connect and each connection are links to their pages. */
+export function ConnectorCard({ connector, connections }: ConnectorCardProps) {
   const best = bestConnectMethod(connector)
   return (
     <Card className="flex flex-col" data-testid={`connector-card-${connector.key}`}>
@@ -262,9 +223,17 @@ export function ConnectorCard({ connector, connections, onConnect, onOpenConnect
             </CardTitle>
             {connector.description && <CardDescription className="line-clamp-2">{connector.description}</CardDescription>}
           </div>
-          <Button type="button" size="sm" onClick={onConnect} disabled={connector.connect.length === 0} aria-label={`Connect ${connector.displayName}`} className="shrink-0">
-            {best ? (best.label || CONNECT_METHOD_LABELS[best.type]) : 'Connect'}
-          </Button>
+          {connector.connect.length === 0 ? (
+            <Button type="button" size="sm" disabled aria-label={`Connect ${connector.displayName}`} className="shrink-0">
+              Connect
+            </Button>
+          ) : (
+            <Button size="sm" asChild className="shrink-0">
+              <Link to={`${CONNECTIONS_PATH}/connect/${encodeURIComponent(connector.key)}`} aria-label={`Connect ${connector.displayName}`}>
+                {best ? (best.label || CONNECT_METHOD_LABELS[best.type]) : 'Connect'}
+              </Link>
+            </Button>
+          )}
         </div>
         {(connector.docsUrl || connector.keyPageUrl) && (
           <div className="flex gap-3 pt-1">
@@ -288,9 +257,8 @@ export function ConnectorCard({ connector, connections, onConnect, onOpenConnect
           <ul className="divide-y rounded-md border" data-testid="connector-connections">
             {connections.map((c) => (
               <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpenConnection(c)}
+                <Link
+                  to={`${CONNECTIONS_PATH}/${c.id}`}
                   className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
                   aria-label={`Open ${c.name}`}
                 >
@@ -309,7 +277,7 @@ export function ConnectorCard({ connector, connections, onConnect, onOpenConnect
                     </div>
                   </div>
                   <ConnectionHealthBadge health={c.health} className="shrink-0" />
-                </button>
+                </Link>
               </li>
             ))}
           </ul>

@@ -37,8 +37,7 @@ Every read command takes `--json` and writes undecorated JSON to stdout.
 |---|---|
 | `list [--selectable] [--status s] [--tier t] [--provider id]` | Model cards, each line saying selectable or why not |
 | `get <id>` | One card in full: what can call it, capabilities, pricing, the last validation run, measured latency |
-| `register --name <n> --provider <providerId> --model <vendorModelId> [--tier t] [--region r] [--context n]` | Register a card against a stored LLM provider |
-| `register-endpoint --name <n> --url <baseUrl> --model <vendorModelId> [--api-key-stdin] [--tier t] [--region r] [--context n]` | Register any OpenAI-compatible server you run |
+| `register --name <n> --provider <providerId> --model <vendorModelId> [--tier t] [--region r] [--context n]` | Register a card against a stored LLM provider. A server you run (vLLM, TGI, llama.cpp) is added as a `custom` LLM provider first, then registered against like any other |
 | `set <id> [--name n] [--tier t] [--region r] [--context n] [--status s] [--price-in n --price-out n] [--clear-price]` | Change a card; a price pair is an override that wins over the automatic feed |
 | `sync [providerId]` | Import what a provider lists, as unvalidated cards. With no id, every active provider |
 | `validate <id>` | One real short call. Passing is what makes a card selectable |
@@ -122,21 +121,6 @@ provider can really read, and a mismatch is refused at submit with
 `ps` shows every process's arguments to every user on the machine, shell
 history keeps them, and most CI runners echo them. So this tool does not take
 a secret as a flag value.
-
-**An endpoint key.** Prompted without echo, or read from stdin:
-
-```sh
-npx @almyty/models register-endpoint --name vllm-box --url https://vllm.internal/v1 --model llama-3-8b
-# API key for the endpoint (empty for none): ······
-
-pass show vllm/key | npx @almyty/models register-endpoint \
-  --name vllm-box --url https://vllm.internal/v1 --model llama-3-8b --api-key-stdin
-
-# an endpoint with no key at all
-npx @almyty/models register-endpoint --name open-box --url https://box/v1 --model m --api-key ""
-```
-
-`--api-key <value>` is refused, and says this.
 
 **Adapter configuration.** Best is not to paste one at all: connect the
 provider account once and name the connection.

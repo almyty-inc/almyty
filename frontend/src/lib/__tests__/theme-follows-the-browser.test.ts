@@ -130,23 +130,33 @@ describe('the theme follows the browser unless the person overrides it', () => {
  * React. The script cannot import from theme.ts, so a source guard is the
  * only thing keeping the duplicate honest.
  */
-describe('index.html paints the right theme before React boots', () => {
-  const html = readFileSync(join(__dirname, '..', '..', '..', 'index.html'), 'utf8')
+describe('the theme is painted before React boots', () => {
+  const root = join(__dirname, '..', '..', '..')
+  const html = readFileSync(join(root, 'index.html'), 'utf8')
+  const script = readFileSync(join(root, 'public', 'theme-init.js'), 'utf8')
 
-  it('consults the browser preference inline', () => {
-    expect(html).toContain('prefers-color-scheme: dark')
+  it('consults the browser preference', () => {
+    expect(script).toContain('prefers-color-scheme: dark')
   })
 
-  it('runs the theme script before the app bundle', () => {
-    const script = html.indexOf('prefers-color-scheme')
-    // A missing script is -1, which is "before" everything; rule that out.
-    expect(script).toBeGreaterThan(-1)
-    expect(script).toBeLessThan(html.indexOf('/src/main.tsx'))
+  it('loads the theme script before the app bundle', () => {
+    const tag = html.indexOf('src="/theme-init.js"')
+    // A missing tag is -1, which is "before" everything; rule that out.
+    expect(tag).toBeGreaterThan(-1)
+    expect(tag).toBeLessThan(html.indexOf('/src/main.tsx'))
   })
 
   it('treats an explicit stored choice as the override', () => {
-    expect(html).toContain("stored === 'dark'")
-    expect(html).toContain("stored !== 'light'")
+    expect(script).toContain("stored === 'dark'")
+    expect(script).toContain("stored !== 'light'")
+  })
+
+  // The CSP is script-src 'self'. An inline <script> is refused in
+  // production without a word -- which is exactly what the first version
+  // of this did.
+  it('keeps index.html free of inline scripts the CSP would refuse', () => {
+    const inline = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>/g)]
+    expect(inline).toEqual([])
   })
 })
 

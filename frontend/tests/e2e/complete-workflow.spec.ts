@@ -31,42 +31,38 @@ test.describe('Complete E2E Workflow', () => {
       await page.waitForTimeout(500)
     }
 
-    await page.getByRole('button', { name: /connect api|add.*api|create.*api/i }).click({ force: true })
-    await expect(page.getByRole('dialog')).toBeVisible()
-    await expect(page.getByRole('heading', { name: /connect.*api|add.*api/i })).toBeVisible()
+    await page.getByRole('link', { name: /connect api/i }).first().click({ force: true })
+    await expect(page).toHaveURL(/\/apis\/new$/)
+    await expect(page.getByRole('heading', { name: /connect.*api/i })).toBeVisible()
 
     // Fill API form
-    await page.getByLabel(/api.*name|name/i).fill('E2E Petstore API')
-    await page.getByLabel(/base.*url|url/i).fill(TEST_APIS.PETSTORE.baseUrl)
+    await page.getByLabel(/api name/i).fill('E2E Petstore API')
+    await page.getByLabel(/base url/i).fill(TEST_APIS.PETSTORE.baseUrl)
 
     // Select OpenAPI type (click combobox, not label)
     await page.getByRole('combobox').first().click()
     await page.getByRole('option', { name: /openapi|swagger|rest/i }).click()
 
-    // Submit
-    await page.getByRole('button', { name: /connect api|create|add|save/i }).click()
+    // Submit: step 1 of 2
+    await page.getByRole('button', { name: /continue to schema import/i }).click()
 
-    // Schema import step opens automatically after API creation (same dialog, step changes)
-    await expect(page.getByRole('dialog')).toBeVisible()
+    // Step 2, the schema import, is the new API's own page
+    await expect(page).toHaveURL(/\/apis\/[^/]+\/import\?created=1$/)
     await expect(page.getByRole('heading', { name: /import.*schema/i })).toBeVisible()
     await assertHelper.assertToastMessage(/created|success|added/i)
 
     // ============================================================
     // STEP 2: Import Schema
     // ============================================================
-    // Dialog is already open with inline schema import - switch to "URL" tab
     await page.getByRole('tab', { name: /url/i }).click()
+    await page.getByLabel('Schema URL').fill(TEST_APIS.PETSTORE.schemaUrl)
 
-    // Fill schema URL using the inline input (id="inlineSchemaUrl")
-    await page.locator('#inlineSchemaUrl').fill(TEST_APIS.PETSTORE.schemaUrl)
+    // Generate tools is on by default - no need to enable
 
-    // Auto-generate tools is checked by default - no need to enable
-
-    // Import (button says "Import Schema" or "Importing...")
-    await page.getByRole('button', { name: /import schema|import|submit/i }).click()
-    // Wait for the dialog to close (the inline schema import closes the whole create dialog)
-    await page.waitForTimeout(2000)
-    await assertHelper.waitForLoadingComplete()
+    // Import (button says "Import schema" or "Importing...")
+    await page.getByRole('button', { name: /^import schema$/i }).click()
+    // A finished import opens the API's page
+    await expect(page).toHaveURL(/\/apis\/[^/]+$/, { timeout: 60000 })
     await assertHelper.assertToastMessage(/imported|success|generated/i)
 
     // ============================================================
@@ -109,14 +105,14 @@ test.describe('Complete E2E Workflow', () => {
 
     // Click first create button (might be "Create Gateway" or "Create First Gateway" for empty state)
     await page.getByRole('button', { name: /create.*gateway/i }).first().click()
-    await assertHelper.assertDialogOpen()
+    await expect(page).toHaveURL(/\/gateways\/new$/)
 
     // Fill gateway form
-    await page.getByLabel(/gateway.*name|name/i).fill('E2E Test Gateway')
-    await page.getByLabel(/endpoint.*path|path/i).fill('/e2e-test')
+    await page.getByLabel(/^Name/).fill('E2E Test Gateway')
+    await page.getByLabel(/^Endpoint path/).fill('/e2e-test')
 
-    // Select MCP type (click combobox, not label)
-    await page.getByRole('combobox').click()
+    // Select MCP (click combobox, not label)
+    await page.getByRole('combobox', { name: /protocol/i }).click()
     await page.getByRole('option', { name: /mcp/i }).click()
 
     // Optional description
@@ -143,9 +139,8 @@ test.describe('Complete E2E Workflow', () => {
       throw error
     }
 
-    // Close the dialog manually and refresh page to see new gateway
-    await page.keyboard.press('Escape')
-    await page.reload()
+    // Back to the list to see the new gateway
+    await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
     // Verify gateway appears with correct details

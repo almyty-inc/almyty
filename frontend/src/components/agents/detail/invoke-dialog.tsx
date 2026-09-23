@@ -90,7 +90,7 @@ export function InvokeDialog({ agent, open, onOpenChange }: InvokeDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Run Agent</DialogTitle>
+          <DialogTitle>Run agent</DialogTitle>
           <DialogDescription>
             Provide input JSON to run "{agent.name}".
           </DialogDescription>

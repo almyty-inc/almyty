@@ -4,11 +4,16 @@ import userEvent from '@testing-library/user-event'
 import { useForm } from 'react-hook-form'
 
 import { render } from '../../../test/setup'
-import { EditProviderDialog } from '../edit-provider-dialog'
+import { EditProviderForm } from '../edit-provider-form'
 import { CredentialRefSummary, isMaskedKey } from '../credential-slot'
 
 vi.mock('@/lib/api', () => ({
   llmProvidersApi: { testConnection: vi.fn(), chat: vi.fn(), getModels: vi.fn() },
+}))
+
+// The visibility picker reads the org's teams; not what this file tests.
+vi.mock('@/components/ui/visibility-field', () => ({
+  VisibilityField: () => <div data-testid="visibility-field" />,
 }))
 
 vi.mock('@/lib/connections-api', () => ({
@@ -28,7 +33,7 @@ function EditHarness({ provider, onUpdate }: { provider: any; onUpdate: (payload
     defaultValues: { name: provider.name, model: '', maxTokens: 4096, temperature: 0.7, apiKey: '', usageApiKey: '', credentialId: undefined, usageCredentialId: undefined },
   })
   const mutation = { isPending: false, mutate: (payload: any) => onUpdate(payload) } as any
-  return <EditProviderDialog open onOpenChange={() => {}} editForm={form} providerToEdit={provider} updateProviderMutation={mutation} availableModels={[]} modelsLoading={false} />
+  return <EditProviderForm onCancel={() => {}} editForm={form} providerToEdit={provider} updateProviderMutation={mutation} availableModels={[]} modelsLoading={false} />
 }
 
 const withRef = { id: 'p-1', type: 'openai', name: 'prod', credentialRef, usageCredentialRef: null, configuration: { apiKey: '***masked***', usageApiKey: undefined } }
@@ -57,7 +62,7 @@ describe('CredentialRefSummary', () => {
   })
 })
 
-describe('EditProviderDialog credential slots', () => {
+describe('EditProviderForm credential slots', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('opens on the backing connection and submits without touching the credential', async () => {
@@ -71,7 +76,7 @@ describe('EditProviderDialog credential slots', () => {
     expect(screen.queryByLabelText('New API key')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('***masked***')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
     const data = onUpdate.mock.calls[0][0].data
     expect(data.credentialId).toBeUndefined()
@@ -92,7 +97,7 @@ describe('EditProviderDialog credential slots', () => {
     fireEvent.change(select, { target: { value: 'conn-openai' } })
     expect(await slot.findByTestId('connected-chip')).toHaveTextContent('OpenAI prod')
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
     const data = onUpdate.mock.calls[0][0].data
     expect(data.credentialId).toBe('conn-openai')
@@ -109,7 +114,7 @@ describe('EditProviderDialog credential slots', () => {
     expect(input.placeholder).toMatch(/keep the existing key/i)
     await userEvent.type(input, 'sk-new-key')
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
     const data = onUpdate.mock.calls[0][0].data
     expect(data.apiKey).toBe('sk-new-key')
@@ -125,7 +130,7 @@ describe('EditProviderDialog credential slots', () => {
     fireEvent.click(slot.getByRole('button', { name: 'Remove' }))
     expect(slot.getByTestId('credential-slot-clear')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
     expect(onUpdate.mock.calls[0][0].data.usageCredentialId).toBeNull()
   })

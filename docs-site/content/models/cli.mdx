@@ -1,17 +1,17 @@
 # Models CLI
 
-`@almyty/models` manages the model catalog from the terminal: list and register cards, validate them, register versions of your own weights, deploy a model through an adapter, and watch what each deployment costs. It shares the login of every other almyty CLI.
+`@almyty/models` manages your models from the terminal: list and add them, validate them, run a model on your own cloud account, and watch what it costs. It shares the login of every other almyty CLI.
 
 ```bash
 $ npx @almyty/auth login
 $ npx @almyty/models --help
 ```
 
-The umbrella CLI exposes the same verbs as `almyty models <verb>`. Every command takes `--json` for raw output, `ALMYTY_TOKEN` to skip the stored login, and `ALMYTY_URL` to point at another deployment.
+The umbrella CLI exposes the same commands as `almyty models <command>`. Every command takes `--json` for raw output, `ALMYTY_TOKEN` to skip the stored login, and `ALMYTY_URL` to point at another almyty server.
 
-## Cards
+## Models
 
-List every card, or only the ones the router may pick:
+List every model, or only the ones the router may pick:
 
 ```bash
 $ npx @almyty/models list
@@ -23,13 +23,13 @@ Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
 $ npx @almyty/models list --selectable
 ```
 
-Show one card:
+Show one model:
 
 ```bash
 $ npx @almyty/models get 9b0d...
 ```
 
-Register a card against a stored provider, naming the vendor id yourself:
+Add a model against an inference provider, naming the vendor id yourself:
 
 ```bash
 $ npx @almyty/models register \
@@ -45,38 +45,16 @@ Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
 Run: almyty models validate 4f2a...
 ```
 
-Register an OpenAI-compatible server you run (the URL and key become a `custom` provider). Leave the key off and it is prompted without echo:
+A server you run (vLLM, Ollama, TGI, llama.cpp, LiteLLM) works the same way: it is a `custom` inference provider, set up once in the dashboard or with `POST /llm-providers` (see [A server you run](/models/providers#a-server-you-run)), and `--provider` names it. Its key lives on the inference provider, so no key is ever passed here.
 
-```bash
-$ npx @almyty/models register-endpoint \
-    --name "Lab box" \
-    --url http://10.0.0.7:8000/v1 \
-    --model qwen3-32b \
-    --tier local
-API key for the endpoint (empty for none):
-```
-
-In a script there is no one to prompt, so pipe the key in instead:
-
-```bash
-$ printf '%s' "$LAB_KEY" | npx @almyty/models register-endpoint \
-    --name "Lab box" \
-    --url http://10.0.0.7:8000/v1 \
-    --model qwen3-32b \
-    --tier local \
-    --api-key-stdin
-```
-
-`--api-key sk-...` is refused with a usage error. argv is written to your shell history and is readable by any process through `ps`, so a key passed that way has to be treated as disclosed. The three accepted forms are the prompt, `--api-key-stdin` (spelled `--api-key -` if you prefer), and `--api-key ""` for a server that checks no key at all.
-
-Import what a provider currently lists, as unvalidated cards:
+Import what an inference provider currently lists, as unvalidated models:
 
 ```bash
 $ npx @almyty/models sync 7c1e...
 12 card(s) created, 3 already present.
 ```
 
-Run the validation that makes a card selectable. The exit code is 1 when it fails:
+Run the validation that makes a model selectable. The exit code is 1 when it fails:
 
 ```bash
 $ npx @almyty/models validate 4f2a...
@@ -89,7 +67,7 @@ Failed: model qwen3-32b is not served by this endpoint
 1
 ```
 
-Remove a card:
+Remove a model:
 
 ```bash
 $ npx @almyty/models delete 4f2a...
@@ -98,17 +76,102 @@ Deleted.
 
 | Flag | Commands | Meaning |
 |---|---|---|
-| `--tier` | register, register-endpoint | `public`, `private_cloud` or `local` |
-| `--region` | register, register-endpoint | Region label used by routing allowlists. A card with no region is excluded by any policy that sets one |
+| `--provider` | register | The inference provider's id |
+| `--model` | register | The vendor model id sent on the wire. Not the model source that `deploy` takes below |
+| `--tier` | register | `public`, `private_cloud` or `local` |
+| `--region` | register | Region label used by routing allowlists. A model with no region is excluded by any policy that sets one |
 | `--context` | register | Context length in tokens |
-| `--api-key-stdin` | register-endpoint | Read the Bearer token the server expects from stdin. Left off entirely, the key is prompted without echo; `--api-key ""` means the server checks no key. `--api-key <value>` is refused |
-| `--selectable` | list | Only cards the router may pick |
+| `--selectable` | list | Only models the router may pick |
 
-Note `--model` here names the **vendor model id** on `register` and `register-endpoint`; it is not the deploy command's model reference below.
+## Your cloud account
 
-## Versions
+These commands run a model on [your own cloud account](/models/your-cloud). The command names and the `--adapter` flag keep the API's names: `deploy` starts a model, `deployments` lists the ones on your clouds, and `--adapter` takes the cloud's `providerType`.
 
-Registering a version is optional: do it when you want lineage, a manifest digest and evaluation history tied to your own artifact. See [Deployments](/models/deployments#the-registry) for the URI shapes and the manifest.
+List the clouds and what each can do:
+
+```bash
+$ npx @almyty/models adapters
+modal  Modal
+    architectures="any" lora="merged" serverless=true dedicated=false scaleToZero=true regions=[] registrySources=["hub"]
+huggingface-endpoints  Hugging Face Inference Endpoints
+    architectures="any" lora="merged" serverless=false dedicated=true scaleToZero=true regions=["us-east-1","us-west-2","eu-west-1","eu-central-1","ap-southeast-1"] registrySources=["hub"]
+...
+```
+
+`--json` includes each cloud's `modelSchemes` (every source it accepts, as literal prefixes) and its config schema, the same data the **Add model** form renders from.
+
+The model source is the **positional argument**. The cloud's account details carry secrets, so they come from a file, from stdin or from a saved connection, never from argv. Start a model from a Hugging Face repository:
+
+```bash
+$ cat > hf.json <<'JSON'
+{"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}
+JSON
+$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B \
+    --adapter huggingface-endpoints \
+    --config-file hf.json \
+    --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}' \
+    --budget 5d3f...
+Queued.
+c07b...  huggingface-endpoints  pending  replicas ?/1
+```
+
+The model is in `list` at once, not yet selectable; validate it once it is running. Better still, connect the account once and name the connection, so no key reaches this machine's filesystem at all:
+
+```bash
+$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B \
+    --adapter huggingface-endpoints \
+    --credential 9b4c... \
+    --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}'
+```
+
+Or a model the cloud already hosts:
+
+```bash
+$ npx @almyty/models deploy bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --adapter aws-bedrock-import
+```
+
+`--config '<json>'` still exists, but `deploy` screens it against the cloud's config schema and refuses it the moment it carries a field the cloud marks secret: `token` for `huggingface-endpoints`, `tokenId` and `tokenSecret` for `modal`, `apiKey` for `fireworks` and the rest. argv is written to your shell history, is echoed by most CI runners and is readable by any process through `ps`, so a secret that travelled that way is disclosed. `--config` is also refused outright when the cloud catalog cannot be read, because then almyty does not know which of the fields are secret and will not guess. Run `adapters` to see which fields each one marks secret. `--config` is fine for the fields that are not secret, such as `namespace`, `region`, `instanceType` or `gpu`.
+
+| Flag | Meaning |
+|---|---|
+| `<model>` (positional) | The model source: `hf://org/repo` (pinned to its exact commit for you; `@sha` pins one yourself), `s3://bucket/prefix@etag`, `gs://bucket/prefix@gen`, `file:///path@sha`, or a model the cloud already hosts: `bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`. Required unless `--model-version` is given |
+| `--adapter` | The cloud's `providerType`, from `adapters` (required) |
+| `--config-file <path>` | The cloud's config read from a JSON file. The way to pass secret fields |
+| `--config-stdin` | The cloud's config read from stdin. Same, for a secret that should not touch disk |
+| `--config '<json>'` | The cloud's config inline. Refused if it carries a field the cloud marks secret, or if the catalog could not be read to check |
+| `--credential <id>` | A connection made with `almyty connections connect`; the cloud's secrets are read from there instead of from any config you pass |
+| `--desired` | JSON: `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
+| `--budget` | A spend budget; reaching it stops the model (scales it to zero) |
+| `--card` | An existing model to attach instead of adding a new one; it gets the endpoint once ready and keeps being priced from the cloud |
+| `--base` | The model family, when the cloud checks it and the source does not carry one |
+| `--model-version` | A registered version instead of the positional source; see [Registered versions](#registered-versions) |
+
+`adapters` lists what each cloud accepts; naming a source the chosen cloud can't read is refused before anything runs.
+
+Watch state and spend:
+
+```bash
+$ npx @almyty/models deployments
+c07b...  huggingface-endpoints  ready  replicas 1/1  spent 2.40 USD
+e18a...  huggingface-endpoints  failed  replicas 0/1  spent 0.00 USD
+    quota exceeded for nvidia-a10g in eu-west-1
+```
+
+`deployment <id>` shows one. Change the replica count (0 stops it) or shut it down. Both record what you want; almyty applies it at the cloud within two minutes:
+
+```bash
+$ npx @almyty/models scale c07b... 0
+c07b...  huggingface-endpoints  scaling  replicas 1/0  spent 2.40 USD
+
+$ npx @almyty/models teardown c07b...
+c07b...  huggingface-endpoints  tearing_down  replicas 1/0  spent 2.40 USD
+```
+
+`teardown` removes the endpoint at the cloud. Weights are untouched: a Hugging Face repository, your bucket and a model the cloud hosts all stay where they are.
+
+## Registered versions
+
+Optional, and not needed to run anything: `deploy` takes the source directly and pins a Hugging Face repository for you. Register a version when you want a manifest digest, lineage and evaluation history recorded against your own weights, then pass `--model-version` to `deploy`.
 
 ```bash
 $ npx @almyty/models versions
@@ -123,100 +186,10 @@ qwen3-14b-support-ft  qwen3-14b  29.00 GB  [bf16, awq-int4]
     a91c...  s3://acme-models/qwen3-14b-support@e3b0c442
 ```
 
-An `s3://` version reads its base, size and quantizations from `almyty-manifest.json` at the URI. For every other scheme the manifest is optional; pass `--base` when it is absent, and `--quantizations q1,q2` to record them.
-
-## Deployments
-
-List the adapters and what each can do:
-
-```bash
-$ npx @almyty/models adapters
-modal  Modal
-    architectures="any" lora="merged" serverless=true dedicated=false scaleToZero=true regions=[] registrySources=["hub"]
-huggingface-endpoints  Hugging Face Inference Endpoints
-    architectures="any" lora="merged" serverless=false dedicated=true scaleToZero=true regions=["us-east-1","us-west-2","eu-west-1","eu-central-1","ap-southeast-1"] registrySources=["hub"]
-...
-```
-
-`--json` includes each adapter's `modelSchemes` (every reference it accepts, as literal prefixes) and its config schema, the same data the deploy form renders from.
-
-Naming the model is configuration, so the model reference is the **positional argument**. The adapter's config carries the secrets, so it comes from a file, from stdin or from a stored connection — never from argv. Deploy straight from a Hugging Face repository:
-
-```bash
-$ cat > hf.json <<'JSON'
-{"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}
-JSON
-$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B@main \
-    --adapter huggingface-endpoints \
-    --config-file hf.json \
-    --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}' \
-    --budget 5d3f...
-Queued.
-c07b...  huggingface-endpoints  pending  replicas ?/1
-```
-
-Better still, connect the account once and name the connection, so no key reaches this machine's filesystem at all:
-
-```bash
-$ npx @almyty/models deploy hf://Qwen/Qwen3-0.6B@main \
-    --adapter huggingface-endpoints \
-    --credential 9b4c... \
-    --desired '{"replicas":1,"region":"eu","privacyTier":"private_cloud"}'
-```
-
-Or from a model already on a platform:
-
-```bash
-$ npx @almyty/models deploy bedrock://anthropic.claude-3-sonnet-20240229-v1:0 --adapter aws-bedrock-import
-```
-
-Or, for lineage tracked through a registered version, point at it instead of naming the model. Piping the config keeps it out of a file too:
-
-```bash
-$ printf '%s' "$MODAL_CONFIG_JSON" | npx @almyty/models deploy --model-version a91c... \
-    --adapter modal --config-stdin
-```
-
-`--config '<json>'` still exists, but `deploy` screens it against the adapter's config schema and refuses it the moment it carries a field the adapter marks secret — `token` for `huggingface-endpoints`, `tokenId` and `tokenSecret` for `modal`, `apiKey` for `fireworks` and the rest. argv is written to your shell history, is echoed by most CI runners and is readable by any process through `ps`, so a secret that travelled that way is disclosed. `--config` is also refused outright when the adapter catalog cannot be read, because then almyty does not know which of the fields are secret and will not guess. Run `adapters` to see which fields each one marks secret. `--config` is fine for the fields that are not secret, such as `namespace`, `region`, `instanceType` or `gpu`.
-
-| Flag | Meaning |
-|---|---|
-| `<model>` (positional) | The model to run: `hf://org/repo@sha`, `s3://bucket/prefix@etag`, `gs://bucket/prefix@gen`, `file:///path@sha`, or a provider reference such as `bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`. Required unless `--model-version` is given |
-| `--model-version` | A registered version instead of the positional model reference |
-| `--adapter` | Adapter key from `adapters` (required) |
-| `--config-file <path>` | Provider config read from a JSON file. The way to pass secret fields |
-| `--config-stdin` | Provider config read from stdin. Same, for a secret that should not touch disk |
-| `--config '<json>'` | Provider config inline. Refused if it carries a field the adapter marks secret, or if the adapter catalog could not be read to check |
-| `--credential <id>` | A connection made with `almyty connections connect`; the adapter reads its secrets from there instead of from any config you pass |
-| `--desired` | JSON desired state: `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
-| `--budget` | A spend budget; reaching it scales the deployment to zero |
-| `--card` | A model card that already exists for this model; the deployment fills its endpoint once ready and keeps pricing it. Without it, register the ready URL with `register-endpoint` |
-
-`adapters` lists what each provider accepts; naming a reference the chosen adapter can't read is refused before anything runs.
-
-Watch desired against actual state and spend:
-
-```bash
-$ npx @almyty/models deployments
-c07b...  huggingface-endpoints  ready  replicas 1/1  spent 2.40 USD
-e18a...  huggingface-endpoints  failed  replicas 0/1  spent 0.00 USD
-    quota exceeded for nvidia-a10g in eu-west-1
-```
-
-Scale (0 scales to zero) and tear down. Both change desired state; the reconcile sweep does the work within two minutes:
-
-```bash
-$ npx @almyty/models scale c07b... 0
-c07b...  huggingface-endpoints  scaling  replicas 1/0  spent 2.40 USD
-
-$ npx @almyty/models teardown c07b...
-c07b...  huggingface-endpoints  tearing_down  replicas 1/0  spent 2.40 USD
-```
-
-Teardown removes the endpoint. Weights you registered a version for stay in your registry; a model that lives on the provider is untouched either way.
+The URI must be pinned. An `s3://` version reads its base, size and quantizations from `almyty-manifest.json` at the URI (the format is in the [Models API](/api-reference/models-api#registered-versions)). For every other scheme the manifest is optional; pass `--base` when it is absent, and `--quantizations q1,q2` to record them.
 
 ## Related
 
-- [Models](/models): what a card is and when it is selectable
-- [Deployments](/models/deployments): the registry, adapters and reconcile loop
+- [Models](/models): the list, and when a model is selectable
+- [Your cloud account](/models/your-cloud): each cloud, its sources, costs and what Stop means there
 - [CLI overview](/cli): the other almyty CLIs and the shared login

@@ -27,6 +27,7 @@ import {
   GatewayToolSearchFilters,
 } from './gateway-tool.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PrivateGatewayGuard } from './private-gateway.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
@@ -211,7 +212,7 @@ export const updateGatewayToolValidationPipe = new ValidationPipe({
 @Controller('gateways')
 @ApiTags('Gateways')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateGatewayGuard)
 export class GatewayToolsController {
   private readonly logger = new Logger(GatewayToolsController.name);
 

@@ -21,6 +21,7 @@ import { useNotifications } from '@/store/app'
 import { useCopySensitive } from '@/lib/clipboard'
 import { ssoApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 type Protocol = 'saml' | 'oidc'
 
@@ -117,6 +118,7 @@ function SsoSettingsForm() {
       error('Failed to generate token', getApiErrorMessage(err, 'Please try again.')),
   })
 
+  const { confirm, dialog: confirmDialog } = useConfirm()
   if (isLoading) {
     return (
       <Card>
@@ -134,7 +136,7 @@ function SsoSettingsForm() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-primary" /> Single Sign-On
+            <ShieldCheck className="h-5 w-5 text-primary" /> Single sign-on
           </CardTitle>
           <CardDescription>
             Let members sign in through your identity provider (SAML or OIDC).
@@ -257,7 +259,7 @@ function SsoSettingsForm() {
           )}
 
           <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? 'Saving...' : 'Save SSO Settings'}
+            {saveMutation.isPending ? 'Saving...' : 'Save SSO settings'}
           </Button>
         </CardContent>
       </Card>
@@ -265,7 +267,7 @@ function SsoSettingsForm() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <KeyRound className="h-5 w-5 text-primary" /> SCIM Provisioning
+            <KeyRound className="h-5 w-5 text-primary" /> SCIM provisioning
           </CardTitle>
           <CardDescription>
             Point your identity provider at this base URL and bearer token to
@@ -308,7 +310,20 @@ function SsoSettingsForm() {
           <div className="flex items-center gap-3">
             <Button
               variant="outline"
-              onClick={() => rotateTokenMutation.mutate()}
+              onClick={async () => {
+                // Generating the first token breaks nothing; rotating
+                // invalidates the one your identity provider is using.
+                if (data?.scimTokenSet) {
+                  const ok = await confirm({
+                    title: 'Rotate the SCIM token?',
+                    description: 'The current token stops working immediately. Provisioning from your identity provider fails until you give it the new token.',
+                    confirmLabel: 'Rotate token',
+                    destructive: true,
+                  })
+                  if (!ok) return
+                }
+                rotateTokenMutation.mutate()
+              }}
               disabled={rotateTokenMutation.isPending}
             >
               {data?.scimTokenSet ? 'Rotate SCIM token' : 'Generate SCIM token'}
@@ -321,6 +336,7 @@ function SsoSettingsForm() {
           </div>
         </CardContent>
       </Card>
+      {confirmDialog}
     </div>
   )
 }

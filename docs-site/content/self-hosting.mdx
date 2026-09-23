@@ -243,7 +243,7 @@ almyty's SSRF protection refuses private and loopback URLs on outbound LLM calls
 OLLAMA_ALLOW_PRIVATE_URLS=true
 ```
 
-Set it on the backend API process, then add an Ollama provider (Models → Add Provider → Ollama). The URL defaults to `http://localhost:11434`; chat and tool calling use Ollama's OpenAI-compatible `/v1` endpoint, the model list comes from `/api/tags`, and memory embeddings use `/api/embed`. No API key is needed.
+Set it on the backend API process, then add an Ollama inference provider (Models → Inference providers → add a provider → Ollama). The URL defaults to `http://localhost:11434`; chat and tool calling use Ollama's OpenAI-compatible `/v1` endpoint, the model list comes from `/api/tags`, and memory embeddings use `/api/embed`. No API key is needed.
 
 Networking note for Docker Compose: inside the backend container, `localhost` is the container itself, not your machine. Point the provider at the host instead, `http://host.docker.internal:11434` (on Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the backend service). The escape hatch only relaxes the private-range ban: URLs must still be http(s) with no embedded credentials, and every other provider type keeps the full SSRF gate.
 

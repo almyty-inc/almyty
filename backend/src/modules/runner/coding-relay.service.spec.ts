@@ -26,7 +26,7 @@ describe('CodingRelayService', () => {
   let transport: EventEmitter & { off: any };
   let runners: {
     runnerIdForSession: jest.Mock;
-    belongsToOrganization: jest.Mock;
+    isOwnedBy: jest.Mock;
   };
   let relay: CodingRelayService;
 
@@ -34,11 +34,12 @@ describe('CodingRelayService', () => {
     transport = new EventEmitter() as any;
     runners = {
       runnerIdForSession: jest.fn().mockResolvedValue(null),
-      // Every runner in these tests lives in org-1; a hello arriving on
-      // a session belonging to any other organization is a claim on
-      // someone else's machine.
-      belongsToOrganization: jest.fn(
-        async (_runnerId: string, organizationId: string) => organizationId === 'org-1',
+      // Every runner in these tests lives in org-1 and belongs to
+      // owner-1; a hello arriving on a session of any other organization
+      // or any other user is a claim on someone else's machine.
+      isOwnedBy: jest.fn(
+        async (_runnerId: string, organizationId: string, userId: string) =>
+          organizationId === 'org-1' && userId === 'owner-1',
       ),
     };
     relay = new CodingRelayService(runners as any, transport as any);
@@ -52,12 +53,12 @@ describe('CodingRelayService', () => {
     const received: any[] = [];
     relay.subscribe('r1', (e) => received.push(e));
 
-    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), { id: 'sess1', organizationId: 'org-1' });
+    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), { id: 'sess1', organizationId: 'org-1', userId: 'owner-1' });
     await flush();
     transport.emit(
       'envelope',
       env({ kind: 'coding.output', sessionId: 'cs_1', data: 'hi\n', seq: 1 }),
-      { id: 'sess1', organizationId: 'org-1' },
+      { id: 'sess1', organizationId: 'org-1', userId: 'owner-1' },
     );
     await flush();
 
@@ -74,7 +75,7 @@ describe('CodingRelayService', () => {
     transport.emit(
       'envelope',
       env({ kind: 'coding.exit', sessionId: 'cs_9', exitCode: 0, signal: null }),
-      { id: 'sess9', organizationId: 'org-1' },
+      { id: 'sess9', organizationId: 'org-1', userId: 'owner-1' },
     );
     await flush();
 
@@ -90,7 +91,7 @@ describe('CodingRelayService', () => {
     transport.emit(
       'envelope',
       env({ kind: 'coding.output', sessionId: 'cs_1', data: 'x' }),
-      { id: 'unknown-sess', organizationId: 'org-1' },
+      { id: 'unknown-sess', organizationId: 'org-1', userId: 'owner-1' },
     );
     await flush();
     expect(received).toHaveLength(0);
@@ -99,13 +100,13 @@ describe('CodingRelayService', () => {
   it('ignores non-event envelopes, non-coding kinds, and session-less re-emits', async () => {
     const received: any[] = [];
     relay.subscribe('r1', (e) => received.push(e));
-    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), { id: 's1', organizationId: 'org-1' });
+    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), { id: 's1', organizationId: 'org-1', userId: 'owner-1' });
     await flush();
 
-    transport.emit('envelope', { ...env({ kind: 'coding.output', sessionId: 'cs_1' }), type: 'heartbeat' }, { id: 's1', organizationId: 'org-1' });
-    transport.emit('envelope', env({ kind: 'runner.draining' }), { id: 's1', organizationId: 'org-1' });
+    transport.emit('envelope', { ...env({ kind: 'coding.output', sessionId: 'cs_1' }), type: 'heartbeat' }, { id: 's1', organizationId: 'org-1', userId: 'owner-1' });
+    transport.emit('envelope', env({ kind: 'runner.draining' }), { id: 's1', organizationId: 'org-1', userId: 'owner-1' });
     transport.emit('envelope', env({ kind: 'coding.output', sessionId: 'cs_1', data: 'x' }), undefined);
-    transport.emit('envelope', env({ kind: 'coding.output' }), { id: 's1', organizationId: 'org-1' }); // no sessionId
+    transport.emit('envelope', env({ kind: 'coding.output' }), { id: 's1', organizationId: 'org-1', userId: 'owner-1' }); // no sessionId
     await flush();
 
     expect(received).toHaveLength(0);
@@ -117,11 +118,11 @@ describe('CodingRelayService', () => {
     relay.subscribe('r1', (e) => r1.push(e));
     relay.subscribe('r2', (e) => r2.push(e));
 
-    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), { id: 's1', organizationId: 'org-1' });
-    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r2' }), { id: 's2', organizationId: 'org-1' });
+    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), { id: 's1', organizationId: 'org-1', userId: 'owner-1' });
+    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r2' }), { id: 's2', organizationId: 'org-1', userId: 'owner-1' });
     await flush();
-    transport.emit('envelope', env({ kind: 'coding.output', sessionId: 'cs_a', data: '1' }), { id: 's1', organizationId: 'org-1' });
-    transport.emit('envelope', env({ kind: 'coding.output', sessionId: 'cs_b', data: '2' }), { id: 's2', organizationId: 'org-1' });
+    transport.emit('envelope', env({ kind: 'coding.output', sessionId: 'cs_a', data: '1' }), { id: 's1', organizationId: 'org-1', userId: 'owner-1' });
+    transport.emit('envelope', env({ kind: 'coding.output', sessionId: 'cs_b', data: '2' }), { id: 's2', organizationId: 'org-1', userId: 'owner-1' });
     await flush();
 
     expect(r1).toHaveLength(1);
@@ -137,9 +138,9 @@ describe('CodingRelayService', () => {
     unsub();
     expect(relay.listenerCount('r1')).toBe(0);
 
-    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), { id: 's1', organizationId: 'org-1' });
+    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), { id: 's1', organizationId: 'org-1', userId: 'owner-1' });
     await flush();
-    transport.emit('envelope', env({ kind: 'coding.output', sessionId: 'cs_1', data: 'x' }), { id: 's1', organizationId: 'org-1' });
+    transport.emit('envelope', env({ kind: 'coding.output', sessionId: 'cs_1', data: 'x' }), { id: 's1', organizationId: 'org-1', userId: 'owner-1' });
     await flush();
     expect(received).toHaveLength(0);
   });
@@ -159,17 +160,44 @@ describe('CodingRelayService', () => {
     transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), {
       id: 'attacker-sess',
       organizationId: 'org-2',
+      userId: 'attacker',
     });
     await flush();
 
     transport.emit(
       'envelope',
       env({ kind: 'coding.output', sessionId: 'cs_1', data: 'rm -rf /\n' }),
-      { id: 'attacker-sess', organizationId: 'org-2' },
+      { id: 'attacker-sess', organizationId: 'org-2', userId: 'attacker' },
     );
     await flush();
 
-    expect(runners.belongsToOrganization).toHaveBeenCalledWith('r1', 'org-2');
+    expect(runners.isOwnedBy).toHaveBeenCalledWith('r1', 'org-2', 'attacker');
+    expect(received).toHaveLength(0);
+  });
+
+  /**
+   * Same organization, different user. Checking the organization alone
+   * let another member of the org bind their session to the owner's
+   * runner and inject output into the owner's coding session.
+   */
+  it('refuses a runner.hello from another member of the same organization', async () => {
+    const received: any[] = [];
+    relay.subscribe('r1', (e) => received.push(e));
+
+    transport.emit('envelope', env({ kind: 'runner.hello', runnerId: 'r1' }), {
+      id: 'colleague-sess',
+      organizationId: 'org-1',
+      userId: 'colleague',
+    });
+    await flush();
+    transport.emit(
+      'envelope',
+      env({ kind: 'coding.output', sessionId: 'cs_1', data: 'forged\n' }),
+      { id: 'colleague-sess', organizationId: 'org-1', userId: 'colleague' },
+    );
+    await flush();
+
+    expect(runners.isOwnedBy).toHaveBeenCalledWith('r1', 'org-1', 'colleague');
     expect(received).toHaveLength(0);
   });
 });

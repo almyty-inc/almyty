@@ -13,10 +13,10 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmChatRunnerHelper } from '../llm-providers/llm-chat-runner.helper';
 import { LlmModelsHelper } from '../llm-providers/llm-models.helper';
-import { EndpointProviderHelper } from '../llm-providers/endpoint-provider.helper';
 import { PriceFeedService } from './pricing/price-feed.service';
 import { ModelRouterService } from './routing/model-router.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
+import { providerUsableBy } from '../llm-providers/private-provider';
 
 /** Override as the API accepts it; currency defaults to USD when omitted. */
 export type ModelPricingInput = Omit<ModelPricing, 'currency'> & { currency?: string };
@@ -46,20 +46,6 @@ export interface RegisterModelInput {
 export type UpdateModelInput = Partial<Omit<RegisterModelInput, 'vendorModelId'>> & {
   status?: Model['status'];
 };
-
-export interface RegisterEndpointInput {
-  name: string;
-  /** Base URL of an OpenAI-compatible chat endpoint (the part before /chat/completions). */
-  url: string;
-  apiKey?: string;
-  vendorModelId: string;
-  capabilities?: ModelCapabilities;
-  contextLength?: number | null;
-  privacyTier?: ModelPrivacyTier;
-  region?: string | null;
-  pricingOverride?: ModelPricingInput | null;
-}
-
 
 export interface ProviderSyncResult {
   created: Model[];
@@ -117,23 +103,45 @@ export class ModelCatalogService {
     @Optional() private readonly priceFeed?: PriceFeedService,
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
-    @Optional() private readonly endpointProviders?: EndpointProviderHelper,
   ) {}
 
-  list(organizationId: string, filter: { status?: Model['status']; privacyTier?: ModelPrivacyTier; providerId?: string; selectable?: boolean } = {}): Promise<Model[]> {
+  /**
+   * The org's cards. With `viewerId` (a person asking; null for nobody),
+   * cards served by another user's private provider are left out: the
+   * provider is not theirs to see, and neither is what it serves.
+   */
+  async list(
+    organizationId: string,
+    filter: { status?: Model['status']; privacyTier?: ModelPrivacyTier; providerId?: string; selectable?: boolean } = {},
+    viewerId?: string | null,
+  ): Promise<Model[]> {
     const where: Record<string, any> = { organizationId };
     if (filter.status) where.status = filter.status;
     if (filter.privacyTier) where.privacyTier = filter.privacyTier;
     if (filter.providerId) where.providerId = filter.providerId;
-    return this.models
-      .find({ where, order: { createdAt: 'ASC' } })
-      .then((rows) => (filter.selectable ? rows.filter((r) => r.isSelectable()) : rows));
+    const rows = await this.models.find({ where, order: { createdAt: 'ASC' } });
+    const hidden = viewerId === undefined ? new Set<string>() : await this.hiddenProviderIds(organizationId, viewerId);
+    return rows
+      .filter((r) => !r.providerId || !hidden.has(r.providerId))
+      .filter((r) => (filter.selectable ? r.isSelectable() : true));
   }
 
-  async get(organizationId: string, id: string): Promise<Model> {
+  async get(organizationId: string, id: string, viewerId?: string | null): Promise<Model> {
     const card = await this.models.findOne({ where: { id, organizationId } });
     if (!card) throw new NotFoundException('Model not found');
+    if (viewerId !== undefined && card.providerId && (await this.hiddenProviderIds(organizationId, viewerId)).has(card.providerId)) {
+      throw new NotFoundException('Model not found');
+    }
     return card;
+  }
+
+  /** Ids of the org's private providers that `viewerId` may not see. */
+  private async hiddenProviderIds(organizationId: string, viewerId: string | null): Promise<Set<string>> {
+    const rows = await this.providers.find({
+      where: { organizationId, visibility: 'private' },
+      select: { id: true, visibility: true, ownerUserId: true },
+    });
+    return new Set(rows.filter((p) => !providerUsableBy(p, viewerId)).map((p) => p.id));
   }
 
   async register(organizationId: string, input: RegisterModelInput, userId?: string): Promise<Model> {
@@ -203,50 +211,6 @@ export class ModelCatalogService {
   }
 
   /**
-   * A hand-registered OpenAI-compatible endpoint: the URL and key become a
-   * custom LLM provider row (encrypted like any other), the card points at
-   * it. Selectable after one passing validation run, like every card.
-   */
-  async registerEndpoint(organizationId: string, input: RegisterEndpointInput, userId?: string): Promise<Model> {
-    if (!this.endpointProviders) {
-      throw new BadRequestException({ code: 'ENDPOINT_REGISTRATION_UNAVAILABLE', message: 'Endpoint registration is not available in this deployment' });
-    }
-    // A registered endpoint is a real provider row on the OpenAI-compatible
-    // path (chat at <base>/chat/completions), and its key lives in the
-    // credential store like every other provider's, never inline.
-    const provider = await this.endpointProviders.upsert({
-      organizationId,
-      name: input.name,
-      apiUrl: input.url,
-      model: input.vendorModelId,
-      apiKey: input.apiKey,
-      managedById: `endpoint:${organizationId}:${input.name}`,
-      region: input.region,
-    });
-    return this.register(
-      organizationId,
-      {
-        name: input.name,
-        vendorModelId: input.vendorModelId,
-        providerId: provider.id,
-        capabilities: input.capabilities,
-        contextLength: input.contextLength,
-        privacyTier: input.privacyTier ?? 'private_cloud',
-        region: input.region,
-        pricingOverride: input.pricingOverride,
-        // The card records where it is served from, the same field a
-        // deployment fills, minus the deploymentId that marks one we run.
-        // Without this a hand-registered endpoint was indistinguishable
-        // from a vendor key, so it was badged wrong and the "your
-        // endpoint" filter matched nothing.
-        endpointRef: { url: input.url },
-        metadata: { endpoint: input.url },
-      },
-      userId,
-    );
-  }
-
-  /**
    * Import the models a stored provider currently lists as unvalidated
    * cards. Cards already present are left alone, with one exception: a
    * card whose vendor id has vanished from the list goes inactive with
@@ -257,7 +221,9 @@ export class ModelCatalogService {
    */
   async syncFromProvider(organizationId: string, providerId: string, userId?: string): Promise<ProviderSyncResult> {
     const provider = await this.providers.findOne({ where: { id: providerId, organizationId } });
-    if (!provider) throw new NotFoundException('Provider not found');
+    // A person asking (userId given) is told another user's private
+    // provider does not exist; lifecycle syncs run with no user.
+    if (!provider || (userId && !providerUsableBy(provider, userId))) throw new NotFoundException('Provider not found');
     const listed = await this.modelsHelper.fetchModelsFromProvider(provider);
     const existing = await this.models.find({ where: { organizationId, providerId } });
     const byVendorId = new Map(existing.map((m) => [m.vendorModelId, m]));
@@ -312,6 +278,9 @@ export class ModelCatalogService {
     const providers = await this.providers.find({ where: { organizationId, status: LlmProviderStatus.ACTIVE }, order: { createdAt: 'ASC' } });
     const summary: CatalogSyncSummary = { created: [], skipped: 0, retired: [], reinstated: [], providers: [] };
     for (const provider of providers) {
+      // A person syncing the org's catalog never reaches another user's
+      // private provider (its key is not theirs to spend).
+      if (userId && !providerUsableBy(provider, userId)) continue;
       try {
         const r = await this.syncFromProvider(organizationId, provider.id, userId);
         summary.created.push(...r.created);

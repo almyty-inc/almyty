@@ -68,7 +68,7 @@ export function SecurityTab() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Lock className="h-5 w-5" />
-            Change Password
+            Change password
           </CardTitle>
           <CardDescription>
             Update your account password
@@ -113,7 +113,7 @@ export function SecurityTab() {
               onClick={handleChangePassword}
               disabled={changePasswordMutation.isPending}
             >
-              {changePasswordMutation.isPending ? 'Updating...' : 'Update Password'}
+              {changePasswordMutation.isPending ? 'Updating...' : 'Update password'}
             </Button>
           </div>
         </CardContent>
@@ -124,7 +124,7 @@ export function SecurityTab() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Active Sessions
+            Active sessions
           </CardTitle>
           <CardDescription>
             Manage your active login sessions
@@ -162,7 +162,7 @@ export function SecurityTab() {
       {/* Account Security Info */}
       <Card>
         <CardHeader>
-          <CardTitle>Account Security</CardTitle>
+          <CardTitle>Account security</CardTitle>
           <CardDescription>
             Your account security status
           </CardDescription>
@@ -183,7 +183,7 @@ export function SecurityTab() {
                 disabled={resendVerification.isPending}
                 onClick={() => resendVerification.mutate()}
               >
-                {resendVerification.isPending ? 'Sending...' : 'Send Verification'}
+                {resendVerification.isPending ? 'Sending...' : 'Send verification'}
               </Button>
             </div>
 

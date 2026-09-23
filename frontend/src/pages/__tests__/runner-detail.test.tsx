@@ -14,9 +14,13 @@ vi.mock('../../lib/api', () => ({
   runnersApi: {
     getById: vi.fn(),
     unregister: vi.fn(),
+    update: vi.fn(),
   },
   workspacesApi: {
     getAll: vi.fn(),
+  },
+  organizationsApi: {
+    getTeams: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -26,18 +30,23 @@ vi.mock('../../store/organization', () => ({
 vi.mock('../../store/app', () => ({
   useNotifications: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }))
+vi.mock('../../store/auth', () => ({
+  useAuthStore: () => ({ user: { id: 'me' } }),
+}))
 
 import { runnersApi, workspacesApi } from '../../lib/api'
 
 const getRunner = runnersApi.getById as ReturnType<typeof vi.fn>
 const getWorkspaces = workspacesApi.getAll as ReturnType<typeof vi.fn>
 const unregister = runnersApi.unregister as ReturnType<typeof vi.fn>
+const update = runnersApi.update as ReturnType<typeof vi.fn>
 
 describe('RunnerDetailPage', () => {
   beforeEach(() => {
     getRunner.mockReset()
     getWorkspaces.mockReset()
     unregister.mockReset()
+    update.mockReset()
     getWorkspaces.mockResolvedValue([])
   })
 
@@ -49,35 +58,55 @@ describe('RunnerDetailPage', () => {
     expect(screen.getByText('env=dev')).toBeInTheDocument()
   })
 
-  it('shows the Deregister button only when the runner is offline', async () => {
+  it('offers Delete only for an offline runner or one that never connected', async () => {
     getRunner.mockResolvedValue(makeRunner({ state: 'online' }))
-    const { rerender, unmount } = render(<RunnerDetailPage />)
+    const { unmount } = render(<RunnerDetailPage />)
     await waitFor(() => expect(screen.getByText('online')).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /deregister/i })).toBeNull()
-
+    expect(screen.queryByRole('button', { name: /delete runner/i })).toBeNull()
     unmount()
+
     getRunner.mockResolvedValue(makeRunner({ state: 'offline' }))
-    render(<RunnerDetailPage />)
+    const second = render(<RunnerDetailPage />)
     await waitFor(() => expect(screen.getByText('offline')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /deregister/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /delete runner/i })).toBeInTheDocument()
+    second.unmount()
+
+    // The setup page's record, abandoned before the daemon ever started.
+    getRunner.mockResolvedValue(makeRunner({ state: 'registered', runtimeInfo: null, lastHeartbeatAt: null }))
+    render(<RunnerDetailPage />)
+    await waitFor(() => expect(screen.getByText('never connected')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /delete runner/i })).toBeInTheDocument()
+    expect(screen.getByText('almyty-runner start --name r1 --org o1')).toBeInTheDocument()
   })
 
-  it('Deregister button opens a confirmation dialog and calls the API on confirm', async () => {
+  it('Delete asks a one-line confirmation and calls the API on confirm', async () => {
     getRunner.mockResolvedValue(makeRunner({ state: 'offline' }))
     unregister.mockResolvedValue({})
     const user = userEvent.setup()
     render(<RunnerDetailPage />)
-    await waitFor(() => screen.getByRole('button', { name: /deregister/i }))
-    await user.click(screen.getByRole('button', { name: /deregister/i }))
-    // Confirmation dialog
-    await waitFor(() => screen.getByText(/deregister this runner\?/i))
-    // The dialog cancel + confirm both have "Deregister" labels; the
-    // last one in the document is the AlertDialogAction.
-    const buttons = screen.getAllByRole('button', { name: /deregister/i })
-    await user.click(buttons[buttons.length - 1])
+    await user.click(await screen.findByRole('button', { name: /delete runner/i }))
+    await waitFor(() => screen.getByText(/delete runner r1\?/i))
+    await user.click(screen.getByRole('button', { name: /^delete$/i }))
     await waitFor(() => expect(unregister).toHaveBeenCalledWith('r1'))
   })
 
+  it('lets the owner change visibility in place, without a dialog', async () => {
+    getRunner.mockResolvedValue(makeRunner({ ownerUserId: 'me', visibility: 'org' }))
+    update.mockResolvedValue({})
+    const user = userEvent.setup()
+    render(<RunnerDetailPage />)
+    await user.click(await screen.findByRole('radio', { name: /private/i }))
+    await user.click(screen.getByRole('button', { name: /save visibility/i }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith('r1', { visibility: 'private', teamId: null }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('does not offer the visibility editor to someone who does not own the runner', async () => {
+    getRunner.mockResolvedValue(makeRunner({ ownerUserId: 'someone-else', visibility: 'org' }))
+    render(<RunnerDetailPage />)
+    await waitFor(() => expect(screen.getByText('darwin / arm64')).toBeInTheDocument())
+    expect(screen.queryByText(/who can see and use it/i)).toBeNull()
+  })
   it('renders detected coding agents with provider + capability badges', async () => {
     getRunner.mockResolvedValue(makeRunner({
       runtimeInfo: {

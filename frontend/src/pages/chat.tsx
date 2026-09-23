@@ -6,12 +6,10 @@ import {
   RotateCcw,
   Bot,
   User,
-  ChevronDown,
   Wrench,
   Plus,
   MessageSquare,
   X,
-  Sparkles,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -19,26 +17,13 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from '@/components/ui/dropdown-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { ModelPicker } from '@/components/model-picker'
 import { llmProvidersApi, toolsApi } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'tool'
@@ -52,6 +37,8 @@ interface ChatSession {
   id: string
   providerId: string
   providerName: string
+  /** Empty for the provider's default model. */
+  model?: string
   messages: ChatMessage[]
   createdAt: string
   title: string
@@ -69,6 +56,8 @@ export function ChatPage() {
 
   // Provider state
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
+  // Empty means the provider's own default model.
+  const [selectedModel, setSelectedModel] = useState('')
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -87,13 +76,7 @@ export function ChatPage() {
 
   // Fetch providers
   const { data: providersRaw, isLoading: loadingProviders } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: async () => {
-      const response = await llmProvidersApi.getAll()
-      const d = response
-      const result = d?.providers || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    },
+    ...llmProvidersQuery,
   })
   const providers = Array.isArray(providersRaw) ? providersRaw : []
 
@@ -139,6 +122,7 @@ export function ChatPage() {
         id: sessionId || Date.now().toString(),
         providerId: selectedProvider.id,
         providerName: selectedProvider.name,
+        model: selectedModel,
         messages: [...messages],
         createdAt: new Date().toISOString(),
         title,
@@ -164,6 +148,7 @@ export function ChatPage() {
           id: sessionId || Date.now().toString(),
           providerId: selectedProvider.id,
           providerName: selectedProvider.name,
+          model: selectedModel,
           messages: [...messages],
           createdAt: new Date().toISOString(),
           title,
@@ -174,6 +159,7 @@ export function ChatPage() {
     setMessages(session.messages)
     setSessionId(session.id)
     setSelectedProviderId(session.providerId)
+    setSelectedModel(session.model ?? '')
     setActiveSidebarSession(session.id)
   }
 
@@ -195,6 +181,7 @@ export function ChatPage() {
       const response = await llmProvidersApi.chat(selectedProvider.id, {
         messages: newMessages.map(m => ({ role: m.role, content: m.content })),
         sessionId: sessionId || undefined,
+        ...(selectedModel ? { model: selectedModel } : {}),
         ...(selectedToolIds.length > 0 && { toolIds: selectedToolIds }),
       })
 
@@ -248,16 +235,11 @@ export function ChatPage() {
         <Bot className="h-16 w-16 text-muted-foreground mb-4" />
         <h2 className="text-xl font-semibold mb-2">No models configured</h2>
         <p className="text-muted-foreground text-center max-w-md mb-4">
-          {/* The screen this points at is called Models in the sidebar and
-              lives at /models; "the AI Models page" named a screen that does
-              not exist. */}
-          To start chatting, configure at least one model provider (OpenAI,
-          Anthropic, etc.) on the Models page.
+          To start chatting, add at least one inference provider (OpenAI,
+          Anthropic, a server you run, and more).
         </p>
-        {/* A full page reload to /llm-providers only to be redirected to
-            /models?tab=providers threw the SPA away for no reason. */}
-        <Button onClick={() => navigate('/models?tab=providers')}>
-          Configure models
+        <Button onClick={() => navigate('/llm-providers/new')}>
+          Add an inference provider
         </Button>
       </div>
     )
@@ -270,7 +252,7 @@ export function ChatPage() {
         <div className="p-3 border-b">
           <Button onClick={handleNewChat} className="w-full gap-2" size="sm">
             <Plus className="h-4 w-4" />
-            New Chat
+            New chat
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -300,117 +282,108 @@ export function ChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <div className="border-b px-4 py-2 flex items-center justify-between bg-background">
-          <div className="flex items-center gap-3">
-            {/* Provider Selector */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  {selectedProvider?.name || 'Select Provider'}
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuLabel>Active Providers</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {activeProviders.map((provider: any) => (
-                  <DropdownMenuItem
-                    key={provider.id}
-                    onClick={() => setSelectedProviderId(provider.id)}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <span>{provider.name}</span>
-                      {provider.id === selectedProviderId && (
-                        <Badge variant="secondary" className="text-xs ml-2">Active</Badge>
-                      )}
-                    </div>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {selectedProvider && (
-              <span className="text-xs text-muted-foreground">
-                {selectedProvider.type} · {selectedProvider.configuration?.model || 'default model'}
-              </span>
-            )}
-          </div>
+        <div className="border-b px-4 py-2 flex flex-wrap items-end justify-between gap-2 bg-background">
+          {/* Provider and model: which model answers is a choice here, not
+              whatever the provider happens to default to. */}
+          <ModelPicker
+            idPrefix="chat"
+            compact
+            activeOnly
+            modelOptional
+            className="w-full sm:w-auto sm:min-w-[28rem]"
+            value={{ providerId: selectedProviderId ?? undefined, model: selectedModel }}
+            onChange={(next) => {
+              setSelectedProviderId(next.providerId ?? null)
+              setSelectedModel(next.model ?? '')
+            }}
+          />
 
           <div className="flex items-center gap-2">
-            {/* Tool Selector */}
-            <Dialog open={isToolPickerOpen} onOpenChange={setIsToolPickerOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Wrench className="h-4 w-4" />
-                  Tools
-                  {selectedToolIds.length > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {selectedToolIds.length}
-                    </Badge>
-                  )}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Attach Tools</DialogTitle>
-                </DialogHeader>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Select tools the AI can use during the conversation.
-                </p>
-                <div className="max-h-[400px] overflow-y-auto space-y-1">
-                  {loadingTools ? (
-                    <div className="text-center py-4"><LoadingSpinner /></div>
-                  ) : tools.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No tools available</p>
-                  ) : (
-                    tools.map((tool: any) => (
-                      <label
-                        key={tool.id}
-                        className="flex items-center gap-3 p-2 rounded-md hover:bg-accent cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedToolIds.includes(tool.id)}
-                          onChange={() => toggleTool(tool.id)}
-                          className="rounded"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{tool.name}</div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {tool.description || 'No description'}
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          {tool.type}
-                        </Badge>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {selectedToolIds.length > 0 && (
-                  <div className="flex justify-between items-center pt-2 border-t">
-                    <span className="text-xs text-muted-foreground">
-                      {selectedToolIds.length} tool{selectedToolIds.length !== 1 ? 's' : ''} selected
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedToolIds([])}
-                    >
-                      Clear all
-                    </Button>
-                  </div>
-                )}
-              </DialogContent>
-            </Dialog>
+            {/* Tool selector: toggles an inline panel under this bar. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              aria-expanded={isToolPickerOpen}
+              aria-controls="chat-tool-picker"
+              onClick={() => setIsToolPickerOpen((open) => !open)}
+            >
+              <Wrench className="h-4 w-4" />
+              Tools
+              {selectedToolIds.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {selectedToolIds.length}
+                </Badge>
+              )}
+            </Button>
 
             <Button variant="ghost" size="sm" onClick={handleNewChat} className="gap-1">
               <RotateCcw className="h-3 w-3" />
-              New Chat
+              New chat
             </Button>
           </div>
         </div>
+
+        {/* Tools the model may call, picked in place: the conversation stays
+            in view while the selection changes. */}
+        {isToolPickerOpen && (
+          <section
+            id="chat-tool-picker"
+            aria-label="Attach tools"
+            className="border-b bg-muted/40 px-4 py-3"
+          >
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">
+                Select tools the AI can use during the conversation.
+              </p>
+              <div className="flex items-center gap-2">
+                {selectedToolIds.length > 0 && (
+                  <>
+                    <span className="text-xs text-muted-foreground">
+                      {selectedToolIds.length} tool{selectedToolIds.length !== 1 ? 's' : ''} selected
+                    </span>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedToolIds([])}>
+                      Clear all
+                    </Button>
+                  </>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setIsToolPickerOpen(false)}>
+                  Done
+                </Button>
+              </div>
+            </div>
+            <div className="grid max-h-64 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+              {loadingTools ? (
+                <div className="py-4 text-center sm:col-span-2"><LoadingSpinner /></div>
+              ) : tools.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground sm:col-span-2">No tools available</p>
+              ) : (
+                tools.map((tool: any) => (
+                  <label
+                    key={tool.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-accent"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedToolIds.includes(tool.id)}
+                      onChange={() => toggleTool(tool.id)}
+                      className="rounded"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{tool.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {tool.description || 'No description'}
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 text-xs">
+                      {tool.type}
+                    </Badge>
+                  </label>
+                ))
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -538,7 +511,7 @@ export function ChatPage() {
           </form>
           <div className="text-xs text-muted-foreground mt-1">
             Enter to send · Shift+Enter for newline
-            {selectedProvider && ` · ${selectedProvider.type} · ${selectedProvider.configuration?.model || 'default'}`}
+            {selectedProvider && ` · ${selectedProvider.type} · ${selectedModel || 'provider default model'}`}
           </div>
         </div>
       </div>

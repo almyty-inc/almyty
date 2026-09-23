@@ -90,10 +90,14 @@ export class Api {
    * AccessPolicyService.applyListFilter.
    */
   @Column({ type: 'varchar', length: 8, default: 'org' })
-  visibility: 'org' | 'team';
+  visibility: 'org' | 'team' | 'private';
 
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;
+
+  /** Who created it; required when visibility is 'private' (the owner). */
+  @Column({ type: 'uuid', nullable: true })
+  ownerUserId: string | null;
 
   @Column({ type: 'json', nullable: true })
   headers: Record<string, string>; // Default headers for all requests

@@ -34,6 +34,7 @@ import { CliGeneratorService } from './cli-generator.service';
 import { CodegenService } from './codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateToolGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ToolType, ToolStatus, ToolExecutionMethod } from '../../entities/tool.entity';
 
@@ -41,7 +42,7 @@ import { ToolType, ToolStatus, ToolExecutionMethod } from '../../entities/tool.e
 @Controller('organizations/:organizationId/tools')
 @ApiTags('Tools')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateToolGuard)
 export class ToolsController {
   constructor(
     private readonly toolsService: ToolsService,
@@ -133,7 +134,7 @@ export class ToolsController {
     @Request() req: any,
   ) {
     try {
-      const tool = await this.toolsService.getTool(toolId, organizationId);
+      const tool = await this.toolsService.getTool(toolId, organizationId, true, { id: req.user?.sub || req.user?.id });
 
       return {
         success: true,
@@ -483,7 +484,7 @@ export class ToolsController {
     @Request() req: any,
   ) {
     try {
-      const stats = await this.toolsService.getOrganizationToolStats(organizationId);
+      const stats = await this.toolsService.getOrganizationToolStats(organizationId, req.user?.sub || req.user?.id);
 
       return {
         success: true,

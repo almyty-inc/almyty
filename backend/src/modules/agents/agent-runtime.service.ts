@@ -30,6 +30,7 @@ import { AgentStepProcessor } from './agent-step-processor';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { describeLimitTrip } from './run-limits';
 import { BudgetsService } from '../budgets/budgets.service';
+import { isOthersPrivate } from '../../common/authorization/private-visibility';
 
 /**
  * Built-in tool definitions that the agent runtime injects for autonomous agents.
@@ -230,7 +231,10 @@ export class AgentRuntimeService implements OnModuleInit {
 
   ): Promise<AgentRun> {
     const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
-    if (!agent) throw new NotFoundException('Agent not found');
+    // Another member's private agent is not runnable -- as a top-level run,
+    // a collaboration participant, or a child run -- and a run with no
+    // known user cannot be its owner. Same answer as a missing agent.
+    if (!agent || isOthersPrivate(agent, userId ?? null)) throw new NotFoundException('Agent not found');
 
     if (agent.mode !== 'autonomous') {
       throw new BadRequestException('Agent is not in autonomous mode. Use /invoke for workflow agents.');

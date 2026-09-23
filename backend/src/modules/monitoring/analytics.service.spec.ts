@@ -310,7 +310,7 @@ describe('AnalyticsService — request_logs org scope is index-shaped', () => {
   it('getRequestLogs scopes on log.organizationId with no gateway join', async () => {
     const { service, recorded } = await buildRecording();
 
-    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50 });
+    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50, callerId: 'user-1' });
 
     expect(recorded.wheres).toContain('log.organizationId = :orgId');
     expect(recorded.wheres.some(unindexable)).toBe(false);
@@ -320,7 +320,7 @@ describe('AnalyticsService — request_logs org scope is index-shaped', () => {
   it('getRequestLogs projects only the columns its mapper emits', async () => {
     const { service, recorded } = await buildRecording();
 
-    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50 });
+    await service.getRequestLogs({ organizationId: 'org-1', page: 1, limit: 50, callerId: 'user-1' });
 
     expect(recorded.selects).toHaveLength(1);
     const projected = recorded.selects[0];

@@ -10,12 +10,15 @@ import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AnalyticsExportHelper } from './analytics-export.helper';
 import { AnalyticsSummariesHelper } from './analytics-summaries.helper';
+import { notOthersPrivateGateway, notOthersPrivateProvider } from './private-rows';
 
 export interface RequestLogQuery {
   organizationId: string;
   page: number;
   limit: number;
   gatewayId?: string;
+  /** Who is asking; other users' private gateways are left out. */
+  callerId: string;
   toolId?: string;
   protocol?: string;
   statusFilter?: string;
@@ -29,6 +32,8 @@ export interface ExportQuery {
   from?: Date;
   to?: Date;
   type: 'requests' | 'tool-executions' | 'llm-sessions';
+  /** Who is exporting; other users' private gateways/providers are left out. */
+  callerId: string;
 }
 
 @Injectable()
@@ -199,6 +204,8 @@ export class AnalyticsService {
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
 
+    // Another member's private gateway: its traffic is not listed.
+    qb.andWhere(`(log.gatewayId IS NULL OR ${notOthersPrivateGateway('log."gatewayId"')})`, { privateViewerId: query.callerId });
     if (query.gatewayId) {
       qb.andWhere('log.gatewayId = :gatewayId', { gatewayId: query.gatewayId });
     }
@@ -246,7 +253,7 @@ export class AnalyticsService {
     };
   }
 
-  async getToolUsage(organizationId: string, timeframe: string) {
+  async getToolUsage(organizationId: string, timeframe: string, callerId?: string | null) {
     if (!organizationId) {
       throw new Error('getToolUsage requires organizationId');
     }
@@ -261,6 +268,11 @@ export class AnalyticsService {
       .addSelect('MAX(exec.createdAt)', 'lastUsed')
       .where('exec.organizationId = :orgId', { orgId: organizationId })
       .andWhere('exec.createdAt >= :since', { since })
+      // Another member's private tools are not in this caller's usage table.
+      .andWhere(
+        `NOT EXISTS (SELECT 1 FROM tools pt WHERE pt.id = exec."toolId" AND pt.visibility = 'private' AND pt."createdBy" IS DISTINCT FROM :_privateMe)`,
+        { _privateMe: callerId ?? null },
+      )
       .groupBy('exec.toolId')
       .orderBy('COUNT(*)', 'DESC')
       .getRawMany();
@@ -277,7 +289,7 @@ export class AnalyticsService {
     }));
   }
 
-  async getGatewayUsage(organizationId: string, timeframe: string) {
+  async getGatewayUsage(organizationId: string, timeframe: string, callerId: string) {
     if (!organizationId) {
       throw new Error('getGatewayUsage requires organizationId');
     }
@@ -296,6 +308,7 @@ export class AnalyticsService {
       .where('metric.organizationId = :orgId', { orgId: organizationId })
       .andWhere('metric.type = :type', { type: MetricType.REQUEST_COUNT })
       .andWhere('metric.gatewayId IS NOT NULL')
+      .andWhere(notOthersPrivateGateway('metric."gatewayId"'), { privateViewerId: callerId })
       .andWhere('metric.timestamp >= :since', { since })
       .groupBy('metric.gatewayId')
       .orderBy('COUNT(*)', 'DESC')
@@ -312,7 +325,7 @@ export class AnalyticsService {
     }));
   }
 
-  async getLlmUsage(organizationId: string, timeframe: string) {
+  async getLlmUsage(organizationId: string, timeframe: string, callerId: string) {
     if (!organizationId) {
       throw new Error('getLlmUsage requires organizationId');
     }
@@ -328,6 +341,7 @@ export class AnalyticsService {
       .addSelect('SUM(session.totalCost)', 'totalCostDollars')
       .addSelect('SUM(session.toolCalls)', 'totalToolCalls')
       .where('session.organizationId = :orgId', { orgId: organizationId })
+      .andWhere(`(session.providerId IS NULL OR ${notOthersPrivateProvider('session."providerId"')})`, { privateViewerId: callerId })
       .andWhere('session.createdAt >= :since', { since })
       .groupBy('session.providerId')
       .getRawMany();

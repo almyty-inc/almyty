@@ -12,6 +12,7 @@ import { ToolTemplate } from '../../entities/tool-template.entity';
 import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { isOthersPrivate } from '../../common/authorization/private-visibility';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import {
   sanitizeConfiguration,
@@ -187,15 +188,16 @@ export class ToolHubService {
         const existing = await this.apiRepository.findOne({
           where: { id: options.existingApiId, organizationId: orgId },
         });
-        if (!existing) {
+        if (!existing || isOthersPrivate(existing, userId)) {
           throw new BadRequestException('Specified API not found in your organization');
         }
         api = existing;
       } else {
         // Check for existing Api with same baseUrl in org
-        const existing = await this.apiRepository.findOne({
+        // Another member's private API is not reusable (nor visible) here.
+        const existing = (await this.apiRepository.find({
           where: { baseUrl: template.apiConfig.baseUrl, organizationId: orgId },
-        });
+        })).find((a) => !isOthersPrivate(a, userId));
 
         if (existing) {
           api = existing;
@@ -207,6 +209,7 @@ export class ToolHubService {
             type: ApiType.HTTP,
             status: ApiStatus.ACTIVE,
             organizationId: orgId,
+            ownerUserId: userId,
             // Scrubbed on the way in as well as on the way out. The
             // publish path never writes apiConfig.headers, but a template
             // is data another party may have authored, and this is the
@@ -234,6 +237,8 @@ export class ToolHubService {
       apiId: api?.id || null,
       organizationId: orgId,
       createdBy: userId,
+      // A tool installed onto the caller's private API is private with it.
+      ...(api?.visibility === 'private' ? { visibility: 'private' as const, teamId: null } : {}),
       status: ToolStatus.ACTIVE,
       version: '1.0.0',
       metadata: {
@@ -338,7 +343,9 @@ export class ToolHubService {
       where: { id: dto.toolId, organizationId: orgId },
       relations: { api: true },
     });
-    if (!tool) {
+    // Another member's private tool is "not found" here too: publishing it
+    // to the hub would hand it to every tenant.
+    if (!tool || isOthersPrivate(tool, userId)) {
       // 404 rather than 403: a 403 would confirm the id exists in some
       // other organization.
       throw new NotFoundException('Tool not found');

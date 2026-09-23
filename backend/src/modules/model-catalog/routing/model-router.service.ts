@@ -10,6 +10,7 @@ import { AuditLogService } from '../../audit-log/audit-log.service';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { RouteCandidate, RoutingPolicy, selectCandidates } from './model-router';
 import { getRequestContext } from '../../../common/request-context';
+import { providerUsableBy } from '../../llm-providers/private-provider';
 
 /** Weight of a new sample in the p50 average. */
 const LATENCY_P50_ALPHA = 0.2;
@@ -174,6 +175,9 @@ export class ModelRouterService {
     if (!card.providerId) return null;
     const provider = await this.providers.findOne({ where: { id: card.providerId, organizationId: card.organizationId } });
     if (!provider) return null;
+    // Another user's private provider is never a candidate, and neither is
+    // any private provider for a call attributed to nobody.
+    if (!providerUsableBy(provider, principal?.id)) return null;
     if (this.credentialRefs && provider.credentialId) {
       // The row references a connection: it must still resolve for this
       // caller, or the candidate drops out of the plan.

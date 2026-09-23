@@ -267,71 +267,435 @@ export function isBuildable(target: DistributionTarget): boolean {
  * whole of it.
  */
 /**
- * The credentials each channel needs before it can carry a message.
+ * One setting a messaging distribution asks for.
  *
- * Mirrors REQUIRED_CREDENTIALS in the backend
- * (distribution-publish.ts). Kept in step by hand rather than fetched,
- * because it is a small fixed table and the alternative is a round trip
- * to render a form. The backend is the authority: it refuses to publish
- * a distribution missing any of these, so a drift here only ever means
- * an extra or missing field, never a surface that ships unprotected.
+ * `hint` is the one line that says where in the platform's own console
+ * the value lives -- the question every one of these fields raised when
+ * it was a bare label. `secret` values are masked as they are typed;
+ * everything here, secret or not, is kept away from password managers,
+ * which otherwise filled a dashboard login into the access-token field.
  */
-export const CHANNEL_CREDENTIAL_FIELDS: Partial<Record<DistributionTarget, Array<{ key: string; label: string; secret?: boolean }>>> = {
+export interface ChannelCredentialField {
+  key: string
+  label: string
+  hint: string
+  placeholder?: string
+  /** Masked while typed, and never shown back once stored. */
+  secret?: boolean
+  /**
+   * Required before the distribution can publish. Mirrors
+   * REQUIRED_CREDENTIALS in the backend (distribution-publish.ts); an
+   * optional field is one the adapter reads but publishing does not
+   * insist on.
+   */
+  required?: boolean
+}
+
+const TWILIO_SID: ChannelCredentialField = {
+  key: 'twilio_account_sid',
+  label: 'Account SID',
+  hint: 'Twilio Console → Account Info on the dashboard. It starts with AC.',
+  placeholder: 'ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+  required: true,
+}
+
+const TWILIO_TOKEN: ChannelCredentialField = {
+  key: 'twilio_auth_token',
+  label: 'Auth token',
+  hint: 'Twilio Console → Account Info → Auth Token.',
+  secret: true,
+  required: true,
+}
+
+/**
+ * Signal, Matrix and IRC arrive through a bridge the customer runs, and
+ * the adapters refuse a forwarded message that does not carry this token
+ * (signal/matrix/irc.adapter.ts, `inbound_token`). Publishing does not
+ * require it, so it is optional here, but without it nothing gets in.
+ */
+const BRIDGE_INBOUND_TOKEN: ChannelCredentialField = {
+  key: 'inbound_token',
+  label: 'Incoming token',
+  hint: 'A random string you choose. The bridge sends it as a Bearer token with every message it forwards; without it incoming messages are refused.',
+  secret: true,
+}
+
+/**
+ * The settings each channel needs before it can carry a message.
+ *
+ * The required keys mirror REQUIRED_CREDENTIALS in the backend
+ * (distribution-publish.ts), kept in step by hand because it is a small
+ * fixed table. The backend is the authority: it refuses to publish a
+ * distribution missing any of them, so a drift here only ever means an
+ * extra or missing field, never a surface that ships unprotected.
+ */
+export const CHANNEL_CREDENTIAL_FIELDS: Partial<Record<DistributionTarget, ChannelCredentialField[]>> = {
   slack: [
-    { key: 'bot_token', label: 'Bot token', secret: true },
-    { key: 'signing_secret', label: 'Signing secret', secret: true },
+    {
+      key: 'bot_token',
+      label: 'Bot token',
+      hint: 'api.slack.com/apps → your app → OAuth & Permissions → Bot User OAuth Token.',
+      placeholder: 'xoxb-...',
+      secret: true,
+      required: true,
+    },
+    {
+      key: 'signing_secret',
+      label: 'Signing secret',
+      hint: 'api.slack.com/apps → your app → Basic Information → App Credentials.',
+      secret: true,
+      required: true,
+    },
   ],
-  discord: [{ key: 'bot_token', label: 'Bot token', secret: true }],
-  telegram: [{ key: 'bot_token', label: 'Bot token', secret: true }],
+  discord: [
+    {
+      key: 'bot_token',
+      label: 'Bot token',
+      hint: 'discord.com/developers/applications → your app → Bot → Reset Token. Turn on the Message Content intent on the same page.',
+      secret: true,
+      required: true,
+    },
+  ],
+  telegram: [
+    {
+      key: 'bot_token',
+      label: 'Bot token',
+      hint: 'Message @BotFather in Telegram, send /newbot, and copy the token it replies with.',
+      placeholder: '123456789:AA...',
+      secret: true,
+      required: true,
+    },
+  ],
   whatsapp: [
-    { key: 'twilio_account_sid', label: 'Twilio account SID' },
-    { key: 'twilio_auth_token', label: 'Twilio auth token', secret: true },
-    { key: 'phone_number', label: 'Phone number' },
+    TWILIO_SID,
+    TWILIO_TOKEN,
+    {
+      key: 'phone_number',
+      label: 'WhatsApp sender',
+      hint: 'Twilio Console → Messaging → Senders → WhatsApp senders, written as whatsapp:+15551234567.',
+      placeholder: 'whatsapp:+15551234567',
+      required: true,
+    },
   ],
   whatsapp_cloud: [
-    { key: 'access_token', label: 'Access token', secret: true },
-    { key: 'phone_number_id', label: 'Phone number ID' },
-    { key: 'app_secret', label: 'App secret', secret: true },
-    { key: 'verify_token', label: 'Verify token', secret: true },
+    {
+      key: 'access_token',
+      label: 'Access token',
+      hint: 'Meta for Developers → your app → WhatsApp → API Setup. For production, a permanent system-user token from Business Settings.',
+      secret: true,
+      required: true,
+    },
+    {
+      key: 'phone_number_id',
+      label: 'Phone number ID',
+      hint: 'Meta for Developers → your app → WhatsApp → API Setup, under the sending number. An ID, not the phone number itself.',
+      placeholder: '109876543210987',
+      required: true,
+    },
+    {
+      key: 'app_secret',
+      label: 'App secret',
+      hint: 'Meta for Developers → your app → App settings → Basic → App secret. Used to check that incoming messages really come from Meta.',
+      secret: true,
+      required: true,
+    },
+    {
+      key: 'verify_token',
+      label: 'Verify token',
+      hint: 'Any phrase you choose. Enter the same phrase next to the callback URL in Meta’s webhook settings.',
+      required: true,
+    },
   ],
   sms: [
-    { key: 'twilio_account_sid', label: 'Twilio account SID' },
-    { key: 'twilio_auth_token', label: 'Twilio auth token', secret: true },
-    { key: 'phone_number', label: 'Phone number' },
+    TWILIO_SID,
+    TWILIO_TOKEN,
+    {
+      key: 'phone_number',
+      label: 'Twilio phone number',
+      hint: 'Twilio Console → Phone Numbers → Active numbers, written as +15551234567.',
+      placeholder: '+15551234567',
+      required: true,
+    },
   ],
   email: [
-    { key: 'resend_api_key', label: 'Resend API key', secret: true },
-    { key: 'inbound_address', label: 'Inbound address' },
-    { key: 'reply_from', label: 'Reply-from address' },
+    {
+      key: 'resend_api_key',
+      label: 'Resend API key',
+      hint: 'resend.com → API Keys → Create API key. It starts with re_.',
+      placeholder: 're_...',
+      secret: true,
+      required: true,
+    },
+    {
+      key: 'inbound_address',
+      label: 'Receiving address',
+      hint: 'The address people write to. Its domain must receive mail through Resend (resend.com → Domains).',
+      placeholder: 'support@yourdomain.com',
+      required: true,
+    },
+    {
+      key: 'reply_from',
+      label: 'Reply-from address',
+      hint: 'Replies are sent from this address, on a domain verified in resend.com → Domains.',
+      placeholder: 'support@yourdomain.com',
+      required: true,
+    },
   ],
   webhook: [
-    { key: 'callback_url', label: 'Callback URL' },
-    { key: 'secret', label: 'Shared secret', secret: true },
+    {
+      key: 'callback_url',
+      label: 'Reply URL',
+      hint: 'Your own endpoint. Each reply is POSTed here as JSON.',
+      placeholder: 'https://your-server.example.com/almyty',
+      required: true,
+    },
+    {
+      key: 'secret',
+      label: 'Shared secret',
+      hint: 'A random string you choose. Sign what you send with HMAC-SHA256 in the X-Webhook-Signature header; replies are signed the same way.',
+      secret: true,
+      required: true,
+    },
   ],
   google_chat: [
-    { key: 'webhook_url', label: 'Webhook URL' },
-    { key: 'verification_token', label: 'Verification token', secret: true },
+    {
+      key: 'webhook_url',
+      label: 'Space webhook URL',
+      hint: 'In Google Chat, open the space → Apps & integrations → Webhooks → Add webhook, and copy its URL. Replies are posted here.',
+      placeholder: 'https://chat.googleapis.com/v1/spaces/...',
+      secret: true,
+      required: true,
+    },
+    {
+      key: 'verification_token',
+      label: 'Verification token',
+      hint: 'Google Cloud console → APIs & Services → Google Chat API → Configuration. Every event must carry it as a Bearer token.',
+      secret: true,
+      required: true,
+    },
   ],
   microsoft_teams: [
-    { key: 'bot_id', label: 'Bot ID' },
-    { key: 'bot_password', label: 'Bot password', secret: true },
-    { key: 'service_url', label: 'Service URL' },
+    {
+      key: 'bot_id',
+      label: 'Microsoft App ID',
+      hint: 'Azure portal → your Azure Bot → Configuration → Microsoft App ID.',
+      placeholder: '00000000-0000-0000-0000-000000000000',
+      required: true,
+    },
+    {
+      key: 'bot_password',
+      label: 'Client secret',
+      hint: 'Azure portal → the bot’s app registration → Certificates & secrets → New client secret. Copy the Value, not the ID.',
+      secret: true,
+      required: true,
+    },
+    {
+      key: 'service_url',
+      label: 'Service URL',
+      hint: 'Where replies go when a message does not say. Usually https://smba.trafficmanager.net/teams/.',
+      placeholder: 'https://smba.trafficmanager.net/teams/',
+      required: true,
+    },
   ],
   signal: [
-    { key: 'api_url', label: 'Bridge API URL' },
-    { key: 'phone_number', label: 'Phone number' },
+    {
+      key: 'api_url',
+      label: 'Bridge URL',
+      hint: 'The address of your signal-cli-rest-api bridge.',
+      placeholder: 'http://signal-cli:8080',
+      required: true,
+    },
+    {
+      key: 'phone_number',
+      label: 'Signal number',
+      hint: 'The number registered with the bridge, written as +15551234567.',
+      placeholder: '+15551234567',
+      required: true,
+    },
+    BRIDGE_INBOUND_TOKEN,
   ],
   matrix: [
-    { key: 'homeserver_url', label: 'Homeserver URL' },
-    { key: 'access_token', label: 'Access token', secret: true },
-    { key: 'room_id', label: 'Room ID' },
+    {
+      key: 'homeserver_url',
+      label: 'Homeserver URL',
+      hint: 'Where the bot account lives.',
+      placeholder: 'https://matrix.org',
+      required: true,
+    },
+    {
+      key: 'access_token',
+      label: 'Access token',
+      hint: 'Sign in as the bot in Element → Settings → Help & About → Access token.',
+      secret: true,
+      required: true,
+    },
+    {
+      key: 'room_id',
+      label: 'Room ID',
+      hint: 'Element → the room → Settings → Advanced → Internal room ID. It starts with !.',
+      placeholder: '!abcdef:matrix.org',
+      required: true,
+    },
+    BRIDGE_INBOUND_TOKEN,
   ],
   irc: [
-    { key: 'webhook_url', label: 'Bridge webhook URL' },
-    { key: 'bridge_token', label: 'Bridge token', secret: true },
-    { key: 'nick', label: 'Nick' },
-    { key: 'channel', label: 'Channel' },
+    {
+      key: 'webhook_url',
+      label: 'Bridge URL',
+      hint: 'Your IRC bridge’s HTTP endpoint (matterbridge in API mode, or similar). Replies are POSTed here.',
+      placeholder: 'https://irc-bridge.example.com/api/message',
+      required: true,
+    },
+    {
+      key: 'bridge_token',
+      label: 'Reply token',
+      hint: 'Sent to the bridge as a Bearer token with every reply. Use whatever token your bridge checks.',
+      secret: true,
+      required: true,
+    },
+    {
+      key: 'nick',
+      label: 'Nick',
+      hint: 'The nick the bot speaks as.',
+      placeholder: 'acme-bot',
+      required: true,
+    },
+    {
+      key: 'channel',
+      label: 'Channel',
+      hint: 'Where replies go when a message does not say.',
+      placeholder: '#support',
+      required: true,
+    },
+    BRIDGE_INBOUND_TOKEN,
   ],
+}
+
+/**
+ * How a platform learns where to deliver messages.
+ *
+ *  - manual: the operator pastes our URL into the platform's console.
+ *  - auto:   publishing registers it (Telegram setWebhook, the Twilio
+ *            number's messaging webhook -- channel-webhook-registrar.ts).
+ *  - none:   nothing calls us: a download, the hosted web app, or
+ *            Discord, whose messages arrive over the gateway websocket
+ *            almyty opens (discord-gateway.transport.ts).
+ */
+export type InboundMode = 'manual' | 'auto' | 'none'
+
+export interface DistributionInbound {
+  mode: InboundMode
+  /** What to do with the URL, in the platform's own words. */
+  where?: string
+  /** Why no URL is needed (mode 'none'). */
+  why?: string
+  /** The URL is the shared email route rather than the surface's own. */
+  sharedEmailRoute?: boolean
+}
+
+export const DISTRIBUTION_INBOUND: Record<DistributionTarget, DistributionInbound> = {
+  web: { mode: 'none', why: 'almyty hosts the web app, so there is nothing to register.' },
+  tui: { mode: 'none', why: 'A terminal app is a file people download; nothing calls back.' },
+  desktop: { mode: 'none', why: 'A desktop app is a file people download; nothing calls back.' },
+  binary: { mode: 'none', why: 'A binary is a file people download; nothing calls back.' },
+  discord: {
+    mode: 'none',
+    why: 'almyty connects out to Discord’s gateway, so there is no URL to register.',
+  },
+  slack: {
+    mode: 'manual',
+    where: 'Paste it into api.slack.com/apps → your app → Event Subscriptions → Request URL, then subscribe to the message.im and app_mention bot events.',
+  },
+  telegram: {
+    mode: 'auto',
+    where: 'Registered with Telegram for you when you publish. Shown here in case you need to check it.',
+  },
+  whatsapp: {
+    mode: 'auto',
+    where: 'Set on your Twilio number for you when you publish. Shown here in case you need to check it.',
+  },
+  sms: {
+    mode: 'auto',
+    where: 'Set on your Twilio number for you when you publish. Shown here in case you need to check it.',
+  },
+  whatsapp_cloud: {
+    mode: 'manual',
+    where: 'Meta for Developers → your app → WhatsApp → Configuration → Webhook: paste this as the Callback URL with the verify token above, then subscribe to the messages field. Meta checks it straight away, so publish first.',
+  },
+  microsoft_teams: {
+    mode: 'manual',
+    where: 'Azure portal → your Azure Bot → Configuration → Messaging endpoint.',
+  },
+  google_chat: {
+    mode: 'manual',
+    where: 'Google Cloud console → Google Chat API → Configuration → Connection settings: choose HTTP endpoint URL and paste this.',
+  },
+  email: {
+    mode: 'manual',
+    sharedEmailRoute: true,
+    where: 'resend.com → Webhooks → Add endpoint, for received email. One endpoint serves every email distribution; mail is matched to this one by its receiving address.',
+  },
+  signal: {
+    mode: 'manual',
+    where: 'Set this as your bridge’s receive webhook, sending the incoming token above as a Bearer token.',
+  },
+  matrix: {
+    mode: 'manual',
+    where: 'Point your Matrix bridge at this URL to forward room messages, sending the incoming token above as a Bearer token.',
+  },
+  irc: {
+    mode: 'manual',
+    where: 'Set this as your bridge’s outgoing webhook, sending the incoming token above as a Bearer token.',
+  },
+  webhook: {
+    mode: 'manual',
+    where: 'Your system POSTs incoming messages here, signed with the shared secret above.',
+  },
+}
+
+/**
+ * The URL a platform delivers messages to for this distribution.
+ *
+ * Publishing creates a gateway whose endpoint is `/apps/<app>/<target>`
+ * (endpointFor in the backend), served on the unified endpoint under the
+ * organization: `<api>/<org>/apps/<app>/<target>` -- the same URL the
+ * webhook registrar hands Telegram and Twilio. Email is the exception:
+ * Resend allows one inbound webhook per account, so every email
+ * distribution shares `/channels/email/inbound` and is matched by its
+ * receiving address (channel-email-inbound.controller.ts).
+ */
+export function distributionCallbackUrl(
+  apiBase: string,
+  orgSlug: string,
+  appSlug: string,
+  target: DistributionTarget,
+): string | null {
+  const inbound = DISTRIBUTION_INBOUND[target]
+  if (!inbound || inbound.mode === 'none') return null
+  const base = apiBase.replace(/\/+$/, '')
+  if (inbound.sharedEmailRoute) return `${base}/channels/email/inbound`
+  return `${base}/${orgSlug}/apps/${appSlug}/${target}`
+}
+
+/** One sentence under a distribution's title: what it does, said once. */
+export const DISTRIBUTION_DESCRIPTIONS: Record<DistributionTarget, string> = {
+  web: 'A branded chat site on its own address, hosted by almyty.',
+  tui: 'A command your users install and run in a terminal.',
+  desktop: 'An installable windowed app for macOS, Windows and Linux.',
+  binary: 'A single executable with no runtime to install.',
+  slack: 'Answers direct messages and mentions in your Slack workspace.',
+  discord: 'Answers in your Discord server as a bot.',
+  telegram: 'Answers as a Telegram bot.',
+  whatsapp: 'Answers messages to your Twilio WhatsApp sender.',
+  whatsapp_cloud: 'Answers messages to your business number through Meta’s Cloud API.',
+  sms: 'Answers text messages to your Twilio number.',
+  microsoft_teams: 'Answers as a bot in Microsoft Teams.',
+  google_chat: 'Answers as a Chat app in your Google Workspace spaces.',
+  email: 'Answers email sent to your receiving address, through Resend.',
+  signal: 'Answers on Signal through a bridge you run.',
+  matrix: 'Answers in a Matrix room through a bridge you run.',
+  irc: 'Answers in an IRC channel through a bridge you run.',
+  webhook: 'Takes messages from, and sends replies to, an endpoint you own.',
 }
 
 export function servesOverGateway(target: DistributionTarget): boolean {
@@ -493,4 +857,40 @@ export function grantsLocalAccess(capabilities: AppCapabilities | null | undefin
  */
 export function isOpenToAnyone(authMode: AppAuthMode | undefined): boolean {
   return (authMode ?? 'public_link') === 'public_link'
+}
+
+/** Names an app cannot take, mirroring the backend list. */
+const RESERVED_APP_SLUGS = [
+  'www', 'api', 'app', 'admin', 'docs', 'status', 'staging', 'dev',
+  'chat', 'mail', 'assets', 'static', 'cdn', 'download', 'install',
+]
+
+const APP_SLUG_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
+
+/** Why this name is unusable, or null. Same wording as the API. */
+export function appSlugError(slug: string): string | null {
+  const value = (slug || '').trim().toLowerCase()
+  if (!value) return 'Pick a name for the product.'
+  if (value.length < 3) return 'Must be at least 3 characters.'
+  if (value.length > 63) return 'Must be 63 characters or fewer.'
+  if (!APP_SLUG_PATTERN.test(value)) {
+    return 'Use lowercase letters, numbers and hyphens. It cannot start or end with a hyphen.'
+  }
+  if (RESERVED_APP_SLUGS.includes(value)) return 'That name is reserved.'
+  return null
+}
+
+/** Turn a display name into a usable address without making the user think. */
+export function slugify(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 63)
+}
+
+/** Every target the API accepts, so a route param can be checked. */
+export function isDistributionTarget(value: string | undefined): value is DistributionTarget {
+  return !!value && Object.prototype.hasOwnProperty.call(DISTRIBUTION_LABELS, value)
 }

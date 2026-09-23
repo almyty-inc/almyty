@@ -14,8 +14,11 @@ import {
 } from '../types/mcp.types';
 
 import { Tool, ToolStatus } from '../../../entities/tool.entity';
+import { withoutOthersPrivate } from '../../../common/authorization/private-visibility';
 import { Resource } from '../../../entities/resource.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
+import { Gateway } from '../../../entities/gateway.entity';
+import { gatewayServableTo } from '../../gateways/private-gateway';
 import { SkillGeneratorService } from '../../tools/skill-generator.service';
 import { PromotedSkillsService } from '../../promoted-skills/promoted-skills.service';
 import { McpToolHandler } from './mcp-tool.handler';
@@ -167,9 +170,10 @@ export class McpContentHandler {
     organizationId: string,
   ): Promise<McpGetPromptResult> {
     if (params.name === 'list-available-tools') {
-      const tools = await this.toolRepository.find({
+      // No caller reaches this path: private tools are never listed here.
+      const tools = withoutOthersPrivate(await this.toolRepository.find({
         where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
-      });
+      }), null);
 
       const toolList = tools.map((t) => `- **${t.name}**: ${t.description || 'No description'}`).join('\n');
 
@@ -193,7 +197,8 @@ export class McpContentHandler {
         where: { name: toolName, organization: { id: organizationId } },
       });
 
-      if (!tool) {
+      // No caller reaches this path, so no private tool does either.
+      if (!tool || tool.visibility === 'private') {
         throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Tool '${toolName}' not found`);
       }
 
@@ -246,7 +251,12 @@ export class McpContentHandler {
     return { skills: [...skills.filter(Boolean), ...promoted] };
   }
 
-  async handleSkillGet(params: any, organizationId: string): Promise<any> {
+  async handleSkillGet(
+    params: any,
+    organizationId: string,
+    caller?: { id: string },
+    servingGatewayId?: string,
+  ): Promise<any> {
     const { toolId, gatewayId, promotedSkillId } = params || {};
 
     if (promotedSkillId) {
@@ -255,11 +265,23 @@ export class McpContentHandler {
     }
 
     if (gatewayId) {
+      // `gatewayId` here is any gateway of the org, named in the request,
+      // not the one being served. Another user's private gateway answers
+      // like one that does not exist.
+      if (gatewayId !== servingGatewayId) {
+        const target = await this.gatewayToolRepository.manager?.findOne(Gateway, {
+          where: { id: gatewayId, organizationId },
+          select: { id: true, visibility: true, ownerUserId: true },
+        });
+        if (target && !gatewayServableTo(target, caller?.id)) {
+          throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Gateway not found: ${gatewayId}`);
+        }
+      }
       return this.skillGeneratorService.generateGatewaySkills(gatewayId, organizationId);
     }
 
     if (toolId) {
-      return this.skillGeneratorService.generateToolSkill(toolId, organizationId);
+      return this.skillGeneratorService.generateToolSkill(toolId, organizationId, caller ?? null);
     }
 
     throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'toolId, gatewayId, or promotedSkillId is required');

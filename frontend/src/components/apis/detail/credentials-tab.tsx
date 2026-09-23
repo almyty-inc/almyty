@@ -2,21 +2,23 @@
  * CredentialsTab — upstream credentials section for an API.
  *
  * Renders a list of stored credentials (API key, bearer token, basic auth,
- * OAuth2, JWT, custom header) and provides add/test/delete flows. Used by
- * the API detail page (`pages/api-detail.tsx`).
+ * OAuth2, JWT, custom header) and provides add/test/delete flows. "Add
+ * credential" opens a form in place at the top of the section; delete
+ * asks through a one-line confirmation. Used by the API detail page
+ * (`pages/api-detail.tsx`).
  */
-import { useState } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Key, Shield, TestTube, Trash2 } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { SecretInput } from '@/components/ui/secret-input'
+import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +52,8 @@ interface CredentialsTabProps {
 export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
-  const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [typeError, setTypeError] = useState<string | undefined>()
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [newCredType, setNewCredType] = useState('')
   const [newCredName, setNewCredName] = useState('')
@@ -66,8 +69,8 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
     mutationFn: (data: { name: string; type: string; config: Record<string, string> }) => apisApi.createCredential(apiId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-credentials', apiId] })
-      success('Credential Added', 'Credential has been securely stored')
-      setAddDialogOpen(false)
+      success('Credential added', 'Credential has been securely stored')
+      setAdding(false)
       setNewCredType('')
       setNewCredName('')
       setNewCredConfig({})
@@ -81,7 +84,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
     mutationFn: (credId: string) => apisApi.deleteCredential(apiId, credId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-credentials', apiId] })
-      success('Credential Deleted', 'Credential has been removed')
+      success('Credential deleted', 'Credential has been removed')
       setDeleteId(null)
     },
     onError: (err: Error & { response?: { data?: { message?: string } } }) => {
@@ -102,7 +105,13 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
   const credsRaw = credsData?.credentials || credsData || []
   const credentials = Array.isArray(credsRaw) ? credsRaw : []
 
-  const handleCreate = () => {
+  const handleCreate = (e: FormEvent) => {
+    e.preventDefault()
+    if (!newCredType) {
+      setTypeError('Choose the kind of credential the API expects.')
+      document.getElementById('cred-type')?.focus()
+      return
+    }
     createMutation.mutate({
       name: newCredName || `${apiName} ${CREDENTIAL_TYPE_LABELS[newCredType] || newCredType}`,
       type: newCredType,
@@ -110,168 +119,80 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
     })
   }
 
+  const setConfig = (key: string) => (e: ChangeEvent<HTMLInputElement>) =>
+    setNewCredConfig({ ...newCredConfig, [key]: e.target.value })
+  const value = (key: string) => newCredConfig[key] || ''
+
   const renderConfigFields = () => {
     switch (newCredType) {
       case 'API_KEY':
         return (
           <>
-            <div>
-              <Label htmlFor="cred-api-key">API Key</Label>
-              <Input id="cred-api-key"
-                type="password"
-                value={newCredConfig.apiKey || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, apiKey: e.target.value })}
-                placeholder="sk-..."
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-header-name">Header Name</Label>
-              <Input id="cred-header-name"
-                value={newCredConfig.headerName || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, headerName: e.target.value })}
-                placeholder="X-API-Key (default)"
-                className="mt-1"
-              />
-            </div>
+            <Field id="cred-api-key" label="API key">
+              <SecretInput value={value('apiKey')} onChange={setConfig('apiKey')} placeholder="sk-..." />
+            </Field>
+            <Field id="cred-header-name" label="Header name">
+              <Input value={value('headerName')} onChange={setConfig('headerName')} placeholder="X-API-Key (default)" />
+            </Field>
           </>
         )
       case 'BEARER_TOKEN':
         return (
-          <div>
-            <Label htmlFor="cred-bearer-token">Bearer Token</Label>
-            <Input id="cred-bearer-token"
-              type="password"
-              value={newCredConfig.token || ''}
-              onChange={e => setNewCredConfig({ ...newCredConfig, token: e.target.value })}
-              placeholder="Enter token"
-              className="mt-1"
-            />
-          </div>
+          <Field id="cred-bearer-token" label="Bearer token">
+            <SecretInput value={value('token')} onChange={setConfig('token')} placeholder="Enter token" />
+          </Field>
         )
       case 'BASIC_AUTH':
         return (
           <>
-            <div>
-              <Label htmlFor="cred-username">Username</Label>
-              <Input id="cred-username"
-                value={newCredConfig.username || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, username: e.target.value })}
-                placeholder="Username"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-password">Password</Label>
-              <Input id="cred-password"
-                type="password"
-                value={newCredConfig.password || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, password: e.target.value })}
-                placeholder="Password"
-                className="mt-1"
-              />
-            </div>
+            <Field id="cred-username" label="Username">
+              <SecretInput masked={false} value={value('username')} onChange={setConfig('username')} placeholder="Username" />
+            </Field>
+            <Field id="cred-password" label="Password">
+              <SecretInput value={value('password')} onChange={setConfig('password')} placeholder="Password" />
+            </Field>
           </>
         )
       case 'OAUTH2':
         return (
           <>
-            <div>
-              <Label htmlFor="cred-client-id">Client ID</Label>
-              <Input id="cred-client-id"
-                value={newCredConfig.clientId || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, clientId: e.target.value })}
-                placeholder="OAuth client ID"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-client-secret">Client Secret</Label>
-              <Input id="cred-client-secret"
-                type="password"
-                value={newCredConfig.clientSecret || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, clientSecret: e.target.value })}
-                placeholder="OAuth client secret"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-token-endpoint">Token Endpoint</Label>
-              <Input id="cred-token-endpoint"
-                value={newCredConfig.tokenUrl || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, tokenUrl: e.target.value })}
-                placeholder="https://oauth.example.com/token"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-access-token">Access Token</Label>
-              <Input id="cred-access-token"
-                type="password"
-                value={newCredConfig.accessToken || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, accessToken: e.target.value })}
-                placeholder="Current access token (if you have one)"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-refresh-token">Refresh Token</Label>
-              <Input id="cred-refresh-token"
-                type="password"
-                value={newCredConfig.refreshToken || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, refreshToken: e.target.value })}
-                placeholder="Refresh token (for auto-renewal)"
-                className="mt-1"
-              />
-            </div>
+            <Field id="cred-client-id" label="Client ID">
+              <SecretInput masked={false} value={value('clientId')} onChange={setConfig('clientId')} placeholder="OAuth client ID" />
+            </Field>
+            <Field id="cred-client-secret" label="Client secret">
+              <SecretInput value={value('clientSecret')} onChange={setConfig('clientSecret')} placeholder="OAuth client secret" />
+            </Field>
+            <Field id="cred-token-endpoint" label="Token endpoint">
+              <Input value={value('tokenUrl')} onChange={setConfig('tokenUrl')} placeholder="https://oauth.example.com/token" />
+            </Field>
+            <Field id="cred-access-token" label="Access token">
+              <SecretInput value={value('accessToken')} onChange={setConfig('accessToken')} placeholder="Current access token (if you have one)" />
+            </Field>
+            <Field id="cred-refresh-token" label="Refresh token">
+              <SecretInput value={value('refreshToken')} onChange={setConfig('refreshToken')} placeholder="Refresh token (for auto-renewal)" />
+            </Field>
           </>
         )
       case 'JWT':
         return (
           <>
-            <div>
-              <Label htmlFor="cred-jwt-token">JWT Token</Label>
-              <Input id="cred-jwt-token"
-                type="password"
-                value={newCredConfig.token || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, token: e.target.value })}
-                placeholder="eyJhbGciOiJIUzI1NiIs..."
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-header-name-2">Header Name</Label>
-              <Input id="cred-header-name-2"
-                value={newCredConfig.headerName || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, headerName: e.target.value })}
-                placeholder="Authorization (default)"
-                className="mt-1"
-              />
-            </div>
+            <Field id="cred-jwt-token" label="JWT">
+              <SecretInput value={value('token')} onChange={setConfig('token')} placeholder="eyJhbGciOiJIUzI1NiIs..." />
+            </Field>
+            <Field id="cred-header-name-2" label="Header name">
+              <Input value={value('headerName')} onChange={setConfig('headerName')} placeholder="Authorization (default)" />
+            </Field>
           </>
         )
       case 'CUSTOM':
         return (
           <>
-            <div>
-              <Label htmlFor="cred-header-name-3">Header Name</Label>
-              <Input id="cred-header-name-3"
-                value={newCredConfig.headerName || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, headerName: e.target.value })}
-                placeholder="X-Custom-Header"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-header-value">Header Value</Label>
-              <Input id="cred-header-value"
-                type="password"
-                value={newCredConfig.headerValue || ''}
-                onChange={e => setNewCredConfig({ ...newCredConfig, headerValue: e.target.value })}
-                placeholder="Custom header value"
-                className="mt-1"
-              />
-            </div>
+            <Field id="cred-header-name-3" label="Header name">
+              <Input value={value('headerName')} onChange={setConfig('headerName')} placeholder="X-Custom-Header" />
+            </Field>
+            <Field id="cred-header-value" label="Header value">
+              <SecretInput value={value('headerValue')} onChange={setConfig('headerValue')} placeholder="Custom header value" />
+            </Field>
           </>
         )
       default:
@@ -282,31 +203,71 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
               <Shield className="h-4 w-4" />
-              Upstream Credentials
+              Upstream credentials
             </CardTitle>
             <CardDescription>
               Credentials used when tools call this API. Encrypted at rest.
             </CardDescription>
           </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              setNewCredType('')
-              setNewCredName('')
-              setNewCredConfig({})
-              setAddDialogOpen(true)
-            }}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Add Credential
-          </Button>
+          {!adding && (
+            <Button
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                setNewCredType('')
+                setNewCredName('')
+                setNewCredConfig({})
+                setTypeError(undefined)
+                setAdding(true)
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add credential
+            </Button>
+          )}
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {adding && (
+          <form
+            onSubmit={handleCreate}
+            noValidate
+            aria-label="Add credential"
+            className="space-y-4 rounded-lg border p-4"
+            data-testid="add-credential-form"
+          >
+            <p className="text-sm text-muted-foreground">
+              Store credentials for authenticating with {apiName}. Sensitive values are encrypted.
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field id="cred-name" label="Name" hint="Defaults to the API and credential type.">
+                <Input value={newCredName} onChange={e => setNewCredName(e.target.value)} placeholder="e.g. Production API key" />
+              </Field>
+              <Field id="cred-type" label="Type" error={typeError} required>
+                <Select value={newCredType} onValueChange={v => { setNewCredType(v); setNewCredConfig({}); setTypeError(undefined) }}>
+                  <SelectTrigger id="cred-type" aria-invalid={typeError ? true : undefined} aria-describedby={typeError ? "cred-type-error" : undefined}>
+                    <SelectValue placeholder="Select credential type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(CREDENTIAL_TYPE_LABELS).map(([type, label]) => (
+                      <SelectItem key={type} value={type}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+            {newCredType && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{renderConfigFields()}</div>}
+            <InlineFormActions
+              onCancel={() => setAdding(false)}
+              submitLabel="Save credential"
+              submitting={createMutation.isPending}
+            />
+          </form>
+        )}
         {isLoading ? (
           <div className="flex justify-center py-4"><LoadingSpinner /></div>
         ) : credentials.length === 0 ? (
@@ -354,55 +315,11 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
         )}
       </CardContent>
 
-      {/* Add Credential Dialog */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add Credential</DialogTitle>
-            <DialogDescription>
-              Store credentials for authenticating with {apiName}. Sensitive values are encrypted.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="cred-name">Name</Label>
-              <Input id="cred-name"
-                value={newCredName}
-                onChange={e => setNewCredName(e.target.value)}
-                placeholder="e.g. Production API Key"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="cred-type">Type</Label>
-              <Select value={newCredType} onValueChange={v => { setNewCredType(v); setNewCredConfig({}) }}>
-                <SelectTrigger id="cred-type" className="mt-1">
-                  <SelectValue placeholder="Select credential type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CREDENTIAL_TYPE_LABELS).map(([type, label]) => (
-                    <SelectItem key={type} value={type}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {newCredType && renderConfigFields()}
-            <Button
-              className="w-full"
-              onClick={handleCreate}
-              disabled={!newCredType || createMutation.isPending}
-            >
-              {createMutation.isPending ? 'Saving...' : 'Save Credential'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={open => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Credential</AlertDialogTitle>
+            <AlertDialogTitle>Delete this credential?</AlertDialogTitle>
             <AlertDialogDescription>
               Tools using this credential will no longer be able to authenticate with the API.
             </AlertDialogDescription>
@@ -411,9 +328,9 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteId && deleteMutation.mutate(deleteId)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete credential'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

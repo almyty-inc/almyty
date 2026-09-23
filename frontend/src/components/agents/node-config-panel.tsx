@@ -19,11 +19,11 @@ import { Switch } from '@/components/ui/switch'
 import { CodeEditor } from '@/components/ui/code-editor'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 
-import { llmProvidersApi, toolsApi, agentsApi } from '@/lib/api'
+import { toolsApi, agentsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
-import { RoutingPolicyField } from '@/components/models/routing-policy-editor'
-import type { LlmProvider, Tool, Agent } from '@/types'
+import { ModelPicker, type ModelSelection, type ProviderOption } from '@/components/model-picker'
+import type { Tool, Agent } from '@/types'
 import type { RoutingPolicy } from '@/types/models'
 
 // ─── Shared types ────────────────────────────────────────────────────────────
@@ -43,6 +43,59 @@ interface NodeConfigPanelProps {
 interface ParameterMapping {
   key: string
   value: string
+}
+
+// ─── Model fields shared by every node that calls a model ────────────────────
+
+/** What a node's data says about its model, in the picker's terms. */
+function nodeModelSelection(node: Node): ModelSelection {
+  const routing = node.data.routing
+  return {
+    providerId: (node.data.providerId as string) || undefined,
+    model: (node.data.model as string) || undefined,
+    routing: routing && typeof routing === 'object' ? (routing as RoutingPolicy) : undefined,
+  }
+}
+
+/**
+ * The node's data with a new model selection. A pinned provider and a
+ * routing policy are exclusive on the node: choosing one removes the other,
+ * and choosing neither leaves the organization default to answer. Other
+ * fields, a `roleKey` included, are kept.
+ */
+function withModelSelection(data: NodeData, next: ModelSelection, provider?: ProviderOption): NodeData {
+  const { routing: _r, providerId: _p, providerName: _pn, providerType: _pt, model: _m, ...rest } = data
+  if (next.routing) return { ...rest, routing: next.routing }
+  if (next.providerId) {
+    return { ...rest, providerId: next.providerId, providerName: provider?.name || '', providerType: provider?.type || '', model: next.model || '' }
+  }
+  return rest
+}
+
+/** Provider, model or policy for a node whose provider may be left to the org default. */
+function NodeModelField({ node, idPrefix, onUpdateNode }: { node: Node; idPrefix: string; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
+  const roleKey = node.data.roleKey as string | undefined
+  const selection = nodeModelSelection(node)
+  if (roleKey && !selection.providerId && !selection.routing) {
+    return (
+      <div>
+        <Label>Model</Label>
+        <p className="text-xs text-muted-foreground mt-1">
+          Filled at run time by role <code>{roleKey}</code>.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <ModelPicker
+      idPrefix={idPrefix}
+      layout="stack"
+      allowRouting
+      providerOptionalLabel="Organization default routing policy"
+      value={selection}
+      onChange={(next, provider) => onUpdateNode(node.id, withModelSelection(node.data, next, provider))}
+    />
+  )
 }
 
 // ─── Main Panel ──────────────────────────────────────────────────────────────
@@ -97,13 +150,13 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
             around the previous node's source. */}
         {nodeType === 'condition' && <ConditionConfig key={node.id} node={node} nodes={nodes} updateData={updateData} />}
         {nodeType === 'transform' && <TransformConfig node={node} updateData={updateData} />}
-        {nodeType === 'merge' && <MergeConfig node={node} updateData={updateData} />}
+        {nodeType === 'merge' && <MergeConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
         {nodeType === 'parallel' && <ParallelConfig />}
         {nodeType === 'sub_agent' && <SubAgentConfig node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
         {nodeType === 'loop' && <LoopConfig node={node} updateData={updateData} />}
         {nodeType === 'verify' && <VerifyConfig node={node} updateData={updateData} />}
-        {nodeType === 'extract_context' && <ExtractContextConfig node={node} updateData={updateData} />}
-        {nodeType === 'decision' && <DecisionConfig key={node.id} node={node} updateData={updateData} />}
+        {nodeType === 'extract_context' && <ExtractContextConfig key={node.id} node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
+        {nodeType === 'decision' && <DecisionConfig key={node.id} node={node} updateData={updateData} onUpdateNode={onUpdateNode} />}
       </div>
 
       {/* Footer: delete */}
@@ -115,7 +168,7 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
           onClick={() => onDeleteNode(node.id)}
         >
           <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-          Delete Node
+          Delete node
         </Button>
       </div>
     </div>
@@ -219,21 +272,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   const { currentOrganization } = useOrganizationStore()
   const [toolSearch, setToolSearch] = useState('')
   const [showAllTools, setShowAllTools] = useState(false)
-  // `null` means "the user has not picked a mode on this panel yet", so the
-  // mode is derived from the saved value below instead of defaulting to the
-  // suggestion list. Plain `useState(false)` made a saved custom model open
-  // on a Select that could not represent it.
-  const [customModelOverride, setCustomModelOverride] = useState<boolean | null>(null)
   const VISIBLE_TOOLS_LIMIT = 8
-
-  const { data: providers } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: async () => {
-      const res = await llmProvidersApi.getAll()
-      return Array.isArray(res) ? res : res?.providers || []
-    },
-  })
-
   const { data: tools } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
@@ -244,44 +283,6 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   })
 
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
-  const routed = !!node.data.routing && typeof node.data.routing === 'object'
-
-  // Get the selected provider to determine type for model suggestions
-  const providerList = (Array.isArray(providers) ? providers : (providers as any)?.providers || []) as Array<Pick<LlmProvider, 'id' | 'name' | 'type'>>
-  const selectedProvider = useMemo(() => {
-    if (!providerList.length || !node.data.providerId) return null
-    return providerList.find((p) => p.id === node.data.providerId) || null
-  }, [providerList, node.data.providerId])
-
-  // Fetch models dynamically from the provider API
-  const { data: dynamicModels } = useQuery({
-    queryKey: ['provider-models', node.data.providerId],
-    queryFn: async () => {
-      // llmProvidersApi.getModels goes through apiGet → extractData,
-      // so res is already the flat array of model objects.
-      const res = await llmProvidersApi.getModels(node.data.providerId as string)
-      const models = Array.isArray(res) ? res : []
-      return models.map((m: Record<string, string>) => m.id || m.name || String(m))
-    },
-    enabled: !!node.data.providerId,
-  })
-
-  const modelSuggestions: string[] = dynamicModels || []
-
-  const savedModel = (node.data.model as string) || ''
-  // Radix renders the placeholder whenever `value` matches no SelectItem, and
-  // it does so silently: a node holding a dated snapshot id, a fine-tune or a
-  // retired model -- none of which the provider's list endpoint returns --
-  // read as "Select model" while still executing the saved value. Two guards,
-  // because either alone leaves a hole: default this node to the free-text
-  // input when the saved model is not in the list, and keep the saved value in
-  // the list so the Select can never drop it even if the user switches back.
-  const savedModelIsCustom =
-    !!savedModel && modelSuggestions.length > 0 && !modelSuggestions.includes(savedModel)
-  const useCustomModel = customModelOverride ?? savedModelIsCustom
-  const modelOptions = savedModel && !modelSuggestions.includes(savedModel)
-    ? [savedModel, ...modelSuggestions]
-    : modelSuggestions
 
   // Filter tools by search
   const toolList = (Array.isArray(tools) ? tools : (tools as any)?.tools || []) as Array<Pick<Tool, 'id' | 'name'>>
@@ -303,140 +304,14 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
       {/* Model selection: a pinned provider + model, or a routing policy the
           catalog resolves at run time. The two are exclusive on the node:
           routing replaces providerId, switching back removes routing. */}
-      <div>
-        <Label>Model selection</Label>
-        <div className="mt-1 grid grid-cols-2 gap-1 rounded-md bg-muted p-1" role="radiogroup" aria-label="Model selection">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={!routed}
-            className={`rounded px-2 py-1 text-xs transition-colors ${!routed ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground'}`}
-            onClick={() => {
-              if (!routed) return
-              const { routing: _routing, ...rest } = node.data
-              onUpdateNode(node.id, rest)
-            }}
-          >
-            Pinned provider
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={routed}
-            className={`rounded px-2 py-1 text-xs transition-colors ${routed ? 'bg-background shadow-sm font-medium' : 'text-muted-foreground hover:text-foreground'}`}
-            onClick={() => {
-              if (routed) return
-              const { providerId: _providerId, providerName: _providerName, providerType: _providerType, model: _model, ...rest } = node.data
-              onUpdateNode(node.id, { ...rest, routing: { objective: 'cheapest' } })
-              setCustomModelOverride(null)
-            }}
-          >
-            Routed by policy
-          </button>
-        </div>
-        <p className="text-[11px] text-muted-foreground mt-1">
-          {routed
-            ? 'The router picks a validated card from the catalog on every call and records which one answered.'
-            : 'Always this provider and model.'}
-        </p>
-      </div>
-
-      {routed ? (
-        <RoutingPolicyField
-          value={(node.data.routing as RoutingPolicy) || {}}
-          onChange={(policy) => updateData('routing', policy)}
-        />
-      ) : (
-        <>
-      <div>
-        <Label htmlFor="node-provider">Provider</Label>
-        <Select
-          value={(node.data.providerId as string) || ''}
-          onValueChange={(v) => {
-            const provider = providerList.find((p) => p.id === v)
-            // Batch all updates in one call to avoid stale data overwrites
-            onUpdateNode(node.id, {
-              ...node.data,
-              providerId: v,
-              providerName: provider?.name || '',
-              providerType: provider?.type || '',
-              model: '',
-            })
-            setCustomModelOverride(null)
-          }}
-        >
-          <SelectTrigger id="node-provider" className="mt-1">
-            <SelectValue placeholder="Select provider" />
-          </SelectTrigger>
-          <SelectContent>
-            {/*
-              A required field whose select opens on nothing is a dead
-              end: the node fails validation, Save is blocked, and the
-              screen never says why.
-            */}
-            {providerList.length === 0 && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                No model providers connected yet — add one under Models.
-              </div>
-            )}
-            {providerList.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name} <span className="text-muted-foreground ml-1">({p.type})</span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between">
-          <Label htmlFor="model">Model</Label>
-          {modelSuggestions.length > 0 && (
-            <button
-              type="button"
-              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setCustomModelOverride(!useCustomModel)}
-            >
-              {useCustomModel ? 'Use suggested' : 'Custom model'}
-            </button>
-          )}
-        </div>
-        {modelSuggestions.length > 0 && !useCustomModel ? (
-          <Select
-            value={(node.data.model as string) || ''}
-            onValueChange={(v) => updateData('model', v)}
-          >
-            <SelectTrigger className="mt-1">
-              <SelectValue placeholder="Select model" />
-            </SelectTrigger>
-            <SelectContent>
-              {modelOptions.map((model) => (
-                <SelectItem key={model} value={model}>
-                  {model}
-                  {model === savedModel && savedModelIsCustom && (
-                    <span className="text-muted-foreground ml-1">(saved)</span>
-                  )}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          <>
-            <Input
-              id="model"
-              className="mt-1"
-              value={(node.data.model as string) || ''}
-              onChange={(e) => updateData('model', e.target.value)}
-              placeholder="Enter model name"
-            />
-            {modelSuggestions.length === 0 && node.data.providerId && (
-              <p className="text-[11px] text-muted-foreground mt-1">No models returned from provider. Type the model name manually.</p>
-            )}
-          </>
-        )}
-      </div>
-        </>
-      )}
+      <ModelPicker
+        idPrefix="node"
+        layout="stack"
+        allowRouting
+        value={nodeModelSelection(node)}
+        // One write for all fields, so no update lands on stale data.
+        onChange={(next, provider) => onUpdateNode(node.id, withModelSelection(node.data, next, provider))}
+      />
 
       <div>
         <Label htmlFor="system-prompt">System Prompt</Label>
@@ -693,7 +568,7 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
             </div>
           ))}
           <Button variant="outline" size="sm" className="w-full" onClick={addParam}>
-            Add Parameter
+            Add parameter
           </Button>
         </div>
       </div>
@@ -905,7 +780,7 @@ function TransformConfig({ node, updateData }: { node: Node; updateData: UpdateD
 }
 
 // --- Merge Config ---
-function MergeConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+function MergeConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   return (
     <div className="space-y-3">
       <div>
@@ -925,6 +800,35 @@ function MergeConfig({ node, updateData }: { node: Node; updateData: UpdateDataF
           </SelectContent>
         </Select>
       </div>
+
+      {(node.data.strategy === 'best_of_n' || node.data.strategy === 'consensus') && (
+        // The panel said the judge used "this node's own provider or routing
+        // policy" and offered no way to set either. The executor reads a
+        // pinned provider from judgeConfig and a policy from the node.
+        <ModelPicker
+          idPrefix="merge-judge"
+          layout="stack"
+          allowRouting
+          providerLabel="Judge provider"
+          modelLabel="Judge model"
+          providerOptionalLabel="Organization default routing policy"
+          value={{
+            providerId: (node.data.judgeConfig as any)?.providerId,
+            model: (node.data.judgeConfig as any)?.model,
+            routing: (node.data.routing as RoutingPolicy) || undefined,
+          }}
+          onChange={(next) => {
+            const { judgeConfig, routing: _routing, ...rest } = node.data as Record<string, any>
+            const { providerId: _p, model: _m, ...judgeRest } = (judgeConfig || {}) as Record<string, any>
+            const nextJudge = next.providerId ? { ...judgeRest, providerId: next.providerId, model: next.model || undefined } : judgeRest
+            onUpdateNode(node.id, {
+              ...rest,
+              ...(Object.keys(nextJudge).length > 0 ? { judgeConfig: nextJudge } : {}),
+              ...(next.routing ? { routing: next.routing } : {}),
+            })
+          }}
+        />
+      )}
 
       {node.data.strategy === 'best_of_n' && (
         <>
@@ -1083,7 +987,7 @@ function SubAgentConfig({ node, updateData, onUpdateNode }: { node: Node; update
             </div>
           ))}
           <Button variant="outline" size="sm" className="w-full" onClick={addMapping}>
-            Add Mapping
+            Add mapping
           </Button>
         </div>
       </div>
@@ -1145,17 +1049,6 @@ const VERIFY_POLICIES = [
 ] as const
 
 function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
-  const { data: providers } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: async () => {
-      const res = await llmProvidersApi.getAll()
-      return Array.isArray(res) ? res : res?.providers || []
-    },
-  })
-  const providerList = (Array.isArray(providers) ? providers : (providers as any)?.providers || []) as Array<
-    Pick<LlmProvider, 'id' | 'name' | 'type'>
-  >
-
   const checkers: VerifyChecker[] = Array.isArray(node.data.checkers)
     ? (node.data.checkers as VerifyChecker[])
     : []
@@ -1267,33 +1160,15 @@ function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateData
                 </p>
               )}
 
-              <Select
-                value={checker.providerId || ''}
-                onValueChange={(v) => patchChecker(i, { providerId: v })}
-              >
-                <SelectTrigger className="text-xs" aria-label={`Checker ${i + 1} provider`}>
-                  <SelectValue placeholder="Select provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  {providerList.length === 0 && (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">
-                      No model providers connected yet — add one under Models.
-                    </div>
-                  )}
-                  {providerList.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} <span className="text-muted-foreground ml-1">({p.type})</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Input
-                className="text-xs"
-                aria-label={`Checker ${i + 1} model`}
-                placeholder="model (optional)"
-                value={checker.model || ''}
-                onChange={(e) => patchChecker(i, { model: e.target.value })}
+              <ModelPicker
+                idPrefix={`checker-${i}`}
+                layout="stack"
+                compact
+                modelOptional
+                providerLabel={`Checker ${i + 1} provider`}
+                modelLabel={`Checker ${i + 1} model`}
+                value={{ providerId: checker.providerId, model: checker.model }}
+                onChange={(next) => patchChecker(i, { providerId: next.providerId, model: next.model })}
               />
 
               <Textarea
@@ -1308,7 +1183,7 @@ function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateData
           ))}
 
           <Button variant="outline" size="sm" className="w-full" onClick={addChecker}>
-            Add Checker
+            Add checker
           </Button>
         </div>
       </div>
@@ -1323,18 +1198,7 @@ function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateData
 }
 
 // --- Extract Context Config ---
-function ExtractContextConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
-  const { data: providers } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: async () => {
-      const res = await llmProvidersApi.getAll()
-      return Array.isArray(res) ? res : res?.providers || []
-    },
-  })
-  const providerList = (Array.isArray(providers) ? providers : (providers as any)?.providers || []) as Array<
-    Pick<LlmProvider, 'id' | 'name' | 'type'>
-  >
-  const roleKey = node.data.roleKey as string | undefined
+function ExtractContextConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
 
   return (
     <div className="space-y-3">
@@ -1369,55 +1233,7 @@ function ExtractContextConfig({ node, updateData }: { node: Node; updateData: Up
         </p>
       </div>
 
-      {roleKey ? (
-        <div>
-          <Label>Model</Label>
-          <p className="text-xs text-muted-foreground mt-1">
-            Filled at run time by role <code>{roleKey}</code>.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div>
-            <Label htmlFor="extract-provider">Provider</Label>
-            <Select
-              value={(node.data.providerId as string) || ''}
-              onValueChange={(v) => updateData('providerId', v)}
-            >
-              <SelectTrigger id="extract-provider" className="mt-1">
-                <SelectValue placeholder="Organization default routing policy" />
-              </SelectTrigger>
-              <SelectContent>
-                {providerList.length === 0 && (
-                  <div className="px-3 py-2 text-sm text-muted-foreground">
-                    No model providers connected yet — add one under Models.
-                  </div>
-                )}
-                {providerList.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} <span className="text-muted-foreground ml-1">({p.type})</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground mt-1">
-              Leave it unset and the organization's default routing policy answers. With no
-              default set either, the run fails at this node.
-            </p>
-          </div>
-
-          <div>
-            <Label htmlFor="extract-model">Model</Label>
-            <Input
-              id="extract-model"
-              className="mt-1"
-              value={(node.data.model as string) || ''}
-              onChange={(e) => updateData('model', e.target.value)}
-              placeholder="Enter model name"
-            />
-          </div>
-        </>
-      )}
+      <NodeModelField node={node} idPrefix="extract" onUpdateNode={onUpdateNode} />
 
       <div>
         <Label htmlFor="extract-instruction">Instruction</Label>
@@ -1468,7 +1284,7 @@ const DECISION_TYPES = [
 // by name rather than quietly serving the declared order.
 const DECISION_ORDER_POLICIES = [{ value: 'asis', label: 'As written' }] as const
 
-function DecisionConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
+function DecisionConfig({ node, updateData, onUpdateNode }: { node: Node; updateData: UpdateDataFn; onUpdateNode: (nodeId: string, data: NodeData) => void }) {
   const question = ((node.data.question as DecisionQuestion) || {}) as DecisionQuestion
   const options: DecisionOption[] = Array.isArray(question.options) ? question.options : []
   const thresholds = (node.data.thresholds as Record<string, number>) || {}
@@ -1504,6 +1320,9 @@ function DecisionConfig({ node, updateData }: { node: Node; updateData: UpdateDa
 
   return (
     <div className="space-y-3">
+      {/* The decide call takes its model like a Model Call node does:
+          role, pinned provider, routing policy, then the org default. */}
+      <NodeModelField node={node} idPrefix="decision" onUpdateNode={onUpdateNode} />
       <div>
         <Label htmlFor="decision-question-id">Question ID</Label>
         <Input
@@ -1645,7 +1464,7 @@ function DecisionConfig({ node, updateData }: { node: Node; updateData: UpdateDa
           ))}
 
           <Button variant="outline" size="sm" className="w-full" onClick={addOption}>
-            Add Option
+            Add option
           </Button>
         </div>
       </div>

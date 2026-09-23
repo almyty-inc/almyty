@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThan, Repository } from 'typeorm';
+import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
 import { v7 as uuidv7 } from 'uuid';
 
 import { CanonicalMemory } from './canonical-memory.entity';
@@ -111,6 +111,8 @@ export class ConsolidationService {
       where: {
         organizationId: scope.scope_id,
         status: LlmProviderStatus.ACTIVE,
+        // Never a member's private ("just me") provider.
+        visibility: Not('private'),
       },
       order: { createdAt: 'ASC' },
     });

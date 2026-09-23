@@ -1,6 +1,5 @@
-import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Package, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -9,7 +8,9 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Badge } from '@/components/ui/badge'
-import { formatDateTime } from '@/lib/utils'
+import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
+import { formatDateTime, pluralized } from '@/lib/utils'
 import {
   AUTH_MODE_LABELS,
   DISTRIBUTION_LABELS,
@@ -17,7 +18,7 @@ import {
   grantsLocalAccess,
   type AgentApp,
 } from '@/lib/agent-apps'
-import { CreateAppDialog } from '@/components/agent-apps/create-app-dialog'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 
 /**
  * Apps: the products this organization ships.
@@ -27,7 +28,9 @@ import { CreateAppDialog } from '@/components/agent-apps/create-app-dialog'
  * actually use.
  */
 export function AppsPage() {
-  const [createOpen, setCreateOpen] = useState(false)
+  const navigate = useNavigate()
+  // Old ?new=1 links (bookmarks, docs) land on the create page.
+  useNewParamRedirect('/apps/new')
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['agent-apps'],
@@ -38,24 +41,23 @@ export function AppsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">
-            Apps
-          </h1>
-          <p className="text-muted-foreground">
-            {isLoading ? (
-              <span className="inline-block h-4 w-48 animate-pulse rounded bg-muted" />
-            ) : (
-              `${apps.length} ${apps.length === 1 ? 'app' : 'apps'}`
-            )}
-          </p>
-        </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create App
-        </Button>
-      </div>
+      <PageHeader
+        title="Apps"
+        description={
+          isLoading ? (
+            <span className="inline-block h-4 w-48 animate-pulse rounded bg-muted" />
+          ) : (
+            pluralized(apps.length, 'app')
+          )
+        }
+        actions={
+          <Button onClick={() => navigate('/apps/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create app
+          </Button>
+        }
+      />
+      <PageIntro topic="apps" />
 
       {isLoading ? (
         <div className="flex justify-center py-12">
@@ -65,11 +67,12 @@ export function AppsPage() {
         <QueryError error={error} onRetry={() => refetch()} />
       ) : apps.length === 0 ? (
         <EmptyState
+          variant="panel"
           icon={Package}
           title="No apps yet"
           description="An app gathers agents under your branding and publishes them as a web app, a messaging channel, a terminal, or a desktop app."
           action={
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button onClick={() => navigate('/apps/new')}>
               <Plus className="mr-2 h-4 w-4" />
               Create app
             </Button>
@@ -144,8 +147,6 @@ export function AppsPage() {
           })}
         </div>
       )}
-
-      <CreateAppDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   )
 }

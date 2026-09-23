@@ -68,6 +68,7 @@ describe('ProviderUsageController', () => {
     expect(usage.getReconciliation).toHaveBeenCalledWith(
       'org-1',
       expect.objectContaining({ from: new Date(from), to: new Date(to) }),
+      null,
     );
   });
 

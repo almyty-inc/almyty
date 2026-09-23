@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { MoreThanOrEqual } from 'typeorm';
 import { GatewayStats } from './gateways.service';
 
@@ -24,6 +24,13 @@ const METRIC_SAMPLE_LIMIT = 50_000;
  * import is thousands of them and a one-letter query matches most.
  */
 const SKILL_SEARCH_LIMIT = 200;
+
+/**
+ * A `gateway` alias row the caller may see: anything not private, or a
+ * private gateway of their own. Binds `:callerId`.
+ */
+const PRIVATE_GATEWAY_CLAUSE =
+  `(gateway.visibility <> 'private' OR gateway."ownerUserId" = :callerId)`;
 
 /** The slug form used for org, gateway and tool segments of a skillRef. */
 function slugify(value: string): string {
@@ -109,7 +116,7 @@ export class GatewaysStatsHelper {
     };
   }
 
-  async getOrganizationGatewayStats(organizationId: string): Promise<{
+  async getOrganizationGatewayStats(organizationId: string, callerId: string): Promise<{
     totalGateways: number;
     activeGateways: number;
     inactiveGateways: number;
@@ -121,12 +128,15 @@ export class GatewaysStatsHelper {
       requestCount: number;
     }>;
   }> {
-    // Get gateway counts
+    // Get gateway counts. Another user's private gateway is not counted:
+    // a number that moves when someone else makes a "just me" gateway is
+    // a way to learn that it exists.
     const gatewayCounts = await this.gatewayRepository
       .createQueryBuilder('gateway')
       .select('gateway.status')
       .addSelect('COUNT(*)', 'count')
       .where('gateway.organizationId = :organizationId', { organizationId })
+      .andWhere(PRIVATE_GATEWAY_CLAUSE, { callerId })
       .groupBy('gateway.status')
       .getRawMany();
 
@@ -139,7 +149,10 @@ export class GatewaysStatsHelper {
 
     // Get all gateways for organization
     const gateways = await this.gatewayRepository.find({
-      where: { organizationId },
+      where: [
+        { organizationId, visibility: Not('private') },
+        { organizationId, visibility: 'private', ownerUserId: callerId },
+      ],
     });
 
     const totalRequests = gateways.reduce((sum, g) => sum + g.totalRequests, 0);
@@ -226,7 +239,7 @@ export class GatewaysStatsHelper {
     }
   }
 
-  async searchSkillsAcrossGateways(organizationId: string, query: string): Promise<Array<{
+  async searchSkillsAcrossGateways(organizationId: string, query: string, callerId: string): Promise<Array<{
     toolId: string;
     toolName: string;
     toolDescription: string;
@@ -270,6 +283,10 @@ export class GatewaysStatsHelper {
       .where('gateway.organizationId = :organizationId', { organizationId })
       .andWhere('gateway.status = :status', { status: GatewayStatus.ACTIVE })
       .andWhere('gatewayTool.isActive = true')
+      // Another user's private gateway is not searched, and neither is
+      // another user's private tool sitting behind a shared one.
+      .andWhere(PRIVATE_GATEWAY_CLAUSE, { callerId })
+      .andWhere(`(tool.visibility <> 'private' OR tool."createdBy" = :callerId)`, { callerId })
       .andWhere('(tool.name ILIKE :q OR tool.description ILIKE :q)', { q: `%${escaped}%` })
       .orderBy('gateway.name', 'ASC')
       .addOrderBy('tool.name', 'ASC')
@@ -422,9 +439,13 @@ export class GatewaysStatsHelper {
    * used the list for `gateways[0]?.organization` alone and now asks for
    * the organization directly.
    */
-  async getAllUserGateways(organizationId: string): Promise<Gateway[]> {
+  async getAllUserGateways(organizationId: string, callerId: string): Promise<Gateway[]> {
     return this.gatewayRepository.find({
-      where: { organizationId, status: GatewayStatus.ACTIVE },
+      where: [
+        { organizationId, status: GatewayStatus.ACTIVE, visibility: Not('private') },
+        // Private gateways: the caller's own only.
+        { organizationId, status: GatewayStatus.ACTIVE, visibility: 'private', ownerUserId: callerId },
+      ],
       relations: { organization: true },
     });
   }

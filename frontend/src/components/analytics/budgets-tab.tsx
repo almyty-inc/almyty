@@ -16,6 +16,7 @@
  */
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { BellRing, Pencil, Plus, Trash2, Wallet } from 'lucide-react'
 
 import {
@@ -48,7 +49,7 @@ import {
   type SpendBudgetPeriod,
 } from '@/types/budgets'
 
-import { BudgetDialog, type BudgetAgentOption } from './budget-dialog'
+import { BUDGETS_PATH, useBudgetAgents, type BudgetAgentOption } from './budget-form'
 import { TABLE_HEAD_CLASS as TH } from './constants'
 import { useOrganizationRole } from '@/hooks/use-organization-role'
 
@@ -73,8 +74,6 @@ export function BudgetsTab() {
   const queryClient = useQueryClient()
   const { success, error } = useNotifications()
 
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editing, setEditing] = useState<SpendBudget | null>(null)
   // POST/PATCH/DELETE /budgets are @Roles('admin','owner'). Rendering the
   // controls to everyone meant a member clicked New and got a 403 -- an
   // action offered that could never work. The server still decides; this
@@ -116,19 +115,7 @@ export function BudgetsTab() {
     enabled,
   })
 
-  const agentsQuery = useQuery({
-    queryKey: ['agents'],
-    queryFn: () => agentsApi.getAll(),
-    enabled,
-  })
-
-  const agents: BudgetAgentOption[] = useMemo(() => {
-    const raw = (agentsQuery.data as any)?.data ?? agentsQuery.data ?? []
-    return (Array.isArray(raw) ? raw : []).map((a: any) => ({
-      id: a.id,
-      name: a.name ?? a.id,
-    }))
-  }, [agentsQuery.data])
+  const agents: BudgetAgentOption[] = useBudgetAgents(enabled)
 
   const agentNames = useMemo(() => {
     const map: Record<string, string> = {}
@@ -154,31 +141,6 @@ export function BudgetsTab() {
     ])
   }
 
-  const createMutation = useMutation({
-    mutationFn: (data: BudgetPayload) => budgetsApi.create(data),
-    onSuccess: async () => {
-      success('Budget created', 'It applies from the current period onward.')
-      setDialogOpen(false)
-      setEditing(null)
-      await invalidate()
-    },
-    onError: (err: unknown) =>
-      error('Failed to create budget', getApiErrorMessage(err, 'Please try again.')),
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: BudgetPayload }) =>
-      budgetsApi.update(id, data),
-    onSuccess: async () => {
-      success('Budget updated', 'Changes saved.')
-      setDialogOpen(false)
-      setEditing(null)
-      await invalidate()
-    },
-    onError: (err: unknown) =>
-      error('Failed to update budget', getApiErrorMessage(err, 'Please try again.')),
-  })
-
   const deleteMutation = useMutation({
     mutationFn: (id: string) => budgetsApi.delete(id),
     onSuccess: async () => {
@@ -189,21 +151,6 @@ export function BudgetsTab() {
     onError: (err: unknown) =>
       error('Failed to delete budget', getApiErrorMessage(err, 'Please try again.')),
   })
-
-  const handleSubmit = (data: BudgetPayload) => {
-    if (editing) updateMutation.mutate({ id: editing.id, data })
-    else createMutation.mutate(data)
-  }
-
-  const openCreate = () => {
-    setEditing(null)
-    setDialogOpen(true)
-  }
-
-  const openEdit = (budget: SpendBudget) => {
-    setEditing(budget)
-    setDialogOpen(true)
-  }
 
   const budgets = budgetsQuery.data ?? []
 
@@ -219,9 +166,9 @@ export function BudgetsTab() {
             <Button
               size="sm"
               className="h-7 text-xs bg-gradient-to-r from-violet-500 to-cyan-400 text-white hover:opacity-90"
-              onClick={openCreate}
+              asChild
             >
-              <Plus className="h-3 w-3 mr-1" /> New budget
+              <Link to={`${BUDGETS_PATH}/new`}><Plus className="h-3 w-3 mr-1" /> New budget</Link>
             </Button>
           )}
         </div>
@@ -247,8 +194,8 @@ export function BudgetsTab() {
             description="Nothing caps what agent runs may cost. Set a budget to be warned at a threshold, or to stop new runs once a limit is reached."
             action={
               canManage ? (
-                <Button size="sm" onClick={openCreate}>
-                  <Plus className="h-4 w-4 mr-1" /> New budget
+                <Button size="sm" asChild>
+                  <Link to={`${BUDGETS_PATH}/new`}><Plus className="h-4 w-4 mr-1" /> New budget</Link>
                 </Button>
               ) : undefined
             }
@@ -337,14 +284,10 @@ export function BudgetsTab() {
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         {canManage && (
                           <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2"
-                              aria-label="Edit budget"
-                              onClick={() => openEdit(b)}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
+                            <Button variant="ghost" size="sm" className="h-7 px-2" asChild>
+                              <Link to={`${BUDGETS_PATH}/${b.id}/edit`} aria-label="Edit budget">
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Link>
                             </Button>
                             <Button
                               variant="ghost"
@@ -372,18 +315,6 @@ export function BudgetsTab() {
         agentNames={agentNames}
       />
 
-      <BudgetDialog
-        open={dialogOpen}
-        onOpenChange={(next) => {
-          setDialogOpen(next)
-          if (!next) setEditing(null)
-        }}
-        budget={editing}
-        agents={agents}
-        isSaving={createMutation.isPending || updateMutation.isPending}
-        onSubmit={handleSubmit}
-      />
-
       <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -407,6 +338,7 @@ export function BudgetsTab() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={() => deleting && deleteMutation.mutate(deleting.id)}
               disabled={deleteMutation.isPending}
             >

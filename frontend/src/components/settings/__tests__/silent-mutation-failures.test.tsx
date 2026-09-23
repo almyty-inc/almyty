@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor, within } from '@testing-library/react'
+
+// Removing a stream asks first; this answers the confirmation.
+const confirmRemoval = async () =>
+  fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove stream' }))
 
 import { render } from '../../../test/setup'
 import { KmsSettings } from '../kms-settings'
@@ -86,6 +90,7 @@ describe('audit stream removal', () => {
     render(<AuditStreamsSettings />)
 
     fireEvent.click(await screen.findByTestId('remove-stream-s1'))
+    await confirmRemoval()
 
     await waitFor(() =>
       expect(screen.getByTestId('remove-stream-error')).toHaveTextContent(
@@ -101,6 +106,7 @@ describe('audit stream removal', () => {
 
     render(<AuditStreamsSettings />)
     fireEvent.click(await screen.findByTestId('remove-stream-s1'))
+    await confirmRemoval()
 
     await waitFor(() => expect(api.delete).toHaveBeenCalled())
     expect(screen.queryByTestId('remove-stream-error')).not.toBeInTheDocument()

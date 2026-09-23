@@ -14,7 +14,7 @@ describe('JsonSchemaBuilder', () => {
       )
 
       expect(screen.getByText('No properties defined')).toBeInTheDocument()
-      expect(screen.getByText('Add First Property')).toBeInTheDocument()
+      expect(screen.getByText('Add first property')).toBeInTheDocument()
     })
 
     it('should render existing properties', () => {
@@ -42,7 +42,7 @@ describe('JsonSchemaBuilder', () => {
       expect(screen.getByDisplayValue('User age')).toBeInTheDocument()
     })
 
-    it('should add new property when clicking Add Property button', async () => {
+    it('should add new property when clicking Add property button', async () => {
       const onChange = vi.fn()
       render(
         <JsonSchemaBuilder
@@ -51,7 +51,7 @@ describe('JsonSchemaBuilder', () => {
         />
       )
 
-      const addButton = screen.getByText('Add First Property')
+      const addButton = screen.getByText('Add first property')
       fireEvent.click(addButton)
 
       await waitFor(() => {
@@ -178,7 +178,7 @@ describe('JsonSchemaBuilder', () => {
   })
 
   describe('Source Mode', () => {
-    it('should switch to source mode when clicking View Source', () => {
+    it('should switch to source mode when clicking View source', () => {
       render(
         <JsonSchemaBuilder
           value={{ type: 'object', properties: {} }}
@@ -186,7 +186,7 @@ describe('JsonSchemaBuilder', () => {
         />
       )
 
-      const viewSourceButton = screen.getByText(/View Source/i)
+      const viewSourceButton = screen.getByText(/View source/i)
       fireEvent.click(viewSourceButton)
 
       expect(screen.getByText('JSON Schema Source')).toBeInTheDocument()
@@ -205,7 +205,7 @@ describe('JsonSchemaBuilder', () => {
       )
 
       // Switch to source mode
-      fireEvent.click(screen.getByText(/View Source/i))
+      fireEvent.click(screen.getByText(/View source/i))
 
       const textarea = screen.getByRole('textbox')
       const newSchema = {
@@ -233,7 +233,7 @@ describe('JsonSchemaBuilder', () => {
         />
       )
 
-      fireEvent.click(screen.getByText(/View Source/i))
+      fireEvent.click(screen.getByText(/View source/i))
 
       const textarea = screen.getByRole('textbox')
       fireEvent.change(textarea, { target: { value: '{invalid json}' } })
@@ -253,11 +253,11 @@ describe('JsonSchemaBuilder', () => {
       )
 
       // Go to source mode
-      fireEvent.click(screen.getByText(/View Source/i))
+      fireEvent.click(screen.getByText(/View source/i))
       expect(screen.getByText('JSON Schema Source')).toBeInTheDocument()
 
       // Go back to visual mode
-      fireEvent.click(screen.getByText(/Visual Editor/i))
+      fireEvent.click(screen.getByText(/Visual editor/i))
       expect(screen.getByText('Schema Properties')).toBeInTheDocument()
       expect(screen.getByDisplayValue('test')).toBeInTheDocument()
     })
@@ -294,7 +294,7 @@ describe('JsonSchemaBuilder', () => {
 
       render(<JsonSchemaBuilder value={schema} onChange={vi.fn()} readOnly />)
 
-      expect(screen.queryByText('Add Property')).not.toBeInTheDocument()
+      expect(screen.queryByText('Add property')).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /trash/i })).not.toBeInTheDocument()
     })
 
@@ -308,7 +308,7 @@ describe('JsonSchemaBuilder', () => {
 
       render(<JsonSchemaBuilder value={schema} onChange={vi.fn()} readOnly />)
 
-      fireEvent.click(screen.getByText(/View Source/i))
+      fireEvent.click(screen.getByText(/View source/i))
 
       const textarea = screen.getByRole('textbox')
       expect(textarea).toHaveAttribute('readonly')
@@ -325,7 +325,7 @@ describe('JsonSchemaBuilder', () => {
         />
       )
 
-      fireEvent.click(screen.getByText('Add First Property'))
+      fireEvent.click(screen.getByText('Add first property'))
 
       const generatedSchema = onChange.mock.calls[0][0]
       expect(generatedSchema).toMatchObject({
@@ -465,7 +465,7 @@ describe('JsonSchemaBuilder', () => {
       const onChange = vi.fn()
       render(<JsonSchemaBuilder value={{ type: 'object', properties: {} }} onChange={onChange} />)
 
-      fireEvent.click(screen.getByText('Add First Property'))
+      fireEvent.click(screen.getByText('Add first property'))
 
       const schema = onChange.mock.calls[0][0]
       expect(schema.type).toBe('object')
@@ -480,7 +480,7 @@ describe('JsonSchemaBuilder', () => {
         />
       )
 
-      fireEvent.click(screen.getByText('Add First Property'))
+      fireEvent.click(screen.getByText('Add first property'))
 
       const schema = onChange.mock.calls[0][0]
       const firstProp = Object.values(schema.properties)[0] as any

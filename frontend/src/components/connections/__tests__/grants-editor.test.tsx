@@ -119,7 +119,7 @@ describe('GrantsEditor', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke Platform team' }))
     expect(await screen.findByText('Revoke access?')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke access' }))
 
     await waitFor(() => expect(connectionsApi.removeGrant).toHaveBeenCalledWith('conn-1', 'g1'))
     await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Access revoked', expect.any(String)))

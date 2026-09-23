@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor, within } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
 import { KmsSettings } from '../kms-settings'
@@ -25,6 +25,10 @@ const config = (over: Record<string, unknown> = {}) => ({
   updatedAt: null,
   ...over,
 })
+
+// Rotation now asks first; this answers the confirmation.
+const confirmRotation = async () =>
+  fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Rotate key' }))
 
 describe('customer-managed key settings', () => {
   beforeEach(() => {
@@ -118,6 +122,9 @@ describe('customer-managed key settings', () => {
     it('rotates through the rotate endpoint and never through attach', async () => {
       render(<KmsSettings />)
       fireEvent.click(await screen.findByTestId('rotate-cmk'))
+      expect(await screen.findByRole('alertdialog')).toHaveTextContent('Rotate the encryption key?')
+      expect(api.post).not.toHaveBeenCalled()
+      await confirmRotation()
       await waitFor(() => expect(api.post).toHaveBeenCalledWith('/kms/rotate', expect.anything()))
       // The destructive call. It must not happen from this screen.
       expect(api.put).not.toHaveBeenCalledWith('/kms', expect.anything())
@@ -130,6 +137,7 @@ describe('customer-managed key settings', () => {
       // one, and an empty string must not reach it as an ARN.
       render(<KmsSettings />)
       fireEvent.click(await screen.findByTestId('rotate-cmk'))
+      await confirmRotation()
       await waitFor(() =>
         expect(api.post).toHaveBeenCalledWith('/kms/rotate', {
           cmkArn: 'arn:aws:kms:eu-central-1:1:key/a',
@@ -148,6 +156,7 @@ describe('customer-managed key settings', () => {
       fireEvent.click(button)
       await waitFor(() =>
         expect(api.post).toHaveBeenCalledWith('/kms/rotate', { cmkArn: undefined, awsRegion: undefined }),
+      await confirmRotation()
       )
     })
     it('says older secrets stay readable, because that is the whole point', async () => {
@@ -162,6 +171,7 @@ describe('customer-managed key settings', () => {
       })
       render(<KmsSettings />)
       fireEvent.click(await screen.findByTestId('rotate-cmk'))
+      await confirmRotation()
       expect(await screen.findByTestId('kms-error')).toHaveTextContent(/could not be used to wrap/i)
     })
   })

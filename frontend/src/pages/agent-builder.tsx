@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Node } from '@xyflow/react'
@@ -20,9 +20,17 @@ import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
-import { validateWorkflowGraph, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
+import {
+  EMPTY_COLLABORATION,
+  collaborationFromAgent,
+  collaborationPayload,
+  collaborationProblems,
+  type CollaborationState,
+} from '@/components/agents/builder/collaboration'
+import { workflowIssues, type BuilderIssue, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
+import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 
-import { agentsApi, llmProvidersApi, toolsApi } from '@/lib/api'
+import { agentsApi, toolsApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
@@ -63,23 +71,11 @@ export function AgentBuilderPage() {
   const [agentModelConfig, setAgentModelConfig] = useState<{ providerId?: string; model?: string; temperature?: number; maxTokens?: number }>({})
   const [agentMemoryConfig, setAgentMemoryConfig] = useState<{ enabled?: boolean; autoSave?: boolean }>({ enabled: false, autoSave: false })
   const [agentConfig, setAgentConfig] = useState<{ canCallAgents?: boolean; canCreateAgents?: boolean }>({ canCallAgents: false, canCreateAgents: false })
-  const [agentCollaboration, setAgentCollaboration] = useState<{
-    enabled: boolean;
-    strategy: 'sequential' | 'parallel' | 'race' | 'debate';
-    agents: { agentId: string; role?: string }[];
-    sharedBrief?: string;
-    rules?: {
-      maxTotalCost?: number;
-      maxChainDepth?: number;
-      outputFormat?: 'text' | 'json';
-      escalation?: 'never' | 'on_failure' | 'on_low_confidence';
-      conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge';
-    };
-    judgeAgentId?: string;
-    maxRounds?: number;
-  }>({ enabled: false, strategy: 'sequential', agents: [], rules: {} })
+  const [agentCollaboration, setAgentCollaboration] = useState<CollaborationState>(EMPTY_COLLABORATION)
 
   const [showTestPanel, setShowTestPanel] = useState(false)
+  const [agentVisibility, setAgentVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
+  const [showVisibility, setShowVisibility] = useState(false)
 
   // ── Tool picker state ──────────────────────────────────────────────────
   const [toolSearch, setToolSearch] = useState('')
@@ -119,13 +115,6 @@ export function AgentBuilderPage() {
   })
   const availableTools = Array.isArray(rawTools) ? rawTools : (rawTools as any)?.tools || []
 
-  // Fetch LLM providers (for autonomous mode)
-  const { data: rawProviders } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
-  })
-  const availableProviders = Array.isArray(rawProviders) ? rawProviders : (rawProviders as any)?.providers || []
-
   // Fetch available agents (for collaboration)
   const { data: rawAgents } = useQuery({
     queryKey: ['agents-list'],
@@ -160,8 +149,9 @@ export function AgentBuilderPage() {
       setAgentModelConfig(agent.modelConfig || {})
       setAgentMemoryConfig(agent.memoryConfig || { enabled: false, autoSave: false })
       setAgentConfig(agent.agentConfig || { canCallAgents: false, canCreateAgents: false })
+      setAgentVisibility({ visibility: agent.visibility ?? 'org', teamId: agent.teamId ?? null })
       if (agent.collaboration) {
-        setAgentCollaboration({ enabled: true, ...agent.collaboration })
+        setAgentCollaboration(collaborationFromAgent(agent.collaboration))
       }
       const pipelineNodes = (agent.pipeline?.nodes || []).map((n: PipelineNode) => ({
         id: n.id,
@@ -225,16 +215,16 @@ export function AgentBuilderPage() {
   // AgentValidationHelper: everything it reports is a reason the save would
   // 400 anyway, so it costs no valid graph a save and earns the user the
   // answer before the round trip instead of after it.
-  const validationErrors = useMemo(() => {
-    const errors: string[] = []
+  const validationIssues = useMemo(() => {
+    const errors: BuilderIssue[] = []
 
     if (!agentName.trim()) {
-      errors.push('Give the agent a name.')
+      errors.push({ text: 'Name the agent', nodeIds: [] })
     }
 
     if (agentMode === 'workflow') {
       errors.push(
-        ...validateWorkflowGraph(pipeline.nodes as GraphNode[], pipeline.edges as GraphEdge[], {
+        ...workflowIssues(pipeline.nodes as GraphNode[], pipeline.edges as GraphEdge[], {
           // An organization default makes a bare Model Call node legitimate:
           // the engine resolves it, and the server's validator never had an
           // llm_call rule to begin with.
@@ -244,15 +234,18 @@ export function AgentBuilderPage() {
     } else {
       // Autonomous mode validation
       if (!agentInstructions.trim()) {
-        errors.push('Write the agent instructions: what it should do, and how.')
+        errors.push({ text: 'Write the instructions', nodeIds: [] })
       }
       if (!agentModelConfig.providerId) {
-        errors.push('Choose a model provider for the agent to run on.')
+        errors.push({ text: 'Pick a model', nodeIds: [] })
       }
+      errors.push(...collaborationProblems(agentCollaboration).map((text) => ({ text, nodeIds: [] })))
     }
 
     return errors
-  }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
+  }, [agentName, agentMode, agentInstructions, agentModelConfig, agentCollaboration, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
+
+  const validationErrors = useMemo(() => validationIssues.map((issue) => issue.text), [validationIssues])
 
   const canSave = validationErrors.length === 0
 
@@ -296,6 +289,43 @@ export function AgentBuilderPage() {
 
   const showValidationErrors = isEditing || saveAttempted || draftTouched
 
+  // An item about a step takes the user to it: selecting the node opens its
+  // settings, which is where the fix is, and the view centres on it. With
+  // two Model Calls, this -- not a node id in the text -- is how the user
+  // learns which one the item means.
+  const goToIssue = useCallback(
+    (issue: BuilderIssue) => {
+      const node = pipeline.nodes.find((n) => n.id === issue.nodeIds[0])
+      if (!node) return
+      pipeline.setSelectedNode(node)
+      pipeline.reactFlowInstance?.fitView({
+        nodes: issue.nodeIds.map((id) => ({ id })),
+        padding: 0.6,
+        maxZoom: 1.2,
+        duration: 300,
+      })
+    },
+    [pipeline.nodes, pipeline.setSelectedNode, pipeline.reactFlowInstance],
+  )
+
+  // Outline the steps the list is about, once the list is shown as errors.
+  // A fresh draft stays calm: its steps are a to-do list, not a failure.
+  const canvasNodes = useMemo(() => {
+    if (!showValidationErrors) return pipeline.nodes
+    const flagged = new Set(validationIssues.flatMap((issue) => issue.nodeIds))
+    if (!flagged.size) return pipeline.nodes
+    return pipeline.nodes.map((node) =>
+      flagged.has(node.id)
+        ? {
+            ...node,
+            className: [node.className, 'rounded-xl ring-2 ring-destructive ring-offset-2 ring-offset-background']
+              .filter(Boolean)
+              .join(' '),
+          }
+        : node,
+    )
+  }, [pipeline.nodes, validationIssues, showValidationErrors])
+
   // Build pipeline payload
   const buildPipeline = () => {
     const viewport = pipeline.reactFlowInstance?.getViewport()
@@ -325,6 +355,10 @@ export function AgentBuilderPage() {
         name: agentName,
         description: agentDescription || undefined,
         mode: agentMode,
+        // Sent on every save: 'private' makes the agent the saver's alone,
+        // and an edit must not quietly reset an existing scope.
+        visibility: agentVisibility.visibility,
+        teamId: agentVisibility.teamId,
       }
 
       if (agentMode === 'workflow') {
@@ -338,20 +372,7 @@ export function AgentBuilderPage() {
         payload.modelConfig = agentModelConfig
         payload.memoryConfig = agentMemoryConfig
         payload.agentConfig = agentConfig
-        if (agentCollaboration.enabled && agentCollaboration.agents.length > 0) {
-          payload.collaboration = {
-            strategy: agentCollaboration.strategy,
-            agents: agentCollaboration.agents,
-            sharedBrief: agentCollaboration.sharedBrief || undefined,
-            rules: agentCollaboration.rules && Object.values(agentCollaboration.rules).some(v => v !== undefined && v !== null)
-              ? agentCollaboration.rules
-              : undefined,
-            judgeAgentId: agentCollaboration.judgeAgentId,
-            maxRounds: agentCollaboration.maxRounds,
-          }
-        } else {
-          payload.collaboration = null
-        }
+        payload.collaboration = collaborationPayload(agentCollaboration)
         // Keep a minimal pipeline for backward compat
         payload.pipeline = payload.pipeline || { nodes: [], edges: [] }
       }
@@ -386,7 +407,7 @@ export function AgentBuilderPage() {
       // it still says which. The button only greys out once they are on
       // screen, so there is always a way to ask and always an answer.
       setSaveAttempted(true)
-      errorNotif('Not ready to save yet', validationErrors.join(' '))
+      errorNotif('Not ready to save yet', validationErrors.join(' · '))
       return
     }
     saveMutation.mutate()
@@ -458,6 +479,9 @@ export function AgentBuilderPage() {
         onSave={handleSave}
         onExport={handleExport}
         onBack={() => navigate('/agents')}
+        visibility={agentVisibility.visibility}
+        visibilityOpen={showVisibility}
+        onVisibilityClick={() => setShowVisibility((open) => !open)}
       />
 
       {/*
@@ -480,8 +504,20 @@ export function AgentBuilderPage() {
                   report several problems at once, and an uncapped list pushed
                   the canvas off the screen. */}
               <ul className="text-xs text-destructive space-y-0.5 max-h-24 overflow-y-auto">
-                {validationErrors.map((err, i) => (
-                  <li key={i}>{err}</li>
+                {validationIssues.map((issue, i) => (
+                  <li key={i}>
+                    {issue.nodeIds.length ? (
+                      <button
+                        type="button"
+                        onClick={() => goToIssue(issue)}
+                        className="text-left underline-offset-2 hover:underline"
+                      >
+                        {issue.text}
+                      </button>
+                    ) : (
+                      issue.text
+                    )}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -498,9 +534,21 @@ export function AgentBuilderPage() {
                   To finish this agent
                 </p>
                 <ul className="text-xs text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto mt-0.5">
-                  {validationErrors.map((step, i) => (
-                    <li key={i}>{step}</li>
-                  ))}
+                  {validationIssues.map((issue, i) => (
+                  <li key={i}>
+                    {issue.nodeIds.length ? (
+                      <button
+                        type="button"
+                        onClick={() => goToIssue(issue)}
+                        className="text-left underline-offset-2 hover:underline"
+                      >
+                        {issue.text}
+                      </button>
+                    ) : (
+                      issue.text
+                    )}
+                  </li>
+                ))}
                 </ul>
               </div>
             </div>
@@ -508,6 +556,25 @@ export function AgentBuilderPage() {
         )
       )}
 
+      {/*
+        Who can see and use the agent, opened from the toolbar. Inline under
+        the toolbar rather than in a dialog so the canvas stays in view.
+      */}
+      {showVisibility && (
+        <div
+          id="agent-visibility-panel"
+          role="region"
+          aria-label="Agent visibility"
+          className="px-4 py-3 border-b bg-background shrink-0"
+        >
+          <VisibilityField
+            organizationId={currentOrganization?.id ?? ''}
+            value={agentVisibility}
+            onChange={setAgentVisibility}
+            noun="this agent"
+          />
+        </div>
+      )}
       {/* Main content: Workflow pipeline or Autonomous config */}
       {agentMode === 'autonomous' ? (
         <AutonomousConfig
@@ -518,7 +585,6 @@ export function AgentBuilderPage() {
           onInstructionsChange={setAgentInstructions}
           modelConfig={agentModelConfig}
           onModelConfigChange={setAgentModelConfig}
-          providers={availableProviders}
           toolIds={agentToolIds}
           onToolIdsChange={setAgentToolIds}
           tools={availableTools}
@@ -537,7 +603,7 @@ export function AgentBuilderPage() {
           // Restores the position the graph was saved at. buildPipeline has
           // always written this and nothing read it back.
           savedViewport={agentData?.pipeline?.viewport}
-          nodes={pipeline.nodes}
+          nodes={canvasNodes}
           edges={pipeline.edges}
           onNodesChange={pipeline.onNodesChange}
           onEdgesChange={pipeline.onEdgesChange}

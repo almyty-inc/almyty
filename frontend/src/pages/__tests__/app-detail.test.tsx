@@ -88,22 +88,17 @@ describe('AppDetailPage', () => {
     expect(await screen.findByText(/Ready to publish/)).toBeInTheDocument()
   })
 
-  it('opens a dialog to edit a distribution, not a drawer', async () => {
+  it('links each distribution to its own page, not a dialog', async () => {
     render(<AppDetailPage />)
 
-    fireEvent.click(await screen.findByText('Slack'))
-
-    // A centered dialog, the same edit pattern as everywhere else.
-    const dialog = await screen.findByRole('dialog')
-    expect(dialog).toBeInTheDocument()
-    await waitFor(() =>
-      expect(agentAppsApi.checkDistribution).toHaveBeenCalledWith('acme-support', 'slack'),
-    )
+    const card = (await screen.findByText('Slack')).closest('a')
+    expect(card).toHaveAttribute('href', '/apps/acme-support/distributions/slack')
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('offers to add a distribution from the header', async () => {
     render(<AppDetailPage />)
-    expect(await screen.findAllByRole('button', { name: /Add distribution/ })).not.toHaveLength(0)
+    expect(await screen.findAllByRole('link', { name: /Add distribution/ })).not.toHaveLength(0)
   })
 
   it('invites a first distribution when there are none', async () => {
@@ -111,25 +106,5 @@ describe('AppDetailPage', () => {
     render(<AppDetailPage />)
 
     expect(await screen.findByText(/No distributions yet/)).toBeInTheDocument()
-  })
-
-  // Remove sits inside the config dialog, where people are only adjusting
-  // settings -- it used to unpublish a shipping target on one click.
-  it('confirms before removing a distribution', async () => {
-    ;(agentAppsApi.removeDistribution as any).mockResolvedValue({})
-    render(<AppDetailPage />)
-
-    fireEvent.click(await screen.findByText('Slack'))
-    fireEvent.click(await screen.findByRole('button', { name: /^Remove$/ }))
-
-    const confirm = await screen.findByRole('alertdialog')
-    expect(confirm).toHaveTextContent('Remove distribution?')
-    expect(agentAppsApi.removeDistribution).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: /Remove Distribution/ }))
-
-    await waitFor(() =>
-      expect(agentAppsApi.removeDistribution).toHaveBeenCalledWith('acme-support', 'slack'),
-    )
   })
 })

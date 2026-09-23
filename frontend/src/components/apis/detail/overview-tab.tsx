@@ -14,6 +14,7 @@ import { Edit, ExternalLink, TestTube, Upload, Zap } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
@@ -49,7 +50,7 @@ export function OverviewTab({
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">API Content</CardTitle>
+            <CardTitle className="text-sm">API content</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex justify-between">
@@ -110,7 +111,7 @@ export function OverviewTab({
           <CardContent className="space-y-2">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Type</span>
-              <Badge variant="outline">{api.type.toUpperCase()}</Badge>
+              <ApiTypeBadge type={api.type} />
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Version</span>
@@ -136,7 +137,7 @@ export function OverviewTab({
       <div className="flex items-center gap-2">
         <Button variant="outline" onClick={onOpenSchemaImport}>
           <Upload className="mr-2 h-4 w-4" />
-          {api.schemas && api.schemas.length > 0 ? 'Update Schema' : 'Import Schema'}
+          {api.schemas && api.schemas.length > 0 ? 'Update schema' : 'Import schema'}
         </Button>
         {operations.length > 0 && (
           <Button
@@ -198,14 +199,14 @@ export function OverviewTab({
           disabled={testing}
         >
           <TestTube className="mr-2 h-4 w-4" />
-          {testing ? 'Testing...' : 'Test Connection'}
+          {testing ? 'Testing...' : 'Test connection'}
         </Button>
         <Button
           variant="outline"
           onClick={() => navigate(`/gateways?apiId=${api.id}&apiName=${encodeURIComponent(api.name)}`)}
         >
           <ExternalLink className="mr-2 h-4 w-4" />
-          Expose via Gateway
+          Expose via gateway
         </Button>
       </div>
 

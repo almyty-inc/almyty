@@ -91,7 +91,7 @@ export function FilesTab({ agentId, files, error, onRetry }: FilesTabProps) {
               ) : (
                 <Upload className="h-4 w-4 mr-2" />
               )}
-              Upload File
+              Upload file
             </Button>
           </div>
         </div>

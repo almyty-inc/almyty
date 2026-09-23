@@ -47,16 +47,18 @@ const protocolLabels: Record<string, string> = {
 
 interface ProtocolBadgeProps {
   protocol: string
+  /** Overrides the text; the colour still comes from `protocol`. */
+  label?: string
   className?: string
 }
 
-export function ProtocolBadge({ protocol, className }: ProtocolBadgeProps) {
+export function ProtocolBadge({ protocol, label, className }: ProtocolBadgeProps) {
   const key = protocol.toLowerCase()
   const style = protocolStyles[key] || 'bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-500/20 dark:text-zinc-300 dark:border-zinc-500/30'
 
   return (
     <Badge variant="outline" className={cn('text-xs font-medium uppercase', style, className)}>
-      {protocolLabels[key] || protocol.replace(/_/g, ' ').toUpperCase()}
+      {label ?? (protocolLabels[key] || protocol.replace(/_/g, ' ').toUpperCase())}
     </Badge>
   )
 }
