@@ -65,13 +65,25 @@ export enum GatewayStatus {
   ERROR = 'error',
 }
 
+/**
+ * Per-gateway rate limits, enforced by GatewayRateLimitService.
+ *
+ * Every field here is read on the request path. `burstLimit` and
+ * `windowSize` used to sit in this interface and in both halves of the
+ * gateway DTO, and neither was ever read: the service fixes its windows
+ * at 60s / 3600s / 86400s and derives a burst allowance from
+ * `perVisitorPerHour` itself, so a gateway that set a burst of 5 or a
+ * window of 30s was told it saved and then limited on the built-in
+ * numbers. They are gone rather than wired, because the service already
+ * has a considered answer for both concepts and a second, conflicting
+ * source for the same two knobs is how the first one stops being
+ * trustworthy.
+ */
 export interface RateLimitConfig {
   enabled: boolean;
   requestsPerMinute?: number;
   requestsPerHour?: number;
   requestsPerDay?: number;
-  burstLimit?: number;
-  windowSize?: number;
   /** Messages each signed-in or cookie-identified visitor may send per hour (hosted chat, widget). */
   perVisitorPerHour?: number;
   /** Messages each client address may send per hour, hashed, for visitors without an identity. */

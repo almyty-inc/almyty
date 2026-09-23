@@ -165,9 +165,17 @@ export class Runner {
   state: RunnerState;
 
   /**
-   * User-chosen labels for routing. Distinct from the detected fields
-   * in `runtimeInfo` so a user can set `env: production` without
-   * colliding with anything the runner detects automatically.
+   * User-chosen tags. Distinct from the detected fields in `runtimeInfo`
+   * so a user can set `env: production` without colliding with anything
+   * the runner detects automatically.
+   *
+   * NOT USED FOR ROUTING TODAY, though this said "labels for routing" in
+   * the present tense and the runner detail page told users the same.
+   * WorkspaceService.pickRunner takes an explicit runnerId or the
+   * account's single runner, and throws when there are several; it never
+   * reads this column. Label-based selection is the v1.x scheduler (see
+   * docs/runner.md). Until it ships these are descriptive only, so
+   * setting one changes nothing about where work lands.
    */
   @Column({ type: 'json', default: () => `'{}'::json` })
   labels: Record<string, string>;

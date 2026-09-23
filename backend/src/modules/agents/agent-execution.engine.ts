@@ -61,6 +61,16 @@ export interface EngineInternalOptions {
  */
 const LAYER_TIMEOUT_DRAIN_MS = 2_000;
 
+/**
+ * Cap on the run-level error string. It is assembled from every failed
+ * node, stored in an unbounded `text` column, posted to the agent's
+ * webhook and rendered into a failure email, so it needs a ceiling of its
+ * own. Each node's own message is already capped by safeErrorMessage.
+ */
+const MAX_EXECUTION_ERROR_CHARS = 2_000;
+
+import { safeErrorMessage } from '../llm-providers/llm-providers.service';
+
 import {
   buildGraph,
   computeLayers,
@@ -302,6 +312,13 @@ export class AgentExecutionEngine {
         nodes: {},
         variables: { ...(agent.variables || {}), ...(options.variables || {}) },
         runLimits: { maxSteps: runLimits.maxSteps, maxToolCalls: runLimits.maxToolCalls },
+        // The run-scoped tool-call ledger. `maxToolCalls` was resolved,
+        // written onto the context, and compared by nothing -- the comment
+        // above claims the node executor clamps on it, and no such clamp
+        // existed. One counter per run, shared by reference with every node
+        // of every layer, so a fan-out layer's tool nodes count against the
+        // same budget instead of each one seeing zero.
+        toolCalls: { count: 0 },
       };
 
       // Build node map
@@ -486,7 +503,14 @@ export class AgentExecutionEngine {
                     userId,
                     edges: pipeline.edges,
                     nestingDepth: internalOptions?.nestingDepth,
-                    maxNestingDepth: internalOptions?.maxNestingDepth,
+                    // A nested run inherits the ceiling its parent was
+                    // given; a top-level run gets the one resolved for it.
+                    // Without the fallback the sub-agent executor reached
+                    // its own hard-coded `|| 5` on every top-level run, so
+                    // `maxRecursionDepth` -- an organization setting with an
+                    // operator env floor (RUN_LIMIT_MAX_RECURSION_DEPTH) --
+                    // was resolved and then governed nothing.
+                    maxNestingDepth: internalOptions?.maxNestingDepth ?? runLimits.maxRecursionDepth,
                     signal: layerAbort.signal,
                     // Filled once for the whole run, above, rather than per
                     // node: a role is one decision, and resolving it per node
@@ -534,7 +558,7 @@ export class AgentExecutionEngine {
               nodeId,
               node,
               result: null as NodeExecutionResult | null,
-              error: err.message || 'Unknown node error',
+              error: safeErrorMessage(err),
               errorType,
               // Typed cause, so callers that only see the persisted node
               // results (the scheduler) can still act on MODEL_NOT_FOUND.
@@ -805,19 +829,58 @@ export class AgentExecutionEngine {
 
       const executionTime = Date.now() - startTime;
 
+      // A cancel that arrives while the LAST layer is running has no next
+      // layer for the between-layer check to guard, so without this the
+      // engine would write a terminal status straight over the CANCELLED row
+      // the cancellation service just persisted, and the caller who asked to
+      // stop would be told the run finished. Keyed on an explicit cancel,
+      // not on the signal: a client that merely disconnected as the run
+      // landed still gets its answer recorded.
+      //
+      // Checked BEFORE the node-failure branch below, not after. Aborting the
+      // last layer is exactly what a cancel does, so its nodes come back as
+      // errors and no `output` node captures -- which sent the run down the
+      // `hasNodeFailures && !outputCaptured` path and recorded a cancel as
+      // "Pipeline failed: ...". The guard was written for this case and sat
+      // one branch too late to ever see it.
+      if (this.cancellations?.isCancelled(execution.id)) {
+        execution.status = AgentExecutionStatus.CANCELLED;
+        execution.error = 'Execution cancelled';
+        execution.output = finalOutput;
+        execution.nodeResults = nodeResults;
+        execution.executionTime = executionTime;
+        execution.totalCost = totalCost;
+        execution.totalTokens = totalTokens;
+        execution.inputTokens = totalInputTokens;
+        execution.outputTokens = totalOutputTokens;
+        await this.agentExecutionRepository.save(execution);
+        await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
+        this.state.emitEvent(onEvent, {
+          type: 'execution.failed',
+          data: { error: execution.error, errorType: 'CANCELLED', executionId: execution.id },
+          timestamp: Date.now(),
+        });
+        return execution;
+      }
+
       // Check if any node failed — if the output node was never reached, mark as failed.
       // Use the explicit `outputCaptured` flag instead of `finalOutput === null` so an
       // output node that legitimately produced `null` isn't treated as "no output ran".
       const hasNodeFailures = Object.values(nodeResults).some((r: any) => r.error);
 
       if (hasNodeFailures && !outputCaptured) {
+        // Capped. `execution.error` is a `text` column with no length of its
+        // own and this concatenates every failed node of a pipeline that may
+        // have a hundred of them; the same string is posted to the agent's
+        // webhook and rendered into a failure email. Each node's message has
+        // already been through safeErrorMessage above.
         const failedNodes = Object.entries(nodeResults)
           .filter(([, r]: [string, any]) => r.error)
           .map(([id, r]: [string, any]) => `${id}: ${r.error}`)
           .join('; ');
 
         execution.status = AgentExecutionStatus.FAILED;
-        execution.error = `Pipeline failed: ${failedNodes}`;
+        execution.error = `Pipeline failed: ${failedNodes}`.slice(0, MAX_EXECUTION_ERROR_CHARS);
         execution.output = null;
         execution.nodeResults = nodeResults;
         execution.executionTime = executionTime;
@@ -837,33 +900,6 @@ export class AgentExecutionEngine {
 
         this.notifyRunFailed(agent, execution).catch(() => {});
 
-        return execution;
-      }
-
-      // A cancel that arrives while the LAST layer is running has no next
-      // layer for the between-layer check to guard, so without this the
-      // engine would write COMPLETED straight over the CANCELLED row the
-      // cancellation service just persisted, and the caller who asked to
-      // stop would be told the run finished. Keyed on an explicit cancel,
-      // not on the signal: a client that merely disconnected as the run
-      // landed still gets its answer recorded.
-      if (this.cancellations?.isCancelled(execution.id)) {
-        execution.status = AgentExecutionStatus.CANCELLED;
-        execution.error = 'Execution cancelled';
-        execution.output = finalOutput;
-        execution.nodeResults = nodeResults;
-        execution.executionTime = executionTime;
-        execution.totalCost = totalCost;
-        execution.totalTokens = totalTokens;
-        execution.inputTokens = totalInputTokens;
-        execution.outputTokens = totalOutputTokens;
-        await this.agentExecutionRepository.save(execution);
-        await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
-        this.state.emitEvent(onEvent, {
-          type: 'execution.failed',
-          data: { error: execution.error, errorType: 'CANCELLED', executionId: execution.id },
-          timestamp: Date.now(),
-        });
         return execution;
       }
 
@@ -909,7 +945,7 @@ export class AgentExecutionEngine {
       // run's whole record and reported its spend as zero, which made the
       // crash both unreproducible and free.
       execution.status = AgentExecutionStatus.FAILED;
-      execution.error = error.message || 'Unknown error';
+      execution.error = safeErrorMessage(error);
       execution.executionTime = executionTime;
       execution.nodeResults = nodeResults;
       execution.totalCost = totalCost;

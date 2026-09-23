@@ -28,6 +28,7 @@ import { AgentRuntimeEventsHelper } from './agent-runtime-events.helper';
 import { AgentRuntimeMiscHelper } from './agent-runtime-misc.helper';
 import { AgentStepProcessor } from './agent-step-processor';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { describeLimitTrip } from './run-limits';
 import { BudgetsService } from '../budgets/budgets.service';
 
 /**
@@ -256,6 +257,12 @@ export class AgentRuntimeService implements OnModuleInit {
     //
     // Also added a hard iteration cap (MAX_PARENT_WALK) so a corrupted
     // parent chain with a cycle can't loop forever.
+    // How many ancestors this run will have. Persisted onto the row as
+    // `recursionDepth`, which is the ledger `checkRunLimits` compares
+    // `maxRecursionDepth` against -- a column nothing ever wrote, so that
+    // comparison was always 0 > N and RECURSION_DEPTH_EXCEEDED could not
+    // fire. Depth 0 is a top-level run.
+    let recursionDepth = 0;
     if (options?.parentRunId) {
       // Hard, unconditional ceiling on recursive run nesting. A per-agent
       // collaboration.rules.maxChainDepth may tighten this but never loosen
@@ -293,6 +300,29 @@ export class AgentRuntimeService implements OnModuleInit {
         if (!parentRun || !parentRun.parentRunId) break;
         depth++;
         currentParentId = parentRun.parentRunId;
+      }
+      recursionDepth = depth;
+
+      // The configured ceiling, on top of the absolute one above.
+      // `maxRecursionDepth` is resolved min-wins across the operator env
+      // floor, the organization and the agent, and until now the only thing
+      // that ever read it was a comparison against a column that stayed 0 --
+      // so an operator who set RUN_LIMIT_MAX_RECURSION_DEPTH got the
+      // hard-coded 10 regardless. Rejected here rather than at the child's
+      // first step, so a run that cannot be allowed leaves no row behind.
+      const nestedLimits = await this.misc.resolveLimits({
+        organizationId,
+        agent,
+        maxSteps: options?.maxSteps,
+        limits: {
+          ...(options?.maxSteps ? { maxSteps: options.maxSteps } : {}),
+          ...(options?.maxCostCents ? { maxCostCents: options.maxCostCents } : {}),
+          ...(options?.maxDurationMs ? { maxDurationMs: options.maxDurationMs } : {}),
+        },
+      } as unknown as AgentRun);
+      if (recursionDepth > nestedLimits.maxRecursionDepth) {
+        const trip = describeLimitTrip('RECURSION_DEPTH_EXCEEDED');
+        throw new BadRequestException(`${trip.code}: ${trip.message}`);
       }
     }
 
@@ -342,6 +372,11 @@ export class AgentRuntimeService implements OnModuleInit {
         maxToolCalls: 100,
       },
       parentRunId: options?.parentRunId || null,
+      // The nesting ledger, counted above. Written here so the per-step
+      // `checkRunLimits` compares a real number instead of the column's
+      // default 0 -- which is what made RECURSION_DEPTH_EXCEEDED dead code.
+      recursionDepth,
+      toolCallCount: 0,
       ...(options?.metadata ? { metadata: { ...options.metadata } } : {}),
     });
 

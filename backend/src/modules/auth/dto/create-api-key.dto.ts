@@ -42,9 +42,11 @@ export class CreateApiKeyDto {
   organizationId?: string;
 
   @ApiPropertyOptional({
-    description: 'Array of scopes/permissions for this API key',
-    example: ['read', 'write', 'admin'],
+    description:
+      'NOT IMPLEMENTED for platform keys, and rejected with 400 if sent. A platform key acts with the full permissions of the user who minted it; nothing on the ApiKeyStrategy path reads these. Scoped keys are per gateway: POST /gateways/:id/api-keys.',
+    example: [],
     isArray: true,
+    deprecated: true,
   })
   @IsOptional()
   @IsArray()
@@ -68,8 +70,10 @@ export class CreateApiKeyDto {
   expiresAt?: string;
 
   @ApiPropertyOptional({
-    description: 'Rate limiting configuration',
+    description:
+      'NOT IMPLEMENTED, and rejected with 400 if sent. Nothing reads ApiKey.rateLimits on any request path. Rate limiting is configured per gateway (Gateway.rateLimitConfig).',
     type: RateLimitDto,
+    deprecated: true,
   })
   @IsOptional()
   @ValidateNested()

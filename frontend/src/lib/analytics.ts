@@ -47,6 +47,17 @@ const DEFAULT_HOST = '/ingest'
 // they keep working even though events flow through the proxy.
 const UI_HOST = 'https://eu.posthog.com'
 
+/**
+ * Elements whose TEXT holds a live secret (a one-time access key, a rotated
+ * token) carry this attribute. Session replay masks their text; everything
+ * else stays legible so the recording is still worth watching.
+ *
+ * Exported so the components that render such values, and the test that
+ * keeps them marked, share one spelling.
+ */
+export const SENSITIVE_TEXT_ATTRIBUTE = 'data-sensitive-text'
+export const SENSITIVE_TEXT_SELECTOR = `[${SENSITIVE_TEXT_ATTRIBUTE}]`
+
 // Live PostHog client, or null while uninitialized / disabled.
 let client: PostHog | null = null
 // Guards against double-init (e.g. React StrictMode double-invoke).
@@ -144,6 +155,14 @@ export async function initAnalytics(): Promise<void> {
     //   logo" replay was exactly that: an un-inlined stylesheet.
     session_recording: {
       maskAllInputs: true,
+      // maskAllInputs only covers <input>/<textarea>/<select> VALUES.
+      // rrweb captures every other text node verbatim, so a secret that
+      // is rendered as page text -- a freshly minted access key shown
+      // once in a <code> block -- would be uploaded to PostHog in the
+      // clear. Anything holding a live secret carries
+      // data-sensitive-text; mask its text, and only its text, so the
+      // rest of the replay stays readable.
+      maskTextSelector: SENSITIVE_TEXT_SELECTOR,
       inlineStylesheet: true,
       recordCrossOriginIframes: false,
     },

@@ -33,6 +33,39 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
       throw new UnauthorizedException('Invalid API key');
     }
 
+    // A gateway key is a credential for ONE gateway's protocol surface.
+    // gateway-auth.controller mints it with a gatewayId and the scope
+    // ['gateway:use'], and GatewayAuthValidators authenticates it on the
+    // gateway endpoint. It is not a platform session.
+    //
+    // This strategy looks a key up by hash alone, and JwtAuthGuard is
+    // AuthGuard(['jwt', 'api-key']) -- it fronts the whole dashboard API.
+    // extractApiKey only requires the `almyty_` prefix on the Bearer
+    // form; X-API-Key and ?api_key= take anything. So a `gw_...` key,
+    // handed to a third-party MCP client so it can call one gateway,
+    // also authenticated as its minting user on every dashboard route:
+    // read and write across the whole organization. ApiKey.scopes is the
+    // control that was meant to bound that, and nothing on this path
+    // reads it.
+    if (validApiKey.gatewayId) {
+      throw new UnauthorizedException(
+        'This is a gateway API key. Use it against the gateway endpoint, not the platform API.',
+      );
+    }
+
+    // A platform key acts as its user, carrying that user's full role and
+    // membership, on every JwtAuthGuard route. Nothing here reads
+    // ApiKey.scopes, so a key minted with ['read'] answers DELETE just as
+    // well. AuthService.createApiKey now refuses to mint one; this
+    // fail-closes on rows written around it, because the alternative for
+    // an access control is to let a caller through on a promise that
+    // nothing downstream keeps.
+    if (validApiKey.scopes?.length) {
+      throw new UnauthorizedException(
+        'Per-key scopes are not enforced on platform API keys. Mint a key without scopes, or use a gateway key.',
+      );
+    }
+
     // Build the same user shape that JwtStrategy returns so guards
     // and request handlers work identically regardless of whether
     // auth was via JWT or API key.

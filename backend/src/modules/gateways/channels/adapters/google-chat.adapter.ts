@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { BaseAdapter, NormalizedMessage, AdapterResponse } from './base.adapter';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class GoogleChatAdapter extends BaseAdapter {
@@ -74,12 +75,37 @@ export class GoogleChatAdapter extends BaseAdapter {
     }
   }
 
+  /**
+   * Google Chat inbound, authenticated by the shared verification token
+   * the space is configured with.
+   *
+   * Fails closed: without the token there is nothing to distinguish
+   * Google Chat from any other caller.
+   *
+   * Constant-time, and prefix-anchored. It was `token === config...`
+   * after a `.replace('Bearer ', '')` — a non-anchored replace that
+   * rewrites the first occurrence anywhere in the header, and an
+   * equality that leaks its match length to an unauthenticated caller
+   * with unlimited attempts. Every other secret comparison in this
+   * directory (signal, matrix, irc, slack, twilio, svix) is a
+   * length-guarded timingSafeEqual; this one now matches.
+   *
+   * Worth recording what this is NOT: Google signs inbound requests
+   * with an RS256 JWT issued by chat@system.gserviceaccount.com, which
+   * microsoft-teams.adapter.ts verifies properly for its own platform.
+   * A static shared secret is materially weaker — it never expires and
+   * it is symmetric — and moving to the JWT is a separate change.
+   */
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>): Promise<boolean> {
-    // Google Chat uses bearer tokens for verification
-    // Fail closed: without the verification token there is nothing to
-    // distinguish Google Chat from any other caller.
     if (!config.verification_token) return false;
-    const token = headers['authorization']?.replace('Bearer ', '');
-    return token === config.verification_token;
+
+    const header = headers['authorization'];
+    if (typeof header !== 'string' || !header.startsWith('Bearer ')) return false;
+    const token = header.slice('Bearer '.length).trim();
+    if (!token) return false;
+
+    const a = Buffer.from(token);
+    const b = Buffer.from(String(config.verification_token));
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
   }
 }

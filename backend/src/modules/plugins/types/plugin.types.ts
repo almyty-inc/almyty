@@ -182,20 +182,6 @@ export interface PluginResult {
   nextAction?: 'continue' | 'stop' | 'retry' | 'skip';
 }
 
-// Built-in Plugin Types
-export enum BuiltInPluginType {
-  PII_FILTER = 'pii_filter',
-  RATE_LIMITER = 'rate_limiter',
-  CACHE_MANAGER = 'cache_manager',
-  REQUEST_LOGGER = 'request_logger',
-  RESPONSE_TRANSFORMER = 'response_transformer',
-  ERROR_HANDLER = 'error_handler',
-  SECURITY_SCANNER = 'security_scanner',
-  PERFORMANCE_MONITOR = 'performance_monitor',
-  DATA_VALIDATOR = 'data_validator',
-  AUTHENTICATION_ENHANCER = 'authentication_enhancer',
-}
-
 // Plugin Registry
 export interface PluginRegistry {
   plugins: Map<string, Plugin>;

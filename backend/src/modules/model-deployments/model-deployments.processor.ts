@@ -398,6 +398,26 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     }
     card.region = actual.region ?? d.desired.region ?? card.region;
 
+    // The declared privacy tier of the deployment, on the card the router
+    // actually gates with.
+    //
+    // ModelRouter checks `card.privacyTier` against the policy's floor.
+    // `card.privacyTier` is otherwise only ever set by model-catalog:
+    // defaulted from the provider type (ollama -> 'local', everything
+    // else -> 'public') or edited by hand. So the tier chosen in the
+    // deploy dialog was written to `deployment.desired.privacyTier`,
+    // displayed back in the deployment sheet, and read by nothing: a
+    // model deployed into a private VPC still carried 'public' and was
+    // refused by a private_cloud routing policy. `desired.region` on the
+    // line above had this exact shape and was propagated; this field was
+    // the one omission.
+    //
+    // Both doors lead to the same authority -- whoever can deploy can
+    // also edit the card's tier directly -- so this attenuates nothing
+    // and escalates nothing. It makes the deploy dialog's control mean
+    // what it says.
+    if (d.desired.privacyTier) card.privacyTier = d.desired.privacyTier;
+
     // A card is called through a real provider row: conversations carry a
     // provider foreign key and stats are written per provider id, so a
     // transient object would break the first chat that used it.

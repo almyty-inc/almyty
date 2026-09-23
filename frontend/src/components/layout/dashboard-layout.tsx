@@ -194,8 +194,22 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   const handleLogout = () => {
-    logout()
+    // logout() clears local state synchronously and returns a promise that
+    // resolves once the server has -- or has not -- confirmed the httpOnly
+    // session cookie is gone. Navigate straight away so the click still
+    // feels instant, and only then say whether the session really ended.
+    const ended = logout()
     navigate('/auth/login')
+    void ended.then((serverSessionEnded) => {
+      if (serverSessionEnded) return
+      // Only the server can clear the cookie. Saying nothing here would
+      // show the login page while the session is still live, which is the
+      // one thing a sign-out must never imply.
+      notifications.error(
+        'Signed out on this device only',
+        "We couldn't reach the server to end your session, so it may still be active. Sign in again and sign out once you're back online.",
+      )
+    })
   }
 
   const handleOrgChange = (org: any) => {

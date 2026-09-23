@@ -62,7 +62,12 @@ export class ApprovalPolicy {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  /** Optional team scoping (mirrors approval_requests visibility model). */
+  /**
+   * Optional team scoping (mirrors approval_requests visibility model).
+   * Set = this policy governs only requests raised for that team; null =
+   * org-wide. Enforced in ApprovalPolicyEvaluator.resolvePolicy against
+   * the `teamId` ApprovalsService puts in the approval context.
+   */
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;
 

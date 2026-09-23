@@ -12,7 +12,7 @@ import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executo
 import { Agent } from '../../entities/agent.entity';
 import { AgentVerifierHelper, VerifyPanelResult } from './agent-verifier.helper';
 import { AgentContextCompactor } from './agent-context-compactor.helper';
-import { checkRunLimits, formatToolError } from './run-limits';
+import { checkRunLimits, describeLimitTrip, formatToolError } from './run-limits';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
 import type { RoutingPolicy } from '../model-catalog/routing/model-router';
@@ -378,6 +378,29 @@ export class AgentStepProcessor {
 
         // Execute each tool call
         for (const toolCall of responseMessage.toolCalls) {
+          // The tool-call budget, spent per call rather than per step.
+          // `maxToolCalls` was resolved on every step and compared against
+          // `run.toolCallCount` -- a column no code ever incremented, so the
+          // comparison was always against zero and TOOL_CALL_LIMIT_EXCEEDED
+          // was unreachable. One step may carry any number of tool calls, so
+          // the once-per-step check at the top of processStep is no ceiling
+          // on its own even now that the ledger is real.
+          if ((run.toolCallCount ?? 0) >= resolvedLimits.maxToolCalls) {
+            const trip = describeLimitTrip('TOOL_CALL_LIMIT_EXCEEDED');
+            run.status = AgentRunStatus.FAILED;
+            run.error = `${trip.code}: ${trip.message}`;
+            run.metadata = { ...(run.metadata || {}), limitTrip: trip };
+            run.executionTime += Date.now() - stepStart;
+            if (!(await this.commitStep(run, expectedStep))) return 'done';
+            this.s.emitEvent(runId, 'run.failed', {
+              error: run.error,
+              reasonCode: trip.code,
+              reason: trip.message,
+            });
+            return 'done';
+          }
+          run.toolCallCount = (run.toolCallCount ?? 0) + 1;
+
           const toolExecStart = Date.now();
 
           // Check for built-in tools first
@@ -992,6 +1015,10 @@ export class AgentStepProcessor {
         currentStep: run.currentStep,
         totalCost: run.totalCost,
         totalTokens: run.totalTokens,
+        // The tool-call ledger, persisted with everything else the step
+        // advanced. Held only in memory it would reset to the row's value
+        // on the next step, and a per-step counter is no run budget.
+        toolCallCount: run.toolCallCount ?? 0,
         executionTime: run.executionTime,
         steps: this.boundStepsForPersist(run.steps),
         output: run.output,

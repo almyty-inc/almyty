@@ -11,7 +11,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
-import { useCopySensitive } from '@/lib/clipboard'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -88,7 +87,6 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
 
   const queryClient = useQueryClient()
   const notifications = useNotifications()
-  const copySensitive = useCopySensitive()
 
   const { data: providersRaw, isLoading, isError, error, refetch: refetchProviders } = useQuery({
     queryKey: ['llm-providers'],
@@ -280,7 +278,6 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
     setIsEditDialogOpen,
     setModelsLoading,
     setAvailableModels,
-    copySensitive,
     toggleProviderStatusMutation,
     teamLookup,
   })

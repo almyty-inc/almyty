@@ -50,9 +50,38 @@ export class ApiKey {
   @Column({ nullable: true })
   lastUsedAt: Date;
 
+  /**
+   * Scopes, and who actually enforces them.
+   *
+   * GATEWAY keys (gatewayId set, minted by gateway-auth.controller):
+   * enforced. GatewayAuthValidators hands these to the gateway protocol
+   * service, which threads them into ToolExecutionOptions.scopes, which
+   * is checked against gateway_tools.permissions.requiredScopes before
+   * dispatch.
+   *
+   * PLATFORM keys (gatewayId null, minted by AuthService.createApiKey):
+   * NOT enforced, and not accepted either. A platform key authenticates
+   * through ApiKeyStrategy -- one half of JwtAuthGuard -- and acts as its
+   * user with that user's full role on every route the guard protects.
+   * Nothing on that path reads this column, so a ['read'] key answered
+   * DELETE. createApiKey now rejects scopes, and ApiKeyStrategy refuses
+   * a platform key that carries any.
+   */
   @Column({ type: 'json', nullable: true })
-  scopes: string[]; // Array of permissions/scopes
+  scopes: string[];
 
+  /**
+   * NOT IMPLEMENTED. No code reads this column: not ApiKeyStrategy, not
+   * any guard or interceptor, not GatewayRateLimitService. It was
+   * accepted by CreateApiKeyDto and stored, and then ignored on every
+   * request. createApiKey now rejects it rather than pretending.
+   *
+   * Rate limiting that works is per gateway: Gateway.rateLimitConfig,
+   * enforced by GatewayRateLimitService. Per-key limits are a product
+   * decision, not a missing line of plumbing -- they need a counter
+   * keyed by ApiKey.id on the platform request path, which does not
+   * exist.
+   */
   @Column({ type: 'json', nullable: true })
   rateLimits: {
     requestsPerMinute?: number;
@@ -109,10 +138,6 @@ export class ApiKey {
   // Methods
   isExpired(): boolean {
     return this.expiresAt ? new Date() > this.expiresAt : false;
-  }
-
-  hasScope(scope: string): boolean {
-    return this.scopes?.includes(scope) || false;
   }
 
   canMakeRequest(): boolean {

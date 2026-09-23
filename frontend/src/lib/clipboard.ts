@@ -21,11 +21,40 @@ import { useCallback } from 'react'
 
 import { useNotifications } from '@/store/app'
 
+/**
+ * Placeholders the API sends in place of a stored secret. A value that is
+ * one of these is NOT the secret — it is the server saying "there is a
+ * secret here and you may not read it back".
+ *
+ *   '***masked***'  LlmProvider.maskSensitiveData()
+ *   '********'      MASKED_CHANNEL_SECRET (channel gateway configuration)
+ *   '••••••••'      maskAuthSecrets() (gateway auth configuration)
+ *
+ * Copying one of them puts a useless string on the clipboard while the
+ * toast claims the secret was copied — the user pastes it into a CI
+ * secret or a .env and the integration fails with an opaque auth error.
+ * Treat it, and an empty value, as "nothing to copy".
+ */
+const MASK_PLACEHOLDERS = new Set(['***masked***', '********', '••••••••'])
+
+export function isMaskedSecret(value: string): boolean {
+  return value === '' || MASK_PLACEHOLDERS.has(value)
+}
+
 export function useCopySensitive() {
   const { warning, error } = useNotifications()
 
   return useCallback(
     async (value: string, label: string): Promise<void> => {
+      // The server masks stored secrets on read. Never claim to have
+      // copied one — say plainly that it cannot be read back.
+      if (isMaskedSecret(value)) {
+        error(
+          `${label} can't be copied`,
+          'Stored secrets are never sent back to the browser. Replace it with a new value if you no longer have it.',
+        )
+        return
+      }
       try {
         await navigator.clipboard.writeText(value)
         warning(
