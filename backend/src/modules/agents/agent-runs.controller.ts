@@ -299,7 +299,7 @@ export class AgentRunsController {
         );
       }
 
-      const run = await this.runtimeService.cancelRun(runId, organizationId, id);
+      const run = await this.runtimeService.cancelRun(runId, organizationId, id, req.user.sub || req.user.id);
       return { success: true, data: run, message: 'Run cancelled' };
     } catch (error) {
       throw new HttpException(

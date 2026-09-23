@@ -94,7 +94,7 @@ export class UnifiedAgentHelper {
     }
 
     if (action === 'executions' || action.startsWith('executions/')) {
-      return this.handleAgentExecutions(agent, organization, req, res, action);
+      return this.handleAgentExecutions(agent, organization, req, res, action, apiKey);
     }
 
     if (req.method === 'GET' && action.startsWith('conversations/')) {
@@ -409,6 +409,9 @@ export class UnifiedAgentHelper {
     req: Request,
     res: Response,
     action: string,
+    // Appended last, and only so the cancel below can name who did it on
+    // the audit row.
+    apiKey?: ApiKey,
   ) {
     const parts = action.split('/');
     const executionId = parts[1];
@@ -418,7 +421,12 @@ export class UnifiedAgentHelper {
       if (!this.cancellations) {
         throw new HttpException('Execution cancellation is unavailable', HttpStatus.SERVICE_UNAVAILABLE);
       }
-      const execution = await this.cancellations.cancel(executionId, organization.id, agent.id);
+      const execution = await this.cancellations.cancel(
+        executionId,
+        organization.id,
+        agent.id,
+        apiKey?.userId,
+      );
       return res.json({
         success: true,
         data: { id: execution.id, status: execution.status },
