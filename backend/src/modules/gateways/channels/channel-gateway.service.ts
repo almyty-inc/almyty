@@ -192,7 +192,18 @@ export class ChannelGatewayService {
     const isValid = await adapter.verifyWebhook(body, headers, effectiveConfig, rawBody);
     if (!isValid) {
       this.logger.warn(`Webhook signature verification failed for gateway: ${gateway.id}`);
-      await this.logEvent(gateway, 'inbound', 'failed', body, 'signature verification failed');
+      // truncatePayload, like every other logEvent call in this file.
+      // This one took the raw body, so an unauthenticated caller whose
+      // signature fails still got their full payload persisted to
+      // channel_events — a write amplifier on the one path that exists
+      // precisely to record requests we did not trust.
+      await this.logEvent(
+        gateway,
+        'inbound',
+        'failed',
+        this.truncatePayload(body),
+        'signature verification failed',
+      );
       return;
     }
 

@@ -50,6 +50,32 @@ describe('GoogleChatAdapter', () => {
     it('rejects mismatched bearer token', async () => {
       expect(await adapter.verifyWebhook({}, { authorization: 'Bearer wrong' }, { verification_token: 'abc' })).toBe(false);
     });
+
+    // The comparison is a length-guarded timingSafeEqual rather than a
+    // plain equality: this is an unauthenticated endpoint, the caller
+    // supplies one side, and attempts are unlimited. A length mismatch
+    // must be a refusal, not the throw timingSafeEqual raises on its own.
+    it('rejects a token of a different length without throwing', async () => {
+      await expect(
+        adapter.verifyWebhook({}, { authorization: 'Bearer a' }, { verification_token: 'abcdefgh' }),
+      ).resolves.toBe(false);
+      await expect(
+        adapter.verifyWebhook({}, { authorization: 'Bearer abcdefghijkl' }, { verification_token: 'abc' }),
+      ).resolves.toBe(false);
+    });
+
+    it('requires the credential to be presented as a Bearer prefix', async () => {
+      // The old parse rewrote the first 'Bearer ' occurrence anywhere in
+      // the header instead of anchoring at the start. Anchor it.
+      expect(await adapter.verifyWebhook({}, { authorization: 'abc' }, { verification_token: 'abc' })).toBe(false);
+      expect(await adapter.verifyWebhook({}, { authorization: 'Basic abc' }, { verification_token: 'abc' })).toBe(false);
+      expect(await adapter.verifyWebhook({}, { authorization: 'x Bearer abc' }, { verification_token: 'abc' })).toBe(false);
+    });
+
+    it('rejects an absent or empty authorization header', async () => {
+      expect(await adapter.verifyWebhook({}, {}, { verification_token: 'abc' })).toBe(false);
+      expect(await adapter.verifyWebhook({}, { authorization: 'Bearer ' }, { verification_token: 'abc' })).toBe(false);
+    });
   });
 
   describe('sendResponse', () => {

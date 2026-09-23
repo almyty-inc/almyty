@@ -23,7 +23,7 @@ describe('surface round trips', () => {
       event: { type: 'message', text: 'hello', user: 'U1', channel: 'C42', ts: '1700000000.1' },
     };
     const rawBody = JSON.stringify(inbound);
-    const timestamp = '1700000000';
+    const timestamp = String(Math.floor(Date.now() / 1000)); // inside Slack's replay window
     const headers = {
       'x-slack-request-timestamp': timestamp,
       'x-slack-signature':
@@ -539,7 +539,7 @@ describe('surface round trips', () => {
       event: { type: 'message', text: 'hello', user: 'U1', channel: 'C42', ts: '1700000000.1' },
     };
     const rawBody = JSON.stringify(inbound);
-    const timestamp = '1700000000';
+    const timestamp = String(Math.floor(Date.now() / 1000)); // inside Slack's replay window
     const headers = {
       'x-slack-request-timestamp': timestamp,
       'x-slack-signature':

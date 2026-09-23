@@ -103,8 +103,12 @@ export class WhatsAppCloudAdapter extends BaseAdapter {
   /**
    * Meta signs every webhook POST with X-Hub-Signature-256:
    * `sha256=` + hex(HMAC-SHA256(app_secret, raw body bytes)).
-   * Enforced when app_secret is configured; skipped otherwise
-   * (mirroring the Slack adapter's optional signing_secret).
+   *
+   * Fails closed. Meta always signs, so an unconfigured app_secret is a
+   * misconfiguration rather than a reason to trust the payload — this
+   * comment used to say the check was "skipped otherwise", which was a
+   * description of behaviour that no longer exists and an invitation to
+   * put it back.
    */
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
     const appSecret = config.app_secret;
@@ -129,6 +133,11 @@ export class WhatsAppCloudAdapter extends BaseAdapter {
    * echo hub.challenge iff hub.mode is "subscribe" and hub.verify_token
    * matches the configured verify_token. Returns the challenge string
    * to echo, or null when verification fails.
+   *
+   * The token comparison is constant-time. This endpoint is reachable
+   * unauthenticated with unlimited attempts and the caller supplies one
+   * side of the comparison, so it gets the same treatment as every
+   * other secret compare in this module rather than a plain inequality.
    */
   static handleVerification(
     query: Record<string, any>,
@@ -138,7 +147,10 @@ export class WhatsAppCloudAdapter extends BaseAdapter {
     const token = query?.['hub.verify_token'];
     const challenge = query?.['hub.challenge'];
     if (mode !== 'subscribe') return null;
-    if (!config?.verify_token || token !== config.verify_token) return null;
+    if (!config?.verify_token) return null;
+    const a = Buffer.from(String(token ?? ''));
+    const b = Buffer.from(String(config.verify_token));
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
     return String(challenge ?? '');
   }
 }

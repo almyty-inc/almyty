@@ -81,6 +81,13 @@ describe('SlackAdapter', () => {
     const signingSecret = 'super-secret-signing-key';
     const config = { signing_secret: signingSecret };
 
+    /** Sign a payload exactly the way Slack does, at a chosen clock. */
+    const sign = (payload: any, timestamp: string) => {
+      const basestring = `v0:${timestamp}:${JSON.stringify(payload)}`;
+      return 'v0=' + crypto.createHmac('sha256', signingSecret).update(basestring).digest('hex');
+    };
+    const nowSeconds = () => Math.floor(Date.now() / 1000);
+
     it('refuses inbound when there is no signing_secret configured', async () => {
       // Fail closed: with no secret we cannot tell Slack from a forger.
       const ok = await adapter.verifyWebhook(slackEventCallback, {}, {});
@@ -90,26 +97,24 @@ describe('SlackAdapter', () => {
     it('rejects rather than throwing when the signature length differs', async () => {
       const ok = await adapter.verifyWebhook(
         slackEventCallback,
-        { 'x-slack-request-timestamp': '1700000000', 'x-slack-signature': 'v0=short' },
+        { 'x-slack-request-timestamp': String(nowSeconds()), 'x-slack-signature': 'v0=short' },
         config,
       );
       expect(ok).toBe(false);
     });
 
     it('accepts a correctly-signed request', async () => {
-      const timestamp = '1700000000';
-      const basestring = `v0:${timestamp}:${JSON.stringify(slackEventCallback)}`;
-      const signature = 'v0=' + crypto.createHmac('sha256', signingSecret).update(basestring).digest('hex');
+      const timestamp = String(nowSeconds());
       const ok = await adapter.verifyWebhook(
         slackEventCallback,
-        { 'x-slack-request-timestamp': timestamp, 'x-slack-signature': signature },
+        { 'x-slack-request-timestamp': timestamp, 'x-slack-signature': sign(slackEventCallback, timestamp) },
         config,
       );
       expect(ok).toBe(true);
     });
 
     it('rejects a signature with the wrong secret', async () => {
-      const timestamp = '1700000000';
+      const timestamp = String(nowSeconds());
       const basestring = `v0:${timestamp}:${JSON.stringify(slackEventCallback)}`;
       const wrongSig = 'v0=' + crypto.createHmac('sha256', 'wrong-secret').update(basestring).digest('hex');
       const ok = await adapter.verifyWebhook(
@@ -122,6 +127,59 @@ describe('SlackAdapter', () => {
 
     it('rejects a request without timestamp/signature headers', async () => {
       const ok = await adapter.verifyWebhook(slackEventCallback, {}, config);
+      expect(ok).toBe(false);
+    });
+
+    // ── Replay window ────────────────────────────────────────────────
+    //
+    // A signature authenticates a request, it does not date it. Without
+    // the window, a captured Slack POST stayed valid until the signing
+    // secret was rotated — and for slash commands and interactive
+    // payloads (no event_id, no event.ts) `deliveryId` is undefined, so
+    // the dedupe claim never sees the replay either. Each replay was a
+    // fresh agent run on the tenant's model keys.
+
+    it('refuses a correctly-signed delivery whose timestamp is stale', async () => {
+      const stale = String(nowSeconds() - SlackAdapter.TIMESTAMP_TOLERANCE_SECONDS - 1);
+      const ok = await adapter.verifyWebhook(
+        slackEventCallback,
+        { 'x-slack-request-timestamp': stale, 'x-slack-signature': sign(slackEventCallback, stale) },
+        config,
+      );
+      expect(ok).toBe(false);
+    });
+
+    it('refuses a correctly-signed delivery timestamped in the future', async () => {
+      // Symmetric: a clock far ahead is as good as a captured one for
+      // extending a signature's life.
+      const ahead = String(nowSeconds() + SlackAdapter.TIMESTAMP_TOLERANCE_SECONDS + 1);
+      const ok = await adapter.verifyWebhook(
+        slackEventCallback,
+        { 'x-slack-request-timestamp': ahead, 'x-slack-signature': sign(slackEventCallback, ahead) },
+        config,
+      );
+      expect(ok).toBe(false);
+    });
+
+    it('still accepts a delivery at the edge of the window', async () => {
+      // One second inside, so the window is a window and not a
+      // stricter-than-Slack rejection of ordinary delivery latency.
+      const edge = String(nowSeconds() - SlackAdapter.TIMESTAMP_TOLERANCE_SECONDS + 1);
+      const ok = await adapter.verifyWebhook(
+        slackEventCallback,
+        { 'x-slack-request-timestamp': edge, 'x-slack-signature': sign(slackEventCallback, edge) },
+        config,
+      );
+      expect(ok).toBe(true);
+    });
+
+    it('refuses a non-numeric timestamp instead of treating it as epoch 0', async () => {
+      const bogus = 'not-a-number';
+      const ok = await adapter.verifyWebhook(
+        slackEventCallback,
+        { 'x-slack-request-timestamp': bogus, 'x-slack-signature': sign(slackEventCallback, bogus) },
+        config,
+      );
       expect(ok).toBe(false);
     });
   });
