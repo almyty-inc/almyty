@@ -55,9 +55,9 @@ describe('session replay never records a secret rendered as text', () => {
    * would prove the same thing while breaking on any unrelated refactor of
    * the credentials page.
    */
-  it('marks the one-time access key on /credentials as sensitive text', async () => {
+  it('marks the one-time access key on /credentials/access-keys/new as sensitive text', async () => {
     const { SENSITIVE_TEXT_ATTRIBUTE } = await import('../analytics')
-    const source = readFileSync(resolve(__dirname, '../../pages/credentials.tsx'), 'utf8')
+    const source = readFileSync(resolve(__dirname, '../../components/credentials/generate-access-key-form.tsx'), 'utf8')
 
     const keyElement = source
       .split('\n')

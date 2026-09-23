@@ -140,53 +140,18 @@ test.describe('A11y landmarks', () => {
   })
 })
 
-test.describe('?new=1 deep links reach the create page', () => {
-  // A converted area's `?new=1` redirects to its create page
-  // (useNewParamRedirect).
-  const redirects = [
-    { label: 'Connect API', path: '/apis?new=1', to: /\/apis\/new$/, heading: /connect api/i },
-    { label: 'Create tool', path: '/tools?new=1', to: /\/tools\/new$/, heading: /create tool/i },
-  ]
-  for (const link of redirects) {
-    test(link.label, async () => {
-      await page.goto(link.path)
-      await expect(page).toHaveURL(link.to, { timeout: 15_000 })
-      await expect(page.getByRole('heading', { name: link.heading })).toBeVisible({ timeout: 10_000 })
-    })
-  }
-})
-
-test.describe('Create dialogs open from deep-link', () => {
-  // Every list page that still has a create dialog supports `?new=1`
-  // as a deep-link to open it. These tests verify that landing on each
-  // list page with that param actually renders a dialog -- catches
-  // silent regressions in the `useCreateDeepLink` hook wiring.
-  const deepLinks = [
-    { label: 'Add Credential', path: '/credentials?new=1', heading: /add credential|new credential|create credential/i },
-  ]
-
-  for (const link of deepLinks) {
-    test(link.label, async () => {
-      await page.goto(link.path)
-      await expect(page.locator('main#main-content')).toBeVisible({ timeout: 15_000 })
-      // Radix Dialog has role="dialog" on the content root.
-      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 })
-      // Close the dialog to reset state for the next test (Escape
-      // is the universal close for Radix Dialog).
-      await page.keyboard.press('Escape')
-      await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5_000 })
-    })
-  }
-})
-
 test.describe('Create pages open from deep-link', () => {
-  // Adding a model and adding an inference provider are pages, not
-  // dialogs: `?new=1` forwards to them.
+  // Create flows that became pages keep their old `?new=1` links working
+  // by forwarding to the page.
   const deepLinks = [
     { label: 'Add inference provider', path: '/llm-providers?new=1', lands: /\/llm-providers\/new$/, heading: 'Add inference provider' },
+    { label: 'Connect API', path: '/apis?new=1', lands: /\/apis\/new$/, heading: 'Connect API' },
+    { label: 'Create tool', path: '/tools?new=1', lands: /\/tools\/new$/, heading: 'Create tool' },
     { label: 'Add model', path: '/models?new=1', lands: /\/models\/new$/, heading: 'Add model' },
     { label: 'Create gateway', path: '/gateways?new=1', lands: /\/gateways\/new$/, heading: 'Create gateway' },
     { label: 'Create app', path: '/apps?new=1', lands: /\/apps\/new$/, heading: 'Create app' },
+    { label: 'Add credential', path: '/credentials?new=1', lands: /\/credentials\/new$/, heading: 'Add credential' },
+    { label: 'Create organization', path: '/organizations?new=1', lands: /\/organizations\/new$/, heading: 'Create organization' },
   ]
 
   for (const link of deepLinks) {

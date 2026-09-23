@@ -177,7 +177,7 @@ describe('RbacSettings', () => {
     await user.click(screen.getByRole('button', { name: /assign users to release-manager/i }))
 
     // Pick the member from the select, then assign.
-    await user.click(await screen.findByRole('combobox', { name: /select member/i }))
+    await user.click(await screen.findByRole('combobox', { name: /^select member$/i }))
     await user.click(await screen.findByText(/Ada Lovelace/i))
     await user.click(screen.getByRole('button', { name: /^assign$/i }))
 
@@ -203,5 +203,47 @@ describe('RbacSettings', () => {
     expect(arg.name).toBe('deny-prod')
     expect(arg.effect).toBe('allow')
     expect(arg.action).toBe('*')
+  })
+
+  // Role create/edit, assignment and the new-policy form are inline in their
+  // cards now, not dialogs.
+  it('edits a role inline, seeded from the row, via PATCH to its id', async () => {
+    mockEntitlements(withRbac)
+    ;(rbacApi.updateRole as ReturnType<typeof vi.fn>).mockResolvedValue({ ...sampleRole })
+    const user = userEvent.setup()
+    render(<RbacSettings />)
+
+    await screen.findByText('release-manager')
+    await user.click(screen.getByRole('button', { name: /^edit release-manager$/i }))
+
+    const form = await screen.findByRole('form', { name: /edit role release-manager/i })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const name = within(form).getByLabelText('Name')
+    expect(name).toHaveValue('release-manager')
+    await user.clear(name)
+    await user.type(name, 'release-lead')
+    await user.click(within(form).getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() =>
+      expect(rbacApi.updateRole).toHaveBeenCalledWith(
+        'role-1',
+        expect.objectContaining({ name: 'release-lead' }),
+      ),
+    )
+    await waitFor(() => expect(screen.queryByRole('form', { name: /edit role/i })).not.toBeInTheDocument())
+  })
+
+  it('cancelling the inline role form closes it without saving', async () => {
+    mockEntitlements(withRbac)
+    const user = userEvent.setup()
+    render(<RbacSettings />)
+
+    await screen.findByText('release-manager')
+    await user.click(screen.getByRole('button', { name: /new role/i }))
+    const form = await screen.findByRole('form', { name: /new custom role/i })
+    await user.click(within(form).getByRole('button', { name: /^cancel$/i }))
+
+    expect(screen.queryByRole('form', { name: /new custom role/i })).not.toBeInTheDocument()
+    expect(rbacApi.createRole).not.toHaveBeenCalled()
   })
 })

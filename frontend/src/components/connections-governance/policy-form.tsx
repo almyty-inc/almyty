@@ -1,19 +1,26 @@
 /**
- * Create or edit one connection policy. A kind picker (fixed when editing)
- * switches the per-kind form: connectors for allow and deny lists and
- * rotation, principal kinds and environments for scope rules, day counts
- * for expiry and rotation. The rule body is built by `buildPolicyRule`.
+ * Create or edit one connection policy, as a page:
+ * /settings/connections/policies/new (optionally `?kind=<kind>`) and
+ * /settings/connections/policies/:policyId.
+ *
+ * A kind picker (fixed when editing) switches the per-kind form:
+ * connectors for allow and deny lists and rotation, principal kinds and
+ * environments for scope rules, day counts for expiry and rotation. The
+ * rule body is built by `buildPolicyRule`.
  */
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2, X } from 'lucide-react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useParams, useSearchParams } from 'react-router-dom'
+import { ShieldCheck, X } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { FormPage, FormSection } from '@/components/layout/form-page'
+import { EmptyState } from '@/components/ui/empty-state'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { errorMessage } from '@/lib/connections-api'
 import {
   POLICIES_QUERY_KEY,
@@ -44,9 +51,10 @@ const SELECT_CLASS =
 
 const ENVIRONMENT_SUGGESTIONS = ['production', 'staging', 'development']
 
-export interface PolicyDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+/** Where the policies table lives; the form returns there. */
+export const CONNECTIONS_SETTINGS_PATH = '/settings/connections'
+
+export interface PolicyFormProps {
   /** Editing this policy; absent means create. */
   policy?: ConnectionPolicy | null
   /** The kind a new policy starts with. */
@@ -54,20 +62,23 @@ export interface PolicyDialogProps {
   onSaved?: (policy: ConnectionPolicy) => void
 }
 
-export function PolicyDialog({ open, onOpenChange, policy, initialKind, onSaved }: PolicyDialogProps) {
+export function PolicyForm({ policy, initialKind, onSaved }: PolicyFormProps) {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const editing = !!policy
 
-  const [values, setValues] = useState<PolicyFormValues>(() => (policy ? policyToForm(policy) : emptyPolicyForm(initialKind)))
+  const [initial] = useState<PolicyFormValues>(() => (policy ? policyToForm(policy) : emptyPolicyForm(initialKind)))
+  const [values, setValues] = useState<PolicyFormValues>(initial)
   const [errors, setErrors] = useState<string[]>([])
+  const errorsRef = useRef<HTMLUListElement>(null)
+  const guard = useLeaveGuard(JSON.stringify(values) !== JSON.stringify(initial))
 
-  // Fresh form each time the dialog opens or the edited policy changes.
+  // A problem list is the one "field" this form marks: bring it into view.
   useEffect(() => {
-    if (!open) return
-    setValues(policy ? policyToForm(policy) : emptyPolicyForm(initialKind))
-    setErrors([])
-  }, [open, policy, initialKind])
+    if (errors.length === 0) return
+    errorsRef.current?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    errorsRef.current?.focus({ preventScroll: true })
+  }, [errors])
 
   const patch = (next: Partial<PolicyFormValues>) => setValues((prev) => ({ ...prev, ...next }))
 
@@ -77,7 +88,7 @@ export function PolicyDialog({ open, onOpenChange, policy, initialKind, onSaved 
       queryClient.invalidateQueries({ queryKey: POLICIES_QUERY_KEY })
       notifications.success(editing ? 'Policy updated' : 'Policy added', `${POLICY_KIND_LABELS[values.kind]} is ${editing ? 'saved' : 'active'}.`)
       onSaved?.(saved)
-      onOpenChange(false)
+      guard.leave(CONNECTIONS_SETTINGS_PATH)
     },
     onError: (error: unknown) => {
       const invalid = readPolicyInvalid(error)
@@ -85,8 +96,7 @@ export function PolicyDialog({ open, onOpenChange, policy, initialKind, onSaved 
     },
   })
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
+  const submit = () => {
     const problems = validatePolicyForm(values)
     setErrors(problems)
     if (problems.length) return
@@ -96,14 +106,18 @@ export function PolicyDialog({ open, onOpenChange, policy, initialKind, onSaved 
   const busy = save.isPending
 
   return (
-    <Dialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" data-testid="policy-dialog">
-        <DialogHeader>
-          <DialogTitle>{editing ? 'Edit policy' : 'Add policy'}</DialogTitle>
-          <DialogDescription>{POLICY_KIND_DESCRIPTIONS[values.kind]}</DialogDescription>
-        </DialogHeader>
-
-        <form onSubmit={submit} className="space-y-4" noValidate data-testid="policy-form">
+    <FormPage
+      title={editing ? 'Edit policy' : 'Add policy'}
+      description={POLICY_KIND_DESCRIPTIONS[values.kind]}
+      back={{ to: CONNECTIONS_SETTINGS_PATH, label: 'Connections' }}
+      guard={guard}
+      onSubmit={submit}
+      submitLabel={editing ? 'Save policy' : 'Add policy'}
+      submitting={busy}
+      width="narrow"
+    >
+      <FormSection>
+        <div className="space-y-4" data-testid="policy-form">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="policy-kind">Kind</Label>
@@ -202,22 +216,51 @@ export function PolicyDialog({ open, onOpenChange, policy, initialKind, onSaved 
           )}
 
           {errors.length > 0 && (
-            <ul role="alert" className="space-y-0.5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive" data-testid="policy-errors">
+            <ul ref={errorsRef} tabIndex={-1} role="alert" className="space-y-0.5 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive" data-testid="policy-errors">
               {errors.map((err) => <li key={err}>{err}</li>)}
             </ul>
           )}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
-            <Button type="submit" disabled={busy}>
-              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-              {busy ? 'Saving...' : editing ? 'Save policy' : 'Add policy'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </FormSection>
+    </FormPage>
   )
+}
+
+/**
+ * The page. A new policy may start on a kind given as `?kind=`; an edit
+ * loads its policy first so the form seeds from stored values.
+ */
+export function ConnectionPolicyFormPage() {
+  const { policyId } = useParams<{ policyId?: string }>()
+  const [searchParams] = useSearchParams()
+  const kindParam = searchParams.get('kind') as ConnectionPolicyKind | null
+  const initialKind = kindParam && (CONNECTION_POLICY_KINDS as readonly string[]).includes(kindParam) ? kindParam : undefined
+
+  const policyQuery = useQuery({
+    queryKey: [...POLICIES_QUERY_KEY, policyId],
+    queryFn: () => connectionPoliciesApi.get(policyId!),
+    enabled: !!policyId,
+  })
+
+  if (!policyId) return <PolicyForm initialKind={initialKind} />
+  if (policyQuery.isLoading) {
+    return (
+      <div className="flex h-32 items-center justify-center">
+        <LoadingSpinner size="md" />
+      </div>
+    )
+  }
+  if (policyQuery.isError || !policyQuery.data) {
+    return (
+      <EmptyState
+        variant="panel"
+        icon={ShieldCheck}
+        title="Policy not found"
+        description="It may have been deleted. Settings > Connections lists the policies that exist."
+      />
+    )
+  }
+  return <PolicyForm key={policyQuery.data.id} policy={policyQuery.data} />
 }
 
 function toInt(raw: string): number {

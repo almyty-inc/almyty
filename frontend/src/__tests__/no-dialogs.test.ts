@@ -181,6 +181,11 @@ const CONVERTED_DIALOGS: string[] = [
   'components/gateways/create-gateway-dialog.tsx',
   'components/gateways/detail/edit-gateway-dialog.tsx',
   'components/gateways/gateway-details-sheet.tsx',
+  'components/analytics/budget-dialog.tsx',
+  'components/connections-governance/policy-dialog.tsx',
+  'components/connections/connection-detail-sheet.tsx',
+  'components/connections/custom-connector-dialog.tsx',
+  'components/settings/approval-policy-dialog.tsx',
 ]
 
 describe('converted dialogs are deleted', () => {

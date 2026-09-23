@@ -56,6 +56,18 @@ const HostedModelPage = lazy(() => import('@/pages/hosted-model').then(m => ({ d
 const LlmProviderNewPage = lazy(() => import('@/pages/llm-provider-new').then(m => ({ default: m.LlmProviderNewPage })))
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ default: m.AnalyticsPage })))
 const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
+const CredentialNewPage = lazy(() => import('@/pages/credential-new').then(m => ({ default: m.CredentialNewPage })))
+const AccessKeyNewPage = lazy(() => import('@/pages/credential-new').then(m => ({ default: m.AccessKeyNewPage })))
+const MemoryNewPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryNewPage })))
+const MemoryTransferPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryTransferPage })))
+const AnalyticsBudgetPage = lazy(() => import('@/pages/analytics-budget').then(m => ({ default: m.AnalyticsBudgetPage })))
+const ApprovalPolicyPage = lazy(() => import('@/pages/approval-policy').then(m => ({ default: m.ApprovalPolicyPage })))
+const ConnectionConnectPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionConnectPage })))
+const ConnectionDetailRoutePage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionDetailRoutePage })))
+const CustomConnectorNewPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.CustomConnectorNewPage })))
+const ConnectionPolicyPage = lazy(() => import('@/pages/connection-pages').then(m => ({ default: m.ConnectionPolicyPage })))
+const OrganizationNewPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationNewPage })))
+const OrganizationDetailPage = lazy(() => import('@/pages/organization-pages').then(m => ({ default: m.OrganizationDetailPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
 const OrganizationsPage = lazy(() => import('@/pages/organizations').then(m => ({ default: m.OrganizationsPage })))
 const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatPage })))
@@ -95,10 +107,13 @@ function DashboardLayoutOutlet() {
 }
 
 // The OAuth callback for the Connections layer lands the browser on
-// /connections?connection=<id>&status=...; the gallery lives under Settings.
+// /connections?connection=<id>&status=...; the connection has a page of its
+// own under Settings, and without an id the gallery is the place to look.
 function ConnectionsRedirect() {
   const location = useLocation()
-  return <Navigate to={`/settings/connections${location.search}`} replace />
+  const id = new URLSearchParams(location.search).get('connection')
+  const to = id ? `/settings/connections/${encodeURIComponent(id)}` : '/settings/connections'
+  return <Navigate to={`${to}${location.search}`} replace />
 }
 
 import { HostedChatPage } from '@/pages/hosted-chat'
@@ -180,12 +195,28 @@ function App() {
           <Route path="/llm-providers" element={<LlmProvidersPage />} />
           <Route path="/llm-providers/new" element={<LlmProviderNewPage />} />
           <Route path="/llm-providers/:id" element={<LlmProviderDetailPage />} />
+          <Route path="/analytics/budgets/new" element={<AnalyticsBudgetPage />} />
+          <Route path="/analytics/budgets/:budgetId/edit" element={<AnalyticsBudgetPage />} />
           <Route path="/analytics/*" element={<AnalyticsPage />} />
           <Route path="/memories" element={<MemoriesPage />} />
+          <Route path="/memories/new" element={<MemoryNewPage />} />
+          <Route path="/memories/transfer" element={<MemoryTransferPage />} />
+          <Route path="/credentials/new" element={<CredentialNewPage />} />
+          <Route path="/credentials/access-keys/new" element={<AccessKeyNewPage />} />
           <Route path="/credentials/*" element={<CredentialsPage />} />
+          <Route path="/settings/approvals/policies/new" element={<ApprovalPolicyPage />} />
+          <Route path="/settings/approvals/policies/:policyId" element={<ApprovalPolicyPage />} />
+          <Route path="/settings/connections/connect" element={<ConnectionConnectPage />} />
+          <Route path="/settings/connections/connect/:connectorKey" element={<ConnectionConnectPage />} />
+          <Route path="/settings/connections/custom/new" element={<CustomConnectorNewPage />} />
+          <Route path="/settings/connections/policies/new" element={<ConnectionPolicyPage />} />
+          <Route path="/settings/connections/policies/:policyId" element={<ConnectionPolicyPage />} />
+          <Route path="/settings/connections/:id" element={<ConnectionDetailRoutePage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/connections" element={<ConnectionsRedirect />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
+          <Route path="/organizations/new" element={<OrganizationNewPage />} />
+          <Route path="/organizations/:id" element={<OrganizationDetailPage />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/shortcuts" element={<ShortcutsPage />} />

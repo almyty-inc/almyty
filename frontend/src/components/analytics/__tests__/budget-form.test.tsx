@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { render } from '../../../test/setup'
-import { BudgetDialog } from '../budget-dialog'
+import { BudgetForm } from '../budget-form'
 import type { SpendBudget } from '@/types/budgets'
 
 /**
@@ -35,13 +35,10 @@ const agents = [
   { id: 'a2', name: 'Support Bot' },
 ]
 
-function setup(props: Partial<React.ComponentProps<typeof BudgetDialog>> = {}) {
+function setup(props: Partial<React.ComponentProps<typeof BudgetForm>> = {}) {
   const onSubmit = vi.fn()
-  const onOpenChange = vi.fn()
   render(
-    <BudgetDialog
-      open
-      onOpenChange={onOpenChange}
+    <BudgetForm
       budget={null}
       agents={agents}
       isSaving={false}
@@ -49,7 +46,7 @@ function setup(props: Partial<React.ComponentProps<typeof BudgetDialog>> = {}) {
       {...props}
     />,
   )
-  return { onSubmit, onOpenChange }
+  return { onSubmit }
 }
 
 // Radix Select uses pointer-capture + scrollIntoView, absent in jsdom.
@@ -61,14 +58,14 @@ beforeEach(() => {
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
 })
 
-describe('the spend budget dialog', () => {
+describe('the spend budget form', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('sends dollars as the integer cents the DTO takes, org-wide by default', async () => {
     const user = userEvent.setup()
     const { onSubmit } = setup()
 
-    await user.type(screen.getByLabelText('Limit (USD)'), '12.34')
+    await user.type(screen.getByLabelText(/^Limit \(USD\)/), '12.34')
     await user.click(screen.getByRole('button', { name: /create budget/i }))
 
     await waitFor(() =>
@@ -87,7 +84,7 @@ describe('the spend budget dialog', () => {
     const user = userEvent.setup()
     const { onSubmit } = setup()
 
-    await user.type(screen.getByLabelText('Limit (USD)'), '0')
+    await user.type(screen.getByLabelText(/^Limit \(USD\)/), '0')
     await user.click(screen.getByRole('button', { name: /create budget/i }))
 
     expect(await screen.findByText(/greater than \$0\.00/i)).toBeInTheDocument()
@@ -98,7 +95,7 @@ describe('the spend budget dialog', () => {
     const user = userEvent.setup()
     const { onSubmit } = setup()
 
-    await user.type(screen.getByLabelText('Limit (USD)'), '50')
+    await user.type(screen.getByLabelText(/^Limit \(USD\)/), '50')
     const pct = screen.getByLabelText(/warn at/i)
     await user.clear(pct)
     await user.type(pct, '150')
@@ -118,7 +115,7 @@ describe('the spend budget dialog', () => {
     )
 
     await user.click(screen.getByRole('combobox', { name: /when the limit is reached/i }))
-    await user.click(await screen.findByText('Block new runs'))
+    await user.click(await screen.findByRole('option', { name: 'Block new runs' }))
 
     await waitFor(() =>
       expect(screen.getByTestId('budget-behavior-consequence')).toHaveTextContent(
@@ -131,7 +128,7 @@ describe('the spend budget dialog', () => {
     const user = userEvent.setup()
     setup()
 
-    await user.type(screen.getByLabelText('Limit (USD)'), '200')
+    await user.type(screen.getByLabelText(/^Limit \(USD\)/), '200')
 
     await waitFor(() =>
       expect(screen.getByTestId('budget-soft-preview')).toHaveTextContent(
@@ -149,9 +146,9 @@ describe('the spend budget dialog', () => {
     const user = userEvent.setup()
     const { onSubmit } = setup()
 
-    await user.type(screen.getByLabelText('Limit (USD)'), '25')
+    await user.type(screen.getByLabelText(/^Limit \(USD\)/), '25')
     await user.click(screen.getByRole('combobox', { name: /applies to/i }))
-    await user.click(await screen.findByText('A single agent'))
+    await user.click(await screen.findByRole('option', { name: 'A single agent' }))
     await user.click(screen.getByRole('button', { name: /create budget/i }))
 
     expect(await screen.findByText(/Choose the agent this budget applies to/i)).toBeInTheDocument()
@@ -162,11 +159,11 @@ describe('the spend budget dialog', () => {
     const user = userEvent.setup()
     const { onSubmit } = setup()
 
-    await user.type(screen.getByLabelText('Limit (USD)'), '25')
+    await user.type(screen.getByLabelText(/^Limit \(USD\)/), '25')
     await user.click(screen.getByRole('combobox', { name: /applies to/i }))
-    await user.click(await screen.findByText('A single agent'))
+    await user.click(await screen.findByRole('option', { name: 'A single agent' }))
     await user.click(await screen.findByRole('combobox', { name: /^agent$/i }))
-    await user.click(await screen.findByText('Support Bot'))
+    await user.click(await screen.findByRole('option', { name: 'Support Bot' }))
     await user.click(screen.getByRole('button', { name: /create budget/i }))
 
     await waitFor(() =>
@@ -181,7 +178,7 @@ describe('the spend budget dialog', () => {
       budget: budget({ limitCents: 4550, periodType: 'day', behavior: 'reject', softThresholdPct: 60, agentId: 'a1' }),
     })
 
-    expect(screen.getByLabelText('Limit (USD)')).toHaveValue(45.5)
+    expect(screen.getByLabelText(/^Limit \(USD\)/)).toHaveValue(45.5)
     expect(screen.getByLabelText(/warn at/i)).toHaveValue(60)
     expect(screen.getByRole('button', { name: /save budget/i })).toBeInTheDocument()
     expect(screen.getByTestId('budget-behavior-consequence')).toHaveTextContent(

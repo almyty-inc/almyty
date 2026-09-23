@@ -119,7 +119,7 @@ describe('ConnectionsTab', () => {
     expect(openaiCard).toHaveTextContent('org-acme')
     expect(openaiCard).toHaveTextContent('2 scopes')
     expect(within(openaiCard).getByTestId('connection-health')).toHaveAttribute('data-status', 'valid')
-    expect(within(openaiCard).getByRole('button', { name: 'Connect OpenAI' })).toHaveTextContent('API key')
+    expect(within(openaiCard).getByRole('link', { name: 'Connect OpenAI' })).toHaveTextContent('API key')
 
     const vllmCard = within(inference).getByTestId('connector-card-office-vllm')
     expect(vllmCard).toHaveTextContent('custom')
@@ -128,7 +128,7 @@ describe('ConnectionsTab', () => {
     const slackCard = within(channels).getByTestId('connector-card-slack')
     expect(slackCard).toHaveTextContent('personal')
     expect(within(slackCard).getByTestId('connection-health')).toHaveAttribute('data-status', 'expired')
-    expect(within(slackCard).getByRole('button', { name: 'Connect Slack' })).toHaveTextContent('Add to Slack')
+    expect(within(slackCard).getByRole('link', { name: 'Connect Slack' })).toHaveTextContent('Add to Slack')
   })
 
   it('filters the gallery by search across connectors and connection names', async () => {
@@ -140,27 +140,17 @@ describe('ConnectionsTab', () => {
     expect(screen.getByTestId('connector-card-slack')).toBeInTheDocument()
   })
 
-  it('opens the detail sheet with health, last error and actions', async () => {
+  // Connecting, a connection's detail and a custom connector are pages now
+  // (connection-pages.test.tsx drives them); the gallery links there.
+  it('links every entry point to its page instead of opening a sheet', async () => {
     render(<ConnectionsTab />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Open My Slack' }))
 
-    expect(await screen.findByTestId('connection-last-error')).toHaveTextContent('token expired')
-    expect(screen.getByRole('button', { name: 'Validate' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Rotate' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Who can use it' })).toBeInTheDocument()
-  })
-
-  it('disconnects after confirming and refreshes the list', async () => {
-    vi.mocked(connectionsApi.remove).mockResolvedValue({ revoked: true })
-    render(<ConnectionsTab />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Open OpenAI prod' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }))
-    expect(await screen.findByText('Disconnect OpenAI prod?')).toBeInTheDocument()
-    fireEvent.click(screen.getAllByRole('button', { name: 'Disconnect' }).at(-1)!)
-
-    await waitFor(() => expect(connectionsApi.remove).toHaveBeenCalledWith('conn-1'))
-    await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Disconnected', expect.any(String)))
+    expect(await screen.findByRole('link', { name: 'Open My Slack' })).toHaveAttribute('href', '/settings/connections/conn-2')
+    expect(screen.getByRole('link', { name: 'Open OpenAI prod' })).toHaveAttribute('href', '/settings/connections/conn-1')
+    expect(screen.getByRole('link', { name: 'Connect OpenAI' })).toHaveAttribute('href', '/settings/connections/connect/openai')
+    expect(screen.getByRole('link', { name: /^Connect$/ })).toHaveAttribute('href', '/settings/connections/connect')
+    expect(screen.getByRole('link', { name: /Add custom connector/ })).toHaveAttribute('href', '/settings/connections/custom/new')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('reads the org toggle from settings and patches it', async () => {

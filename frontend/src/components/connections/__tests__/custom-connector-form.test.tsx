@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 
-import { render } from '../../../test/setup'
-import { CustomConnectorDialog, EMPTY_CUSTOM_CONNECTOR, buildCustomConnectorBody } from '../custom-connector-dialog'
+import { renderAtRoute } from '../../../test/render-at-route'
+import { EMPTY_CUSTOM_CONNECTOR, buildCustomConnectorBody } from '../custom-connector-form'
+import { CustomConnectorNewPage } from '../../../pages/connection-pages'
 import { connectorsApi } from '../../../lib/connections-api'
+
+vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 
 vi.mock('../../../lib/connections-api', async () => {
   const actual = await vi.importActual<typeof import('../../../lib/connections-api')>('../../../lib/connections-api')
@@ -54,30 +57,28 @@ describe('buildCustomConnectorBody', () => {
   })
 })
 
-describe('CustomConnectorDialog', () => {
+describe('/settings/connections/custom/new', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('posts the connector and reports the new key', async () => {
+  it('posts the connector and goes straight on to connecting it', async () => {
     vi.mocked(connectorsApi.create).mockResolvedValue({ key: 'office-vllm', kind: 'inference', displayName: 'Office vLLM', connect: [] })
-    const onCreated = vi.fn()
-    const onOpenChange = vi.fn()
-    render(<CustomConnectorDialog open onOpenChange={onOpenChange} onCreated={onCreated} />)
+    renderAtRoute(<CustomConnectorNewPage />, { path: '/settings/connections/custom/new' })
 
-    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'Office vLLM' } })
-    fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'office-vllm' } })
-    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://models.example.com/v1' } })
+    fireEvent.change(screen.getByLabelText(/^Display name/), { target: { value: 'Office vLLM' } })
+    fireEvent.change(screen.getByLabelText(/^Key/), { target: { value: 'office-vllm' } })
+    fireEvent.change(screen.getByLabelText(/^Base URL/), { target: { value: 'https://models.example.com/v1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add connector' }))
 
     await waitFor(() => expect(connectorsApi.create).toHaveBeenCalledTimes(1))
     expect(vi.mocked(connectorsApi.create).mock.calls[0][0]).toMatchObject({ key: 'office-vllm', kind: 'inference', validation: { kind: 'http' } })
-    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('office-vllm'))
-    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(await screen.findByText('at /settings/connections/connect/office-vllm')).toBeInTheDocument()
   })
 
-  it('shows field errors instead of posting', async () => {
-    render(<CustomConnectorDialog open onOpenChange={() => {}} />)
+  it('shows field errors and focuses the first one instead of posting', async () => {
+    renderAtRoute(<CustomConnectorNewPage />, { path: '/settings/connections/custom/new' })
     fireEvent.click(screen.getByRole('button', { name: 'Add connector' }))
     expect(await screen.findByText('Key is required')).toBeInTheDocument()
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^Display name/)))
     expect(connectorsApi.create).not.toHaveBeenCalled()
   })
 })

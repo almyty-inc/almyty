@@ -1,7 +1,7 @@
 /**
  * One consumer end to end: the Add MCP server page's "Connect an account"
- * action opens the connect sheet, and the connection it returns lands in the
- * page's own payload as credentialId while the pasted token is dropped.
+ * action opens the connect flow inline, and the connection it returns lands
+ * in the page's own payload as credentialId while the pasted token is dropped.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
@@ -80,7 +80,7 @@ describe('Add MCP server page connect entry point', () => {
     expect(screen.queryByTestId('connected-chip')).not.toBeInTheDocument()
   })
 
-  it('opens the sheet filtered to MCP connectors and selects the returned connection on the page', async () => {
+  it('opens the connect flow inline, filtered to MCP connectors, and selects the returned connection on the page', async () => {
     render(<McpServerForm organizationId="org-1" />)
 
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
@@ -91,13 +91,13 @@ describe('Add MCP server page connect entry point', () => {
     expect(await screen.findByText('Connect MCP server')).toBeInTheDocument()
     await waitFor(() => expect(connectorsApi.list).toHaveBeenCalled())
 
-    const sheet = within(screen.getByRole('dialog', { name: 'Connect MCP server' }))
+    const sheet = within(screen.getByTestId('connect-flow'))
     fireEvent.change(await sheet.findByLabelText('Server URL'), { target: { value: 'https://mcp.example.com/mcp' } })
     fireEvent.change(sheet.getByLabelText('Bearer token'), { target: { value: 'tok-secret' } })
     fireEvent.click(sheet.getByRole('button', { name: 'Connect' }))
 
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('mcp-custom', { method: 'api_key', owner: 'org', input: { serverUrl: 'https://mcp.example.com/mcp', apiKey: 'tok-secret' } }))
-    // Connecting inside the sheet does not submit the page's own form.
+    // Connecting inside the inline flow does not submit the page's own form.
     expect(mcpSourcesApi.create).not.toHaveBeenCalled()
     const chip = await screen.findByTestId('connected-chip')
     expect(chip).toHaveTextContent('MCP server')
@@ -111,7 +111,7 @@ describe('Add MCP server page connect entry point', () => {
   it('lets the user drop the connection and go back to a token', async () => {
     render(<McpServerForm organizationId="org-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
-    const sheet = within(await screen.findByRole('dialog', { name: 'Connect MCP server' }))
+    const sheet = within(await screen.findByTestId('connect-flow'))
     fireEvent.change(await sheet.findByLabelText('Server URL'), { target: { value: 'https://mcp.example.com/mcp' } })
     fireEvent.click(sheet.getByRole('button', { name: 'Connect' }))
     await screen.findByTestId('connected-chip')
