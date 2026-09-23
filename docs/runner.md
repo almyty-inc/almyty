@@ -98,6 +98,53 @@ When `RunnerService.tick()` flips a runner to OFFLINE, it returns the runner id 
 
 `WorkspaceService.sweepExpired` runs on the same `workspace-tick` BullMQ job as the runner tick (one queue, one cadence). 24h hard cap on TTL.
 
+### Reclaiming processes for dead workspaces
+
+Releasing or expiring a workspace only moves a database row. The processes it
+started are on the user's own machine, and something has to kill them.
+
+That happens on the **heartbeat**, not on a release message. Every heartbeat the
+runner sends is answered with a `heartbeat` envelope correlated to it, carrying
+`workspaces: { active: [...] }` — the set `WorkspaceService.listActiveForRunner`
+returns for that runner. The runner kills (`ProcessManager.killWorkspace`)
+everything it is hosting outside that set.
+
+A `workspace.release` RPC was the obvious alternative and is the wrong shape:
+drop that one message — pod restart, stream gap, runner mid-reconnect — and the
+user's processes run forever with nothing left to notice. A set re-sent every
+30s self-heals; a missed reconciliation costs one beat.
+
+`active` is the only status reported. `released`, `expired` and `stranded` are
+all terminal and all mean the same thing to the machine holding the processes.
+`stranded` included: it is set when the runner went offline, it is deliberately
+one-way, and a runner that comes back is holding processes for work that is
+never resuming.
+
+Four rules keep this from killing the wrong thing:
+
+- **Absent is not empty.** An ack with no `workspaces` key reclaims nothing; an
+  ack with `active: []` reclaims everything. An older backend never acks at all,
+  and a newer one that could not build the set omits the key rather than sending
+  an empty one — an empty set is an instruction to kill.
+- **Ambiguity reclaims nothing.** An unparseable set, or an ack that does not
+  correlate to a heartbeat this runner actually sent (a replayed frame, say),
+  kills nothing and logs why.
+- **Nothing newer than the question.** A workspace whose oldest running process
+  started after the heartbeat was sent is skipped: the backend's answer predates
+  it. The next beat picks it up.
+- **Say what was killed.** A reclaim writes
+  `workspace <id> reclaimed: killed N process(es) because the backend no longer
+  lists it as active` to stdout. Silently terminating someone's processes erodes
+  trust in the daemon even when it is right.
+
+Backwards compatible both ways, and the protocol version stays at 1: this adds
+payload fields to an existing envelope type. An old runner ignores server-sent
+heartbeat envelopes; a new runner talking to an old backend never receives an
+ack and so reclaims nothing.
+
+Runner half: `packages/runner/src/workspace-reclaimer.ts`. Backend half:
+`RunnerCallService.ackHeartbeat`.
+
 44 unit tests + 6 integration tests against real Postgres.
 
 ## Cluster 3: Runner CLI daemon (`packages/runner`)

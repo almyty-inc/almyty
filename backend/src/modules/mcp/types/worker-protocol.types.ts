@@ -98,3 +98,48 @@ export const WORKER_ERROR_CODES = {
   /** Internal error in the transport or downstream handler. */
   INTERNAL: -32603,
 } as const;
+
+/**
+ * Payload of a `heartbeat` envelope sent runner -> server.
+ *
+ * `v` stays 1: this adds payload fields to an existing envelope type
+ * rather than changing the frame, and `isWorkerEnvelope` hard-rejects
+ * any other version, so a bump would disconnect every deployed runner.
+ */
+export interface HeartbeatPayload {
+  ts: number;
+  /** Number of running processes the runner is currently hosting. */
+  inUse?: number;
+}
+
+/**
+ * Payload of the `heartbeat` envelope the server pushes back down the
+ * command stream, correlated to the heartbeat's own envelope id.
+ *
+ * `workspaces` is the reconciliation instruction the runner acts on: it
+ * is the complete set of workspaces the backend still considers ACTIVE
+ * for that runner, and the runner reclaims (kills) processes for
+ * anything it is hosting outside that set.
+ *
+ * The field is OPTIONAL on purpose, and its absence is not the same as
+ * an empty list:
+ *
+ *   - absent  -> "no answer"; the runner must reclaim nothing. This is
+ *                what an older backend (which never acks) and a backend
+ *                that failed to compute the set both look like.
+ *   - present -> "I looked"; `active` is authoritative, and an empty
+ *                `active` means every workspace on that runner is gone
+ *                and its processes should be reclaimed.
+ *
+ * Keeping those two structurally distinct is the whole point. Folding
+ * them together would either leak processes forever (treat empty as
+ * "no answer") or wipe a user's running work on any serialization slip
+ * (treat absent as "nothing is active").
+ */
+export interface HeartbeatAckPayload {
+  ts: number;
+  workspaces?: {
+    /** Ids of the workspaces still ACTIVE for this runner. */
+    active: string[];
+  };
+}

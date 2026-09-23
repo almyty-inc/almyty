@@ -102,8 +102,11 @@ export class WorkspaceService {
   /**
    * Mark a workspace released. Idempotent: calling release on an
    * already-terminal workspace is a no-op and returns the existing row.
-   * The actual kill of workspace-scoped processes on the runner is
-   * the caller's job; this service only updates the DB record.
+   * This only updates the DB record; the workspace's processes on the
+   * runner are killed by the next heartbeat, which is answered with
+   * `listActiveForRunner` and no longer contains this workspace. There
+   * is no release message to the runner on purpose — see
+   * `RunnerCallService.ackHeartbeat`.
    *
    * The transition is conditional on the row still being ACTIVE, so a
    * release that races the TTL sweep or the stranding fan-out loses
@@ -134,7 +137,17 @@ export class WorkspaceService {
     return this.getOne(id, ownerUserId, organizationId);
   }
 
-  /** List active workspaces for a runner. Used by the heartbeat path. */
+  /**
+   * The workspaces a runner is still allowed to be running processes
+   * for. `RunnerCallService.ackHeartbeat` answers every heartbeat with
+   * this set and the runner kills everything outside it, so membership
+   * here is a kill decision on someone's own machine.
+   *
+   * ACTIVE only. `released`, `expired` and `stranded` are the three
+   * terminal states and all three mean "nothing should still be running
+   * for this workspace" — a terminal row that leaked into this list
+   * would keep its processes alive indefinitely.
+   */
   async listActiveForRunner(runnerId: string): Promise<Workspace[]> {
     return this.workspaces.find({
       where: { runnerId, status: WorkspaceStatus.ACTIVE },
@@ -150,9 +163,9 @@ export class WorkspaceService {
 
   /**
    * Sweep TTL-expired active workspaces. The expiry job calls this
-   * periodically; runner-side cleanup of any processes the workspace
-   * owned is the caller's responsibility (the routing layer hooks the
-   * release envelope dispatch in).
+   * periodically. Nothing is dispatched to the runner here: an expired
+   * workspace simply stops appearing in `listActiveForRunner`, and the
+   * runner's next heartbeat ack reclaims its processes.
    *
    * Each flip is conditional on the row still being ACTIVE, and only
    * the rows this sweep actually claimed come back — a workspace the
