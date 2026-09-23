@@ -24,7 +24,8 @@ interface AuthState {
   authChecked: boolean
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, firstName: string, lastName: string, organizationName: string, captchaToken?: string) => Promise<void>
-  logout: () => void
+  /** Resolves false when the server never confirmed the session was ended. */
+  logout: () => Promise<boolean>
   updateProfile: (data: Partial<User>) => Promise<void>
   checkAuth: () => Promise<void>
 }
@@ -126,12 +127,11 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
-        // Call backend to clear the httpOnly cookie
-        authApi.logout().catch(() => {
-          // Best-effort — even if the call fails, clear local state
-        })
-
+      logout: async () => {
+        // Local state goes first and synchronously (everything up to the
+        // await below runs before the caller gets its promise), so the UI
+        // still responds to the click at once and never waits on the wire.
+        //
         // Legacy cleanup: old builds wrote 'token' + persisted
         // 'auth-storage.token' into localStorage. Remove both so an
         // upgrade from a vulnerable client leaves no residue behind.
@@ -155,6 +155,21 @@ export const useAuthStore = create<AuthState>()(
           token: null,
           isAuthenticated: false,
         })
+
+        // Only the SERVER can clear the httpOnly cookie. This call used to
+        // be fire-and-forget (`.catch(() => {})`), so a sign-out that never
+        // reached the server -- offline, a 5xx, a dropped proxy hop -- still
+        // showed the login page while the session cookie stayed live.
+        // Navigating back to /dashboard then ran checkAuth(), the cookie
+        // authenticated, and the "signed out" user was signed straight back
+        // in; on a shared machine that hands the account to whoever sits
+        // down next. Report the outcome so the caller can say so.
+        try {
+          await authApi.logout()
+          return true
+        } catch {
+          return false
+        }
       },
 
       updateProfile: async (data: Partial<User>) => {

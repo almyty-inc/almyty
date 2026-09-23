@@ -376,7 +376,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
           {generatedKey ? (
             <div className="space-y-4 pt-2">
               <div className="flex items-center gap-2 bg-muted p-3 rounded-lg">
-                <code className="text-sm flex-1 break-all select-all">{generatedKey}</code>
+                <code className="text-sm flex-1 break-all select-all" data-sensitive-text>{generatedKey}</code>
                 <Button variant="ghost" size="sm" aria-label="Copy access key" onClick={() => copySensitive(generatedKey, 'Access key')}><Copy className="h-4 w-4" /></Button>
               </div>
               <div className="flex items-center gap-2 text-amber-600 text-sm"><Key className="h-4 w-4" /> Store this key securely. It cannot be retrieved later.</div>
