@@ -93,8 +93,16 @@ export class ToolGeneratorService {
         const batch = operations.slice(i, i + BATCH_SIZE);
         const batchResults = await Promise.allSettled(
           batch.map(async (operation) => {
+            // Scope the lookup to the API's organization. Operations
+            // are reachable only through their own API today, so this is
+            // defence in depth rather than a live leak — but an unscoped
+            // WHERE on a tenant table is the thing that stops being true
+            // quietly.
             const existingTool = await this.toolRepository.findOne({
-              where: { operationId: operation.id },
+              where: {
+                operationId: operation.id,
+                organizationId: api.organizationId,
+              },
             });
 
             if (existingTool) {
@@ -179,6 +187,16 @@ export class ToolGeneratorService {
 
       // Create the tool
       const tool = this.toolRepository.create({
+        // `Tool.organizationId` is a NOT NULL column with no default
+        // and no @BeforeInsert hook, so omitting it here did not create
+        // an unscoped tool — it made the INSERT fail. The failure was
+        // swallowed by the catch below, which returns null, which the
+        // caller records as `skipped: Failed to generate tool schema`.
+        // Net effect: POST /tools/generate-from-api/:apiId answered
+        // `success: true, "Generated 0 tools successfully"` every time.
+        // The schema-import path never hit this because it goes through
+        // a different helper that does set the field.
+        organizationId: api.organizationId,
         name: toolName,
         description: this.generateToolDescription(operation, api),
         type: toolType,

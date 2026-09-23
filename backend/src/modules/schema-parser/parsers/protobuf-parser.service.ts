@@ -8,6 +8,35 @@ import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../
 /** Hard cap on .proto input size — memory DoS protection. */
 const MAX_PROTO_BYTES = 5 * 1024 * 1024; // 5 MB
 
+/**
+ * Ceiling on how many field-property nodes one parse may emit.
+ *
+ * Input size does not bound output size here. Every RPC method rebuilds
+ * the full property map of its request and response message from
+ * scratch — there is no memoisation — so `|methods| x |fields|` objects
+ * are allocated, and both factors are linear in the .proto. A 171 KB
+ * file (`message Big` with 5000 fields, `service S` with 2000 methods
+ * all taking and returning it) produces ten million objects and a V8
+ * heap OOM, which aborts the process rather than raising something the
+ * `catch` in `parseSchema` could turn into a 400. The BullMQ processor
+ * shares a process with the HTTP server, so the whole backend goes
+ * down with it.
+ *
+ * Exhausting the budget is not an error: the remaining messages come
+ * back with a partial (or empty) property map, which is the same shape
+ * `getMessageProperties` already returns for a type it cannot resolve.
+ */
+const MAX_EXPANDED_PROPERTY_NODES = 1_000_000;
+
+/** Mutable expansion allowance, shared across one parse. */
+interface ExpansionBudget {
+  left: number;
+}
+
+function newExpansionBudget(): ExpansionBudget {
+  return { left: MAX_EXPANDED_PROPERTY_NODES };
+}
+
 @Injectable()
 export class ProtobufParserService implements SchemaParser {
   private readonly logger = new Logger(ProtobufParserService.name);
@@ -19,8 +48,12 @@ export class ProtobufParserService implements SchemaParser {
       }
       const root = protobuf.parse(rawSchema).root;
       
-      const operations = await this.extractOperationsFromProtobuf(root);
-      const resources = await this.extractResourcesFromProtobuf(root);
+      // One budget for the whole parse: operations and resources draw
+      // from the same allowance, so the total emitted is bounded even
+      // when a .proto concentrates its size in one of the two.
+      const budget = newExpansionBudget();
+      const operations = await this.extractOperationsFromProtobuf(root, budget);
+      const resources = await this.extractResourcesFromProtobuf(root, budget);
 
       return {
         version: '1.0.0',
@@ -112,7 +145,10 @@ export class ProtobufParserService implements SchemaParser {
     return resources;
   }
 
-  private async extractOperationsFromProtobuf(root: protobuf.Root): Promise<ParsedOperation[]> {
+  private async extractOperationsFromProtobuf(
+    root: protobuf.Root,
+    budget: ExpansionBudget = newExpansionBudget(),
+  ): Promise<ParsedOperation[]> {
     const operations: ParsedOperation[] = [];
 
     // Recursively traverse to find all services (including inside package namespaces)
@@ -138,7 +174,7 @@ export class ProtobufParserService implements SchemaParser {
               message: {
                 type: 'object',
                 description: `Request message of type: ${method.requestType}`,
-                properties: this.getMessageProperties(root, method.requestType),
+                properties: this.getMessageProperties(root, method.requestType, budget),
               },
             },
             header: {
@@ -159,7 +195,7 @@ export class ProtobufParserService implements SchemaParser {
               schema: {
                 type: 'object',
                 description: `Response message of type: ${method.responseType}`,
-                properties: this.getMessageProperties(root, method.responseType),
+                properties: this.getMessageProperties(root, method.responseType, budget),
               },
             },
             'default': {
@@ -193,12 +229,15 @@ export class ProtobufParserService implements SchemaParser {
     }
   }
 
-  private async extractResourcesFromProtobuf(root: protobuf.Root): Promise<ParsedResource[]> {
+  private async extractResourcesFromProtobuf(
+    root: protobuf.Root,
+    budget: ExpansionBudget = newExpansionBudget(),
+  ): Promise<ParsedResource[]> {
     const resources: ParsedResource[] = [];
 
     // Extract messages (types)
     this.traverseMessages(root, (message) => {
-      const properties = this.extractMessageProperties(message);
+      const properties = this.extractMessageProperties(message, budget);
       
       resources.push({
         name: message.name,
@@ -254,10 +293,15 @@ export class ProtobufParserService implements SchemaParser {
     }
   }
 
-  private extractMessageProperties(message: protobuf.Type): Record<string, any> {
+  private extractMessageProperties(
+    message: protobuf.Type,
+    budget: ExpansionBudget = newExpansionBudget(),
+  ): Record<string, any> {
     const properties: Record<string, any> = {};
 
-    message.fieldsArray.forEach(field => {
+    for (const field of message.fieldsArray) {
+      if (budget.left <= 0) break;
+      budget.left--;
       properties[field.name] = {
         type: this.mapProtobufTypeToJsonType(field.type),
         description: field.comment || `Field: ${field.name}`,
@@ -277,15 +321,19 @@ export class ProtobufParserService implements SchemaParser {
           description: field.comment || `Repeated field: ${field.name}`,
         };
       }
-    });
+    }
 
     return properties;
   }
 
-  private getMessageProperties(root: protobuf.Root, messageTypeName: string): Record<string, any> {
+  private getMessageProperties(
+    root: protobuf.Root,
+    messageTypeName: string,
+    budget: ExpansionBudget = newExpansionBudget(),
+  ): Record<string, any> {
     try {
       const messageType = root.lookupType(messageTypeName);
-      return this.extractMessageProperties(messageType);
+      return this.extractMessageProperties(messageType, budget);
     } catch (error) {
       this.logger.warn(`Could not find message type: ${messageTypeName}`);
       return {};
