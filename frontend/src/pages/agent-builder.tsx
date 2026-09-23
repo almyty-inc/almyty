@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { AlertTriangle, X, ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { AlertTriangle, ListChecks, X, ChevronDown, ChevronRight, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -229,7 +229,7 @@ export function AgentBuilderPage() {
     const errors: string[] = []
 
     if (!agentName.trim()) {
-      errors.push('Agent name is required')
+      errors.push('Give the agent a name.')
     }
 
     if (agentMode === 'workflow') {
@@ -244,10 +244,10 @@ export function AgentBuilderPage() {
     } else {
       // Autonomous mode validation
       if (!agentInstructions.trim()) {
-        errors.push('Instructions are required for autonomous agents')
+        errors.push('Write the agent instructions: what it should do, and how.')
       }
       if (!agentModelConfig.providerId) {
-        errors.push('A model provider must be selected')
+        errors.push('Choose a model provider for the agent to run on.')
       }
     }
 
@@ -255,6 +255,46 @@ export function AgentBuilderPage() {
   }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
 
   const canSave = validationErrors.length === 0
+
+  // ── When the remaining steps become errors ──────────────────────────────
+  //
+  // A brand-new draft opened red: untouched fields reported as failures
+  // before the user had done anything. A blank form has not failed
+  // validation, it has not been filled in yet, and red on first paint is how
+  // people learn to ignore red, which costs us the banners that are real.
+  //
+  // So the same list is shown in a neutral, forward-looking voice until the
+  // user has either been in one of these fields or pressed Save. Nothing
+  // about the rule changes: canSave still gates the mutation, and Save still
+  // refuses and still explains.
+  const [saveAttempted, setSaveAttempted] = useState(false)
+
+  // An agent loaded from the server is not a blank draft: whatever is wrong
+  // with it is wrong with saved data, and worth saying plainly at once.
+  const draftTouched = useMemo(() => {
+    const signals = [
+      agentName !== 'New Agent',
+      agentDescription.trim() !== '',
+      agentInstructions.trim() !== '',
+      agentPersonality.trim() !== '',
+      Boolean(agentModelConfig.providerId),
+      agentToolIds.length > 0,
+      // The first history entry is the starting graph, so this only turns
+      // true once a node or an edge has actually been changed.
+      pipeline.canUndo,
+    ]
+    return signals.some(Boolean)
+  }, [
+    agentName,
+    agentDescription,
+    agentInstructions,
+    agentPersonality,
+    agentModelConfig.providerId,
+    agentToolIds.length,
+    pipeline.canUndo,
+  ])
+
+  const showValidationErrors = isEditing || saveAttempted || draftTouched
 
   // Build pipeline payload
   const buildPipeline = () => {
@@ -342,7 +382,11 @@ export function AgentBuilderPage() {
 
   const handleSave = () => {
     if (!canSave) {
-      errorNotif('Validation Failed', validationErrors.join('. '))
+      // A refused save is the moment the remaining steps become errors, and
+      // it still says which. The button only greys out once they are on
+      // screen, so there is always a way to ask and always an answer.
+      setSaveAttempted(true)
+      errorNotif('Not ready to save yet', validationErrors.join(' '))
       return
     }
     saveMutation.mutate()
@@ -409,29 +453,59 @@ export function AgentBuilderPage() {
         agentVersion={agentData ? (agentData as Agent).version || '1.0.0' : undefined}
         showTestPanel={showTestPanel}
         onToggleTestPanel={() => setShowTestPanel(!showTestPanel)}
-        canSave={canSave}
-        validationErrors={validationErrors}
+        saveDisabled={!canSave && showValidationErrors}
         isSaving={saveMutation.isPending}
         onSave={handleSave}
         onExport={handleExport}
         onBack={() => navigate('/agents')}
       />
 
-      {/* Validation Errors Banner */}
+      {/*
+        One list, two voices. On an untouched new draft these are the steps
+        that are left, drawn like any other hint on the page; once the user
+        has been in a field or pressed Save they are errors, and the styling
+        says so. Both render the same strings, so nothing is hidden either
+        way and Save is gated by canSave in both.
+      */}
       {validationErrors.length > 0 && (
-        <div className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 shrink-0">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-            {/* Capped: mirroring the server means a badly wired graph can
-                report several problems at once, and an uncapped list pushed
-                the canvas off the screen. */}
-            <ul className="text-xs text-destructive space-y-0.5 max-h-24 overflow-y-auto">
-              {validationErrors.map((err, i) => (
-                <li key={i}>{err}</li>
-              ))}
-            </ul>
+        showValidationErrors ? (
+          <div
+            data-testid="builder-validation-errors"
+            role="alert"
+            className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 shrink-0"
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+              {/* Capped: mirroring the server means a badly wired graph can
+                  report several problems at once, and an uncapped list pushed
+                  the canvas off the screen. */}
+              <ul className="text-xs text-destructive space-y-0.5 max-h-24 overflow-y-auto">
+                {validationErrors.map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div
+            data-testid="builder-next-steps"
+            className="px-4 py-2 bg-muted/50 border-b border-border shrink-0"
+          >
+            <div className="flex items-start gap-2">
+              <ListChecks className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground">
+                  To finish this agent
+                </p>
+                <ul className="text-xs text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto mt-0.5">
+                  {validationErrors.map((step, i) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )
       )}
 
       {/* Main content: Workflow pipeline or Autonomous config */}

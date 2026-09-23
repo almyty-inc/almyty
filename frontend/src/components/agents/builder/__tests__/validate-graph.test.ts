@@ -96,8 +96,8 @@ describe('rules the server enforces and the builder did not', () => {
       [e('input_1', 'tool_1'), e('tool_1', 'sub_1'), e('sub_1', 'output_1')],
     )
 
-    expect(errors.join(' ')).toMatch(/Tool Call node "tool_1" is missing a tool/i)
-    expect(errors.join(' ')).toMatch(/Sub-Agent node "sub_1" is missing an agent/i)
+    expect(errors.join(' ')).toMatch(/Choose a tool for the Tool Call step "tool_1"/i)
+    expect(errors.join(' ')).toMatch(/Choose an agent for the Sub-Agent step "sub_1"/i)
   })
 
   it('refuses a Verify node with no checkers, a checker naming nothing, and an unknown policy', () => {
@@ -107,8 +107,10 @@ describe('rules the server enforces and the builder did not', () => {
         [e('input_1', 'verify_1'), e('verify_1', 'output_1')],
       ).join(' ')
 
-    expect(graph({ checkers: [] })).toMatch(/needs at least one checker/i)
-    expect(graph({ checkers: [{ name: 'a' }] })).toMatch(/checker #1 is missing a provider or a role/i)
+    expect(graph({ checkers: [] })).toMatch(/Add at least one checker to the Verify step/i)
+    expect(graph({ checkers: [{ name: 'a' }] })).toMatch(
+      /Choose a provider or a role for checker #1 of the Verify step/i,
+    )
     expect(graph({ checkers: [{ roleKey: 'v' }], policy: 'best_effort' })).toMatch(
       /unknown merge policy "best_effort"/i,
     )
@@ -181,7 +183,44 @@ describe('graphs the server takes, which the builder must keep taking', () => {
     )
 
     expect(errors).toEqual([
-      'Model Call node "llm_1" is missing a provider, a routing policy, or a role',
+      'Pick a model for the Model Call step "llm_1": choose a provider, or a routing policy or role to choose one at run time.',
     ])
+  })
+
+  // The strings are the product here as much as the rules are: a new user
+  // who reads one has to learn what to do next from it, not only what the
+  // graph is missing. Three internal nouns and a node id taught them
+  // nothing, so every message that reports a gap opens with the verb.
+  it('phrases every gap as the step that closes it', () => {
+    const errors = validateWorkflowGraph(
+      [
+        n('llm_1', 'llm_call', {}),
+        n('tool_1', 'tool_call', { toolId: '' }),
+        n('sub_1', 'sub_agent', { agentId: '' }),
+        n('verify_1', 'verify', { checkers: [{ name: 'a' }] }),
+      ],
+      [],
+    )
+
+    expect(errors.length).toBeGreaterThan(0)
+    for (const message of errors) {
+      expect(message).toMatch(/^(Add|Pick|Choose|Connect|Give|Write)\b/)
+    }
+  })
+
+  // A node the user has named is called by that name; the id is only ever
+  // the fallback, because the canvas never draws the id at all.
+  it('calls a node by its label when it has one', () => {
+    const errors = validateWorkflowGraph(
+      [
+        n('input_1', 'input'),
+        n('llm_1', 'llm_call', { label: 'Draft the reply' }),
+        n('output_1', 'output'),
+      ],
+      [e('input_1', 'llm_1'), e('llm_1', 'output_1')],
+    )
+
+    expect(errors.join(' ')).toMatch(/"Draft the reply"/)
+    expect(errors.join(' ')).not.toMatch(/llm_1/)
   })
 })
