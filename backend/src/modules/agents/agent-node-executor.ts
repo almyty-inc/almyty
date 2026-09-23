@@ -1,6 +1,7 @@
 import { Injectable, Logger, Inject, Optional, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { createHash } from 'crypto';
 
 import { AgentTemplateResolver, ExecutionContext } from './agent-template-resolver';
 import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
@@ -21,8 +22,17 @@ import {
   EXTRACT_CONTEXT_INSTRUCTION,
   ExtractedContext,
   ExtractedContextInvalid,
+  extractJsonObject,
   parseExtractedContext,
 } from './strategies/extract-context';
+import {
+  DecideAnswer,
+  DecideAudit,
+  DecideQuestion,
+  abstainOptionOf,
+  validateQuestion,
+} from '../model-catalog/decide/decide-contract';
+import { DEFAULT_SCORING_MODE, scoreOptions } from '../model-catalog/decide/option-scoring';
 import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from './input-schema';
 import { describeLimitTrip } from './run-limits';
 
@@ -137,6 +147,105 @@ function unquoteLiteral(value: string): string {
   return unescaped;
 }
 
+/**
+ * The floor a verbalised option weight is clamped to before it is logged.
+ *
+ * A model that says an option is worth 0 is saying it is impossible, and
+ * `Math.log(0)` is -Infinity, which the scorer refuses as a non-finite
+ * logprob. Flooring keeps such an option at effectively zero mass without
+ * turning one confident exclusion into a failed node.
+ */
+const MIN_DECIDE_WEIGHT = 1e-9;
+
+/**
+ * The instruction a `decision` node sends.
+ *
+ * Kept next to the parse so the shape asked for and the shape accepted
+ * cannot drift apart. It asks for a weight per declared option rather than
+ * for a winner: a winner carries no confidence, and a threshold needs one.
+ */
+function decideInstruction(question: DecideQuestion): string {
+  const options = (question.options ?? [])
+    .map((option) => {
+      const abstain = option.abstain ? '  [abstain: pick this when the state does not answer the question]' : '';
+      return `  ${option.id}${option.description ? ` — ${option.description}` : ''}${abstain}`;
+    })
+    .join('\n');
+
+  return [
+    'You are answering one typed question over a fixed option set.',
+    'Do not pick a winner. Give every option a non-negative weight for how well it fits the state.',
+    'Answer with a single JSON object and nothing else:',
+    '  {"scores": {"<option id>": <number>, ...}}',
+    'Include every option id exactly once, including the abstain option.',
+    '',
+    'Options:',
+    options,
+  ].join('\n');
+}
+
+/**
+ * Read the weights out of a model's answer.
+ *
+ * Strict about the option set and forgiving about the surroundings, for
+ * the same reason `extract_context` is: models wrap JSON in prose and
+ * fences, and failing on that is flakiness unrelated to the work. What it
+ * will not do is default a missing option to zero — an option the model
+ * never mentioned would then read as a confident exclusion, which is the
+ * exact claim a `decide` answer exists to stop a caller making by
+ * accident.
+ */
+function parseDecideWeights(
+  raw: string,
+  optionOrder: string[],
+  nodeId: string,
+): Record<string, number> {
+  const fail = (reason: string): never => {
+    throw Object.assign(new Error(`Decision node '${nodeId}' got an unusable answer: ${reason}`), {
+      code: 'DECIDE_ANSWER_INVALID',
+      raw,
+    });
+  };
+
+  const json = extractJsonObject((raw ?? '').trim());
+  if (!json) fail('no JSON object in the answer');
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json as string);
+  } catch (err) {
+    fail(`the JSON did not parse: ${(err as Error).message}`);
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    fail('the answer was not a JSON object');
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  // Either the documented `{scores: {...}}` envelope or a bare map of
+  // option id to weight. The envelope is what is asked for; the bare map
+  // is what models hand back often enough that refusing it would be
+  // pedantry rather than a contract rule.
+  const scoresRaw = (obj.scores ?? obj) as Record<string, unknown>;
+  if (typeof scoresRaw !== 'object' || scoresRaw === null || Array.isArray(scoresRaw)) {
+    fail('`scores` was not an object of option id to weight');
+  }
+
+  const weights: Record<string, number> = {};
+  for (const optionId of optionOrder) {
+    const value = (scoresRaw as Record<string, unknown>)[optionId];
+    if (value === undefined || value === null) {
+      fail(`option '${optionId}' has no weight; every declared option needs one`);
+    }
+    const num = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(num) || num < 0) {
+      fail(`option '${optionId}' has weight ${JSON.stringify(value)}, which is not a non-negative number`);
+    }
+    weights[optionId] = num;
+  }
+
+  return weights;
+}
+
 @Injectable()
 export class AgentNodeExecutor {
   private readonly logger = new Logger(AgentNodeExecutor.name);
@@ -188,7 +297,7 @@ export class AgentNodeExecutor {
 
   /**
    * Executes a single pipeline node and returns the result.
-   * Supports: input, output, llm_call, tool_call, condition, transform, loop, parallel, merge, sub_agent, verify
+   * Supports: input, output, llm_call, tool_call, condition, transform, loop, parallel, merge, sub_agent, verify, extract_context, decision
    */
   async execute(
     node: AgentPipelineNode,
@@ -260,6 +369,9 @@ export class AgentNodeExecutor {
 
       case 'extract_context':
         return this.executeExtractContextNode(node, context, organizationId, userId, execOptions);
+
+      case 'decision':
+        return this.executeDecisionNode(node, context, organizationId, userId, execOptions);
 
       default:
         throw new Error(`Unsupported node type: ${node.type}`);
@@ -1201,6 +1313,187 @@ export class AgentNodeExecutor {
     }
 
     return { ...result, output: brief };
+  }
+
+
+  /**
+   * Execute a `decision` node — one typed question over a declared option
+   * set, answered with a distribution instead of prose.
+   *
+   * `decide` is an invocation mode, not a second routing system, so the
+   * call goes through `callModelForNode` exactly like an `llm_call` node:
+   * same role / providerId / routing / organization-default ladder, same
+   * accounting, and the same `routing` attribution stamped on the node
+   * result. Only the ask and the parse differ, which is where the
+   * difference belongs.
+   *
+   * Config (node.data || node.config):
+   *   question    — a DecideQuestion; required
+   *   thresholds  — optional minimum winning probability, per option id
+   *   state       — what to decide over; defaults to the upstream outputs
+   *   roleKey / providerId / model / routing / temperature / maxTokens
+   *
+   * The execution path is always `constrained`. Nothing on ChatRequest
+   * exposes token logprobs, so the model verbalises a weight per option
+   * and the answer is normalised over the declared options only. The
+   * contract is explicit that this path is never calibrated, so the answer
+   * carries `calibrated: false` and the numbers are conditional scores —
+   * they order the options and mean nothing on their own.
+   */
+  private async executeDecisionNode(
+    node: AgentPipelineNode,
+    context: ExecutionContext,
+    organizationId: string,
+    userId?: string,
+    options?: NodeExecutionOptions,
+  ): Promise<NodeExecutionResult> {
+    const config = node.data || node.config || {};
+    const question: DecideQuestion | undefined = config.question;
+
+    if (!question || typeof question !== 'object') {
+      throw new Error(`Decision node '${node.id}' is missing 'question' in config`);
+    }
+
+    // The contract rules are the contract's to enforce, not this node's:
+    // re-deriving "a choice question needs an abstain option" here is how
+    // the two copies drift. Thrown before any model is called, so a
+    // question that cannot produce an honest answer costs nothing.
+    validateQuestion(question);
+
+    if (question.type === 'boolean') {
+      // A boolean question declares no options, so it has no abstain
+      // option and therefore no edge for a below-threshold answer to take.
+      // Model it as a choice with an explicit abstain instead of quietly
+      // serving a two-way question that the threshold cannot protect.
+      throw new Error(
+        `Decision node '${node.id}' asks a boolean question, which declares no options and so no ` +
+          'abstain edge. Ask it as a choice question with yes/no/abstain options.',
+      );
+    }
+
+    if (question.optionsOrderPolicy && question.optionsOrderPolicy !== 'asis') {
+      // Refused rather than silently served `asis`: a caller who asked for
+      // the order to be debiased and got the declared order back has no
+      // way to tell from the distribution.
+      throw new Error(
+        `Decision node '${node.id}' asks for optionsOrderPolicy '${question.optionsOrderPolicy}', ` +
+          'which this node does not serve. Only `asis` is implemented.',
+      );
+    }
+
+    const declared = question.options ?? [];
+    const optionOrder = declared.map((option) => option.id);
+
+    const asText = (value: any): string =>
+      typeof value === 'string' ? value : value === undefined ? '' : JSON.stringify(value, null, 2);
+
+    const state =
+      config.state !== undefined
+        ? typeof config.state === 'string'
+          ? this.templateResolver.resolve(config.state, context)
+          : asText(config.state)
+        : this.getIncomingOutputs(node, context, options?.edges).map(asText).join('\n\n---\n\n') ||
+          asText(context.input);
+
+    const messages: ChatRequest['messages'] = [
+      { role: 'system' as any, content: decideInstruction(question) },
+      {
+        role: 'user' as any,
+        content: ['State:', state.trim() || '(empty)', '', 'Question:', question.prompt].join('\n'),
+      },
+    ];
+
+    const result = await this.callModelForNode(node, config, messages, organizationId, userId, options);
+
+    const raw = typeof result.output === 'string' ? result.output : asText(result.output);
+    const weights = parseDecideWeights(raw, optionOrder, node.id);
+
+    // The scorer is the one arithmetic seam for every path: softmax over a
+    // reduced per-option score, restricted to the declared options. Feeding
+    // it log(weight) makes the verbalised weights normalise exactly as the
+    // logits path does, so argmax and entropy are computed once rather than
+    // twice. A zero weight is floored rather than passed as -Infinity,
+    // which the scorer refuses as a non-finite logprob.
+    const scored = scoreOptions(
+      optionOrder.map((optionId) => ({
+        optionId,
+        tokenLogprobs: [Math.log(Math.max(weights[optionId], MIN_DECIDE_WEIGHT))],
+      })),
+      DEFAULT_SCORING_MODE,
+    );
+
+    const distribution: Record<string, number> = {};
+    for (const score of scored.scores) distribution[score.optionId] = score.probability;
+
+    const answer: DecideAnswer = {
+      type: question.type,
+      argmax: scored.argmax,
+      distribution,
+      entropy: scored.entropy,
+      agreement: null,
+      calibrated: false,
+      conditionalScores: true,
+    };
+
+    const audit: DecideAudit = {
+      provider: result.providerId ?? 'unknown',
+      modelRevision: result.model ?? 'unknown',
+      promptHash: createHash('sha256').update(JSON.stringify(messages)).digest('hex'),
+      optionOrder,
+      servingConfig: {
+        temperature: typeof config.temperature === 'number' ? config.temperature : 0,
+        ...(typeof config.seed === 'number' ? { seed: config.seed } : {}),
+        // No `scoring` here, deliberately. The constrained path reads no
+        // token logprobs at all, so naming a mode would assert a
+        // measurement that never happened, and an audit row that claims a
+        // reading it did not take is worse than one that is silent about
+        // it. The field is absent until a scoring path fills it in.
+      },
+      latencyMs: result.executionTime ?? 0,
+      tokens: { input: result.inputTokens ?? 0, output: result.outputTokens ?? 0 },
+    };
+
+    const thresholds: Record<string, number> =
+      config.thresholds && typeof config.thresholds === 'object' ? config.thresholds : {};
+    const rawThreshold = thresholds[answer.argmax];
+    const threshold = typeof rawThreshold === 'number' ? rawThreshold : null;
+    const winningProbability = distribution[answer.argmax];
+    const belowThreshold = threshold !== null && winningProbability < threshold;
+
+    // The whole point of the threshold: an answer the model is not
+    // confident enough about takes the abstain edge rather than the
+    // argmax edge. `validateQuestion` guarantees exactly one abstain
+    // option exists on every question that reaches here, so the edge is
+    // always there to take.
+    //
+    // It stops at abstain. Sending a below-threshold decision to a human
+    // is a separate decision: the pipeline DAG engine has no approval node
+    // (human-in-the-loop lives on the autonomous runtime, as the
+    // `request_approval` tool), and inventing one here would be a second
+    // HITL mechanism rather than a reuse of the existing one.
+    const abstain = abstainOptionOf(question);
+    const selectedOption = belowThreshold && abstain ? abstain.id : answer.argmax;
+
+    const outgoing = (options?.edges ?? []).filter((edge) => edge.source === node.id);
+    const selectedEdge =
+      outgoing.find((edge) => (edge.sourceHandle || edge.label || '') === selectedOption) ?? null;
+
+    return {
+      ...result,
+      output: {
+        __decision: true,
+        selectedOption,
+        selectedEdgeId: selectedEdge?.id ?? null,
+        argmax: answer.argmax,
+        abstained: selectedOption !== answer.argmax,
+        probability: winningProbability,
+        threshold,
+        distribution,
+        answer,
+        audit,
+      },
+      resolvedInput: { messages },
+    };
   }
 
 }
