@@ -2,17 +2,17 @@
  * Registers a connector the catalog does not ship: an OpenAI-compatible
  * server, an MCP server, an S3-compatible registry. Every custom connector
  * gets one api_key method whose schema carries the base URL (prefilled) and
- * the key (secret, optional for keyless servers).
+ * the key (secret, optional for keyless servers). A page at
+ * /settings/connections/custom/new.
  */
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
+import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { connectorsApi, errorMessage } from '@/lib/connections-api'
 import { useNotifications } from '@/store/app'
 import { CONNECTOR_KIND_LABELS, type ConnectorKind, type ConnectorValidation, type CreateConnectorBody } from '@/types/connections'
@@ -112,40 +112,35 @@ export function buildCustomConnectorBody(form: CustomConnectorForm): CustomConne
   }
   return { ok: true, body }
 }
-export interface CustomConnectorDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+export interface CustomConnectorFormProps {
+  /** After the connector is saved; defaults to its connect page. */
   onCreated?: (key: string) => void
 }
 
-export function CustomConnectorDialog({ open, onOpenChange, onCreated }: CustomConnectorDialogProps) {
+/** /settings/connections/custom/new */
+export function CustomConnectorCreate({ onCreated }: CustomConnectorFormProps) {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const [form, setForm] = useState<CustomConnectorForm>(EMPTY_CUSTOM_CONNECTOR)
   const [errors, setErrors] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    if (!open) {
-      setForm(EMPTY_CUSTOM_CONNECTOR)
-      setErrors({})
-    }
-  }, [open])
+  const guard = useLeaveGuard(JSON.stringify(form) !== JSON.stringify(EMPTY_CUSTOM_CONNECTOR))
 
   const create = useMutation({
     mutationFn: (body: CreateConnectorBody) => connectorsApi.create(body),
     onSuccess: (connector, body) => {
       queryClient.invalidateQueries({ queryKey: CONNECTORS_QUERY_KEY })
       notifications.success('Connector added', `${connector?.displayName ?? body.displayName} is in the gallery. Connect it to start using it.`)
-      onOpenChange(false)
-      onCreated?.(connector?.key ?? body.key)
+      const key = connector?.key ?? body.key
+      if (onCreated) onCreated(key)
+      // Straight on to connecting it, as the gallery's own Connect would.
+      else guard.leave(`/settings/connections/connect/${encodeURIComponent(key)}`)
     },
     onError: (error: unknown) => notifications.error('Could not add connector', errorMessage(error, 'The connector was not saved')),
   })
 
   const set = <K extends keyof CustomConnectorForm>(key: K, value: CustomConnectorForm[K]) => setForm((prev) => ({ ...prev, [key]: value }))
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault()
+  const submit = () => {
     const result = buildCustomConnectorBody(form)
     if (!result.ok) {
       setErrors(result.errors)
@@ -158,55 +153,43 @@ export function CustomConnectorDialog({ open, onOpenChange, onCreated }: CustomC
   const meta = CUSTOM_CONNECTOR_KINDS.find((k) => k.kind === form.kind) ?? CUSTOM_CONNECTOR_KINDS[0]
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Add custom connector</DialogTitle>
-          <DialogDescription>Anything with a known API format: an OpenAI-compatible server, an MCP server, an S3 registry. Admins only.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={submit} className="space-y-4" noValidate>
-          <div className="space-y-1.5">
-            <Label htmlFor="custom-connector-kind">Kind</Label>
-            <select id="custom-connector-kind" className={SELECT_CLASS} value={form.kind} onChange={(e) => set('kind', e.target.value as ConnectorKind)}>
-              {CUSTOM_CONNECTOR_KINDS.map((k) => (
-                <option key={k.kind} value={k.kind}>{k.label} ({CONNECTOR_KIND_LABELS[k.kind]})</option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="custom-connector-name">Display name</Label>
-              <Input id="custom-connector-name" value={form.displayName} onChange={(e) => set('displayName', e.target.value)} placeholder="Office vLLM" aria-invalid={!!errors.displayName} />
-              {errors.displayName && <p role="alert" className="text-xs text-destructive">{errors.displayName}</p>}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="custom-connector-key">Key</Label>
-              <Input id="custom-connector-key" className="font-mono" value={form.key} onChange={(e) => set('key', e.target.value)} placeholder="office-vllm" aria-invalid={!!errors.key} />
-              {errors.key && <p role="alert" className="text-xs text-destructive">{errors.key}</p>}
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="custom-connector-url">{meta.urlLabel}</Label>
-            <Input id="custom-connector-url" className="font-mono" value={form.baseUrl} onChange={(e) => set('baseUrl', e.target.value)} placeholder={meta.urlPlaceholder} aria-invalid={!!errors.baseUrl} />
-            {errors.baseUrl && <p role="alert" className="text-xs text-destructive">{errors.baseUrl}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="custom-connector-description">Description <span className="font-normal text-muted-foreground">(optional)</span></Label>
-            <Input id="custom-connector-description" value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="What it is and who runs it" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Checkbox id="custom-connector-requires-key" checked={form.requiresKey} onCheckedChange={(v) => set('requiresKey', v === true)} />
-            <Label htmlFor="custom-connector-requires-key" className="font-normal">Requires an API key</Label>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={create.isPending}>Cancel</Button>
-            <Button type="submit" disabled={create.isPending}>
-              {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-              {create.isPending ? 'Adding...' : 'Add connector'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <FormPage
+      title="Add custom connector"
+      description="Anything with a known API format: an OpenAI-compatible server, an MCP server, an S3 registry. Admins only."
+      back={{ to: '/settings/connections', label: 'Connections' }}
+      guard={guard}
+      onSubmit={submit}
+      submitLabel="Add connector"
+      submitting={create.isPending}
+      width="narrow"
+    >
+      <FormSection>
+        <Field id="custom-connector-kind" label="Kind">
+          <select className={SELECT_CLASS} value={form.kind} onChange={(e) => set('kind', e.target.value as ConnectorKind)}>
+            {CUSTOM_CONNECTOR_KINDS.map((k) => (
+              <option key={k.kind} value={k.kind}>{k.label} ({CONNECTOR_KIND_LABELS[k.kind]})</option>
+            ))}
+          </select>
+        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field id="custom-connector-name" label="Display name" required error={errors.displayName}>
+            <Input value={form.displayName} onChange={(e) => set('displayName', e.target.value)} placeholder="Office vLLM" />
+          </Field>
+          <Field id="custom-connector-key" label="Key" required error={errors.key} hint="Lowercase letters, digits and dashes.">
+            <Input className="font-mono" value={form.key} onChange={(e) => set('key', e.target.value)} placeholder="office-vllm" />
+          </Field>
+        </div>
+        <Field id="custom-connector-url" label={meta.urlLabel} required error={errors.baseUrl}>
+          <Input className="font-mono" value={form.baseUrl} onChange={(e) => set('baseUrl', e.target.value)} placeholder={meta.urlPlaceholder} />
+        </Field>
+        <Field id="custom-connector-description" label={<>Description <span className="font-normal text-muted-foreground">(optional)</span></>}>
+          <Input value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="What it is and who runs it" />
+        </Field>
+        <div className="flex items-center gap-2">
+          <Checkbox id="custom-connector-requires-key" checked={form.requiresKey} onCheckedChange={(v) => set('requiresKey', v === true)} />
+          <Label htmlFor="custom-connector-requires-key" className="font-normal">Requires an API key</Label>
+        </div>
+      </FormSection>
+    </FormPage>
   )
 }

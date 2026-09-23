@@ -80,7 +80,7 @@ describe('AddMcpServerDialog connect entry point', () => {
     expect(screen.queryByTestId('connected-chip')).not.toBeInTheDocument()
   })
 
-  it('opens the sheet filtered to MCP connectors and selects the returned connection in the dialog', async () => {
+  it('opens the connect flow inline, filtered to MCP connectors and selects the returned connection in the dialog', async () => {
     const onOpenChange = vi.fn()
     render(<AddMcpServerDialog open onOpenChange={onOpenChange} organizationId="org-1" />)
 
@@ -93,7 +93,7 @@ describe('AddMcpServerDialog connect entry point', () => {
     expect(onOpenChange).not.toHaveBeenCalled()
     await waitFor(() => expect(connectorsApi.list).toHaveBeenCalled())
 
-    const sheet = within(screen.getByRole('dialog', { name: 'Connect MCP server' }))
+    const sheet = within(screen.getByTestId('connect-flow'))
     fireEvent.change(await sheet.findByLabelText('Server URL'), { target: { value: 'https://mcp.example.com/mcp' } })
     fireEvent.change(sheet.getByLabelText('Bearer token'), { target: { value: 'tok-secret' } })
     fireEvent.click(sheet.getByRole('button', { name: 'Connect' }))
@@ -113,7 +113,7 @@ describe('AddMcpServerDialog connect entry point', () => {
   it('lets the user drop the connection and go back to a token', async () => {
     render(<AddMcpServerDialog open onOpenChange={() => {}} organizationId="org-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
-    const sheet = within(await screen.findByRole('dialog', { name: 'Connect MCP server' }))
+    const sheet = within(await screen.findByTestId('connect-flow'))
     fireEvent.change(await sheet.findByLabelText('Server URL'), { target: { value: 'https://mcp.example.com/mcp' } })
     fireEvent.click(sheet.getByRole('button', { name: 'Connect' }))
     await screen.findByTestId('connected-chip')
