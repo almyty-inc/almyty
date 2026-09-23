@@ -28,6 +28,7 @@ import {
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { CaptchaService } from './captcha.service';
 import { normalizeEmail, isDisposableEmail } from './email-normalization';
+import { effectiveMemberships } from '../../common/authorization/membership';
 
 export interface JwtPayload {
   sub: string;
@@ -329,7 +330,7 @@ export class AuthService {
     user.lastLoginAt = now;
 
     // Audit log (fire-and-forget) - log to user's first organization
-    const orgId = user.organizationMemberships?.[0]?.organizationId;
+    const orgId = effectiveMemberships(user.organizationMemberships)[0]?.organizationId;
     if (orgId) {
       this.auditLogService.log({ organizationId: orgId, userId: user.id, userEmail: user.email, action: AuditAction.LOGIN, resourceType: AuditResource.USER, resourceId: user.id, resourceName: user.email });
     }
@@ -416,7 +417,7 @@ export class AuthService {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      organizations: userWithOrgs.organizationMemberships.map(membership => ({
+      organizations: effectiveMemberships(userWithOrgs.organizationMemberships).map(membership => ({
         id: membership.organization.id,
         name: membership.organization.name,
         role: membership.role,

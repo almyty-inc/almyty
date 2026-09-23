@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './jwt.strategy';
 import { User } from '../../../entities/user.entity';
 
@@ -201,7 +201,10 @@ describe('JwtStrategy', () => {
           { headers: { 'x-organization-id': 'org-other' } } as any,
           payload,
         ),
-      ).rejects.toThrow(UnauthorizedException);
+      // 403, not 401: the session is valid, one request header is not.
+      // Answering 401 made the web client treat a stale organization id
+      // as a dead session and bounce the user back to /auth/login.
+      ).rejects.toThrow(ForbiddenException);
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'user-1' },
         relations: { organizationMemberships: { organization: true } },

@@ -85,16 +85,40 @@ describe('a revoked or pending invite is not a membership', () => {
     const payload = { sub: 'u-attacker', email: 'attacker@example.com' } as any;
     const withHeader = { headers: { 'x-organization-id': VICTIM_ORG } } as any;
 
+    /**
+     * 403, not 401. The refusal is unchanged — a revoked or pending
+     * invite still grants nothing — but the session it was sent with is
+     * valid, and saying 401 made web clients sign the user out over one
+     * bad request header. The code is what lets a client recover.
+     */
+    function expectOrgContextRefusal(promise: Promise<unknown>) {
+      return expect(promise).rejects.toMatchObject({
+        status: 403,
+        response: { code: 'ORGANIZATION_CONTEXT_INVALID' },
+      });
+    }
+
     it('refuses X-Organization-Id naming an org whose invite was revoked', async () => {
       userRepository.findOne.mockResolvedValue(userWith(REVOKED_INVITE));
       await expect(strategy.validate(withHeader, payload)).rejects.toBeInstanceOf(
-        UnauthorizedException,
+        ForbiddenException,
       );
+      userRepository.findOne.mockResolvedValue(userWith(REVOKED_INVITE));
+      await expectOrgContextRefusal(strategy.validate(withHeader, payload));
     });
 
     it('refuses X-Organization-Id naming an org whose invite is unaccepted', async () => {
       userRepository.findOne.mockResolvedValue(userWith(PENDING_INVITE));
       await expect(strategy.validate(withHeader, payload)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      userRepository.findOne.mockResolvedValue(userWith(PENDING_INVITE));
+      await expectOrgContextRefusal(strategy.validate(withHeader, payload));
+    });
+
+    it('never answers a stale org header with 401, which clients read as a dead session', async () => {
+      userRepository.findOne.mockResolvedValue(userWith(REVOKED_INVITE));
+      await expect(strategy.validate(withHeader, payload)).rejects.not.toBeInstanceOf(
         UnauthorizedException,
       );
     });

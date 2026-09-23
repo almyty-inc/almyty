@@ -100,6 +100,9 @@ describe('AgentExecutionEngine', () => {
     agentExecutionRepo = {
       create: jest.fn(),
       save: jest.fn(),
+      // Terminal writes are a guarded UPDATE now (see commitTerminal),
+      // not a whole-entity save; affected>0 means this write won.
+      update: jest.fn(async () => ({ affected: 1 })),
     };
 
     const mockNodeExecutor = {
@@ -1018,13 +1021,13 @@ describe('AgentExecutionEngine', () => {
 
       agentExecutionRepo.create.mockReturnValue(execution);
       // The run completes its nodes, then the final row write blows up —
-      // a DB blip at the end of a run.
-      let saves = 0;
-      agentExecutionRepo.save.mockImplementation((e: any) => {
-        saves += 1;
-        if (saves >= 2) return Promise.reject(new Error('connection terminated unexpectedly'));
-        return Promise.resolve(e);
-      });
+      // a DB blip at the end of a run. That final write is the guarded
+      // UPDATE in commitTerminal, not a save: the initial insert is the
+      // only save() left on this path.
+      agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
+      agentExecutionRepo.update.mockImplementation(() =>
+        Promise.reject(new Error('connection terminated unexpectedly')),
+      );
       agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
 
       const bump = jest

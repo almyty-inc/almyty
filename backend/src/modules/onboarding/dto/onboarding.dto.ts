@@ -1,3 +1,4 @@
+import { IsBoolean, IsOptional } from 'class-validator';
 /**
  * Shape of the onboarding checklist state returned by
  * GET /organizations/:organizationId/onboarding.
@@ -35,7 +36,16 @@ export interface OnboardingState {
   activatedRealAt: string | null;
 }
 
+/**
+ * The global ValidationPipe runs with `forbidNonWhitelisted: true`, and a
+ * property with no class-validator decorator is not whitelisted. Without
+ * these, PATCH .../onboarding answered 400 "property dismissed should not
+ * exist" for the one field it exists to accept, so reopening the getting
+ * started card failed every time.
+ */
 export class PatchOnboardingDto {
+  @IsOptional()
+  @IsBoolean()
   dismissed?: boolean;
 }
 

@@ -45,6 +45,54 @@ export type Protocol =
   | 'dashscope_native'
   | 'embeddings'
   | 'rerank';
+/**
+ * The wire shapes that can score a caller-supplied continuation.
+ *
+ * Same rule as `Protocol` above: a scoring shape is ONE implementation
+ * that many serving engines share, so it is code, and which engine speaks
+ * which shape is data. Two exist because the open serving engines settled
+ * on two conventions, not because two vendors wanted different things.
+ *
+ * - `openai_completions_echo`: the legacy completions route with
+ *   `echo: true` and `logprobs`, which returns the logprob of every prompt
+ *   token as well as the generated ones. Feeding the prompt plus the
+ *   option as the prompt and reading back the option's own tokens is a
+ *   teacher-forced score. vLLM's `prompt_logprobs` is the same idea on the
+ *   same route.
+ * - `tgi_decoder_input_details`: a generate route that returns prefill
+ *   token logprobs when asked for input details, which is the same
+ *   measurement arrived at from the other direction.
+ *
+ * Neither is the chat-completions route. Chat completions can report the
+ * logprobs of tokens the model CHOSE, which is a different quantity: it
+ * cannot tell you the probability of a string the model did not pick, and
+ * scoring options is entirely a question about strings the model did not
+ * pick.
+ */
+export type ScoringProtocol = 'openai_completions_echo' | 'tgi_decoder_input_details';
+
+/**
+ * Where a scoring call goes, when the surface has one.
+ *
+ * NO SHIPPED VENDOR PROFILE SETS THIS, and that is the honest state of the
+ * world rather than an omission. Every profile in this file points at a
+ * chat-completions surface, and no hosted vendor in the list documents a
+ * teacher-forced scoring route on it. A card that claims it can score
+ * carries its own route on `endpointRef.scoring` instead, which is the
+ * shape that fits the case this exists for: a serving engine the customer
+ * runs, reached through a generic provider row, where the base URL is a
+ * box rather than a brand.
+ *
+ * The field lives here anyway because this is where a vendor fact belongs
+ * the day a vendor documents one, and because putting it here keeps the
+ * answer to "can this surface score" in the same row as the rest of what
+ * the surface can do, rather than in a second list that drifts.
+ */
+export interface ScoringBinding {
+  protocol: ScoringProtocol;
+  /** Appended to the binding's base for a scoring call. */
+  path: string;
+}
 
 /**
  * How the key reaches the vendor. Orthogonal to protocol: Vertex minting a
@@ -82,6 +130,11 @@ export interface ProtocolBinding {
    * a miss surfaces as NO_MODEL_CONFIGURED.
    */
   listingPath: string | null;
+  /**
+   * Where a teacher-forced scoring call goes on this binding, absent when
+   * the surface documents none. Absent is the normal answer today.
+   */
+  scoring?: ScoringBinding;
 }
 
 export interface ProviderProfile {

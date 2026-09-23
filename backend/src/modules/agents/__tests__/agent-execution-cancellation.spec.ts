@@ -20,46 +20,9 @@ import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentExecutionStateHelper } from '../agent-execution-state.helper';
 import { AgentNodeExecutor } from '../agent-node-executor';
 import { AgentWebhookService } from '../agent-webhook.service';
-import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entity';
+import { Agent, AgentPipeline } from '../../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus } from '../../../entities/agent-execution.entity';
-
-function makeExecutionRow(overrides: Partial<AgentExecution> = {}): AgentExecution {
-  const exec = new AgentExecution();
-  exec.id = 'exec-1';
-  exec.agentId = 'agent-1';
-  exec.organizationId = 'org-1';
-  exec.userId = 'user-1';
-  exec.status = AgentExecutionStatus.RUNNING;
-  exec.input = {};
-  exec.output = null;
-  exec.nodeResults = {};
-  exec.executionTime = 0;
-  exec.totalCost = 0;
-  exec.totalTokens = 0;
-  exec.error = null as any;
-  exec.metadata = {};
-  return Object.assign(exec, overrides);
-}
-
-/** A repository that only hands back rows matching the whole `where`. */
-function fakeExecutionRepo(rows: AgentExecution[]) {
-  const saved: AgentExecution[] = [];
-  return {
-    saved,
-    create: jest.fn((v: any) => Object.assign(makeExecutionRow(), v)),
-    save: jest.fn(async (e: AgentExecution) => {
-      saved.push(Object.assign(new AgentExecution(), e));
-      return e;
-    }),
-    findOne: jest.fn(async ({ where }: any) => {
-      return (
-        rows.find((r) =>
-          Object.entries(where).every(([k, v]) => (r as any)[k] === v),
-        ) ?? null
-      );
-    }),
-  };
-}
+import { fakeExecutionRepo, makeAgent, makeExecutionRow } from './agent-execution.fixtures';
 
 describe('AgentExecutionCancellationService', () => {
   describe('cancel', () => {
@@ -189,23 +152,7 @@ describe('AgentExecutionCancellationService', () => {
 
 // ── The engine actually stops ────────────────────────────────────────────
 
-function makeAgent(pipeline: AgentPipeline): Agent {
-  const agent = new Agent();
-  agent.id = 'agent-1';
-  agent.name = 'Cancellable';
-  agent.organizationId = 'org-1';
-  agent.status = AgentStatus.ACTIVE;
-  agent.pipeline = pipeline;
-  agent.variables = {};
-  agent.settings = {};
-  agent.metadata = {};
-  agent.totalExecutions = 0;
-  agent.successfulExecutions = 0;
-  agent.totalCost = 0;
-  agent.averageExecutionTime = 0;
-  agent.createdBy = 'user-1';
-  return agent;
-}
+// makeAgent now lives in ./agent-execution.fixtures
 
 describe('cancelling reaches the running engine', () => {
   let engine: AgentExecutionEngine;

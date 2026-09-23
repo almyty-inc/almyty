@@ -1,10 +1,10 @@
 import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
 import { findModelNotFound } from '../llm-providers/model-errors';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 
 import { Agent, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
-import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execution.entity';
+import { AgentExecution, AgentExecutionStatus, TERMINAL_EXECUTION_STATUSES } from '../../entities/agent-execution.entity';
 import { AgentNodeExecutor, NodeExecutionResult } from './agent-node-executor';
 import { AgentWebhookService } from './agent-webhook.service';
 import { AgentExecutionStateHelper } from './agent-execution-state.helper';
@@ -254,7 +254,16 @@ export class AgentExecutionEngine {
           ...(compiled.chosenBy ? { strategyChosenBy: compiled.chosenBy } : {}),
           ...(compiled.fallbackReason ? { strategyFallbackReason: compiled.fallbackReason } : {}),
         };
-        await this.agentExecutionRepository.save(execution);
+        // Guarded, and a column update rather than a whole-entity save.
+        // `execution` is held in memory with status RUNNING for the life
+        // of the run, so saving the entity here would write RUNNING back
+        // over a row another replica had just cancelled — resurrecting a
+        // cancelled run in the UI and to any scheduler reading status.
+        // Only the metadata this block just computed needs to land.
+        await this.agentExecutionRepository.update(
+          { id: execution.id, status: Not(In([...TERMINAL_EXECUTION_STATUSES])) },
+          { metadata: execution.metadata },
+        );
       }
 
       // A compiled strategy names roles on its nodes, so the roles have to
@@ -360,7 +369,7 @@ export class AgentExecutionEngine {
           execution.inputTokens = totalInputTokens;
           execution.outputTokens = totalOutputTokens;
           execution.nodeResults = nodeResults;
-          await this.agentExecutionRepository.save(execution);
+          if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
           await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
           this.state.emitEvent(onEvent, {
@@ -382,7 +391,7 @@ export class AgentExecutionEngine {
           execution.error = `Execution timed out after ${maxExecutionTime}ms`;
           execution.executionTime = Date.now() - startTime;
           execution.nodeResults = nodeResults;
-          await this.agentExecutionRepository.save(execution);
+          if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
           await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
           this.state.emitEvent(onEvent, {
@@ -418,7 +427,7 @@ export class AgentExecutionEngine {
           execution.outputTokens = totalOutputTokens;
           execution.nodeResults = nodeResults;
           execution.output = context.nodes;
-          await this.agentExecutionRepository.save(execution);
+          if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
           this.logger.log(`[EXECUTE] Agent ${agent.id} stopped on budget policy: ${budgetVerdict.reason}`);
           return execution;
         }
@@ -433,7 +442,7 @@ export class AgentExecutionEngine {
           execution.inputTokens = totalInputTokens;
           execution.outputTokens = totalOutputTokens;
           execution.nodeResults = nodeResults;
-          await this.agentExecutionRepository.save(execution);
+          if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
           await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
 
           this.state.emitEvent(onEvent, {
@@ -634,7 +643,7 @@ export class AgentExecutionEngine {
           execution.inputTokens = totalInputTokens;
           execution.outputTokens = totalOutputTokens;
           execution.nodeResults = nodeResults;
-          await this.agentExecutionRepository.save(execution);
+          if (!(await this.commitTerminal(execution, agent.id, onEvent, layerRunningCost))) return execution;
           await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, layerRunningCost);
 
           this.state.emitEvent(onEvent, {
@@ -775,6 +784,29 @@ export class AgentExecutionEngine {
             }
           }
 
+          // Handle decision branching: skip every option branch that was
+          // not chosen.
+          //
+          // Without this the decision node is a classifier with a label on
+          // it rather than a router. It would name the option it picked,
+          // the run would proceed down EVERY option edge anyway, and the
+          // failure would not look like a failure: each branch produces a
+          // plausible result and the merge downstream reports success. The
+          // threshold would be the most misleading part, because the whole
+          // point of routing a low-confidence answer to abstain is that the
+          // confident branches do not run.
+          if (node.type === 'decision' && result.output?.__decision) {
+            const chosen = result.output.selectedOption;
+            const outgoingEdges = pipeline.edges.filter(e => e.source === nodeId);
+
+            for (const edge of outgoingEdges) {
+              const handle = edge.sourceHandle || edge.label || '';
+              if (handle && handle !== chosen) {
+                markBranchAsSkipped(edge.target, adjacencyList, skippedNodes, pipeline.edges);
+              }
+            }
+          }
+
           // Capture output node
           if (node.type === 'output') {
             finalOutput = result.output;
@@ -816,7 +848,7 @@ export class AgentExecutionEngine {
         execution.inputTokens = totalInputTokens;
         execution.outputTokens = totalOutputTokens;
         execution.nodeResults = nodeResults;
-        await this.agentExecutionRepository.save(execution);
+        if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
         await this.state.bumpAgentStats(agent.id, false, Date.now() - startTime, totalCost);
         this.state.emitEvent(onEvent, {
           type: 'execution.failed',
@@ -853,7 +885,7 @@ export class AgentExecutionEngine {
         execution.totalTokens = totalTokens;
         execution.inputTokens = totalInputTokens;
         execution.outputTokens = totalOutputTokens;
-        await this.agentExecutionRepository.save(execution);
+        if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
         await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
         this.state.emitEvent(onEvent, {
           type: 'execution.failed',
@@ -888,7 +920,7 @@ export class AgentExecutionEngine {
         execution.totalTokens = totalTokens;
         execution.inputTokens = totalInputTokens;
         execution.outputTokens = totalOutputTokens;
-        await this.agentExecutionRepository.save(execution);
+        if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
 
         await this.state.bumpAgentStats(agent.id, false, executionTime, totalCost);
 
@@ -912,7 +944,7 @@ export class AgentExecutionEngine {
       execution.totalTokens = totalTokens;
       execution.inputTokens = totalInputTokens;
       execution.outputTokens = totalOutputTokens;
-      await this.agentExecutionRepository.save(execution);
+      if (!(await this.commitTerminal(execution, agent.id, onEvent, totalCost))) return execution;
 
       // 9. Update agent stats atomically via SQL UPDATE.
       await this.state.bumpAgentStats(agent.id, true, executionTime, totalCost);
@@ -952,11 +984,28 @@ export class AgentExecutionEngine {
       execution.totalTokens = totalTokens;
       execution.inputTokens = totalInputTokens;
       execution.outputTokens = totalOutputTokens;
+      // Logged before the write, so a crash is still diagnosable even
+      // when the write below turns out to have lost a race and returns
+      // early.
+      this.logger.error(
+        `[EXECUTE] Agent ${agent.id} execution failed: ${error.message} ` +
+          `(nodes=${Object.keys(nodeResults).length}, cost=${totalCost})`,
+        error.stack,
+      );
+
+      // Guarded like every other terminal write: a crash here must not
+      // overwrite a terminal status another replica already recorded —
+      // a cancel, most often.
+      let committed = true;
       try {
-        await this.agentExecutionRepository.save(execution);
+        committed = await this.commitTerminal(execution, agent.id, onEvent, totalCost);
       } catch (saveError) {
         this.logger.error(`[EXECUTE] Failed to persist execution record on crash: ${saveError.message}`);
       }
+      // commitTerminal has already banked the spend and announced the
+      // outcome that stands; announcing this crash over it would tell the
+      // caller their cancelled run failed instead.
+      if (!committed) return execution;
 
       // Separate try, so a failed row write does not also cost us the
       // stats bump — and with the real cost, not 0. The LLM calls the run
@@ -968,12 +1017,6 @@ export class AgentExecutionEngine {
       } catch (statsError) {
         this.logger.error(`[EXECUTE] Failed to bump agent stats on crash: ${statsError.message}`);
       }
-
-      this.logger.error(
-        `[EXECUTE] Agent ${agent.id} execution failed: ${error.message} ` +
-          `(nodes=${Object.keys(nodeResults).length}, cost=${totalCost})`,
-        error.stack,
-      );
 
       this.state.emitEvent(onEvent, {
         type: 'execution.failed',
@@ -993,6 +1036,106 @@ export class AgentExecutionEngine {
       // a controller nothing is listening to.
       this.cancellations?.release(execution.id);
     }
+  }
+
+  /**
+   * Persist a terminal outcome for this run, guarded on the row not
+   * already being terminal, and report whether ours is the one that
+   * landed.
+   *
+   * The API runs more than one replica and the cancellation registry is
+   * per-process, so a cancel routinely lands on a replica that is not the
+   * one running the execution: that replica writes CANCELLED and answers
+   * 200 while this one carries on to the end of the pipeline. An
+   * unguarded `save()` then wrote COMPLETED straight over the CANCELLED
+   * row — the user was told it stopped, it did not, and the record then
+   * claimed it had finished normally. Same shape as the autonomous path's
+   * `commitStep`: a terminal status is final, whoever gets there first.
+   *
+   * This is the half that holds on its own. The cross-replica cancel
+   * signal stops the wasted spend; this stops the lie about it, and keeps
+   * doing so whenever the signal cannot be delivered (no Redis, a dropped
+   * subscription, a replica that started the run before it subscribed).
+   *
+   * When the guard rejects the write, the in-memory entity is refreshed
+   * from the row so the caller returns the outcome that actually stands
+   * rather than the one this replica wanted; the spend this run really
+   * incurred is still banked against the agent; and what any attached
+   * stream is told is `execution.failed`/CANCELLED rather than whatever
+   * this replica was about to announce.
+   */
+  private async commitTerminal(
+    execution: AgentExecution,
+    agentId: string,
+    onEvent: ((event: StreamEvent) => void) | undefined,
+    costForStats: number,
+  ): Promise<boolean> {
+    // Captured before the reload below, which replaces them with the
+    // winning writer's values.
+    const executionTime = execution.executionTime ?? 0;
+
+    // Statuses this write is allowed to land on: the two non-terminal
+    // ones, plus the outcome we are about to write.
+    //
+    // That last entry is not a loophole. The cancellation service records
+    // CANCELLED with status and error alone, because it is answering an
+    // HTTP request and has no idea what the run spent; the engine then
+    // arrives with the cost, the tokens and the node results for the same
+    // CANCELLED outcome. Letting it complete the record it agrees with is
+    // not overwriting somebody else's answer — refusing it would just
+    // lose the spend off a cancelled run.
+    const writableFrom = [
+      AgentExecutionStatus.PENDING,
+      AgentExecutionStatus.RUNNING,
+      execution.status,
+    ];
+
+    const result = await this.agentExecutionRepository.update(
+      { id: execution.id, status: In(writableFrom) },
+      {
+        status: execution.status,
+        error: execution.error,
+        output: execution.output,
+        nodeResults: execution.nodeResults,
+        executionTime: execution.executionTime,
+        totalCost: execution.totalCost,
+        totalTokens: execution.totalTokens,
+        inputTokens: execution.inputTokens,
+        outputTokens: execution.outputTokens,
+        metadata: execution.metadata,
+      },
+    );
+    if ((result.affected ?? 0) > 0) return true;
+
+    // Lost the race. Answer with the row, not with our own intent.
+    const live = await this.agentExecutionRepository.findOne({ where: { id: execution.id } });
+    if (live) Object.assign(execution, live);
+
+    this.logger.warn(
+      `[EXECUTE] Execution ${execution.id} already reached ${execution.status} elsewhere; ` +
+        "discarding this replica's terminal write instead of overwriting it",
+    );
+
+    // The model calls this run made were billed whoever won the race, so
+    // the spend is still banked — as a failure, which is what the row now
+    // says the run was.
+    try {
+      await this.state.bumpAgentStats(agentId, false, executionTime, costForStats);
+    } catch (statsError: any) {
+      this.logger.error(`[EXECUTE] Failed to bump agent stats after a lost terminal write: ${statsError?.message}`);
+    }
+
+    this.state.emitEvent(onEvent, {
+      type: 'execution.failed',
+      data: {
+        error: execution.error ?? 'Execution cancelled',
+        errorType: 'CANCELLED',
+        executionId: execution.id,
+      },
+      timestamp: Date.now(),
+    });
+
+    return false;
   }
 
   /**

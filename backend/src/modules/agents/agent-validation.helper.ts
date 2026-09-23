@@ -1,5 +1,10 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
+import {
+  DecideQuestion,
+  DecideValidationError,
+  validateQuestion,
+} from '../model-catalog/decide/decide-contract';
 
 @Injectable()
 export class AgentValidationHelper {
@@ -161,6 +166,68 @@ export class AgentValidationHelper {
             throw new BadRequestException(
               `Verify node '${node.id}' has invalid policy '${policy}' (expected all_pass | majority | any_fail_blocks)`,
             );
+          }
+          break;
+        }
+
+        case 'decision': {
+          const decisionData = node.data || node.config || {};
+          const question = decisionData.question;
+          if (!question || typeof question !== 'object') {
+            throw new BadRequestException(
+              `Decision node '${node.id}' must have a 'question' in config`,
+            );
+          }
+
+          // The rules a decide question has to satisfy belong to the decide
+          // contract, not to pipeline validation: re-deriving "a choice
+          // question needs exactly one abstain option" here is how the two
+          // copies drift, and the copy that drifts is the one that lets a
+          // forced choice through. Refused at save time as well as at run
+          // time so an unanswerable question never reaches a model.
+          try {
+            validateQuestion(question as DecideQuestion);
+          } catch (err) {
+            if (err instanceof DecideValidationError) {
+              throw new BadRequestException(
+                `Decision node '${node.id}': ${err.message} (${err.code})`,
+              );
+            }
+            throw err;
+          }
+
+          if (question.type === 'boolean') {
+            throw new BadRequestException(
+              `Decision node '${node.id}' asks a boolean question, which declares no options and ` +
+                'so no abstain edge for a below-threshold answer. Ask it as a choice question ' +
+                'with an explicit abstain option.',
+            );
+          }
+
+          const declaredIds = new Set(
+            ((question.options ?? []) as Array<{ id: string }>).map((option) => option.id),
+          );
+          const thresholds = decisionData.thresholds;
+          if (thresholds !== undefined) {
+            if (typeof thresholds !== 'object' || thresholds === null || Array.isArray(thresholds)) {
+              throw new BadRequestException(
+                `Decision node '${node.id}' thresholds must be an object of option id to number`,
+              );
+            }
+            for (const [optionId, value] of Object.entries(thresholds as Record<string, unknown>)) {
+              if (!declaredIds.has(optionId)) {
+                throw new BadRequestException(
+                  `Decision node '${node.id}' sets a threshold for '${optionId}', which the ` +
+                    'question does not declare as an option',
+                );
+              }
+              if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+                throw new BadRequestException(
+                  `Decision node '${node.id}' threshold for '${optionId}' must be a probability ` +
+                    'between 0 and 1',
+                );
+              }
+            }
           }
           break;
         }

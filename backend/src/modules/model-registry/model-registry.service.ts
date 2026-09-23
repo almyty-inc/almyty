@@ -7,6 +7,7 @@ import { join } from 'path';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { Organization } from '../../entities/organization.entity';
+import { validateUrl } from '../../common/security/url-validator';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { ModelManifest, manifestSha, totalSizeBytes, validateManifest } from './manifest';
 import { ParsedRegistryUri, parseRegistryUri } from './registry-uri';
@@ -144,6 +145,24 @@ export class ModelRegistryService implements OnModuleInit {
     const cfg = credential.getDecryptedConfig();
     if (!cfg.bucket || !cfg.accessKeyId || !cfg.secretAccessKey) {
       throw Object.assign(new Error('The registry connection is incomplete (bucket and keys are required)'), { code: 'REGISTRY_CONNECTION_INVALID', credentialId: credential.id });
+    }
+    // The endpoint is whatever an org admin typed into the connection, and
+    // this pod is about to make a request to it: an S3Client pointed at
+    // http://169.254.169.254 or at a cluster-internal address turns
+    // `POST /model-versions` into an outbound probe from inside the
+    // network, with the failure handed back verbatim as an open-port
+    // oracle. The same field is already gated by the connection validator
+    // (connection-validation.service.ts, s3Bucket), but that runs only on
+    // the opt-in test button, so a connection saved and never tested
+    // reached the SDK ungated.
+    if (cfg.endpoint) {
+      const check = validateUrl(String(cfg.endpoint));
+      if (!check.valid) {
+        throw Object.assign(new Error(`The registry connection's endpoint was refused: ${check.error ?? 'URL refused'}`), {
+          code: 'REGISTRY_ENDPOINT_REFUSED',
+          credentialId: credential.id,
+        });
+      }
     }
     return {
       credentialId: credential.id,

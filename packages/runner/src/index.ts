@@ -33,11 +33,19 @@ export {
   WORKER_PROTOCOL_VERSION,
   WORKER_ERROR_CODES,
   isWorkerEnvelope,
+  parseHeartbeatAck,
   type WorkerEnvelope,
   type RequestPayload,
   type ResponsePayload,
   type HeartbeatPayload,
+  type HeartbeatAckPayload,
+  type HeartbeatAckParse,
 } from './protocol.js';
+export {
+  WorkspaceReclaimer,
+  type ReclaimableProcesses,
+  type ReclaimerLog,
+} from './workspace-reclaimer.js';
 export {
   RunnerError,
   RUNNER_ERROR_CODES,

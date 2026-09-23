@@ -79,9 +79,7 @@ describe('the dashboard loading gate', () => {
 
     // Still waiting, rather than claiming the org has nothing.
     expect(document.querySelector('.animate-spin')).toBeInTheDocument()
-    expect(
-      screen.queryByText((_t, el) => el?.tagName === 'DIV' && /Serving$/.test(el?.textContent ?? '')),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /\d+\s*Gateways?/ })).not.toBeInTheDocument()
   })
 
   it('prints the counts once every query has answered', async () => {
@@ -93,13 +91,31 @@ describe('the dashboard loading gate', () => {
 
     render(<DashboardPage />)
 
-    // JSX splits `{count} Gateway Serving` across text nodes, so match on
-    // the element's whole text.
-    const label = await screen.findByText(
-      (_t, el) => el?.tagName === 'DIV' && el?.textContent === 'Gateway Serving',
-    )
-    // The number beside that label is the real one, not a placeholder zero.
-    expect(label.parentElement?.textContent).toBe('1Gateway Serving')
+    // This is an inventory count, not a claim that the gateway is serving.
+    expect(await screen.findByRole('button', { name: /^1\s*Gateway$/ })).toBeInTheDocument()
+  })
+
+  it('labels mixed-state inventory without claiming activity or generation', async () => {
+    ;(gatewaysApi.getAll as any).mockResolvedValue({
+      gateways: [{ id: 'g1', isActive: false }], total: 5,
+    })
+    ;(toolsApi.getAll as any).mockResolvedValue({
+      tools: [{ id: 't1', type: 'javascript' }], total: 37,
+    })
+    ;(apisApi.getAll as any).mockResolvedValue({ apis: [{ id: 'a1' }], total: 1 })
+    ;(agentsApi.getAll as any).mockResolvedValue([
+      { id: 'a1', status: 'active' }, { id: 'a2', status: 'active' },
+      { id: 'a3', status: 'draft' }, { id: 'a4', status: 'draft' },
+    ])
+    ;(analyticsApi.getRequestLogs as any).mockResolvedValue({ logs: [] })
+
+    render(<DashboardPage />)
+
+    expect(await screen.findByRole('button', { name: /^4\s*Agents$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^5\s*Gateways$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^37\s*Tools$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^1\s*API$/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Running|Serving|Generated|Connected/ })).not.toBeInTheDocument()
   })
 
   // The two "Needs Attention" lines were <div onClick> dressed as links.
@@ -159,9 +175,7 @@ describe('the dashboard when a count fails to load', () => {
     )
     // The pipeline row must not appear at all: a zero here is a lie about
     // the org, not a fact about the request.
-    expect(
-      screen.queryByText((_t, el) => el?.tagName === 'DIV' && /Serving$/.test(el?.textContent ?? '')),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /\d+\s*Gateways?/ })).not.toBeInTheDocument()
   })
 
   it('surfaces the backend message and offers a retry that refetches', async () => {
