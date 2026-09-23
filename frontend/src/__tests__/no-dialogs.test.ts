@@ -154,7 +154,14 @@ describe('no dialogs', () => {
  * gone -- a converted dialog left on disk is the "unwired unit" this
  * codebase keeps producing: it compiles, its tests pass, nothing opens it.
  */
-const CONVERTED_DIALOGS: string[] = []
+const CONVERTED_DIALOGS: string[] = [
+  'components/SchemaImportDialog.tsx',
+  'components/apis/create-api-dialog.tsx',
+  'components/tools/add-mcp-server-dialog.tsx',
+  'components/tools/create-tool-dialog.tsx',
+  'components/tools/publish-tool-dialog.tsx',
+  'components/tools/tool-execution-dialog.tsx',
+]
 
 describe('converted dialogs are deleted', () => {
   it.each(CONVERTED_DIALOGS.length ? CONVERTED_DIALOGS : ['(none yet)'])('%s is gone', (p) => {

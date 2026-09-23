@@ -103,7 +103,7 @@ describe('model selection goes through ModelPicker', () => {
       'components/agents/builder/autonomous-config.tsx',
       'components/agents/node-config-panel.tsx',
       'components/agents/detail/verify-config-editor.tsx',
-      'components/tools/create-tool-dialog.tsx',
+      'components/tools/tool-form.tsx',
       'pages/chat.tsx',
     ]
     for (const rel of sites) {
