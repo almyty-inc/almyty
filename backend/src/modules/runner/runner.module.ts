@@ -12,6 +12,7 @@ import { RunnerCallService } from './runner-call.service';
 import { RunnerCapabilityPublisher } from './runner-capability.publisher';
 import { CodingRelayService } from './coding-relay.service';
 import { McpModule } from '../mcp/mcp.module';
+import { WorkspaceModule } from '../workspace/workspace.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 /**
@@ -30,11 +31,19 @@ import { AuthorizationModule } from '../../common/authorization/authorization.mo
  * dispatch — the cycle is McpModule → ToolsModule → RunnerModule →
  * McpModule. forwardRef on either edge is enough; we put it on the
  * runner side because McpModule's surface is the older one.
+ *
+ * forwardRef on WorkspaceModule for the same reason: WorkspaceModule
+ * imports RunnerModule so its TTL tick can drive the runner FSM, and
+ * RunnerCallService imports WorkspaceService so a heartbeat can be
+ * acked with the runner's active-workspace set. Both edges are
+ * forwardRef'd so neither module's file order decides whether the app
+ * boots.
  */
 @Module({
   imports: [
     TypeOrmModule.forFeature([Runner, RunnerSession, Workspace, Tool]),
     forwardRef(() => McpModule),
+    forwardRef(() => WorkspaceModule),
     AuthorizationModule,
   ],
   providers: [RunnerService, RunnerCallService, RunnerCapabilityPublisher, CodingRelayService],

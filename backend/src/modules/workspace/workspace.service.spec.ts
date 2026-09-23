@@ -282,7 +282,52 @@ describe('WorkspaceService', () => {
     expect(workspaces._store.get('b').status).toBe(WorkspaceStatus.RELEASED);
   });
 
-  // ── visibility ──────────────────────────────────────────────────────
+  // ── the set the heartbeat ack reports ──────────────────────────────
+
+  /**
+   * listActiveForRunner is what a runner's heartbeat ack is built from,
+   * and the runner kills processes for every workspace NOT in it. So
+   * the exact membership rule is load-bearing in both directions: a
+   * terminal workspace that leaks into the list keeps its processes
+   * alive forever, and an ACTIVE one that falls out of it has a user's
+   * running work killed underneath them.
+   *
+   * ACTIVE is the only status that belongs. released, expired and
+   * stranded are the three terminal states and every one of them means
+   * "nothing should still be running for this workspace" — stranded
+   * included, since it is set when the runner went offline and is
+   * deliberately one-way, so a runner that comes back is holding
+   * processes for work that is never resuming.
+   */
+  it('listActiveForRunner returns only ACTIVE workspaces for that runner', async () => {
+    const mine = makeRunner();
+    const theirs = makeRunner({ id: 'r-2', name: 'r2' });
+    runners._store.set(mine.id, mine);
+    runners._store.set(theirs.id, theirs);
+
+    const row = (id: string, runnerId: string, status: WorkspaceStatus) => ({
+      id, runnerId, ownerUserId, organizationId, status, ttlAt: null, cwd: '/',
+      isolation: RunnerIsolationTier.HOST,
+      createdAt: new Date(), updatedAt: new Date(), closedAt: null, closeReason: null,
+    } as any);
+
+    workspaces._store.set('a', row('a', mine.id, WorkspaceStatus.ACTIVE));
+    workspaces._store.set('b', row('b', mine.id, WorkspaceStatus.RELEASED));
+    workspaces._store.set('c', row('c', mine.id, WorkspaceStatus.EXPIRED));
+    workspaces._store.set('d', row('d', mine.id, WorkspaceStatus.STRANDED));
+    workspaces._store.set('e', row('e', theirs.id, WorkspaceStatus.ACTIVE));
+
+    const active = await service.listActiveForRunner(mine.id);
+
+    expect(active.map((w) => w.id)).toEqual(['a']);
+  });
+
+  it('listActiveForRunner is empty, not an error, for a runner with nothing active', async () => {
+    const runner = makeRunner();
+    runners._store.set(runner.id, runner);
+    expect(await service.listActiveForRunner(runner.id)).toEqual([]);
+  });
+
 
   it('getOne refuses cross-tenant read', async () => {
     const runner = makeRunner();

@@ -1,12 +1,14 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, forwardRef } from '@nestjs/common';
 import { v7 as uuidv7 } from 'uuid';
 
 import { StreamableHttpTransport } from '../mcp/transports/streamable-http.transport';
 import {
+  HeartbeatAckPayload,
   WorkerEnvelope,
   WorkerErrorPayload,
 } from '../mcp/types/worker-protocol.types';
 import { RunnerService } from './runner.service';
+import { WorkspaceService } from '../workspace/workspace.service';
 import { RunnerState } from '../../entities/runner.entity';
 
 export interface RunnerRequestPayload {
@@ -119,6 +121,10 @@ export class RunnerCallService implements OnModuleDestroy {
   constructor(
     private readonly runners: RunnerService,
     private readonly transport: StreamableHttpTransport,
+    // forwardRef: WorkspaceModule imports RunnerModule for the TTL tick,
+    // and this is the return edge.
+    @Inject(forwardRef(() => WorkspaceService))
+    private readonly workspaces: WorkspaceService,
   ) {
     this.envelopeListener = (env, session) => this.onEnvelope(env, session);
     this.transport.on('envelope', this.envelopeListener);
@@ -235,7 +241,8 @@ export class RunnerCallService implements OnModuleDestroy {
 
   /**
    * Handle runner.hello (link session -> runner) and heartbeat (refresh
-   * lastHeartbeatAt + recompute state) envelopes.
+   * lastHeartbeatAt + recompute state, then ack with the active
+   * workspace set) envelopes.
    */
   private async onLivenessEnvelope(env: WorkerEnvelope, session?: EnvelopeSession): Promise<void> {
     if (!session) return;
@@ -278,6 +285,54 @@ export class RunnerCallService implements OnModuleDestroy {
       }
       this.rememberSession(session.id, runnerId);
       await this.runners.heartbeat(runnerId);
+      await this.ackHeartbeat(session.id, runnerId, env.id);
+    }
+  }
+
+  /**
+   * Answer a heartbeat with the set of workspaces the backend still
+   * considers ACTIVE for this runner, correlated to the heartbeat's own
+   * envelope id.
+   *
+   * This is the server half of workspace cleanup. There is deliberately
+   * no `workspace.release` RPC: a release/expiry message that gets
+   * dropped leaks the user's processes forever, whereas a heartbeat set
+   * is re-sent every 30s, so a missed reconciliation self-heals on the
+   * next beat.
+   *
+   * ACTIVE is the only status reported. `released`, `expired` and
+   * `stranded` are the three terminal states, and every one of them
+   * means the same thing to the machine hosting the processes: nothing
+   * should still be running for that workspace. `stranded` in
+   * particular is set when the runner went OFFLINE — if that runner
+   * comes back (same process, recovered network) its leftover processes
+   * are exactly what needs reclaiming, and stranded is one-way, so the
+   * workspace is never coming back to justify them.
+   *
+   * On failure the ack is sent with no `workspaces` key at all rather
+   * than an empty one: an ack that omits the set means "no answer" to
+   * the runner and reclaims nothing, while an empty `active` array is
+   * an authoritative "you should be hosting nothing".
+   */
+  private async ackHeartbeat(
+    sessionId: string,
+    runnerId: string,
+    correlationId: string,
+  ): Promise<void> {
+    let payload: HeartbeatAckPayload;
+    try {
+      const active = await this.workspaces.listActiveForRunner(runnerId);
+      payload = { ts: Date.now(), workspaces: { active: active.map((w) => w.id) } };
+    } catch (err: any) {
+      this.logger.warn(
+        `could not list active workspaces for runner ${runnerId}: ${err?.message ?? err}; ` +
+          'acking without a workspace set (runner reclaims nothing)',
+      );
+      payload = { ts: Date.now() };
+    }
+    const pushed = this.transport.push(sessionId, 'heartbeat', payload, correlationId);
+    if (!pushed) {
+      this.logger.debug(`heartbeat ack for session ${sessionId} not deliverable`);
     }
   }
 
