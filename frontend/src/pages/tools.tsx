@@ -14,7 +14,6 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
-import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -132,7 +131,6 @@ export function ToolsPage() {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const navigate = useNavigate()
-  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -789,15 +787,6 @@ return new Promise((resolve, reject) => {
                   Go to APIs
                 </a>
               </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                onClick={() => seedSample.mutate()}
-                disabled={seedSample.isPending || !currentOrganization}
-              >
-                {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -862,16 +851,6 @@ return new Promise((resolve, reject) => {
                       <Button onClick={() => navigate('/apis?new=1')}>
                         <Plus className="h-4 w-4 mr-2" />
                         Import API
-                      </Button>
-                    }
-                    secondaryAction={
-                      <Button
-                        variant="outline"
-                        className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                        onClick={() => seedSample.mutate()}
-                        disabled={seedSample.isPending || !currentOrganization}
-                      >
-                        {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
                       </Button>
                     }
                     className="py-16"

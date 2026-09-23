@@ -11,7 +11,7 @@ The `@almyty/mcp-server` package connects an almyty **gateway** to any MCP-compa
 4. Run the server with your gateway ID
 
 ```bash
-$ npx @almyty/mcp-server acme/petstore
+$ npx @almyty/mcp-server acme/billing
 ```
 
 ## How it works
@@ -77,8 +77,8 @@ For a specific gateway:
 ```json
 {
   "mcpServers": {
-    "petstore": {
-      "url": "https://api.almyty.com/acme/petstore"
+    "billing": {
+      "url": "https://api.almyty.com/acme/billing"
     }
   }
 }
@@ -95,7 +95,7 @@ $ claude mcp add almyty --transport http https://api.almyty.com/mcp
 Or for a specific gateway:
 
 ```bash
-$ claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
+$ claude mcp add billing --transport http https://api.almyty.com/acme/billing
 ```
 
 ### Cursor
@@ -161,7 +161,7 @@ If you want skill-first mode (2 tools instead of N, lower token cost), use the l
 
 ```bash
 $ npx @almyty/auth login
-$ claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
+$ claude mcp add billing -- npx -y @almyty/mcp-server acme/billing
 ```
 
 ## Environment variables
@@ -175,10 +175,10 @@ $ claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
 
 ### Finding your gateway ID
 
-Your gateway ID is `org/slug`, shown on the gateway detail page. For example, if your org is "acme" and your gateway slug is "petstore":
+Your gateway ID is `org/slug`, shown on the gateway detail page. For example, if your org is "acme" and your gateway slug is "billing":
 
 ```bash
-$ npx @almyty/mcp-server acme/petstore
+$ npx @almyty/mcp-server acme/billing
 ```
 
 ## Skills as MCP prompts

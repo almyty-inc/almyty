@@ -36,8 +36,8 @@ import { VERSION } from './version.js';
 
 
 // Accept gateway as positional arg or env var:
-//   npx @almyty/mcp-server acme/petstore
-//   ALMYTY_GATEWAY_ID=acme/petstore npx @almyty/mcp-server
+//   npx @almyty/mcp-server acme/billing
+//   ALMYTY_GATEWAY_ID=acme/billing npx @almyty/mcp-server
 const ALMYTY_GATEWAY_ID = process.argv[2] || process.env.ALMYTY_GATEWAY_ID;
 const ALMYTY_MODE = (process.env.ALMYTY_MODE || 'skill-first') as 'skill-first' | 'full';
 
@@ -409,8 +409,8 @@ Environment:
   ALMYTY_MODE        "skill-first" (default) | "full"
 
 Configuration:
-  Claude Code:  claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
-  Cursor:       .cursor/mcp.json -> { "mcpServers": { "petstore": { "command": "npx", "args": ["-y", "@almyty/mcp-server", "acme/petstore"] } } }
+  Claude Code:  claude mcp add billing -- npx -y @almyty/mcp-server acme/billing
+  Cursor:       .cursor/mcp.json -> { "mcpServers": { "billing": { "command": "npx", "args": ["-y", "@almyty/mcp-server", "acme/billing"] } } }
   Copilot:      .vscode/mcp.json -> { "servers": { "almyty": { "command": "npx", "args": ["-y", "@almyty/mcp-server"] } } }
   Gemini:       ~/.gemini/settings.json -> { "mcpServers": { "almyty": { ... } } }
 

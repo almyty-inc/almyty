@@ -105,7 +105,7 @@ almyty chat my-agent                      # interactive REPL with an agent
 almyty models list --selectable           # model cards the router may pick
 almyty models route --objective cheapest  # what the router would choose, and what it passed over
 almyty connections connectors             # what can be connected, and how
-almyty skills install @acme/petstore      # install tools as Agent Skills into Claude Code, Cursor, etc.
+almyty skills install @acme/billing      # install tools as Agent Skills into Claude Code, Cursor, etc.
 almyty mcp                                # run almyty as an MCP server proxy
 almyty acp                                # run almyty as an ACP agent
 almyty runner start --name laptop         # register this machine as a runner
@@ -125,8 +125,8 @@ Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agent
 Install almyty tools as [Agent Skills](https://agentskills.io) into 30 coding agents (Claude Code, Cursor, Copilot, Windsurf, …):
 
 ```bash
-npx @almyty/skills install @acme/petstore
-npx @almyty/skills install @acme/petstore --dry-run   # show every file it would write first
+npx @almyty/skills install @acme/billing
+npx @almyty/skills install @acme/billing --dry-run   # show every file it would write first
 ```
 
 ### MCP

@@ -3,7 +3,7 @@
  *
  * Scripts need to tell "you are not logged in" apart from "the server
  * fell over" without grepping stderr. Every almyty CLI uses this same
- * table, so `npx @almyty/mcp-server acme/petstore || case $? in 3)
+ * table, so `npx @almyty/mcp-server acme/billing || case $? in 3)
  * almyty login;; esac` behaves the same whichever binary produced the
  * code. This one used to exit 1 for a missing credential, which told a
  * supervisor to restart a server that would never start.

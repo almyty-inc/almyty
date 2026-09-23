@@ -1314,18 +1314,8 @@ export interface OnboardingState {
     first_call: boolean
     external_client: boolean
   }
-  sampleWorkspace: boolean
   dismissed: boolean
-  activatedSampleAt: string | null
   activatedRealAt: string | null
-}
-
-export interface SampleWorkspaceResult {
-  apiId: string
-  toolIds: string[]
-  gatewayId: string
-  agentId: string | null
-  created: boolean
 }
 
 export const onboardingApi = {
@@ -1333,10 +1323,6 @@ export const onboardingApi = {
     apiGet(`/organizations/${organizationId}/onboarding`),
   setDismissed: (organizationId: string, dismissed: boolean): Promise<OnboardingState> =>
     apiPatch(`/organizations/${organizationId}/onboarding`, { dismissed }),
-  seedSample: (organizationId: string): Promise<SampleWorkspaceResult> =>
-    apiPost(`/organizations/${organizationId}/sample-workspace`),
-  deleteSample: (organizationId: string): Promise<null> =>
-    apiDel(`/organizations/${organizationId}/sample-workspace`),
 }
 
 export type ApiResponse<T = any> = AxiosResponse<T>

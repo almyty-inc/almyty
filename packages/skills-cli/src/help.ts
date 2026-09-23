@@ -37,7 +37,7 @@ References:
   org/gateway/skill              One skill
   skill-name                     Search by name, install if it is unambiguous
   <uuid>                         A gateway by id
-  A leading @ is optional: @acme/petstore and acme/petstore are the same.
+  A leading @ is optional: @acme/billing and acme/billing are the same.
 
 Install targets:
   --agent, -a <name>             Install to the named agent. Repeatable,
@@ -100,11 +100,11 @@ Exit codes:
 
 Examples:
   npx @almyty/skills gateways
-  npx @almyty/skills install acme/petstore --dry-run
-  npx @almyty/skills install acme/petstore -a codex -a claude
-  npx @almyty/skills install acme/petstore --all --global
+  npx @almyty/skills install acme/billing --dry-run
+  npx @almyty/skills install acme/billing -a codex -a claude
+  npx @almyty/skills install acme/billing --all --global
   npx @almyty/skills search weather --json
-  npx @almyty/skills run acme/petstore/get-pet --petId 123
+  npx @almyty/skills run acme/billing/get-invoice --invoiceId inv_123
 `;
 }
 

@@ -30,7 +30,7 @@ https://api.almyty.com/{org}/{gateway-slug}
 ### Claude Code
 
 ```bash
-claude mcp add petstore --transport http https://api.almyty.com/acme/petstore
+claude mcp add billing --transport http https://api.almyty.com/acme/billing
 ```
 
 Pass your gateway key as an `x-api-key` header (generate it in the gateway's **Authentication** panel).
@@ -42,8 +42,8 @@ Add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "petstore": {
-      "url": "https://api.almyty.com/acme/petstore",
+    "billing": {
+      "url": "https://api.almyty.com/acme/billing",
       "headers": {
         "x-api-key": "your-gateway-key"
       }
@@ -59,8 +59,8 @@ Add to `.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "petstore": {
-      "url": "https://api.almyty.com/acme/petstore",
+    "billing": {
+      "url": "https://api.almyty.com/acme/billing",
       "headers": {
         "x-api-key": "your-gateway-key"
       }
@@ -105,8 +105,8 @@ Tools exposed through the gateway follow the MCP tool format:
 MCP gateways with OAuth enabled expose discovery endpoints automatically:
 
 ```
-https://api.almyty.com/acme/petstore/.well-known/oauth-authorization-server
-https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
+https://api.almyty.com/acme/billing/.well-known/oauth-authorization-server
+https://api.almyty.com/acme/billing/.well-known/oauth-protected-resource
 ```
 
 On 401 responses, the gateway returns a `WWW-Authenticate` header linking to the protected resource metadata so MCP clients can start the OAuth flow automatically. See [Gateway Authentication](/gateways/authentication) for the full OAuth 2.1 walkthrough.
