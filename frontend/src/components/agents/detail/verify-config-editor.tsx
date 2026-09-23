@@ -1,12 +1,14 @@
 /**
- * Configure the autonomous agent's verifier panel from the UI (previously
- * JSON-only). Set enable/policy/triggers/revision-budget and the cross-vendor
- * checker list (each pointed at a provider + model). Saves to agentConfig.verify
- * via PATCH /agents/:id, preserving the rest of agentConfig.
+ * Configure the autonomous agent's verifier panel, inline on the agent page
+ * (it used to be a modal; create and configure flows live on the page).
+ * Set enable/policy/triggers/revision-budget and the cross-vendor checker
+ * list, each reviewer a provider + model from the shared picker. Saves to
+ * agentConfig.verify via PATCH /agents/:id, preserving the rest of
+ * agentConfig.
  */
-import { useState, useEffect } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Loader2, Settings2 } from 'lucide-react'
+import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Plus, Trash2, Loader2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,15 +18,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
-} from '@/components/ui/dialog'
+import { ModelPicker, asProviderList, useProviderList } from '@/components/model-picker'
 
 import { agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 type Policy = 'all_pass' | 'majority' | 'any_fail_blocks'
 type Trigger = 'on_final_output' | 'every_n_steps' | 'on_tool_result'
@@ -36,43 +35,27 @@ const TRIGGERS: { id: Trigger; label: string }[] = [
   { id: 'on_tool_result', label: 'On tool result (advisory)' },
 ]
 
-export function VerifyConfigDialog({ agent }: { agent: Agent }) {
+/** Mounted when the user starts editing, so it seeds from the saved agent each time. */
+export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: () => void }) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
-  const [open, setOpen] = useState(false)
 
-  const { data: providersData } = useQuery<any>({
-    ...llmProvidersQuery,
-  })
-  const providers: any[] = Array.isArray(providersData)
-    ? providersData
-    : providersData?.providers || []
+  const providers = asProviderList(useProviderList().data)
 
   const v = agent.agentConfig?.verify
-  const [enabled, setEnabled] = useState(false)
-  const [policy, setPolicy] = useState<Policy>('any_fail_blocks')
-  const [maxReviseLoops, setMaxReviseLoops] = useState(2)
-  const [triggers, setTriggers] = useState<Trigger[]>(['on_final_output'])
-  const [everyNSteps, setEveryNSteps] = useState(5)
-  const [checkers, setCheckers] = useState<Checker[]>([])
-
-  // Re-seed the form from the agent each time the dialog opens.
-  useEffect(() => {
-    if (!open) return
-    setEnabled(v?.enabled ?? false)
-    setPolicy((v?.policy as Policy) ?? 'any_fail_blocks')
-    setMaxReviseLoops(v?.maxReviseLoops ?? 2)
-    setTriggers((v?.triggers as Trigger[]) ?? ['on_final_output'])
-    setEveryNSteps(v?.everyNSteps ?? 5)
-    setCheckers(
-      (v?.checkers ?? []).map((c) => ({
-        name: c.name ?? '',
-        providerId: c.providerId ?? '',
-        model: c.model ?? '',
-        instructions: c.instructions ?? '',
-      })),
-    )
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const [enabled, setEnabled] = useState(v?.enabled ?? false)
+  const [policy, setPolicy] = useState<Policy>((v?.policy as Policy) ?? 'any_fail_blocks')
+  const [maxReviseLoops, setMaxReviseLoops] = useState(v?.maxReviseLoops ?? 2)
+  const [triggers, setTriggers] = useState<Trigger[]>((v?.triggers as Trigger[]) ?? ['on_final_output'])
+  const [everyNSteps, setEveryNSteps] = useState(v?.everyNSteps ?? 5)
+  const [checkers, setCheckers] = useState<Checker[]>(
+    (v?.checkers ?? []).map((c) => ({
+      name: c.name ?? '',
+      providerId: c.providerId ?? '',
+      model: c.model ?? '',
+      instructions: c.instructions ?? '',
+    })),
+  )
 
   const toggleTrigger = (t: Trigger) =>
     setTriggers((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]))
@@ -105,29 +88,19 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
     onSuccess: () => {
       success('Verification saved')
       queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
-      setOpen(false)
+      onDone()
     },
     onError: (e: any) => errorNotif('Save failed', getApiErrorMessage(e)),
   })
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1.5">
-          <Settings2 className="h-3.5 w-3.5" />
-          Configure
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Verification</DialogTitle>
-          <DialogDescription>
-            A panel of LLM reviewers checks this agent's answers. Point each reviewer at any provider
-            to build a cross-vendor panel.
-          </DialogDescription>
-        </DialogHeader>
+    <section aria-label="Verification settings" className="space-y-4 rounded-md border p-3" data-testid="verify-config-editor">
+      <p className="text-xs text-muted-foreground">
+        A panel of reviewer models checks this agent&apos;s answers. Point each reviewer at a
+        different provider to build a cross-vendor panel.
+      </p>
 
-        <div className="space-y-4 py-2">
+      <div className="space-y-4">
           <div className="flex items-center justify-between">
             <Label htmlFor="verify-enabled">Enable verification</Label>
             <Switch id="verify-enabled" checked={enabled} onCheckedChange={setEnabled} />
@@ -135,7 +108,7 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
 
           {enabled && (
             <>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="verify-merge-policy">Merge policy</Label>
                   <Select value={policy} onValueChange={(p) => setPolicy(p as Policy)}>
@@ -221,22 +194,13 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Select value={c.providerId} onValueChange={(p) => setChecker(i, { providerId: p })}>
-                        <SelectTrigger className="h-8"><SelectValue placeholder="Provider" /></SelectTrigger>
-                        <SelectContent>
-                          {providers.map((p: any) => (
-                            <SelectItem key={p.id} value={p.id}>{p.name || p.type}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        placeholder="Model (optional)"
-                        className="h-8"
-                        value={c.model}
-                        onChange={(e) => setChecker(i, { model: e.target.value })}
-                      />
-                    </div>
+                    <ModelPicker
+                      idPrefix={`verify-reviewer-${i}`}
+                      compact
+                      modelOptional
+                      value={{ providerId: c.providerId, model: c.model }}
+                      onChange={(next) => setChecker(i, { providerId: next.providerId ?? '', model: next.model ?? '' })}
+                    />
                     <Input
                       placeholder="Focus instructions (optional)"
                       className="h-8"
@@ -248,18 +212,17 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
               </div>
             </>
           )}
-        </div>
+      </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={mutation.isPending}>
-            Cancel
-          </Button>
-          <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="gap-1.5">
-            {mutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Save
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <div className="flex justify-end gap-2 border-t pt-3">
+        <Button variant="outline" size="sm" onClick={onDone} disabled={mutation.isPending}>
+          Cancel
+        </Button>
+        <Button size="sm" onClick={() => mutation.mutate()} disabled={mutation.isPending} className="gap-1.5">
+          {mutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          Save verification
+        </Button>
+      </div>
+    </section>
   )
 }

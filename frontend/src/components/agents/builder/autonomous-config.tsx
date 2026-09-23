@@ -2,12 +2,12 @@
  * AutonomousConfig — form cards for autonomous-mode agent configuration.
  *
  * Renders: Personality, Instructions, Model, Tools (grouped + searchable),
- * Memory, Agent Capabilities, Collaboration (multi-agent), and Heartbeat.
- * All state is owned by the parent (AgentBuilderPage) and threaded via props.
+ * Memory, Agent Capabilities, Collaboration (agents and models), and
+ * Heartbeat. All state is owned by the parent (AgentBuilderPage) and
+ * threaded via props.
  */
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Search, X } from 'lucide-react'
+import { Bot, ChevronDown, ChevronRight, Cpu, Search, Trash2, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +17,12 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { ModelPicker } from '@/components/model-picker'
+import type {
+  CollaborationParticipant,
+  CollaborationState,
+  ModelParticipant,
+} from '@/components/agents/builder/collaboration'
 
 export interface AutonomousConfigProps {
   agentId?: string
@@ -26,7 +32,6 @@ export interface AutonomousConfigProps {
   onInstructionsChange: (v: string) => void
   modelConfig: { providerId?: string; model?: string; temperature?: number; maxTokens?: number }
   onModelConfigChange: (v: AutonomousConfigProps['modelConfig']) => void
-  providers: any[]
   toolIds: string[]
   onToolIdsChange: (v: string[]) => void
   tools: any[]
@@ -38,22 +43,8 @@ export interface AutonomousConfigProps {
     runLimits?: RunLimitsConfig
   }
   onAgentConfigChange: (v: AutonomousConfigProps['agentConfig']) => void
-  collaboration: {
-    enabled: boolean
-    strategy: 'sequential' | 'parallel' | 'race' | 'debate'
-    agents: { agentId: string; role?: string }[]
-    sharedBrief?: string
-    rules?: {
-      maxTotalCost?: number
-      maxChainDepth?: number
-      outputFormat?: 'text' | 'json'
-      escalation?: 'never' | 'on_failure' | 'on_low_confidence'
-      conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge'
-    }
-    judgeAgentId?: string
-    maxRounds?: number
-  }
-  onCollaborationChange: (v: AutonomousConfigProps['collaboration']) => void
+  collaboration: CollaborationState
+  onCollaborationChange: (v: CollaborationState) => void
   availableAgents: any[]
   heartbeat: { enabled: boolean; intervalMinutes: number; prompt: string }
   onHeartbeatChange: (v: AutonomousConfigProps['heartbeat']) => void
@@ -63,7 +54,7 @@ export function AutonomousConfig({
   agentId,
   personality, onPersonalityChange,
   instructions, onInstructionsChange,
-  modelConfig, onModelConfigChange, providers,
+  modelConfig, onModelConfigChange,
   toolIds, onToolIdsChange, tools,
   memoryConfig, onMemoryConfigChange,
   agentConfig, onAgentConfigChange,
@@ -101,42 +92,12 @@ export function AutonomousConfig({
       <Card>
         <CardHeader><CardTitle className="text-base">Model configuration</CardTitle></CardHeader>
         <CardContent className="space-y-4">
+          <ModelPicker
+            idPrefix="autonomous"
+            value={{ providerId: modelConfig.providerId, model: modelConfig.model }}
+            onChange={(next) => onModelConfigChange({ ...modelConfig, providerId: next.providerId, model: next.model })}
+          />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm" htmlFor="autonomous-provider">Provider</Label>
-              {providers.length === 0 ? (
-                // A required field with nothing in it is a dead end: save
-                // refuses with "A model provider must be selected", and
-                // opening the empty select showed a 4px sliver with no
-                // items and no explanation. Say what is missing and where
-                // to fix it instead.
-                <div
-                  data-testid="no-providers"
-                  className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
-                >
-                  No model providers connected yet.{' '}
-                  <Link
-                    to="/models?tab=providers&new=1"
-                    className="text-primary underline-offset-2 hover:underline"
-                  >
-                    Connect one
-                  </Link>{' '}
-                  to give this agent a model.
-                </div>
-              ) : (
-                <Select value={modelConfig.providerId || ''} onValueChange={(v) => onModelConfigChange({ ...modelConfig, providerId: v })}>
-                  <SelectTrigger id="autonomous-provider"><SelectValue placeholder="Select provider" /></SelectTrigger>
-                  <SelectContent>
-                    {providers.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.name} ({p.type})</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="autonomous-model" className="text-sm">Model</Label>
-              <Input id="autonomous-model" value={modelConfig.model || ''} onChange={(e) => onModelConfigChange({ ...modelConfig, model: e.target.value })}
-                placeholder="e.g. gpt-4o, claude-sonnet-5" />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="autonomous-temperature" className="text-sm">Temperature</Label>
               <Input id="autonomous-temperature" type="number" min={0} max={2} step={0.1} value={modelConfig.temperature ?? 0.7}
@@ -233,7 +194,7 @@ export function AutonomousConfig({
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={collaboration.enabled}
               onChange={(e) => onCollaborationChange({ ...collaboration, enabled: e.target.checked })} className="rounded" />
-            <div><p className="text-sm font-medium">Enable Multi-Agent Collaboration</p><p className="text-xs text-muted-foreground">Multiple agents work together on each request</p></div>
+            <div><p className="text-sm font-medium">Enable collaboration</p><p className="text-xs text-muted-foreground">Other agents and models work on each request with this one, in the order and shape you choose</p></div>
           </label>
           {collaboration.enabled && (
             <CollaborationConfig agentId={agentId} collaboration={collaboration} onChange={onCollaborationChange} availableAgents={availableAgents} />
@@ -359,12 +320,32 @@ function ToolGroupList({ tools, toolSearch, selectedIds, onSelectedIdsChange, ex
   )
 }
 
+const STRATEGY_HINTS: Record<CollaborationState['strategy'], string> = {
+  sequential: 'This agent answers first, then each participant in order, each reading the previous output.',
+  parallel: 'Every participant answers at once; a judge merges the answers, or they are listed together.',
+  race: 'Every participant answers at once; the first to finish wins and the rest are stopped.',
+  debate: 'Participants answer in rounds, each round reading the last; a judge writes the verdict.',
+}
+
 function CollaborationConfig({ agentId, collaboration, onChange, availableAgents }: {
   agentId?: string
-  collaboration: AutonomousConfigProps['collaboration']
-  onChange: (v: AutonomousConfigProps['collaboration']) => void
+  collaboration: CollaborationState
+  onChange: (v: CollaborationState) => void
   availableAgents: any[]
 }) {
+  const otherAgents = availableAgents.filter((a: any) => a.id !== agentId)
+  const participants = collaboration.participants
+  const setParticipants = (next: CollaborationParticipant[]) => onChange({ ...collaboration, participants: next })
+  const patch = (i: number, next: CollaborationParticipant) => setParticipants(participants.map((p, idx) => (idx === i ? next : p)))
+  const move = (i: number, by: -1 | 1) => {
+    const j = i + by
+    if (j < 0 || j >= participants.length) return
+    const next = [...participants]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    setParticipants(next)
+  }
+  const ordered = collaboration.strategy === 'sequential'
+
   return (
     <div className="space-y-4 pt-2">
       <div className="space-y-2">
@@ -372,50 +353,85 @@ function CollaborationConfig({ agentId, collaboration, onChange, availableAgents
         <Select value={collaboration.strategy} onValueChange={(v: any) => onChange({ ...collaboration, strategy: v })}>
           <SelectTrigger id="autonomous-strategy"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="sequential">Sequential — agents run one after another, piping output to input</SelectItem>
-            <SelectItem value="parallel">Parallel — all agents run simultaneously, results merged</SelectItem>
-            <SelectItem value="race">Race — all agents run, first to finish wins</SelectItem>
-            <SelectItem value="debate">Debate — agents discuss in rounds, judge synthesizes</SelectItem>
+            <SelectItem value="sequential">Sequential</SelectItem>
+            <SelectItem value="parallel">Parallel</SelectItem>
+            <SelectItem value="race">Race</SelectItem>
+            <SelectItem value="debate">Debate</SelectItem>
           </SelectContent>
         </Select>
+        <p className="text-xs text-muted-foreground">{STRATEGY_HINTS[collaboration.strategy]}</p>
       </div>
 
       <div className="space-y-2">
-        <Label className="text-sm">Participating Agents</Label>
-        <div className="space-y-2 max-h-[200px] overflow-y-auto">
-          {availableAgents.filter((a: any) => a.id !== agentId).map((agent: any) => {
-            const isSelected = collaboration.agents.some(a => a.agentId === agent.id)
-            const agentEntry = collaboration.agents.find(a => a.agentId === agent.id)
-            return (
-              <div key={agent.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50">
-                <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
-                  <input type="checkbox" checked={isSelected}
-                    onChange={(e) => {
-                      if (e.target.checked) onChange({ ...collaboration, agents: [...collaboration.agents, { agentId: agent.id }] })
-                      else onChange({ ...collaboration, agents: collaboration.agents.filter(a => a.agentId !== agent.id) })
-                    }} className="rounded" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{agent.name}</p>
-                    {agent.description && <p className="text-xs text-muted-foreground truncate">{agent.description}</p>}
-                  </div>
-                </label>
-                {isSelected && (
-                  <Input placeholder="Role..." value={agentEntry?.role || ''}
-                    onChange={(e) => onChange({ ...collaboration, agents: collaboration.agents.map(a => a.agentId === agent.id ? { ...a, role: e.target.value } : a) })}
-                    className="w-32 h-7 text-xs flex-shrink-0" />
+        <Label className="text-sm">Participants</Label>
+        <p className="text-xs text-muted-foreground">
+          A participant is another agent, or a model called directly. Mix them freely{ordered ? '; they run top to bottom' : ''}.
+        </p>
+        {participants.length === 0 && (
+          <p data-testid="no-participants" className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+            No participants yet. Add a model to run it alongside this agent
+            {otherAgents.length > 0 ? ', or add one of your other agents.' : '. Other agents can join too once you have more than one.'}
+          </p>
+        )}
+        <ol className="space-y-2">
+          {participants.map((p, i) => (
+            <li key={i} className="rounded-md border p-3 space-y-3" data-testid={`participant-${i}`}>
+              <div className="flex items-center gap-2">
+                {p.kind === 'agent' ? <Bot className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden /> : <Cpu className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />}
+                <span className="text-sm font-medium flex-1 shrink-0 whitespace-nowrap">
+                  {ordered ? `${i + 1}. ` : ''}{p.kind === 'agent' ? 'Agent' : 'Model'}
+                </span>
+                <Input
+                  aria-label={`Participant ${i + 1} role`}
+                  placeholder="Role"
+                  value={p.role || ''}
+                  onChange={(e) => patch(i, { ...p, role: e.target.value || undefined })}
+                  className="w-24 min-w-0 sm:w-40 h-7 text-xs"
+                />
+                {ordered && (
+                  <>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label={`Move participant ${i + 1} up`} disabled={i === 0} onClick={() => move(i, -1)}>
+                      <ChevronDown className="h-3.5 w-3.5 rotate-180" />
+                    </Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label={`Move participant ${i + 1} down`} disabled={i === participants.length - 1} onClick={() => move(i, 1)}>
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
                 )}
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7" aria-label={`Remove participant ${i + 1}`} onClick={() => setParticipants(participants.filter((_, idx) => idx !== i))}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
-            )
-          })}
-          {availableAgents.filter((a: any) => a.id !== agentId).length === 0 && (
-            <p className="text-sm text-muted-foreground py-2 text-center">No other agents available.</p>
+              {p.kind === 'agent' ? (
+                <AgentChoice idPrefix={`participant-${i}`} value={p.agentId} agents={otherAgents} onChange={(id) => patch(i, { ...p, agentId: id })} />
+              ) : (
+                <ModelParticipantFields idPrefix={`participant-${i}`} value={p} onChange={(next) => patch(i, next)} />
+              )}
+            </li>
+          ))}
+        </ol>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setParticipants([...participants, { kind: 'model' }])}>
+            <Cpu className="h-3.5 w-3.5 mr-1.5" /> Add model
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={otherAgents.length === 0}
+            onClick={() => setParticipants([...participants, { kind: 'agent', agentId: '' }])}
+          >
+            <Bot className="h-3.5 w-3.5 mr-1.5" /> Add agent
+          </Button>
+          {otherAgents.length === 0 && (
+            <span className="text-xs text-muted-foreground" data-testid="no-other-agents">No other agents yet; models work without one.</span>
           )}
         </div>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="autonomous-shared-brief" className="text-sm">Shared Brief</Label>
-        <Textarea id="autonomous-shared-brief" placeholder="Context shared with all participating agents..." value={collaboration.sharedBrief || ''}
+        <Textarea id="autonomous-shared-brief" placeholder="Context shared with every participant..." value={collaboration.sharedBrief || ''}
           onChange={(e) => onChange({ ...collaboration, sharedBrief: e.target.value })} rows={2} />
       </div>
 
@@ -464,35 +480,105 @@ function CollaborationConfig({ agentId, collaboration, onChange, availableAgents
       </div>
 
       {(collaboration.strategy === 'debate' || collaboration.strategy === 'parallel') && (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="autonomous-judge-agent" className="text-sm">Judge Agent</Label>
-            <Select value={collaboration.judgeAgentId || ''} onValueChange={(v) => onChange({ ...collaboration, judgeAgentId: v })}>
-              <SelectTrigger id="autonomous-judge-agent"><SelectValue placeholder="Select judge" /></SelectTrigger>
-              <SelectContent>
-                {/*
-                  Your first agent has no siblings, so on Debate/Parallel this
-                  select opened on an empty sliver. The three other selects on
-                  this card were given an empty state; this one was missed.
-                */}
-                {availableAgents.length === 0 && (
-                  <div data-testid="no-judge-agents" className="px-3 py-2 text-sm text-muted-foreground">
-                    No other agents yet — create a second agent to judge this one's output.
-                  </div>
-                )}
-                {availableAgents.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          {collaboration.strategy === 'debate' && (
+        <div className="space-y-3 border-t pt-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="autonomous-max-rounds" className="text-sm">Max Rounds</Label>
-              <Input id="autonomous-max-rounds" type="number" min={1} max={10} value={collaboration.maxRounds ?? 3}
-                onChange={(e) => onChange({ ...collaboration, maxRounds: parseInt(e.target.value) })} />
+              <Label htmlFor="autonomous-judge-kind" className="text-sm">Judge</Label>
+              <Select
+                value={collaboration.judge?.kind ?? 'none'}
+                onValueChange={(v) => {
+                  if (v === 'none') onChange({ ...collaboration, judge: undefined })
+                  else if (v === 'model') onChange({ ...collaboration, judge: { kind: 'model' } })
+                  else onChange({ ...collaboration, judge: { kind: 'agent', agentId: '' } })
+                }}
+              >
+                <SelectTrigger id="autonomous-judge-kind"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No judge: list every answer</SelectItem>
+                  <SelectItem value="model">A model</SelectItem>
+                  {/*
+                    Your first agent has no siblings, so an agent judge is
+                    not on offer until there is one; a model judge is.
+                  */}
+                  <SelectItem value="agent" disabled={otherAgents.length === 0}>
+                    {otherAgents.length === 0 ? 'An agent (no other agents yet)' : 'An agent'}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {collaboration.strategy === 'debate' && (
+              <div className="space-y-2">
+                <Label htmlFor="autonomous-max-rounds" className="text-sm">Max Rounds</Label>
+                <Input id="autonomous-max-rounds" type="number" min={1} max={10} value={collaboration.maxRounds ?? 3}
+                  onChange={(e) => onChange({ ...collaboration, maxRounds: parseInt(e.target.value) })} />
+              </div>
+            )}
+          </div>
+          {collaboration.judge?.kind === 'agent' && (
+            <AgentChoice
+              idPrefix="autonomous-judge"
+              value={collaboration.judge.agentId}
+              agents={otherAgents}
+              onChange={(id) => onChange({ ...collaboration, judge: { kind: 'agent', agentId: id } })}
+            />
+          )}
+          {collaboration.judge?.kind === 'model' && (
+            <ModelParticipantFields
+              idPrefix="autonomous-judge"
+              value={collaboration.judge}
+              onChange={(next) => onChange({ ...collaboration, judge: next })}
+            />
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function AgentChoice({ idPrefix, value, agents, onChange }: {
+  idPrefix: string
+  value: string
+  agents: any[]
+  onChange: (agentId: string) => void
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={`${idPrefix}-agent`} className="text-xs">Agent</Label>
+      <Select value={value || ''} onValueChange={onChange}>
+        <SelectTrigger id={`${idPrefix}-agent`} className="h-8 text-xs"><SelectValue placeholder="Select agent" /></SelectTrigger>
+        <SelectContent>
+          {agents.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+function ModelParticipantFields({ idPrefix, value, onChange }: {
+  idPrefix: string
+  value: ModelParticipant
+  onChange: (next: ModelParticipant) => void
+}) {
+  return (
+    <div className="space-y-3">
+      <ModelPicker
+        idPrefix={idPrefix}
+        compact
+        allowRouting
+        value={{ providerId: value.providerId, model: value.model, routing: value.routing }}
+        onChange={(next) => onChange({ ...value, providerId: next.providerId, model: next.model, routing: next.routing })}
+      />
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-instructions`} className="text-xs">Instructions (optional)</Label>
+        <Textarea
+          id={`${idPrefix}-instructions`}
+          rows={2}
+          className="text-xs"
+          placeholder="What this model should do with what it is given, e.g. find the flaws in the draft"
+          value={value.instructions || ''}
+          onChange={(e) => onChange({ ...value, instructions: e.target.value || undefined })}
+        />
+      </div>
     </div>
   )
 }
