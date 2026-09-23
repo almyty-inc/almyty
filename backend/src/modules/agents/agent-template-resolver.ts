@@ -22,6 +22,14 @@ export interface ExecutionContext {
    * would otherwise outlive the budget that governs everything else.
    */
   runLimits?: { maxSteps?: number; maxToolCalls?: number };
+  /**
+   * The run's tool-call ledger, counted against `runLimits.maxToolCalls`.
+   * A single mutable object shared by every node of the run (the executor
+   * shallow-copies the context per node, so the counter stays shared by
+   * reference): the budget is run-scoped, not node-scoped, and a per-node
+   * counter would be no budget at all.
+   */
+  toolCalls?: { count: number };
 }
 
 /** Maximum allowed length for a single template expression (inside {{ }}). */

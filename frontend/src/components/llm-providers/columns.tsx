@@ -2,7 +2,7 @@
  * DataTable column factory for the LLM providers list page.
  *
  * Encapsulates the Provider/Model/Status/Usage cells plus the row action
- * menu (View, Test, Edit, Copy API Key, Toggle Status, Delete) so the page
+ * menu (View, Test, Edit, Toggle Status, Delete) so the page
  * file only needs to wire up state and mutations.
  */
 import React from 'react'
@@ -33,7 +33,6 @@ interface ProviderColumnDeps {
   setIsEditDialogOpen: (open: boolean) => void
   setModelsLoading: (loading: boolean) => void
   setAvailableModels: (models: Array<{ id: string; name: string }>) => void
-  copySensitive: (value: string, label: string) => void
   toggleProviderStatusMutation: UseMutationResult<any, any, { providerId: string; status: string }, any>
   teamLookup?: Record<string, Team>
 }
@@ -49,7 +48,6 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
     setIsEditDialogOpen,
     setModelsLoading,
     setAvailableModels,
-    copySensitive,
     toggleProviderStatusMutation,
     teamLookup,
   } = deps
@@ -193,12 +191,6 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
             } finally {
               setModelsLoading(false)
             }
-          },
-        },
-        {
-          label: 'Copy API Key',
-          onClick: (provider) => {
-            copySensitive(provider.configuration.apiKey || '', 'API key')
           },
         },
         {
