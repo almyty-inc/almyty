@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="docs-site/public/screenshots/agent-detail-overview.png" alt="An almyty agent: a GPT-4o primary model with a cross-vendor verifier panel (GPT-4o and Gemini) checking every output, plus its tools, schedule, and OpenAI-compatible endpoint" width="860">
+  <img src="docs-site/public/screenshots/agent-detail-overview.png" alt="A demo almyty agent overview with its primary model and cross-vendor verification configuration" width="860">
 </p>
 
 ---
@@ -29,7 +29,7 @@ Twenty years of better APIs, better protocols, better tooling. Computers still d
 
 ## What almyty does
 
-Point it at an API schema (OpenAPI, GraphQL, SOAP, Protobuf) and each operation becomes a tool. Or point it at an npm package (`pg`, `stripe`, `@aws-sdk/*`, etc.) and almyty generates tools from the SDK surface automatically. No code needed for either path. When you do need custom logic, write sandboxed JavaScript with full npm access: it runs in a Node 24 worker thread with filesystem, process, and network restrictions enforced.
+Point it at an API schema (OpenAPI, GraphQL, SOAP, Protobuf) and each operation becomes a tool. Or point it at an npm package (`pg`, `stripe`, `@aws-sdk/*`, etc.) and almyty generates tools from the SDK surface automatically. No code needed for either path. When you do need custom logic, write sandboxed JavaScript with npm dependencies: it runs in a Node 26 worker thread with filesystem, process, and network restrictions enforced.
 
 Build agents with a visual pipeline builder. Chain LLM calls, tool calls, conditions, loops, parallel fan-out, sub-agents. Or skip the pipeline and run autonomous agents that figure out the steps themselves. Either way, you get scheduling, webhooks, human-in-the-loop, and an OpenAI-compatible chat API.
 
@@ -39,12 +39,15 @@ Self-hosted. Your infrastructure, your data.
 
 ## Quick start
 
+For local development, install Docker with the Compose v2 plugin, then:
+
 ```bash
 git clone https://github.com/almyty-inc/almyty.git
 cd almyty
-docker-compose up -d
-cd frontend && npm run dev    # http://localhost:3002
+docker compose up --build -d
 ```
+
+Open the UI at **http://localhost:4001**; the API is at **http://localhost:4000**. Compose builds the development images, installs their dependencies, and starts PostgreSQL and Redis too. No separate frontend process is needed. These development defaults are not suitable for a public deployment.
 
 See the [self-hosting guide](https://docs.almyty.com/self-hosting) for production deployment with Kubernetes.
 
@@ -53,11 +56,16 @@ See the [self-hosting guide](https://docs.almyty.com/self-hosting) for productio
 Two ways to self-host:
 
 - **`almyty/api` + `almyty/frontend`**: the API and the UI as separate images, for Kubernetes and scale-out deployments.
-- **`almyty/almyty`**: a single image that serves both the API and the UI on one origin, for simple self-hosting. Point it at an external postgres + redis:
+- **`almyty/almyty`**: a single image that serves both the API and the UI on one origin, for simple self-hosting. The example below starts separate PostgreSQL (with pgvector) and Redis containers alongside it. From the repository root, generate secrets for a **new installation**:
 
   ```bash
+  export JWT_SECRET="$(openssl rand -hex 32)"
+  export ENCRYPTION_KEY="$(openssl rand -hex 32)"
+  export POSTGRES_PASSWORD="$(openssl rand -hex 32)"
   docker compose -f docker-compose.allinone.yml up -d   # http://localhost:3000
   ```
+
+  Persist these values securely outside version control and restore them before later starts. Keep the same `ENCRYPTION_KEY` for an existing installation: regenerating it makes stored credentials unreadable. Existing database volumes also require their original database password. For managed services, replace the database/cache services and configure their connection settings; PostgreSQL must provide the `vector` extension. Configure TLS before exposing the app publicly.
 
 ## How it works
 
@@ -110,7 +118,7 @@ Each subcommand maps to a standalone npm package (`@almyty/auth`, `@almyty/agent
 
 **Debugging a run from the terminal.** `almyty agents inspect <agent> <runId>` shows an autonomous run step by step — which model answered each step, what it cost, how long it took. `almyty agents trace <agent> <execId>` does the same hop by hop for a workflow execution, and flags a hop where the provider served a different model from the one requested. Both show what the router passed over and why, and a hop whose cost the provider did not report reads `cost opaque` rather than `$0`.
 
-**Versioning.** The CLI packages share one version line and release together as a suite (`@almyty/* 1.x`). That is separate from the platform's own versioning, which is the Docker images and `v0.x` git tags. Any CLI 1.x works with platform 0.1 and later, so the two numbers moving independently is expected.
+**Versioning.** The CLI packages share one version line and release together as a suite (`@almyty/* 1.x`). That is separate from the platform's own versioning, which is the Docker images and `v0.x` git tags. The two numbers moving independently is expected; newer CLI commands need the corresponding server features, so keep both current.
 
 ### Skills
 
@@ -127,7 +135,7 @@ Almyty serves every tool and agent as MCP at `/{org}/{gateway}` (Streamable HTTP
 
 ### Runners
 
-A runner is a long-running daemon that registers **any machine you control** with almyty — your laptop, a build box, a GPU host, a server inside your own network — and runs process / shell / file work there, scoped to a workspace. The code, the credentials and the output never leave that machine; almyty sends the command and reads the result. Tools the runner publishes appear in the catalog automatically, and agents call them like any other tool over a persistent Streamable HTTP connection.
+A runner is a long-running daemon that registers **any machine you control** with almyty — your laptop, a build box, a GPU host, a server inside your own network — and runs process / shell / file work there, scoped to a workspace. Execution happens on that machine, but command results and requested output are sent back to almyty and may become agent/model context. Do not print secrets or return sensitive file contents unless you intend to share them. Tools the runner publishes appear in the catalog automatically, and agents call them like any other tool over a persistent Streamable HTTP connection.
 
 That is the general capability. One thing it is particularly good at is driving a CLI coding agent (Claude Code, Codex, gemini, aider) against a real checkout in one coherent session.
 
@@ -141,11 +149,18 @@ Or open `/runners/new` in the UI for a guided setup. See [docs/runner.md](docs/r
 
 ## Development
 
+For tests outside the containers, use Node 26+ and install dependencies from the repository root. These commands all run from that same directory:
+
 ```bash
-cd backend && npm run test           # unit + integration
-cd frontend && npm test -- --run     # vitest
-cd frontend && npx playwright test   # E2E
+npm --prefix backend ci --legacy-peer-deps
+npm --prefix frontend ci --legacy-peer-deps
+npm --prefix backend run test           # default suite; DB-gated tests are skipped
+npm --prefix backend run test:full      # includes DB integration; needs local PostgreSQL + Redis
+npm --prefix frontend run test -- --run # vitest
+npm --prefix frontend run test:e2e      # Playwright E2E; see prerequisites below
 ```
+
+The database integration command uses the PostgreSQL/Redis ports from the development Compose stack. For browser installation and E2E environment setup, see the [E2E test guide](frontend/tests/e2e/README.md).
 
 ## Compliance
 
