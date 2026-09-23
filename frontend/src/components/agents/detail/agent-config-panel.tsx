@@ -7,17 +7,15 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { Cpu, ShieldCheck, ShieldAlert, Repeat, Brain } from 'lucide-react'
-
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { llmProvidersApi } from '@/lib/api'
 import { VerifyConfigDialog } from './verify-config-dialog'
 import type { Agent } from '@/types'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 export function AgentConfigPanel({ agent }: { agent: Agent }) {
   const { data: providersData } = useQuery<any>({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
+    ...llmProvidersQuery,
   })
   // getAll() may return a bare array or a { providers: [...] } envelope.
   const providers: any[] = Array.isArray(providersData)

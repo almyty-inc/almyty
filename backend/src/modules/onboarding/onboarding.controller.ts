@@ -1,9 +1,7 @@
 import {
   Controller,
   Get,
-  Post,
   Patch,
-  Delete,
   Body,
   Param,
   Request,
@@ -16,7 +14,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { OnboardingService } from './onboarding.service';
-import { SampleWorkspaceService } from './sample-workspace.service';
 import { PatchOnboardingDto } from './dto/onboarding.dto';
 
 @Controller('organizations')
@@ -26,7 +23,6 @@ import { PatchOnboardingDto } from './dto/onboarding.dto';
 export class OnboardingController {
   constructor(
     private readonly onboardingService: OnboardingService,
-    private readonly sampleWorkspaceService: SampleWorkspaceService,
   ) {}
 
   @Get(':organizationId/onboarding')
@@ -55,29 +51,5 @@ export class OnboardingController {
     }
     const data = await this.onboardingService.getState(organizationId, req.user.id);
     return { success: true, data, message: 'Onboarding preferences updated successfully' };
-  }
-
-  @Post(':organizationId/sample-workspace')
-  @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Seed the idempotent Petstore sample workspace' })
-  @ApiResponse({ status: 201, description: 'Sample workspace ready' })
-  async seedSampleWorkspace(
-    @Param('organizationId', ParseUUIDPipe) organizationId: string,
-    @Request() req: any,
-  ) {
-    const data = await this.sampleWorkspaceService.seed(organizationId, req.user.id);
-    return { success: true, data, message: 'Sample workspace ready' };
-  }
-
-  @Delete(':organizationId/sample-workspace')
-  @Roles('member', 'admin', 'owner')
-  @ApiOperation({ summary: 'Delete the Petstore sample workspace and all its entities' })
-  @ApiResponse({ status: 200, description: 'Sample workspace removed' })
-  async deleteSampleWorkspace(
-    @Param('organizationId', ParseUUIDPipe) organizationId: string,
-    @Request() req: any,
-  ) {
-    await this.sampleWorkspaceService.remove(organizationId, req.user.id);
-    return { success: true, data: null, message: 'Sample workspace removed' };
   }
 }

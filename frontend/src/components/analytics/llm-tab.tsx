@@ -4,13 +4,14 @@ import { MessageSquare } from 'lucide-react'
 
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
-import { analyticsApi, llmProvidersApi } from '@/lib/api'
+import { analyticsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import type { LlmUsageEntry } from '@/types'
 
 import { TABLE_HEAD_CLASS as TH } from './constants'
 import { formatNumber } from './format'
 import { TimeframeSelector } from './timeframe-selector'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 export function LlmTab() {
   const { currentOrganization } = useOrganizationStore()
@@ -23,13 +24,12 @@ export function LlmTab() {
   })
 
   const { data: llmProvidersData } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
+    ...llmProvidersQuery,
     enabled: !!currentOrganization,
   })
 
   const providerNameMap = useMemo(() => {
-    const providers = llmProvidersData?.providers || llmProvidersData || []
+    const providers = llmProvidersData || []
     const arr = Array.isArray(providers) ? providers : []
     const map: Record<string, string> = {}
     arr.forEach((p: any) => {
