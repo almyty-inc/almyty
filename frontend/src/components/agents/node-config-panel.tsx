@@ -25,6 +25,7 @@ import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
 import { RoutingPolicyField } from '@/components/models/routing-policy-editor'
 import type { LlmProvider, Tool, Agent } from '@/types'
 import type { RoutingPolicy } from '@/types/models'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -227,11 +228,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   const VISIBLE_TOOLS_LIMIT = 8
 
   const { data: providers } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: async () => {
-      const res = await llmProvidersApi.getAll()
-      return Array.isArray(res) ? res : res?.providers || []
-    },
+    ...llmProvidersQuery,
   })
 
   const { data: tools } = useQuery({
@@ -1146,11 +1143,7 @@ const VERIFY_POLICIES = [
 
 function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
   const { data: providers } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: async () => {
-      const res = await llmProvidersApi.getAll()
-      return Array.isArray(res) ? res : res?.providers || []
-    },
+    ...llmProvidersQuery,
   })
   const providerList = (Array.isArray(providers) ? providers : (providers as any)?.providers || []) as Array<
     Pick<LlmProvider, 'id' | 'name' | 'type'>
@@ -1325,11 +1318,7 @@ function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateData
 // --- Extract Context Config ---
 function ExtractContextConfig({ node, updateData }: { node: Node; updateData: UpdateDataFn }) {
   const { data: providers } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: async () => {
-      const res = await llmProvidersApi.getAll()
-      return Array.isArray(res) ? res : res?.providers || []
-    },
+    ...llmProvidersQuery,
   })
   const providerList = (Array.isArray(providers) ? providers : (providers as any)?.providers || []) as Array<
     Pick<LlmProvider, 'id' | 'name' | 'type'>

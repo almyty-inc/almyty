@@ -54,7 +54,7 @@ import {
   createActionsColumn,
   createSortableColumn,
 } from '@/components/ui/data-table'
-import { toolsApi, llmProvidersApi } from '@/lib/api'
+import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
@@ -76,6 +76,7 @@ import { useMemo } from 'react'
 // Form Schema for manual tool creation
 import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 interface Tool {
   id: string
@@ -235,11 +236,10 @@ export function ToolsPage() {
   })
 
   const { data: providersData } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
+    ...llmProvidersQuery,
     enabled: !!currentOrganization,
   })
-  const llmProvidersExtracted = providersData?.providers || providersData || []
+  const llmProvidersExtracted = providersData || []
   const llmProviders = Array.isArray(llmProvidersExtracted) ? llmProvidersExtracted : []
   const activeProviders = llmProviders.filter((p: any) => p.status === 'active' || p.isActive)
 

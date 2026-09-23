@@ -22,12 +22,13 @@ import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
 import { validateWorkflowGraph, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 
-import { agentsApi, llmProvidersApi, toolsApi } from '@/lib/api'
+import { agentsApi, toolsApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import type { Agent, PipelineNode, PipelineEdge } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
   { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } },
@@ -121,8 +122,7 @@ export function AgentBuilderPage() {
 
   // Fetch LLM providers (for autonomous mode)
   const { data: rawProviders } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
+    ...llmProvidersQuery,
   })
   const availableProviders = Array.isArray(rawProviders) ? rawProviders : (rawProviders as any)?.providers || []
 
