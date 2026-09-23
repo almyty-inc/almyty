@@ -197,7 +197,7 @@ describe('ModelPicker', () => {
     renderPicker({})
     const empty = await screen.findByTestId('no-providers')
     const link = within(empty).getByRole('link', { name: /Connect one/ })
-    expect(link).toHaveAttribute('href', '/models?tab=providers&new=1')
+    expect(link).toHaveAttribute('href', '/llm-providers/new')
     // A new tab, so whatever was being built here is not thrown away.
     expect(link).toHaveAttribute('target', '_blank')
   })

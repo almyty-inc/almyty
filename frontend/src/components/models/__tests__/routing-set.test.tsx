@@ -3,7 +3,7 @@ import { fireEvent, screen } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
 import { RoutingSetBar, buildRoutingPolicy, vendorsOf } from '../routing-set'
-import { modelOrigin, modelVendor, whereItRuns } from '../model-origin'
+import { modelVendor } from '../model-origin'
 import type { ModelCard } from '@/types/models'
 
 const copy = vi.fn()
@@ -44,18 +44,11 @@ function card(overrides: Partial<ModelCard> = {}): ModelCard {
 
 const providerNames = { p1: 'Anthropic prod', p2: 'Moonshot' }
 
-describe('model origin', () => {
-  it('tells the three ways a card reaches the catalog apart', () => {
-    expect(modelOrigin(card())).toBe('vendor')
-    expect(modelOrigin(card({ endpointRef: { url: 'http://10.0.0.5:8000/v1' } }))).toBe('endpoint')
-    expect(modelOrigin(card({ endpointRef: { url: 'https://x.hf.space/v1', deploymentId: 'd-1' } }))).toBe('deployment')
-  })
-
-  it('names the vendor and where the call goes', () => {
+describe('modelVendor', () => {
+  it('names the vendor a card belongs to, for the routing set count', () => {
     expect(modelVendor(card(), providerNames)).toBe('Anthropic prod')
     expect(modelVendor(card({ providerId: null, providerType: null, endpointRef: { url: 'http://10.0.0.5:8000/v1' } }), providerNames)).toBe('10.0.0.5:8000')
     expect(modelVendor(card({ providerId: null, providerType: null, endpointRef: null }), providerNames)).toBe('Unassigned')
-    expect(whereItRuns(card({ region: 'us-east' }), providerNames)).toBe('Anthropic prod, us-east')
   })
 })
 

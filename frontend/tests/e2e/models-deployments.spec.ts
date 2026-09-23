@@ -1,38 +1,45 @@
 import { test as base, expect, type BrowserContext, type Page } from '@playwright/test'
 
 /**
- * Models layer, Deployments and Tracked artifacts.
+ * Models: hosting a model on your own cloud account.
  *
- * Deploying is about the model, not about a registered version. The dialog
- * asks where the model is, takes a reference (hf://org/repo@sha,
- * s3://bucket/prefix@etag, or a model a platform already holds such as
- * bedrock:// or fireworks://), and only then offers the providers that can
- * run it. Tracked artifacts are the operator's optional record of their own
- * weights, and most deployments never have one.
+ * Add model > Your cloud account (/models/new?via=cloud) asks which model
+ * first (hf://org/repo, s3://bucket/prefix@etag, or a model a cloud already
+ * holds such as bedrock:// or fireworks://), and only then offers the clouds
+ * that can run it. A Hugging Face repository may be named without a commit;
+ * the server pins it. Nothing has to be registered first, and there is no
+ * dialog anywhere in the flow. The request creates the model in the list at
+ * once and the browser lands on its page, where the "On your cloud" section
+ * carries its state, cost and controls.
  *
- * The versionless POST body is asserted on the wire below. That is the one
- * shape a controller DTO and a form can disagree about while every unit
- * suite on both sides stays green, so it is checked where the two meet.
+ * The POST body is asserted on the wire below. That is the one shape a
+ * controller DTO and a form can disagree about while every unit suite on
+ * both sides stays green, so it is checked where the two meet.
  *
- * The stub adapter is registered whenever NODE_ENV is not production (or
- * MODEL_STUB_ADAPTER=true); against a stack without it the deploy tests are
- * skipped. The reconcile loop is a cron (MODEL_RECONCILE_CRON, every two
- * minutes by default); the waits below allow for one tick at a one-minute
- * cadence and can be widened with E2E_RECONCILE_WAIT_MS.
+ * The in-memory test cloud (the `stub` integration) is registered whenever
+ * NODE_ENV is not production (or MODEL_STUB_ADAPTER=true); against a stack
+ * without it the hosting run is skipped. The reconcile loop is a cron
+ * (MODEL_RECONCILE_CRON, every two minutes by default); the waits below
+ * allow for one tick at a one-minute cadence and can be widened with
+ * E2E_RECONCILE_WAIT_MS.
  *
  *   npx playwright test --config=playwright.local.config.ts models-deployments.spec.ts
  */
 
-// The deploy dialog also reads credentials, budgets and connections; a
-// missing proxy rule for any of them answers with index.html and the form
-// silently loses a field, so they are guarded alongside the models paths.
+// The host form also reads credentials, budgets and connections; a missing
+// proxy rule for any of them answers with index.html and the form silently
+// loses a field, so they are guarded alongside the models paths.
 const API_PATHS = /^\/(models|model-adapters|model-deployments|model-versions|credentials|budgets|connections|connectors)(\/|\?|$)/
 const RECONCILE_WAIT_MS = Number(process.env.E2E_RECONCILE_WAIT_MS || 150000)
 
-/** A Hub repository, pinned. Nothing registers it anywhere. */
-const MODEL_REF = 'hf://e2e-org/qwen3-14b@abc123def'
-/** The artifact the optional Tracked artifacts tab records. */
-const ARTIFACT_URI = 'hf://e2e-org/qwen3-14b-tracked@def456abc'
+/**
+ * A Hub repository pinned to a full commit, so the server has nothing to
+ * resolve against the Hub for a repository that does not exist there.
+ */
+const MODEL_REF = 'hf://e2e-org/qwen3-14b@0123456789abcdef0123456789abcdef01234567'
+const MODEL_NAME = 'E2E hosted qwen'
+/** Integrations that are not a cloud; the picker never offers them. */
+const NOT_A_CLOUD = new Set(['custom-endpoint'])
 
 async function registerUser(page: Page, suffix: string) {
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
@@ -73,7 +80,7 @@ const test = base.extend<{}, { authState: AuthState }>({
     async ({ browser }, use, workerInfo) => {
       const context = await browser.newContext({ baseURL: workerInfo.project.use.baseURL })
       const page = await context.newPage()
-      await registerUser(page, 'deploy')
+      await registerUser(page, 'hosting')
       const state = await context.storageState()
       await context.close()
       await use(state)
@@ -96,7 +103,7 @@ function guardJsonResponses(page: Page): string[] {
   return violations
 }
 
-/** Polls the API until the single deployment reaches one of the states. */
+/** Polls the API until the single hosted model reaches one of the states. */
 async function waitForState(page: Page, states: string[], timeoutMs: number) {
   const started = Date.now()
   let last = ''
@@ -107,35 +114,37 @@ async function waitForState(page: Page, states: string[], timeoutMs: number) {
     if (states.includes(last)) return rows[0]
     await page.waitForTimeout(3000)
   }
-  throw new Error(`deployment did not reach ${states.join('|')} within ${timeoutMs}ms (last: ${last})`)
+  throw new Error(`hosted model did not reach ${states.join('|')} within ${timeoutMs}ms (last: ${last})`)
 }
 
-/** Opens the deploy dialog from the Deployments tab. */
-async function openDeployDialog(page: Page) {
-  await page.goto('/models?tab=deployments')
-  await page.getByRole('button', { name: 'Run a model', exact: true }).first().click()
-  const dialog = page.getByRole('dialog')
-  await expect(dialog.getByRole('heading', { name: 'Run a model' })).toBeVisible()
-  return dialog
+/** Opens Add model > Your cloud account. */
+async function openHostForm(page: Page) {
+  await page.goto('/models/new?via=cloud')
+  await expect(page.getByRole('heading', { name: 'Host a model on your cloud', level: 1 })).toBeVisible()
+  await expect(page.getByLabel('Which model')).toBeVisible()
+  return {
+    model: page.getByLabel('Which model'),
+    clouds: page.getByRole('radiogroup', { name: 'Cloud' }),
+  }
 }
 
 test.describe.configure({ mode: 'serial' })
 
-test.describe('Models: deployments and tracked artifacts', () => {
+test.describe('Models: hosting a model on your cloud account', () => {
   let violations: string[] = []
   let hasStub = false
-  let adapterCount = 0
+  let cloudCount = 0
 
   test.beforeEach(async ({ page }) => {
     violations = guardJsonResponses(page)
     const adapters = await page.request.get('/model-adapters')
     expect(adapters.headers()['content-type']).toContain('application/json')
     const list: any[] = (await adapters.json())?.data ?? []
-    adapterCount = list.length
-    expect(adapterCount).toBeGreaterThan(0)
+    cloudCount = list.filter((a) => !NOT_A_CLOUD.has(a.key)).length
+    expect(cloudCount).toBeGreaterThan(0)
     hasStub = list.some((a) => a.key === 'stub')
     // modelSchemes is the compatibility rule the form filters with; without
-    // it every provider looks able to run everything.
+    // it every cloud looks able to run everything.
     expect(list.every((a) => Array.isArray(a.modelSchemes) && a.modelSchemes.length > 0)).toBe(true)
   })
 
@@ -143,105 +152,102 @@ test.describe('Models: deployments and tracked artifacts', () => {
     expect(violations, 'non-JSON API responses').toEqual([])
   })
 
-  test('the deploy dialog asks where the model is before it asks who runs it', async ({ page }) => {
+  test('the host form asks which model before which cloud, on a page, with nothing to register', async ({ page }) => {
     const adapters = page.waitForResponse((r) => r.url().includes('/model-adapters') && r.request().resourceType() !== 'document')
-    await page.goto('/models?tab=deployments')
+    await page.goto('/models/new')
+    await page.getByRole('list', { name: 'Where does it run?' }).getByRole('button', { name: /^Your cloud account/ }).click()
+    await expect(page).toHaveURL(/\/models\/new\?via=cloud$/)
     expect((await adapters).status()).toBe(200)
-    await expect(page.getByRole('heading', { name: 'Deployments', exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'No deployments yet' })).toBeVisible()
-
-    await page.getByRole('button', { name: 'Run a model', exact: true }).first().click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog.getByRole('heading', { name: 'Run a model' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Host a model on your cloud', level: 1 })).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
 
     // The model is the first question and it is a free reference: nothing
-    // has to exist in this organization before a deployment can name it.
-    const model = dialog.getByLabel('Where is the model?')
+    // has to exist in this organization before a model can be hosted.
+    const model = page.getByLabel('Which model')
     await expect(model).toHaveValue('')
-    await expect(dialog.getByText('Nothing has to be registered first. Paste the reference and pick a provider that can run it.')).toBeVisible()
+    await expect(page.getByText('Paste the repository or path, then pick the cloud that runs it.')).toBeVisible()
 
-    // Who runs it: every provider this server has, until a reference narrows it.
-    const providers = dialog.getByRole('radiogroup', { name: 'Provider' })
-    await expect(providers.getByRole('radio')).toHaveCount(adapterCount)
-    await expect(providers.getByRole('radio', { name: /Hugging Face Inference Endpoints/ })).toBeVisible()
-    await expect(dialog.getByText('Pick a provider to see its settings.')).toBeVisible()
+    // Which cloud: every cloud this server has, until a source narrows it.
+    const clouds = page.getByRole('radiogroup', { name: 'Cloud' })
+    await expect(clouds.getByRole('radio')).toHaveCount(cloudCount)
+    await expect(clouds.getByRole('radio', { name: /Hugging Face Inference Endpoints/ })).toBeVisible()
+    await expect(page.getByText('Pick a cloud to see its settings.')).toBeVisible()
 
-    // A registered artifact is optional, so it is folded away.
-    await expect(dialog.getByLabel('Registered version')).toBeHidden()
-    await dialog.getByRole('button', { name: /Tracked artifact/ }).click()
-    await expect(dialog.getByLabel('Registered version')).toBeVisible()
-    await expect(dialog.getByRole('option', { name: 'None, use the reference above' })).toBeAttached()
-    await expect(dialog.getByText(/Most deployments never use one/)).toBeVisible()
+    // No registered versions or tracked weights to pick from anywhere.
+    await expect(page.getByText(/Tracked artifact|Registered version/)).toHaveCount(0)
 
-    test.skip(!hasStub, 'stub adapter not registered on this stack')
-    await providers.getByRole('radio', { name: /Stub \(in-memory\)/ }).click()
+    // A Hub repository without a commit is accepted; the server pins it.
+    await model.fill('hf://Qwen/Qwen3-14B')
+    await expect(page.getByText('Hugging Face repo: Qwen/Qwen3-14B, pinned to its exact commit when you save')).toBeVisible()
+    await model.fill('')
+
+    test.skip(!hasStub, 'test cloud not registered on this stack')
+    await clouds.getByRole('radio', { name: /Test cloud \(in memory\)/ }).click()
     // The stub's JSON schema: a secret token, an image with a default, a simulate enum.
-    await expect(dialog.getByLabel('API token', { exact: true })).toHaveAttribute('type', 'password')
-    await expect(dialog.getByRole('button', { name: 'Show API token' })).toBeVisible()
-    await expect(dialog.getByLabel('Container image')).toHaveValue('stub/vllm:latest')
-    await expect(dialog.getByLabel('simulate')).toBeVisible()
-    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.getByLabel('API token', { exact: true })).toHaveAttribute('type', 'password')
+    await expect(page.getByRole('button', { name: 'Show API token' })).toBeVisible()
+    await expect(page.getByLabel('Container image')).toHaveValue('stub/vllm:latest')
+    await expect(page.getByLabel('simulate')).toBeVisible()
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page).toHaveURL(/\/models$/)
   })
 
-  test('the provider list narrows to the typed reference, and the excluded ones say why', async ({ page }) => {
-    const dialog = await openDeployDialog(page)
-    const model = dialog.getByLabel('Where is the model?')
-    const providers = dialog.getByRole('radiogroup', { name: 'Provider' })
-    await expect(providers.getByRole('radio')).toHaveCount(adapterCount)
+  test('the cloud list narrows to the named model, and the excluded ones say why', async ({ page }) => {
+    const { model, clouds } = await openHostForm(page)
+    await expect(clouds.getByRole('radio')).toHaveCount(cloudCount)
 
-    // A Hub repository: the providers that read hf:// stay on offer.
+    // A Hub repository: the clouds that read hf:// stay on offer.
     await model.fill('hf://Qwen/Qwen3-14B@abc123')
-    await expect(dialog.getByText('Hugging Face repo: Qwen/Qwen3-14B, pinned to abc123')).toBeVisible()
-    const hfCount = await providers.getByRole('radio').count()
+    await expect(page.getByText('Hugging Face repo: Qwen/Qwen3-14B at abc123, pinned to its exact commit when you save')).toBeVisible()
+    const hfCount = await clouds.getByRole('radio').count()
     expect(hfCount).toBeGreaterThan(0)
-    expect(hfCount).toBeLessThan(adapterCount)
-    await expect(providers.getByRole('radio', { name: /Hugging Face Inference Endpoints/ })).toBeVisible()
-    await expect(providers.getByRole('radio', { name: /Amazon SageMaker/ })).toHaveCount(0)
+    expect(hfCount).toBeLessThan(cloudCount)
+    await expect(clouds.getByRole('radio', { name: /Hugging Face Inference Endpoints/ })).toBeVisible()
+    await expect(clouds.getByRole('radio', { name: /Amazon SageMaker/ })).toHaveCount(0)
 
     // The rest are still reachable, each with its own reason.
-    await dialog.getByRole('button', { name: /cannot run this model/ }).click()
-    const blocked = dialog.getByTestId('blocked-providers')
-    await expect(blocked.getByRole('listitem')).toHaveCount(adapterCount - hfCount)
-    await expect(blocked).toContainText('Amazon SageMaker AI (real-time endpoint)')
+    await page.getByRole('button', { name: /cannot run this model/ }).click()
+    const blocked = page.getByTestId('blocked-providers')
+    await expect(blocked.getByRole('listitem')).toHaveCount(cloudCount - hfCount)
+    await expect(blocked).toContainText('Amazon SageMaker')
     await expect(blocked).toContainText('not hf://')
 
-    // A model a platform already holds: only that platform can run it.
+    // A model a cloud already holds: only that cloud can run it.
     await model.fill('bedrock://arn:aws:bedrock:eu-west-1::model/acme.support-v1')
-    await expect(providers.getByRole('radio')).toHaveCount(1)
-    await expect(providers.getByRole('radio', { name: /AWS Bedrock/ })).toBeVisible()
-    await expect(dialog.getByText(`1 of ${adapterCount} providers can run a bedrock:// model.`)).toBeVisible()
-    await expect(blocked).toContainText('only that provider can run it')
+    await expect(clouds.getByRole('radio')).toHaveCount(1)
+    await expect(clouds.getByRole('radio', { name: /AWS Bedrock/ })).toBeVisible()
+    await expect(page.getByText(`1 of ${cloudCount} clouds can run a bedrock:// model.`)).toBeVisible()
+    await expect(blocked).toContainText('only that cloud can run it')
 
-    // The filter runs both ways: picking a provider narrows the sources.
-    await providers.getByRole('radio', { name: /AWS Bedrock/ }).click()
-    await expect(dialog.getByTestId('adapter-accepts')).toHaveText('AWS Bedrock accepts s3://, bedrock://.')
-    const chips = dialog.getByTestId('model-source-chips')
+    // The filter runs both ways: picking a cloud narrows the sources.
+    await clouds.getByRole('radio', { name: /AWS Bedrock/ }).click()
+    await expect(page.getByTestId('adapter-accepts')).toHaveText('AWS Bedrock accepts s3://, bedrock://.')
+    const chips = page.getByTestId('model-source-chips')
     await expect(chips).toContainText('Amazon S3')
     await expect(chips).not.toContainText('Hugging Face repo')
     await chips.getByRole('button', { name: 'Amazon S3' }).click()
     await expect(model).toHaveValue('s3://bucket/prefix@etag')
 
-    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('button', { name: 'Cancel' }).click()
   })
 
-  test('a provider that cannot read the reference is refused by the form, and by the server', async ({ page }) => {
-    const dialog = await openDeployDialog(page)
-    const providers = dialog.getByRole('radiogroup', { name: 'Provider' })
+  test('a cloud that cannot read the model is refused by the form, and by the server', async ({ page }) => {
+    const { model, clouds } = await openHostForm(page)
 
-    // Pick first, then name a model that provider cannot read. It drops out
+    // Pick first, then name a model that cloud cannot read. It drops out
     // of the offered list, so the form says where it went.
-    await providers.getByRole('radio', { name: /Hugging Face Inference Endpoints/ }).click()
-    await dialog.getByLabel('Where is the model?').fill('s3://weights/support@e3b0c442')
-    await expect(dialog.getByTestId('dropped-selection')).toContainText('Hugging Face Inference Endpoints is no longer on offer')
+    await clouds.getByRole('radio', { name: /Hugging Face Inference Endpoints/ }).click()
+    await model.fill('s3://weights/support@e3b0c442')
+    await expect(page.getByTestId('dropped-selection')).toContainText('Hugging Face Inference Endpoints is no longer on offer')
 
     let posted = false
     page.on('request', (r) => {
       if (r.method() === 'POST' && new URL(r.url()).pathname === '/model-deployments') posted = true
     })
-    await dialog.getByRole('button', { name: 'Deploy', exact: true }).click()
+    await page.getByRole('button', { name: 'Host model', exact: true }).click()
     // The error belongs to the model field, so it is read there rather than
-    // from the amber note that also names the provider.
-    await expect(dialog.locator('#deploy-model-error')).toHaveText('Hugging Face Inference Endpoints reads hf://, not s3://')
+    // from the amber note that also names the cloud.
+    await expect(page.locator('#host-model-error')).toHaveText('Hugging Face Inference Endpoints reads hf://, not s3://')
     expect(posted, 'the form settled the pair without asking the server').toBe(false)
 
     // The same pair straight at the API: the rule is the server's, not a
@@ -254,131 +260,112 @@ test.describe('Models: deployments and tracked artifacts', () => {
     expect(body?.error?.code).toBe('ADAPTER_UNSUPPORTED_SOURCE')
     expect(body?.error?.message).toContain('cannot run s3://weights/support@e3b0c442')
 
-    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('button', { name: 'Cancel' }).click()
   })
 
-  test('a model reference alone deploys: the POST carries model and no version, and the stub runs it', async ({ page }) => {
-    test.skip(!hasStub, 'stub adapter not registered on this stack')
+  test('hosting a model: the POST names the model, the model is in the list at once, and it starts, stops and shuts down from its own page', async ({ page }) => {
+    test.skip(!hasStub, 'test cloud not registered on this stack')
     test.setTimeout(3 * RECONCILE_WAIT_MS + 120000)
 
-    const dialog = await openDeployDialog(page)
-    await dialog.getByLabel('Where is the model?').fill(MODEL_REF)
-    await dialog.getByRole('radiogroup', { name: 'Provider' }).getByRole('radio', { name: /Stub \(in-memory\)/ }).click()
-    await dialog.getByLabel('API token', { exact: true }).fill('valid')
+    const { model, clouds } = await openHostForm(page)
+    await model.fill(MODEL_REF)
+    await page.locator('#host-name').fill(MODEL_NAME)
+    await clouds.getByRole('radio', { name: /Test cloud \(in memory\)/ }).click()
+    await page.getByLabel('API token', { exact: true }).fill('valid')
 
     // The shape that matters: the model is configuration, so the body
-    // carries `model` and nothing points at a registered version. The
-    // controller DTO has to accept exactly this.
+    // carries `model` and nothing points at a registered version.
     const posted = page.waitForRequest((r) => r.method() === 'POST' && new URL(r.url()).pathname === '/model-deployments')
-    const deployed = page.waitForResponse((r) => new URL(r.url()).pathname === '/model-deployments' && r.request().method() === 'POST')
-    await dialog.getByRole('button', { name: 'Deploy', exact: true }).click()
+    const hosted = page.waitForResponse((r) => new URL(r.url()).pathname === '/model-deployments' && r.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Host model', exact: true }).click()
     const sent = (await posted).postDataJSON()
     expect(sent).toEqual({
       model: MODEL_REF,
       providerType: 'stub',
-      desired: { replicas: 1 },
+      name: MODEL_NAME,
+      desired: { replicas: 1, privacyTier: 'private_cloud' },
       providerConfig: { token: 'valid', image: 'stub/vllm:latest', simulate: 'none' },
     })
-    // Said twice on purpose: the whole point is that no registered version
-    // exists anywhere and none is referenced.
     expect(sent).not.toHaveProperty('modelVersionId')
 
-    const deployRes = await deployed
-    expect(deployRes.status(), await deployRes.text()).toBe(201)
-    const created = (await deployRes.json())?.data
+    const hostRes = await hosted
+    expect(hostRes.status(), await hostRes.text()).toBe(201)
+    const created = (await hostRes.json())?.data
     expect(created?.modelRef).toBe(MODEL_REF)
     expect(created?.modelVersionId ?? null).toBeNull()
-    await expect(page.getByText('Deployment queued', { exact: true })).toBeVisible()
+    // The server creates the model with the request and links it.
+    const modelId: string = created?.modelId
+    expect(modelId, 'the hosting request created the model').toBeTruthy()
+    await expect(page.getByText('Starting your model', { exact: true })).toBeVisible()
 
-    const row = page.getByRole('row').filter({ hasText: 'Stub (in-memory)' })
-    await expect(row).toBeVisible()
-    await expect(row).toContainText(MODEL_REF)
+    // The browser lands on the model, which is already a model: not usable
+    // until it runs and a validation passes, but in the list from now on.
+    await expect(page).toHaveURL(new RegExp(`/models/${modelId}$`))
+    await expect(page.getByRole('heading', { name: MODEL_NAME, level: 1 })).toBeVisible()
+    const card = await (await page.request.get(`/models/${modelId}`)).json()
+    expect(card?.data?.status).toBe('deploying')
+    expect(card?.data?.selectable).toBe(false)
+    const onCloud = page.getByRole('region', { name: 'On your cloud' })
+    await expect(onCloud).toBeVisible()
+    const panel = onCloud.getByTestId('hosting-panel')
+    await expect(panel).toContainText('Test cloud (in memory)')
 
-    // The reconcile loop deploys and reads the endpoint back as ready.
+    await page.goto('/models')
+    const listed = page.getByTestId('catalog-cards').getByRole('listitem').filter({ hasText: MODEL_NAME })
+    await expect(listed).toContainText('Your cloud')
+    await expect(listed).toContainText('Test cloud (in memory)')
+
+    // The reconcile loop starts it and reads the endpoint back as ready.
     const ready = await waitForState(page, ['ready', 'failed'], RECONCILE_WAIT_MS)
     expect(ready.state, ready.lastError ?? '').toBe('ready')
     expect(ready.externalRef?.url).toContain('stub.invalid')
-    await page.getByRole('button', { name: 'Refresh deployments' }).click()
-    await expect(row.getByRole('cell', { name: 'ready', exact: true })).toBeVisible({ timeout: 15000 })
+    await expect
+      .poll(async () => (await (await page.request.get(`/models/${modelId}`)).json())?.data?.status, { timeout: 30000, message: 'the model turns active once its endpoint is ready' })
+      .toBe('active')
 
-    // Scale to zero from the detail sheet.
-    await row.getByRole('cell').first().click()
-    const sheet = page.getByRole('dialog')
-    await expect(sheet.getByRole('heading', { name: /Stub \(in-memory\)/ })).toBeVisible()
-    // The sheet says the model was named here rather than tracked anywhere.
-    await expect(sheet.getByText('Named as configuration on the deployment. Nothing had to be registered.')).toBeVisible()
-    await expect(sheet.getByRole('button', { name: 'Copy endpoint URL' })).toBeVisible()
-    await sheet.locator('#deployment-replicas').fill('0')
-    await sheet.getByRole('button', { name: 'Scale', exact: true }).click()
-    const confirmScale = page.getByRole('alertdialog')
-    await expect(confirmScale).toContainText('Scale to 0 replicas?')
+    await page.goto(`/models/${modelId}`)
+    await expect(panel.locator('[data-state="ready"]')).toHaveText('Running', { timeout: 15000 })
+    await expect(panel.getByRole('button', { name: 'Copy endpoint URL' })).toBeVisible()
+
+    // Stop asks first; starting and resizing do not.
+    await panel.getByRole('button', { name: 'Stop', exact: true }).click()
+    const confirmStop = page.getByRole('alertdialog')
+    await expect(confirmStop.getByRole('heading', { name: 'Stop this model?' })).toBeVisible()
     const scaled = page.waitForResponse((r) => r.url().includes('/scale'))
-    await confirmScale.getByRole('button', { name: 'Scale', exact: true }).click()
+    await confirmStop.getByRole('button', { name: 'Stop', exact: true }).click()
     expect((await scaled).status()).toBe(201)
-    await expect(page.getByText('Scale requested', { exact: true })).toBeVisible()
+    await expect(page.getByText('Stopping', { exact: true })).toBeVisible()
     const stopped = await waitForState(page, ['ready', 'failed'], RECONCILE_WAIT_MS)
     expect(stopped.state).toBe('ready')
     expect(stopped.desired?.replicas).toBe(0)
     expect(stopped.actual?.state).toBe('stopped')
 
-    // Tear it down. The sheet may have closed on the list refetch; reopen it.
-    if (!(await sheet.isVisible())) await row.getByRole('cell').first().click()
-    await sheet.getByRole('button', { name: 'Tear down' }).click()
-    const confirmTeardown = page.getByRole('alertdialog')
-    await expect(confirmTeardown).toContainText('Tear down this deployment?')
+    await page.reload()
+    await expect(panel.locator('[data-state="ready"]')).toHaveText('Stopped', { timeout: 15000 })
+    await expect(panel.getByRole('button', { name: 'Start', exact: true })).toBeVisible()
+
+    // Shut down asks first, then removes it from the cloud; the model stays.
+    await panel.getByRole('button', { name: 'Shut down', exact: true }).click()
+    const confirmShutDown = page.getByRole('alertdialog')
+    await expect(confirmShutDown.getByRole('heading', { name: 'Shut this model down?' })).toBeVisible()
     const torn = page.waitForResponse((r) => r.url().includes('/teardown'))
-    await confirmTeardown.getByRole('button', { name: 'Tear down' }).click()
+    await confirmShutDown.getByRole('button', { name: 'Shut down', exact: true }).click()
     expect((await torn).status()).toBe(201)
-    await expect(page.getByText('Teardown requested', { exact: true })).toBeVisible()
+    await expect(page.getByText('Shutting down', { exact: true }).first()).toBeVisible()
     const final = await waitForState(page, ['torn_down', 'failed'], RECONCILE_WAIT_MS)
     expect(final.state).toBe('torn_down')
     expect(final.externalRef).toBeNull()
-    // Reload the tab rather than trusting the sheet/list state after two reconciles.
-    await page.goto('/models?tab=deployments')
-    await expect(page.getByRole('row').filter({ hasText: 'Stub (in-memory)' }).getByRole('cell', { name: 'torn down' })).toBeVisible({ timeout: 15000 })
+
+    // Reload rather than trusting the page state after two reconciles.
+    await page.goto(`/models/${modelId}`)
+    await expect(page.getByRole('heading', { name: MODEL_NAME, level: 1 })).toBeVisible()
+    await expect(panel.locator('[data-state="torn_down"]')).toHaveText('Shut down', { timeout: 15000 })
+    await expect(panel.getByRole('button', { name: 'Shut down', exact: true })).toHaveCount(0)
   })
 
-  test('a tracked artifact is optional, and deploying one pre-fills the reference', async ({ page }) => {
-    await page.goto('/models?tab=versions')
-    await expect(page.getByRole('heading', { name: 'Tracked artifacts', exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Nothing tracked here, and most people never need this' })).toBeVisible()
-
-    await page.getByRole('button', { name: 'Register artifact', exact: true }).click()
-    const registerDialog = page.getByRole('dialog')
-    await expect(registerDialog.getByRole('heading', { name: 'Register an artifact' })).toBeVisible()
-    await registerDialog.locator('#version-name').fill('e2e-qwen3-v1')
-    await registerDialog.locator('#version-base').fill('qwen3-14b')
-    await registerDialog.locator('#version-registry-uri').fill(ARTIFACT_URI)
-    const created = page.waitForResponse((r) => new URL(r.url()).pathname === '/model-versions' && r.request().method() === 'POST')
-    await registerDialog.getByRole('button', { name: 'Register', exact: true }).click()
-    const createdRes = await created
-    expect(createdRes.status(), await createdRes.text()).toBe(201)
-    await expect(page.getByText('Version registered', { exact: true })).toBeVisible()
-    const versionRow = page.getByRole('row').filter({ hasText: 'e2e-qwen3-v1' })
-    await expect(versionRow.getByRole('cell', { name: ARTIFACT_URI })).toBeVisible()
-
-    // Deploying a tracked artifact fills the reference from the record, and
-    // sends the id instead of the reference.
-    await versionRow.getByRole('cell').first().click()
-    const sheet = page.getByRole('dialog')
-    await expect(sheet.getByRole('heading', { name: 'e2e-qwen3-v1' })).toBeVisible()
-    await sheet.getByRole('button', { name: 'Deploy this version' }).click()
-    const deployDialog = page.getByRole('dialog')
-    await expect(deployDialog.getByRole('heading', { name: 'Run a model' })).toBeVisible()
-    await expect(deployDialog.getByLabel('Where is the model?')).toHaveValue(ARTIFACT_URI)
-    await expect(deployDialog.getByLabel('Registered version')).not.toHaveValue('')
-
-    test.skip(!hasStub, 'stub adapter not registered on this stack')
-    await deployDialog.getByRole('radiogroup', { name: 'Provider' }).getByRole('radio', { name: /Stub \(in-memory\)/ }).click()
-    await deployDialog.getByLabel('API token', { exact: true }).fill('valid')
-    const posted = page.waitForRequest((r) => r.method() === 'POST' && new URL(r.url()).pathname === '/model-deployments')
-    const deployed = page.waitForResponse((r) => new URL(r.url()).pathname === '/model-deployments' && r.request().method() === 'POST')
-    await deployDialog.getByRole('button', { name: 'Deploy', exact: true }).click()
-    const sent = (await posted).postDataJSON()
-    expect(sent.modelVersionId).toBeTruthy()
-    expect(sent).not.toHaveProperty('model')
-    const deployRes = await deployed
-    expect(deployRes.status(), await deployRes.text()).toBe(201)
-    expect((await deployRes.json())?.data?.modelVersionId).toBe(sent.modelVersionId)
+  test('a hosted model page for something on no cloud says so', async ({ page }) => {
+    await page.goto('/models/hosting/00000000-0000-4000-8000-000000000000')
+    await expect(page.getByText('This model is not on any of your clouds.')).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 })

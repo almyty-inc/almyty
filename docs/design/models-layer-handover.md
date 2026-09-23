@@ -170,9 +170,6 @@ the thing rather than by testing it.
 4. **Registry credentials were keyed on the version row**, so a deployment
    naming its bucket inline reached Bedrock, SageMaker or Fireworks with
    none. That is the whole "run my own weights on my own account" path.
-5. **A registered endpoint was badged as a vendor key.** `registerEndpoint`
-   wrote the URL to `metadata` and left `endpointRef` null, which is the
-   field the UI reads, so its origin filter matched nothing.
 
 For each of these the fix was reverted once to watch the new test fail, so
 the guards are proven rather than assumed.

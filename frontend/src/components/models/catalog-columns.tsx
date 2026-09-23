@@ -12,12 +12,19 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { formatModelPrice, PRICING_SOURCE_LABELS } from '@/lib/models-api'
+import { runsOn, type ProviderInfo } from '@/lib/model-hosting'
+import type { ModelAdapter, ModelDeployment } from '@/types/deployments'
 import type { ModelCard } from '@/types/models'
 import { CapabilityBadges, PrivacyTierBadge, SelectableIndicator, ValidationBadge } from './model-badges'
-import { ModelOriginBadge, modelOrigin, modelVendor, whereItRuns } from './model-origin'
+import { ModelSourceBadge, modelSource } from './model-origin'
+import { HostedStatusBadge } from './hosting/hosted-status-badge'
 
 export interface CatalogColumnActions {
-  providerNames: Record<string, string>
+  providers: Record<string, ProviderInfo>
+  adapters: ModelAdapter[]
+  /** The hosting record behind each hosted card, by card id. */
+  hosting: Record<string, ModelDeployment>
+  onOpen: (card: ModelCard) => void
   onValidate: (card: ModelCard) => void
   onEdit: (card: ModelCard) => void
   onDelete: (card: ModelCard) => void
@@ -32,7 +39,7 @@ export function formatContextLength(n: number | null | undefined): string {
   return String(n)
 }
 
-export function buildCatalogColumns({ providerNames, onValidate, onEdit, onDelete, validatingIds }: CatalogColumnActions): ColumnDef<ModelCard, any>[] {
+export function buildCatalogColumns({ providers, adapters, hosting, onOpen, onValidate, onEdit, onDelete, validatingIds }: CatalogColumnActions): ColumnDef<ModelCard, any>[] {
   return [
     {
       accessorKey: 'name',
@@ -47,15 +54,22 @@ export function buildCatalogColumns({ providerNames, onValidate, onEdit, onDelet
     {
       id: 'provider',
       header: 'Runs on',
-      accessorFn: (card) => modelVendor(card, providerNames),
-      cell: ({ row }) => (
-        <div className="min-w-0 space-y-1">
-          <div className="truncate text-sm" title={whereItRuns(row.original, providerNames)}>
-            {whereItRuns(row.original, providerNames)}
+      accessorFn: (card) => runsOn(card, providers, adapters, hosting[card.id]),
+      cell: ({ row }) => {
+        const where = runsOn(row.original, providers, adapters, hosting[row.original.id])
+        const hosted = hosting[row.original.id]
+        return (
+          <div className="min-w-0 space-y-1">
+            <div className="truncate text-sm" title={where}>
+              {row.original.region ? `${where}, ${row.original.region}` : where}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              <ModelSourceBadge source={modelSource(row.original, hosting[row.original.id])} />
+              {hosted && <HostedStatusBadge deployment={hosted} />}
+            </div>
           </div>
-          <ModelOriginBadge origin={modelOrigin(row.original)} />
-        </div>
-      ),
+        )
+      },
     },
     {
       id: 'tier',
@@ -119,13 +133,14 @@ export function buildCatalogColumns({ providerNames, onValidate, onEdit, onDelet
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onOpen(card) }}>Details</DropdownMenuItem>
               <DropdownMenuItem disabled={validating} onClick={(e) => { e.stopPropagation(); onValidate(card) }}>
                 {validating ? 'Validating...' : 'Validate'}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(card) }}>Edit</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(card) }}>
-                Delete
+                Remove
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
