@@ -197,70 +197,44 @@ describe('GatewaysPage', () => {
       await waitFor(() => {
         expect(screen.getAllByRole('button', { name: 'Create gateway' })[0]).toBeInTheDocument()
       })
-
       await user.click(screen.getAllByRole('button', { name: 'Create gateway' })[0])
 
       expect(mockNavigate).toHaveBeenCalledWith('/gateways/new')
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    it('sends the empty-state action to the create page too', async () => {
+      const user = userEvent.setup()
+      renderGatewaysPage()
+
+      await screen.findByText('No gateways yet')
+      const buttons = screen.getAllByRole('button', { name: 'Create gateway' })
+      await user.click(buttons[buttons.length - 1])
+
+      expect(mockNavigate).toHaveBeenCalledWith('/gateways/new')
     })
   })
 
-  describe('Gateway Details Sheet', () => {
+  describe('Row actions', () => {
     beforeEach(() => {
-      const gatewayWithTools = {
-        ...mockGateway,
-        tools: [{ ...mockTool, id: 'tool-1', name: 'Test Tool 1' }],
-      }
-
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
-        gateways: [gatewayWithTools],
+        gateways: [{ ...mockGateway, tools: [{ ...mockTool, id: 'tool-1', name: 'Test Tool 1' }] }],
       })
     })
 
-    it('should open gateway details sheet via Edit action', async () => {
+    it('edits a gateway on its own edit page, not in a sheet', async () => {
       const user = userEvent.setup()
       renderGatewaysPage()
 
       await waitFor(() => {
         expect(screen.getByText('Test Gateway')).toBeInTheDocument()
       })
-
-      // Find and click the actions button
       const gatewayRow = screen.getByText('Test Gateway').closest('tr')
-      expect(gatewayRow).toBeInTheDocument()
-
-      const actionButton = within(gatewayRow!).getByRole('button', { name: /actions/i })
-      await user.click(actionButton)
-
-      // Click Edit to open the sheet
+      await user.click(within(gatewayRow!).getByRole('button', { name: /actions/i }))
       await user.click(screen.getByText('Edit'))
 
-      // Should see the details sheet with Information tab
-      expect(screen.getByText('Information')).toBeInTheDocument()
-      // The sheet should have a Tools tab (use role to disambiguate from table header)
-      expect(screen.getByRole('tab', { name: /tools/i })).toBeInTheDocument()
-    })
-
-    it('should show tool scoping interface in tools tab', async () => {
-      const user = userEvent.setup()
-      renderGatewaysPage()
-
-      await waitFor(() => {
-        expect(screen.getByText('Test Gateway')).toBeInTheDocument()
-      })
-
-      // Open details sheet
-      const gatewayRow = screen.getByText('Test Gateway').closest('tr')
-      const actionButton = within(gatewayRow!).getByRole('button', { name: /actions/i })
-      await user.click(actionButton)
-      await user.click(screen.getByText('Edit'))
-
-      // Click tools tab (use role to disambiguate from table header)
-      await user.click(screen.getByRole('tab', { name: /tools/i }))
-
-      // Should see tool scoping section
-      expect(screen.getByText('Tool Scoping')).toBeInTheDocument()
-      expect(screen.getByText(/assigned/)).toBeInTheDocument()
+      expect(mockNavigate).toHaveBeenCalledWith('/gateways/test-gateway-id/edit')
+      expect(screen.queryByRole('dialog')).toBeNull()
     })
   })
 

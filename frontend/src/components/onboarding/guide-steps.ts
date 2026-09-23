@@ -14,9 +14,9 @@
  *    page `to` opens; __tests__/guide-steps.test.ts fails the build when
  *    they drift, or when `to` is not a route in App.tsx.
  *
- * Links go to the page where the step is done: the create flow when there
- * is one (`?new=1` opens it), the org's own gateway / agent / app when the
- * step is about that object.
+ * Links go to the page where the step is done: the create page when there
+ * is one (/apis/new, /gateways/new, /apps/new ...), the org's own gateway /
+ * agent / app when the step is about that object.
  */
 import type { LucideIcon } from 'lucide-react'
 import { Bot, Cpu, Globe, Package } from 'lucide-react'
@@ -75,7 +75,7 @@ export const JOURNEYS: Journey[] = [
         description: () =>
           'Upload, link or paste an OpenAPI, GraphQL, SOAP or Protobuf schema. Every operation becomes a tool.',
         cta: 'Import an API',
-        target: () => ({ to: '/apis/new', place: 'APIs › Connect new API' }),
+        target: () => ({ to: '/apis/new', place: 'APIs › Connect API' }),
       },
       {
         key: 'tools',
@@ -91,7 +91,7 @@ export const JOURNEYS: Journey[] = [
         description: () =>
           'A gateway serves the tools you pick at one address, over MCP, A2A, UTCP or Agent Skills. Done once a gateway has at least one tool.',
         cta: 'Create a gateway',
-        target: () => ({ to: '/gateways/new', place: 'Gateways › New gateway' }),
+        target: () => ({ to: '/gateways/new', place: 'Gateways › Create gateway' }),
       },
       {
         key: 'external_client',
@@ -178,9 +178,9 @@ export const JOURNEYS: Journey[] = [
         key: 'app',
         title: 'Create an app',
         description: () =>
-          'An app puts one or more agents under your name and sets who may use it. Press Create app on the Apps page.',
-        cta: 'Go to apps',
-        target: () => ({ to: '/apps', place: 'Apps' }),
+          'An app puts one or more agents under your name and sets who may use it.',
+        cta: 'Create an app',
+        target: () => ({ to: '/apps/new', place: 'Apps › Create app' }),
       },
       {
         key: 'distribution',
@@ -190,7 +190,7 @@ export const JOURNEYS: Journey[] = [
         cta: 'Add a distribution',
         target: (s) =>
           s.links.app
-            ? { to: `/apps/${s.links.app.slug}`, place: `Apps › ${s.links.app.name} › Distributions` }
+            ? { to: `/apps/${s.links.app.slug}/distributions/new`, place: `Apps › ${s.links.app.name} › Add a distribution` }
             : { to: '/apps', place: 'Apps' },
       },
     ],

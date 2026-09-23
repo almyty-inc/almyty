@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { toolSourceApi, DELETED_API_LABEL } from '@/lib/tool-source'
+import { SecurityPolicyForm } from './security-policy-form'
 
 export type ScopingPreset = 'read-only' | 'admin' | 'public' | 'all' | 'none'
 
@@ -39,7 +40,9 @@ export interface GatewayToolsTabProps {
   onRequestRemoveAll: () => void
   onAssign: (toolId: string) => void
   onRemove: (toolId: string) => void
-  onOpenSecurity: (target: SecurityTarget) => void
+  /** Persist one tool's policy; resolves once saved so the row can close. */
+  onSaveSecurity: (target: SecurityTarget) => Promise<unknown> | void
+  securitySaving?: boolean
 }
 
 interface ToolGroup {
@@ -80,9 +83,12 @@ export function GatewayToolsTab({
   onRequestRemoveAll,
   onAssign,
   onRemove,
-  onOpenSecurity,
+  onSaveSecurity,
+  securitySaving = false,
 }: GatewayToolsTabProps) {
   const [search, setSearch] = useState('')
+  // The tool whose security policy is open for editing, under its row.
+  const [policyOpenFor, setPolicyOpenFor] = useState<string | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   const isToolAssigned = useMemo(() => {
@@ -278,11 +284,15 @@ export function GatewayToolsTab({
                         const assigned = isToolAssigned(tool.id)
                         const assignable = isToolAssignable(tool)
 
+                        const gt = assigned
+                          ? gatewayTools.find(
+                              (g: any) => g.toolId === tool.id || g.tool?.id === tool.id,
+                            )
+                          : undefined
+                        const policyOpen = assigned && policyOpenFor === tool.id
                         return (
-                          <div
-                            key={tool.id}
-                            className="flex items-center justify-between px-4 py-3 border-b last:border-b-0"
-                          >
+                          <div key={tool.id} className="border-b last:border-b-0">
+                          <div className="flex items-center justify-between px-4 py-3">
                             <div className="flex-1 min-w-0 pl-7">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-sm">{tool.name}</span>
@@ -325,19 +335,12 @@ export function GatewayToolsTab({
                             <div className="flex gap-2 shrink-0">
                               {assigned && (
                                 <Button
-                                  variant="outline"
+                                  variant={policyOpen ? 'secondary' : 'outline'}
                                   size="sm"
-                                  aria-label={`Configure security policy for ${tool.name}`}
-                                  onClick={() => {
-                                    const gt = gatewayTools.find(
-                                      (gt: any) => gt.toolId === tool.id || gt.tool?.id === tool.id,
-                                    )
-                                    onOpenSecurity({
-                                      gatewayToolId: gt?.gatewayToolId || gt?.id || tool.id,
-                                      toolName: tool.name,
-                                      policy: gt?.securityPolicy || null,
-                                    })
-                                  }}
+                                  aria-label={`Security policy for ${tool.name}`}
+                                  aria-expanded={policyOpen}
+                                  aria-controls={`policy-${tool.id}`}
+                                  onClick={() => setPolicyOpenFor(policyOpen ? null : tool.id)}
                                 >
                                   <Shield className="h-4 w-4" />
                                 </Button>
@@ -361,6 +364,36 @@ export function GatewayToolsTab({
                                 {assigned ? 'Remove' : 'Assign'}
                               </Button>
                             </div>
+                          </div>
+                          {policyOpen && (
+                            <div
+                              id={`policy-${tool.id}`}
+                              className="border-t bg-muted/30 px-4 py-4 sm:pl-11"
+                            >
+                              <p className="mb-3 flex items-center gap-2 text-sm font-medium">
+                                <Shield className="h-4 w-4" aria-hidden="true" />
+                                Security policy
+                              </p>
+                              <SecurityPolicyForm
+                                idPrefix={`policy-${tool.id}`}
+                                initialPolicy={gt?.securityPolicy || null}
+                                isSaving={securitySaving}
+                                onCancel={() => setPolicyOpenFor(null)}
+                                onSave={async (policy) => {
+                                  try {
+                                    await onSaveSecurity({
+                                      gatewayToolId: gt?.gatewayToolId || gt?.id || tool.id,
+                                      toolName: tool.name,
+                                      policy,
+                                    })
+                                    setPolicyOpenFor(null)
+                                  } catch {
+                                    // The page reports the failure; the form stays open.
+                                  }
+                                }}
+                              />
+                            </div>
+                          )}
                           </div>
                         )
                       })}

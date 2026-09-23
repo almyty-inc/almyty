@@ -20,6 +20,7 @@ import { credentialsApi, gatewaysApi } from '../../lib/api'
 
 vi.mock('../../lib/api', () => ({
   gatewaysApi: { create: vi.fn(), getAll: vi.fn().mockResolvedValue([]) },
+  getApiBaseUrl: () => 'https://api.test',
   credentialsApi: { create: vi.fn(), getAll: vi.fn().mockResolvedValue([]) },
   agentsApi: { getAll: vi.fn().mockResolvedValue([]) },
   organizationsApi: { getTeams: vi.fn().mockResolvedValue([]) },
@@ -61,11 +62,11 @@ describe('new gateway page', () => {
     vi.mocked(gatewaysApi.create).mockResolvedValue({ id: 'gw-new' })
     render(<GatewayNewPage />)
 
-    expect(screen.getByRole('heading', { name: 'New gateway' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Create gateway' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('Gateway Name'), 'Mine')
-    await user.click(screen.getByRole('combobox', { name: 'Gateway Type' }))
+    await user.type(screen.getByLabelText(/^Name/), 'Mine')
+    await user.click(screen.getByRole('combobox', { name: /^Protocol/ }))
     await user.click((await screen.findAllByText('MCP - Model Context Protocol')).at(-1)!)
     await user.click(privateOption())
     await user.click(screen.getByRole('button', { name: 'Create gateway' }))
@@ -74,7 +75,7 @@ describe('new gateway page', () => {
     expect(vi.mocked(gatewaysApi.create).mock.calls[0][0]).toMatchObject({
       name: 'Mine', type: 'mcp', visibility: 'private', teamId: null,
     })
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/gateways/gw-new'))
+    await waitFor(() => expect(mockNavigate.mock.calls.at(-1)?.[0]).toBe('/gateways/gw-new'))
   })
 
   it('will not submit a private chat channel', async () => {
@@ -82,8 +83,8 @@ describe('new gateway page', () => {
     render(<GatewayNewPage />)
 
     await user.click(screen.getByText('Agent'))
-    await user.type(screen.getByLabelText('Gateway Name'), 'Support')
-    await user.click(screen.getByRole('combobox', { name: 'Gateway Type' }))
+    await user.type(screen.getByLabelText(/^Name/), 'Support')
+    await user.click(screen.getByRole('combobox', { name: /^Protocol/ }))
     await user.click((await screen.findAllByText('Slack')).at(-1)!)
     await user.click(privateOption())
 
@@ -100,8 +101,8 @@ describe('new credential page', () => {
     render(<CredentialNewPage />)
 
     expect(screen.getByRole('heading', { name: 'Add credential' })).toBeInTheDocument()
-    await user.type(screen.getByLabelText('Name'), 'My key')
-    await user.type(screen.getByLabelText('API Key'), 'sk-123456789')
+    await user.type(screen.getByLabelText(/^Name/), 'My key')
+    await user.type(screen.getByLabelText(/^API key/), 'sk-123456789')
     await user.click(privateOption())
     await user.click(screen.getByRole('button', { name: 'Create credential' }))
 
@@ -109,7 +110,7 @@ describe('new credential page', () => {
     expect(vi.mocked(credentialsApi.create).mock.calls[0][0]).toMatchObject({
       name: 'My key', visibility: 'private', teamId: null,
     })
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/credentials'))
+    await waitFor(() => expect(mockNavigate.mock.calls.at(-1)?.[0]).toBe('/credentials'))
   })
 })
 

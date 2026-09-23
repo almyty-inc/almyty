@@ -251,7 +251,7 @@ function OrganizationTab({ organization }: { organization: any }) {
                 sidebar nor anywhere a person looks for it.
               */}
               <Button variant="outline" asChild data-testid="new-organization">
-                <Link to="/organizations?new=1">New organization</Link>
+                <Link to="/organizations/new">New organization</Link>
               </Button>
             </div>
           ) : (

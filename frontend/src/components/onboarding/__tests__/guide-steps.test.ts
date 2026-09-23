@@ -151,7 +151,7 @@ describe('guide steps: the words match the link', () => {
     expect(run.target(s)).toEqual({ to: '/agents/ag-1', place: 'Agents › Support bot' })
     expect(run.description(s)).toContain('Support bot')
     const ship = ALL_STEPS.find((x) => x.key === 'distribution')!
-    expect(ship.target(s).to).toBe('/apps/helpdesk')
+    expect(ship.target(s).to).toBe('/apps/helpdesk/distributions/new')
   })
 })
 

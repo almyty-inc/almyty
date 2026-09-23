@@ -14,7 +14,7 @@ vi.mock('@/lib/api', () => ({
 vi.mock('@/lib/analytics', () => ({ identifyUser: vi.fn(), resetAnalytics: vi.fn() }))
 vi.mock('@/components/onboarding/guide-pill', () => ({ GuidePill: () => null }))
 vi.mock('@/components/command-palette', () => ({ CommandPalette: () => null }))
-vi.mock('@/components/keyboard-shortcuts', () => ({ KeyboardShortcutsDialog: () => null }))
+vi.mock('@/components/keyboard-shortcuts', () => ({ KeyboardShortcutsListener: () => null }))
 vi.mock('@/components/notifications/notification-bell', () => ({ NotificationBell: () => null }))
 vi.mock('@/components/layout/email-verification-banner', () => ({ EmailVerificationBanner: () => null }))
 vi.mock('@/components/plan-indicator', () => ({ PlanBadge: () => null }))

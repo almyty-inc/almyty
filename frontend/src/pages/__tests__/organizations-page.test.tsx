@@ -68,26 +68,6 @@ describe('OrganizationsPage', () => {
     }
   })
 
-  it('keeps the API rejection visible in the creation dialog, preserves input, and clears it on retry', async () => {
-    vi.mocked(organizationsApi.getAll).mockResolvedValue([])
-    vi.mocked(organizationsApi.create).mockRejectedValueOnce({
-      response: { data: { error: { message: 'Organization with this name or slug already exists' } } },
-    }).mockImplementationOnce(() => new Promise(() => {}))
-    const user = userEvent.setup()
-    render(<OrganizationsPage />)
-    await user.click(await screen.findByRole('button', { name: 'Create organization' }))
-    const dialog = within(screen.getByRole('dialog'))
-    const name = dialog.getByLabelText('Organization Name')
-    await user.type(name, 'QA First Run')
-    await user.click(dialog.getByRole('button', { name: 'Create', exact: true }))
-
-    expect(await dialog.findByRole('alert')).toHaveTextContent('Organization with this name or slug already exists')
-    expect(name).toHaveValue('QA First Run')
-    await user.click(dialog.getByRole('button', { name: 'Create', exact: true }))
-    await waitFor(() => expect(dialog.queryByRole('alert')).not.toBeInTheDocument())
-    expect(dialog.getByRole('button', { name: 'Creating...' })).toBeDisabled()
-  })
-
   it('renders the org row with its real name when given a flat array (post-extractData)', async () => {
     ;(organizationsApi.getAll as any).mockResolvedValue([
       {
@@ -139,26 +119,12 @@ describe('OrganizationsPage', () => {
       expect(await screen.findByText('5 members')).toBeInTheDocument()
       expect(screen.queryByText('0 members')).not.toBeInTheDocument()
     })
-
-    it('lists the members the API returned', async () => {
-      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
-      vi.mocked(organizationsApi.getMembers).mockResolvedValue([
-        { id: 'm1', userId: 'u1', role: 'owner', user: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' } },
-      ] as any)
-
-      render(<OrganizationsPage />)
-
-      await userEvent.click(await screen.findByText('alpha-org'))
-      await userEvent.click(await screen.findByRole('tab', { name: /members/i }))
-
-      expect(await screen.findByText(/ada@example.com/i)).toBeInTheDocument()
-    })
   })
 
   // The row's onRowClick was the only way into an organization, and a click
-  // handler on a <tr> is invisible to the keyboard. The name is a real
-  // button now, so it is tabbable and opens on Enter.
-  it('opens the organization from the keyboard', async () => {
+  // handler on a <tr> is invisible to the keyboard. The name is a real link
+  // to the organization's own page now: tabbable, and it opens on Enter.
+  it('links the organization name to its page', async () => {
     vi.mocked(organizationsApi.getAll).mockResolvedValue([
       {
         id: 'org-a',
@@ -171,17 +137,17 @@ describe('OrganizationsPage', () => {
         updatedAt: '2026-06-02T00:00:00.000Z',
       },
     ] as any)
-    vi.mocked(organizationsApi.getMembers).mockResolvedValue([] as any)
 
     render(<OrganizationsPage />)
 
-    const nameButton = await screen.findByRole('button', { name: 'alpha-org' })
-    nameButton.focus()
-    expect(nameButton).toHaveFocus()
+    expect(await screen.findByRole('link', { name: 'alpha-org' })).toHaveAttribute('href', '/organizations/org-a')
+  })
 
-    await userEvent.keyboard('{Enter}')
-
-    expect(await screen.findByRole('tab', { name: /members/i })).toBeInTheDocument()
+  it('links Create organization to /organizations/new, not a dialog', async () => {
+    vi.mocked(organizationsApi.getAll).mockResolvedValue([])
+    render(<OrganizationsPage />)
+    expect(await screen.findByRole('link', { name: 'Create organization' })).toHaveAttribute('href', '/organizations/new')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   // "Delete" in an organization's row menu deleted the whole organization
@@ -234,42 +200,5 @@ describe('OrganizationsPage', () => {
       await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
       expect(organizationsApi.delete).not.toHaveBeenCalled()
     })
-  })
-
-  it('asks before removing a member, and offers no dead Edit item', async () => {
-    vi.mocked(organizationsApi.getAll).mockResolvedValue([
-      {
-        id: 'org-a',
-        name: 'alpha-org',
-        slug: 'alpha-org',
-        isActive: true,
-        plan: 'free',
-        memberCount: 1,
-        createdAt: '2026-06-01T12:17:57.470Z',
-        updatedAt: '2026-06-02T00:00:00.000Z',
-      },
-    ] as any)
-    vi.mocked(organizationsApi.getMembers).mockResolvedValue([
-      { id: 'm1', userId: 'u1', role: 'member', user: { name: 'Ada Lovelace', email: 'ada@example.com' } },
-    ] as any)
-    vi.mocked(organizationsApi.removeMember).mockResolvedValue(undefined as any)
-    const user = userEvent.setup()
-    render(<OrganizationsPage />)
-
-    await user.click(await screen.findByRole('button', { name: 'alpha-org' }))
-    await user.click(await screen.findByRole('tab', { name: /members/i }))
-    await screen.findByText(/ada@example.com/i)
-
-    const sheet = screen.getByRole('dialog')
-    await user.click(within(sheet).getByRole('button', { name: 'Actions' }))
-    expect(screen.queryByRole('menuitem', { name: 'Edit' })).not.toBeInTheDocument()
-    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
-
-    const dialog = await screen.findByRole('alertdialog')
-    expect(dialog).toHaveTextContent('Remove this member?')
-    expect(organizationsApi.removeMember).not.toHaveBeenCalled()
-
-    await user.click(within(dialog).getByRole('button', { name: 'Remove member' }))
-    await waitFor(() => expect(organizationsApi.removeMember).toHaveBeenCalledWith('org-a', 'u1'))
   })
 })

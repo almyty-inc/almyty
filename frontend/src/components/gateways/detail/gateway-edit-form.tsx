@@ -1,23 +1,21 @@
 /**
- * GatewayEditForm — the form for a gateway's name/endpoint/description/
- * status and who can see it. Rendered on its own page (/gateways/:id/edit),
- * not in a modal.
+ * GatewayEditForm -- a gateway's name, path, description, status and who
+ * can see it. Rendered on its own page (/gateways/:id/edit), not in a
+ * modal.
  *
- * Owns its own react-hook-form + zod validation. The page supplies the
- * current gateway and the submit handler that runs the update mutation.
+ * Owns its react-hook-form + zod validation. The page supplies the
+ * gateway, the save handler that runs the update mutation, and what
+ * Cancel does. A failed submit marks the field and focuses it.
  */
 import React from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 
-import { Badge } from '@/components/ui/badge'
+import { Field, FormSection, InlineFormActions, focusFirstInvalid } from '@/components/layout/form-page'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
-import { Button } from '@/components/ui/button'
 import { VisibilityField, type Visibility, type VisibilityValue } from '@/components/ui/visibility-field'
-import { useOrganizationStore } from '@/store/organization'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -26,13 +24,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { PRIVATE_CAPABLE_GATEWAY_TYPES } from '@/components/gateways/create-gateway-form'
+import { useOrganizationStore } from '@/store/organization'
 
 export const editGatewaySchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  endpoint: z.string().min(1, 'Endpoint is required').transform(val => {
-    // Auto-add leading slash if missing
-    return val.startsWith('/') ? val : `/${val}`;
-  }),
+  endpoint: z
+    .string()
+    .min(1, 'Endpoint is required')
+    .transform((val) => (val.startsWith('/') ? val : `/${val}`)),
   description: z.string().optional(),
   status: z.enum(['active', 'inactive', 'maintenance', 'error']),
 })
@@ -48,21 +48,10 @@ export interface GatewayEditFormProps {
   isSystem?: boolean
 }
 
-/**
- * Protocol types that may be private (see PRIVATE_CAPABLE_GATEWAY_TYPES
- * on the backend): a chat channel's audience never signs in to almyty.
- */
-const PRIVATE_CAPABLE = new Set(['mcp', 'utcp', 'skills', 'a2a', 'acp', 'openai_chat'])
-
-export function GatewayEditForm({
-  gateway,
-  isSaving,
-  onSubmit,
-  onCancel,
-  isSystem,
-}: GatewayEditFormProps) {
+export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSystem }: GatewayEditFormProps) {
   const { currentOrganization } = useOrganizationStore()
-  const editForm = useForm<EditGatewayForm>({
+  const formRef = React.useRef<HTMLFormElement>(null)
+  const form = useForm<EditGatewayForm>({
     resolver: zodResolver(editGatewaySchema),
     values: {
       name: gateway?.name || '',
@@ -71,6 +60,8 @@ export function GatewayEditForm({
       status: gateway?.status || 'active',
     },
   })
+  const { errors } = form.formState
+
   // Start from the gateway's stored scope so an unrelated edit keeps it.
   const stored: VisibilityValue = {
     visibility: (gateway?.visibility as Visibility) ?? 'org',
@@ -80,7 +71,9 @@ export function GatewayEditForm({
   React.useEffect(() => {
     setVisibility({ visibility: (gateway?.visibility as Visibility) ?? 'org', teamId: gateway?.teamId ?? null })
   }, [gateway?.id, gateway?.visibility, gateway?.teamId])
-  const privateNotPossible = visibility.visibility === 'private' && !PRIVATE_CAPABLE.has(gateway?.type)
+  // A chat channel's audience never signs in to almyty, so it can't be private.
+  const privateNotPossible =
+    visibility.visibility === 'private' && !PRIVATE_CAPABLE_GATEWAY_TYPES.has(gateway?.type)
   const scopeChanged = visibility.visibility !== stored.visibility || visibility.teamId !== stored.teamId
 
   const submit = (data: EditGatewayForm) => {
@@ -89,102 +82,90 @@ export function GatewayEditForm({
   }
 
   return (
-        <form onSubmit={editForm.handleSubmit(submit)} className="space-y-6">
-          <div>
-            <Label htmlFor="edit-name">Gateway Name</Label>
-            <Input
-              id="edit-name"
-              placeholder="Enter gateway name"
-              {...editForm.register('name')}
-            />
-            {editForm.formState.errors.name && (
-              <p className="text-sm text-red-500 mt-1">
-                {editForm.formState.errors.name.message}
-              </p>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">
-              Type: {gateway?.type && <ProtocolBadge protocol={gateway.type} className="ml-1" />} (cannot be changed)
+    <form
+      ref={formRef}
+      noValidate
+      onSubmit={form.handleSubmit(submit, () =>
+        requestAnimationFrame(() => focusFirstInvalid(formRef.current)),
+      )}
+      className="space-y-6"
+      aria-label="Edit gateway"
+    >
+      <FormSection>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field
+            id="edit-name"
+            label="Name"
+            required
+            hint={
+              <span className="inline-flex items-center gap-1">
+                Protocol {gateway?.type && <ProtocolBadge protocol={gateway.type} />} (cannot be changed)
+              </span>
+            }
+            error={errors.name?.message}
+          >
+            <Input placeholder="Enter gateway name" autoComplete="off" {...form.register('name')} />
+          </Field>
+
+          <Field
+            id="edit-endpoint"
+            label="Endpoint path"
+            required
+            hint={
+              isSystem
+                ? 'A system gateway keeps its endpoint.'
+                : 'The path after your organization in the gateway URL. The slash is added for you.'
+            }
+            error={errors.endpoint?.message}
+          >
+            <Input placeholder="my-gateway" autoComplete="off" disabled={isSystem} {...form.register('endpoint')} />
+          </Field>
+        </div>
+
+        <Field id="edit-description" label="Description">
+          <Textarea placeholder="What this gateway is for" rows={3} {...form.register('description')} />
+        </Field>
+
+        <Field id="edit-status" label="Status" hint="Only an active gateway answers requests.">
+          <Select
+            onValueChange={(value) => form.setValue('status', value as EditGatewayForm['status'], { shouldDirty: true })}
+            value={form.watch('status')}
+          >
+            <SelectTrigger id="edit-status" className="sm:max-w-xs">
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+      </FormSection>
+
+      {!isSystem && (
+        <FormSection title="Who can use it">
+          <VisibilityField
+            organizationId={currentOrganization?.id ?? ''}
+            value={visibility}
+            onChange={setVisibility}
+            noun="this gateway"
+          />
+          {privateNotPossible && (
+            <p role="alert" className="text-sm text-destructive">
+              A chat channel can't be private: the people it answers don't sign in to almyty.
             </p>
-          </div>
-
-          <div>
-            <Label htmlFor="edit-endpoint">Endpoint Path</Label>
-            <Input
-              id="edit-endpoint"
-              placeholder="my-gateway"
-              disabled={isSystem}
-              {...editForm.register('endpoint')}
-            />
-            {editForm.formState.errors.endpoint && (
-              <p className="text-sm text-red-500 mt-1">
-                {editForm.formState.errors.endpoint.message}
-              </p>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">
-              {isSystem
-                ? 'System gateway endpoint cannot be changed'
-                : 'The path for your gateway (slash is added automatically)'}
-            </p>
-          </div>
-
-          <div>
-            <Label htmlFor="edit-description">Description</Label>
-            <Textarea
-              id="edit-description"
-              placeholder="Enter gateway description"
-              {...editForm.register('description')}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="edit-status">Status</Label>
-            <Select
-              onValueChange={(value) => editForm.setValue('status', value as any)}
-              value={editForm.watch('status')}
-            >
-              <SelectTrigger id="edit-status">
-                <SelectValue placeholder="Select status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {!isSystem && (
-            <div className="border-t pt-4">
-              <VisibilityField
-                organizationId={currentOrganization?.id ?? ''}
-                value={visibility}
-                onChange={setVisibility}
-                noun="this gateway"
-              />
-              {privateNotPossible && (
-                <p className="text-sm text-destructive mt-2">
-                  A chat channel can't be private: the people it answers don't sign in to almyty.
-                </p>
-              )}
-            </div>
           )}
+        </FormSection>
+      )}
 
-          <div className="flex justify-end space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={isSaving || privateNotPossible}
-            >
-              {isSaving ? 'Saving...' : 'Save changes'}
-            </Button>
-          </div>
-        </form>
+      <InlineFormActions
+        onCancel={onCancel}
+        submitLabel="Save changes"
+        submitting={isSaving}
+        submitDisabled={privateNotPossible}
+      />
+    </form>
   )
 }

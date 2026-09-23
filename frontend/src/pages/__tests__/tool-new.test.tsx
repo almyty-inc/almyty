@@ -42,7 +42,7 @@ beforeEach(() => {
 })
 
 async function fillBasics(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText('Tool Name'), 'mine')
+  await user.type(screen.getByLabelText(/Tool name/), 'mine')
   await user.type(screen.getByLabelText('Description'), 'a private tool')
   await user.type(screen.getByLabelText('URL'), 'https://api.example.com/x')
 }
@@ -51,7 +51,7 @@ describe('the create-tool page', () => {
   it('renders as a page, not a dialog', () => {
     renderWithProviders(<ToolNewPage />)
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Create manual tool' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1, name: 'Create tool' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Tools/ })).toHaveAttribute('href', '/tools')
   })
@@ -74,7 +74,7 @@ describe('the create-tool page', () => {
       executionMethod: 'http',
       httpConfig: expect.objectContaining({ method: 'GET', path: 'https://api.example.com/x' }),
     })
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/tools/tool-1'))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/tools/tool-1', undefined))
   })
 
   it('defaults to org-wide when nothing is picked', async () => {
@@ -94,7 +94,7 @@ describe('the create-tool page', () => {
     renderWithProviders(<ToolNewPage />)
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(navigate).toHaveBeenCalledWith('/tools')
+    expect(navigate).toHaveBeenCalledWith('/tools', undefined)
     expect(toolsApi.create).not.toHaveBeenCalled()
   })
 })

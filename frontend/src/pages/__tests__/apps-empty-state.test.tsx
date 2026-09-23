@@ -7,7 +7,6 @@ vi.mock('@/lib/agent-apps', async () => {
   const actual = await vi.importActual<typeof import('@/lib/agent-apps')>('@/lib/agent-apps')
   return { ...actual, agentAppsApi: { ...actual.agentAppsApi, list: vi.fn().mockResolvedValue([]) } }
 })
-vi.mock('@/components/agent-apps/create-app-dialog', () => ({ CreateAppDialog: () => null }))
 
 import { AppsPage } from '../apps'
 
