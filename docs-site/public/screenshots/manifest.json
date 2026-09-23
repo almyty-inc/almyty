@@ -66,7 +66,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed"
+      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "agent-detail-overview",
@@ -87,8 +88,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed",
-      "notes": "Live seeded demo agent. Viewport framed to show configuration without environment-specific integration URLs."
+      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
+      "notes": "Live seeded demo agent. Viewport framed to show configuration without environment-specific integration URLs. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "agent-skill-viewer",
@@ -127,8 +128,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed",
-      "notes": "Upper portion of the scrollable verification dialog; no configuration saved."
+      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
+      "notes": "Upper portion of the scrollable verification dialog; no configuration saved. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "agents-empty",
@@ -157,8 +158,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "087585b4f31390e541789fd98e10bfdbf1408481a73586a95cef1561565d690d",
-      "notes": "Live seeded demo organization; search filter excludes unrelated QA fixtures. Sidebar collapsed to omit account details."
+      "sourceDigest": "67524f29fab181964bced72d0084e969c017b7a02bfcd305145888baac2089dd",
+      "notes": "Live seeded demo organization; search filter excludes unrelated QA fixtures. Sidebar collapsed to omit account details. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "analytics-agents",
@@ -179,8 +180,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
-      "notes": "Seeded QA agent lifetime totals and time-window counters; not production reliability measurements."
+      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
+      "notes": "Seeded QA agent lifetime totals and time-window counters; not production reliability measurements. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "analytics-audit",
@@ -201,8 +202,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
-      "notes": "Seeded demo identity only. No IP addresses or secrets are visible. Audit export is locked on this Pro organization; page-header exports are for request logs."
+      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
+      "notes": "Seeded demo identity only. No IP addresses or secrets are visible. Audit export is locked on this Pro organization; page-header exports are for request logs. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "analytics-gateways",
@@ -223,8 +224,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
-      "notes": "The demo organization has no gateway requests in this time window; this is the genuine loaded empty state."
+      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
+      "notes": "The demo organization has no gateway requests in this time window; this is the genuine loaded empty state. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "analytics-overview",
@@ -245,8 +246,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
-      "notes": "Actual staging QA traffic from the weather-tool check; not a production performance benchmark."
+      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
+      "notes": "Actual staging QA traffic from the weather-tool check; not a production performance benchmark. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "analytics-tools",
@@ -267,8 +268,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
-      "notes": "One actual staging UI execution; not a production reliability benchmark."
+      "sourceDigest": "8ff2f21ea6fedfd5c30a7fc18aecd079b99e1693210e57e17d423c45b1be8c8c",
+      "notes": "One actual staging UI execution; not a production reliability benchmark. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "api-auth-curl",
@@ -298,7 +299,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "969a41cd997fc6ec48d707e46d91133faf834c432ebe4edecc41477e48a940bf"
+      "sourceDigest": "7f655b4e2f07238c281362054f28c4b93793fc901b4438b80648b6a3e8e3dbf2",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "api-error-sample",
@@ -347,7 +349,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "fe3ab4f09ba3a07a0f196a18cabe1a7b16319c15cb8af0bd8e75b97dbdaaa230"
+      "sourceDigest": "9c84a1e35935b4301ab207b95328ca2297f1ee270de3e8a29cda0faed533c45e",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "apis-list",
@@ -368,7 +371,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0bee20ea3d86fa118670887c4fccec36ba9f8e4167b11f84813555d77a4ec329"
+      "sourceDigest": "8feb460967b73e44e1e4be6f012c62e6087e31964642e126547a5dd3f202cfd9",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "approval-refund-820",
@@ -665,7 +669,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3b0620baf1efe15de9e9e8369ab99287cdda05b95d1309fb94d84fb073597f22"
+      "sourceDigest": "a3fb96a17709cca4ba2a230089d19dd7f080dc5731899837a0508f458deada7b",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "credentials-add",
@@ -686,8 +691,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "53dbd17ef5ea59fbaa63e197ecf8df36d52acfcfd961db938b818b539f3d6a6f",
-      "notes": "No credential was entered or created."
+      "sourceDigest": "f77989e05b1fa1f846234e68ee523342390b04e393cc7b1cf8b32914c37a1da9",
+      "notes": "No credential was entered or created. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "credentials-vault",
@@ -708,8 +713,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "53dbd17ef5ea59fbaa63e197ecf8df36d52acfcfd961db938b818b539f3d6a6f",
-      "notes": "Only labels and status are visible; no secret values were revealed."
+      "sourceDigest": "f77989e05b1fa1f846234e68ee523342390b04e393cc7b1cf8b32914c37a1da9",
+      "notes": "Only labels and status are visible; no secret values were revealed. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "dashboard-empty",
@@ -830,30 +835,69 @@
     },
     {
       "id": "memories",
-      "title": "Memories page",
+      "title": "Long-tier seeded demo memory entries",
       "path": "screenshots/memories.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "13164c77bb39b466ace13d6e739bdb0718d1dd4e6a45c3cb8bd6561694679d51"
+      "capturedAt": "2026-09-23T10:47:32.593Z",
+      "status": "current",
+      "sha256": "2b9544dc9b7fa57e4435dd0d436c46be9ea00dbc9bc311a4fae2fa1b44fa5e72",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/memories"
+      },
+      "sources": [
+        "frontend/src/pages/memories.tsx",
+        "frontend/src/components/connections",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "769cfb4ae1b1c9e93ded1f92473dfafd91532467e563b6b51128d80315996096",
+      "notes": "Browse filtered to the long tier. The displayed policies and percentages are seeded demo content, not almyty commercial terms or product measurements."
     },
     {
       "id": "memory-write",
-      "title": "memory write",
+      "title": "Blank New memory dialog with mode and scope selection",
       "path": "screenshots/memory-write.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "9c0843b06e418a05c779d3141463e227d6f205fad6fc1378ffbfd17534c23d97"
+      "capturedAt": "2026-09-23T10:47:43.651Z",
+      "status": "current",
+      "sha256": "f1bbdb0f928b1860a455607d829cc5a33b80eb2888fe6ffe26df7b2a1529d0a7",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/memories"
+      },
+      "sources": [
+        "frontend/src/pages/memories.tsx",
+        "frontend/src/components/connections",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "769cfb4ae1b1c9e93ded1f92473dfafd91532467e563b6b51128d80315996096",
+      "notes": "No memory was created or modified. Long-tier seeded demo entries are visible behind the dialog."
     },
     {
       "id": "memory",
-      "title": "memory",
+      "title": "Long-tier seeded demo memories with tags and embedding status",
       "path": "screenshots/memory.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "04fc052b6d18f330fffea2e529243b88981c93dab137a95b3354ab170d39be68"
+      "capturedAt": "2026-09-23T10:47:32.593Z",
+      "status": "current",
+      "sha256": "2b9544dc9b7fa57e4435dd0d436c46be9ea00dbc9bc311a4fae2fa1b44fa5e72",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/memories"
+      },
+      "sources": [
+        "frontend/src/pages/memories.tsx",
+        "frontend/src/components/connections",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "769cfb4ae1b1c9e93ded1f92473dfafd91532467e563b6b51128d80315996096",
+      "notes": "Browse filtered to the long tier. The displayed policies and percentages are seeded demo content, not almyty commercial terms or product measurements."
     },
     {
       "id": "models",
@@ -874,7 +918,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "dff4234bc99dc45594634f8a813a7514d37bc3ef1911d56ff7b3f3c08f8dd1b8"
+      "sourceDigest": "701b872da75dd2d622c2110c9fe332f55f8a4c6e63d86d7fe16056bb326d2e6d",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "quickstart-api-imported",
@@ -895,7 +940,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "969a41cd997fc6ec48d707e46d91133faf834c432ebe4edecc41477e48a940bf"
+      "sourceDigest": "7f655b4e2f07238c281362054f28c4b93793fc901b4438b80648b6a3e8e3dbf2",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "quickstart-claude-config",
@@ -988,8 +1034,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b5115ac67d220e621567efef4fdf6f656ea4328fa48a96bcc03b8513f0b4a72b",
-      "notes": "Contains only the seeded Ava Chen demo identity."
+      "sourceDigest": "d3f2bf3088629637a3bbdaa6900ccfa9b48ebc56a6bc90ad7e5a26e24dcc5668",
+      "notes": "Contains only the seeded Ava Chen demo identity. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "settings-security",
@@ -1010,7 +1056,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b5115ac67d220e621567efef4fdf6f656ea4328fa48a96bcc03b8513f0b4a72b"
+      "sourceDigest": "d3f2bf3088629637a3bbdaa6900ccfa9b48ebc56a6bc90ad7e5a26e24dcc5668",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "settings-teams",
@@ -1031,8 +1078,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "b5115ac67d220e621567efef4fdf6f656ea4328fa48a96bcc03b8513f0b4a72b",
-      "notes": "Members tab, not the custom-role editor. Only seeded demo account data is shown."
+      "sourceDigest": "d3f2bf3088629637a3bbdaa6900ccfa9b48ebc56a6bc90ad7e5a26e24dcc5668",
+      "notes": "Members tab, not the custom-role editor. Only seeded demo account data is shown. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "support-agent-constraints",
@@ -1053,7 +1100,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed"
+      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "support-agent-overview",
@@ -1074,8 +1122,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed",
-      "notes": "Live seeded demo agent. Viewport framed to show configuration without environment-specific integration URLs."
+      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
+      "notes": "Live seeded demo agent. Viewport framed to show configuration without environment-specific integration URLs. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "support-agent-runs",
@@ -1096,7 +1144,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "3bbca82285c482368c591d72b21760ae980119198d5c646aafac32f8b18a83ed"
+      "sourceDigest": "f5eb2a1187d6d06571c36e96800be0493d285b722ec7078fd92eff4509b73bbe",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "tool-detail",
@@ -1117,7 +1166,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d6983605acccdde85243dc4bec02049ef78318882e7e44222f27b74bc1c02798"
+      "sourceDigest": "e68bfe673adf4109b0cf818b0f4878a3d16697737925692b24f97f26994e4059",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "tools-create-dialog",
@@ -1138,8 +1188,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "ee99c5fcb77fef6e2ae5e3319f952cd43f100ef8c3ce1b6b3514b933c2026f61",
-      "notes": "Seven available execution methods shown in the open selector. No tool created or configuration saved."
+      "sourceDigest": "41a677c029ca848b97c90e47b10ba216a5f7a916213d905f22a482f00016f710",
+      "notes": "Seven available execution methods shown in the open selector. No tool created or configuration saved. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "tools-empty",
@@ -1170,7 +1220,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "570d4b72dc32a2084e3ba3f3a7070b14263ebd53319ba4cb82038142cf01492c"
+      "sourceDigest": "ebdb59176185ec9766bb49330f0271d5efec8930d93bc38e8149d28cd3ad5f43",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "tools",
@@ -1192,7 +1243,8 @@
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "570d4b72dc32a2084e3ba3f3a7070b14263ebd53319ba4cb82038142cf01492c"
+      "sourceDigest": "ebdb59176185ec9766bb49330f0271d5efec8930d93bc38e8149d28cd3ad5f43",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "versioning-history",
