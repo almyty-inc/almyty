@@ -246,70 +246,6 @@ describe('UsageMetric Entity', () => {
     });
   });
 
-  describe('createThroughputMetric', () => {
-    it('should create throughput metric with calculation', () => {
-      const created = UsageMetric.createThroughputMetric({
-        requestCount: 100,
-        timeWindowSeconds: 10,
-      });
-
-      expect(created.type).toBe(MetricType.THROUGHPUT);
-      expect(created.value).toBe(10); // 100 / 10
-      expect(created.status).toBe(MetricStatus.SUCCESS);
-      expect(created.timestamp).toBeDefined();
-    });
-
-    it('should store dimensions', () => {
-      const created = UsageMetric.createThroughputMetric({
-        requestCount: 500,
-        timeWindowSeconds: 60,
-      });
-
-      expect(created.dimensions.requestCount).toBe(500);
-      expect(created.dimensions.timeWindowSeconds).toBe(60);
-    });
-
-    it('should create throughput metric with gateway and organization', () => {
-      const created = UsageMetric.createThroughputMetric({
-        gatewayId: 'gateway-1',
-        organizationId: 'org-1',
-        requestCount: 1000,
-        timeWindowSeconds: 60,
-      });
-
-      expect(created.gatewayId).toBe('gateway-1');
-      expect(created.organizationId).toBe('org-1');
-      expect(created.value).toBeCloseTo(16.67, 2); // 1000 / 60
-    });
-
-    it('should calculate requests per second correctly', () => {
-      const created = UsageMetric.createThroughputMetric({
-        requestCount: 300,
-        timeWindowSeconds: 5,
-      });
-
-      expect(created.value).toBe(60);
-    });
-
-    it('should handle 1-second time window', () => {
-      const created = UsageMetric.createThroughputMetric({
-        requestCount: 25,
-        timeWindowSeconds: 1,
-      });
-
-      expect(created.value).toBe(25);
-    });
-
-    it('should handle large time windows', () => {
-      const created = UsageMetric.createThroughputMetric({
-        requestCount: 86400,
-        timeWindowSeconds: 3600, // 1 hour
-      });
-
-      expect(created.value).toBe(24); // 86400 / 3600
-    });
-  });
-
   describe('Integration Tests', () => {
     it('should correctly categorize created response time metrics', () => {
       const fastMetric = UsageMetric.createResponseTimeMetric({
@@ -339,11 +275,9 @@ describe('UsageMetric Entity', () => {
       expect(successMetric.isError()).toBe(false);
     });
 
-    it('should access throughput metric dimensions', () => {
-      const metric = UsageMetric.createThroughputMetric({
-        requestCount: 450,
-        timeWindowSeconds: 30,
-      });
+    it('should access dimensions', () => {
+      const metric = new UsageMetric();
+      metric.dimensions = { requestCount: 450, timeWindowSeconds: 30 };
 
       expect(metric.getDimensionValue('requestCount')).toBe(450);
       expect(metric.getDimensionValue('timeWindowSeconds')).toBe(30);

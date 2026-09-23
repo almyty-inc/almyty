@@ -36,27 +36,6 @@ describe('ApiKey Entity', () => {
     });
   });
 
-  describe('hasScope', () => {
-    it('should return true for existing scope', () => {
-      expect(apiKey.hasScope('read:apis')).toBe(true);
-      expect(apiKey.hasScope('write:tools')).toBe(true);
-    });
-
-    it('should return false for non-existing scope', () => {
-      expect(apiKey.hasScope('delete:all')).toBe(false);
-    });
-
-    it('should return false when no scopes defined', () => {
-      apiKey.scopes = [];
-      expect(apiKey.hasScope('read:apis')).toBe(false);
-    });
-
-    it('should return false when scopes is null', () => {
-      apiKey.scopes = null;
-      expect(apiKey.hasScope('read:apis')).toBe(false);
-    });
-  });
-
   describe('canMakeRequest', () => {
     it('should return true for active, non-expired key', () => {
       expect(apiKey.canMakeRequest()).toBe(true);

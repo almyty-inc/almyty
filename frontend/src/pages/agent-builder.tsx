@@ -74,8 +74,6 @@ export function AgentBuilderPage() {
       outputFormat?: 'text' | 'json';
       escalation?: 'never' | 'on_failure' | 'on_low_confidence';
       conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge';
-      sharedMemoryScope?: boolean;
-      allowRevision?: boolean;
     };
     judgeAgentId?: string;
     maxRounds?: number;

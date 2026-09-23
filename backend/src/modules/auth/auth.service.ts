@@ -467,6 +467,35 @@ export class AuthService {
   }
 
   async createApiKey(userId: string, createApiKeyDto: CreateApiKeyDto): Promise<{ apiKey: string; keyData: ApiKey }> {
+    // Neither scopes nor rate limits are implemented for PLATFORM keys,
+    // and both were accepted and stored anyway.
+    //
+    // A platform key authenticates through ApiKeyStrategy, which is one
+    // half of JwtAuthGuard: the key acts as its user, with that user's
+    // whole role and membership, on every route the guard protects. No
+    // guard, interceptor or handler reads ApiKey.scopes there -- a key
+    // created with ['read'] answered DELETE exactly as well as one
+    // created with ['admin'], which is an access control that is not one.
+    // Nothing reads ApiKey.rateLimits anywhere at all.
+    //
+    // Refusing is the honest answer rather than inventing a scope
+    // vocabulary here: the two attenuations that DO exist are per
+    // gateway. Gateway keys (POST /gateways/:id/api-keys) carry a
+    // gatewayId, and their scopes are checked against
+    // gateway_tools.permissions.requiredScopes before dispatch (see
+    // ToolExecutionOptions.scopes). Rate limiting is per gateway too,
+    // via Gateway.rateLimitConfig and GatewayRateLimitService.
+    if (createApiKeyDto.scopes?.length) {
+      throw new BadRequestException(
+        'Per-key scopes are not implemented for platform API keys: a platform key acts with the full permissions of the user who minted it. Scoped keys are per gateway (POST /gateways/:id/api-keys).',
+      );
+    }
+    if (createApiKeyDto.rateLimits) {
+      throw new BadRequestException(
+        'Per-key rate limits are not implemented. Rate limiting is configured per gateway (Gateway.rateLimitConfig).',
+      );
+    }
+
     // Default the org scope to the user's single org when the caller
     // doesn't provide one (e.g. the CLI login flow mints a key from
     // the frontend without an explicit org ID).
@@ -509,9 +538,7 @@ export class AuthService {
       keyPrefix,
       userId,
       organizationId: orgId,
-      scopes: createApiKeyDto.scopes,
       expiresAt: createApiKeyDto.expiresAt ? new Date(createApiKeyDto.expiresAt) : undefined,
-      rateLimits: createApiKeyDto.rateLimits,
       metadata: createApiKeyDto.metadata,
     });
 

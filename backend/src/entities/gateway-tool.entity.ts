@@ -55,6 +55,22 @@ export class GatewayTool {
     requiredScopes?: string[];
   };
 
+  /**
+   * Per-gateway renaming of a tool's payloads.
+   *
+   * `inputMapping` and `outputMapping` are applied by
+   * ToolExecutorService (input before validation and the cache key,
+   * output on a successful result), and only on calls that arrive with a
+   * gatewayId -- the mapping belongs to one tool on one gateway.
+   *
+   * `headerMapping` is NOT IMPLEMENTED: nothing reads it, including
+   * transformInput/transformOutput below. It is accepted by the DTO and
+   * stored, and it changes no outbound request. Unlike the other two it
+   * has no rename semantics to borrow -- outbound headers are assembled
+   * per executor under the security policy's allowed-host and HTTPS
+   * checks, so honouring it would change what leaves the process, which
+   * is a product decision rather than missing plumbing.
+   */
   @Column({ type: 'json', nullable: true })
   transformations: {
     inputMapping?: Record<string, string>;

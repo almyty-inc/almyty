@@ -50,8 +50,6 @@ export interface CreateGatewayDto {
     requestsPerMinute?: number;
     requestsPerHour?: number;
     requestsPerDay?: number;
-    burstLimit?: number;
-    windowSize?: number;
     perVisitorPerHour?: number;
     perIpPerHour?: number;
   };
@@ -99,8 +97,6 @@ export interface UpdateGatewayDto {
     requestsPerMinute?: number;
     requestsPerHour?: number;
     requestsPerDay?: number;
-    burstLimit?: number;
-    windowSize?: number;
     perVisitorPerHour?: number;
     perIpPerHour?: number;
   };
