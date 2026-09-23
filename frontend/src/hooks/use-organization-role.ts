@@ -31,8 +31,17 @@ export function useOrganizationRole(): OrganizationRoleState {
 
   return useMemo(() => {
     const orgId = currentOrganization?.id
+    // GET /auth/profile re-projects each membership as
+    // `{ id, role, joinedAt, organization: { id, name, slug } }` — there is
+    // no `organizationId` on the wire, only the nested organization. Reading
+    // the flat key alone matched nothing, so `role` was null and `canManage`
+    // false for EVERY user including owners, which hid the spend-budget
+    // controls from the people who own the org. Read the nested id first and
+    // keep the flat one as a fallback for payloads that carry it.
     const membership = orgId
-      ? user?.organizationMemberships?.find((m) => m.organizationId === orgId)
+      ? user?.organizationMemberships?.find(
+          (m) => (m.organization?.id ?? m.organizationId) === orgId,
+        )
       : undefined
     const role = membership?.role ?? null
     return {

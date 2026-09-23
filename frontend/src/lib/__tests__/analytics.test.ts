@@ -109,8 +109,10 @@ describe('analytics wrapper — keyed (enabled)', () => {
     // CSS is inlined into snapshots so the replay renders styled instead of
     // a giant unstyled logo (un-inlined <link href> the player can't fetch).
     expect(sr.inlineStylesheet).toBe(true)
-    // We do NOT blanket-mask text — that would blank the whole page.
-    expect(sr.maskTextSelector).toBeUndefined()
+    // We do NOT blanket-mask text — that would blank the whole page. The
+    // selector is narrow on purpose: only elements explicitly marked as
+    // holding a live secret (see analytics-session-replay-secrets.test.ts).
+    expect(sr.maskTextSelector).toBe(a.SENSITIVE_TEXT_SELECTOR)
     expect(sr.maskAllText).toBeUndefined()
   })
 
