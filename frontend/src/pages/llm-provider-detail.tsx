@@ -216,6 +216,9 @@ export function LlmProviderDetailPage() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          <Button variant="outline" size="sm" onClick={() => navigate(`/llm-providers/${provider.id}/edit`)}>
+            Edit
+          </Button>
           <Button variant="outline" size="sm" onClick={() => {
             toggleStatusMutation.mutate({ status: provider.status === 'active' ? 'inactive' : 'active' })
           }}>

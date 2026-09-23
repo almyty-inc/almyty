@@ -7,7 +7,6 @@
  */
 import React from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { UseFormReturn } from 'react-hook-form'
 import type { UseMutationResult } from '@tanstack/react-query'
 
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +14,6 @@ import {
   createActionsColumn,
   createSortableColumn,
 } from '@/components/ui/data-table'
-import { llmProvidersApi } from '@/lib/api'
 import { VisibilityBadge, type Team } from '@/components/ui/team-filter'
 
 import type { LlmProvider } from './schema'
@@ -28,11 +26,6 @@ interface ProviderColumnDeps {
   setProviderToDelete: (provider: LlmProvider | null) => void
   setTestProvider: (provider: LlmProvider | null) => void
   setIsTestDialogOpen: (open: boolean) => void
-  setProviderToEdit: (provider: LlmProvider | null) => void
-  editForm: UseFormReturn<any>
-  setIsEditDialogOpen: (open: boolean) => void
-  setModelsLoading: (loading: boolean) => void
-  setAvailableModels: (models: Array<{ id: string; name: string }>) => void
   toggleProviderStatusMutation: UseMutationResult<any, any, { providerId: string; status: string }, any>
   teamLookup?: Record<string, Team>
 }
@@ -43,11 +36,6 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
     setProviderToDelete,
     setTestProvider,
     setIsTestDialogOpen,
-    setProviderToEdit,
-    editForm,
-    setIsEditDialogOpen,
-    setModelsLoading,
-    setAvailableModels,
     toggleProviderStatusMutation,
     teamLookup,
   } = deps
@@ -164,34 +152,8 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
         },
         {
           label: 'Edit',
-          onClick: async (provider) => {
-            setProviderToEdit(provider)
-            editForm.reset({
-              name: provider.name,
-              model: provider.configuration.model || '',
-              maxTokens: provider.configuration.maxTokens || 4096,
-              temperature: provider.configuration.temperature || 0.7,
-              // Stored keys are masked/encrypted — start blank; blank
-              // means "keep the existing key" on update, and an unset
-              // credentialId keeps the connection.
-              apiKey: '',
-              usageApiKey: '',
-              apiUrl: provider.configuration?.apiUrl || '',
-              credentialId: undefined,
-              usageCredentialId: undefined,
-            })
-            setIsEditDialogOpen(true)
-            setModelsLoading(true)
-            setAvailableModels([])
-            try {
-              const res = await llmProvidersApi.getModels(provider.id)
-              setAvailableModels(res || [])
-            } catch {
-              setAvailableModels([])
-            } finally {
-              setModelsLoading(false)
-            }
-          },
+          // Editing is a page of its own, not a modal.
+          onClick: (provider) => navigate(`/llm-providers/${provider.id}/edit`),
         },
         {
           label: 'Toggle Status',

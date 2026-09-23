@@ -40,14 +40,14 @@ export const CORE_STEPS: {
     label: 'Turn an API into tools',
     description: 'Paste a schema and get ready-to-use tools. No code.',
     cta: 'Add an API',
-    to: '/apis?new=1',
+    to: '/apis/new',
   },
   {
     key: 'gateway',
     label: 'Make it usable by AI',
     description: 'Get one link Claude and other agents can call.',
     cta: 'Create a gateway',
-    to: '/gateways?new=1',
+    to: '/gateways/new',
   },
   {
     key: 'first_call',
@@ -68,7 +68,7 @@ const MODEL_STEP = {
   label: 'Building agents on almyty?',
   description: 'Connect a model to power agents, model-backed tools, and memory.',
   cta: 'Connect a model',
-  to: '/llm-providers?new=1',
+  to: '/llm-providers/new',
 }
 
 export interface GettingStartedCardProps {

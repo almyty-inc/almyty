@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +12,6 @@ import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
-import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { PageHeader } from '@/components/layout/page-header'
 import { pluralized } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
@@ -60,23 +57,12 @@ import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { CreateToolDialog } from '@/components/tools/create-tool-dialog'
 import { AddMcpServerDialog } from '@/components/tools/add-mcp-server-dialog'
 import { McpSourcesPanel } from '@/components/tools/mcp-sources-panel'
 import { ToolExecutionDialog } from '@/components/tools/tool-execution-dialog'
 import { PublishToolDialog, isPublishable } from '@/components/tools/publish-tool-dialog'
 import { ToolHubPage } from '@/pages/tool-hub'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
-import CodeMirror from '@uiw/react-codemirror'
-import { javascript } from '@codemirror/lang-javascript'
-import { json } from '@codemirror/lang-json'
-import { autocompletion } from '@codemirror/autocomplete'
-import { githubLight } from '@uiw/codemirror-theme-github'
-import { useMemo } from 'react'
-
-// Form Schema for manual tool creation
-import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { toolSourceApi, DELETED_API_LABEL } from '@/lib/tool-source'
 
@@ -150,85 +136,9 @@ export function ToolsPage() {
   const [toolForExecution, setToolForExecution] = useState<Tool | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [isExecutionDialogOpen, setIsExecutionDialogOpen] = useState(false)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isAddMcpDialogOpen, setIsAddMcpDialogOpen] = useState(false)
-  // Honour ?new=1 from the command palette Create Tool action.
-  useCreateDeepLink(setIsCreateDialogOpen)
   const [executionParameters, setExecutionParameters] = useState<Record<string, any>>({})
   const [executionResult, setExecutionResult] = useState<any>(null)
-  const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
-  const [toolCode, setToolCode] = useState('')
-  const [executionMethod, setExecutionMethod] = useState<'http' | 'graphql' | 'soap' | 'grpc' | 'custom' | 'llm' | 'sdk'>('http')
-  const [sdkConfig, setSdkConfig] = useState<any>(null)
-  const [llmConfig, setLlmConfig] = useState({
-    providerId: '',
-    promptTemplate: '',
-    systemPrompt: '',
-    model: '',
-    maxTokens: 1024,
-    temperature: 0.7,
-    outputMode: 'text' as 'text' | 'json',
-    outputSchema: '',
-  })
-
-  // Create parameter autocomplete extension for CodeMirror
-  const parameterAutocomplete = useMemo(() => {
-    const paramNames = Object.keys(toolParameters.properties || {});
-    return autocompletion({
-      override: [
-        (context) => {
-          const word = context.matchBefore(/\w*/);
-          if (!word || (word.from === word.to && !context.explicit)) return null;
-
-          return {
-            from: word.from,
-            options: paramNames.map((name) => ({
-              label: name,
-              type: 'variable',
-              detail: toolParameters.properties[name]?.type || 'parameter',
-              info: toolParameters.properties[name]?.description || '',
-            })),
-          };
-        },
-      ],
-    });
-  }, [toolParameters])
-  const [httpConfig, setHttpConfig] = useState({
-    method: 'GET',
-    url: '',
-    headers: {},
-    body: '',
-  })
-  const [graphqlConfig, setGraphqlConfig] = useState({
-    endpoint: '',
-    query: '',
-    variables: '',
-  })
-  const [soapConfig, setSoapConfig] = useState({
-    wsdlUrl: '',
-    operation: '',
-  })
-  const [grpcConfig, setGrpcConfig] = useState({
-    serviceUrl: '',
-    method: '',
-    protoFile: '',
-  })
-  const [authConfig, setAuthConfig] = useState({
-    type: 'none',
-    apiKey: '',
-    bearerToken: '',
-    username: '',
-    password: '',
-  })
-
-  const createForm = useForm<CreateToolForm>({
-    resolver: zodResolver(createToolSchema),
-    defaultValues: {
-      name: '',
-      description: '',
-    },
-  })
-
   const { data: toolsData, isLoading, isError, error: toolsError, refetch: refetchTools } = useQuery({
     queryKey: ['tools', currentOrganization?.id, page],
     queryFn: () => toolsApi.getAll(currentOrganization?.id, { limit: PAGE_SIZE, page }),
@@ -301,155 +211,6 @@ export function ToolsPage() {
     },
     onError: (error: any) => {
       notifications.error('Could not activate', getApiErrorMessage(error, 'Please try again.'))
-    },
-  })
-
-  // Fetch available APIs for linking HTTP tools
-  const { data: apisData } = useQuery({
-    queryKey: ['apis', currentOrganization?.id],
-    queryFn: () => import('@/lib/api').then(m => m.apisApi.getAll()),
-    enabled: !!currentOrganization,
-  })
-  const apisExtracted = apisData?.apis || apisData || []
-  const availableApis = Array.isArray(apisExtracted) ? apisExtracted : []
-
-  const createToolMutation = useMutation({
-    mutationFn: (data: any) => {
-      let code = undefined;
-
-      if (executionMethod === 'custom') {
-        // Custom JavaScript: user writes their own code, no auto-generation
-        code = toolCode;
-      } else if (executionMethod === 'graphql') {
-        code = `
-// axios is available as a global — no require needed
-// Parameters available as variables
-const response = await axios.post('${graphqlConfig.endpoint}', {
-  query: \`${graphqlConfig.query}\`,
-  variables: parameters
-});
-return response;
-`;
-      } else if (executionMethod === 'soap') {
-        code = `
-// soap is available as a global — no require needed
-const client = await soap.createClientAsync('${soapConfig.wsdlUrl}');
-// Parameters available as variables
-const result = await client.${soapConfig.operation}Async(parameters);
-return result;
-`;
-      } else if (executionMethod === 'grpc') {
-        code = `
-const grpc = require('@grpc/grpc-js');
-const protoLoader = require('@grpc/proto-loader');
-
-// Load proto definition
-const packageDefinition = protoLoader.loadSync('${grpcConfig.protoFile}', {});
-const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
-
-// Create client
-const client = new protoDescriptor.${grpcConfig.method.split('/')[0]}('${grpcConfig.serviceUrl}', grpc.credentials.createInsecure());
-
-// Call method
-return new Promise((resolve, reject) => {
-  client.${grpcConfig.method.split('/')[1]}(parameters, (error, response) => {
-    if (error) reject(error);
-    else resolve(response);
-  });
-});
-`;
-      }
-      // HTTP: no code generation — uses httpConfig instead
-
-      // Auto-assign tool type based on execution method
-      let type = 'function';
-      if (executionMethod === 'http') {
-        type = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpConfig.method) ? 'action' : 'query';
-      } else if (executionMethod === 'graphql') {
-        type = graphqlConfig.query.trim().startsWith('mutation') ? 'mutation' : 'query';
-      } else if (executionMethod === 'sdk') {
-        type = 'function';
-      }
-
-      // Build LLM config if LLM execution method
-      let llmConfigPayload = undefined;
-      if (executionMethod === 'llm') {
-        llmConfigPayload = {
-          providerId: llmConfig.providerId,
-          promptTemplate: llmConfig.promptTemplate,
-          systemPrompt: llmConfig.systemPrompt || undefined,
-          model: llmConfig.model || undefined,
-          maxTokens: llmConfig.maxTokens,
-          temperature: llmConfig.temperature,
-          outputMode: llmConfig.outputMode,
-          outputSchema: llmConfig.outputMode === 'json' && llmConfig.outputSchema
-            ? JSON.parse(llmConfig.outputSchema)
-            : undefined,
-        };
-      }
-
-      // Build httpConfig payload for HTTP tools (structured, no code)
-      let httpConfigPayload = undefined;
-      if (executionMethod === 'http') {
-        httpConfigPayload = {
-          method: httpConfig.method,
-          path: httpConfig.url,
-          bodyEncoding: ['POST', 'PUT', 'PATCH'].includes(httpConfig.method) ? undefined : undefined,
-          bodyTemplate: httpConfig.body || undefined,
-          headers: httpConfig.headers && Object.keys(httpConfig.headers).length > 0 ? httpConfig.headers : undefined,
-        };
-      }
-
-      // The Authentication block was collected, rendered, and never
-      // sent, so every hand-built HTTP tool executed unauthenticated --
-      // and there is no tool edit UI, so it could not be added later
-      // either. The backend stores it nested (`{ type, config }`), while
-      // the form holds it flat, hence the reshape.
-      const inlineAuth =
-        authConfig.type === 'bearer' && authConfig.bearerToken
-          ? { type: 'bearer', config: { token: authConfig.bearerToken } }
-          : authConfig.type === 'apiKey' && authConfig.apiKey
-            ? { type: 'apiKey', config: { key: authConfig.apiKey, headerName: 'X-API-Key' } }
-            : authConfig.type === 'basic' && authConfig.username
-              ? { type: 'basic', config: { username: authConfig.username, password: authConfig.password } }
-              : null;
-
-      const payload: any = {
-        ...data,
-        type,
-        parameters: toolParameters,
-        executionMethod,
-        llmConfig: llmConfigPayload,
-        ...(inlineAuth ? { authConfig: inlineAuth } : {}),
-      };
-
-      // HTTP tools: send httpConfig, no code
-      if (executionMethod === 'http') {
-        payload.httpConfig = httpConfigPayload;
-      } else if (executionMethod === 'sdk') {
-        // SDK tools: send sdkConfig, no code
-        payload.sdkConfig = sdkConfig;
-      } else {
-        // All other methods that generate code
-        payload.code = code;
-      }
-
-      return toolsApi.create(payload, currentOrganization?.id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tools'] })
-      notifications.success('Tool created', 'It is ready to assign to a gateway.')
-      setIsCreateDialogOpen(false)
-      createForm.reset()
-      setToolParameters({ type: 'object', properties: {} })
-      setToolCode('')
-      setHttpConfig({ method: 'GET', url: '', headers: {}, body: '' })
-      setSdkConfig(null)
-      setExecutionMethod('http')
-    },
-    onError: (error: any) => {
-      const msg = getApiErrorMessage(error, 'Failed to create tool')
-      notifications.error('Error', msg)
     },
   })
 
@@ -727,7 +488,7 @@ return new Promise((resolve, reject) => {
                 <Plug className="mr-2 h-4 w-4" />
                 Add MCP server
               </Button>
-              <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!currentOrganization}>
+              <Button onClick={() => navigate('/tools/new')} disabled={!currentOrganization}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create tool
               </Button>
@@ -762,7 +523,7 @@ return new Promise((resolve, reject) => {
           title="No tools yet"
           description="Tools are generated from your APIs. Import an API and its operations appear here."
           action={
-            <Button onClick={() => navigate('/apis?new=1')}>
+            <Button onClick={() => navigate('/apis/new')}>
               <Plus className="mr-2 h-4 w-4" />
               Import API
             </Button>
@@ -1089,46 +850,6 @@ return new Promise((resolve, reject) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Create Tool Dialog */}
-      <CreateToolDialog
-        open={isCreateDialogOpen}
-        onOpenChange={(open) => {
-          setIsCreateDialogOpen(open)
-          if (!open) {
-            createForm.reset()
-            createToolMutation.reset()
-            setToolParameters({ type: 'object', properties: {} })
-            setToolCode('')
-            setHttpConfig({ method: 'GET', url: '', headers: {}, body: '' })
-            setSdkConfig(null)
-            setExecutionMethod('http')
-          }
-        }}
-        createForm={createForm}
-        createToolMutation={createToolMutation}
-        executionMethod={executionMethod}
-        onExecutionMethodChange={(v) => setExecutionMethod(v as 'http' | 'graphql' | 'soap' | 'grpc' | 'custom' | 'llm' | 'sdk')}
-        toolParameters={toolParameters}
-        onToolParametersChange={setToolParameters}
-        toolCode={toolCode}
-        onToolCodeChange={setToolCode}
-        httpConfig={httpConfig}
-        onHttpConfigChange={setHttpConfig}
-        graphqlConfig={graphqlConfig}
-        onGraphqlConfigChange={setGraphqlConfig}
-        soapConfig={soapConfig}
-        onSoapConfigChange={setSoapConfig}
-        grpcConfig={grpcConfig}
-        onGrpcConfigChange={setGrpcConfig}
-        authConfig={authConfig}
-        onAuthConfigChange={setAuthConfig}
-        llmConfig={llmConfig}
-        onLlmConfigChange={setLlmConfig}
-        availableApis={availableApis}
-        sdkConfig={sdkConfig}
-        onSdkConfigChange={setSdkConfig}
-      />
 
       {/* Add MCP Server Dialog */}
       <AddMcpServerDialog

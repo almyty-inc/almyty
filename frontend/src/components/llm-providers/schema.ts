@@ -166,7 +166,7 @@ function pastedKey(value: unknown): string | undefined {
  * picker. Every other create surface in the app forwards them.
  */
 type ProviderCreateInput = CreateProviderFormData & {
-  visibility?: 'org' | 'team'
+  visibility?: 'private' | 'team' | 'org'
   teamId?: string | null
 }
 
@@ -220,6 +220,9 @@ export interface ProviderUpdateFormData {
   /** undefined keeps the current connection, an id points at one, null clears it. */
   credentialId?: string | null
   usageCredentialId?: string | null
+  /** Sent only when the picker changed: 'private' (just me), a team, or org-wide. */
+  visibility?: 'private' | 'team' | 'org'
+  teamId?: string | null
 }
 
 /**
@@ -236,6 +239,8 @@ export function buildProviderUpdateBody(data: ProviderUpdateFormData): Record<st
     name: data.name,
     ...(data.credentialId !== undefined && { credentialId: data.credentialId }),
     ...(data.usageCredentialId !== undefined && { usageCredentialId: data.usageCredentialId }),
+    ...(data.visibility && { visibility: data.visibility }),
+    ...(data.visibility && data.teamId !== undefined && { teamId: data.teamId }),
     configuration: {
       model: data.model,
       maxTokens: data.maxTokens,

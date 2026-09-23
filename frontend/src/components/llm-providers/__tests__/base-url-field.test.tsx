@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 
 import { render } from '../../../test/setup'
 import { CreateProviderForm } from '../create-provider-form'
-import { EditProviderDialog } from '../edit-provider-dialog'
+import { EditProviderForm } from '../edit-provider-form'
 
 vi.mock('@/components/credential-picker', () => ({
   CredentialPicker: () => <div data-testid="credential-picker" />,
@@ -27,9 +27,8 @@ function CreateHarness({ type }: { type: string }) {
 function EditHarness({ type, apiUrl }: { type: string; apiUrl?: string }) {
   const form = useForm<any>({ defaultValues: { name: 'prod', model: '', maxTokens: 4096, temperature: 0.7, apiKey: '', usageApiKey: '', apiUrl: apiUrl ?? '' } })
   return (
-    <EditProviderDialog
-      open
-      onOpenChange={() => {}}
+    <EditProviderForm
+      onCancel={() => {}}
       editForm={form}
       providerToEdit={{ id: 'p-1', type, name: 'prod', configuration: { apiUrl } }}
       updateProviderMutation={{ isPending: false, mutate: vi.fn() } as any}

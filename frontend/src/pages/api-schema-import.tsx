@@ -1,11 +1,20 @@
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
+import { cn } from '@/lib/utils'
+/**
+ * pages/api-schema-import — import a schema into an existing API
+ * (/apis/:id/import). Used to be a dialog opened from the APIs list and
+ * the API detail page.
+ */
 import React, { useState } from 'react'
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Upload, FileCode, Database, Cloud, Server, FileText, Link, Zap } from 'lucide-react'
+import { ArrowLeft, Upload, FileCode, Database, Cloud, Server, FileText, Link, Zap } from 'lucide-react'
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -13,38 +22,72 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { ApiType } from '@/types'
+import { QueryError } from '@/components/ui/query-error'
+import { apisApi } from '@/lib/api'
+import { getApiErrorMessage } from '@/lib/api-error'
+import { useNotifications } from '@/store/app'
+import { ApiType, type Api } from '@/types'
 
 const importSchemaSchema = z.object({
   schemaContent: z.string().optional(),
-  schemaUrl: z.string().url().optional(),
+  // An empty field is "not using the URL tab", not an invalid URL.
+  schemaUrl: z.union([z.literal(''), z.string().url()]).optional(),
   description: z.string().optional(),
   generateTools: z.boolean().optional(),
-}).refine((data) => data.schemaContent || data.schemaUrl, {
-  message: "Either schema content or URL must be provided",
-  path: ["schemaContent"],
 })
 
 type ImportSchemaFormData = z.infer<typeof importSchemaSchema>
 
-interface SchemaImportDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  apiType: ApiType
-  onImport: (data: ImportSchemaFormData, file?: File) => void
-  isLoading?: boolean
-}
-
-export function SchemaImportDialog({ 
-  open, 
-  onOpenChange, 
-  apiType, 
-  onImport, 
-  isLoading = false 
-}: SchemaImportDialogProps) {
+export function ApiSchemaImportPage() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { success, error } = useNotifications()
   const [importMethod, setImportMethod] = useState<'file' | 'url' | 'paste'>('file')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  
+
+  const apiQuery = useQuery<Api>({
+    queryKey: ['api', id],
+    queryFn: () => apisApi.getById(id!),
+    enabled: !!id,
+  })
+  const api = apiQuery.data
+  const apiType = api?.type ?? ApiType.OPENAPI
+
+  React.useEffect(() => {
+    document.title = 'Import schema | almyty'
+    return () => { document.title = 'almyty' }
+  }, [])
+
+  const leave = () => navigate(`/apis/${id}`)
+
+  const importSchemaMutation = useMutation({
+    mutationFn: async ({ data, file }: { data: ImportSchemaFormData; file?: File }) => {
+      const importResult = await apisApi.importSchema(id!, data as any, file)
+      if (importResult?.jobId) {
+        return apisApi.pollImportStatus(id!, importResult.jobId)
+      }
+      return importResult
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['api', id] })
+      // The overview panel's "Schema" row reads its own query, not api.schemas.
+      queryClient.invalidateQueries({ queryKey: ['api-schemas', id] })
+      queryClient.invalidateQueries({ queryKey: ['api-operations', id] })
+      queryClient.invalidateQueries({ queryKey: ['apis'] })
+      queryClient.invalidateQueries({ queryKey: ['tools'] })
+      const jobResult = result?.result || result
+      const opCount = jobResult?.operations?.length || jobResult?.operationCount || 0
+      const toolCount = jobResult?.tools?.length || jobResult?.toolCount || 0
+      success('Schema imported', `${opCount} operations found, ${toolCount} tools generated.`)
+      leave()
+    },
+    onError: (err: unknown) => {
+      error('Failed to import schema', getApiErrorMessage(err, 'Please try again.'))
+    },
+  })
+  const isLoading = importSchemaMutation.isPending
+
   const form = useForm<ImportSchemaFormData>({
     resolver: zodResolver(importSchemaSchema),
     defaultValues: {
@@ -52,8 +95,20 @@ export function SchemaImportDialog({
     },
   })
 
+  // One of the three sources is required. Checked here rather than in the
+  // schema: the file lives outside the form, and a file-only import used
+  // to fail the schema's "content or URL" rule and never submit. The file
+  // itself also never reached the request -- both pages that opened the
+  // dialog dropped it.
   const handleSubmit = (data: ImportSchemaFormData) => {
-    onImport(data, selectedFile || undefined)
+    if (!selectedFile && !data.schemaContent && !data.schemaUrl) {
+      form.setError('schemaContent', { message: 'Either schema content or URL must be provided' })
+      return
+    }
+    const payload: ImportSchemaFormData = { ...data }
+    if (!payload.schemaUrl) delete payload.schemaUrl
+    if (!payload.schemaContent) delete payload.schemaContent
+    importSchemaMutation.mutate({ data: payload, file: selectedFile || undefined })
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,20 +174,41 @@ export function SchemaImportDialog({
   const schemaInfo = getSchemaInfo(apiType)
   const IconComponent = schemaInfo.icon
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <IconComponent className="h-5 w-5" />
-            Import {schemaInfo.title}
-          </DialogTitle>
-          <DialogDescription>
-            {schemaInfo.description}. The schema will be parsed to automatically generate operations and tools.
-          </DialogDescription>
-        </DialogHeader>
+  if (apiQuery.isError) {
+    return <QueryError error={apiQuery.error} onRetry={() => apiQuery.refetch()} title="Couldn't open that API" />
+  }
+  if (!api) {
+    return (
+      <div className="flex justify-center py-16">
+        <LoadingSpinner />
+      </div>
+    )
+  }
 
-        <div className="space-y-4">
+  return (
+    <div className="space-y-6">
+      <div>
+        <RouterLink
+          to={`/apis/${id}`}
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="mr-1 h-4 w-4" />
+          {api.name}
+        </RouterLink>
+      </div>
+
+      <div>
+        <h1 className={cn(DETAIL_TITLE_CLASSES, 'flex items-center gap-3')}>
+          <IconComponent className="h-8 w-8" />
+          Import {schemaInfo.title}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {schemaInfo.description}. The schema will be parsed to automatically generate operations and tools.
+        </p>
+      </div>
+
+      <Card>
+        <CardContent className="pt-6 space-y-4">
           <div className="flex gap-2">
             {schemaInfo.formats.map((format) => (
               <Badge key={format} variant="secondary">{format}</Badge>
@@ -263,14 +339,14 @@ export function SchemaImportDialog({
               <div className="flex justify-end gap-2 pt-4 border-t">
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
+                  variant="ghost"
+                  onClick={leave}
                   disabled={isLoading}
                 >
                   Cancel
                 </Button>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={isLoading}
                   className="min-w-32"
                 >
@@ -289,8 +365,8 @@ export function SchemaImportDialog({
               </div>
             </form>
           </Tabs>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

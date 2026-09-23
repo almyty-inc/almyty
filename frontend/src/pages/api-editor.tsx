@@ -1,28 +1,30 @@
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 /**
- * apis/create-api-dialog — Connect / Edit API multi-step dialog.
+ * pages/api-editor — Connect an API (/apis/new) or edit one (/apis/:id/edit).
  *
- * Owns the create form, all 4 create/update mutations (REST/OpenAPI,
- * HTTP, SDK, plus update), the auth-method picker, the SDK package
- * manager, and the inline schema-import second step. Used by
- * `pages/apis.tsx`.
+ * Owns the form, all 4 create/update mutations (REST/OpenAPI, HTTP, SDK,
+ * plus update), the auth-method picker, the SDK package manager, and the
+ * schema-import second step a new REST/GraphQL/SOAP/gRPC API goes through.
+ * This used to be a dialog on the APIs list; create and configure flows
+ * live on their own pages.
  */
 import React from 'react'
-import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
-  CheckCircle, Cloud, Database, FileText, Globe, Package, Plus,
+  ArrowLeft, CheckCircle, Cloud, Database, FileText, Globe, Package, Plus,
   Server, Upload, Webhook, XCircle,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { QueryError } from '@/components/ui/query-error'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -41,18 +43,7 @@ import {
   createApiSchema,
   type CreateApiFormData,
   type CreateApiFormInput,
-} from './schema'
-
-interface CreateApiDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  editingApi: Api | null
-  uploadFile: File | null
-  setUploadFile: (file: File | null) => void
-  importSchemaMutation: UseMutationResult<any, any, { id: string; data: any; file?: File }, unknown>
-  onSelectApi: (api: Api | null) => void
-}
-
+} from '@/components/apis/schema'
 // Get supported auth methods per API type
 function getSupportedAuthMethods(apiType: ApiType): ApiAuthType[] {
   switch (apiType) {
@@ -93,21 +84,32 @@ function getUrlInfo(apiType: ApiType) {
   }
 }
 
-export function CreateApiDialog({
-  open,
-  onOpenChange,
-  editingApi,
-  uploadFile,
-  setUploadFile,
-  importSchemaMutation,
-  onSelectApi,
-}: CreateApiDialogProps) {
+export function ApiEditorPage() {
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const { id } = useParams<{ id?: string }>()
+  const isEditing = !!id
+
+  React.useEffect(() => {
+    document.title = `${isEditing ? 'Edit API' : 'Connect API'} | almyty`
+    return () => { document.title = 'almyty' }
+  }, [isEditing])
+
+  // Editing loads the API itself (the list row no longer hands it over).
+  const editingApiQuery = useQuery<Api>({
+    queryKey: ['api', id],
+    queryFn: () => apisApi.getById(id!),
+    enabled: isEditing,
+  })
+  const editingApi: Api | null = isEditing ? (editingApiQuery.data ?? null) : null
+
+  /** Leave the page: to the API when there is one, else back to the list. */
+  const done = (apiId?: string) => navigate(apiId ? `/apis/${apiId}` : '/apis')
 
   const [createStep, setCreateStep] = React.useState<'details' | 'schema'>('details')
   const [createdApiForSchema, setCreatedApiForSchema] = React.useState<Api | null>(null)
+  const [uploadFile, setUploadFile] = React.useState<File | null>(null)
   const [selectedAuthType, setSelectedAuthType] = React.useState<ApiAuthType>(ApiAuthType.NONE)
   const [apiKeyCredentialId, setApiKeyCredentialId] = React.useState('')
   const [bearerCredentialId, setBearerCredentialId] = React.useState('')
@@ -130,7 +132,6 @@ export function CreateApiDialog({
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       success('API created', 'API has been created successfully.')
       setCreatedApiForSchema(response)
-      onSelectApi(response)
       setCreateStep('schema')
     },
     onError: (err: any) => {
@@ -138,13 +139,40 @@ export function CreateApiDialog({
     },
   })
 
-  const updateApiMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Api> }) =>
-      apisApi.update(id, data),
-    onSuccess: () => {
+  // The schema step of a new API. Same flow the APIs list ran: start the
+  // import, poll the job, then refresh everything an import changes.
+  const importSchemaMutation = useMutation({
+    mutationFn: async ({ id: apiId, data, file }: { id: string; data: any; file?: File }) => {
+      const importResult = await apisApi.importSchema(apiId, data, file)
+      if (importResult?.jobId) {
+        return apisApi.pollImportStatus(apiId, importResult.jobId)
+      }
+      return importResult
+    },
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
+      queryClient.invalidateQueries({ queryKey: ['api-schemas'] })
+      queryClient.invalidateQueries({ queryKey: ['api-operations'] })
+      queryClient.invalidateQueries({ queryKey: ['tools'] })
+      const jobResult = result?.result || result
+      const opCount = jobResult?.operations?.length || jobResult?.operationCount || 0
+      const toolCount = jobResult?.tools?.length || jobResult?.toolCount || 0
+      success('Schema imported', `Schema imported successfully. ${opCount} operations found, ${toolCount} tools generated.`)
+      done(variables.id)
+    },
+    onError: (err: any) => {
+      error('Failed to import schema', getApiErrorMessage(err, 'Please try again.'))
+    },
+  })
+
+  const updateApiMutation = useMutation({
+    mutationFn: ({ id: apiId, data }: { id: string; data: Partial<Api> }) =>
+      apisApi.update(apiId, data),
+    onSuccess: (_res, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['apis'] })
+      queryClient.invalidateQueries({ queryKey: ['api', variables.id] })
       success('API updated', 'API has been updated successfully.')
-      onOpenChange(false)
+      done(variables.id)
     },
     onError: (err: any) => {
       error('Failed to update API', getApiErrorMessage(err, 'Please try again.'))
@@ -153,11 +181,10 @@ export function CreateApiDialog({
 
   const createHttpApiMutation = useMutation({
     mutationFn: (data: any) => apisApi.createHttpApi(data),
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       success('API created', 'Custom HTTP API has been created successfully.')
-      onOpenChange(false)
-      setCreateStep('details')
+      done(response?.id)
     },
     onError: (err: any) => {
       error('Failed to create API', getApiErrorMessage(err, 'Please try again.'))
@@ -169,19 +196,7 @@ export function CreateApiDialog({
     onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['apis'] })
       success('API created', 'SDK API has been created successfully. Packages are being analyzed.')
-      onOpenChange(false)
-      setCreateStep('details')
-      setSdkPackages([])
-      setNewPkgName('')
-      setNewPkgVersion('*')
-      setUsePrivateRegistry(false)
-      setRegistryUrl('')
-      setRegistryToken('')
-      setRegistryScope('')
-      // Navigate to API detail page
-      if (response?.id) {
-        navigate(`/apis/${response.id}`)
-      }
+      done(response?.id)
     },
     onError: (err: any) => {
       error('Failed to create SDK API', getApiErrorMessage(err, 'Please try again.'))
@@ -199,7 +214,7 @@ export function CreateApiDialog({
     },
   })
 
-  // Populate form when editing
+  // Populate the form once the API being edited has loaded.
   React.useEffect(() => {
     if (editingApi) {
       createForm.reset({
@@ -215,17 +230,11 @@ export function CreateApiDialog({
       })
       setSelectedAuthType(editingApi.authentication?.type || ApiAuthType.NONE)
       setSelectedApiType(editingApi.type)
-    } else {
-      createForm.reset({
-        type: ApiType.OPENAPI,
-        authentication: {
-          type: ApiAuthType.NONE,
-          config: {},
-        },
-      })
-      setSelectedAuthType(ApiAuthType.NONE)
-      setSelectedApiType(ApiType.OPENAPI)
+      // Load the API's own scope: defaulting to org-wide here would widen
+      // a private or team API on any unrelated edit.
+      setVisibility({ visibility: editingApi.visibility ?? 'org', teamId: editingApi.teamId ?? null })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingApi])
 
   const handleCreateApi = (data: CreateApiFormData) => {
@@ -261,50 +270,54 @@ export function CreateApiDialog({
     }
   }
 
-  const handleDialogOpenChange = (next: boolean) => {
-    onOpenChange(next)
-    if (!next) {
-      setCreateStep('details')
-      setCreatedApiForSchema(null)
-      createForm.reset()
-      createApiMutation.reset()
-      updateApiMutation.reset()
-      createHttpApiMutation.reset()
-      createSdkApiMutation.reset()
-      setSelectedAuthType(ApiAuthType.NONE)
-      setSelectedApiType(ApiType.OPENAPI)
-      setApiKeyCredentialId('')
-      setBearerCredentialId('')
-      setOauthCredentialId('')
-      setSdkPackages([])
-      setNewPkgName('')
-      setNewPkgVersion('*')
-      setUsePrivateRegistry(false)
-      setRegistryUrl('')
-      setRegistryToken('')
-      setRegistryScope('')
-    }
+  if (isEditing && editingApiQuery.isError) {
+    return (
+      <QueryError
+        error={editingApiQuery.error}
+        onRetry={() => editingApiQuery.refetch()}
+        title="Couldn't open that API"
+      />
+    )
+  }
+
+  if (isEditing && !editingApi) {
+    return (
+      <div className="flex justify-center py-16">
+        <LoadingSpinner />
+      </div>
+    )
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {createStep === 'schema'
-              ? 'Import schema'
-              : editingApi ? 'Edit API' : 'Connect new API'}
-          </DialogTitle>
-          <DialogDescription>
-            {createStep === 'schema'
-              ? 'Import a schema to auto-generate operations and tools, or skip this step.'
-              : editingApi
-                ? 'Update your API configuration and settings.'
-                : 'Connect an existing API to automatically generate tools your agents can call.'}
-          </DialogDescription>
-        </DialogHeader>
+    <div className="space-y-6">
+      <div>
+        <Link
+          to={editingApi ? `/apis/${editingApi.id}` : '/apis'}
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="mr-1 h-4 w-4" />
+          {editingApi ? editingApi.name : 'APIs'}
+        </Link>
+      </div>
+
+      <div>
+        <h1 className={DETAIL_TITLE_CLASSES}>
+          {createStep === 'schema'
+            ? 'Import schema'
+            : editingApi ? 'Edit API' : 'Connect new API'}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {createStep === 'schema'
+            ? 'Import a schema to auto-generate operations and tools, or skip this step.'
+            : editingApi
+              ? 'Update your API configuration and settings.'
+              : 'Connect an existing API to automatically generate tools your agents can call.'}
+        </p>
+      </div>
+
         {createStep === 'schema' && createdApiForSchema ? (
-          <div className="space-y-6">
+          <Card>
+            <CardContent className="pt-6 space-y-6">
             <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 dark:bg-green-500/10 dark:border-green-500/30 rounded-lg">
               <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
               <div>
@@ -372,14 +385,7 @@ export function CreateApiDialog({
             </Tabs>
 
             <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  onOpenChange(false)
-                  setCreateStep('details')
-                  setCreatedApiForSchema(null)
-                }}
-              >
+              <Button variant="ghost" onClick={() => done(createdApiForSchema.id)}>
                 Skip for now
               </Button>
               <Button
@@ -396,8 +402,6 @@ export function CreateApiDialog({
                     data,
                     file: uploadFile || undefined,
                   })
-                  setCreateStep('details')
-                  setCreatedApiForSchema(null)
                 }}
               >
                 {importSchemaMutation.isPending ? (
@@ -410,8 +414,11 @@ export function CreateApiDialog({
                 )}
               </Button>
             </div>
-          </div>
+            </CardContent>
+          </Card>
         ) : (
+        <Card>
+          <CardContent className="pt-6">
         <form onSubmit={createForm.handleSubmit(handleCreateApi)} className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
@@ -785,14 +792,11 @@ export function CreateApiDialog({
               organizationId={currentOrganization?.id ?? ''}
               value={visibility}
               onChange={setVisibility}
+              noun="this API"
             />
           </div>
-          <div className="flex justify-end space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => done(editingApi?.id)}>
               Cancel
             </Button>
             <Button
@@ -805,8 +809,9 @@ export function CreateApiDialog({
             </Button>
           </div>
         </form>
+          </CardContent>
+        </Card>
         )}
-      </DialogContent>
-    </Dialog>
+    </div>
   )
 }

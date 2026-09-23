@@ -18,11 +18,6 @@ import { gatewaysApi, toolsApi } from '@/lib/api'
 import { useEntitlements } from '@/hooks/use-entitlement'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-
-import {
-  EditGatewayDialog,
-  type EditGatewayForm,
-} from '@/components/gateways/detail/edit-gateway-dialog'
 import { GatewayAuthSection } from '@/components/gateways/detail/gateway-auth-section'
 import { GatewayConfigurationCard } from '@/components/gateways/detail/gateway-configuration-card'
 import { IntegrationsSection } from '@/components/gateways/detail/integrations-section'
@@ -50,7 +45,6 @@ export function GatewayDetailPage() {
   const queryClient = useQueryClient()
 
   const [removeAllToolsDialogOpen, setRemoveAllToolsDialogOpen] = useState(false)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [securityDialogOpen, setSecurityDialogOpen] = useState(false)
   const [securityTarget, setSecurityTarget] = useState<SecurityTarget | null>(null)
 
@@ -170,19 +164,6 @@ export function GatewayDetailPage() {
 
   const gateway = gatewayData
 
-  // Edit gateway mutation
-  const editGatewayMutation = useMutation({
-    mutationFn: (data: EditGatewayForm) => gatewaysApi.update(id!, data),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['gateway', id] })
-      await queryClient.invalidateQueries({ queryKey: ['gateways'] })
-      success('Gateway updated', 'Gateway has been updated successfully.')
-      setEditDialogOpen(false)
-    },
-    onError: (err: any) => {
-      errorNotif('Failed to update gateway', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
 
   // Channel-config mutation: PATCHes only the configuration object.
   // Used by the per-channel-type credential form.
@@ -319,7 +300,7 @@ export function GatewayDetailPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => navigate(`/gateways/${id}/edit`)}>
             <Settings className="h-4 w-4 mr-2" />
             Edit gateway
           </Button>
@@ -515,16 +496,6 @@ export function GatewayDetailPage() {
           <GatewayEventsTab gatewayId={id!} />
         </TabsContent>
       </Tabs>
-
-      {/* Edit Gateway Dialog */}
-      <EditGatewayDialog
-        open={editDialogOpen}
-        onOpenChange={setEditDialogOpen}
-        gateway={gateway}
-        isSaving={editGatewayMutation.isPending}
-        onSubmit={(data) => editGatewayMutation.mutate(data)}
-        isSystem={gateway.isSystem}
-      />
 
       {/* Remove All Tools Confirmation */}
       <AlertDialog open={removeAllToolsDialogOpen} onOpenChange={setRemoveAllToolsDialogOpen}>

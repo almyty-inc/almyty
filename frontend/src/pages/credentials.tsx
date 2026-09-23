@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { Key, Shield, Plus, MoreHorizontal, Copy, Trash2, CheckCircle2 } from 'lucide-react'
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { Key, Shield, Plus, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import {
   AlertDialog,
@@ -28,23 +25,13 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 // formatDate is the shared one from lib/utils: a local copy here returned
 // relative time ("3h ago") while every other page showed "Jan 5, 2026".
 import { cn, formatDate } from '@/lib/utils'
-import { credentialsApi, accessKeysApi, gatewaysApi, agentsApi } from '@/lib/api'
+import { credentialsApi, accessKeysApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
-import { useCopySensitive } from '@/lib/clipboard'
-import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
-import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { credentialConfig, createCredentialSchema } from '@/components/credentials/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
 import type { VaultCredential, AccessKey } from '@/types'
-
-const SECRET_TYPES = [
-  { value: 'api_key', label: 'API Key' }, { value: 'bearer_token', label: 'Bearer Token' },
-  { value: 'basic_auth', label: 'Basic Auth' }, { value: 'oauth2', label: 'OAuth2' },
-  { value: 'jwt', label: 'JWT' }, { value: 'custom', label: 'Custom' },
-]
-const SCOPE_OPTIONS = ['read', 'write', 'execute', 'admin']
+import { SECRET_TYPES } from '@/components/credentials/schema'
 
 export function CredentialsPage() {
   const location = useLocation()
@@ -52,13 +39,12 @@ export function CredentialsPage() {
   const tab = location.pathname.includes('/access-keys') ? 'access-keys' : 'secrets'
   const setTab = (t: string) => navigate(t === 'secrets' ? '/credentials' : '/credentials/access-keys')
 
-  // Dialog state lifted to page level so buttons in header can trigger them
-  const [isCreateSecretOpen, setIsCreateSecretOpen] = useState(false)
-  const [isGenerateKeyOpen, setIsGenerateKeyOpen] = useState(false)
-  // Honour ?new=1 from the command palette Add Credential action.
-  // Opens the secret dialog on the Vault tab; the Access Keys tab
-  // has its own generate-key entry if we wire it later.
-  useCreateDeepLink(setIsCreateSecretOpen)
+  // Adding a credential is a page of its own now; ?new=1 from older
+  // links lands there.
+  const [searchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('new') === '1') navigate('/credentials/new', { replace: true })
+  }, [searchParams, navigate])
 
   useEffect(() => { document.title = 'Credentials | almyty'; return () => { document.title = 'almyty' } }, [])
 
@@ -69,11 +55,11 @@ export function CredentialsPage() {
         description="Manage vault credentials and access keys for your APIs and agents"
         actions={
           tab === 'secrets' ? (
-            <Button onClick={() => setIsCreateSecretOpen(true)}>
+            <Button onClick={() => navigate('/credentials/new')}>
               <Plus className="h-4 w-4 mr-2" /> Add credential
             </Button>
           ) : (
-            <Button onClick={() => setIsGenerateKeyOpen(true)}>
+            <Button onClick={() => navigate('/credentials/access-keys/new')}>
               <Plus className="h-4 w-4 mr-2" /> Generate key
             </Button>
           )
@@ -86,25 +72,17 @@ export function CredentialsPage() {
         </TabsList>
       </Tabs>
       <div>
-        {tab === 'secrets' && <SecretsTabWithDialog isCreateOpen={isCreateSecretOpen} setIsCreateOpen={setIsCreateSecretOpen} />}
-        {tab === 'access-keys' && <AccessKeysTabWithDialog isOpen={isGenerateKeyOpen} setIsOpen={setIsGenerateKeyOpen} />}
+        {tab === 'secrets' && <SecretsTab />}
+        {tab === 'access-keys' && <AccessKeysTab />}
       </div>
     </div>
   )
 }
 
-/** A blank credential form, whatever type it ends up being. */
-const EMPTY_CREDENTIAL_FORM = {
-  name: '', type: 'api_key', description: '', value: '',
-  username: '', password: '', clientId: '', clientSecret: '',
-}
-
-function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen: boolean; setIsCreateOpen: (v: boolean) => void }) {
+function SecretsTab() {
   const qc = useQueryClient(), notify = useNotifications()
+  const navigate = useNavigate()
   const { currentOrganization } = useOrganizationStore()
-  const [form, setForm] = useState(EMPTY_CREDENTIAL_FORM)
-  const [formError, setFormError] = useState<string | null>(null)
-  const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
   const [credentialToDelete, setCredentialToDelete] = useState<VaultCredential | null>(null)
@@ -114,11 +92,6 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   })
   const credentials: VaultCredential[] = Array.isArray(credentialsRaw) ? credentialsRaw : (credentialsRaw as any)?.credentials || []
   const visibleCredentials = filterByTeamVisibility(credentials as any[], teamFilter)
-  const createMut = useMutation({
-    mutationFn: (data: any) => credentialsApi.create(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setIsCreateOpen(false); setForm(EMPTY_CREDENTIAL_FORM); notify.success('Credential created', `"${form.name}" is now in the vault.`) },
-    onError: (err) => notify.error('Error', getApiErrorMessage(err, 'Failed to create credential')),
-  })
   const deleteMut = useMutation({
     mutationFn: (id: string) => credentialsApi.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setCredentialToDelete(null); notify.success('Credential deleted', 'The secret has been removed from the vault.') },
@@ -186,7 +159,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
           title="No credentials yet"
           description="The vault holds API keys, tokens and passwords your APIs and agents use. Values are encrypted and never shown again."
           action={
-            <Button onClick={() => setIsCreateOpen(true)}>
+            <Button onClick={() => navigate('/credentials/new')}>
               <Plus className="h-4 w-4 mr-2" /> Add credential
             </Button>
           }
@@ -205,82 +178,6 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
         </CardContent>
       </Card>
       )}
-      <Dialog open={isCreateOpen} onOpenChange={(open) => {
-        setIsCreateOpen(open)
-        if (!open) {
-          setForm(EMPTY_CREDENTIAL_FORM)
-          setFormError(null)
-          createMut.reset()
-        }
-      }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add credential</DialogTitle>
-            <DialogDescription>Store a credential securely in the vault.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div><label className="text-sm font-medium">Name</label>
-              <Input placeholder="e.g. Stripe API Key" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-            <div><label className="text-sm font-medium">Type</label>
-              <Select value={form.type} onValueChange={v => setForm(f => ({ ...f, type: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{SECRET_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-              </Select></div>
-            {(form.type === 'api_key' || form.type === 'bearer_token' || form.type === 'jwt') && (
-              <div><label className="text-sm font-medium">{form.type === 'api_key' ? 'API Key' : form.type === 'bearer_token' ? 'Token' : 'JWT Token'}</label>
-                <Input type="password" placeholder="Enter value..." value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} /></div>
-            )}
-            {/*
-              These four were `onChange={() => {}}` -- the only no-op
-              handlers in the frontend. Whatever you typed went nowhere,
-              so submitting failed on a `value` field that is not even
-              rendered for these types.
-            */}
-            {form.type === 'basic_auth' && (<>
-              <div><label className="text-sm font-medium">Username</label>
-                <Input placeholder="Username" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} /></div>
-              <div><label className="text-sm font-medium">Password</label>
-                <Input type="password" placeholder="Password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} /></div>
-            </>)}
-            {form.type === 'oauth2' && (<>
-              <div><label className="text-sm font-medium">Client ID</label>
-                <Input placeholder="Client ID" value={form.clientId} onChange={e => setForm(f => ({ ...f, clientId: e.target.value }))} /></div>
-              <div><label className="text-sm font-medium">Client Secret</label>
-                <Input type="password" placeholder="Client Secret" value={form.clientSecret} onChange={e => setForm(f => ({ ...f, clientSecret: e.target.value }))} /></div>
-            </>)}
-            <div><label className="text-sm font-medium">Description</label>
-              <Input placeholder="Optional description" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-            <div className="border-t pt-4">
-              <VisibilityField
-                organizationId={currentOrganization?.id ?? ''}
-                value={visibility}
-                onChange={setVisibility}
-              />
-            </div>
-            {formError && <p className="text-sm text-destructive">{formError}</p>}
-            <Button className="w-full" disabled={!form.name || createMut.isPending} onClick={() => {
-              const parsed = createCredentialSchema.safeParse(form)
-              if (!parsed.success) {
-                setFormError(parsed.error.issues[0].message)
-                return
-              }
-              setFormError(null)
-              // Backend's CreateCredentialDto (PR #154) expects { name, type, description?, config: object, visibility, teamId? }.
-              // The legacy flat 'value' shape is rejected by forbidNonWhitelisted.
-              createMut.mutate({
-                name: form.name,
-                type: form.type,
-                description: form.description,
-                config: credentialConfig(form),
-                visibility: visibility.visibility,
-                teamId: visibility.teamId,
-              })
-            }}>
-              {createMut.isPending ? 'Creating...' : 'Create credential'}</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/*
         Deleting a vault secret is irreversible and the row menu is one
         click away from Copy, so it goes through a confirm that names the
@@ -317,24 +214,13 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   )
 }
 
-function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (v: boolean) => void }) {
+function AccessKeysTab() {
   const qc = useQueryClient(), notify = useNotifications()
-  const copySensitive = useCopySensitive()
-  const [generatedKey, setGeneratedKey] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', resourceType: 'gateway' as 'gateway' | 'agent', resourceId: '', scopes: ['read'] as string[] })
+  const navigate = useNavigate()
 
   const { data: keysRaw, isLoading, isError, error, refetch } = useQuery({ queryKey: ['access-keys'], queryFn: () => accessKeysApi.getAll() })
   const keys: AccessKey[] = Array.isArray(keysRaw) ? keysRaw : (keysRaw as any)?.keys || (keysRaw as any)?.accessKeys || []
-  const { data: gatewaysRaw } = useQuery({ queryKey: ['gateways'], queryFn: () => gatewaysApi.getAll() })
-  const gateways: any[] = Array.isArray(gatewaysRaw) ? gatewaysRaw : (gatewaysRaw as any)?.gateways || []
-  const { data: agentsRaw } = useQuery({ queryKey: ['agents'], queryFn: () => agentsApi.getAll() })
-  const agents: any[] = Array.isArray(agentsRaw) ? agentsRaw : (agentsRaw as any)?.agents || []
 
-  const createMut = useMutation({
-    mutationFn: (data: any) => accessKeysApi.create(data),
-    onSuccess: (data: any) => { qc.invalidateQueries({ queryKey: ['access-keys'] }); setGeneratedKey(data?.key || data?.accessKey || 'Key generated'); notify.success('Access key created', 'Copy it now -- it is not shown again.') },
-    onError: (err) => notify.error('Could not generate the key', getApiErrorMessage(err, 'No key was created.')),
-  })
   const revokeMut = useMutation({
     mutationFn: (id: string) => accessKeysApi.revoke(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['access-keys'] }); notify.success('Access key revoked', 'The key can no longer be used.') },
@@ -349,23 +235,6 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
       destructive: true,
     })
     if (ok) revokeMut.mutate(key.id)
-  }
-
-  const toggleScope = (s: string) => setForm(f => ({ ...f, scopes: f.scopes.includes(s) ? f.scopes.filter(x => x !== s) : [...f.scopes, s] }))
-  const handleGenerate = () => {
-    const p: any = { name: form.name, scopes: form.scopes }
-    if (form.resourceType === 'gateway') p.gatewayId = form.resourceId; else p.agentId = form.resourceId
-    createMut.mutate(p)
-  }
-
-  // Sync external open state - clear generatedKey when opening fresh
-  useEffect(() => {
-    if (isOpen) setGeneratedKey(null)
-  }, [isOpen])
-
-  const handleClose = (v: boolean) => {
-    setIsOpen(v)
-    if (!v) setGeneratedKey(null)
   }
 
   const columns = [
@@ -400,7 +269,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
           title="No access keys yet"
           description="An access key lets a script or another service call one of your gateways or agents."
           action={
-            <Button onClick={() => setIsOpen(true)}>
+            <Button onClick={() => navigate('/credentials/access-keys/new')}>
               <Plus className="h-4 w-4 mr-2" /> Generate key
             </Button>
           }
@@ -412,69 +281,6 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
         </CardContent>
       </Card>
       )}
-      <Dialog open={isOpen} onOpenChange={handleClose}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{generatedKey ? 'Key generated' : 'Generate access key'}</DialogTitle>
-            <DialogDescription>{generatedKey ? 'Copy this key now. It will not be shown again.' : 'Create a new access key for a gateway or agent.'}</DialogDescription>
-          </DialogHeader>
-          {generatedKey ? (
-            <div className="space-y-4 pt-2">
-              <div className="flex items-center gap-2 bg-muted p-3 rounded-lg">
-                <code className="text-sm flex-1 break-all select-all" data-sensitive-text>{generatedKey}</code>
-                <Button variant="ghost" size="sm" aria-label="Copy access key" onClick={() => copySensitive(generatedKey, 'Access key')}><Copy className="h-4 w-4" /></Button>
-              </div>
-              <div className="flex items-center gap-2 text-amber-600 text-sm"><Key className="h-4 w-4" /> Store this key securely. It cannot be retrieved later.</div>
-              <Button className="w-full" onClick={() => { handleClose(false) }}>Done</Button>
-            </div>
-          ) : (
-            <div className="space-y-4 pt-2">
-              <div><label className="text-sm font-medium">Name</label>
-                <Input placeholder="e.g. Production Key" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-              <div><label className="text-sm font-medium">Resource Type</label>
-                <Select value={form.resourceType} onValueChange={(v: 'gateway' | 'agent') => setForm(f => ({ ...f, resourceType: v, resourceId: '' }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="gateway">Gateway</SelectItem><SelectItem value="agent">Agent</SelectItem></SelectContent>
-                </Select></div>
-              <div><label className="text-sm font-medium">{form.resourceType === 'gateway' ? 'Gateway' : 'Agent'}</label>
-                <Select value={form.resourceId} onValueChange={v => setForm(f => ({ ...f, resourceId: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                  <SelectContent>
-                    {/*
-                      An access key needs a resource, and an org with no
-                      agents yet -- very common, since keys are often set
-                      up first -- opened this on an empty sliver with a
-                      greyed-out button and no explanation.
-                    */}
-                    {(form.resourceType === 'gateway' ? gateways : agents).length === 0 && (
-                      <div className="px-3 py-2 text-sm text-muted-foreground">
-                        {form.resourceType === 'gateway' ? 'No gateways yet.' : 'No agents yet.'}
-                      </div>
-                    )}
-                    {(form.resourceType === 'gateway' ? gateways : agents).map((r: any) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
-                  </SelectContent>
-                </Select></div>
-              <div><label className="text-sm font-medium">Scopes</label>
-                <div className="flex gap-2 flex-wrap mt-1">
-                  {SCOPE_OPTIONS.map(scope => (
-                    <button key={scope} type="button" onClick={() => toggleScope(scope)} className={cn(
-                      'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
-                      form.scopes.includes(scope) ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50'
-                    )}>{form.scopes.includes(scope) && <CheckCircle2 className="h-3 w-3 inline mr-1" />}{scope}</button>
-                  ))}
-                </div></div>
-              <Button className="w-full" disabled={!form.name || !form.resourceId || createMut.isPending} onClick={handleGenerate}>
-                {createMut.isPending ? 'Generating...' : 'Generate key'}</Button>
-              {/* A disabled button that does not say why is a dead end. */}
-              {(!form.name || !form.resourceId) && (
-                <p className="text-xs text-muted-foreground text-center">
-                  {!form.name ? 'Give the key a name' : `Choose the ${form.resourceType} this key is for`} to continue.
-                </p>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
       {confirmDialog}
     </>
   )

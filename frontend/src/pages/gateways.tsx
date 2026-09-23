@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { Router, Plus, Search, Zap, Building2 } from 'lucide-react'
 
@@ -17,7 +15,6 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { QueryError } from '@/components/ui/query-error'
-import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -32,13 +29,10 @@ import { pluralized } from '@/lib/utils'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import { CreateGatewayDialog } from '@/components/gateways/create-gateway-dialog'
 import { GatewayDetailsSheet } from '@/components/gateways/gateway-details-sheet'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Gateway } from '@/types'
 
-// Form Schema
-import { createGatewaySchema, type CreateGatewayForm } from '@/components/gateways/schema'
 
 /**
  * Gateway types that are really messaging distributions of an app.
@@ -57,9 +51,11 @@ export function GatewaysPage() {
   }, [])
 
   const navigate = useNavigate()
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  // Honour ?new=1 from the command palette Create Gateway action.
-  useCreateDeepLink(setCreateDialogOpen)
+  // Honour ?new=1 from older links: creating a gateway is a page now.
+  const [searchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('new') === '1') navigate('/gateways/new', { replace: true })
+  }, [searchParams, navigate])
   const [deleteGatewayDialogOpen, setDeleteGatewayDialogOpen] = useState(false)
   const [gatewayToDelete, setGatewayToDelete] = useState<Gateway | null>(null)
   const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null)
@@ -155,78 +151,6 @@ export function GatewaysPage() {
     return matchesSearch && matchesType && matchesStatus
   })
 
-
-  // Form setup
-  const createForm = useForm<CreateGatewayForm>({
-    resolver: zodResolver(createGatewaySchema),
-    defaultValues: {
-      name: '',
-      type: '',
-      endpoint: '',
-      description: '',
-    }
-  })
-
-  // Handler function for gateway creation (extracted for clean state management)
-  const handleCreateGateway = (data: CreateGatewayForm & { kind?: string; agentId?: string }) => {
-    // Ensure endpoint starts with /
-    const endpoint = data.endpoint.startsWith('/') ? data.endpoint : '/' + data.endpoint
-
-    // Set default configuration based on gateway type
-    let configuration: Record<string, any> = {}
-    if (data.type === 'mcp') {
-      configuration = { transport: 'http' }
-    } else if (data.type === 'a2a') {
-      configuration = { agentCapabilities: {} }
-    } else if (data.type === 'acp') {
-      configuration = { agentCapabilities: {} }
-    } else if (data.type === 'utcp') {
-      configuration = { protocol: 'http' }
-    } else if (data.type === 'skills') {
-      configuration = { format: 'skill-md' }
-    }
-
-    const payload: Record<string, any> = {
-      ...data,
-      endpoint,
-      configuration,
-    }
-
-    // Pass kind (defaults to 'tool' for backwards compat)
-    if (data.kind) {
-      payload.kind = data.kind
-    }
-    if (data.agentId) {
-      payload.agentId = data.agentId
-    }
-
-    createGatewayMutation.mutate(payload)
-  }
-
-  // Create gateway mutation
-  const createGatewayMutation = useMutation({
-    mutationFn: async (payload: Record<string, any>) => {
-      return await gatewaysApi.create(payload)
-    },
-    onSuccess: async (result) => {
-      captureEvent('gateway_deployed')
-      // Show success message first
-      success('Gateway created', result?.message || 'It is now serving on its protocol endpoint.')
-
-      // Invalidate and refetch gateway queries - wait for completion
-      await queryClient.invalidateQueries({ queryKey: ['gateways'] })
-
-      // Wait a moment for the refetch to complete and UI to update
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      // CRITICAL: Reset form BEFORE closing to clear all state
-      createForm.reset()
-      setCreateDialogOpen(false)
-    },
-    onError: (err: unknown) => {
-      errorNotif('Error', getApiErrorMessage(err, 'Failed to create gateway'))
-    }
-  })
 
   // Delete gateway mutation
   const deleteGatewayMutation = useMutation({
@@ -394,7 +318,7 @@ export function GatewaysPage() {
           )
         }
         actions={
-          <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>
+          <Button onClick={() => navigate('/gateways/new')} disabled={!currentOrganization}>
             <Plus className="h-4 w-4 mr-2" />
             Create gateway
           </Button>
@@ -421,7 +345,7 @@ export function GatewaysPage() {
           title="No gateways yet"
           description="A gateway serves a set of tools over MCP, A2A, UTCP, and Agent Skills — one endpoint, every protocol."
           action={
-            <Button onClick={() => setCreateDialogOpen(true)}>
+            <Button onClick={() => navigate('/gateways/new')}>
               <Plus className="h-4 w-4 mr-2" />
               Create gateway
             </Button>
@@ -497,20 +421,6 @@ export function GatewaysPage() {
       </>
       )}
 
-      {/* Create Gateway Dialog */}
-      <CreateGatewayDialog
-        open={createDialogOpen}
-        onOpenChange={(open) => {
-          setCreateDialogOpen(open)
-          if (!open) {
-            createForm.reset()
-            createGatewayMutation.reset()
-          }
-        }}
-        createForm={createForm}
-        onSubmit={handleCreateGateway}
-        createGatewayMutation={createGatewayMutation}
-      />
 
 
       {/* Delete Gateway Confirmation Dialog */}

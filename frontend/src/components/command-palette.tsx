@@ -107,13 +107,14 @@ export function CommandPalette() {
 
   const actionEntries: Entry[] = [
     { id: 'act-new-agent', label: 'Create Agent', hint: 'Open the visual agent builder', icon: Plus, action: () => go('/agents/new') },
-    { id: 'act-new-gateway', label: 'Create Gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways?new=1') },
-    { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, Model, or SDK', icon: Plus, action: () => go('/tools?new=1') },
-    { id: 'act-new-api', label: 'Import API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis?new=1') },
+    { id: 'act-new-gateway', label: 'Create Gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways/new') },
+    { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, Model, or SDK', icon: Plus, action: () => go('/tools/new') },
+    { id: 'act-new-api', label: 'Import API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis/new') },
     { id: 'act-new-model', label: 'Add model', hint: 'From a provider, a server you run, or your cloud', icon: Plus, action: () => go('/models/new') },
     { id: 'act-new-provider', label: 'Add inference provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/llm-providers/new') },
     { id: 'act-new-runner', label: 'Register Runner', hint: 'Run agents on your own machine', icon: Plus, action: () => go('/runners/new') },
-    { id: 'act-new-credential', label: 'Add Credential', hint: 'Store a vault secret', icon: Plus, action: () => go('/credentials?new=1') },
+    { id: 'act-new-credential', label: 'Add Credential', hint: 'Store a vault secret', icon: Plus, action: () => go('/credentials/new') },
+    { id: 'act-new-access-key', label: 'Generate Access Key', hint: 'A key for a gateway or an agent', icon: Plus, action: () => go('/credentials/access-keys/new') },
   ]
 
   return (
