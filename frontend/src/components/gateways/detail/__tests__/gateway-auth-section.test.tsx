@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { render } from '../../../../test/setup'
 import { GatewayAuthSection } from '../gateway-auth-section'
 import { gatewaysApi } from '@/lib/api'
@@ -86,5 +87,62 @@ describe('GatewayAuthSection API keys list', () => {
     await waitFor(() => {
       expect(screen.getByText(/No API keys yet/i)).toBeInTheDocument()
     })
+  })
+})
+
+describe('GatewayAuthSection inline forms', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    if (!Element.prototype.hasPointerCapture) {
+      Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false) as any
+      Element.prototype.setPointerCapture = vi.fn() as any
+      Element.prototype.releasePointerCapture = vi.fn() as any
+    }
+    vi.mocked(gatewaysApi.getAuthConfigs).mockResolvedValue([apiKeyAuthConfig])
+    vi.mocked(gatewaysApi.listApiKeys).mockResolvedValue([])
+  })
+
+  it('generates a key inline and shows it once, with a copy button', async () => {
+    const user = userEvent.setup()
+    vi.mocked(gatewaysApi.generateApiKey).mockResolvedValue({ key: 'gw_full_secret_value' } as any)
+    render(<GatewayAuthSection gatewayId="gw-1" gatewayName="Petstore" />)
+
+    await user.click(await screen.findByRole('button', { name: /Generate key/ }))
+    const form = screen.getByRole('form', { name: 'Generate API key' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await user.type(within(form).getByLabelText('Key name'), 'CI')
+    await user.click(within(form).getByRole('button', { name: 'Generate key' }))
+
+    await waitFor(() => expect(gatewaysApi.generateApiKey).toHaveBeenCalledWith('gw-1', { name: 'CI' }))
+    const shown = await screen.findByTestId('generated-api-key')
+    expect(shown).toHaveTextContent('gw_full_secret_value')
+    expect(shown).toHaveTextContent(/won't see it again/)
+    expect(within(shown).getByRole('button', { name: /copy api key/i })).toBeInTheDocument()
+
+    await user.click(within(shown).getByRole('button', { name: "I've saved it" }))
+    expect(screen.queryByText('gw_full_secret_value')).toBeNull()
+  })
+
+  it('adds an auth method inline, and says so when none is chosen', async () => {
+    const user = userEvent.setup()
+    vi.mocked(gatewaysApi.getAuthConfigs).mockResolvedValue([])
+    vi.mocked(gatewaysApi.createAuthConfig).mockResolvedValue({} as any)
+    render(<GatewayAuthSection gatewayId="gw-1" gatewayName="Petstore" />)
+
+    await user.click(await screen.findByRole('button', { name: /Add auth method/ }))
+    const form = screen.getByRole('form', { name: 'Add authentication method' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    await user.click(within(form).getByRole('button', { name: 'Add auth method' }))
+    expect(await within(form).findByText('Choose how clients authenticate.')).toBeInTheDocument()
+    expect(gatewaysApi.createAuthConfig).not.toHaveBeenCalled()
+
+    await user.click(within(form).getByLabelText(/^Method/))
+    await user.click(await screen.findByRole('option', { name: 'Bearer Token' }))
+    await user.click(within(form).getByRole('button', { name: 'Add auth method' }))
+
+    await waitFor(() =>
+      expect(gatewaysApi.createAuthConfig).toHaveBeenCalledWith('gw-1', { type: 'bearer_token', configuration: {} }),
+    )
   })
 })
