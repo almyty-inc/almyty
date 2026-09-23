@@ -1,35 +1,16 @@
-import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeft, Check, ChevronRight, Package, Plus, Trash2 } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, ArrowLeft, Check, ChevronRight, Package, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
-import { useNotifications } from '@/store/app'
 import { agentsApi } from '@/lib/api'
 import {
   DISTRIBUTION_BLURBS,
@@ -37,13 +18,9 @@ import {
   agentAppsApi,
   type AppDistribution,
   type DistributionStatus,
-  type DistributionTarget,
 } from '@/lib/agent-apps'
 import { AppAgentsPanel } from '@/components/agent-apps/app-agents-panel'
 import { AppSettingsPanel } from '@/components/agent-apps/app-settings-panel'
-import { AddDistributionDialog } from '@/components/agent-apps/add-distribution-dialog'
-import { DistributionPanel } from '@/components/agent-apps/distribution-panel'
-import { getApiErrorMessage } from '@/lib/api-error'
 
 /** How each distribution status reads and colours in a badge. */
 const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | 'secondary' | 'warning' | 'outline' | 'destructive' }> = {
@@ -57,18 +34,16 @@ const STATUS: Record<DistributionStatus, { label: string; variant: 'success' | '
 /**
  * One app: what it is made of, and everywhere it ships.
  *
- * Structured like every other detail page in the product — a header, a
- * row of tabbed sections, cards for the things it contains, and dialogs
- * for editing them. An app is a configuration entity, the same shape as
- * a gateway, so it is presented the same way rather than as a canvas.
+ * Structured like every other detail page in the product -- a header, a
+ * row of tabbed sections, cards for the things it contains. Each
+ * distribution has a page of its own (/apps/:slug/distributions/:target)
+ * with its settings, its callback URL and its publish or build controls.
+ * What stops the app as a whole from shipping is said here, once, not
+ * inside every distribution.
  */
 export function AppDetailPage() {
   const { slug = '' } = useParams<{ slug: string }>()
   const queryClient = useQueryClient()
-  const { success, error: errorNotif } = useNotifications()
-
-  const [editing, setEditing] = useState<DistributionTarget | null>(null)
-  const [addOpen, setAddOpen] = useState(false)
 
   const {
     data: app,
@@ -103,21 +78,6 @@ export function AppDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['agent-app-check', slug] })
   }
 
-  const [distributionToRemove, setDistributionToRemove] = useState<DistributionTarget | null>(null)
-  const removeDistribution = useMutation({
-    mutationFn: (target: DistributionTarget) => agentAppsApi.removeDistribution(slug, target),
-    onSuccess: () => {
-      success('Distribution removed', 'It is no longer on this app.')
-      setDistributionToRemove(null)
-      setEditing(null)
-      invalidate()
-    },
-    onError: (err: any) => {
-      setDistributionToRemove(null)
-      errorNotif('Could not remove', getApiErrorMessage(err, 'Something went wrong.'))
-    },
-  })
-
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -131,8 +91,8 @@ export function AppDetailPage() {
   }
 
   const distributions = app.distributions ?? []
-  const openDistribution = distributions.find((d) => d.target === editing)
   const refusals = check?.refusals ?? []
+  const addPath = `/apps/${app.slug}/distributions/new`
 
   return (
     <div className="space-y-8">
@@ -163,14 +123,16 @@ export function AppDetailPage() {
             </div>
           </div>
         </div>
-        <Button onClick={() => setAddOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add distribution
+        <Button asChild>
+          <Link to={addPath}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add distribution
+          </Link>
         </Button>
       </div>
 
       {refusals.length > 0 ? (
-        <Card className="border-amber-400 p-4">
+        <Card className="border-amber-400 p-4" data-testid="app-readiness">
           <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300">
             <AlertTriangle className="h-4 w-4" />
             Can't publish yet
@@ -207,19 +169,21 @@ export function AppDetailPage() {
               title="No distributions yet"
               description="Publish this app as a web app, a terminal, a desktop app, or a messaging channel."
               action={
-                <Button onClick={() => setAddOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add distribution
+                <Button asChild>
+                  <Link to={addPath}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add distribution
+                  </Link>
                 </Button>
               }
             />
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {distributions.map((distribution) => (
                 <DistributionCard
                   key={distribution.target}
+                  to={`/apps/${app.slug}/distributions/${distribution.target}`}
                   distribution={distribution}
-                  onEdit={() => setEditing(distribution.target)}
                 />
               ))}
             </div>
@@ -238,117 +202,31 @@ export function AppDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
-          {openDistribution && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{DISTRIBUTION_LABELS[openDistribution.target]}</DialogTitle>
-                <DialogDescription>
-                  Configure the {DISTRIBUTION_LABELS[openDistribution.target]} distribution.
-                </DialogDescription>
-              </DialogHeader>
-              <DistributionPanel
-                app={app}
-                distribution={openDistribution}
-                agents={agents}
-                onSaved={invalidate}
-              />
-              <Button
-                variant="ghost"
-                className="mt-2 w-full text-destructive"
-                disabled={removeDistribution.isPending}
-                onClick={() => setDistributionToRemove(openDistribution.target)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Remove
-              </Button>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/*
-        Removing a distribution unpublishes a shipping target; the button is
-        inside the config dialog where people are only fiddling with settings,
-        so it asks first and names the target.
-      */}
-      <AlertDialog
-        open={distributionToRemove !== null}
-        onOpenChange={(open) => { if (!open) setDistributionToRemove(null) }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove distribution?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {distributionToRemove
-                ? `This removes the ${DISTRIBUTION_LABELS[distributionToRemove]} distribution and its configuration from this app. Builds already downloaded keep working.`
-                : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (distributionToRemove) {
-                  removeDistribution.mutate(distributionToRemove)
-                }
-              }}
-              variant="destructive"
-            >
-              Remove distribution
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AddDistributionDialog
-        app={app}
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        onAdded={invalidate}
-      />
     </div>
   )
 }
 
-/** One place the product ships to, as a card in the grid. */
-function DistributionCard({
-  distribution,
-  onEdit,
-}: {
-  distribution: AppDistribution
-  onEdit: () => void
-}) {
+/** One place the product ships to, as a card linking to its page. */
+function DistributionCard({ distribution, to }: { distribution: AppDistribution; to: string }) {
   const status = STATUS[distribution.status] ?? STATUS.draft
 
   return (
-    <Card
-      role="button"
-      tabIndex={0}
-      onClick={onEdit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onEdit()
-        }
-      }}
-      className="cursor-pointer p-4 transition-colors hover:border-primary/50"
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate font-medium">
-          {DISTRIBUTION_LABELS[distribution.target]}
-        </span>
-        <Badge variant={status.variant}>{status.label}</Badge>
-      </div>
-      <div className="mt-2 flex items-center gap-2">
-        <ProtocolBadge protocol={distribution.target} />
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {DISTRIBUTION_BLURBS[distribution.target]}
-      </p>
-    </Card>
+    <Link to={to} className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Card className="h-full p-4 transition-colors hover:border-primary/50">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate font-medium">
+            {DISTRIBUTION_LABELS[distribution.target]}
+          </span>
+          <Badge variant={status.variant}>{status.label}</Badge>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <ProtocolBadge protocol={distribution.target} />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {DISTRIBUTION_BLURBS[distribution.target]}
+        </p>
+      </Card>
+    </Link>
   )
 }
 
