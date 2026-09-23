@@ -301,6 +301,7 @@ export function CreateProviderForm({
               organizationId={currentOrganization?.id ?? ''}
               value={visibility}
               onChange={setVisibility}
+              noun="this provider and its key"
             />
           </div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

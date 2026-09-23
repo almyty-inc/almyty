@@ -140,8 +140,12 @@ A runner is a long-running daemon that registers **any machine you control** wit
 That is the general capability. One thing it is particularly good at is driving a CLI coding agent (Claude Code, Codex, gemini, aider) against a real checkout in one coherent session.
 
 ```bash
-npx @almyty/runner start --name my-laptop
+npm i -g @almyty/runner @almyty/auth
+almyty-auth login
+almyty-runner start --name my-laptop
 ```
+
+The login is what identifies and authorises the runner, not the name. Who else can see and use it is its visibility: Private (the default), Team, or Org-wide.
 
 By default the runner uses **host isolation**: dispatched commands run as the user who started it, on that machine. Package installs are refused by default, and `allowedCwdRoots` / `denyPatterns` narrow it further — see [the runner README](packages/runner/README.md#what-that-command-lets-almyty-do-to-your-machine), which the daemon also summarizes at boot.
 

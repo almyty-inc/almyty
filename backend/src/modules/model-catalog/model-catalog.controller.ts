@@ -50,7 +50,7 @@ export class ModelCatalogController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'List models' })
   async list(@Request() req: any, @Query(new ValidationPipe({ transform: true })) query: ListModelsQueryDto) {
-    const rows = await this.catalog.list(this.orgId(req), query);
+    const rows = await this.catalog.list(this.orgId(req), query, req.user?.id ?? null);
     return { success: true, data: rows.map(view) };
   }
 
@@ -78,7 +78,7 @@ export class ModelCatalogController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Model detail' })
   async get(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    return { success: true, data: view(await this.catalog.get(this.orgId(req), id)) };
+    return { success: true, data: view(await this.catalog.get(this.orgId(req), id, req.user?.id ?? null)) };
   }
 
   @Patch(':id')

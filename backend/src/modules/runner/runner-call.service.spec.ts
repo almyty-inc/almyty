@@ -27,7 +27,7 @@ class FakeTransport extends EventEmitter {
     return new Promise((resolve) => this.waiters.push(resolve));
   }
   /** Helper to simulate a runner-side response or error envelope. */
-  emitEnvelope(env: WorkerEnvelope, session?: { id: string; organizationId: string }): void {
+  emitEnvelope(env: WorkerEnvelope, session?: { id: string; organizationId: string; userId?: string }): void {
     this.emit('envelope', env, session);
   }
 }
@@ -38,12 +38,15 @@ class FakeRunnerService {
     name: 'laptop',
     state: RunnerState.ONLINE,
     organizationId: 'org-1',
+    ownerUserId: 'owner-1',
   } as any;
-  /** Which (runnerId, organizationId) pairs this fake considers real. */
-  membershipChecks: Array<{ runnerId: string; organizationId: string }> = [];
-  async belongsToOrganization(runnerId: string, organizationId: string): Promise<boolean> {
-    this.membershipChecks.push({ runnerId, organizationId });
-    return runnerId === this.runner.id && organizationId === (this.runner as any).organizationId;
+  /** Which (runnerId, organizationId, userId) triples this fake was asked about. */
+  membershipChecks: Array<{ runnerId: string; organizationId: string; userId?: string }> = [];
+  async isOwnedBy(runnerId: string, organizationId: string, userId?: string): Promise<boolean> {
+    this.membershipChecks.push({ runnerId, organizationId, userId });
+    return runnerId === this.runner.id
+      && organizationId === (this.runner as any).organizationId
+      && userId === (this.runner as any).ownerUserId;
   }
   session: RunnerSession | null = {
     id: 'session-row-1',
@@ -54,7 +57,9 @@ class FakeRunnerService {
     remoteAddress: null,
   } as any;
   resolveError: { status?: number; message: string } | null = null;
-  async resolveForDispatch(_id: string): Promise<Runner> {
+  resolveCallers: Array<string | null | undefined> = [];
+  async resolveForDispatch(_id: string, callerUserId?: string | null): Promise<Runner> {
+    this.resolveCallers.push(callerUserId);
     if (this.resolveError) {
       const err: any = new Error(this.resolveError.message);
       err.status = this.resolveError.status;
@@ -253,7 +258,7 @@ describe('RunnerCallService', () => {
     const { runners, transport } = makeService();
     transport.emitEnvelope(
       { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e1', ts: Date.now(), payload: { kind: 'runner.hello', runnerId: 'runner-1' } },
-      { id: 'sh_session_1', organizationId: 'org-1' },
+      { id: 'sh_session_1', organizationId: 'org-1', userId: 'owner-1' },
     );
     await flush();
     expect(runners.sessionConnects).toEqual([{ runnerId: 'runner-1', sessionId: 'sh_session_1' }]);
@@ -264,12 +269,12 @@ describe('RunnerCallService', () => {
     // hello first to establish the session->runner link
     transport.emitEnvelope(
       { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e1', ts: Date.now(), payload: { kind: 'runner.hello', runnerId: 'runner-1' } },
-      { id: 'sh_session_1', organizationId: 'org-1' },
+      { id: 'sh_session_1', organizationId: 'org-1', userId: 'owner-1' },
     );
     await flush();
     transport.emitEnvelope(
       { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: { ts: Date.now(), inUse: 0 } },
-      { id: 'sh_session_1', organizationId: 'org-1' },
+      { id: 'sh_session_1', organizationId: 'org-1', userId: 'owner-1' },
     );
     await flush();
     expect(runners.heartbeats).toEqual(['runner-1']);
@@ -281,7 +286,7 @@ describe('RunnerCallService', () => {
     runners.sessionToRunner['sh_session_2'] = 'runner-1';
     transport.emitEnvelope(
       { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: { ts: Date.now(), inUse: 0 } },
-      { id: 'sh_session_2', organizationId: 'org-1' },
+      { id: 'sh_session_2', organizationId: 'org-1', userId: 'owner-1' },
     );
     await flush();
     expect(runners.heartbeats).toEqual(['runner-1']);
@@ -291,7 +296,7 @@ describe('RunnerCallService', () => {
     const { runners, transport } = makeService();
     transport.emitEnvelope(
       { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: { ts: Date.now(), inUse: 0 } },
-      { id: 'sh_unknown', organizationId: 'org-1' },
+      { id: 'sh_unknown', organizationId: 'org-1', userId: 'owner-1' },
     );
     await flush();
     expect(runners.heartbeats).toEqual([]);
@@ -319,7 +324,7 @@ describe('RunnerCallService', () => {
     t: ReturnType<typeof makeService>,
     heartbeatId = 'h1',
   ): Promise<void> {
-    const session = { id: 'sh_session_1', organizationId: 'org-1' };
+    const session = { id: 'sh_session_1', organizationId: 'org-1', userId: 'owner-1' };
     t.transport.emitEnvelope(
       { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e1', ts: Date.now(), payload: { kind: 'runner.hello', runnerId: 'runner-1' } },
       session,
@@ -384,7 +389,7 @@ describe('RunnerCallService', () => {
     const t = makeService();
     t.transport.emitEnvelope(
       { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: { ts: Date.now() } },
-      { id: 'sh_unknown', organizationId: 'org-1' },
+      { id: 'sh_unknown', organizationId: 'org-1', userId: 'owner-1' },
     );
     await flush();
     expect(t.workspaces.calls).toEqual([]);
@@ -420,12 +425,12 @@ describe('RunnerCallService', () => {
         ts: Date.now(),
         payload: { kind: 'runner.hello', runnerId: 'runner-1' },
       },
-      { id: 'sh_attacker', organizationId: 'org-2' },
+      { id: 'sh_attacker', organizationId: 'org-2', userId: 'attacker' },
     );
     await flush();
 
     expect(runners.membershipChecks).toEqual([
-      { runnerId: 'runner-1', organizationId: 'org-2' },
+      { runnerId: 'runner-1', organizationId: 'org-2', userId: 'attacker' },
     ]);
     expect(runners.sessionConnects).toEqual([]);
 
@@ -434,9 +439,47 @@ describe('RunnerCallService', () => {
     // looking alive either.
     transport.emitEnvelope(
       { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: {} },
-      { id: 'sh_attacker', organizationId: 'org-2' },
+      { id: 'sh_attacker', organizationId: 'org-2', userId: 'attacker' },
     );
     await flush();
     expect(runners.heartbeats).toEqual([]);
+  });
+
+  /**
+   * Same organization, different user: a colleague who learns the
+   * runner's id (it is shown on the runner's page to anyone who can see
+   * the runner) must not be able to attach their own daemon's session
+   * to it and take over its dispatches.
+   */
+  it('refuses a runner.hello from another member of the same organization', async () => {
+    const { runners, transport } = makeService();
+    transport.emitEnvelope(
+      {
+        v: WORKER_PROTOCOL_VERSION,
+        type: 'event',
+        id: 'e1',
+        ts: Date.now(),
+        payload: { kind: 'runner.hello', runnerId: 'runner-1' },
+      },
+      { id: 'sh_colleague', organizationId: 'org-1', userId: 'colleague' },
+    );
+    await flush();
+    expect(runners.sessionConnects).toEqual([]);
+
+    transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: {} },
+      { id: 'sh_colleague', organizationId: 'org-1', userId: 'colleague' },
+    );
+    await flush();
+    expect(runners.heartbeats).toEqual([]);
+  });
+
+  it('passes the caller through to resolveForDispatch', async () => {
+    const { svc: service, runners, transport } = makeService();
+    const pushed = transport.waitForPush();
+    const call = service.dispatch('runner-1', 'runner.info', {}, undefined, { callerUserId: 'owner-1', timeoutMs: 50 });
+    await pushed;
+    await call.catch(() => undefined);
+    expect(runners.resolveCallers).toEqual(['owner-1']);
   });
 });

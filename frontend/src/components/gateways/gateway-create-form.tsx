@@ -7,13 +7,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -25,12 +18,11 @@ import { useOrganizationStore } from '@/store/organization'
 import type { Agent } from '@/types'
 import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 
-interface CreateGatewayDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+interface GatewayCreateFormProps {
   createForm: UseFormReturn<any>
   onSubmit: (data: any) => void
   createGatewayMutation: UseMutationResult<any, any, any, any>
+  onCancel: () => void
 }
 
 const TOOL_TYPES = [
@@ -57,13 +49,24 @@ const AGENT_TYPES = [
   { value: 'chat_widget', label: 'Chat Widget' },
 ]
 
-export function CreateGatewayDialog({
-  open,
-  onOpenChange,
+/**
+ * Protocol surfaces a caller reaches with an almyty identity (an API key,
+ * an OAuth token). Only these can be private: a chat channel is reached
+ * by people who never sign in to almyty, so the server refuses a private
+ * one. Mirrors PRIVATE_CAPABLE_GATEWAY_TYPES on the backend.
+ */
+export const PRIVATE_CAPABLE_GATEWAY_TYPES = new Set(['mcp', 'utcp', 'skills', 'a2a', 'acp', 'openai_chat'])
+
+/**
+ * The create-a-gateway form. Rendered on its own page (/gateways/new), not
+ * in a modal; the page owns the form state and the mutation.
+ */
+export function GatewayCreateForm({
   createForm,
   onSubmit,
   createGatewayMutation,
-}: CreateGatewayDialogProps) {
+  onCancel,
+}: GatewayCreateFormProps) {
   const [kind, setKind] = useState<'tool' | 'agent'>('tool')
   const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const { currentOrganization } = useOrganizationStore()
@@ -76,21 +79,17 @@ export function CreateGatewayDialog({
       const result = d?.agents || (Array.isArray(d) ? d : [])
       return Array.isArray(result) ? result : []
     },
-    enabled: !!currentOrganization && kind === 'agent' && open,
+    enabled: !!currentOrganization && kind === 'agent',
   })
 
   const agents: Agent[] = Array.isArray(agentsData) ? agentsData : []
   const typeOptions = kind === 'tool' ? TOOL_TYPES : AGENT_TYPES
-
-  const handleOpenChange = (openVal: boolean) => {
-    onOpenChange(openVal)
-    if (!openVal) {
-      createForm.reset()
-      setKind('tool')
-    }
-  }
+  const selectedType: string = createForm.watch('type') || ''
+  const privateNotPossible =
+    visibility.visibility === 'private' && !!selectedType && !PRIVATE_CAPABLE_GATEWAY_TYPES.has(selectedType)
 
   const handleSubmit = (data: any) => {
+    if (privateNotPossible) return
     onSubmit({
       ...data,
       kind,
@@ -101,14 +100,6 @@ export function CreateGatewayDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Create new gateway</DialogTitle>
-          <DialogDescription>
-            Create a new gateway to expose your tools or agents via different protocols.
-          </DialogDescription>
-        </DialogHeader>
         <form onSubmit={createForm.handleSubmit(handleSubmit)} className="space-y-6">
           {/* Kind selector */}
           <div>
@@ -257,26 +248,31 @@ export function CreateGatewayDialog({
               organizationId={currentOrganization?.id ?? ''}
               value={visibility}
               onChange={setVisibility}
+              noun="this gateway"
             />
+            {privateNotPossible && (
+              <p className="text-sm text-destructive mt-2">
+                A chat channel can't be private: the people it answers don't sign in to almyty.
+                Private works for MCP, UTCP, Skills, A2A, ACP and OpenAI Chat gateways.
+              </p>
+            )}
           </div>
 
           <div className="flex justify-end space-x-2">
             <Button
               type="button"
               variant="outline"
-              onClick={() => handleOpenChange(false)}
+              onClick={onCancel}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={createGatewayMutation.isPending}
+              disabled={createGatewayMutation.isPending || privateNotPossible}
             >
               {createGatewayMutation.isPending ? 'Creating...' : 'Create gateway'}
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
   )
 }

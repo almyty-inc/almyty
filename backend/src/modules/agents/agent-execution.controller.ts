@@ -23,6 +23,7 @@ import { AgentNotActive, agentIsInvokable, runsOnAutonomousRuntime } from './age
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
 /**
@@ -32,7 +33,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @Controller('agents')
 @ApiTags('Agents')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateAgentGuard)
 export class AgentExecutionController {
   private readonly logger = new Logger(AgentExecutionController.name);
 

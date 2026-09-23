@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -147,7 +147,11 @@ export class GatewayAuthValidators {
     const apiKeyRecord = await this.apiKeyRepository.findOne({
       where: [
         { keyHash, isActive: true, gatewayId: authConfig.gatewayId, organizationId: gateway.organizationId },
-        { keyHash, isActive: true, gatewayId: null as any, organizationId: gateway.organizationId },
+        // IsNull(), not a bare null: TypeORM refuses a null in a where
+        // object (invalidWhereValuesBehavior defaults to throw), so the
+        // whole lookup threw and every API-key request on the gateway
+        // came back as an 'Authentication system error'.
+        { keyHash, isActive: true, gatewayId: IsNull(), organizationId: gateway.organizationId },
       ],
       relations: { user: { organizationMemberships: true } },
     });

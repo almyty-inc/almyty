@@ -19,7 +19,7 @@ vi.mock('posthog-js', () => ({ default: posthogMock }))
  * <input>/<textarea>/<select>. rrweb captures every other text node
  * verbatim.
  *
- * The one-time access key on /credentials is rendered as page text in a
+ * The one-time access key (/credentials/access-keys/new) is rendered as page text in a
  * <code> block, not an input — so before this, minting a key in production
  * uploaded it in the clear to a third-party analytics vendor, where it sits
  * in a replay anyone with PostHog access can scrub to.
@@ -55,9 +55,9 @@ describe('session replay never records a secret rendered as text', () => {
    * would prove the same thing while breaking on any unrelated refactor of
    * the credentials page.
    */
-  it('marks the one-time access key on /credentials as sensitive text', async () => {
+  it('marks the one-time access key on /credentials/access-keys/new as sensitive text', async () => {
     const { SENSITIVE_TEXT_ATTRIBUTE } = await import('../analytics')
-    const source = readFileSync(resolve(__dirname, '../../pages/credentials.tsx'), 'utf8')
+    const source = readFileSync(resolve(__dirname, '../../pages/access-key-new.tsx'), 'utf8')
 
     const keyElement = source
       .split('\n')

@@ -14,13 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
 import { CredentialPicker } from '@/components/credential-picker'
 import { SdkToolForm } from '@/components/tools/sdk-tool-form'
@@ -36,9 +29,8 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { githubLight } from '@uiw/codemirror-theme-github'
 import { ModelPicker } from '@/components/model-picker'
 
-interface CreateToolDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+export interface ToolFormProps {
+  onCancel: () => void
   createForm: UseFormReturn<any>
   createToolMutation: UseMutationResult<any, any, any, any>
   executionMethod: string
@@ -73,9 +65,13 @@ interface CreateToolDialogProps {
   onSdkConfigChange?: (value: any) => void
 }
 
-export function CreateToolDialog({
-  open,
-  onOpenChange,
+/**
+ * The form for a new manual tool: execution method, its config,
+ * parameters, auth and visibility. Rendered by pages/tool-new.tsx; the
+ * page owns the state and the create mutation.
+ */
+export function ToolForm({
+  onCancel,
   createForm,
   createToolMutation,
   executionMethod,
@@ -99,7 +95,7 @@ export function CreateToolDialog({
   availableApis = [],
   sdkConfig,
   onSdkConfigChange,
-}: CreateToolDialogProps) {
+}: ToolFormProps) {
   // SDK tool state
   const [sdkApiId, setSdkApiId] = useState<string>('')
   const sdkApis = useMemo(() => availableApis.filter((api: any) => api.type === ApiType.SDK || api.type === 'sdk'), [availableApis])
@@ -155,23 +151,13 @@ export function CreateToolDialog({
     });
   }, [toolParameters])
 
+  // selectedApiId was local state whose only effects were the field
+  // label and helper text. "Link to API" therefore relabelled URL to
+  // Path, told you the path would be relative to the API's base URL, and
+  // then saved a tool with apiId null -- so the relative path was never
+  // prefixed and the tool was rejected as an invalid URL at execution,
+  // every time.
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Create manual tool</DialogTitle>
-          <DialogDescription>
-            Create a custom tool with JavaScript code or link to an API operation.
-          </DialogDescription>
-        </DialogHeader>
-        {/*
-          selectedApiId was local state whose only effects were the field
-          label and helper text. "Link to API" therefore relabelled URL
-          to Path, told you the path would be relative to the API's base
-          URL, and then saved a tool with apiId null -- so the relative
-          path was never prefixed and the tool was rejected as an invalid
-          URL at execution, every time.
-        */}
         <form
           onSubmit={createForm.handleSubmit((data: any) =>
             createToolMutation.mutate({
@@ -838,15 +824,12 @@ export function CreateToolDialog({
               organizationId={useOrganizationStore.getState().currentOrganization?.id ?? ''}
               value={visibility}
               onChange={setVisibility}
+              noun="this tool"
             />
           </div>
 
-          <div className="flex justify-end space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onCancel}>
               Cancel
             </Button>
             <Button type="submit" disabled={createToolMutation.isPending}>
@@ -854,7 +837,5 @@ export function CreateToolDialog({
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
   )
 }

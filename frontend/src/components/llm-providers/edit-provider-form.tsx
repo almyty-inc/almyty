@@ -5,13 +5,8 @@ import { UseMutationResult } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { VisibilityField, type Visibility, type VisibilityValue } from '@/components/ui/visibility-field'
+import { useOrganizationStore } from '@/store/organization'
 import {
   Select,
   SelectContent,
@@ -24,38 +19,47 @@ import { providerKeyUrls, providerUsageApiSupport, usageApiSupported } from './p
 import { CredentialSlot, isMaskedKey } from './credential-slot'
 import { BASE_URL_PRIVATE_HOST_HINT, baseUrlSupported } from './schema'
 
-interface EditProviderDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+interface EditProviderFormProps {
   editForm: UseFormReturn<any>
   providerToEdit: any | null
   updateProviderMutation: UseMutationResult<any, any, any, any>
   availableModels: Array<{ id: string; name: string }>
   modelsLoading: boolean
+  onCancel: () => void
 }
 
-export function EditProviderDialog({
-  open,
-  onOpenChange,
+/**
+ * The edit-a-provider form, including who can see it. Rendered on its own
+ * page (/llm-providers/:id/edit), not in a modal. The visibility picker
+ * starts at the provider's stored scope; it travels only when changed, so
+ * an unrelated edit never rewrites it.
+ */
+export function EditProviderForm({
   editForm,
   providerToEdit,
   updateProviderMutation,
   availableModels,
   modelsLoading,
-}: EditProviderDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Edit inference provider</DialogTitle>
-          <DialogDescription>
-            Update provider configuration and model settings
-          </DialogDescription>
-        </DialogHeader>
+  onCancel,
+}: EditProviderFormProps) {
+  const { currentOrganization } = useOrganizationStore()
+  const stored: VisibilityValue = {
+    visibility: (providerToEdit?.visibility as Visibility) ?? 'org',
+    teamId: providerToEdit?.teamId ?? null,
+  }
+  const [visibility, setVisibility] = React.useState<VisibilityValue>(stored)
+  React.useEffect(() => {
+    setVisibility({ visibility: (providerToEdit?.visibility as Visibility) ?? 'org', teamId: providerToEdit?.teamId ?? null })
+  }, [providerToEdit?.id, providerToEdit?.visibility, providerToEdit?.teamId])
+  const scopeChanged = visibility.visibility !== stored.visibility || visibility.teamId !== stored.teamId
 
+  return (
         <form onSubmit={editForm.handleSubmit((data: any) => {
           if (providerToEdit) {
-            updateProviderMutation.mutate({ id: providerToEdit.id, data })
+            updateProviderMutation.mutate({
+              id: providerToEdit.id,
+              data: scopeChanged ? { ...data, visibility: visibility.visibility, teamId: visibility.teamId } : data,
+            })
           }
         })} className="space-y-4">
           {/* Provider Name */}
@@ -198,8 +202,17 @@ export function EditProviderDialog({
             />
           )}
 
+          <div className="border-t pt-4">
+            <VisibilityField
+              organizationId={currentOrganization?.id ?? ''}
+              value={visibility}
+              onChange={setVisibility}
+              noun="this provider and its key"
+            />
+          </div>
+
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
             </Button>
             <Button type="submit" disabled={updateProviderMutation.isPending}>
@@ -207,7 +220,5 @@ export function EditProviderDialog({
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
   )
 }

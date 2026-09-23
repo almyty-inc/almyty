@@ -186,9 +186,11 @@ describe('GatewaysPage', () => {
       vi.mocked(gatewaysApi.getAll).mockResolvedValue({
         gateways: [],
       })
+      mockNavigate.mockClear()
     })
 
-    it('should open create gateway dialog', async () => {
+    // Creating a gateway is a page of its own (/gateways/new), not a modal.
+    it('goes to the new-gateway page instead of opening a dialog', async () => {
       const user = userEvent.setup()
       renderGatewaysPage()
 
@@ -198,66 +200,8 @@ describe('GatewaysPage', () => {
 
       await user.click(screen.getAllByRole('button', { name: 'Create gateway' })[0])
 
-      expect(screen.getByText('Create new gateway')).toBeInTheDocument()
-      expect(screen.getByLabelText('Gateway Name')).toBeInTheDocument()
-      expect(screen.getByLabelText('Gateway Type')).toBeInTheDocument()
-    })
-
-    it('should show tool-kind gateway types by default (MCP, UTCP, Skills)', async () => {
-      const user = userEvent.setup()
-      renderGatewaysPage()
-
-      await waitFor(() => {
-        expect(screen.getAllByRole('button', { name: 'Create gateway' })[0]).toBeInTheDocument()
-      })
-
-      await user.click(screen.getAllByRole('button', { name: 'Create gateway' })[0])
-
-      // The dialog now has a kind selector defaulting to "Tools"
-      expect(screen.getByText('Tools')).toBeInTheDocument()
-      expect(screen.getByText('Agent')).toBeInTheDocument()
-
-      // Click on the select trigger for type
-      const selectTrigger = screen.getByRole('combobox')
-      await user.click(selectTrigger)
-
-      // Tool-kind types should be visible (Radix Select renders portal items)
-      expect(screen.getAllByText('MCP - Model Context Protocol').length).toBeGreaterThan(0)
-      expect(screen.getAllByText('UTCP - Universal Tool Call Protocol').length).toBeGreaterThan(0)
-      expect(screen.getAllByText('Skills - Agent Skills (SKILL.md)').length).toBeGreaterThan(0)
-      // A2A is agent-kind only, should NOT appear in the tool-kind dropdown
-      expect(screen.queryByText('A2A - Agent-to-Agent Protocol')).not.toBeInTheDocument()
-    })
-
-    it('should show create gateway dialog with form fields', async () => {
-      const user = userEvent.setup()
-
-      renderGatewaysPage()
-
-      await waitFor(() => {
-        expect(screen.getAllByRole('button', { name: 'Create gateway' })[0]).toBeInTheDocument()
-      })
-
-      await user.click(screen.getAllByRole('button', { name: 'Create gateway' })[0])
-
-      // Verify form fields exist
-      expect(screen.getByLabelText('Gateway Name')).toBeInTheDocument()
-      expect(screen.getByLabelText('Endpoint Path')).toBeInTheDocument()
-      expect(screen.getByLabelText('Gateway Type')).toBeInTheDocument()
-      expect(screen.getByText('Description (Optional)')).toBeInTheDocument()
-
-      // Fill in text fields
-      await user.type(screen.getByLabelText('Gateway Name'), 'New Test Gateway')
-      expect(screen.getByLabelText('Gateway Name')).toHaveValue('New Test Gateway')
-
-      // The form auto-generates an endpoint slug from the gateway
-      // name (e.g., "New Test Gateway" → "/n"), so without
-      // clearing first user.type appends to the prefill and we
-      // end up with "/n/new-test". Clear then type.
-      const endpointField = screen.getByLabelText('Endpoint Path')
-      await user.clear(endpointField)
-      await user.type(endpointField, '/new-test')
-      expect(endpointField).toHaveValue('/new-test')
+      expect(mockNavigate).toHaveBeenCalledWith('/gateways/new')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
 

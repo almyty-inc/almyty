@@ -206,6 +206,9 @@ export interface Agent {
     prompt: string
   }
   toolIds?: string[]
+  /** 'private' = only its owner (createdBy) can see or use it. */
+  visibility?: 'private' | 'team' | 'org'
+  teamId?: string | null
   modelConfig?: {
     providerId?: string
     model?: string

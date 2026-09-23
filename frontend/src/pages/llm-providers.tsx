@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
 import { ArrowLeft, Plus, Search, Brain } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -10,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
-import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,9 +32,8 @@ import { useOrganizationStore } from '@/store/organization'
 import { llmProvidersApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { TeamFilter, useTeamLookup, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { EditProviderDialog } from '@/components/llm-providers/edit-provider-dialog'
 import { TestProviderDialog } from '@/components/llm-providers/test-provider-dialog'
-import { buildProviderUpdateBody, type LlmProvider } from '@/components/llm-providers/schema'
+import { type LlmProvider } from '@/components/llm-providers/schema'
 import { buildProviderColumns } from '@/components/llm-providers/columns'
 import { providerTypeOptions } from '@/components/llm-providers/provider-type-config'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -54,11 +51,11 @@ export function LlmProvidersPage() {
   }, [])
 
   const navigate = useNavigate()
-  // ?new=1 (command palette, onboarding) opens the add page, which is a
-  // page now rather than a dialog.
-  useCreateDeepLink((open) => { if (open) navigate('/llm-providers/new', { replace: true }) })
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [providerToEdit, setProviderToEdit] = useState<LlmProvider | null>(null)
+  // Honour ?new=1 from older links: adding a provider is a page now.
+  const [searchParams] = useSearchParams()
+  useEffect(() => {
+    if (searchParams.get('new') === '1') navigate('/llm-providers/new', { replace: true })
+  }, [searchParams, navigate])
   const [providerToDelete, setProviderToDelete] = useState<LlmProvider | null>(null)
   const [testProvider, setTestProvider] = useState<LlmProvider | null>(null)
   const [isTestDialogOpen, setIsTestDialogOpen] = useState(false)
@@ -71,10 +68,6 @@ export function LlmProvidersPage() {
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { currentOrganization } = useOrganizationStore()
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
-
-  // Dynamic model fetching state
-  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>([])
-  const [modelsLoading, setModelsLoading] = useState(false)
 
   const queryClient = useQueryClient()
   const notifications = useNotifications()
@@ -167,39 +160,6 @@ export function LlmProvidersPage() {
     }
   })
 
-  // Form hook for edit provider. credentialId / usageCredentialId stay
-  // undefined (keep) unless the dialog's credential slot sets them: a
-  // connection id points the provider at it, null clears it.
-  const editForm = useForm<any>({
-    defaultValues: {
-      name: '',
-      model: '',
-      maxTokens: 4096,
-      temperature: 0.7,
-      apiKey: '',
-      usageApiKey: '',
-      apiUrl: '',
-      credentialId: undefined,
-      usageCredentialId: undefined,
-    }
-  })
-
-  const updateProviderMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return llmProvidersApi.update(id, buildProviderUpdateBody(data))
-    },
-    onSuccess: (_result, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
-      queryClient.invalidateQueries({ queryKey: ['llm-provider', id] })
-      setIsEditDialogOpen(false)
-      setProviderToEdit(null)
-      notifications.success('Updated', 'Provider configuration updated successfully')
-    },
-    onError: (error: any) => {
-      notifications.error('Error', getApiErrorMessage(error, 'Failed to update provider'))
-    }
-  })
-
   const filteredProviders = filterByTeamVisibility(providers as any[], teamFilter).filter((provider: any) => {
     const matchesSearch = provider.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (provider.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -222,11 +182,6 @@ export function LlmProvidersPage() {
     setProviderToDelete,
     setTestProvider,
     setIsTestDialogOpen,
-    setProviderToEdit,
-    editForm,
-    setIsEditDialogOpen,
-    setModelsLoading,
-    setAvailableModels,
     toggleProviderStatusMutation,
     teamLookup,
   })
@@ -328,18 +283,6 @@ export function LlmProvidersPage() {
           </CardContent>
         </Card>
       )}
-
-
-      {/* Edit Provider Dialog */}
-      <EditProviderDialog
-        open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
-        editForm={editForm}
-        providerToEdit={providerToEdit}
-        updateProviderMutation={updateProviderMutation}
-        availableModels={availableModels}
-        modelsLoading={modelsLoading}
-      />
 
       {/* Delete Confirmation AlertDialog */}
       <AlertDialog open={!!providerToDelete} onOpenChange={() => setProviderToDelete(null)}>

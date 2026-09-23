@@ -7,6 +7,7 @@ import { LlmProvidersController } from './llm-providers.controller';
 import { LlmProvidersService } from './llm-providers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateProviderGuard } from './private-provider.guard';
 
 describe('LlmProvidersController', () => {
   let controller: LlmProvidersController;
@@ -47,6 +48,8 @@ describe('LlmProvidersController', () => {
     .overrideGuard(JwtAuthGuard)
     .useValue({ canActivate: jest.fn(() => true) })
     .overrideGuard(RolesGuard)
+    .useValue({ canActivate: jest.fn(() => true) })
+    .overrideGuard(PrivateProviderGuard)
     .useValue({ canActivate: jest.fn(() => true) })
     .compile();
 
@@ -270,7 +273,7 @@ describe('LlmProvidersController', () => {
       const result = await controller.getProvider('provider-1', 'true', mockRequest);
 
       expect(result.success).toBe(true);
-      expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', true);
+      expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', true, expect.anything());
     });
 
     it('should return provider without secrets for member', async () => {
@@ -286,7 +289,7 @@ describe('LlmProvidersController', () => {
       const result = await controller.getProvider('provider-1', 'true', mockRequest);
 
       expect(result.success).toBe(true);
-      expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', false);
+      expect(llmProvidersService.getProvider).toHaveBeenCalledWith('provider-1', 'org-1', false, expect.anything());
     });
   });
 

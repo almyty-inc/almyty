@@ -68,7 +68,7 @@ describe('GuidePage', () => {
     expect(screen.getByText(/0 of 10 steps done/)).toBeInTheDocument()
     const next = screen.getByTestId('next-step')
     expect(within(next).getByText('Import an API', { selector: 'p' })).toBeInTheDocument()
-    expect(within(next).getByTestId('next-step-link')).toHaveAttribute('href', '/apis?new=1')
+    expect(within(next).getByTestId('next-step-link')).toHaveAttribute('href', '/apis/new')
     expect(within(next).getByTestId('next-step-place')).toHaveTextContent('Opens APIs › Connect new API')
     // No command until there is a gateway to connect to.
     expect(screen.queryByTestId('connect-command')).not.toBeInTheDocument()

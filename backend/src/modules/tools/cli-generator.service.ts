@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Tool, ToolExecutionMethod } from '../../entities/tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
+import { servableOnGateway } from '../../common/authorization/private-visibility';
 
 export interface CliOutput {
   name: string;
@@ -88,7 +89,8 @@ export class CliGeneratorService {
       relations: { tool: { operation: true } },
     });
 
-    const tools = gatewayTools.map(gt => gt.tool).filter(Boolean);
+    // A private tool is served only on its owner's own private gateway.
+    const tools = servableOnGateway(gatewayTools.map(gt => gt.tool).filter(Boolean), gateway);
 
     const content = format === 'bash'
       ? this.renderBashBundle(gateway, tools)

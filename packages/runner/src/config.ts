@@ -181,6 +181,7 @@ export function loadConfig(inputs: LoadConfigInputs = {}): ResolvedConfig {
   // to set without a config file: backend URL, runner name, isolation.
   if (env.ALMYTY_URL) resolved.backendUrl = env.ALMYTY_URL;
   if (env.ALMYTY_RUNNER_NAME) resolved.name = env.ALMYTY_RUNNER_NAME;
+  if (env.ALMYTY_ORG_ID) resolved.organizationId = env.ALMYTY_ORG_ID;
   if (env.ALMYTY_RUNNER_ISOLATION) {
     if (!isIsolation(env.ALMYTY_RUNNER_ISOLATION)) {
       throw new Error(`ALMYTY_RUNNER_ISOLATION must be one of: container, host`);
@@ -194,6 +195,7 @@ export function loadConfig(inputs: LoadConfigInputs = {}): ResolvedConfig {
   if (f.name) resolved.name = f.name;
   if (f.labels) resolved.labels = { ...resolved.labels, ...f.labels };
   if (f.backendUrl) resolved.backendUrl = f.backendUrl;
+  if (f.organizationId) resolved.organizationId = f.organizationId;
   if (f.config) resolved.config = mergeRunnerConfig(resolved.config, f.config);
   if (f.binaryProbeList && f.binaryProbeList.length > 0) {
     resolved.binaryProbeList = f.binaryProbeList;

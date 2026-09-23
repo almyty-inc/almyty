@@ -12,6 +12,8 @@ export interface ParsedFlags {
   url?: string;
   configPath?: string;
   labels?: Record<string, string>;
+  /** --org: the organization to register in (X-Organization-Id). */
+  org?: string;
   /**
    * A usage problem worth exiting on. Parsing reports it rather than
    * exiting itself, so the surface can be tested without a process, and
@@ -21,6 +23,8 @@ export interface ParsedFlags {
 }
 
 export const COMMANDS = ['start', 'status', 'stop', 'help', 'version'] as const;
+
+const VALUE_FLAGS = ['--name', '--config', '--url', '--label', '--org'];
 
 /** Takes a full argv; the first two entries are node and the script. */
 export function parseArgs(argv: string[]): ParsedFlags {
@@ -42,7 +46,7 @@ export function parseArgs(argv: string[]): ParsedFlags {
   for (let i = 1; i < args.length; i++) {
     const a = args[i];
     if (a === '--help' || a === '-h') return { command: 'help' };
-    if (a === '--name' || a === '--config' || a === '--url' || a === '--label') {
+    if (VALUE_FLAGS.includes(a)) {
       const value = args[i + 1];
       if (value === undefined || value.startsWith('-')) {
         return { ...flags, error: `${a} needs a value` };
@@ -51,6 +55,7 @@ export function parseArgs(argv: string[]): ParsedFlags {
       if (a === '--name') { flags.name = value; continue; }
       if (a === '--config') { flags.configPath = value; continue; }
       if (a === '--url') { flags.url = value; continue; }
+      if (a === '--org') { flags.org = value; continue; }
       const eq = value.indexOf('=');
       if (eq <= 0) return { ...flags, error: `--label expects key=value, got: ${value}` };
       flags.labels = flags.labels ?? {};

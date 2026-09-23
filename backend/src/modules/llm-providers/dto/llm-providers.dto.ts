@@ -2,6 +2,7 @@ import type { RoutingPolicy } from '../../model-catalog/routing/model-router';
 import type { RouteAttribution } from '../../model-catalog/routing/model-router.service';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../../entities/llm-provider.entity';
 import { MessageRole, MessageContent, ToolCall } from '../../../entities/message.entity';
+import { type ResourceVisibility } from '../../../common/authorization/access-policy.service';
 
 export type StreamChunk = { content?: string; toolCalls?: any[] };
 
@@ -17,7 +18,7 @@ export interface CreateLlmProviderDto {
   capabilities?: LlmProvider['capabilities'];
   metadata?: LlmProvider['metadata'];
   // Team-scoping fields from the dashboard VisibilityField.
-  visibility?: 'org' | 'team';
+  visibility?: ResourceVisibility;
   teamId?: string | null;
 }
 
@@ -30,7 +31,7 @@ export interface UpdateLlmProviderDto {
   usageCredentialId?: string | null;
   capabilities?: Partial<LlmProvider['capabilities']>;
   metadata?: Partial<LlmProvider['metadata']>;
-  visibility?: 'org' | 'team';
+  visibility?: ResourceVisibility;
   teamId?: string | null;
 }
 

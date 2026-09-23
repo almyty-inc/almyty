@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsEnum, IsObject, IsNumber, IsBoolean, ValidateNested, Matches, MaxLength } from 'class-validator';
+import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/authorization/access-policy.service';
 import { Type, Transform } from 'class-transformer';
 import { ApiType } from '../../../entities/api.entity';
 
@@ -83,8 +84,8 @@ export class CreateApiDto {
   // exist". The entity columns already exist; the gap was only in the
   // DTO validator.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()
@@ -141,8 +142,8 @@ export class UpdateApiDto {
 
   // Same team-scoping fields on update so the edit dialog works too.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()
@@ -208,8 +209,8 @@ export class CreateHttpApiDto {
   retryAttempts?: number;
 
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()
@@ -238,8 +239,8 @@ export class CreateSdkApiDto {
   npmRegistry?: Record<string, any>;
 
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()

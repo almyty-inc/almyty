@@ -5,6 +5,7 @@ import { WebSocket } from 'ws';
 
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
+import { isPrivateGateway } from './private-gateway';
 import { ToolExecutorService, ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
 
 export interface ProtocolRequest {
@@ -114,7 +115,10 @@ export class GatewayProtocolService {
         relations: { authConfigs: true },
       });
 
-      if (!gateway) {
+      // This path carries no authenticated caller, so it cannot tell a
+      // private gateway's owner from anyone else: a private gateway is
+      // absent here, the same answer as an unknown id.
+      if (!gateway || isPrivateGateway(gateway)) {
         return {
           success: false,
           error: {
@@ -438,7 +442,9 @@ export class GatewayProtocolService {
         relations: { authConfigs: true },
       });
 
-      if (!gateway || !gateway.canAcceptRequests()) {
+      // No caller identity reaches this path, so a private gateway is
+      // never served here (see handleProtocolRequest).
+      if (!gateway || isPrivateGateway(gateway) || !gateway.canAcceptRequests()) {
         ws.close(1003, 'Gateway not available');
         return;
       }

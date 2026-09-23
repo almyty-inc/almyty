@@ -33,19 +33,27 @@ const DashboardPage = lazy(() => import('@/pages/dashboard').then(m => ({ defaul
 const GuidePage = lazy(() => import('@/pages/guide').then(m => ({ default: m.GuidePage })))
 const GatewaysPage = lazy(() => import('@/pages/gateways').then(m => ({ default: m.GatewaysPage })))
 const GatewayDetailPage = lazy(() => import('@/pages/gateway-detail').then(m => ({ default: m.GatewayDetailPage })))
+const GatewayNewPage = lazy(() => import('@/pages/gateway-new').then(m => ({ default: m.GatewayNewPage })))
+const GatewayEditPage = lazy(() => import('@/pages/gateway-edit').then(m => ({ default: m.GatewayEditPage })))
 const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisPage })))
 const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ default: m.ApiDetailPage })))
+const ApiEditorPage = lazy(() => import('@/pages/api-editor').then(m => ({ default: m.ApiEditorPage })))
+const ApiSchemaImportPage = lazy(() => import('@/pages/api-schema-import').then(m => ({ default: m.ApiSchemaImportPage })))
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
+const ToolNewPage = lazy(() => import('@/pages/tool-new').then(m => ({ default: m.ToolNewPage })))
 const LlmProvidersPage = lazy(() => import('@/pages/llm-providers').then(m => ({ default: m.LlmProvidersPage })))
 const LlmProviderDetailPage = lazy(() => import('@/pages/llm-provider-detail').then(m => ({ default: m.LlmProviderDetailPage })))
+const LlmProviderNewPage = lazy(() => import('@/pages/llm-provider-new').then(m => ({ default: m.LlmProviderNewPage })))
+const LlmProviderEditPage = lazy(() => import('@/pages/llm-provider-edit').then(m => ({ default: m.LlmProviderEditPage })))
 const ModelsPage = lazy(() => import('@/pages/models').then(m => ({ default: m.ModelsPage })))
 const ModelNewPage = lazy(() => import('@/pages/model-new').then(m => ({ default: m.ModelNewPage })))
 const ModelDetailPage = lazy(() => import('@/pages/model-detail').then(m => ({ default: m.ModelDetailPage })))
 const HostedModelPage = lazy(() => import('@/pages/hosted-model').then(m => ({ default: m.HostedModelPage })))
-const LlmProviderNewPage = lazy(() => import('@/pages/llm-provider-new').then(m => ({ default: m.LlmProviderNewPage })))
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ default: m.AnalyticsPage })))
 const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
+const CredentialNewPage = lazy(() => import('@/pages/credential-new').then(m => ({ default: m.CredentialNewPage })))
+const AccessKeyNewPage = lazy(() => import('@/pages/access-key-new').then(m => ({ default: m.AccessKeyNewPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
 const OrganizationsPage = lazy(() => import('@/pages/organizations').then(m => ({ default: m.OrganizationsPage })))
 const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatPage })))
@@ -131,10 +139,16 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/guide" element={<GuidePage />} />
           <Route path="/gateways" element={<GatewaysPage />} />
+          <Route path="/gateways/new" element={<GatewayNewPage />} />
+          <Route path="/gateways/:id/edit" element={<GatewayEditPage />} />
           <Route path="/gateways/:id" element={<GatewayDetailPage />} />
           <Route path="/apis" element={<ApisPage />} />
+          <Route path="/apis/new" element={<ApiEditorPage />} />
           <Route path="/apis/:id" element={<ApiDetailPage />} />
+          <Route path="/apis/:id/edit" element={<ApiEditorPage />} />
+          <Route path="/apis/:id/import" element={<ApiSchemaImportPage />} />
           <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/tools/new" element={<ToolNewPage />} />
           <Route path="/tools/:id" element={<ToolDetailPage />} />
           <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
           <Route path="/agents" element={<AgentsPage />} />
@@ -156,9 +170,12 @@ function App() {
           <Route path="/models/:id" element={<ModelDetailPage />} />
           <Route path="/llm-providers" element={<LlmProvidersPage />} />
           <Route path="/llm-providers/new" element={<LlmProviderNewPage />} />
+          <Route path="/llm-providers/:id/edit" element={<LlmProviderEditPage />} />
           <Route path="/llm-providers/:id" element={<LlmProviderDetailPage />} />
           <Route path="/analytics/*" element={<AnalyticsPage />} />
           <Route path="/memories" element={<MemoriesPage />} />
+          <Route path="/credentials/new" element={<CredentialNewPage />} />
+          <Route path="/credentials/access-keys/new" element={<AccessKeyNewPage />} />
           <Route path="/credentials/*" element={<CredentialsPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/connections" element={<ConnectionsRedirect />} />

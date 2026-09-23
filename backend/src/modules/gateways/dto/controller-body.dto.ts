@@ -2,6 +2,7 @@ import { IsArray, IsBoolean, IsEnum, IsNumber, IsObject, IsOptional, IsString, I
 import { Transform, Type } from 'class-transformer';
 
 import { GatewayKind, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
+import { RESOURCE_VISIBILITIES, type ResourceVisibility } from '../../../common/authorization/access-policy.service';
 
 export class CreateGatewayBodyDto {
   @IsString()
@@ -95,8 +96,8 @@ export class CreateGatewayBodyDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()
@@ -188,8 +189,8 @@ export class UpdateGatewayBodyDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()

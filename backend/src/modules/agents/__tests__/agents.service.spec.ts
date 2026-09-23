@@ -1017,13 +1017,19 @@ describe('AgentsService', () => {
   // ── findByName ────────────────────────────────────────────────────────────
 
   describe('findByName', () => {
-    it('should find agent by name and organizationId', async () => {
+    it('should find agent by name and organizationId, never another member\'s private agent', async () => {
       const agent = makeAgent();
-      agentRepo.findOne.mockResolvedValue(agent);
+      const qb = { where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(), getOne: jest.fn().mockResolvedValue(agent) };
+      agentRepo.createQueryBuilder = jest.fn().mockReturnValue(qb);
 
-      const result = await service.findByName('Test Agent', 'org-1');
+      const result = await service.findByName('Test Agent', 'org-1', 'user-1');
 
-      expect(agentRepo.findOne).toHaveBeenCalledWith({ where: { name: 'Test Agent', organizationId: 'org-1' } });
+      expect(qb.where).toHaveBeenCalledWith('agent.organizationId = :organizationId', { organizationId: 'org-1' });
+      expect(qb.andWhere).toHaveBeenCalledWith('agent.name = :name', { name: 'Test Agent' });
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        `(agent.visibility IS DISTINCT FROM 'private' OR agent."createdBy" = :_me)`,
+        { _me: 'user-1' },
+      );
       expect(result).toBe(agent);
     });
 

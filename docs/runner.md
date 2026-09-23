@@ -88,7 +88,28 @@ draining -> offline          drain grace expires
 
 ### Single-runner-per-account in v1.0
 
-The data model carries no such restriction; the limit lives in the registration policy in `RunnerService.register`. When the v1.x scheduler arrives, the limit lifts without a migration.
+The data model carries no such restriction; the limit lives in the registration policy in `RunnerService.register` (and `create`, for the setup page's record). When the v1.x scheduler arrives, the limit lifts without a migration.
+
+### Identity: what makes a runner yours
+
+A runner is identified and authorised by the login its daemon presents, never by its name.
+
+- `POST /runners/register` takes the owner from the bearer token (the user who ran `almyty-auth login`, or whose `ALMYTY_TOKEN` it is) and the organization from `X-Organization-Id` (`--org`), which `JwtStrategy` refuses for an organization the user is not a member of. Nothing in the body names an owner or an org.
+- The name is a label, **unique within the organization**. A name another member already uses is refused with 409. It used to be unique only per owner, while the published tool names (`runner.<name>.<method>`) are unique per organization and publishing replaces rows by name: a second member registering the same name deleted the first member's tools and republished them pointing at their own machine, so an agent calling `runner.<name>.shell.exec` ran on the wrong person's computer.
+- The same user restarting with the same name (a rebuilt machine) updates the same row in place; the newest session takes the dispatches. That is the intended takeover and only the owner can do it.
+- `runner.hello` binds a Streamable HTTP session to a runner only when the session's user **owns** the runner (`RunnerService.isOwnedBy`). It used to check the organization only, so another member of the same org could bind their daemon's session to your runner id and receive its dispatches (`getActiveSession` takes the newest session). Sessions themselves are bound to the user who minted them: another member cannot POST on, or open the stream of, your session id.
+
+### Visibility
+
+`visibility` is `private` | `team` | `org`, the same three tiers as agents, tools, APIs, gateways, LLM providers and credentials (`AccessPolicyService`). A runner nobody chose a visibility for is **private**: it runs commands as its owner on its owner's machine. The setup page sets it on the pending record; the daemon does not send one, and re-registration keeps what is stored (it used to reset every runner to `org` on each restart).
+
+A private runner is visible to and usable by its owner only, org owners/admins included:
+
+- `GET /runners` (`listVisible`, via `applyListFilter` with the owner column) and `GET /runners/:id` (`getOne`, 404) hide it.
+- `RunnerService.resolveForDispatch(runnerId, callerUserId)` — the one function every dispatch goes through (runner REST endpoints, runner-backed tools) — refuses anyone but the owner, and refuses a dispatch with no known caller (an API-key gateway call). Team runners need a team member; org runners accept any member, and a dispatch with no caller as before.
+- The coding bridge (`/runners/:id/coding/*`) uses `getUsable` (visibility-aware) instead of "any org member".
+- Published capability tools inherit the runner's visibility, team and owner (`createdBy`), so they are hidden from tool lists and MCP surfaces the same way, and `ToolExecutorService` refuses to execute a private tool for anyone but its owner.
+- Update and delete of a private runner answer 404 to everyone but the owner.
 
 ### Stranding fan-out
 
@@ -151,8 +172,9 @@ Runner half: `packages/runner/src/workspace-reclaimer.ts`. Backend half:
 
 New package; ships as `@almyty/runner` with a `bin: almyty-runner`.
 
-- **Auth via `@almyty/client`**: same shared resolver every other almyty CLI uses. ALMYTY_TOKEN env first, then `~/.almyty/credentials.json` written by `@almyty/auth login`. No parallel structures.
-- **Config in JSON**: `~/.almyty/config.json` (global), `./.almyty/config.json` (project), env (`ALMYTY_*`), CLI flags (`--name`, `--label`, `--config`, `--url`). Layered lowest precedence first; backend overrides apply at registration and only constrain.
+- **Install path**: `npm i -g @almyty/runner @almyty/auth` once, then the installed binaries (`almyty-auth login`, `almyty-runner start|status|stop`). The daemon is long-lived and queried/stopped locally, so it is a pinned global install rather than an `npx` resolution per start. The umbrella `@almyty/cli` exposes the same commands as `almyty runner …`.
+- **Auth via `@almyty/client`**: same shared resolver every other almyty CLI uses. ALMYTY_TOKEN env first, then `~/.almyty/credentials.json` written by `almyty-auth login`. No parallel structures.
+- **Config in JSON**: `~/.almyty/config.json` (global), `./.almyty/config.json` (project), env (`ALMYTY_*`, including `ALMYTY_ORG_ID`), CLI flags (`--name`, `--org`, `--label`, `--config`, `--url`). Layered lowest precedence first; backend overrides apply at registration and only constrain.
 - **Detected vs configured**: `runtimeInfo` (os, arch, hostname, cpu, memory, runner version, binaries) detected at startup, never settable. `RunnerConfig` (name, labels, isolation, paths, network/install policy, concurrency cap) user-set.
 - **PTY by default**: `node-pty` lazy-loaded on first PTY spawn so non-PTY tests don't pay the native dep cost. Pipe mode via `pty: false`.
 - **Resource scoping**: every `process_id` namespaced by `workspaceId`. Cross-workspace access throws `PROCESS_CROSS_WORKSPACE`; this is the runner's load-bearing security boundary.
@@ -167,9 +189,9 @@ The walkthrough lives at [docs/runner-demo.md](runner-demo.md): start a runner w
 
 Five pages, all conforming to the existing UI patterns in the repo (React Router v6, TanStack Query inline in pages, shadcn/ui components, custom `<table>`s with the same header/Card/empty-state shape `agents.tsx` uses):
 
-- `/runners` — list page with state badge, OS/arch, last heartbeat, capacity, labels. Polls every 15s (half the runner heartbeat interval). Empty state links to the start-a-runner page.
-- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results), active workspaces, recent (terminated) workspaces. Deregister button only renders when state is `offline`; uses the existing `AlertDialog` confirmation pattern.
-- `/runners/new` — the adoption page. Three-step ordered list: name + labels form, exact `npx @almyty/runner start --name X --label k=v` command (with copy buttons) ready to paste on the target machine, then a "Waiting for first heartbeat..." indicator that polls the runners list and navigates to the runner detail when the runner appears with state online and a recent heartbeat. Validates name uniqueness against existing runners and the `[a-zA-Z0-9_-]{1,64}` regex the backend enforces.
+- `/runners` — list page with state badge (a runner whose daemon never connected reads "never connected"), visibility badge, OS/arch, last heartbeat, capacity, labels, and a Delete action behind a one-line confirmation. Lists every runner the caller may see: their own (private ones included), org-wide ones, and team ones for their teams. Polls every 15s (half the runner heartbeat interval). Empty state links to the start-a-runner page.
+- `/runners/:id` — detail page with runtime info, labels, capabilities (binary detection results), active workspaces, recent (terminated) workspaces. The owner changes visibility in place on this page (no dialog). Delete renders when the runner is `offline` or has never connected; one-line `AlertDialog` confirmation.
+- `/runners/new` — the setup page. Step 1: name, labels, visibility (Private by default, Team, Org-wide). "Generate command" creates the runner record (`POST /runners`, pending: never connected) holding all of that, so step 2's commands need only the name: `npm i -g @almyty/runner @almyty/auth`, `almyty-auth login`, `almyty-runner start --name X --org <org-id>`. From step 2 the user can go Back (the pending record is updated in place with `PATCH /runners/:id`, rename allowed only while pending) or Cancel (the pending record is deleted). Step 3 polls the record and opens the runner on its first heartbeat. An abandoned setup stays visible on `/runners` as "never connected" and can be deleted there.
 - `/workspaces` — list page with status filter (active by default), per-runner filter, cwd substring search.
 - `/workspaces/:id` — detail page with metadata, close reason (only for terminated workspaces), Release action (only for active).
 

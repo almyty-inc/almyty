@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, Raw, Repository } from 'typeorm';
+import { notOthersPrivateGateway, notOthersPrivateProvider } from './private-rows';
 
 import { RequestLog } from '../../entities/request-log.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
@@ -12,6 +13,8 @@ export interface ExportQuery {
   organizationId: string;
   from?: Date;
   to?: Date;
+  /** Who is exporting; other users' private gateways/providers are left out. */
+  callerId: string;
 }
 
 /**
@@ -44,6 +47,8 @@ export class AnalyticsExportHelper {
         .innerJoin('log.gateway', 'gw')
         .where('gw.organizationId = :orgId', { orgId: query.organizationId })
         .andWhere('log.timestamp BETWEEN :from AND :to', { from, to })
+        // Not another member's private gateway's traffic.
+        .andWhere(notOthersPrivateGateway('log."gatewayId"'), { privateViewerId: query.callerId })
         // Only the columns the export emits.
         //
         // `take(10000)` bounds the row count and nothing bounded the row
@@ -100,7 +105,15 @@ export class AnalyticsExportHelper {
       // (which holds the system prompt) and `metadata`, and the column
       // list below uses neither.
       const sessions = await this.conversationRepository.find({
-        where: { organizationId: query.organizationId, createdAt: Between(from, to) },
+        where: {
+          organizationId: query.organizationId,
+          createdAt: Between(from, to),
+          // Not another member's private provider's sessions.
+          providerId: Raw(
+            (column) => `(${column} IS NULL OR ${notOthersPrivateProvider(column)})`,
+            { privateViewerId: query.callerId },
+          ),
+        },
         select: {
           // `type` is in the CSV column list below but is not a column on
           // Conversation, so that column has always come out empty --

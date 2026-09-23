@@ -19,10 +19,11 @@ This is the routing path end-to-end: the SaaS dispatches a tool, the backend loo
 
 That's it. No agent CLIs, no API keys, no clones. The runner ships node-pty + node and that's enough for `shell.exec`.
 
-## Step 1: Authenticate
+## Step 1: Install and authenticate
 
 ```
-npx @almyty/auth login
+npm i -g @almyty/runner @almyty/auth
+almyty-auth login
 ```
 
 Or, if you already have the umbrella installed:
@@ -31,16 +32,16 @@ Or, if you already have the umbrella installed:
 almyty login
 ```
 
-Opens a browser. One-time per machine. The runner picks the credential up from `~/.almyty/credentials.json` automatically.
+Opens a browser. One-time per machine. The runner picks the credential up from `~/.almyty/credentials.json` automatically, and that login is what makes the runner yours: the name you give it is only a label.
 
 ## Step 2: Start the runner
 
 Either of these works — the umbrella delegates `runner` to `@almyty/runner`, so they produce identical output:
 
 ```
+almyty-runner start --name laptop --label env=demo
+# or, with the umbrella installed:
 almyty runner start --name laptop --label env=demo
-# or, without installing the umbrella globally:
-npx @almyty/runner start --name laptop --label env=demo
 ```
 
 You'll see the daemon log:

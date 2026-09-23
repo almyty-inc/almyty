@@ -142,13 +142,14 @@ export class Runner {
   organizationId: string;
 
   /**
-   * Team-scoping. visibility='org' (default) is org-wide; 'team'
-   * requires teamId. Constraint enforced at DB level via
-   * 1745340000000-TeamScopingPerEntity. Listing filters use
-   * AccessPolicyService.applyListFilter.
+   * Visibility. 'private' (the default for a runner: it executes
+   * commands as its owner on the owner's machine) is the owner only;
+   * 'org' is every org member; 'team' requires teamId. Constraint
+   * enforced at DB level via 1750808000000-PrivateVisibility. Listing
+   * filters use AccessPolicyService.applyListFilter.
    */
   @Column({ type: 'varchar', length: 8, default: 'org' })
-  visibility: 'org' | 'team';
+  visibility: 'org' | 'team' | 'private';
 
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;

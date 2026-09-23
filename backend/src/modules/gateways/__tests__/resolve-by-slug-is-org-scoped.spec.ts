@@ -49,7 +49,7 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
     });
 
     await expect(
-      service.resolveGateway('victim-corp', 'prod-gateway', CALLER_ORG_ID),
+      service.resolveGateway('victim-corp', 'prod-gateway', CALLER_ORG_ID, 'caller-user'),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     // Not merely filtered afterwards: the gateway is never loaded.
@@ -60,7 +60,7 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
   it('says the same thing for a slug that does not exist', async () => {
     const { service } = makeService({ org: null });
     await expect(
-      service.resolveGateway('no-such-org', 'prod-gateway', CALLER_ORG_ID),
+      service.resolveGateway('no-such-org', 'prod-gateway', CALLER_ORG_ID, 'caller-user'),
     ).rejects.toThrow(/Gateway not found/);
   });
 
@@ -70,7 +70,7 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
       gateway: { ...VICTIM_GATEWAY, organizationId: CALLER_ORG_ID },
     });
 
-    const gateway = await service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID);
+    const gateway = await service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID, 'caller-user');
     expect(gateway.id).toBe('gw-secret');
   });
 });

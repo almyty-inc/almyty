@@ -5,6 +5,13 @@ import { In, MoreThanOrEqual, Repository } from 'typeorm';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 
+/**
+ * Executions of tools that are private to somebody other than :me. With
+ * no caller (:me null) every private tool's executions are excluded.
+ */
+const NOT_OTHERS_PRIVATE_EXECUTION =
+  `NOT EXISTS (SELECT 1 FROM tools pt WHERE pt.id = execution."toolId" AND pt.visibility = 'private' AND (pt."createdBy" IS NULL OR pt."createdBy" IS DISTINCT FROM :me))`;
+
 export interface ToolUsageStats {
   totalExecutions: number;
   successfulExecutions: number;
@@ -108,7 +115,7 @@ export class ToolsStatsHelper {
     };
   }
 
-  async getOrganizationToolStats(organizationId: string): Promise<{
+  async getOrganizationToolStats(organizationId: string, callerId?: string | null): Promise<{
     totalTools: number;
     activeTools: number;
     draftTools: number;
@@ -122,6 +129,9 @@ export class ToolsStatsHelper {
       .select('tool.status')
       .addSelect('COUNT(*)', 'count')
       .where('tool.organizationId = :organizationId', { organizationId })
+      // Another member's private tools are not part of this caller's
+      // numbers -- a count that moves when they add one is a leak.
+      .andWhere(`(tool.visibility IS DISTINCT FROM 'private' OR tool."createdBy" = :me)`, { me: callerId ?? null })
       .groupBy('tool.status')
       .getRawMany();
 
@@ -149,12 +159,14 @@ export class ToolsStatsHelper {
         .select('COUNT(*)', 'count')
         .addSelect('AVG(execution.executionTime)', 'avg')
         .where('execution.organizationId = :organizationId', { organizationId })
+        .andWhere(NOT_OTHERS_PRIVATE_EXECUTION, { me: callerId ?? null })
         .getRawOne<{ count: string; avg: string | null }>(),
       this.toolExecutionRepository
         .createQueryBuilder('execution')
         .select('execution.toolId', 'toolId')
         .addSelect('COUNT(*)', 'count')
         .where('execution.organizationId = :organizationId', { organizationId })
+        .andWhere(NOT_OTHERS_PRIVATE_EXECUTION, { me: callerId ?? null })
         .groupBy('execution.toolId')
         .orderBy('COUNT(*)', 'DESC')
         .limit(10)
@@ -170,7 +182,7 @@ export class ToolsStatsHelper {
     const topToolIds = usageRows.map((row) => row.toolId);
 
     const topTools = await this.toolRepository.find({
-      where: { id: In(topToolIds) },
+      where: { id: In(topToolIds), organizationId },
     });
 
     const topUsedTools = topTools.map((tool) => ({

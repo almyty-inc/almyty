@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { PrivateGatewayGuard } from '../private-gateway.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 
@@ -31,7 +32,7 @@ import { ChannelGatewayService } from './channel-gateway.service';
 @Controller('gateways')
 @ApiTags('Gateway channels')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateGatewayGuard)
 export class ChannelEventsController {
   constructor(
     private readonly gatewaysService: GatewaysService,

@@ -47,4 +47,17 @@ describe('almyty-runner argument parsing', () => {
     expect(parseArgs(argv('start', '--help'))).toEqual({ command: 'help' });
     expect(parseArgs(argv('-h'))).toEqual({ command: 'help' });
   });
+
+  it('reads --org, the organization to register in', () => {
+    expect(parseArgs(argv('start', '--name', 'franemb', '--org', 'org-uuid'))).toEqual({
+      command: 'start', name: 'franemb', org: 'org-uuid',
+    });
+    expect(parseArgs(argv('start', '--org')).error).toMatch(/--org needs a value/);
+  });
+
+  it('still refuses --team-id: visibility is chosen on the web, not on the command line', () => {
+    // The setup page used to print `--team-id <id>`, which this parser has
+    // never accepted, so a team runner's start command failed on paste.
+    expect(parseArgs(argv('start', '--name', 'box', '--team-id', 't')).error).toMatch(/Unknown option: --team-id/);
+  });
 });

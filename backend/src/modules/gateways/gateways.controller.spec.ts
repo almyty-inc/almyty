@@ -13,6 +13,7 @@ import { CodegenService } from '../tools/codegen.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateGatewayGuard } from './private-gateway.guard';
 
 describe('GatewaysController', () => {
   let authController: GatewayAuthController;
@@ -95,6 +96,8 @@ describe('GatewaysController', () => {
     .overrideGuard(JwtAuthGuard)
     .useValue({ canActivate: jest.fn(() => true) })
     .overrideGuard(RolesGuard)
+    .useValue({ canActivate: jest.fn(() => true) })
+    .overrideGuard(PrivateGatewayGuard)
     .useValue({ canActivate: jest.fn(() => true) })
     .compile();
 
@@ -472,7 +475,7 @@ describe('GatewaysController', () => {
 
   describe('searchSkills', () => {
     it('should search skills across all gateways', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockResults = [
         { toolId: 'tool-1', toolName: 'List Users', toolDescription: 'Lists users', gatewayId: 'gw-1', gatewayName: 'User API', orgSlug: 'test-org', gatewaySlug: 'user-api', skillRef: 'test-org/user-api/list-users' },
         { toolId: 'tool-2', toolName: 'Get User', toolDescription: 'Gets a user', gatewayId: 'gw-1', gatewayName: 'User API', orgSlug: 'test-org', gatewaySlug: 'user-api', skillRef: 'test-org/user-api/get-user' },
@@ -485,11 +488,11 @@ describe('GatewaysController', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockResults);
       expect(result.message).toBe('Found 2 skill(s) matching "user"');
-      expect(gatewaysService.searchSkillsAcrossGateways).toHaveBeenCalledWith('org-1', 'user');
+      expect(gatewaysService.searchSkillsAcrossGateways).toHaveBeenCalledWith('org-1', 'user', 'user-1');
     });
 
     it('should handle empty query', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
 
       gatewaysService.searchSkillsAcrossGateways.mockResolvedValue([]);
 
@@ -497,7 +500,7 @@ describe('GatewaysController', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual([]);
-      expect(gatewaysService.searchSkillsAcrossGateways).toHaveBeenCalledWith('org-1', '');
+      expect(gatewaysService.searchSkillsAcrossGateways).toHaveBeenCalledWith('org-1', '', 'user-1');
     });
 
     it('should throw when no organization found', async () => {
@@ -509,7 +512,7 @@ describe('GatewaysController', () => {
 
   describe('getAllSkills', () => {
     it('should return skills from all user gateways', async () => {
-      const mockRequest = { user: { currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockGateways = [
         {
           id: 'gw-1',
@@ -551,7 +554,7 @@ describe('GatewaysController', () => {
         skills: mockSkills2,
       });
       expect(result.message).toBe('Retrieved skills from 2 gateway(s)');
-      expect(gatewaysService.getAllUserGateways).toHaveBeenCalledWith('org-1');
+      expect(gatewaysService.getAllUserGateways).toHaveBeenCalledWith('org-1', 'user-1');
       expect(skillGeneratorService.generateIndividualSkills).toHaveBeenCalledWith('gw-1', 'org-1', { orgSlug: 'test-org', gatewaySlug: 'user-api' });
       expect(skillGeneratorService.generateIndividualSkills).toHaveBeenCalledWith('gw-2', 'org-1', { orgSlug: 'test-org', gatewaySlug: 'payment-api' });
     });

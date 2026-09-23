@@ -1286,7 +1286,7 @@ describe('AlmytyMcpService', () => {
       await callTool('list_models', { status: 'active', privacyTier: 'public', providerId: 'prov-1', selectable: true });
       expect(mockModelCatalogService.list).toHaveBeenCalledWith('org-1', {
         status: 'active', privacyTier: 'public', providerId: 'prov-1', selectable: true,
-      });
+      }, 'user-1');
     });
 
     it('list_models reports selectable from the card, not from its fields', async () => {
@@ -1498,10 +1498,10 @@ describe('AlmytyMcpService', () => {
       expect(mockAnalyticsService.getToolUsage).toHaveBeenCalledWith('org-1', '30d');
 
       await callTool('get_analytics', { report: 'gateways' });
-      expect(mockAnalyticsService.getGatewayUsage).toHaveBeenCalledWith('org-1', '7d');
+      expect(mockAnalyticsService.getGatewayUsage).toHaveBeenCalledWith('org-1', '7d', 'user-1');
 
       await callTool('get_analytics', { report: 'models' });
-      expect(mockAnalyticsService.getLlmUsage).toHaveBeenCalledWith('org-1', '7d');
+      expect(mockAnalyticsService.getLlmUsage).toHaveBeenCalledWith('org-1', '7d', 'user-1');
 
       await callTool('get_analytics', { report: 'agent_runs' });
       expect(mockAnalyticsService.getAgentRunsSummary).toHaveBeenCalledWith('org-1');

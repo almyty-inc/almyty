@@ -14,6 +14,7 @@ import {
   providerUsageCapability,
 } from './provider-usage.capability';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { providerUsableBy } from '../llm-providers/private-provider';
 
 /** One normalized daily usage/cost bucket, provider-agnostic. */
 export interface NormalizedUsageBucket {
@@ -404,6 +405,7 @@ export class ProviderUsageService {
     from: Date,
     to: Date,
     providerId?: string,
+    viewerId?: string | null,
   ): Promise<Array<{ llmProviderId: string; providerType: string } & {
     supported: boolean;
     written: number;
@@ -411,7 +413,9 @@ export class ProviderUsageService {
   }>> {
     const where: any = { organizationId };
     if (providerId) where.id = providerId;
-    const providers = await this.providerRepo.find({ where });
+    // Another user's private provider is not synced on their behalf.
+    const providers = (await this.providerRepo.find({ where }))
+      .filter((p) => viewerId === undefined || providerUsableBy(p, viewerId));
 
     const out = [];
     for (const p of providers) {
@@ -431,10 +435,12 @@ export class ProviderUsageService {
   async getReconciliation(
     organizationId: string,
     opts: { from: Date; to?: Date },
+    viewerId?: string | null,
   ): Promise<ReconciliationRow[]> {
-    const providers = await this.providerRepo.find({
+    // Another user's private provider is not in anyone else's breakdown.
+    const providers = (await this.providerRepo.find({
       where: { organizationId },
-    });
+    })).filter((p) => viewerId === undefined || providerUsableBy(p, viewerId));
 
     const [estimates, actuals] = await Promise.all([
       this.estimateByProvider(organizationId, opts.from, opts.to),

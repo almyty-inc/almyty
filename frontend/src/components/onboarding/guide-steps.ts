@@ -75,7 +75,7 @@ export const JOURNEYS: Journey[] = [
         description: () =>
           'Upload, link or paste an OpenAPI, GraphQL, SOAP or Protobuf schema. Every operation becomes a tool.',
         cta: 'Import an API',
-        target: () => ({ to: '/apis?new=1', place: 'APIs › Connect new API' }),
+        target: () => ({ to: '/apis/new', place: 'APIs › Connect new API' }),
       },
       {
         key: 'tools',
@@ -91,7 +91,7 @@ export const JOURNEYS: Journey[] = [
         description: () =>
           'A gateway serves the tools you pick at one address, over MCP, A2A, UTCP or Agent Skills. Done once a gateway has at least one tool.',
         cta: 'Create a gateway',
-        target: () => ({ to: '/gateways?new=1', place: 'Gateways › Create new gateway' }),
+        target: () => ({ to: '/gateways/new', place: 'Gateways › New gateway' }),
       },
       {
         key: 'external_client',

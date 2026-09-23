@@ -23,6 +23,7 @@ import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRe
 import { LlmModelsHelper } from './llm-models.helper';
 import { getProviderDisplayName, getProviderDescription, getProviderFeatures, getProviderKeyUrl, getProviderDocsUrl } from './llm-provider-catalog';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PrivateProviderGuard } from './private-provider.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
@@ -52,7 +53,7 @@ export function failureStatus(error: unknown, fallback: HttpStatus): number {
 @Controller('llm-providers')
 @ApiTags('LLM Providers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateProviderGuard)
 export class LlmProvidersController {
   constructor(
     private readonly llmProvidersService: LlmProvidersService,
@@ -177,7 +178,8 @@ export class LlmProvidersController {
       const provider = await this.llmProvidersService.getProvider(
         providerId,
         organizationId,
-        canViewSecrets
+        canViewSecrets,
+        { id: req.user.id },
       );
 
       return {

@@ -197,6 +197,10 @@ export class ToolGeneratorService {
         // The schema-import path never hit this because it goes through
         // a different helper that does set the field.
         organizationId: api.organizationId,
+        // A private API's tools are private to the API's owner.
+        ...(api.visibility === 'private' && api.ownerUserId
+          ? { visibility: 'private' as const, teamId: null, createdBy: api.ownerUserId }
+          : {}),
         name: toolName,
         description: this.generateToolDescription(operation, api),
         type: toolType,

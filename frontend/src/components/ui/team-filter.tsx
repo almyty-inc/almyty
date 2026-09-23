@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Lock } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import {
@@ -10,7 +11,7 @@ import {
 } from '@/components/ui/select'
 import { organizationsApi } from '@/lib/api'
 
-export type TeamFilterValue = 'all' | 'org' | string // string = teamId
+export type TeamFilterValue = 'all' | 'org' | 'private' | string // string = teamId
 
 export interface Team {
   id: string
@@ -79,7 +80,8 @@ export function TeamFilter({
         <SelectValue placeholder="Team" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="all">All my teams</SelectItem>
+        <SelectItem value="all">All I can see</SelectItem>
+        <SelectItem value="private">Private (just me)</SelectItem>
         <SelectItem value="org">Org-wide only</SelectItem>
         {teams.map((t) => (
           <SelectItem key={t.id} value={t.id}>
@@ -93,18 +95,28 @@ export function TeamFilter({
 }
 
 interface VisibilityBadgeProps {
-  visibility?: 'org' | 'team' | null
+  visibility?: 'org' | 'team' | 'private' | null
   teamId?: string | null
   teamLookup?: Record<string, Team>
 }
 
 /**
- * Outline badge describing a row's team visibility.
+ * Outline badge describing a row's visibility.
+ * - private  → "private" with a lock (only the viewer can see it)
  * - org      → neutral "org"
  * - team     → cyan "team: <name>" (looks up name from teamLookup)
  */
 export function VisibilityBadge({ visibility, teamId, teamLookup }: VisibilityBadgeProps) {
   if (!visibility) return null
+
+  if (visibility === 'private') {
+    return (
+      <Badge variant="outline" className="shrink-0 gap-1 text-foreground" title="Only you can see and use this">
+        <Lock className="h-3 w-3" aria-hidden="true" />
+        private
+      </Badge>
+    )
+  }
 
   if (visibility === 'team') {
     const name = teamId ? teamLookup?.[teamId]?.name ?? 'team' : 'team'
@@ -126,16 +138,19 @@ export function VisibilityBadge({ visibility, teamId, teamLookup }: VisibilityBa
 }
 
 /**
- * Apply the current team filter to a row array client-side.
- * - 'all'   → no filtering
- * - 'org'   → only rows with visibility==='org'
- * - teamId  → org-wide rows + rows on that team
+ * Apply the current visibility filter to a row array client-side.
+ * - 'all'     → no filtering
+ * - 'private' → only the caller's private rows (the server never sends
+ *               anyone else's)
+ * - 'org'     → only rows with visibility==='org'
+ * - teamId    → org-wide rows + rows on that team
  */
-export function filterByTeamVisibility<T extends { visibility?: 'org' | 'team' | null; teamId?: string | null }>(
+export function filterByTeamVisibility<T extends { visibility?: 'org' | 'team' | 'private' | null; teamId?: string | null }>(
   rows: T[],
   filter: TeamFilterValue,
 ): T[] {
   if (filter === 'all') return rows
+  if (filter === 'private') return rows.filter((r) => r.visibility === 'private')
   if (filter === 'org') return rows.filter((r) => r.visibility === 'org')
   return rows.filter((r) => r.visibility === 'org' || r.teamId === filter)
 }

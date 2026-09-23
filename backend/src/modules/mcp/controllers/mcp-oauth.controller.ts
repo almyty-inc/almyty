@@ -77,7 +77,7 @@ export class McpOAuthController {
     @Param('orgSlug') orgSlug: string,
     @Param('gatewaySlug') gatewaySlug: string,
   ) {
-    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug, null);
     const base = this.resolve.getBaseUrl();
     const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
 
@@ -114,7 +114,7 @@ export class McpOAuthController {
     @Param('orgSlug') orgSlug: string,
     @Param('gatewaySlug') gatewaySlug: string,
   ) {
-    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug, null);
     const base = this.resolve.getBaseUrl();
     const prefix = `${base}/${orgSlug}/${gatewaySlug}`;
 
@@ -152,7 +152,16 @@ export class McpOAuthController {
     @Req() req: any,
     @Res() res: Response,
   ) {
-    const { organization, gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    // Who is asking decides whether a private gateway exists at all: its
+    // owner signed in, or nobody. Anyone else -- signed out included --
+    // gets the not-found an unknown slug gets, not a login redirect that
+    // would confirm the gateway is there.
+    const viewer = await this.resolve.tryExtractUser(req);
+    const { organization, gateway } = await this.resolve.resolveOrgAndGateway(
+      orgSlug,
+      gatewaySlug,
+      McpOAuthResolveHelper.userIdOf(viewer),
+    );
 
     this.logger.log(
       `OAuth authorize: org=${orgSlug}, gateway=${gateway.name}, client=${clientId}`,
@@ -194,7 +203,7 @@ export class McpOAuthController {
     // --- Check if user is authenticated (JWT cookie or Bearer token) ---
     // Read JWT from cookie or Authorization header, verify, and attach user.
     // Don't use @UseGuards — we need to redirect to login on failure, not 401.
-    const user = await this.resolve.tryExtractUser(req);
+    const user = viewer;
 
     if (!user) {
       // Redirect to frontend login page with a return URL back to this authorize endpoint
@@ -259,9 +268,12 @@ export class McpOAuthController {
     @Req() req: any,
     @Res() res: Response,
   ) {
-    const { gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
-
     const user = await this.resolve.tryExtractUser(req);
+    const { gateway } = await this.resolve.resolveOrgAndGateway(
+      orgSlug,
+      gatewaySlug,
+      McpOAuthResolveHelper.userIdOf(user),
+    );
     if (!user) {
       return res
         .status(HttpStatus.UNAUTHORIZED)
@@ -315,7 +327,11 @@ export class McpOAuthController {
     @Body() body: any,
     @Req() req: any,
   ) {
-    const { organization, gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    const { organization, gateway } = await this.resolve.resolveOrgAndGateway(
+      orgSlug,
+      gatewaySlug,
+      McpOAuthResolveHelper.userIdOf(req.user),
+    );
     this.assertMember(req.user, organization.id);
 
     const responseType = body.response_type;
@@ -486,7 +502,8 @@ export class McpOAuthController {
     },
     @Res() res: Response,
   ) {
-    const { organization, gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug);
+    // Anonymous (dynamic client registration): a private gateway is absent.
+    const { organization, gateway } = await this.resolve.resolveOrgAndGateway(orgSlug, gatewaySlug, null);
 
     this.logger.log(
       `OAuth client registration: org=${orgSlug}, gateway=${gateway.name}, client_name=${body.client_name}`,

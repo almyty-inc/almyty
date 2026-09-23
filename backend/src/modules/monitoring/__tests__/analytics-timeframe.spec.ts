@@ -67,7 +67,7 @@ describe('analytics timeframe clamping', () => {
 });
 
 describe('AnalyticsController passes only clamped windows to the service', () => {
-  const req = { user: { currentOrganizationId: 'org-1' } };
+  const req = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
 
   const makeController = () => {
     const analyticsService: any = {
@@ -88,9 +88,11 @@ describe('AnalyticsController passes only clamped windows to the service', () =>
     await controller.getLlmUsage(req, '9999m');
 
     const ceiling = `${MAX_ANALYTICS_WINDOW_DAYS}d`;
-    expect(analyticsService.getToolUsage).toHaveBeenCalledWith('org-1', ceiling);
-    expect(analyticsService.getGatewayUsage).toHaveBeenCalledWith('org-1', ceiling);
-    expect(analyticsService.getLlmUsage).toHaveBeenCalledWith('org-1', ceiling);
+    // The third argument is the caller, used to leave other members'
+    // private tools, gateways and providers out.
+    expect(analyticsService.getToolUsage).toHaveBeenCalledWith('org-1', ceiling, 'user-1');
+    expect(analyticsService.getGatewayUsage).toHaveBeenCalledWith('org-1', ceiling, 'user-1');
+    expect(analyticsService.getLlmUsage).toHaveBeenCalledWith('org-1', ceiling, 'user-1');
   });
 
   it('clamps both the window and the bucket size on the timeline', async () => {

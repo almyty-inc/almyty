@@ -6,7 +6,7 @@ import { RunnerCallError, RUNNER_CALL_ERRORS } from './runner-call.service';
 
 /**
  * Chat-to-runner coding bridge endpoints. Authz scope is the ORGANIZATION
- * (getOneForOrg: 404 unknown, 403 cross-org), dispatch rides the same
+ * (getUsable: 404 unknown, 403 cross-org), dispatch rides the same
  * RunnerCallService envelope as agent.*, and the per-session SSE endpoint
  * relays coding.output / coding.exit events from CodingRelayService.
  */
@@ -15,12 +15,12 @@ describe('RunnerController coding.* endpoints', () => {
   const SID = 'cs_0d5f8a1e-1111-2222-3333-444455556666';
 
   function make(over: {
-    getOneForOrg?: jest.Mock;
+    getUsable?: jest.Mock;
     dispatch?: jest.Mock;
     subscribe?: jest.Mock;
   } = {}) {
     const service = {
-      getOneForOrg: over.getOneForOrg ?? jest.fn().mockResolvedValue({ id: 'r1', organizationId: 'org1' }),
+      getUsable: over.getUsable ?? jest.fn().mockResolvedValue({ id: 'r1', organizationId: 'org1' }),
     } as any;
     const calls = {
       dispatch: over.dispatch ?? jest.fn().mockResolvedValue({ ok: true, result: { x: 1 } }),
@@ -47,8 +47,8 @@ describe('RunnerController coding.* endpoints', () => {
   it('coding agents list scopes to the org then dispatches coding.list', async () => {
     const { ctrl, service, calls } = make();
     const out = await ctrl.codingAgents(req, 'r1');
-    expect(service.getOneForOrg).toHaveBeenCalledWith('r1', 'org1');
-    expect(calls.dispatch).toHaveBeenCalledWith('r1', 'coding.list', {}, undefined);
+    expect(service.getUsable).toHaveBeenCalledWith('r1', 'u1', 'org1');
+    expect(calls.dispatch).toHaveBeenCalledWith('r1', 'coding.list', {}, undefined, { callerUserId: 'u1' });
     expect(out).toEqual({ success: true, data: { x: 1 } });
   });
 
@@ -64,7 +64,7 @@ describe('RunnerController coding.* endpoints', () => {
       'r1',
       'coding.start',
       { agent: 'claude', task: 'fix the login bug', cwd: '/home/me' },
-      undefined,
+      undefined, { callerUserId: 'u1' },
     );
     expect(out).toEqual({ success: true, data: { sessionId: SID } });
   });
@@ -73,9 +73,9 @@ describe('RunnerController coding.* endpoints', () => {
     const dispatch = jest.fn().mockResolvedValue({ ok: true, result: {} });
     const { ctrl } = make({ dispatch });
     await ctrl.codingInput(req, 'r1', SID, { data: 'yes' } as any);
-    expect(dispatch).toHaveBeenCalledWith('r1', 'coding.input', { sessionId: SID, data: 'yes' }, undefined);
+    expect(dispatch).toHaveBeenCalledWith('r1', 'coding.input', { sessionId: SID, data: 'yes' }, undefined, { callerUserId: 'u1' });
     await ctrl.codingStop(req, 'r1', SID, { force: true } as any);
-    expect(dispatch).toHaveBeenCalledWith('r1', 'coding.stop', { sessionId: SID, force: true }, undefined);
+    expect(dispatch).toHaveBeenCalledWith('r1', 'coding.stop', { sessionId: SID, force: true }, undefined, { callerUserId: 'u1' });
   });
 
   it('rejects malformed session ids before dispatching', async () => {
@@ -88,19 +88,19 @@ describe('RunnerController coding.* endpoints', () => {
   });
 
   it('cross-org access is refused with 403 and never dispatched', async () => {
-    const getOneForOrg = jest.fn().mockRejectedValue(
+    const getUsable = jest.fn().mockRejectedValue(
       new ForbiddenException('runner belongs to a different organization'),
     );
     const dispatch = jest.fn();
-    const { ctrl } = make({ getOneForOrg, dispatch });
+    const { ctrl } = make({ getUsable, dispatch });
     await expect(ctrl.codingStart(req, 'r1', { agent: 'claude', task: 'x' } as any))
       .rejects.toBeInstanceOf(ForbiddenException);
     expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('unknown runner is 404', async () => {
-    const getOneForOrg = jest.fn().mockRejectedValue(new NotFoundException('runner not found'));
-    const { ctrl } = make({ getOneForOrg });
+    const getUsable = jest.fn().mockRejectedValue(new NotFoundException('runner not found'));
+    const { ctrl } = make({ getUsable });
     await expect(ctrl.codingAgents(req, 'r1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -157,9 +157,9 @@ describe('RunnerController coding.* endpoints', () => {
     });
 
     it('org gate applies to the stream too', async () => {
-      const getOneForOrg = jest.fn().mockRejectedValue(new ForbiddenException('nope'));
+      const getUsable = jest.fn().mockRejectedValue(new ForbiddenException('nope'));
       const subscribe = jest.fn();
-      const { ctrl } = make({ getOneForOrg, subscribe });
+      const { ctrl } = make({ getUsable, subscribe });
       await expect(ctrl.codingEvents(req, 'r1', SID, fakeRes()))
         .rejects.toBeInstanceOf(ForbiddenException);
       expect(subscribe).not.toHaveBeenCalled();

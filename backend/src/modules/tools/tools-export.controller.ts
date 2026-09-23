@@ -16,11 +16,12 @@ import { CliGeneratorService } from './cli-generator.service';
 import { CodegenService } from './codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateToolGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('organizations/:organizationId/tools')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateToolGuard)
 export class ToolsExportController {
   constructor(
     private readonly skillGeneratorService: SkillGeneratorService,
@@ -38,7 +39,7 @@ export class ToolsExportController {
     @Request() req: any,
   ) {
     try {
-      const skill = await this.skillGeneratorService.generateToolSkill(toolId, organizationId);
+      const skill = await this.skillGeneratorService.generateToolSkill(toolId, organizationId, { id: req.user?.sub || req.user?.id });
 
       return {
         success: true,

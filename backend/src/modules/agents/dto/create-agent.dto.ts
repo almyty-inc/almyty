@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsObject, IsEnum, IsArray, IsUrl, MaxLength } from 'class-validator';
+import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/authorization/access-policy.service';
 import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';
 import type { AgentCollaboration } from '../collaboration-participants';
@@ -119,8 +120,8 @@ export class CreateAgentDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()

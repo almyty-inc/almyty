@@ -1,9 +1,10 @@
 /**
- * EditGatewayDialog — modal form for editing a gateway's name/endpoint/description/status.
+ * GatewayEditForm — the form for a gateway's name/endpoint/description/
+ * status and who can see it. Rendered on its own page (/gateways/:id/edit),
+ * not in a modal.
  *
- * Owns its own react-hook-form + zod validation. Parent supplies the current
- * gateway, open state, and the submit handler that runs the update mutation.
- * Used by GatewayDetailPage's "Edit Gateway" button in the page header.
+ * Owns its own react-hook-form + zod validation. The page supplies the
+ * current gateway and the submit handler that runs the update mutation.
  */
 import React from 'react'
 import { useForm } from 'react-hook-form'
@@ -13,13 +14,8 @@ import * as z from 'zod'
 import { Badge } from '@/components/ui/badge'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { VisibilityField, type Visibility, type VisibilityValue } from '@/components/ui/visibility-field'
+import { useOrganizationStore } from '@/store/organization'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -43,23 +39,29 @@ export const editGatewaySchema = z.object({
 
 export type EditGatewayForm = z.infer<typeof editGatewaySchema>
 
-export interface EditGatewayDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+export interface GatewayEditFormProps {
   gateway: any
   isSaving: boolean
-  onSubmit: (data: EditGatewayForm) => void
+  /** The form values, plus visibility/teamId when the picker was changed. */
+  onSubmit: (data: EditGatewayForm & { visibility?: Visibility; teamId?: string | null }) => void
+  onCancel: () => void
   isSystem?: boolean
 }
 
-export function EditGatewayDialog({
-  open,
-  onOpenChange,
+/**
+ * Protocol types that may be private (see PRIVATE_CAPABLE_GATEWAY_TYPES
+ * on the backend): a chat channel's audience never signs in to almyty.
+ */
+const PRIVATE_CAPABLE = new Set(['mcp', 'utcp', 'skills', 'a2a', 'acp', 'openai_chat'])
+
+export function GatewayEditForm({
   gateway,
   isSaving,
   onSubmit,
+  onCancel,
   isSystem,
-}: EditGatewayDialogProps) {
+}: GatewayEditFormProps) {
+  const { currentOrganization } = useOrganizationStore()
   const editForm = useForm<EditGatewayForm>({
     resolver: zodResolver(editGatewaySchema),
     values: {
@@ -69,17 +71,25 @@ export function EditGatewayDialog({
       status: gateway?.status || 'active',
     },
   })
+  // Start from the gateway's stored scope so an unrelated edit keeps it.
+  const stored: VisibilityValue = {
+    visibility: (gateway?.visibility as Visibility) ?? 'org',
+    teamId: gateway?.teamId ?? null,
+  }
+  const [visibility, setVisibility] = React.useState<VisibilityValue>(stored)
+  React.useEffect(() => {
+    setVisibility({ visibility: (gateway?.visibility as Visibility) ?? 'org', teamId: gateway?.teamId ?? null })
+  }, [gateway?.id, gateway?.visibility, gateway?.teamId])
+  const privateNotPossible = visibility.visibility === 'private' && !PRIVATE_CAPABLE.has(gateway?.type)
+  const scopeChanged = visibility.visibility !== stored.visibility || visibility.teamId !== stored.teamId
+
+  const submit = (data: EditGatewayForm) => {
+    if (privateNotPossible) return
+    onSubmit(scopeChanged ? { ...data, visibility: visibility.visibility, teamId: visibility.teamId } : data)
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Edit gateway</DialogTitle>
-          <DialogDescription>
-            Update gateway settings. Note: only the gateway type (MCP/A2A/UTCP) cannot be changed after creation.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={editForm.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={editForm.handleSubmit(submit)} className="space-y-6">
           <div>
             <Label htmlFor="edit-name">Gateway Name</Label>
             <Input
@@ -144,23 +154,37 @@ export function EditGatewayDialog({
             </Select>
           </div>
 
+          {!isSystem && (
+            <div className="border-t pt-4">
+              <VisibilityField
+                organizationId={currentOrganization?.id ?? ''}
+                value={visibility}
+                onChange={setVisibility}
+                noun="this gateway"
+              />
+              {privateNotPossible && (
+                <p className="text-sm text-destructive mt-2">
+                  A chat channel can't be private: the people it answers don't sign in to almyty.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end space-x-2">
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={onCancel}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || privateNotPossible}
             >
               {isSaving ? 'Saving...' : 'Save changes'}
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
   )
 }

@@ -64,7 +64,9 @@ export class LlmChatHelper {
       // the plan stands in as the session's provider; the runner walks the
       // whole chain and stamps the answering card on the response.
       const provider = providerId
-        ? await this.providers.getProvider(providerId, organizationId, true)
+        // Another user's private provider (or any private provider, for a
+        // call attributed to nobody) is not found.
+        ? await this.providers.getProvider(providerId, organizationId, true, userId ? { id: userId } : null)
         : await this.runner.headProviderForRoute(organizationId, request, userId ? { id: userId } : undefined);
 
       if (!provider.isHealthy && !request.routing) {
@@ -295,7 +297,10 @@ export class LlmChatHelper {
       // move to the next candidate once tokens have gone out, so the walk
       // that the non-streaming path does is limited to this first choice.
       const routed = request.routing ? await this.runner.planRouteHead(organizationId, request, userId ? { id: userId } : undefined) : null;
-      const provider = routed ? routed.provider : await this.providers.getProvider(providerId as string, organizationId, true);
+      // The caller must be allowed to use this provider: another user's
+      // private provider -- or any private one, when no user is known --
+      // is not found.
+      const provider = routed ? routed.provider : await this.providers.getProvider(providerId as string, organizationId, true, userId ? { id: userId } : null);
       if (routed) {
         request = { ...request, model: routed.candidate.vendorModelId, routing: undefined };
       } else if (!provider.isHealthy) {
