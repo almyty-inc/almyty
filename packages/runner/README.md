@@ -11,22 +11,46 @@ workspace, but nothing about the runner is specific to coding agents.
 
 ## Install
 
-```
-npx @almyty/runner start --name my-laptop
-```
-
-Three commands in three minutes:
+Install once, then call the installed binaries. The runner is a daemon you
+start, restart, query and stop on that machine, so it is a pinned global
+install rather than whatever `npx` resolves on each start.
 
 ```
-npx @almyty/auth login          # if you haven't already
-npx @almyty/runner start --name my-laptop --label os=macos
+npm i -g @almyty/runner @almyty/auth
+almyty-auth login                      # once per machine
+almyty-runner start --name my-laptop   # add --org <org-id> if you belong to several orgs
 # in another terminal:
-npx @almyty/runner status
+almyty-runner status
 ```
 
-Stop with `npx @almyty/runner stop` or ctrl-c in the daemon's terminal.
+Stop with `almyty-runner stop` or ctrl-c in the daemon's terminal.
 
-Or use the UI: log into your almyty account and head to **Runners → Start a runner**. The page generates the exact start command for you and waits for the daemon to come online before redirecting to the runner detail.
+Or use the UI: log into your almyty account and head to **Runners → Start a
+runner**. The page creates the runner (name, labels, and who can see it:
+Private, Team or Org-wide), prints the exact start command, and waits for the
+daemon to come online before opening the runner. From that page you can go
+back and change anything, or cancel, which deletes the runner again.
+
+## What identifies and authorises a runner
+
+Your almyty login on that machine, not the name. `almyty-runner start` sends
+the token `almyty-auth login` stored in `~/.almyty/credentials.json` (or
+`ALMYTY_TOKEN`); the backend attaches the daemon to the runner of that user in
+that organization. The name is a label, unique within the organization:
+
+- Someone who knows the name cannot connect to your runner. Their daemon
+  carries their login, so it is refused (the name is already used in the org)
+  rather than attached to yours.
+- Restarting with the same name from a machine logged in as you replaces the
+  previous connection of your runner; that is how a rebuilt machine takes over.
+- `--org` only picks among organizations you belong to; any other is refused.
+- The daemon's live session is bound to your user as well: another member of
+  the organization cannot attach a session to your runner by its id.
+
+Who else can *use* the runner is its visibility: **Private** (the default:
+you only, not even org admins), **Team**, or **Org-wide**. It is enforced on
+the server when runners are listed and fetched, when work is dispatched, and on
+the tools a runner publishes.
 
 ## What that command lets almyty do to your machine
 
@@ -86,7 +110,7 @@ JSON, layered lowest precedence first:
 2. `~/.almyty/config.json` (global)
 3. `./.almyty/config.json` (project-local)
 4. Environment variables (`ALMYTY_URL`, `ALMYTY_TOKEN`, `ALMYTY_RUNNER_NAME`, `ALMYTY_RUNNER_ISOLATION`)
-5. CLI flags (`--name`, `--label`, `--config`, `--url`)
+5. CLI flags (`--name`, `--org`, `--label`, `--config`, `--url`)
 6. Backend overrides (constrain-only; never escalate)
 
 A `~/.almyty/config.json` that keeps work inside one tree — the shape worth
