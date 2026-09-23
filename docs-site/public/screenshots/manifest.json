@@ -461,7 +461,8 @@
         "packages/agents-cli/src",
         "packages/agents-cli/package.json"
       ],
-      "sourceDigest": "bca52111e3127bee68152141dc22e7499564ce2967d3a538d41958aa2f49f0b0"
+      "sourceDigest": "50f9685b62d48b50bc93c91f62b6254d8b6d29cf8572a81c8b6fc1afdd990a0c",
+      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "cli-almyty-help",
@@ -479,8 +480,8 @@
         "packages/almyty-cli/src",
         "packages/almyty-cli/package.json"
       ],
-      "sourceDigest": "5741b43e9021fb325aaf9292de652b617c3ac6b2216cc315949f29d0bc11babc",
-      "notes": "Rendered from the published binary using freeze; CLI refresh merged in #684."
+      "sourceDigest": "68cf1d3073ad3ff3d4a54872244ac9ef297a9afd14d45cd2759920d6a90ab0d1",
+      "notes": "Rendered from the published binary using freeze; CLI refresh merged in #684. Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "cli-auth-help",
@@ -498,8 +499,8 @@
         "packages/auth-cli/src",
         "packages/auth-cli/package.json"
       ],
-      "sourceDigest": "405c3fc9c8cbee2db49e5a9a4cd81dbe24e4814bdb7101deaafd84474cca5d23",
-      "notes": "Local home directory normalized to ~ before rendering; no personal machine path published."
+      "sourceDigest": "5ed7085bc0ec7b1458198440fc5e8c08dc3b3c87401d82da259ffc2c61a9655c",
+      "notes": "Local home directory normalized to ~ before rendering; no personal machine path published. Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "cli-chat-help",
@@ -517,7 +518,8 @@
         "packages/chat-cli/src",
         "packages/chat-cli/package.json"
       ],
-      "sourceDigest": "734bc72a10ff7645243e3ab8e186c1426f3d841112af24160b422a3780aead3f"
+      "sourceDigest": "88395f17b7d2b46ab8ae4344a1dea58a9aa632b9ab7d7e4d77764a26d83426ba",
+      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "cli-mcp-server-help",
@@ -535,7 +537,8 @@
         "packages/mcp-server/src",
         "packages/mcp-server/package.json"
       ],
-      "sourceDigest": "adc0006f8ca5e8ac3682f2a496933292632f5a104361637df910be86dad9b9d0"
+      "sourceDigest": "b656cb89c51e1515691dc8a966f5da82ddbe78392f2daf470951387819b84ab0",
+      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "cli-skills-help",
@@ -553,7 +556,8 @@
         "packages/skills-cli/src",
         "packages/skills-cli/package.json"
       ],
-      "sourceDigest": "f5d74c59f2e94233b69cd9176698ff75e24b864e0709fe8b75442cb7a46709b2"
+      "sourceDigest": "526a8347ffe04a21322eab4a5e7ee636d973aaa72636e5033d92226f089472e4",
+      "notes": "Source metadata reconciled to published 1.5.0 after reviewing the version-only manifest changes; command implementations and captured pixels are unchanged. Original capture time preserved."
     },
     {
       "id": "command-palette",
@@ -563,6 +567,27 @@
       "status": "needs-recapture",
       "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
       "sha256": "492d12ae7c8da3928998e6e3e825311c8bc82ec2c69092afa3baa6e2f59864e2"
+    },
+    {
+      "id": "connections",
+      "title": "Connections catalog with all Settings sections visible",
+      "path": "screenshots/connections.png",
+      "capturedAt": "2026-09-23T05:53:42.281Z",
+      "status": "current",
+      "sha256": "d91157a54e07217ba91b2f90efe289387fd80c0477f697747a1ac992471f5afd",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/connections"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/connections",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3b0620baf1efe15de9e9e8369ab99287cdda05b95d1309fb94d84fb073597f22"
     },
     {
       "id": "credentials-add",
@@ -728,12 +753,24 @@
     },
     {
       "id": "models",
-      "title": "models",
+      "title": "Models catalog grid with validation and routing availability",
       "path": "screenshots/models.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "58f67d8d688b2735878ae231b17e929665301965e15f553118fd82c8d97e8d71"
+      "capturedAt": "2026-09-23T05:31:21.070Z",
+      "status": "current",
+      "sha256": "43650583b6d8cea1468aab7833a72f97f7d78a03f3928cbfb490b4dd72460e72",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/models"
+      },
+      "sources": [
+        "frontend/src/pages/models.tsx",
+        "frontend/src/components/models",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "dff4234bc99dc45594634f8a813a7514d37bc3ef1911d56ff7b3f3c08f8dd1b8"
     },
     {
       "id": "quickstart-api-imported",
@@ -827,12 +864,24 @@
     },
     {
       "id": "settings-security",
-      "title": "settings security",
+      "title": "Security settings with password form and session limitations",
       "path": "screenshots/settings-security.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "d225d4b0f46f5b35a98058656971cf7bd96ef0720b15bf413cffd47fabf79a82"
+      "capturedAt": "2026-09-23T06:08:27.178Z",
+      "status": "current",
+      "sha256": "9c79e3877c85ae804199b7bba684fac5561b08ba6086edeb18db9d4a2e0b74c9",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/security"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b5115ac67d220e621567efef4fdf6f656ea4328fa48a96bcc03b8513f0b4a72b"
     },
     {
       "id": "settings-teams",
