@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,8 +33,7 @@ import { useOrganizationStore } from '@/store/organization'
 import { llmProvidersApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { TeamFilter, useTeamLookup, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { TestProviderDialog } from '@/components/llm-providers/test-provider-dialog'
-import { type LlmProvider } from '@/components/llm-providers/schema'
+import type { LlmProvider } from '@/components/llm-providers/schema'
 import { buildProviderColumns } from '@/components/llm-providers/columns'
 import { providerTypeOptions } from '@/components/llm-providers/provider-type-config'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -41,8 +41,8 @@ import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 /**
  * Inference providers: the APIs models are called through, with their keys.
- * Its own page, reached from the Models header. The Add model flow opens
- * the same add dialog, so there is one form for it, not two.
+ * Its own page, reached from the Models header. Adding one is its own page
+ * (/llm-providers/new); editing and testing one happen on its detail page.
  */
 export function LlmProvidersPage() {
   useEffect(() => {
@@ -51,17 +51,9 @@ export function LlmProvidersPage() {
   }, [])
 
   const navigate = useNavigate()
-  // Honour ?new=1 from older links: adding a provider is a page now.
-  const [searchParams] = useSearchParams()
-  useEffect(() => {
-    if (searchParams.get('new') === '1') navigate('/llm-providers/new', { replace: true })
-  }, [searchParams, navigate])
+  // ?new=1 (command palette, onboarding, bookmarks) lands on the add page.
+  useNewParamRedirect('/llm-providers/new')
   const [providerToDelete, setProviderToDelete] = useState<LlmProvider | null>(null)
-  const [testProvider, setTestProvider] = useState<LlmProvider | null>(null)
-  const [isTestDialogOpen, setIsTestDialogOpen] = useState(false)
-  const [testInput, setTestInput] = useState('Hello, can you help me test this connection?')
-  const [testResult, setTestResult] = useState<any>(null)
-  const [testLoading, setTestLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -82,49 +74,6 @@ export function LlmProvidersPage() {
   const providers = Array.isArray(providersRaw) ? providersRaw : []
 
   // Provider metrics now live on the detail page (/llm-providers/:id)
-
-  const testProviderMutation = useMutation({
-    mutationFn: async ({ providerId, input }: { providerId: string; input: string }) => {
-      setTestLoading(true)
-      const response = await llmProvidersApi.test(providerId)
-      return response
-    },
-    onSuccess: (responseData) => {
-      // API returns clean data directly
-      const result = responseData.data || responseData
-      if (!result?.isHealthy) {
-        const message = result?.error || 'Provider did not report healthy'
-        setTestResult({
-          error: message,
-          timestamp: new Date().toISOString()
-        })
-        setTestLoading(false)
-        notifications.error('Test Failed', message)
-        queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
-        return
-      }
-      setTestResult({
-        output: {
-          response: result.response || result.message || 'Connection successful',
-          usage: result.usage || { inputTokens: 0, outputTokens: 0 },
-          cost: result.cost || 0,
-          responseTime: result.responseTime || result.latency || 0
-        },
-        timestamp: new Date().toISOString()
-      })
-      setTestLoading(false)
-      notifications.success('Test Complete', 'Provider connection successful')
-      queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
-    },
-    onError: (error: any) => {
-      setTestResult({
-        error: getApiErrorMessage(error),
-        timestamp: new Date().toISOString()
-      })
-      setTestLoading(false)
-      notifications.error('Test Failed', getApiErrorMessage(error, 'Provider connection failed'))
-    }
-  })
 
   const deleteProviderMutation = useMutation({
     mutationFn: async (providerId: string) => {
@@ -169,19 +118,12 @@ export function LlmProvidersPage() {
     return matchesSearch && matchesStatus && matchesType
   })
 
-  const handleTestProvider = () => {
-    if (!testProvider) return
-    testProviderMutation.mutate({ providerId: testProvider.id, input: testInput })
-  }
-
   const totalCost = providers.reduce((sum: number, provider: any) => sum + (provider.totalCost || 0), 0)
   const totalRequests = providers.reduce((sum: number, provider: any) => sum + (provider.totalRequests || 0), 0)
 
   const columns = buildProviderColumns({
     navigate,
     setProviderToDelete,
-    setTestProvider,
-    setIsTestDialogOpen,
     toggleProviderStatusMutation,
     teamLookup,
   })
@@ -303,25 +245,13 @@ export function LlmProvidersPage() {
                   setProviderToDelete(null)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              Delete
+              Delete provider
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Provider Test Dialog */}
-      <TestProviderDialog
-        open={isTestDialogOpen}
-        onOpenChange={setIsTestDialogOpen}
-        testProvider={testProvider}
-        testInput={testInput}
-        onTestInputChange={setTestInput}
-        onTest={handleTestProvider}
-        testLoading={testLoading}
-        testResult={testResult}
-      />
     </div>
   )
 }

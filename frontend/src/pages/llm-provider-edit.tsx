@@ -1,11 +1,9 @@
-import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { ArrowLeft } from 'lucide-react'
 
-import { Card, CardContent } from '@/components/ui/card'
+import { FormPage, FormSection } from '@/components/layout/form-page'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { llmProvidersApi } from '@/lib/api'
@@ -89,39 +87,29 @@ export function LlmProviderEditPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Link to={`/llm-providers/${id}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          {provider?.name ?? 'Provider'}
-        </Link>
-      </div>
-
-      <div>
-        <h1 className={DETAIL_TITLE_CLASSES}>Edit provider</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Update provider configuration, model settings and who can use it.
-        </p>
-      </div>
-
+    <FormPage
+      title="Edit provider"
+      description="Update provider configuration, model settings and who can use it."
+      back={{ to: `/llm-providers/${id}`, label: provider?.name ?? 'Provider' }}
+    >
       {isLoading ? (
-        <LoadingSpinner />
+        <div className="flex justify-center py-16">
+          <LoadingSpinner />
+        </div>
       ) : isError ? (
         <QueryError error={error} onRetry={() => refetch()} title="Couldn't load this provider" />
       ) : (
-        <Card className="max-w-3xl">
-          <CardContent className="pt-6">
-            <EditProviderForm
-              editForm={editForm}
-              providerToEdit={provider}
-              updateProviderMutation={updateProviderMutation}
-              availableModels={availableModels}
-              modelsLoading={modelsLoading}
-              onCancel={() => navigate(`/llm-providers/${id}`)}
-            />
-          </CardContent>
-        </Card>
+        <FormSection>
+          <EditProviderForm
+            editForm={editForm}
+            providerToEdit={provider}
+            updateProviderMutation={updateProviderMutation}
+            availableModels={availableModels}
+            modelsLoading={modelsLoading}
+            onCancel={() => navigate(`/llm-providers/${id}`)}
+          />
+        </FormSection>
       )}
-    </div>
+    </FormPage>
   )
 }

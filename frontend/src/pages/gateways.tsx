@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { Router, Plus, Search, Zap, Building2 } from 'lucide-react'
 
@@ -9,31 +9,22 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { PageIntro } from '@/components/onboarding/page-intro'
 import { QueryError } from '@/components/ui/query-error'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { DataTable, createSelectColumn, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
+import { DataTable, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import type { ColumnDef } from '@tanstack/react-table'
 
-import { gatewaysApi, toolsApi } from '@/lib/api'
+import { gatewaysApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
-import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import { GatewayDetailsSheet } from '@/components/gateways/gateway-details-sheet'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Gateway } from '@/types'
-
 
 /**
  * Gateway types that are really messaging distributions of an app.
@@ -52,20 +43,13 @@ export function GatewaysPage() {
   }, [])
 
   const navigate = useNavigate()
-  // Honour ?new=1 from older links: creating a gateway is a page now.
-  const [searchParams] = useSearchParams()
-  useEffect(() => {
-    if (searchParams.get('new') === '1') navigate('/gateways/new', { replace: true })
-  }, [searchParams, navigate])
+  // Old ?new=1 links (the command palette, bookmarks) land on the create page.
+  useNewParamRedirect('/gateways/new')
   const [deleteGatewayDialogOpen, setDeleteGatewayDialogOpen] = useState(false)
   const [gatewayToDelete, setGatewayToDelete] = useState<Gateway | null>(null)
-  const [selectedGateway, setSelectedGateway] = useState<Gateway | null>(null)
-  const [gatewayDetailsOpen, setGatewayDetailsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [toolSearch, setToolSearch] = useState('')
-  const [toolFilter, setToolFilter] = useState<'all' | 'assigned' | 'unassigned'>('all')
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
 
   const { currentOrganization } = useOrganizationStore()
@@ -81,54 +65,6 @@ export function GatewaysPage() {
 
   const gatewaysExtracted = gatewaysData?.gateways || []
   const gateways = Array.isArray(gatewaysExtracted) ? gatewaysExtracted : []
-
-  // Tool scoping queries
-  const { data: gatewayToolsData } = useQuery({
-    queryKey: ['gateway-tools', selectedGateway?.id],
-    queryFn: () => gatewaysApi.getTools(selectedGateway!.id),
-    enabled: !!selectedGateway && gatewayDetailsOpen,
-  })
-
-  // Same key as the agent builder's tool picker, and under the
-  // ['tools'] prefix the tools page invalidates. It used to be
-  // ['all-tools', orgId], which no mutation anywhere touched.
-  const { data: allToolsData } = useQuery({
-    queryKey: ['tools', currentOrganization?.id, 'all'],
-    queryFn: () => toolsApi.getAll(currentOrganization?.id),
-    enabled: !!currentOrganization && gatewayDetailsOpen,
-  })
-
-  const gatewayTools = (() => {
-    const raw = gatewayToolsData?.gatewayTools || gatewayToolsData?.tools || []
-    return Array.isArray(raw) ? raw : []
-  })()
-  const allTools = (() => {
-    const raw = allToolsData?.tools || []
-    return Array.isArray(raw) ? raw : []
-  })()
-
-  // Determine which tools are assigned (map gatewayTool.toolId to tool data)
-  const assignedToolIds = new Set(gatewayTools.map((gt: any) => gt.toolId || gt.id))
-
-  const assignToolMutation = useMutation({
-    mutationFn: (toolId: string) => gatewaysApi.assignTool(selectedGateway!.id, toolId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gateway-tools', selectedGateway?.id] })
-      queryClient.invalidateQueries({ queryKey: ['gateways'] })
-    },
-    onError: (err: unknown) =>
-      errorNotif('Could not assign the tool', getApiErrorMessage(err, 'The gateway is unchanged.')),
-  })
-
-  const removeToolMutation = useMutation({
-    mutationFn: (toolId: string) => gatewaysApi.removeTool(selectedGateway!.id, toolId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gateway-tools', selectedGateway?.id] })
-      queryClient.invalidateQueries({ queryKey: ['gateways'] })
-    },
-    onError: (err: unknown) =>
-      errorNotif('Could not remove the tool', getApiErrorMessage(err, 'The gateway is unchanged.')),
-  })
 
   // Gateways is the protocol page: MCP, A2A, ACP, UTCP, Skills and the
   // OpenAI-compatible endpoint. Messaging platforms are reached through
@@ -274,10 +210,8 @@ export function GatewaysPage() {
       },
     },
     createActionsColumn<Gateway>(
-      (gateway) => {
-        setSelectedGateway(gateway)
-        setGatewayDetailsOpen(true)
-      },
+      // Editing happens on the gateway's own page, inline.
+      (gateway) => navigate(`/gateways/${gateway.id}/edit`),
       (gateway) => {
         if (gateway.isSystem) return
         setGatewayToDelete(gateway)
@@ -285,11 +219,11 @@ export function GatewaysPage() {
       },
       [
         {
-          label: 'View Details',
+          label: 'View details',
           onClick: (gateway) => navigate(`/gateways/${gateway.id}`),
         },
         {
-          label: 'Copy Full URL',
+          label: 'Copy full URL',
           onClick: async (gateway) => {
             const backendUrl = import.meta.env.ALMYTY_API_BASE_URL || window.location.origin
             const simpleSlug = currentOrganization?.name?.toLowerCase().replace(/\s+/g, '-') || 'org'
@@ -423,8 +357,6 @@ export function GatewaysPage() {
       </>
       )}
 
-
-
       {/* Delete Gateway Confirmation Dialog */}
       <AlertDialog open={deleteGatewayDialogOpen} onOpenChange={setDeleteGatewayDialogOpen}>
         <AlertDialogContent>
@@ -450,20 +382,6 @@ export function GatewaysPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Gateway Details Sheet */}
-      <GatewayDetailsSheet
-        open={gatewayDetailsOpen}
-        onOpenChange={setGatewayDetailsOpen}
-        selectedGateway={selectedGateway}
-        allTools={allTools}
-        assignedToolIds={assignedToolIds}
-        assignToolMutation={assignToolMutation}
-        removeToolMutation={removeToolMutation}
-        toolSearch={toolSearch}
-        onToolSearchChange={setToolSearch}
-        toolFilter={toolFilter}
-        onToolFilterChange={setToolFilter}
-      />
     </div>
   )
 }

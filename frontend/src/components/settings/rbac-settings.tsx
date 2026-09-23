@@ -28,14 +28,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Field, InlineFormActions } from '@/components/layout/form-page'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -158,7 +151,9 @@ function RolesCard({
   loading: boolean
   members: OrgMember[]
 }) {
-  const [dialogOpen, setDialogOpen] = useState(false)
+  // Create and edit happen inline above the table; `editing` null + open
+  // means "new role".
+  const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CustomRole | null>(null)
   const [deleting, setDeleting] = useState<CustomRole | null>(null)
   const [assigning, setAssigning] = useState<CustomRole | null>(null)
@@ -175,6 +170,11 @@ function RolesCard({
     },
     onError: (err) => error('Failed to delete role', getApiErrorMessage(err)),
   })
+
+  const closeForm = () => {
+    setFormOpen(false)
+    setEditing(null)
+  }
 
   const columns: ColumnDef<CustomRole>[] = useMemo(
     () => [
@@ -243,8 +243,9 @@ function RolesCard({
               size="sm"
               onClick={() => {
                 setEditing(row.original)
-                setDialogOpen(true)
+                setFormOpen(true)
               }}
+              aria-label={`Edit ${row.original.name}`}
             >
               Edit
             </Button>
@@ -265,7 +266,7 @@ function RolesCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
+      <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-primary" />
@@ -277,17 +278,24 @@ function RolesCard({
             the built-in owner / admin / member / viewer roles.
           </CardDescription>
         </div>
-        <Button
-          onClick={() => {
-            setEditing(null)
-            setDialogOpen(true)
-          }}
-        >
-          <Plus className="mr-1.5 h-4 w-4" />
-          New role
-        </Button>
+        {!formOpen && (
+          <Button
+            className="shrink-0"
+            onClick={() => {
+              setEditing(null)
+              setFormOpen(true)
+            }}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            New role
+          </Button>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {formOpen && <RoleInlineForm key={editing?.id ?? 'new'} editing={editing} onDone={closeForm} />}
+        {assigning && (
+          <AssignUsersPanel role={assigning} members={members} onClose={() => setAssigning(null)} />
+        )}
         <DataTable
           columns={columns}
           data={roles}
@@ -303,20 +311,6 @@ function RolesCard({
           }
         />
       </CardContent>
-
-      <RoleDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        editing={editing}
-      />
-
-      {assigning && (
-        <AssignUsersDialog
-          role={assigning}
-          members={members}
-          onClose={() => setAssigning(null)}
-        />
-      )}
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
@@ -342,21 +336,14 @@ function RolesCard({
   )
 }
 
-function RoleDialog({
-  open,
-  onOpenChange,
-  editing,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  editing: CustomRole | null
-}) {
+/** "New custom role" / "Edit role", inline above the roles table. */
+function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDone: () => void }) {
   const queryClient = useQueryClient()
   const { success, error } = useNotifications()
 
   const form = useForm<RoleFormData>({
     resolver: zodResolver(roleSchema),
-    values: {
+    defaultValues: {
       name: editing?.name ?? '',
       description: editing?.description ?? '',
       permissions: (editing?.permissions ?? []).join('\n'),
@@ -376,86 +363,54 @@ function RoleDialog({
     },
     onSuccess: async () => {
       success(editing ? 'Role updated' : 'Role created')
-      onOpenChange(false)
-      form.reset()
+      onDone()
       await queryClient.invalidateQueries({ queryKey: ['rbac', 'roles'] })
     },
     onError: (err) => error('Failed to save role', getApiErrorMessage(err)),
   })
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <form onSubmit={form.handleSubmit((d) => saveMutation.mutate(d))}>
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Edit role' : 'New custom role'}</DialogTitle>
-            <DialogDescription>
-              Grant a curated set of permissions. Use{' '}
-              <code className="font-mono text-xs">resource:action</code> strings; wildcards like{' '}
-              <code className="font-mono text-xs">agents:*</code> or{' '}
-              <code className="font-mono text-xs">*:read</code> are supported.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="rbac-role-name">Name</Label>
-              <Input
-                id="rbac-role-name"
-                placeholder="release-manager"
-                {...form.register('name')}
-              />
-              {form.formState.errors.name && (
-                <p className="text-sm text-destructive">{form.formState.errors.name.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="rbac-role-description">Description</Label>
-              <Textarea
-                id="rbac-role-description"
-                placeholder="What this role is for"
-                rows={2}
-                {...form.register('description')}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="rbac-role-permissions">Permissions</Label>
-              <Textarea
-                id="rbac-role-permissions"
-                placeholder={'agents:read\ntools:manage\naudit:export'}
-                rows={4}
-                className="font-mono text-sm"
-                {...form.register('permissions')}
-              />
-              <p className="text-xs text-muted-foreground">
-                One permission per line (or comma-separated).
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saveMutation.isPending}>
-              {editing ? 'Save changes' : 'Create role'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <form
+      onSubmit={form.handleSubmit((d) => saveMutation.mutate(d))}
+      className="space-y-4 rounded-lg border bg-muted/30 p-4"
+      aria-label={editing ? `Edit role ${editing.name}` : 'New custom role'}
+      noValidate
+    >
+      <div>
+        <h3 className="text-sm font-semibold">{editing ? `Edit role “${editing.name}”` : 'New custom role'}</h3>
+        <p className="text-xs text-muted-foreground">
+          Grant a curated set of permissions. Use{' '}
+          <code className="font-mono">resource:action</code> strings; wildcards like{' '}
+          <code className="font-mono">agents:*</code> or <code className="font-mono">*:read</code> are supported.
+        </p>
+      </div>
+      <Field id="rbac-role-name" label="Name" error={form.formState.errors.name?.message}>
+        <Input placeholder="release-manager" autoFocus {...form.register('name')} />
+      </Field>
+      <Field id="rbac-role-description" label="Description">
+        <Textarea placeholder="What this role is for" rows={2} {...form.register('description')} />
+      </Field>
+      <Field id="rbac-role-permissions" label="Permissions" hint="One permission per line (or comma-separated).">
+        <Textarea
+          placeholder={'agents:read\ntools:manage\naudit:export'}
+          rows={4}
+          className="font-mono text-sm"
+          {...form.register('permissions')}
+        />
+      </Field>
+      <InlineFormActions
+        onCancel={onDone}
+        submitLabel={editing ? 'Save changes' : 'Create role'}
+        submitting={saveMutation.isPending}
+      />
+    </form>
   )
 }
 
 /* ── Assignments ──────────────────────────────────────────────────────── */
 
-function AssignUsersDialog({
+/** "Assign {role}", an inline panel above the roles table. */
+function AssignUsersPanel({
   role,
   members,
   onClose,
@@ -478,67 +433,50 @@ function AssignUsersDialog({
     onError: (err) => error('Failed to assign role', getApiErrorMessage(err)),
   })
 
-  const unassignMutation = useMutation({
-    mutationFn: (userId: string) => rbacApi.unassignUser(role.id, userId),
-    onSuccess: async () => {
-      success('Role unassigned')
-      await queryClient.invalidateQueries({ queryKey: ['rbac', 'roles'] })
-    },
-    onError: (err) => error('Failed to unassign role', getApiErrorMessage(err)),
-  })
-
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Assign “{role.name}”</DialogTitle>
-          <DialogDescription>
-            Grant this role to a member. Members can hold several custom roles at once.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="flex items-end gap-2 py-2">
-          <div className="flex-1 space-y-2">
-            <Label htmlFor="rbac-member">Member</Label>
-            <Select value={selectedUser} onValueChange={setSelectedUser}>
-              <SelectTrigger id="rbac-member" aria-label="Select member">
-                <SelectValue placeholder="Select a member" />
-              </SelectTrigger>
-              <SelectContent>
-                {members.length === 0 && (
-                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                    No members
-                  </div>
-                )}
-                {members.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {memberLabel(m)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button
-            onClick={() => selectedUser && assignMutation.mutate(selectedUser)}
-            disabled={!selectedUser || assignMutation.isPending}
-          >
-            <UserPlus className="mr-1.5 h-4 w-4" />
-            Assign
-          </Button>
-        </div>
-
+    <section
+      className="space-y-3 rounded-lg border bg-muted/30 p-4"
+      aria-label={`Assign ${role.name}`}
+    >
+      <div>
+        <h3 className="text-sm font-semibold">Assign “{role.name}”</h3>
         <p className="text-xs text-muted-foreground">
-          To remove a member from this role, use the unassign action beside their name in the
-          member list, or reassign from here.
+          Grant this role to a member. Members can hold several custom roles at once.
         </p>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Close
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex-1 space-y-1.5">
+          <Label htmlFor="rbac-member">Member</Label>
+          <Select value={selectedUser} onValueChange={setSelectedUser}>
+            <SelectTrigger id="rbac-member" aria-label="Select member">
+              <SelectValue placeholder="Select a member" />
+            </SelectTrigger>
+            <SelectContent>
+              {members.length === 0 && (
+                <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                  No members
+                </div>
+              )}
+              {members.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {memberLabel(m)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          onClick={() => selectedUser && assignMutation.mutate(selectedUser)}
+          disabled={!selectedUser || assignMutation.isPending}
+        >
+          <UserPlus className="mr-1.5 h-4 w-4" />
+          Assign
+        </Button>
+        <Button variant="outline" onClick={onClose}>
+          Done
+        </Button>
+      </div>
+    </section>
   )
 }
 
@@ -619,7 +557,7 @@ const policySchema = z.object({
 type PolicyFormData = z.infer<typeof policySchema>
 
 function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: boolean }) {
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<AbacPolicy | null>(null)
 
   const queryClient = useQueryClient()
@@ -692,7 +630,7 @@ function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: 
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
+      <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-primary" />
@@ -703,12 +641,15 @@ function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: 
             <span className="font-medium">deny</span> always wins; higher priority breaks ties.
           </CardDescription>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          New policy
-        </Button>
+        {!creating && (
+          <Button onClick={() => setCreating(true)} className="shrink-0">
+            <Plus className="mr-1.5 h-4 w-4" />
+            New policy
+          </Button>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {creating && <PolicyInlineForm onDone={() => setCreating(false)} />}
         <DataTable
           columns={columns}
           data={policies}
@@ -724,8 +665,6 @@ function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: 
           }
         />
       </CardContent>
-
-      <PolicyDialog open={dialogOpen} onOpenChange={setDialogOpen} />
 
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
@@ -749,13 +688,8 @@ function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: 
   )
 }
 
-function PolicyDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
+/** "New access policy", inline above the policies table. */
+function PolicyInlineForm({ onDone }: { onDone: () => void }) {
   const queryClient = useQueryClient()
   const { success, error } = useNotifications()
 
@@ -776,99 +710,59 @@ function PolicyDialog({
       }),
     onSuccess: async () => {
       success('Policy created')
-      onOpenChange(false)
-      form.reset({ name: '', description: '', effect: 'allow', action: '*', priority: 0 })
+      onDone()
       await queryClient.invalidateQueries({ queryKey: ['rbac', 'policies'] })
     },
     onError: (err) => error('Failed to create policy', getApiErrorMessage(err)),
   })
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <form onSubmit={form.handleSubmit((d) => saveMutation.mutate(d))}>
-          <DialogHeader>
-            <DialogTitle>New access policy</DialogTitle>
-            <DialogDescription>
-              A rule over request attributes. Set the governed action (or{' '}
-              <code className="font-mono text-xs">*</code> for any) and whether it allows or denies.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="rbac-policy-name">Name</Label>
-              <Input
-                id="rbac-policy-name"
-                placeholder="deny-prod-tool-exec"
-                {...form.register('name')}
-              />
-              {form.formState.errors.name && (
-                <p className="text-sm text-destructive">
-                  {form.formState.errors.name.message}
-                </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="rbac-effect">Effect</Label>
-                <Select
-                  value={form.watch('effect')}
-                  onValueChange={(v) => form.setValue('effect', v as 'allow' | 'deny')}
-                >
-                  <SelectTrigger id="rbac-effect" aria-label="Effect">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="allow">allow</SelectItem>
-                    <SelectItem value="deny">deny</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="rbac-policy-priority">Priority</Label>
-                <Input
-                  id="rbac-policy-priority"
-                  type="number"
-                  {...form.register('priority', { valueAsNumber: true })}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="rbac-policy-action">Action</Label>
-              <Input
-                id="rbac-policy-action"
-                placeholder="tools:execute"
-                {...form.register('action')}
-              />
-              <p className="text-xs text-muted-foreground">
-                The action this policy governs. Use <code className="font-mono">*</code> for any.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="rbac-policy-description">Description</Label>
-              <Textarea
-                id="rbac-policy-description"
-                placeholder="What this policy enforces"
-                rows={2}
-                {...form.register('description')}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saveMutation.isPending}>
-              Create policy
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <form
+      onSubmit={form.handleSubmit((d) => saveMutation.mutate(d))}
+      className="space-y-4 rounded-lg border bg-muted/30 p-4"
+      aria-label="New access policy"
+      noValidate
+    >
+      <div>
+        <h3 className="text-sm font-semibold">New access policy</h3>
+        <p className="text-xs text-muted-foreground">
+          A rule over request attributes. Set the governed action (or{' '}
+          <code className="font-mono">*</code> for any) and whether it allows or denies.
+        </p>
+      </div>
+      <Field id="rbac-policy-name" label="Name" error={form.formState.errors.name?.message}>
+        <Input placeholder="deny-prod-tool-exec" autoFocus {...form.register('name')} />
+      </Field>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field id="rbac-effect" label="Effect">
+          <Select
+            value={form.watch('effect')}
+            onValueChange={(v) => form.setValue('effect', v as 'allow' | 'deny')}
+          >
+            <SelectTrigger id="rbac-effect" aria-label="Effect">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="allow">allow</SelectItem>
+              <SelectItem value="deny">deny</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field id="rbac-policy-priority" label="Priority">
+          <Input type="number" {...form.register('priority', { valueAsNumber: true })} />
+        </Field>
+      </div>
+      <Field
+        id="rbac-policy-action"
+        label="Action"
+        hint={<>The action this policy governs. Use <code className="font-mono">*</code> for any.</>}
+      >
+        <Input placeholder="tools:execute" {...form.register('action')} />
+      </Field>
+      <Field id="rbac-policy-description" label="Description">
+        <Textarea placeholder="What this policy enforces" rows={2} {...form.register('description')} />
+      </Field>
+      <InlineFormActions onCancel={onDone} submitLabel="Create policy" submitting={saveMutation.isPending} />
+    </form>
   )
 }

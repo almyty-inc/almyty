@@ -40,9 +40,7 @@ const DESTRUCTIVE_PASTE = 'bg-destructive text-destructive-foreground hover:bg-d
  * still contain the paste -- once it is fixed there, drop it from here so
  * the guard covers it again.
  */
-const PASTE_PENDING_ELSEWHERE = new Set([
-  'pages/llm-providers.tsx',
-])
+const PASTE_PENDING_ELSEWHERE = new Set<string>([])
 
 /** Every `<AlertDialogAction ...>...</AlertDialogAction>` element in a file. */
 function alertDialogActions(text: string): string[] {

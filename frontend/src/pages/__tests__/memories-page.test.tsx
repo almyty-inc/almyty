@@ -141,3 +141,20 @@ describe('MemoriesPage', () => {
     })
   })
 })
+
+// Adding and transferring memory are pages, not dialogs: the buttons that
+// used to open them are links now.
+describe('MemoriesPage entry points', () => {
+  it('links Add memory (header and empty state) and Transfer to their pages', async () => {
+    ;(memoriesApi.list as any).mockResolvedValue({ items: [], next_cursor: null })
+    ;(memoriesApi.listBackends as any).mockResolvedValue([])
+    render(<MemoriesPage />)
+
+    await screen.findByText('No memories yet')
+    const add = screen.getAllByRole('link', { name: /Add memory/i })
+    expect(add).toHaveLength(2)
+    for (const link of add) expect(link).toHaveAttribute('href', '/memories/new')
+    expect(screen.getByRole('link', { name: /Transfer/i })).toHaveAttribute('href', '/memories/transfer')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})

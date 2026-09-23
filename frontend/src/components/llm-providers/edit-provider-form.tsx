@@ -54,7 +54,7 @@ export function EditProviderForm({
   const scopeChanged = visibility.visibility !== stored.visibility || visibility.teamId !== stored.teamId
 
   return (
-        <form onSubmit={editForm.handleSubmit((data: any) => {
+        <form aria-label="Edit provider" onSubmit={editForm.handleSubmit((data: any) => {
           if (providerToEdit) {
             updateProviderMutation.mutate({
               id: providerToEdit.id,

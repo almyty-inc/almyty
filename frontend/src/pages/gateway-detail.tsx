@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Info, Router, Settings, Shield, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Info, KeyRound, Router, Settings, ChevronRight } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { CopyField } from '@/components/ui/copy-field'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 
 import { gatewaysApi, toolsApi } from '@/lib/api'
@@ -21,11 +21,9 @@ import { useNotifications } from '@/store/app'
 import { GatewayAuthSection } from '@/components/gateways/detail/gateway-auth-section'
 import { GatewayConfigurationCard } from '@/components/gateways/detail/gateway-configuration-card'
 import { IntegrationsSection } from '@/components/gateways/detail/integrations-section'
-import { SecurityPolicyForm } from '@/components/gateways/detail/security-policy-form'
 import {
   GatewayToolsTab,
   type ScopingPreset,
-  type SecurityTarget,
 } from '@/components/gateways/detail/tools-tab'
 import { GatewayEventsTab } from '@/components/gateways/detail/events-tab'
 import {
@@ -58,8 +56,16 @@ export function GatewayDetailPage() {
   const queryClient = useQueryClient()
 
   const [removeAllToolsDialogOpen, setRemoveAllToolsDialogOpen] = useState(false)
-  const [securityDialogOpen, setSecurityDialogOpen] = useState(false)
-  const [securityTarget, setSecurityTarget] = useState<SecurityTarget | null>(null)
+  // Editing is its own page (/gateways/:id/edit), with the visibility
+  // picker. ?edit=1 from older links goes there.
+  const wantsEdit = searchParams.get('edit') === '1'
+  useEffect(() => {
+    if (wantsEdit) navigate(`/gateways/${id}/edit`, { replace: true })
+  }, [wantsEdit, id, navigate])
+  // The first API key the backend minted with this gateway, handed over
+  // by the create page. It is shown once and never fetched again.
+  const location = useLocation()
+  const initialApiKey = (location.state as { initialApiKey?: string } | null)?.initialApiKey
 
   const { data: gatewayData, isLoading, isError, error: gatewayError, refetch: refetchGateway } = useQuery({
     queryKey: ['gateway', id],
@@ -198,8 +204,6 @@ export function GatewayDetailPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['gateway-tools', id] })
       success('Security policy updated', 'Tool security policy has been saved.')
-      setSecurityDialogOpen(false)
-      setSecurityTarget(null)
     },
     onError: (err: any) => {
       errorNotif('Failed to update security policy', getApiErrorMessage(err, 'Please try again.'))
@@ -326,6 +330,22 @@ export function GatewayDetailPage() {
           )}
         </div>
       </div>
+
+      {initialApiKey && (
+        <div
+          data-testid="initial-api-key"
+          className="space-y-3 rounded-lg border border-amber-400/60 bg-amber-50 p-4 dark:bg-amber-950/30"
+        >
+          <p className="flex items-center gap-2 font-medium">
+            <KeyRound className="h-4 w-4" aria-hidden="true" />
+            Your gateway's first API key
+          </p>
+          <CopyField value={initialApiKey} label="API key" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            Copy it now. You won't see it again: once you leave this page, only its first characters are shown.
+          </p>
+        </div>
+      )}
 
       {/*
         Webhook registration failed and nothing said so.
@@ -460,10 +480,13 @@ export function GatewayDetailPage() {
             onRequestRemoveAll={() => setRemoveAllToolsDialogOpen(true)}
             onAssign={(toolId) => assignToolMutation.mutate({ toolId })}
             onRemove={(toolId) => removeToolMutation.mutate({ toolId })}
-            onOpenSecurity={(target) => {
-              setSecurityTarget(target)
-              setSecurityDialogOpen(true)
-            }}
+            securitySaving={updateToolConfigMutation.isPending}
+            onSaveSecurity={(target) =>
+              updateToolConfigMutation.mutateAsync({
+                gatewayToolId: target.gatewayToolId,
+                data: { securityPolicy: target.policy },
+              })
+            }
           />
         </TabsContent>
         )}
@@ -535,32 +558,6 @@ export function GatewayDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Security Policy Dialog */}
-      <Dialog open={securityDialogOpen} onOpenChange={(open) => { setSecurityDialogOpen(open); if (!open) setSecurityTarget(null) }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Security policy: {securityTarget?.toolName}
-            </DialogTitle>
-            <DialogDescription>
-              Configure security constraints for this tool in the gateway.
-            </DialogDescription>
-          </DialogHeader>
-          {securityTarget && (
-            <SecurityPolicyForm
-              initialPolicy={securityTarget.policy}
-              onSave={(policy) => {
-                updateToolConfigMutation.mutate({
-                  gatewayToolId: securityTarget.gatewayToolId,
-                  data: { securityPolicy: policy },
-                })
-              }}
-              isSaving={updateToolConfigMutation.isPending}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

@@ -1,21 +1,18 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2, Building2 } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Code, Search, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 import { PageHeader } from '@/components/layout/page-header'
 import { PageIntro } from '@/components/onboarding/page-intro'
 import { pluralized } from '@/lib/utils'
-import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
@@ -24,13 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,18 +40,14 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   DataTable,
-  createSelectColumn,
   createActionsColumn,
-  createSortableColumn,
 } from '@/components/ui/data-table'
 import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { AddMcpServerDialog } from '@/components/tools/add-mcp-server-dialog'
 import { McpSourcesPanel } from '@/components/tools/mcp-sources-panel'
-import { ToolExecutionDialog } from '@/components/tools/tool-execution-dialog'
-import { PublishToolDialog, isPublishable } from '@/components/tools/publish-tool-dialog'
+import { isPublishable } from '@/components/tools/publish-tool-form'
 import { ToolHubPage } from '@/pages/tool-hub'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -72,7 +58,7 @@ interface Tool {
   name: string
   description?: string
   type: string
-  // Read all over this page (row subtitle, detail dialog) but never
+  // Read all over this page (the row subtitle) but never
   // declared, so every read went through an `any`. Publishing needs it
   // typed: only an HTTP tool can become a template.
   executionMethod?: string | null
@@ -131,15 +117,10 @@ export function ToolsPage() {
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
-  const [selectedTool, setSelectedTool] = useState<Tool | null>(null)
   const [deletingTool, setDeletingTool] = useState<Tool | null>(null)
-  const [publishingTool, setPublishingTool] = useState<Tool | null>(null)
-  const [toolForExecution, setToolForExecution] = useState<Tool | null>(null)
-  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
-  const [isExecutionDialogOpen, setIsExecutionDialogOpen] = useState(false)
-  const [isAddMcpDialogOpen, setIsAddMcpDialogOpen] = useState(false)
-  const [executionParameters, setExecutionParameters] = useState<Record<string, any>>({})
-  const [executionResult, setExecutionResult] = useState<any>(null)
+  // Old ?new=1 links (bookmarks, docs) land on the create page.
+  useNewParamRedirect('/tools/new')
+
   const { data: toolsData, isLoading, isError, error: toolsError, refetch: refetchTools } = useQuery({
     queryKey: ['tools', currentOrganization?.id, page],
     queryFn: () => toolsApi.getAll(currentOrganization?.id, { limit: PAGE_SIZE, page }),
@@ -215,26 +196,6 @@ export function ToolsPage() {
     },
   })
 
-  const executeToolMutation = useMutation({
-    mutationFn: ({ id, parameters }: { id: string; parameters: Record<string, any> }) =>
-      toolsApi.execute(id, { parameters }, currentOrganization?.id || ''),
-    onSuccess: (response: any) => {
-      setExecutionResult(response)
-      if (response.success) {
-        notifications.success('Tool executed', 'The run finished successfully.')
-      } else {
-        notifications.error('Execution Failed', response.error || 'Tool execution failed')
-      }
-    },
-    onError: (error: any) => {
-      notifications.error('Error', error.message || 'Failed to execute tool')
-      setExecutionResult({
-        success: false,
-        error: error.message || 'Failed to execute tool',
-      })
-    },
-  })
-
   const toolsExtracted = toolsData?.tools || toolsData || []
   const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
   const toolsTotal = toolsData?.total ?? tools.length
@@ -265,12 +226,6 @@ export function ToolsPage() {
         .filter(Boolean)
     )
   ) as string[]
-
-  const handleCopyEndpoint = (tool: Tool) => {
-    const endpoint = tool.metadata?.sourceOperation?.endpoint || tool.operation?.path || '/unknown'
-    navigator.clipboard.writeText(endpoint)
-    notifications.success('Copied', 'Endpoint copied to clipboard')
-  }
 
   const handleViewDetails = (tool: Tool) => {
     navigate(`/tools/${tool.id}`)
@@ -399,10 +354,8 @@ export function ToolsPage() {
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation()
-                  setToolForExecution(tool)
-                  setExecutionParameters({})
-                  setExecutionResult(null)
-                  setIsExecutionDialogOpen(true)
+                  // The tool's page has the test form (its "Test tool" tab).
+                  navigate(`/tools/${tool.id}?tab=test`)
                 }}
               >
                 Test tool
@@ -441,7 +394,7 @@ export function ToolsPage() {
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation()
-                    setPublishingTool(tool)
+                    navigate(`/tools/${tool.id}/publish`)
                   }}
                 >
                   Publish to hub
@@ -481,17 +434,17 @@ export function ToolsPage() {
         actions={
           activeTab === 'my-tools' ? (
             <>
-              <Button
-                variant="outline"
-                onClick={() => setIsAddMcpDialogOpen(true)}
-                disabled={!currentOrganization}
-              >
-                <Plug className="mr-2 h-4 w-4" />
-                Add MCP server
+              <Button variant="outline" asChild>
+                <Link to="/tools/mcp-servers/new">
+                  <Plug className="mr-2 h-4 w-4" />
+                  Add MCP server
+                </Link>
               </Button>
-              <Button onClick={() => navigate('/tools/new')} disabled={!currentOrganization}>
-                <Plus className="mr-2 h-4 w-4" />
-                Create tool
+              <Button asChild>
+                <Link to="/tools/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create tool
+                </Link>
               </Button>
             </>
           ) : undefined
@@ -525,10 +478,17 @@ export function ToolsPage() {
           title="No tools yet"
           description="Tools are generated from your APIs. Import an API and its operations appear here."
           action={
-            <Button onClick={() => navigate('/apis/new')}>
-              <Plus className="mr-2 h-4 w-4" />
-              Import API
-            </Button>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button asChild>
+                <Link to="/apis/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Import API
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to="/tools/new">Create tool</Link>
+              </Button>
+            </div>
           }
         />
       ) : (
@@ -651,179 +611,6 @@ export function ToolsPage() {
       </TabsContent>
       </Tabs>
 
-      {/* Tool Details Dialog */}
-      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <Code className="h-5 w-5" />
-              {selectedTool?.name}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedTool?.description || 'AI tool generated from API operation'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedTool && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Source API</h4>
-                  <div className="text-sm space-y-1">
-                    <div>
-                      <span className="text-muted-foreground">API: </span>
-                      {toolSourceApi(selectedTool).name || DELETED_API_LABEL}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Type: </span>
-                      {selectedTool.metadata?.sourceApi?.type || 'Unknown'}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Operation: </span>
-                      {selectedTool.metadata?.sourceOperation?.name || 'Unknown'}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Method: </span>
-                      <Badge className="font-mono">
-                        {selectedTool.metadata?.sourceOperation?.method ||
-                          selectedTool.operation?.method ||
-                          'GET'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Endpoint: </span>
-                      <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                        {selectedTool.metadata?.sourceOperation?.endpoint ||
-                          selectedTool.operation?.path ||
-                          'Unknown'}
-                      </code>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Configuration</h4>
-                  <div className="text-sm space-y-1">
-                    <div>
-                      <span className="text-muted-foreground">Status: </span>
-                      <Badge
-                        variant={
-                          selectedTool.status === 'active' ? 'success' : 'secondary'
-                        }
-                      >
-                        {selectedTool.status}
-                      </Badge>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Timeout: </span>
-                      {selectedTool.configuration?.timeout || 30000}ms
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Retries: </span>
-                      {selectedTool.configuration?.retries || 3}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Cache: </span>
-                      {selectedTool.configuration?.cache?.enabled
-                        ? 'Enabled'
-                        : 'Disabled'}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Auto-generated: </span>
-                      {selectedTool.metadata?.autoGenerated ? 'Yes' : 'No'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-medium mb-2">Assigned Gateways</h4>
-                <div className="flex gap-2 flex-wrap">
-                  {(selectedTool as any)?.gatewayAssociations?.length > 0 ? (
-                    (selectedTool as any).gatewayAssociations.map((assoc: any) => (
-                      <Badge key={assoc.id} variant="secondary">
-                        {assoc.gateway?.name || 'Unknown'} ({assoc.gateway?.type?.toUpperCase() || 'N/A'})
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Not assigned to any gateway. Go to <a href="/gateways" className="underline">Gateways page</a> to assign this tool.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-4 border-t">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopyEndpoint(selectedTool)}
-                >
-                  <Copy className="h-3 w-3 mr-1" />
-                  Copy endpoint
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    // Execute tool with empty parameters for quick test
-                    if (selectedTool) {
-                      executeToolMutation.mutate({
-                        id: selectedTool.id,
-                        parameters: {}
-                      })
-                    }
-                  }}
-                  disabled={executeToolMutation.isPending}
-                >
-                  <Play className="h-3 w-3 mr-1" />
-                  {executeToolMutation.isPending ? 'Testing...' : 'Test tool'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    // Close details dialog and open execution dialog to show parameters
-                    setIsDetailsDialogOpen(false)
-                    setToolForExecution(selectedTool)
-                    setIsExecutionDialogOpen(true)
-                  }}
-                >
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  View parameters
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Tool Settings Dialog */}
-      {/* The Tool Settings dialog lived here. It could never open --
-          nothing ever called setIsSettingsDialogOpen(true) -- and if it
-          had, every field was uncontrolled and "Save Settings" only
-          raised a success toast: no mutation, no request. A dialog that
-          reports success without saving is worse than a missing one,
-          because the person believes the setting took. Timeout, retries,
-          rate limit, cache and per-tool auth genuinely have no UI; that
-          is now visibly true rather than faked. */}
-
-      {/* Tool Execution Dialog */}
-      <ToolExecutionDialog
-        open={isExecutionDialogOpen}
-        onOpenChange={setIsExecutionDialogOpen}
-        toolForExecution={toolForExecution}
-        executionParameters={executionParameters}
-        onExecutionParametersChange={setExecutionParameters}
-        executionResult={executionResult}
-        executeToolMutation={executeToolMutation}
-      />
-
-      <PublishToolDialog
-        tool={publishingTool}
-        onOpenChange={(open) => !open && setPublishingTool(null)}
-      />
-
       {/* Delete Confirmation Dialog */}
       <AlertDialog
         open={!!deletingTool}
@@ -853,12 +640,6 @@ export function ToolsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Add MCP Server Dialog */}
-      <AddMcpServerDialog
-        open={isAddMcpDialogOpen}
-        onOpenChange={setIsAddMcpDialogOpen}
-        organizationId={currentOrganization?.id}
-      />
     </div>
   )
 }

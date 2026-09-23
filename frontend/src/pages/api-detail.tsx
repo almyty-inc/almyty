@@ -34,8 +34,10 @@ export function ApiDetailPage() {
   const navigate = useNavigate()
   const { currentOrganization } = useOrganizationStore()
 
-  const [schemaDialogOpen, setSchemaDialogOpen] = React.useState(false)
-  const [authDialogOpen, setAuthDialogOpen] = React.useState(false)
+  // Both open in place on this page: the schema viewer, and the
+  // authentication section's edit form.
+  const [schemaOpen, setSchemaOpen] = React.useState(false)
+  const [authEditing, setAuthEditing] = React.useState(false)
 
   const { data: apiData, isLoading, isError, error: apiError, refetch: refetchApi } = useQuery({
     queryKey: ['api', id],
@@ -76,9 +78,6 @@ export function ApiDetailPage() {
   const allToolsExtracted = allToolsData?.tools || allToolsData || []
   const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
   const apiTools = allTools.filter((tool: Tool) => tool.metadata?.sourceApi?.id === id || (tool as unknown as Record<string, string>).apiId === id)
-
-  // Importing a schema is its own page.
-  const openSchemaImport = () => navigate(`/apis/${id}/import`)
 
   const getApiTypeIcon = (type: ApiType) => {
     switch (type) {
@@ -140,7 +139,7 @@ export function ApiDetailPage() {
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center space-x-4">
           <Button variant="outline" size="sm" onClick={() => navigate('/apis')}>
             <ArrowLeft className="h-4 w-4" />
@@ -158,9 +157,11 @@ export function ApiDetailPage() {
         <div className="flex items-center space-x-2">
           <ApiTypeBadge type={api.type} />
           {api.version && <Badge variant="secondary">v{api.version}</Badge>}
-          <Button variant="outline" size="sm" onClick={() => navigate(`/apis/${api.id}/edit`)}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
+          <Button variant="outline" size="sm" asChild>
+            <Link to={`/apis/${api.id}/edit`}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </Link>
           </Button>
         </div>
       </div>
@@ -169,10 +170,14 @@ export function ApiDetailPage() {
         api={api}
         operations={operations}
         apiTools={apiTools}
-        onOpenSchemaViewer={() => setSchemaDialogOpen(true)}
-        onOpenAuthConfig={() => setAuthDialogOpen(true)}
-        onOpenSchemaImport={openSchemaImport}
+        onOpenSchemaViewer={() => setSchemaOpen(true)}
+        onOpenAuthConfig={() => setAuthEditing(true)}
+        onOpenSchemaImport={() => navigate(`/apis/${api.id}/import`)}
       />
+
+      <SchemaTab api={api} open={schemaOpen} onOpenChange={setSchemaOpen} />
+
+      <SecurityTab api={api} editing={authEditing} onEditingChange={setAuthEditing} />
 
       <CredentialsTab apiId={api.id} apiName={api.name} />
 
@@ -180,12 +185,8 @@ export function ApiDetailPage() {
         api={api}
         operations={operations}
         apiTools={apiTools}
-        onOpenSchemaImport={openSchemaImport}
+        onOpenSchemaImport={() => navigate(`/apis/${api.id}/import`)}
       />
-
-      <SchemaTab api={api} open={schemaDialogOpen} onOpenChange={setSchemaDialogOpen} />
-
-      <SecurityTab api={api} open={authDialogOpen} onOpenChange={setAuthDialogOpen} />
     </div>
   )
 }

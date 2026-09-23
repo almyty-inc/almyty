@@ -2,7 +2,7 @@
  * DataTable column factory for the LLM providers list page.
  *
  * Encapsulates the Provider/Model/Status/Usage cells plus the row action
- * menu (View, Test, Edit, Toggle Status, Delete) so the page
+ * menu (View, Test, Edit, Toggle status, Delete) so the page
  * file only needs to wire up state and mutations.
  */
 import React from 'react'
@@ -24,21 +24,12 @@ import { currentProviderFailure } from '@/lib/provider-health'
 interface ProviderColumnDeps {
   navigate: (path: string) => void
   setProviderToDelete: (provider: LlmProvider | null) => void
-  setTestProvider: (provider: LlmProvider | null) => void
-  setIsTestDialogOpen: (open: boolean) => void
   toggleProviderStatusMutation: UseMutationResult<any, any, { providerId: string; status: string }, any>
   teamLookup?: Record<string, Team>
 }
 
 export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmProvider, any>[] {
-  const {
-    navigate,
-    setProviderToDelete,
-    setTestProvider,
-    setIsTestDialogOpen,
-    toggleProviderStatusMutation,
-    teamLookup,
-  } = deps
+  const { navigate, setProviderToDelete, toggleProviderStatusMutation, teamLookup } = deps
 
   return [
     createSortableColumn<LlmProvider>({
@@ -136,27 +127,21 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
       },
     }),
     createActionsColumn<LlmProvider>(
-      (provider) => navigate(`/llm-providers/${provider.id}`),
+      // Edit: a page of its own, where the visibility picker lives too.
+      (provider) => navigate(`/llm-providers/${provider.id}/edit`),
       (provider) => setProviderToDelete(provider),
       [
         {
-          label: 'View Details',
+          label: 'View details',
           onClick: (provider) => navigate(`/llm-providers/${provider.id}`),
         },
         {
-          label: 'Test Connection',
-          onClick: (provider) => {
-            setTestProvider(provider)
-            setIsTestDialogOpen(true)
-          },
+          // Runs on the provider's page, where the answer is shown.
+          label: 'Test connection',
+          onClick: (provider) => navigate(`/llm-providers/${provider.id}?test=1`),
         },
         {
-          label: 'Edit',
-          // Editing is a page of its own, not a modal.
-          onClick: (provider) => navigate(`/llm-providers/${provider.id}/edit`),
-        },
-        {
-          label: 'Toggle Status',
+          label: 'Toggle status',
           onClick: (provider) => {
             toggleProviderStatusMutation.mutate({
               providerId: provider.id,

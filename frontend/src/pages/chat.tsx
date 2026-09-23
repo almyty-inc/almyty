@@ -18,13 +18,6 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { ModelPicker } from '@/components/model-picker'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 import { llmProvidersApi, toolsApi } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
@@ -306,72 +299,23 @@ export function ChatPage() {
           />
 
           <div className="flex items-center gap-2">
-            {/* Tool Selector */}
-            <Dialog open={isToolPickerOpen} onOpenChange={setIsToolPickerOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Wrench className="h-4 w-4" />
-                  Tools
-                  {selectedToolIds.length > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {selectedToolIds.length}
-                    </Badge>
-                  )}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Attach tools</DialogTitle>
-                </DialogHeader>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Select tools the AI can use during the conversation.
-                </p>
-                <div className="max-h-[400px] overflow-y-auto space-y-1">
-                  {loadingTools ? (
-                    <div className="text-center py-4"><LoadingSpinner /></div>
-                  ) : tools.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No tools available</p>
-                  ) : (
-                    tools.map((tool: any) => (
-                      <label
-                        key={tool.id}
-                        className="flex items-center gap-3 p-2 rounded-md hover:bg-accent cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedToolIds.includes(tool.id)}
-                          onChange={() => toggleTool(tool.id)}
-                          className="rounded"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{tool.name}</div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {tool.description || 'No description'}
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          {tool.type}
-                        </Badge>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {selectedToolIds.length > 0 && (
-                  <div className="flex justify-between items-center pt-2 border-t">
-                    <span className="text-xs text-muted-foreground">
-                      {selectedToolIds.length} tool{selectedToolIds.length !== 1 ? 's' : ''} selected
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedToolIds([])}
-                    >
-                      Clear all
-                    </Button>
-                  </div>
-                )}
-              </DialogContent>
-            </Dialog>
+            {/* Tool selector: toggles an inline panel under this bar. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              aria-expanded={isToolPickerOpen}
+              aria-controls="chat-tool-picker"
+              onClick={() => setIsToolPickerOpen((open) => !open)}
+            >
+              <Wrench className="h-4 w-4" />
+              Tools
+              {selectedToolIds.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {selectedToolIds.length}
+                </Badge>
+              )}
+            </Button>
 
             <Button variant="ghost" size="sm" onClick={handleNewChat} className="gap-1">
               <RotateCcw className="h-3 w-3" />
@@ -379,6 +323,67 @@ export function ChatPage() {
             </Button>
           </div>
         </div>
+
+        {/* Tools the model may call, picked in place: the conversation stays
+            in view while the selection changes. */}
+        {isToolPickerOpen && (
+          <section
+            id="chat-tool-picker"
+            aria-label="Attach tools"
+            className="border-b bg-muted/40 px-4 py-3"
+          >
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-muted-foreground">
+                Select tools the AI can use during the conversation.
+              </p>
+              <div className="flex items-center gap-2">
+                {selectedToolIds.length > 0 && (
+                  <>
+                    <span className="text-xs text-muted-foreground">
+                      {selectedToolIds.length} tool{selectedToolIds.length !== 1 ? 's' : ''} selected
+                    </span>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedToolIds([])}>
+                      Clear all
+                    </Button>
+                  </>
+                )}
+                <Button variant="outline" size="sm" onClick={() => setIsToolPickerOpen(false)}>
+                  Done
+                </Button>
+              </div>
+            </div>
+            <div className="grid max-h-64 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+              {loadingTools ? (
+                <div className="py-4 text-center sm:col-span-2"><LoadingSpinner /></div>
+              ) : tools.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground sm:col-span-2">No tools available</p>
+              ) : (
+                tools.map((tool: any) => (
+                  <label
+                    key={tool.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-accent"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedToolIds.includes(tool.id)}
+                      onChange={() => toggleTool(tool.id)}
+                      className="rounded"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{tool.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {tool.description || 'No description'}
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="shrink-0 text-xs">
+                      {tool.type}
+                    </Badge>
+                  </label>
+                ))
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">

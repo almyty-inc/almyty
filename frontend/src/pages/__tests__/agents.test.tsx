@@ -468,6 +468,17 @@ describe('AgentsPage', () => {
 
       expect(mockNavigate).toHaveBeenCalledWith('/agents/new')
     })
+
+    it('Import from JSON goes to the import page, not a dialog', async () => {
+      const user = userEvent.setup()
+      renderAgentsPage()
+
+      await user.click(screen.getByRole('button', { name: 'Import' }))
+      await user.click(await screen.findByRole('menuitem', { name: /Import from JSON/i }))
+
+      expect(mockNavigate).toHaveBeenCalledWith('/agents/import')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
   })
 
   describe('Error Handling', () => {

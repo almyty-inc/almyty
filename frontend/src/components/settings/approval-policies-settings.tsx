@@ -10,6 +10,7 @@
  * Mirrors the SsoSettings gating pattern.
  */
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldCheck, Plus, Pencil, Trash2 } from 'lucide-react'
 
@@ -42,7 +43,7 @@ import {
   type ApprovalPolicy,
   type UpsertApprovalPolicy,
 } from '@/lib/api'
-import { ApprovalPolicyDialog } from './approval-policy-dialog'
+import { APPROVAL_POLICIES_PATH } from './approval-policy-form'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 export function ApprovalPoliciesSettings() {
@@ -77,8 +78,6 @@ function ApprovalPoliciesManager() {
   const queryClient = useQueryClient()
   const { success, error } = useNotifications()
 
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editing, setEditing] = useState<ApprovalPolicy | null>(null)
   const [deleting, setDeleting] = useState<ApprovalPolicy | null>(null)
 
   const { data: policies, isLoading } = useQuery<ApprovalPolicy[]>({
@@ -88,31 +87,6 @@ function ApprovalPoliciesManager() {
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ['approval-policies'] })
-
-  const createMutation = useMutation({
-    mutationFn: (data: UpsertApprovalPolicy) => approvalPoliciesApi.create(data),
-    onSuccess: async () => {
-      success('Policy created', 'The approval policy is now active.')
-      setDialogOpen(false)
-      setEditing(null)
-      await invalidate()
-    },
-    onError: (err: any) =>
-      error('Failed to create policy', getApiErrorMessage(err, 'Please try again.')),
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<UpsertApprovalPolicy> }) =>
-      approvalPoliciesApi.update(id, data),
-    onSuccess: async () => {
-      success('Policy updated', 'Changes saved.')
-      setDialogOpen(false)
-      setEditing(null)
-      await invalidate()
-    },
-    onError: (err: any) =>
-      error('Failed to update policy', getApiErrorMessage(err, 'Please try again.')),
-  })
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => approvalPoliciesApi.delete(id),
@@ -124,25 +98,6 @@ function ApprovalPoliciesManager() {
     onError: (err: any) =>
       error('Failed to delete policy', getApiErrorMessage(err, 'Please try again.')),
   })
-
-  const handleSubmit = (data: UpsertApprovalPolicy) => {
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, data })
-    } else {
-      createMutation.mutate(data)
-    }
-  }
-
-  const openCreate = () => {
-    setEditing(null)
-    setDialogOpen(true)
-  }
-
-  const openEdit = (policy: ApprovalPolicy) => {
-    setEditing(policy)
-    setDialogOpen(true)
-  }
-
   return (
     <div className="space-y-6">
       <Card>
@@ -157,8 +112,8 @@ function ApprovalPoliciesManager() {
               pending requests in the Approvals queue.
             </CardDescription>
           </div>
-          <Button onClick={openCreate} className="shrink-0">
-            <Plus className="h-4 w-4 mr-1" /> New policy
+          <Button asChild className="shrink-0">
+            <Link to={`${APPROVAL_POLICIES_PATH}/policies/new`}><Plus className="h-4 w-4 mr-1" /> New policy</Link>
           </Button>
         </CardHeader>
         <CardContent>
@@ -214,13 +169,10 @@ function ApprovalPoliciesManager() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Edit ${policy.name}`}
-                          onClick={() => openEdit(policy)}
-                        >
-                          <Pencil className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" asChild>
+                          <Link to={`${APPROVAL_POLICIES_PATH}/policies/${policy.id}`} aria-label={`Edit ${policy.name}`}>
+                            <Pencil className="h-4 w-4" />
+                          </Link>
                         </Button>
                         <Button
                           variant="ghost"
@@ -239,17 +191,6 @@ function ApprovalPoliciesManager() {
           )}
         </CardContent>
       </Card>
-
-      <ApprovalPolicyDialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          setDialogOpen(open)
-          if (!open) setEditing(null)
-        }}
-        policy={editing}
-        isSaving={createMutation.isPending || updateMutation.isPending}
-        onSubmit={handleSubmit}
-      />
 
       <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>

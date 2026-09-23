@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { Key, Shield, Plus, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -25,14 +25,15 @@ import { PageIntro } from '@/components/onboarding/page-intro'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 // formatDate is the shared one from lib/utils: a local copy here returned
 // relative time ("3h ago") while every other page showed "Jan 5, 2026".
-import { cn, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 import { credentialsApi, accessKeysApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
+import { SECRET_TYPES } from '@/components/credentials/create-credential-form'
 import { getApiErrorMessage } from '@/lib/api-error'
 import type { VaultCredential, AccessKey } from '@/types'
-import { SECRET_TYPES } from '@/components/credentials/schema'
 
 export function CredentialsPage() {
   const location = useLocation()
@@ -40,12 +41,8 @@ export function CredentialsPage() {
   const tab = location.pathname.includes('/access-keys') ? 'access-keys' : 'secrets'
   const setTab = (t: string) => navigate(t === 'secrets' ? '/credentials' : '/credentials/access-keys')
 
-  // Adding a credential is a page of its own now; ?new=1 from older
-  // links lands there.
-  const [searchParams] = useSearchParams()
-  useEffect(() => {
-    if (searchParams.get('new') === '1') navigate('/credentials/new', { replace: true })
-  }, [searchParams, navigate])
+  // Old `?new=1` links (command palette, bookmarks) land on the create page.
+  useNewParamRedirect('/credentials/new')
 
   useEffect(() => { document.title = 'Credentials | almyty'; return () => { document.title = 'almyty' } }, [])
 
@@ -56,12 +53,12 @@ export function CredentialsPage() {
         description="Manage vault credentials and access keys for your APIs and agents"
         actions={
           tab === 'secrets' ? (
-            <Button onClick={() => navigate('/credentials/new')}>
-              <Plus className="h-4 w-4 mr-2" /> Add credential
+            <Button asChild>
+              <Link to="/credentials/new"><Plus className="h-4 w-4 mr-2" /> Add credential</Link>
             </Button>
           ) : (
-            <Button onClick={() => navigate('/credentials/access-keys/new')}>
-              <Plus className="h-4 w-4 mr-2" /> Generate key
+            <Button asChild>
+              <Link to="/credentials/access-keys/new"><Plus className="h-4 w-4 mr-2" /> Generate key</Link>
             </Button>
           )
         }
@@ -161,8 +158,8 @@ function SecretsTab() {
           title="No credentials yet"
           description="The vault holds API keys, tokens and passwords your APIs and agents use. Values are encrypted and never shown again."
           action={
-            <Button onClick={() => navigate('/credentials/new')}>
-              <Plus className="h-4 w-4 mr-2" /> Add credential
+            <Button asChild>
+              <Link to="/credentials/new"><Plus className="h-4 w-4 mr-2" /> Add credential</Link>
             </Button>
           }
         />
@@ -218,7 +215,6 @@ function SecretsTab() {
 
 function AccessKeysTab() {
   const qc = useQueryClient(), notify = useNotifications()
-  const navigate = useNavigate()
 
   const { data: keysRaw, isLoading, isError, error, refetch } = useQuery({ queryKey: ['access-keys'], queryFn: () => accessKeysApi.getAll() })
   const keys: AccessKey[] = Array.isArray(keysRaw) ? keysRaw : (keysRaw as any)?.keys || (keysRaw as any)?.accessKeys || []
@@ -271,8 +267,8 @@ function AccessKeysTab() {
           title="No access keys yet"
           description="An access key lets a script or another service call one of your gateways or agents."
           action={
-            <Button onClick={() => navigate('/credentials/access-keys/new')}>
-              <Plus className="h-4 w-4 mr-2" /> Generate key
+            <Button asChild>
+              <Link to="/credentials/access-keys/new"><Plus className="h-4 w-4 mr-2" /> Generate key</Link>
             </Button>
           }
         />

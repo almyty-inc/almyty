@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
-import { ConnectSheet } from '../connect-sheet'
+import { ConnectAccountButton, ConnectFlow } from '../connect-sheet'
 import { connectionsApi, connectorsApi } from '../../../lib/connections-api'
 import type { Connection, Connector } from '@/types/connections'
 
@@ -71,7 +71,7 @@ function connection(overrides: Partial<Connection> = {}): Connection {
   }
 }
 
-describe('ConnectSheet', () => {
+describe('ConnectFlow (inline, as ConnectAccountButton opens it)', () => {
   let openSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -87,7 +87,7 @@ describe('ConnectSheet', () => {
   it('lists connectors of the requested kind and drills into one', async () => {
     const anthropic: Connector = { key: 'anthropic', kind: 'inference', displayName: 'Anthropic', connect: [{ type: 'api_key', label: 'API key' }] }
     vi.mocked(connectorsApi.list).mockResolvedValue([openai, anthropic, slack])
-    render(<ConnectSheet open onOpenChange={() => {}} kind="inference" onConnected={() => {}} />)
+    render(<ConnectFlow embedded onCancel={() => {}} kind="inference" onConnected={() => {}} />)
     expect(await screen.findByTestId('connector-option-openai')).toBeInTheDocument()
     expect(screen.queryByTestId('connector-option-slack')).not.toBeInTheDocument()
 
@@ -102,7 +102,7 @@ describe('ConnectSheet', () => {
     vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: created })
     const onConnected = vi.fn()
     const onOpenChange = vi.fn()
-    render(<ConnectSheet open onOpenChange={onOpenChange} connectorKey="openai" onConnected={onConnected} />)
+    render(<ConnectFlow embedded onCancel={onOpenChange} connectorKey="openai" onConnected={onConnected} />)
 
     const keyInput = await screen.findByLabelText('API key')
     fireEvent.change(keyInput, { target: { value: 'sk-test-123' } })
@@ -110,11 +110,11 @@ describe('ConnectSheet', () => {
 
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', { method: 'api_key', owner: 'org', input: { apiKey: 'sk-test-123' } }))
     await waitFor(() => expect(onConnected).toHaveBeenCalledWith(created))
-    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(onOpenChange).not.toHaveBeenCalled()
   })
 
   it('refuses to post until the required field is filled', async () => {
-    render(<ConnectSheet open onOpenChange={() => {}} connectorKey="openai" onConnected={() => {}} />)
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
     await screen.findByLabelText('API key')
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
     expect(await screen.findByText('API key is required')).toBeInTheDocument()
@@ -127,7 +127,7 @@ describe('ConnectSheet', () => {
       .mockRejectedValueOnce({ response: { status: 422, data: { code: 'CONNECTION_VALIDATION_FAILED', message: 'invalid api key', connection: kept } } })
       .mockResolvedValueOnce({ pending: false, connection: connection() })
     const onConnected = vi.fn()
-    render(<ConnectSheet open onOpenChange={() => {}} connectorKey="openai" onConnected={onConnected} />)
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={onConnected} />)
 
     fireEvent.change(await screen.findByLabelText('API key'), { target: { value: 'sk-bad' } })
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
@@ -158,7 +158,7 @@ describe('ConnectSheet', () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([landed])
     const onConnected = vi.fn()
-    render(<ConnectSheet open onOpenChange={() => {}} connectorKey="slack" onConnected={onConnected} pollIntervalMs={5} />)
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="slack" onConnected={onConnected} pollIntervalMs={5} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Continue with Slack' }))
 
@@ -183,7 +183,7 @@ describe('ConnectSheet', () => {
     const landed = connection({ id: 'conn-slack', name: 'Slack', connectorKey: 'slack', kind: 'channel' })
     vi.mocked(connectionsApi.complete).mockResolvedValue(landed)
     const onConnected = vi.fn()
-    render(<ConnectSheet open onOpenChange={() => {}} connectorKey="slack" onConnected={onConnected} pollIntervalMs={50} />)
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="slack" onConnected={onConnected} pollIntervalMs={50} />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Continue with Slack' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Paste the code instead' }))
@@ -198,7 +198,7 @@ describe('ConnectSheet', () => {
     const existing = connection()
     vi.mocked(connectionsApi.rotate).mockResolvedValue({ pending: false, connection: { ...existing, updatedAt: new Date().toISOString() } })
     const onConnected = vi.fn()
-    render(<ConnectSheet open onOpenChange={() => {}} rotateConnection={existing} onConnected={onConnected} />)
+    render(<ConnectFlow embedded onCancel={() => {}} rotateConnection={existing} onConnected={onConnected} />)
 
     expect(await screen.findByText('Rotate OpenAI')).toBeInTheDocument()
     fireEvent.change(await screen.findByLabelText('API key'), { target: { value: 'sk-new' } })
@@ -206,6 +206,50 @@ describe('ConnectSheet', () => {
 
     await waitFor(() => expect(connectionsApi.rotate).toHaveBeenCalledWith('conn-1', { input: { apiKey: 'sk-new' } }))
     await waitFor(() => expect(onConnected).toHaveBeenCalled())
+    expect(connectionsApi.connect).not.toHaveBeenCalled()
+  })
+})
+
+describe('ConnectAccountButton', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(connectorsApi.list).mockResolvedValue([openai, slack])
+  })
+
+  it('opens the flow inline, inside the consumer form, without a dialog or a nested form', async () => {
+    const created = connection()
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: created })
+    const onConnected = vi.fn()
+    const outerSubmit = vi.fn((e: Event) => e.preventDefault())
+    render(
+      <form onSubmit={outerSubmit as any} data-testid="consumer-form">
+        <ConnectAccountButton connectorKey="openai" onConnected={onConnected} />
+      </form>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
+    expect(await screen.findByText('Connect OpenAI')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // A <form> inside the consumer's <form> would submit the consumer.
+    expect(screen.getByTestId('consumer-form').querySelectorAll('form')).toHaveLength(0)
+
+    const key = await screen.findByLabelText('API key')
+    fireEvent.change(key, { target: { value: 'sk-inline' } })
+    fireEvent.keyDown(key, { key: 'Enter' })
+
+    await waitFor(() => expect(onConnected).toHaveBeenCalledWith(created))
+    expect(connectionsApi.connect).toHaveBeenCalledWith('openai', { method: 'api_key', owner: 'org', input: { apiKey: 'sk-inline' } })
+    expect(outerSubmit).not.toHaveBeenCalled()
+    // Closes itself and gives the button back.
+    expect(await screen.findByRole('button', { name: 'Connect an account' })).toBeInTheDocument()
+  })
+
+  it('Cancel folds the flow away without connecting', async () => {
+    render(<ConnectAccountButton connectorKey="openai" onConnected={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
+    await screen.findByLabelText('API key')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByLabelText('API key')).not.toBeInTheDocument()
     expect(connectionsApi.connect).not.toHaveBeenCalled()
   })
 })

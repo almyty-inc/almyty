@@ -50,23 +50,25 @@ beforeEach(() => {
 })
 
 describe('create flows are pages', () => {
-  it('"Connect API" goes to /apis/new instead of opening a dialog', async () => {
+  // The entry points are links to the create page (open in a new tab,
+  // copy the address), and clicking one opens no dialog.
+  it('"Connect API" links to /apis/new instead of opening a dialog', async () => {
     const user = userEvent.setup()
     render(<ApisPage />)
 
-    await user.click(screen.getByRole('button', { name: 'Connect API' }))
-
-    expect(navigate).toHaveBeenCalledWith('/apis/new')
+    const links = await screen.findAllByRole('link', { name: 'Connect API' })
+    for (const link of links) expect(link).toHaveAttribute('href', '/apis/new')
+    await user.click(links[0])
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('"Create Tool" goes to /tools/new instead of opening a dialog', async () => {
+  it('"Create tool" links to /tools/new instead of opening a dialog', async () => {
     const user = userEvent.setup()
     render(<ToolsPage />)
 
-    await user.click(await screen.findByRole('button', { name: 'Create tool' }))
-
-    expect(navigate).toHaveBeenCalledWith('/tools/new')
+    const links = await screen.findAllByRole('link', { name: 'Create tool' })
+    for (const link of links) expect(link).toHaveAttribute('href', '/tools/new')
+    await user.click(links[0])
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

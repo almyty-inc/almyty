@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Globe } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { PageHeader } from '@/components/layout/page-header'
 import { PageIntro } from '@/components/onboarding/page-intro'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 
 import { getApiErrorMessage } from '@/lib/api-error'
 import { apisApi } from '@/lib/api'
@@ -51,9 +52,9 @@ export function ApisPage() {
   // manually. operationId is the entity field that distinguishes them.
   const generatedToolsTotal = allTools.filter((t: any) => t.operationId).length
 
-  // Connecting, editing and importing a schema each live on their own
-  // page (/apis/new, /apis/:id/edit, /apis/:id/import).
   const [deletingApi, setDeletingApi] = React.useState<Api | null>(null)
+  // Old ?new=1 links (bookmarks, docs) land on the create page.
+  useNewParamRedirect('/apis/new')
   const [searchQuery, setSearchQuery] = React.useState('')
   const [typeFilter, setTypeFilter] = React.useState('all')
   const [healthFilter, setHealthFilter] = React.useState('all')
@@ -130,9 +131,7 @@ export function ApisPage() {
     onEdit: (api) => navigate(`/apis/${api.id}/edit`),
     onDelete: (api) => setDeletingApi(api),
     onViewDetails: (api) => navigate(`/apis/${api.id}`),
-    onTestConnection: (api) => {
-      testApiMutation.mutate({ id: api.id })
-    },
+    onTestConnection: (api) => testApiMutation.mutate({ id: api.id }),
     onImportSchema: (api) => navigate(`/apis/${api.id}/import`),
     onGenerateTools: (api) => generateToolsMutation.mutate({ id: api.id }),
     onCopyBaseUrl: (api) => {
@@ -162,9 +161,11 @@ export function ApisPage() {
         title="APIs"
         description={`${pluralized(apis.length, 'API', 'APIs')} · ${pluralized(apis.reduce((sum: number, a: any) => sum + (a.operationCount ?? a.operations?.length ?? 0), 0), 'operation')} · ${pluralized(generatedToolsTotal, 'tool')} generated`}
         actions={
-          <Button onClick={() => navigate('/apis/new')}>
-            <Plus className="mr-2 h-4 w-4" />
-            Connect API
+          <Button asChild>
+            <Link to="/apis/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Connect API
+            </Link>
           </Button>
         }
       />
@@ -179,9 +180,11 @@ export function ApisPage() {
           title="No APIs yet"
           description="Import an OpenAPI, GraphQL, SOAP, or Protobuf schema — every operation becomes a typed tool."
           action={
-            <Button onClick={() => navigate('/apis/new')}>
-              <Plus className="mr-2 h-4 w-4" />
-              Connect API
+            <Button asChild>
+              <Link to="/apis/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Connect API
+              </Link>
             </Button>
           }
         />

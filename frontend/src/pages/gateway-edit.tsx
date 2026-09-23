@@ -1,10 +1,8 @@
-import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { useEffect } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
 
-import { Card, CardContent } from '@/components/ui/card'
+import { FormPage } from '@/components/layout/form-page'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { gatewaysApi } from '@/lib/api'
@@ -47,38 +45,26 @@ export function GatewayEditPage() {
   })
 
   return (
-    <div className="space-y-6">
-      <div>
-        <Link to={`/gateways/${id}`} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          {gateway?.name ?? 'Gateway'}
-        </Link>
-      </div>
-
-      <div>
-        <h1 className={DETAIL_TITLE_CLASSES}>Edit gateway</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          The gateway type cannot be changed after creation.
-        </p>
-      </div>
-
+    <FormPage
+      title="Edit gateway"
+      description="The protocol cannot be changed after creation."
+      back={{ to: `/gateways/${id}`, label: gateway?.name ?? 'Gateway' }}
+    >
       {isLoading ? (
-        <LoadingSpinner />
+        <div className="flex justify-center py-16">
+          <LoadingSpinner />
+        </div>
       ) : isError ? (
         <QueryError error={error} onRetry={() => refetch()} title="Couldn't load this gateway" />
       ) : (
-        <Card className="max-w-3xl">
-          <CardContent className="pt-6">
-            <GatewayEditForm
-              gateway={gateway}
-              isSaving={editGatewayMutation.isPending}
-              onSubmit={(data) => editGatewayMutation.mutate(data)}
-              onCancel={() => navigate(`/gateways/${id}`)}
-              isSystem={gateway?.isSystem}
-            />
-          </CardContent>
-        </Card>
+        <GatewayEditForm
+          gateway={gateway}
+          isSaving={editGatewayMutation.isPending}
+          onSubmit={(data) => editGatewayMutation.mutate(data)}
+          onCancel={() => navigate(`/gateways/${id}`)}
+          isSystem={gateway?.isSystem}
+        />
       )}
-    </div>
+    </FormPage>
   )
 }
