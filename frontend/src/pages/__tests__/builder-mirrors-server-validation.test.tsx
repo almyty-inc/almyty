@@ -87,7 +87,7 @@ describe('the builder refuses the graphs the server refuses', () => {
 
     renderWithProviders(<AgentBuilderPage />)
 
-    await waitFor(() => expect(screen.getByText(/"orphan_1" is not connected/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/Transform: connect it, or delete it/)).toBeInTheDocument())
     expect(saveButton()).toBeDisabled()
   })
 
@@ -105,7 +105,7 @@ describe('the builder refuses the graphs the server refuses', () => {
     renderWithProviders(<AgentBuilderPage />)
 
     await waitFor(() =>
-      expect(screen.getByText(/exactly one Input node, found 2/i)).toBeInTheDocument(),
+      expect(screen.getByText(/Keep one Input step and delete the others/)).toBeInTheDocument(),
     )
     expect(saveButton()).toBeDisabled()
   })
