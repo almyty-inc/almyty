@@ -68,6 +68,8 @@ export interface ModelPickerProps {
   allowRouting?: boolean
   /** Only providers whose status is active. */
   activeOnly?: boolean
+  /** Leaves out providers this returns true for (the raw provider row is passed). */
+  excludeProvider?: (provider: ProviderOption & Record<string, any>) => boolean
   /** Side by side on wide screens, or stacked. */
   layout?: 'grid' | 'stack'
   /** Smaller type, for rows inside a list (checkers, participants). */
@@ -121,6 +123,7 @@ export function ModelPicker({
   providerOptionalLabel,
   allowRouting = false,
   activeOnly = false,
+  excludeProvider,
   layout = 'grid',
   compact = false,
   providerLabel = 'Provider',
@@ -130,7 +133,8 @@ export function ModelPicker({
   const routed = allowRouting && !!value.routing
   const providersQuery = useProviderList()
   const allProviders = asProviderList(providersQuery.data)
-  const providers = activeOnly ? allProviders.filter(isActive) : allProviders
+  const listed = excludeProvider ? allProviders.filter((p) => !excludeProvider(p)) : allProviders
+  const providers = activeOnly ? listed.filter(isActive) : listed
   const provider = allProviders.find((p) => p.id === value.providerId)
   const providerId = routed ? undefined : value.providerId || undefined
   const freeTextProvider = !!provider && FREE_TEXT_PROVIDER_TYPES.has(provider.type)
@@ -238,7 +242,7 @@ export function ModelPicker({
         >
           No model providers connected yet.{' '}
           <a
-            href="/models?tab=providers&new=1"
+            href="/llm-providers/new"
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-0.5 text-primary underline-offset-2 hover:underline"

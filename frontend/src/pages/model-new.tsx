@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AddInferenceProviderForm } from '@/components/llm-providers/add-inference-provider-form'
-import { ProviderModelForm, type ProviderOption } from '@/components/models/provider-model-form'
+import { ProviderModelForm, isHostedModelPlumbing, type ProviderOption } from '@/components/models/provider-model-form'
 import { ServerModelForm, buildServerRequests, type ServerModelValues } from '@/components/models/server-model-form'
 import { HostModelForm } from '@/components/models/hosting/host-model-form'
 import { llmProvidersApi } from '@/lib/api'
@@ -93,7 +93,7 @@ export function ModelNewPage() {
   // the reconcile loop (metadata.managedBy.kind model_endpoint). It is that
   // model's plumbing, not an API to add other models from.
   const providers: ProviderOption[] = (providersQuery.data || [])
-    .filter((p: any) => p?.metadata?.managedBy?.kind !== 'model_endpoint')
+    .filter((p: any) => !isHostedModelPlumbing(p))
     .map((p: any) => ({ id: p.id, name: p.name, type: p.type }))
 
   const adaptersQuery = useQuery<ModelAdapter[]>({

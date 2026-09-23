@@ -133,7 +133,7 @@ test.describe('Inference providers', () => {
     // Testing is still a dialog on the list page.
     const testDialog = page.getByRole('dialog')
     await expect(testDialog).toBeVisible({ timeout: 10000 })
-    await expect(testDialog.getByText('Test Provider: Connection Test Provider')).toBeVisible()
+    await expect(testDialog.getByText('Test inference provider: Connection Test Provider')).toBeVisible()
 
     await testDialog.getByRole('button', { name: 'Test Provider' }).click()
 
@@ -163,7 +163,7 @@ test.describe('Inference providers', () => {
 
     const editDialog = page.getByRole('dialog')
     await expect(editDialog).toBeVisible({ timeout: 10000 })
-    await expect(editDialog.getByRole('heading', { name: 'Edit Provider' })).toBeVisible()
+    await expect(editDialog.getByRole('heading', { name: 'Edit inference provider' })).toBeVisible()
 
     const nameInput = editDialog.locator('#editProviderName')
     await expect(nameInput).toBeVisible()
@@ -175,7 +175,7 @@ test.describe('Inference providers', () => {
     await tempInput.clear()
     await tempInput.fill('0.5')
 
-    await editDialog.getByRole('button', { name: 'Update Provider' }).click()
+    await editDialog.getByRole('button', { name: 'Save changes' }).click()
 
     await assertHelper.assertToastMessage(/updated|saved/i)
     await expect(page.getByText('Updated Provider Name')).toBeVisible()

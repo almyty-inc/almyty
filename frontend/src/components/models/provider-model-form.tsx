@@ -1,24 +1,24 @@
-import React, { useEffect, useState, type ReactNode } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import React, { useEffect, type ReactNode } from 'react'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useQuery } from '@tanstack/react-query'
 import { Loader2, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { providerTypeLabels } from '@/components/llm-providers/provider-type-config'
-import { llmProvidersApi } from '@/lib/api'
+import { ModelPicker } from '@/components/model-picker'
 import type { RegisterModelBody } from '@/types/models'
 import { registerModelSchema, compactCapabilities, type RegisterModelFormData, type RegisterModelFormOutput } from './schema'
 import { CapabilitiesField, PrivacyTierField } from './model-form-fields'
+
+/**
+ * A model hosted on your cloud gets a provider row written for it by the
+ * reconcile loop (metadata.managedBy.kind model_endpoint). It is that
+ * model's plumbing, not an API to add other models from.
+ */
+export function isHostedModelPlumbing(provider: Record<string, any>): boolean {
+  return provider?.metadata?.managedBy?.kind === 'model_endpoint'
+}
 
 export interface ProviderOption {
   id: string
@@ -49,18 +49,14 @@ const DEFAULTS: RegisterModelFormData = {
   capabilities: {},
 }
 
-function typeLabel(type: string): string {
-  return (providerTypeLabels as Record<string, string>)[type] ?? type
-}
-
 /**
  * Add one model from a provider's API. The provider is one you set up, or
  * one you set up right here: with none configured the form says so and
  * offers the setup, rather than an empty dropdown and a disabled button.
- * The model id can be picked from what the provider lists live, or typed.
+ * The model comes from the shared ModelPicker: what the provider offers,
+ * or an id typed on purpose.
  */
 export function ProviderModelForm({ providers, providersLoading, selectedProviderId, onSetUpProvider, onSubmit, onCancel, submitting, footerStart }: ProviderModelFormProps) {
-  const [typeModelId, setTypeModelId] = useState(false)
   const form = useForm<RegisterModelFormData, unknown, RegisterModelFormOutput>({
     resolver: zodResolver(registerModelSchema),
     defaultValues: DEFAULTS,
@@ -77,18 +73,6 @@ export function ProviderModelForm({ providers, providersLoading, selectedProvide
   const vendorModelId = form.watch('vendorModelId')
   const name = form.watch('name')
 
-  const { data: liveModels = [], isFetching: modelsLoading } = useQuery({
-    queryKey: ['provider-models', providerId],
-    queryFn: async () => {
-      const res = await llmProvidersApi.getModels(providerId)
-      const list = Array.isArray(res) ? res : []
-      return list.map((m: any) => ({ id: String(m.id || m.name || m), name: String(m.name || m.id || m) }))
-    },
-    enabled: !!providerId,
-    staleTime: 60_000,
-  })
-
-  const hasLiveList = liveModels.length > 0 && !typeModelId
   const noProviders = !providersLoading && providers.length === 0
 
   const submit = form.handleSubmit(async (data) => {
@@ -130,84 +114,29 @@ export function ProviderModelForm({ providers, providersLoading, selectedProvide
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
-      <Controller
-        control={form.control}
-        name="providerId"
-        render={({ field }) => (
-          <div>
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="register-provider">Inference provider</Label>
-              <button type="button" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors" onClick={onSetUpProvider}>
-                Set up another
-              </button>
-            </div>
-            <Select value={field.value || ''} onValueChange={(v) => { field.onChange(v); form.setValue('vendorModelId', '') }} disabled={providersLoading}>
-              <SelectTrigger id="register-provider" className="mt-1" aria-label="Inference provider">
-                <SelectValue placeholder={providersLoading ? 'Loading...' : 'Select an inference provider'} />
-              </SelectTrigger>
-              <SelectContent>
-                {providers.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} <span className="text-muted-foreground ml-1">({typeLabel(p.type)})</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.providerId && <p className="text-xs text-destructive mt-1">{errors.providerId.message}</p>}
-          </div>
-        )}
-      />
-      <div>
-        <div className="flex items-center justify-between">
-          <Label htmlFor="register-model-id">Model</Label>
-          {liveModels.length > 0 && (
-            <button
-              type="button"
-              className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setTypeModelId((v) => !v)}
-            >
-              {typeModelId ? 'Pick from the provider list' : 'Type a model id'}
-            </button>
-          )}
+      <div className="space-y-1">
+        <div className="flex justify-end">
+          <button type="button" className="text-[11px] text-muted-foreground hover:text-foreground transition-colors" onClick={onSetUpProvider}>
+            Set up another inference provider
+          </button>
         </div>
-        {hasLiveList ? (
-          <Controller
-            control={form.control}
-            name="vendorModelId"
-            render={({ field }) => (
-              <Select
-                value={field.value || ''}
-                onValueChange={(v) => {
-                  field.onChange(v)
-                  if (!name) form.setValue('name', v)
-                }}
-              >
-                <SelectTrigger id="register-model-id" className="mt-1 font-mono" aria-label="Model id">
-                  <SelectValue placeholder="Select model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {liveModels.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.id}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-        ) : (
-          <Input
-            id="register-model-id"
-            className="mt-1 font-mono"
-            placeholder="claude-sonnet-5"
-            {...form.register('vendorModelId', {
-              onBlur: () => { if (!name && vendorModelId) form.setValue('name', vendorModelId) },
-            })}
-          />
-        )}
-        {modelsLoading && <p className="text-xs text-muted-foreground mt-1">Asking the provider for its model list...</p>}
-        {!modelsLoading && providerId && liveModels.length === 0 && (
-          <p className="text-xs text-muted-foreground mt-1">The provider did not list any models. Type the id it expects.</p>
-        )}
-        {errors.vendorModelId && <p className="text-xs text-destructive mt-1">{errors.vendorModelId.message}</p>}
+        {/* The shared picker: the model is a list of what the provider
+            offers, with typing an id as an explicit escape hatch. */}
+        <ModelPicker
+          idPrefix="register"
+          layout="stack"
+          providerLabel="Inference provider"
+          excludeProvider={isHostedModelPlumbing}
+          value={{ providerId: providerId || undefined, model: vendorModelId || undefined }}
+          onChange={(next) => {
+            const submitted = form.formState.isSubmitted
+            form.setValue('providerId', next.providerId ?? '', { shouldValidate: submitted, shouldDirty: true })
+            form.setValue('vendorModelId', next.model ?? '', { shouldValidate: submitted, shouldDirty: true })
+            if (next.model && (!name || name === vendorModelId)) form.setValue('name', next.model)
+          }}
+        />
+        {errors.providerId && <p className="text-xs text-destructive">{errors.providerId.message}</p>}
+        {errors.vendorModelId && <p className="text-xs text-destructive">{errors.vendorModelId.message}</p>}
       </div>
       <div>
         <Label htmlFor="register-name">Name</Label>

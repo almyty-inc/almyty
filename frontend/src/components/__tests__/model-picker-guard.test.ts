@@ -15,13 +15,15 @@ import { join, relative } from 'node:path'
 const SRC = join(__dirname, '..', '..')
 
 /** The picker itself owns the one free-text model field (its escape hatch). */
-const ALLOWED = new Set(['components/model-picker.tsx'])
+const ALLOWED = new Set([
+  'components/model-picker.tsx',
+  // Creating a Vertex AI provider: there is no provider to pick from yet,
+  // and that surface serves no model list, so the model has to be typed.
+  'components/llm-providers/create-provider-form.tsx',
+])
 
-/**
- * Owned by the Models section restructure, which is rewriting these files
- * in a separate change. Picker sites there are converted once it lands.
- */
-const PENDING_OWNER = ['components/models/', 'components/llm-providers/', 'pages/models.tsx']
+/** Areas another change is still rewriting; empty once they are converted. */
+const PENDING_OWNER: string[] = []
 
 /** An <Input ...> element's source, up to its self-closing end. */
 function inputElements(source: string): Array<{ text: string; line: number }> {
