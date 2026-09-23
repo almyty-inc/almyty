@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useForm } from 'react-hook-form'
 import {
   ArrowLeft,
   ChevronRight,
@@ -13,16 +14,15 @@ import {
   PowerOff,
   Send,
   RotateCcw,
+  Pencil,
 } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
-import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
@@ -30,9 +30,11 @@ import { QueryError } from '@/components/ui/query-error'
 import { llmProvidersApi } from '@/lib/api'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
-import { CredentialPicker } from '@/components/credential-picker'
 import { currentProviderFailure } from '@/lib/provider-health'
 import { providerLogos, statusColors } from '@/components/llm-providers/provider-type-config'
+import { ProviderSettingsForm, providerEditDefaults } from '@/components/llm-providers/provider-settings-form'
+import { CredentialRefSummary, isMaskedKey } from '@/components/llm-providers/credential-slot'
+import { buildProviderUpdateBody } from '@/components/llm-providers/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 export function LlmProviderDetailPage() {
@@ -41,8 +43,6 @@ export function LlmProviderDetailPage() {
   const notifications = useNotifications()
   const queryClient = useQueryClient()
 
-  const [credentialId, setCredentialId] = useState('')
-  const [apiKey, setApiKey] = useState('')
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<Array<{
@@ -95,32 +95,86 @@ export function LlmProviderDetailPage() {
   // provider with maxTokens=10 so we can verify the API key, model
   // name, and base URL without burning real budget. Backend endpoint
   // is scoped to `{providerId, organizationId}` so a cross-tenant
-  // probe gets "Provider not found".
+  // probe gets "Provider not found". The answer shows under the header.
+  const [testResult, setTestResult] = useState<
+    { ok: boolean; responseTime?: number; error?: string; at: string } | null
+  >(null)
   const testProviderMutation = useMutation({
     mutationFn: () => llmProvidersApi.test(id!),
     onSuccess: (result: any) => {
       // The controller returns { success, data: { isHealthy, responseTime, error?, details? }, message }
       // — apiPost unwraps `data` for us, so `result` here is the inner object.
+      const at = new Date().toISOString()
       if (result?.isHealthy) {
-        notifications.success(
-          'Connection OK',
-          `Provider responded in ${result.responseTime ?? '?'}ms`,
-        )
+        setTestResult({ ok: true, responseTime: result.responseTime, at })
       } else {
-        notifications.error(
-          'Connection failed',
-          result?.error || 'Provider did not report healthy',
-        )
+        setTestResult({ ok: false, error: result?.error || 'Provider did not report healthy', at })
       }
       queryClient.invalidateQueries({ queryKey: ['llm-provider', id] })
+      queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
     },
     onError: (error: any) => {
-      notifications.error(
-        'Connection failed',
-        getApiErrorMessage(error, 'Test request failed'),
-      )
+      setTestResult({ ok: false, error: getApiErrorMessage(error, 'Test request failed'), at: new Date().toISOString() })
     },
   })
+
+  // Edit in place, on the Configuration tab. ?tab=configuration&edit=1
+  // (the list's row menu) opens it there directly.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') || 'overview'
+  const [editing, setEditing] = useState(false)
+  const editForm = useForm<any>({ defaultValues: providerEditDefaults(null) })
+
+  const selectTab = (next: string) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'overview') params.delete('tab')
+    else params.set('tab', next)
+    setSearchParams(params, { replace: true })
+  }
+
+  const startEditing = () => {
+    editForm.reset(providerEditDefaults(provider))
+    setEditing(true)
+  }
+  const stopEditing = () => {
+    setEditing(false)
+    editForm.reset(providerEditDefaults(provider))
+  }
+
+  const updateProviderMutation = useMutation({
+    mutationFn: ({ id: providerId, data }: { id: string; data: any }) =>
+      llmProvidersApi.update(providerId, buildProviderUpdateBody(data)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['llm-provider', id] })
+      queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
+      setEditing(false)
+      notifications.success('Provider saved', 'The new settings apply to the next call.')
+    },
+    onError: (error: any) => {
+      notifications.error('Could not save the provider', getApiErrorMessage(error, 'Please try again.'))
+    },
+  })
+
+  // One-shot intents from links: ?edit=1 opens the form, ?test=1 runs
+  // the connection test. Both are stripped so a refresh doesn't repeat them.
+  const wantsEdit = searchParams.get('edit') === '1'
+  const wantsTest = searchParams.get('test') === '1'
+  useEffect(() => {
+    if (!provider || (!wantsEdit && !wantsTest)) return
+    const params = new URLSearchParams(searchParams)
+    if (wantsEdit) {
+      editForm.reset(providerEditDefaults(provider))
+      setEditing(true)
+      params.set('tab', 'configuration')
+      params.delete('edit')
+    }
+    if (wantsTest) {
+      testProviderMutation.mutate()
+      params.delete('test')
+    }
+    setSearchParams(params, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider, wantsEdit, wantsTest])
 
   const handleSendChat = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -200,23 +254,26 @@ export function LlmProviderDetailPage() {
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Button variant="outline" size="sm" onClick={() => navigate('/llm-providers')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-2xl">
-              {providerLogos[provider.type] || '⚙️'}
-            </div>
-            <div>
-              <h1 className={DETAIL_TITLE_CLASSES}>{provider.name}</h1>
-              <p className="text-muted-foreground">{provider.description || `${provider.type} provider`}</p>
-            </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-2xl">
+            {providerLogos[provider.type] || '⚙️'}
+          </div>
+          <div className="min-w-0">
+            <h1 className={DETAIL_TITLE_CLASSES}>{provider.name}</h1>
+            <p className="text-muted-foreground">{provider.description || `${provider.type} provider`}</p>
           </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={() => {
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => testProviderMutation.mutate()}
+            disabled={testProviderMutation.isPending}
+          >
+            <TestTube className="mr-2 h-4 w-4" />
+            {testProviderMutation.isPending ? 'Testing…' : 'Test connection'}
+          </Button>
+          <Button variant="outline" onClick={() => {
             toggleStatusMutation.mutate({ status: provider.status === 'active' ? 'inactive' : 'active' })
           }}>
             {provider.status === 'active' ? <PowerOff className="h-4 w-4 mr-2" /> : <Power className="h-4 w-4 mr-2" />}
@@ -225,15 +282,38 @@ export function LlmProviderDetailPage() {
           <Badge variant={provider.status === 'active' ? 'success' : 'secondary'} className="capitalize">
             {provider.status}
           </Badge>
-          <Switch
-            checked={provider.status === 'active'}
-            onCheckedChange={(checked) => toggleStatusMutation.mutate({ status: checked ? 'active' : 'inactive' })}
-          />
         </div>
       </div>
 
+      {/* The connection test's answer, where the button is: it used to be
+          a dialog with a prompt box the test never sent. */}
+      {testResult && (
+        <div
+          role="status"
+          data-testid="provider-test-result"
+          className={`flex flex-wrap items-start justify-between gap-2 rounded-lg border p-3 text-sm ${
+            testResult.ok
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'
+              : 'border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'
+          }`}
+        >
+          <div className="flex min-w-0 items-start gap-2">
+            {testResult.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0" />}
+            <div className="min-w-0 [overflow-wrap:anywhere]">
+              {testResult.ok
+                ? `Connection OK. The provider answered in ${testResult.responseTime ?? '?'} ms.`
+                : `Connection failed: ${testResult.error}`}
+              <div className="text-xs opacity-80">Tested {formatDateTime(testResult.at)}</div>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setTestResult(null)}>
+            Dismiss
+          </Button>
+        </div>
+      )}
+
       {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Card><CardContent className="pt-6 text-center">
           <div className="text-2xl font-bold">{(provider.totalRequests || 0).toLocaleString()}</div>
           <div className="text-sm text-muted-foreground">Total Requests</div>
@@ -253,8 +333,8 @@ export function LlmProviderDetailPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
+      <Tabs value={tab} onValueChange={selectTab} className="space-y-4">
+        <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="chat">Chat</TabsTrigger>
           <TabsTrigger value="models">Models</TabsTrigger>
@@ -265,7 +345,7 @@ export function LlmProviderDetailPage() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card>
               <CardHeader><CardTitle className="text-sm">Provider information</CardTitle></CardHeader>
               <CardContent className="space-y-2">
@@ -420,25 +500,62 @@ export function LlmProviderDetailPage() {
           )}
         </TabsContent>
 
-        {/* Configuration Tab */}
+        {/* Configuration Tab: read-only until Edit; then the same place
+            becomes the form (it was a dialog on the list). */}
         <TabsContent value="configuration" className="space-y-4">
           <Card>
-            <CardHeader><CardTitle className="text-sm">API configuration</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-sm">Configuration</CardTitle>
+              {!editing && (
+                <Button size="sm" variant="outline" onClick={startEditing}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </Button>
+              )}
+            </CardHeader>
             <CardContent className="space-y-4">
-              <CredentialPicker
-                label="API Key" value={credentialId}
-                onSelect={(cid) => setCredentialId(cid)}
-                onNewKey={(key) => setApiKey(key)}
-                newKeyValue={apiKey || provider.configuration?.apiKey || ''}
-                filterType="api_key"
-              />
-              <div><Label>Base URL</Label><Input value={provider.configuration?.baseUrl || ''} readOnly /></div>
-              {provider.configuration?.region && <div><Label>Region</Label><Input value={provider.configuration.region} readOnly /></div>}
-              <div><Label>Default Model</Label><Input value={provider.configuration?.model || ''} readOnly /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label>Max Tokens</Label><Input value={provider.configuration?.maxTokens || ''} readOnly /></div>
-                <div><Label>Temperature</Label><Input value={provider.configuration?.temperature || ''} readOnly /></div>
-              </div>
+              {editing ? (
+                <ProviderSettingsForm
+                  editForm={editForm}
+                  providerToEdit={provider}
+                  updateProviderMutation={updateProviderMutation}
+                  onCancel={stopEditing}
+                />
+              ) : (
+                <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt className="text-muted-foreground">API key</dt>
+                    <dd>
+                      <CredentialRefSummary
+                        credentialRef={provider.credentialRef}
+                        hasStoredKey={isMaskedKey(provider.configuration?.apiKey)}
+                      />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Base URL</dt>
+                    <dd className="[overflow-wrap:anywhere]">{provider.configuration?.apiUrl || provider.configuration?.baseUrl || 'Provider default'}</dd>
+                  </div>
+                  {provider.configuration?.region && (
+                    <div>
+                      <dt className="text-muted-foreground">Region</dt>
+                      <dd>{provider.configuration.region}</dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt className="text-muted-foreground">Default model</dt>
+                    <dd className="font-mono text-xs">{provider.configuration?.model || 'Provider default'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Max tokens</dt>
+                    <dd>{provider.configuration?.maxTokens || '—'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Temperature</dt>
+                    <dd>{provider.configuration?.temperature ?? '—'}</dd>
+                  </div>
+                </dl>
+              )}
             </CardContent>
           </Card>
           {provider.configuration?.customHeaders && (
@@ -447,8 +564,8 @@ export function LlmProviderDetailPage() {
               <CardContent className="space-y-2">
                 {Object.entries(provider.configuration.customHeaders).map(([key, value], index) => (
                   <div key={index} className="flex gap-2">
-                    <Input value={key} readOnly className="flex-1" />
-                    <Input value={value as string} readOnly className="flex-1" />
+                    <Input value={key} readOnly className="flex-1" aria-label="Header name" />
+                    <Input value={value as string} readOnly className="flex-1" aria-label="Header value" />
                   </div>
                 ))}
               </CardContent>
@@ -458,7 +575,7 @@ export function LlmProviderDetailPage() {
 
         {/* Usage Tab */}
         <TabsContent value="usage" className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card>
               <CardHeader><CardTitle className="text-sm">Performance metrics</CardTitle></CardHeader>
               <CardContent>
@@ -523,7 +640,7 @@ export function LlmProviderDetailPage() {
 
         {/* Monitoring Tab */}
         <TabsContent value="monitoring" className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card>
               <CardHeader><CardTitle className="text-sm">Health status</CardTitle></CardHeader>
               <CardContent className="space-y-2">

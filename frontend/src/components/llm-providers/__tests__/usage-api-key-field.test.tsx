@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 
 import { render } from '../../../test/setup'
 import { CreateProviderForm } from '../create-provider-form'
-import { EditProviderDialog } from '../edit-provider-dialog'
+import { ProviderSettingsForm } from '../provider-settings-form'
 
 // The dialogs pull in the credential vault picker, the team-visibility
 // selector, and the axios API client — none of which matter for the
@@ -49,14 +49,11 @@ function EditHarness({
     mutate: (payload: any) => onUpdate?.(payload),
   } as any
   return (
-    <EditProviderDialog
-      open
-      onOpenChange={() => {}}
+    <ProviderSettingsForm
       editForm={form}
       providerToEdit={{ id: 'provider-1', type, name: 'prod' }}
       updateProviderMutation={mutation}
-      availableModels={[]}
-      modelsLoading={false}
+      onCancel={() => {}}
     />
   )
 }

@@ -55,10 +55,6 @@ const PRIMITIVES = new Set([
  * covers any dialog, so a stale entry cannot linger.
  */
 const OTHER_WORKSTREAMS = [
-  // Models restructure (models, providers, deployments, versions).
-  'components/models/',
-  'components/llm-providers/',
-  'pages/llm-providers.tsx',
   // Agent configuration (model picker + collaboration).
   'components/agents/',
 ]

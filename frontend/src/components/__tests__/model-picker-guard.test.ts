@@ -107,6 +107,7 @@ describe('model selection goes through ModelPicker', () => {
       'components/agents/detail/verify-config-editor.tsx',
       'components/tools/create-tool-dialog.tsx',
       'pages/chat.tsx',
+      'components/llm-providers/provider-settings-form.tsx',
     ]
     for (const rel of sites) {
       const source = readFileSync(join(SRC, rel), 'utf8')
