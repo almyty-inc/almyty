@@ -242,16 +242,11 @@ export function ChatPage() {
         <Bot className="h-16 w-16 text-muted-foreground mb-4" />
         <h2 className="text-xl font-semibold mb-2">No models configured</h2>
         <p className="text-muted-foreground text-center max-w-md mb-4">
-          {/* The screen this points at is called Models in the sidebar and
-              lives at /models; "the AI Models page" named a screen that does
-              not exist. */}
-          To start chatting, configure at least one model provider (OpenAI,
-          Anthropic, etc.) on the Models page.
+          To start chatting, add at least one inference provider (OpenAI,
+          Anthropic, a server you run, and more).
         </p>
-        {/* A full page reload to /llm-providers only to be redirected to
-            /models?tab=providers threw the SPA away for no reason. */}
-        <Button onClick={() => navigate('/models?tab=providers')}>
-          Configure models
+        <Button onClick={() => navigate('/llm-providers/new')}>
+          Add an inference provider
         </Button>
       </div>
     )

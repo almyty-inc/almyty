@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,19 +14,21 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { AdapterRegistry } from './adapters/adapter.registry';
-import { ModelSource, canRun, readModelSource, schemesFor } from './model-source';
+import { ModelSource, canRun, defaultCardName, defaultVendorModelId, readModelSource, schemesFor } from './model-source';
 import { AdapterCredentials } from './adapters/adapter.interface';
 import { ModelRegistryService } from '../model-registry/model-registry.service';
+import { HfRevisionResolver, ModelSourceUnresolvedError, hfPinRequest } from '../model-registry/hf-revision.resolver';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
-
+import { isUniqueViolation } from '../../common/utils/unique-violation';
 export const MODEL_RECONCILE_QUEUE = 'model-reconcile';
 export const MODEL_RECONCILE_JOB = 'reconcile';
 
 export interface CreateDeploymentDto {
   /**
-   * The model to run, as configuration: hf://org/repo@sha for a Hugging
-   * Face repository, bedrock:// fireworks:// together:// and the rest for
-   * a model that already lives on that platform, s3:// or gs:// for
+   * The model to run, as configuration: hf://org/repo for a Hugging Face
+   * repository (a branch, tag or sha after @ is optional; it is pinned to
+   * the commit at create), bedrock:// fireworks:// together:// and the rest
+   * for a model that already lives on that platform, s3:// or gs:// for
    * artifacts a provider reads itself. Either this or modelVersionId.
    */
   model?: string;
@@ -46,6 +49,19 @@ export interface CreateDeploymentDto {
    * deployment that then reaches ready and lights nothing up.
    */
   modelId?: string | null;
+  /**
+   * Name of the card made for this deployment when `modelId` is not
+   * given. Defaults to the repository or artifact name; a taken default
+   * gets a numeric suffix, a taken explicit name is refused (MODEL_EXISTS).
+   */
+  name?: string | null;
+  /**
+   * The model id sent on the wire to the served endpoint, for that card.
+   * Defaults to `org/repo` for hf:// (what vLLM and TGI serve under), the
+   * platform's model reference for a provider reference, and the last path
+   * segment for s3://, gs:// and file://.
+   */
+  vendorModelId?: string | null;
 }
 
 /**
@@ -77,6 +93,11 @@ export class ModelDeploymentsService {
     // module provides it and a guard test asserts the wiring, so the
     // budget check above is never a silent no-op in a running server.
     @Optional() @InjectRepository(SpendBudget) private readonly budgets?: Repository<SpendBudget>,
+    // Last and optional for the same reason again. The module provides it
+    // (ModelRegistryModule exports it) and a guard test asserts the wiring;
+    // without it an unpinned hf:// reference is refused by the parser, as
+    // it was before pinning was automatic.
+    @Optional() private readonly hubRevisions?: HfRevisionResolver,
   ) {}
 
   async list(organizationId: string): Promise<ModelDeployment[]> {
@@ -115,9 +136,22 @@ export class ModelDeploymentsService {
       const budget = await this.budgets.findOne({ where: { id: dto.budgetId, organizationId } });
       if (!budget) throw new NotFoundException('Spend budget not found');
     }
-    const reference = version?.registryUri ?? dto.model;
+    let reference = version?.registryUri ?? (dto.model?.trim() || undefined);
     if (!reference) {
       throw new BadRequestException({ code: 'MODEL_REQUIRED', message: 'Name the model to run with `model`, or point at a registered version with `modelVersionId`' });
+    }
+    // A Hugging Face model is named the way the Hub shows it, `org/repo`,
+    // perhaps with a branch or tag. It is pinned here to the commit that
+    // name points at now, so the deployment runs bytes that cannot move
+    // under it. A registered version already carries its own pin.
+    if (!version && this.hubRevisions && hfPinRequest(reference)) {
+      const token = await this.hubTokenFor(organizationId, userId, adapter.key, dto);
+      try {
+        reference = await this.hubRevisions.pin(reference, token);
+      } catch (err: any) {
+        if (err instanceof ModelSourceUnresolvedError) throw new BadRequestException({ code: err.code, message: err.message });
+        throw err;
+      }
     }
 
     const caps = adapter.capabilities();
@@ -167,12 +201,34 @@ export class ModelDeploymentsService {
       }
     }
 
+    // The card this endpoint fills. A deployment made from the UI names no
+    // card, and the reconcile loop fills only the card on `modelId`, so
+    // without one the endpoint reached ready and nothing could ever call
+    // it. The card is made here, in the same request, and the two are
+    // linked both ways before either is visible: the deployment id is
+    // chosen up front so the card can carry it, and the card goes again if
+    // the deployment does not save.
+    const deploymentId = !dto.modelId && this.models ? randomUUID() : undefined;
+    const card = deploymentId
+      ? await this.createCardFor(organizationId, userId, deploymentId, adapter.key, {
+          name: dto.name,
+          vendorModelId: dto.vendorModelId,
+          typed: dto.model?.trim() || null,
+          reference: source.raw,
+          source,
+          version,
+          base,
+          desired,
+        })
+      : null;
+
     const deployment = this.deployments.create({
+      ...(deploymentId ? { id: deploymentId } : {}),
       organizationId,
       modelVersionId: version?.id ?? null,
       modelRef: version ? null : source.raw,
       modelBase: version ? null : base,
-      modelId: dto.modelId ?? null,
+      modelId: card?.id ?? dto.modelId ?? null,
       providerType: adapter.key,
       desired: { replicas: 1, minScale: caps.scaleToZero ? 0 : 1, maxScale: 1, ...desired },
       providerConfig: { ...(dto.providerConfig ?? {}), ...(dto.credentialId ? { credentialId: dto.credentialId } : {}) },
@@ -182,11 +238,166 @@ export class ModelDeploymentsService {
       budgetId: dto.budgetId ?? null,
       createdBy: userId,
     });
-    await deployment.encryptSensitiveDataForOrg(this.envelopeCrypto);
-    const saved = await this.deployments.save(deployment);
-    this.audit(saved, AuditAction.MODEL_DEPLOYMENT_TRANSITION, userId, { from: null, to: 'pending' });
+    let saved: ModelDeployment;
+    try {
+      await deployment.encryptSensitiveDataForOrg(this.envelopeCrypto);
+      saved = await this.deployments.save(deployment);
+    } catch (err) {
+      // No card may outlive the deployment it was made for: nothing else
+      // would ever fill it, and it would sit in the catalog as "deploying".
+      if (card && this.models) await this.models.delete({ id: card.id, organizationId }).catch(() => undefined);
+      throw err;
+    }
+    this.audit(saved, AuditAction.MODEL_DEPLOYMENT_TRANSITION, userId, { from: null, to: 'pending', ...(card ? { modelId: card.id } : {}) });
     await this.enqueue(saved.id);
     return saved;
+  }
+
+  /**
+   * The catalog card for a deployment that was given none.
+   *
+   * It starts `deploying` and unvalidated, which is never selectable: the
+   * router passes over it until the reconcile loop has filled it (status
+   * `active`, the endpoint URL, the provider row) and a validation run has
+   * passed. No provider row yet (`providerId` null) and no `providerType`
+   * either, because the price feed keys on that and a model on the
+   * organization's own hardware has no public price; the adapter's own
+   * per-token price, when it reports one, arrives through the budget tick.
+   */
+  private async createCardFor(
+    organizationId: string,
+    userId: string | null,
+    deploymentId: string,
+    adapterKey: string,
+    input: {
+      name?: string | null;
+      vendorModelId?: string | null;
+      typed: string | null;
+      reference: string;
+      source: ModelSource;
+      version: ModelVersion | null;
+      base: string | null;
+      desired: ModelDeploymentDesired;
+    },
+  ): Promise<Model> {
+    const models = this.models as Repository<Model>;
+    const explicitName = input.name?.trim() || null;
+    const name = explicitName ?? (await this.freeCardName(organizationId, input.version?.name?.trim() || defaultCardName(input.source)));
+    if (explicitName) {
+      const taken = await models.findOne({ where: { organizationId, name: explicitName } });
+      if (taken) {
+        throw new BadRequestException({ code: 'MODEL_EXISTS', message: `A model named "${explicitName}" already exists; choose another name` });
+      }
+    }
+    const metadata: Record<string, any> = {
+      // What the person asked for, and what almyty pinned it to. The UI
+      // shows the first and says which revision the second is.
+      source: input.typed ?? input.reference,
+      modelRef: input.reference,
+    };
+    if (input.source.parsed.scheme === 'hf' && input.source.parsed.pin) metadata.revision = input.source.parsed.pin;
+
+    const row = models.create({
+      organizationId,
+      name,
+      vendorModelId: (input.vendorModelId?.trim() || defaultVendorModelId(input.source)).slice(0, 255),
+      providerId: null,
+      providerType: null,
+      endpointRef: { deploymentId, providerType: adapterKey },
+      modelVersionId: input.version?.id ?? null,
+      base: input.base,
+      capabilities: {},
+      contextLength: null,
+      privacyTier: input.desired.privacyTier ?? 'private_cloud',
+      region: input.desired.region ?? null,
+      pricingOverride: null,
+      pricingSource: 'unpriced',
+      status: 'deploying',
+      validationStatus: 'never',
+      metadata,
+    });
+    let saved: Model;
+    try {
+      saved = await models.save(row);
+    } catch (err: any) {
+      // Two deploys of the same model at once both found the name free.
+      if (!isUniqueViolation(err)) throw err;
+      if (explicitName) {
+        throw new BadRequestException({ code: 'MODEL_EXISTS', message: `A model named "${explicitName}" already exists; choose another name` });
+      }
+      row.name = `${name.slice(0, 248)}-${randomUUID().slice(0, 6)}`;
+      saved = await models.save(row);
+    }
+    void this.auditLog
+      ?.log({
+        organizationId,
+        userId: userId ?? undefined,
+        action: AuditAction.MODEL_REGISTERED,
+        resourceType: AuditResource.MODEL,
+        resourceId: saved.id,
+        resourceName: saved.name,
+        details: { deploymentId, providerType: adapterKey, source: metadata.source, modelRef: metadata.modelRef },
+      })
+      .catch(() => undefined);
+    return saved;
+  }
+
+  /** `name`, else `name-2`, `name-3`, ...: a default name never fails a deploy for being taken. */
+  private async freeCardName(organizationId: string, wanted: string): Promise<string> {
+    const models = this.models as Repository<Model>;
+    const base = (wanted || 'model').slice(0, 240);
+    for (let n = 1; n <= 20; n++) {
+      const candidate = n === 1 ? base : `${base}-${n}`;
+      if (!(await models.findOne({ where: { organizationId, name: candidate } }))) return candidate;
+    }
+    return `${base}-${randomUUID().slice(0, 6)}`;
+  }
+
+  /**
+   * A Hugging Face token for reading the Hub, when one is at hand.
+   *
+   * In order: a `hubToken` on the deployment's connection or config (the
+   * field the Hugging Face adapter documents for exactly this), then the
+   * connection's own token when that connection is a Hugging Face account,
+   * then the server's HF_TOKEN. A token for another provider (a Modal or
+   * RunPod key) is never sent to the Hub.
+   */
+  private async hubTokenFor(organizationId: string, userId: string | null, adapterKey: string, dto: CreateDeploymentDto): Promise<string | undefined> {
+    const inline = dto.providerConfig ?? {};
+    let stored: Record<string, any> = {};
+    let connectorKey: string | null = null;
+    if (dto.credentialId) {
+      try {
+        if (this.credentialRefs) {
+          const resolved = await this.credentialRefs.resolve(organizationId, dto.credentialId, {
+            principal: userId ? { id: userId } : undefined,
+            context: { purpose: 'deploy', resourceType: 'model_deployment' },
+          });
+          stored = resolved.config ?? {};
+          connectorKey = resolved.credential?.connectorKey ?? null;
+        } else {
+          await this.envelopeCrypto.warmOrg(organizationId);
+          const credential = await this.credentials.findOne({ where: { id: dto.credentialId, organizationId } });
+          if (credential) {
+            stored = credential.getDecryptedConfig() as Record<string, any>;
+            connectorKey = credential.connectorKey ?? null;
+          }
+        }
+      } catch {
+        // A connection that cannot be used is refused by the reconcile
+        // loop with its own reason; a public repository still resolves.
+      }
+    }
+    const hfAccount = adapterKey === 'huggingface-endpoints' || /hugging\s*face|huggingface/i.test(connectorKey ?? '');
+    const candidates = [
+      stored.hubToken,
+      inline.hubToken,
+      hfAccount ? stored.token : undefined,
+      hfAccount ? inline.token : undefined,
+      hfAccount ? stored.apiKey : undefined,
+      process.env.HF_TOKEN,
+    ];
+    return candidates.find((v): v is string => typeof v === 'string' && v.length > 0);
   }
 
   async scale(organizationId: string, id: string, replicas: number, userId: string | null): Promise<ModelDeployment> {

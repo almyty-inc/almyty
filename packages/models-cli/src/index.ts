@@ -11,7 +11,6 @@
  * Adapter configuration and endpoint keys are secrets, so they are never
  * taken from argv: argv is readable through `ps` and lands in shell history.
  */
-import { createInterface } from 'readline';
 import { readFileSync } from 'fs';
 import { AlmytyClient, resolveCredentialsOrExit } from '@almyty/client';
 import { EXIT, EXIT_CODE_HELP, UsageError, describeError, exitCodeFor } from './exit-codes.js';
@@ -25,7 +24,7 @@ export interface ParsedArgs {
 }
 
 /** Flags that never take a value, so they never swallow the next argument. */
-const BOOLEAN_FLAGS = new Set(['json', 'selectable', 'config-stdin', 'api-key-stdin', 'clear-price']);
+const BOOLEAN_FLAGS = new Set(['json', 'selectable', 'config-stdin', 'clear-price']);
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const result: ParsedArgs = { positional: [], flags: {} };
@@ -76,11 +75,9 @@ Catalog:
   get <id>                             One card in full: capabilities, pricing, validation run
   register --name <n> --provider <providerId> --model <vendorModelId>
            [--tier public|private_cloud|local] [--region <r>] [--context <n>]
-                                       Register a card against a stored LLM provider
-  register-endpoint --name <n> --url <baseUrl> --model <vendorModelId>
-           [--api-key-stdin] [--tier <t>] [--region <r>] [--context <n>]
-                                       Register any OpenAI-compatible server you run.
-                                       The key is prompted, or read with --api-key-stdin.
+                                       Register a card against a stored LLM provider.
+                                       A server you run (vLLM, TGI, llama.cpp) is a
+                                       \`custom\` LLM provider; register against that.
   set <id> [--name <n>] [--tier <t>] [--region <r>] [--context <n>]
            [--status active|inactive|error|deploying]
            [--price-in <usdPerMTok> --price-out <usdPerMTok>] [--clear-price]
@@ -114,7 +111,9 @@ Deployments:
          [--desired '<json>'] [--credential <connectionId>] [--budget <id>] [--card <cardId>]
   deploy --model-version <id> --adapter <key> [...]
                                        <model> is where the model lives:
-                                         hf://org/repo@sha       a Hugging Face repository
+                                         hf://org/repo[@rev]     a Hugging Face repository; a
+                                                                 branch, tag or nothing is
+                                                                 pinned to its commit for you
                                          s3://bucket/prefix@etag, gs://bucket/prefix@gen,
                                          file:///path@sha
                                          bedrock:// sagemaker:// vertex:// foundry://
@@ -231,20 +230,6 @@ export function registerBody(flags: ParsedArgs['flags']): Record<string, unknown
     providerId: need(flags, 'provider'),
     vendorModelId: need(flags, 'model'),
   };
-  if (str(flags, 'tier')) body.privacyTier = str(flags, 'tier');
-  if (str(flags, 'region')) body.region = str(flags, 'region');
-  const context = num(flags, 'context');
-  if (context !== undefined) body.contextLength = context;
-  return body;
-}
-
-export function registerEndpointBody(flags: ParsedArgs['flags'], apiKey?: string): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    name: need(flags, 'name'),
-    url: need(flags, 'url'),
-    vendorModelId: need(flags, 'model'),
-  };
-  if (apiKey) body.apiKey = apiKey;
   if (str(flags, 'tier')) body.privacyTier = str(flags, 'tier');
   if (str(flags, 'region')) body.region = str(flags, 'region');
   const context = num(flags, 'context');
@@ -517,47 +502,6 @@ function readStdin(): Promise<string> {
   });
 }
 
-function askHidden(label: string): Promise<string> {
-  return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    const anyRl = rl as any;
-    anyRl._writeToOutput = (s: string) => {
-      if (s.includes(label)) anyRl.output.write(label);
-    };
-    rl.question(label, (answer) => {
-      rl.close();
-      process.stdout.write('\n');
-      resolve(answer.trim());
-    });
-  });
-}
-
-/**
- * The endpoint key, from the safest place it can come from. `--api-key` is
- * refused because argv is world-readable; `-` means stdin, which is what a
- * script should use.
- */
-async function endpointApiKey(flags: ParsedArgs['flags']): Promise<string | undefined> {
-  const inline = str(flags, 'api-key');
-  if (inline && inline !== '-') {
-    throw new UsageError(
-      '--api-key puts the key in your shell history and in `ps`.\n' +
-      '  Leave it off and the key is prompted without echo, or read it from stdin:\n' +
-      '    --api-key-stdin            (also: --api-key -)\n' +
-      '  An endpoint with no key at all: --api-key ""',
-    );
-  }
-  if (flags['api-key-stdin'] || inline === '-') {
-    assertStdinIsPiped('--api-key-stdin');
-    return (await readStdin()).trim() || undefined;
-  }
-  // `--api-key` with no value, or an explicitly empty one: an open endpoint.
-  if (flags['api-key'] === true || inline === '') return undefined;
-  if (!process.stdin.isTTY) return undefined; // unattended and none supplied: an open endpoint
-  const typed = await askHidden('API key for the endpoint (empty for none): ');
-  return typed || undefined;
-}
-
 const CONFIG_ALTERNATIVES = [
   '--config-file <path>       read the JSON object from a file',
   '--config-stdin             read the JSON object from stdin',
@@ -645,12 +589,6 @@ async function main(): Promise<void> {
     }
     case 'register': {
       const res = await post('/models', registerBody(args.flags));
-      out(args, res.data, () => `Registered.\n${formatCard(res.data)}\nRun: almyty models validate ${res.data.id}`);
-      return;
-    }
-    case 'register-endpoint': {
-      const apiKey = await endpointApiKey(args.flags);
-      const res = await post('/models/register-endpoint', registerEndpointBody(args.flags, apiKey));
       out(args, res.data, () => `Registered.\n${formatCard(res.data)}\nRun: almyty models validate ${res.data.id}`);
       return;
     }

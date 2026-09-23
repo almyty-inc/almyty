@@ -6,7 +6,7 @@ export default {
   'tools-api': 'Tools API',
   'gateways-api': 'Gateways API',
   'agents-api': 'Agents API',
-  'llm-providers-api': 'LLM Providers API',
+  'llm-providers-api': 'Inference Providers API',
   'models-api': 'Models API',
   'connections-api': 'Connections API',
   'openai-compatible': 'OpenAI-Compatible API',

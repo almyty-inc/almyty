@@ -18,7 +18,7 @@ const read = (file: string) => stripComments(readFileSync(file, 'utf8'));
  * 3xx. The defect was never a missing gate — it was call sites that did
  * not call one. Six channel adapters, three test-connection probes, the
  * MCP `import_schema` tool, the A2A `baseRpcUrl`, two model-deployment
- * adapters and `/models/register-endpoint` each dialled a tenant-written
+ * adapters and the endpoint-provider helper each dialled a tenant-written
  * URL with no check at all, several of them returning the response body
  * or the errno to the caller.
  *
@@ -52,8 +52,9 @@ describe('tenant-supplied outbound URLs are gated at every call site', () => {
     // Model deployments — providerConfig
     ['modules/model-deployments/adapters/ollama.adapter.ts', 'providerConfig.baseUrl', /validateUrl(AllowingPrivate)?\(/],
     ['modules/model-deployments/adapters/custom-endpoint.adapter.ts', 'providerConfig.url', /validateUrl(AllowingPrivate)?\(/],
-    // The second door onto llm_providers.configuration.apiUrl
-    ['modules/llm-providers/endpoint-provider.helper.ts', 'register-endpoint url', /decideEgress\(/],
+    // The second door onto llm_providers.configuration.apiUrl: the reconcile
+    // loop writes a deployment's endpoint URL into a provider row through it
+    ['modules/llm-providers/endpoint-provider.helper.ts', 'deployment endpoint url', /decideEgress\(/],
     // The one consumer of that column that did not re-gate at request time
     ['modules/provider-usage/provider-usage.service.ts', 'provider apiUrl', /safeFetch\(/],
   ];

@@ -1,25 +1,24 @@
 # Models API
 
-> This is the HTTP API reference. For the concepts, see [Models](/models), [Routing](/models/routing) and [Deployments](/models/deployments).
+> This is the HTTP API reference. For the concepts, see [Models](/models), [Routing](/models/routing) and [Your cloud account](/models/your-cloud).
 
-REST reference for the model catalog, the model registry and deployments. Every response is wrapped in `{ success, data }`; every route is scoped to the caller's current organization.
+REST reference for models and for running a model on your own cloud account. Every response is wrapped in `{ success, data }`; every route is scoped to the caller's current organization.
 
-## Catalog
+## Models
 
 | Method | Endpoint | Role | Description |
 |--------|----------|------|-------------|
-| `GET` | `/models` | member | List cards. Filters: `status`, `privacyTier`, `providerId`, `selectable=true` |
-| `POST` | `/models` | admin | Register a card against a stored provider or an endpoint |
-| `POST` | `/models/register-endpoint` | admin | Register an OpenAI-compatible server as a card (creates a `custom` provider) |
-| `POST` | `/models/sync` | admin | Import what one provider lists (`{ providerId }`), or every active provider with no body |
-| `GET` | `/models/:id` | member | Card detail |
+| `GET` | `/models` | member | List models. Filters: `status`, `privacyTier`, `providerId`, `selectable=true` |
+| `POST` | `/models` | admin | Add a model against an inference provider |
+| `POST` | `/models/sync` | admin | Import what one inference provider lists (`{ providerId }`), or every active one with no body |
+| `GET` | `/models/:id` | member | Model detail |
 | `PATCH` | `/models/:id` | admin | Update privacy tier, region, capabilities, price override, status |
-| `POST` | `/models/:id/validate` | admin | One real call through the card; passing makes it selectable |
-| `DELETE` | `/models/:id` | admin | Remove a card |
+| `POST` | `/models/:id/validate` | admin | One real call through the model; passing makes it selectable |
+| `DELETE` | `/models/:id` | admin | Remove a model |
 
-Every card in a response carries two computed fields: `selectable` (the support rule) and `effectivePricing` (the override when set, else the feed price).
+Every model in a response carries two computed fields: `selectable` (the support rule) and `effectivePricing` (the override when set, else the feed price).
 
-### Register a card
+### Add a model
 
 ```bash
 curl -X POST https://api.almyty.com/models \
@@ -40,18 +39,29 @@ curl -X POST https://api.almyty.com/models \
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Display name |
 | `vendorModelId` | string | Yes | The id sent on the wire |
-| `providerId` | uuid | One of | A stored provider |
+| `providerId` | uuid | One of | An inference provider |
 | `endpointRef` | object | One of | `{ url }` of an endpoint |
-| `modelVersionId` | uuid | No | A registered version, for deployed weights |
+| `modelVersionId` | uuid | No | A [registered version](#registered-versions) |
 | `capabilities` | object | No | Booleans: `tools`, `vision`, `reasoning`, `embedding`, `structuredOutput` |
 | `contextLength` | integer | No | Context in tokens |
 | `privacyTier` | string | No | `local`, `private_cloud`, `public` (default) |
 | `region` | string | No | Region label |
 | `pricingOverride` | object | No | `{ inPerMTok, outPerMTok, currency? }`, dollars per million tokens |
-| `base` | string | No | Base architecture, for example `qwen3-14b` |
+| `base` | string | No | What the model is based on, for example `qwen3-14b` |
 | `metadata` | object | No | Free-form |
 
-`POST /models/register-endpoint` takes `name`, `url`, `vendorModelId`, optional `apiKey`, `capabilities`, `contextLength`, `privacyTier`, `region`, `pricingOverride`.
+### A server you run
+
+Any OpenAI-compatible server (vLLM, Ollama, TGI, llama.cpp, LiteLLM) is a `custom` inference provider plus an ordinary model on it. Create the provider with [`POST /llm-providers`](/api-reference/llm-providers-api), `type: "custom"`, the server's base URL in `configuration.apiUrl` and, if it checks one, its key in `configuration.apiKey`:
+
+```bash
+curl -X POST https://api.almyty.com/llm-providers \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Lab box", "type": "custom", "configuration": { "apiUrl": "http://10.0.0.7:8000/v1" } }'
+```
+
+Then `POST /models` with that `providerId` and the `vendorModelId` the server serves, and validate it. Adding the provider also imports what the server lists at `GET <base>/models`.
 
 ### Validate
 
@@ -71,15 +81,17 @@ curl -X POST https://api.almyty.com/models/4f2a.../validate \
 }
 ```
 
-A failed run answers with `success: false`, `passed: false` and `error`, and records the error on the card.
+A failed run answers with `success: false`, `passed: false` and `error`, and records the error on the model.
 
 ### Sync
 
-`POST /models/sync` with no body returns a per-provider summary; with `{ providerId }` the summary for that provider: `created` and `reinstated` cards, `retired` cards, `skipped` count, and `error` per provider where the vendor could not be asked.
+`POST /models/sync` with no body returns a per-provider summary; with `{ providerId }` the summary for that inference provider: `created` and `reinstated` models, `retired` models, `skipped` count, and `error` per provider where the vendor could not be asked.
 
-### Card fields
+### Model fields
 
 `id`, `name`, `providerId`, `providerType`, `vendorModelId`, `endpointRef`, `base`, `modelVersionId`, `capabilities`, `contextLength`, `pricing`, `pricingSource` (`feed:litellm`, `feed:openrouter`, `native`, `adapter`, `manual`, `unpriced`), `pricingFetchedAt`, `pricingOverride`, `measuredLatencyMs` (`{ p50, p95, updatedAt }`), `privacyTier`, `region`, `status` (`active`, `inactive`, `error`, `deploying`), `validationStatus` (`never`, `passed`, `failed`), `lastValidatedAt`, `lastValidationError`, `metadata`, `createdAt`, `updatedAt`, plus the computed `selectable` and `effectivePricing`.
+
+For a model on your cloud account, `endpointRef` carries `url`, `providerType` and `deploymentId` (the id under `/model-deployments` below).
 
 ## Routing
 
@@ -94,16 +106,78 @@ curl -X PATCH https://api.almyty.com/organizations/$ORG \
 
 `null` clears it; other `settings` keys are left as they are. The attribution of a routed answer (`routing` on the chat response, on `nodeResults[nodeId]`, and on autonomous step output) is `{ modelId, modelVersionId, vendorModelId, providerId, rationale, attempt, tried, rejected }`.
 
-## Versions
+## Your cloud account
 
-Registering a version is optional: lineage, a manifest digest and evaluation history for weights you track yourself. A deployment never needs one; see [Deployments](/models/deployments) below.
+A model on your own cloud account is created, sized and shut down through the `/model-deployments` routes; the clouds are listed by `/model-adapters`. Those are the API's names for it: each cloud is an adapter with a `providerType` key, and each model running on one is a row under `/model-deployments`.
+
+| Method | Endpoint | Role | Description |
+|--------|----------|------|-------------|
+| `GET` | `/model-adapters` | member | The clouds: `key`, `displayName`, `capabilities`, `modelSchemes`, `configSchema` |
+| `GET` | `/model-deployments` | member | List models running on your clouds |
+| `POST` | `/model-deployments` | admin | Start a model on a cloud (records what you want; almyty does the rest) |
+| `GET` | `/model-deployments/:id` | member | Wanted vs actual state, cost |
+| `POST` | `/model-deployments/:id/scale` | admin | `{ replicas }`; 0 stops it (scales to zero) |
+| `POST` | `/model-deployments/:id/teardown` | admin | Shut it down: remove the endpoint at the cloud |
+| `DELETE` | `/model-deployments/:id` | admin | Same as teardown |
+
+`GET /model-adapters` carries `modelSchemes` per cloud: every source it accepts, as literal prefixes (`hf://`, `s3://`, `bedrock://`, ...). A form filters both ways with it: the clouds that can run the source you have, or the sources the cloud you picked will take. `configSchema` is a JSON schema for the cloud's `providerConfig`; properties marked `"x-secret": true` are encrypted at rest and never returned.
+
+Start a model from a Hugging Face repository:
+
+```bash
+curl -X POST https://api.almyty.com/model-deployments \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "hf://Qwen/Qwen3-0.6B",
+    "providerType": "huggingface-endpoints",
+    "name": "Qwen3 0.6B",
+    "desired": { "replicas": 1, "region": "eu-west-1", "privacyTier": "private_cloud" },
+    "providerConfig": { "token": "hf_...", "namespace": "acme", "region": "eu-west-1", "instanceType": "nvidia-a10g" },
+    "budgetId": "5d3f..."
+  }'
+```
+
+Or a model the cloud already hosts:
+
+```json
+{ "model": "fireworks://accounts/acme/models/qwen3-tuned", "providerType": "fireworks" }
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `model` | string | One of | The model source: weights (`hf://org/repo`, pinned to its exact commit for you, or `hf://org/repo@sha`; `s3://bucket/prefix@etag`, `gs://bucket/prefix@generation`, `file:///path@sha`) or a model the cloud already hosts (`bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`) |
+| `modelVersionId` | uuid | One of | A [registered version](#registered-versions) instead of `model` |
+| `providerType` | string | Yes | The cloud's key from `GET /model-adapters` |
+| `name` | string | No | The model's display name in the list |
+| `vendorModelId` | string | No | The id sent on the wire once the endpoint is up, when it differs from what the source implies |
+| `base` | string | No | Model family, when the cloud checks it and the source doesn't carry one |
+| `desired` | object | No | `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
+| `providerConfig` | object | No | The cloud's config, validated against its `configSchema`; `x-secret` fields encrypted |
+| `credentialId` | uuid | No | A saved connection whose fields the cloud reads; inline secrets in `providerConfig` are layered over it |
+| `budgetId` | uuid | No | Spend budget; reaching it stops the model (scales to zero) |
+| `modelId` | uuid | No | An existing model to attach instead of creating a new one |
+
+Exactly one of `model` or `modelVersionId` is required; naming neither is `MODEL_REQUIRED`. A source the cloud can't read is refused with `ADAPTER_UNSUPPORTED_SOURCE` and an `accepts` array of the schemes it does take. An `s3://` source in an organization with no bucket connection is `REGISTRY_NOT_CONNECTED`.
+
+**The model exists at once.** Unless `modelId` names an existing one, `POST /model-deployments` creates the model in the list straight away, with `status: deploying` (not selectable), and links it. When the endpoint is ready the model gets `endpointRef.url` and `endpointRef.deploymentId`, turns `active`, takes the region the cloud reports (or the one asked for), and is priced from the cloud's cost report (`pricingSource: adapter`) where the cloud reports a per-token price and no override is set. Validate it and it is selectable.
+
+A row in a response carries `state` (`pending`, `deploying`, `ready`, `degraded`, `scaling`, `tearing_down`, `torn_down`, `orphaned`, `failed`), `modelRef` or `modelVersionId`, `desired`, `actual` (`state`, `url`, `replicas`, `hardware`, `region`, `message`, `spentCents`, `ratePerHourCents`), `externalRef`, `lastReconcileAt`, `lastError`, `budgetId`, and `providerConfig` with every secret shown as `********`. `scale` and `teardown` change the wanted state only; the reconcile sweep (`MODEL_RECONCILE_CRON`, every two minutes, plus a run right after each change) is the only thing that talks to the cloud.
+
+Cloud errors carry `ADAPTER_UNKNOWN`, `ADAPTER_UNSUPPORTED_SOURCE` (the source's scheme is not one this cloud reads), `ADAPTER_UNSUPPORTED_OPERATION` (the cloud cannot do this at all), `ADAPTER_UNSUPPORTED_ARCHITECTURE`, `ADAPTER_PREVIEW_NOT_ENABLED`, `ADAPTER_AUTH`, `ADAPTER_ERROR`.
+
+No cloud has yet been run against a real account; see [Your cloud account](/models/your-cloud#clouds) for what each one actually accepts.
+
+## Registered versions
+
+Optional, for power users. Nothing needs a registered version: `POST /model-deployments` takes the source directly and pins a Hugging Face repository for you. Register one when you want a manifest digest, lineage and evaluation history recorded against your own weights, then pass its id as `modelVersionId`.
 
 | Method | Endpoint | Role | Description |
 |--------|----------|------|-------------|
 | `GET` | `/model-versions` | member | List registered versions |
-| `POST` | `/model-versions` | admin | Register a pinned registry URI |
+| `POST` | `/model-versions` | admin | Register a pinned URI |
 | `GET` | `/model-versions/:id` | member | Version detail with manifest summary |
-| `DELETE` | `/model-versions/:id` | admin | Remove a version no live deployment references |
+| `DELETE` | `/model-versions/:id` | admin | Remove a version no running model references |
 
 ```bash
 curl -X POST https://api.almyty.com/model-versions \
@@ -116,76 +190,31 @@ curl -X POST https://api.almyty.com/model-versions \
 |-----------|------|----------|-------------|
 | `name` | string | Yes | Version name |
 | `registryUri` | string | Yes | `hf://org/repo@sha`, `s3://bucket/prefix@etag`, `gs://bucket/prefix@generation` or `file:///path@sha`; the pin is required |
-| `base` | string | For a URI without a manifest | Base architecture |
+| `base` | string | For a URI without a manifest | Model family |
 | `quantizations` | string[] | No | For example `["bf16", "awq-int4"]` |
 | `lineage` | object | No | `{ trainingJobId?, datasetRef?, parentVersionId? }` |
 | `metadata` | object | No | Free-form |
 
-Errors: `REGISTRY_NOT_CONNECTED` (no registry connection for the organization, on an `s3://` URI), `VERSION_IN_USE` on delete.
-
-## Deployments
-
-Naming the model is configuration, not a registration step. `POST /model-deployments` takes the model as a string; a registered version is one of two ways in, not the only one.
-
-| Method | Endpoint | Role | Description |
-|--------|----------|------|-------------|
-| `GET` | `/model-adapters` | member | Registered adapters: `key`, `displayName`, `capabilities`, `modelSchemes`, `configSchema` |
-| `GET` | `/model-deployments` | member | List deployments |
-| `POST` | `/model-deployments` | admin | Create a deployment (desired state); reconcile does the rest |
-| `GET` | `/model-deployments/:id` | member | Desired vs actual, state, cost |
-| `POST` | `/model-deployments/:id/scale` | admin | `{ replicas }`; 0 scales to zero |
-| `POST` | `/model-deployments/:id/teardown` | admin | Tear the endpoint down |
-| `DELETE` | `/model-deployments/:id` | admin | Same as teardown |
-
-`GET /model-adapters` carries `modelSchemes` per adapter: every reference it accepts, artifact and provider reference alike, as literal prefixes (`hf://`, `s3://`, `bedrock://`, ...). A form filters both ways with it: the providers that can run the model you have, or the sources the provider you picked will take.
-
-Deploy straight from a Hugging Face repository, no version registered:
-
-```bash
-curl -X POST https://api.almyty.com/model-deployments \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "hf://Qwen/Qwen3-0.6B@main",
-    "providerType": "huggingface-endpoints",
-    "desired": { "replicas": 1, "region": "eu-west-1", "privacyTier": "private_cloud" },
-    "providerConfig": { "token": "hf_...", "namespace": "acme", "region": "eu-west-1", "instanceType": "nvidia-a10g" },
-    "budgetId": "5d3f..."
-  }'
-```
-
-Or a model that already exists on a platform:
+Registering an `s3://` version reads and validates `almyty-manifest.json` at the URI and fills base, size, digest and quantizations from it; an unreadable manifest is an error. For every other scheme the manifest is optional, and `base` is required when it is absent. The layout under the prefix is the manifest plus plain safetensors (`model.safetensors`, or sharded `model-00001-of-0000N.safetensors`) and the tokenizer files it references:
 
 ```json
-{ "model": "fireworks://accounts/acme/models/qwen3-tuned", "providerType": "fireworks" }
+{
+  "schemaVersion": 1,
+  "base": "qwen3-14b",
+  "tokenizer": "s3://acme-models/qwen3-14b-support@e3b0c442/tokenizer",
+  "chatTemplate": "chatml",
+  "license": "Apache-2.0",
+  "created": "2026-09-08T09:00:00Z",
+  "files": [{ "path": "model.safetensors", "sizeBytes": 29000000000, "sha256": "..." }],
+  "quantizations": ["bf16", "awq-int4"],
+  "lineage": { "parentVersionId": "..." }
+}
 ```
 
-Or, for lineage tracked through a registered version, `modelVersionId` instead of `model`:
+Required: `schemaVersion` (1), `base`, `tokenizer`, `license`, `created` and at least one entry in `files` with relative paths. The manifest's canonical SHA-256 is recorded as `manifestSha`; the sum of `files[].sizeBytes` becomes `sizeBytes`.
 
-```json
-{ "modelVersionId": "a91c...", "providerType": "huggingface-endpoints" }
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `model` | string | One of | The model to run: an artifact (`hf://org/repo@sha`, `s3://bucket/prefix@etag`, `gs://bucket/prefix@generation`, `file:///path@sha`) or a provider reference (`bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`) |
-| `modelVersionId` | uuid | One of | A registered version instead of `model`, for lineage |
-| `base` | string | No | Architecture family, when the adapter checks it and the reference itself doesn't carry one |
-| `providerType` | string | Yes | Adapter key from `GET /model-adapters` |
-| `desired` | object | No | `hardware`, `replicas`, `minScale`, `maxScale`, `quantization`, `region`, `privacyTier` |
-| `providerConfig` | object | No | Validated against the adapter's `configSchema`; `x-secret` fields encrypted |
-| `credentialId` | uuid | No | A stored credential whose fields the adapter reads |
-| `budgetId` | uuid | No | Spend budget; reaching it scales to zero |
-| `modelId` | uuid | No | A card that already exists for this model; filled with the endpoint once ready |
-
-Exactly one of `model` or `modelVersionId` is required; naming neither is `MODEL_REQUIRED`. A `model` or version whose scheme the adapter can't read is refused with `ADAPTER_UNSUPPORTED_SOURCE` and an `accepts` array of the schemes it does take.
-
-A deployment in a response carries `state` (`pending`, `deploying`, `ready`, `degraded`, `scaling`, `tearing_down`, `torn_down`, `orphaned`, `failed`), `modelRef` or `modelVersionId`, `desired`, `actual` (`state`, `url`, `replicas`, `hardware`, `region`, `message`, `spentCents`, `ratePerHourCents`), `externalRef`, `lastReconcileAt`, `lastError`, `budgetId`, and `providerConfig` with every secret shown as `********`.
-
-Adapter errors carry `ADAPTER_UNKNOWN`, `ADAPTER_UNSUPPORTED_SOURCE` (the model's scheme is not one this adapter reads), `ADAPTER_UNSUPPORTED_OPERATION` (the adapter cannot do this at all, for example deploy through `custom-endpoint`), `ADAPTER_UNSUPPORTED_ARCHITECTURE`, `ADAPTER_AUTH`, `ADAPTER_ERROR`.
-
-Every adapter is fixture-only: none has been run against a real provider account. See [Deployments](/models/deployments#adapters-are-data) for what each one actually accepts.
+Errors: `REGISTRY_NOT_CONNECTED` (no bucket connection for the organization, on an `s3://` URI), `VERSION_IN_USE` on delete while a model that is not shut down references the version.
 
 ## Audit actions
 
-`model_registered`, `model_validated`, `model_price_updated`, `model_routed`, `model_route_escalated`, deployment transitions, `model_deployment_budget_stop`, `model_deployment_orphan_teardown`.
+`model_registered`, `model_validated`, `model_price_updated`, `model_routed`, `model_route_escalated`, state transitions of models on your clouds, `model_deployment_budget_stop`, `model_deployment_orphan_teardown`.

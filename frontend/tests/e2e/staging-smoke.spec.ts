@@ -77,7 +77,8 @@ test.describe('Top-level nav renders without error', () => {
     { label: 'Gateways', path: '/gateways' },
     { label: 'Agents', path: '/agents' },
     { label: 'Credentials', path: '/credentials' },
-    { label: 'Models', path: '/llm-providers' },
+    { label: 'Models', path: '/models' },
+    { label: 'Inference providers', path: '/llm-providers' },
     { label: 'Memory', path: '/memories' },
     { label: 'Analytics', path: '/analytics' },
     { label: 'Settings', path: '/settings' },
@@ -171,7 +172,6 @@ test.describe('Create dialogs open from deep-link', () => {
   const deepLinks = [
     { label: 'Create Gateway', path: '/gateways?new=1', heading: /create gateway|new gateway/i },
     { label: 'Add Credential', path: '/credentials?new=1', heading: /add credential|new credential|create credential/i },
-    { label: 'Add LLM Provider', path: '/llm-providers?new=1', heading: /add provider|new provider|create provider|add llm/i },
   ]
 
   for (const link of deepLinks) {
@@ -184,6 +184,24 @@ test.describe('Create dialogs open from deep-link', () => {
       // is the universal close for Radix Dialog).
       await page.keyboard.press('Escape')
       await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5_000 })
+    })
+  }
+})
+
+test.describe('Create pages open from deep-link', () => {
+  // Adding a model and adding an inference provider are pages, not
+  // dialogs: `?new=1` forwards to them.
+  const deepLinks = [
+    { label: 'Add inference provider', path: '/llm-providers?new=1', lands: /\/llm-providers\/new$/, heading: 'Add inference provider' },
+    { label: 'Add model', path: '/models?new=1', lands: /\/models\/new$/, heading: 'Add model' },
+  ]
+
+  for (const link of deepLinks) {
+    test(link.label, async () => {
+      await page.goto(link.path)
+      await expect(page).toHaveURL(link.lands)
+      await expect(page.getByRole('heading', { name: link.heading, level: 1 })).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByRole('dialog')).toHaveCount(0)
     })
   }
 })

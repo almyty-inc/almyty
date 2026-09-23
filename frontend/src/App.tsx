@@ -42,8 +42,13 @@ const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ def
 const ToolNewPage = lazy(() => import('@/pages/tool-new').then(m => ({ default: m.ToolNewPage })))
 const ToolPublishPage = lazy(() => import('@/pages/tool-publish').then(m => ({ default: m.ToolPublishPage })))
 const McpServerNewPage = lazy(() => import('@/pages/mcp-server-new').then(m => ({ default: m.McpServerNewPage })))
+const LlmProvidersPage = lazy(() => import('@/pages/llm-providers').then(m => ({ default: m.LlmProvidersPage })))
 const LlmProviderDetailPage = lazy(() => import('@/pages/llm-provider-detail').then(m => ({ default: m.LlmProviderDetailPage })))
 const ModelsPage = lazy(() => import('@/pages/models').then(m => ({ default: m.ModelsPage })))
+const ModelNewPage = lazy(() => import('@/pages/model-new').then(m => ({ default: m.ModelNewPage })))
+const ModelDetailPage = lazy(() => import('@/pages/model-detail').then(m => ({ default: m.ModelDetailPage })))
+const HostedModelPage = lazy(() => import('@/pages/hosted-model').then(m => ({ default: m.HostedModelPage })))
+const LlmProviderNewPage = lazy(() => import('@/pages/llm-provider-new').then(m => ({ default: m.LlmProviderNewPage })))
 const AnalyticsPage = lazy(() => import('@/pages/analytics').then(m => ({ default: m.AnalyticsPage })))
 const CredentialsPage = lazy(() => import('@/pages/credentials').then(m => ({ default: m.CredentialsPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
@@ -80,16 +85,6 @@ function DashboardLayoutOutlet() {
       <Outlet />
     </DashboardLayout>
   )
-}
-
-// The providers list moved under Models as a tab. Old links (command
-// palette history, onboarding cards, bookmarks) still land there, with the
-// query string intact so `?new=1` keeps opening the add-provider dialog.
-function LlmProvidersRedirect() {
-  const location = useLocation()
-  const params = new URLSearchParams(location.search)
-  params.set('tab', 'providers')
-  return <Navigate to={`/models?${params.toString()}`} replace />
 }
 
 // The OAuth callback for the Connections layer lands the browser on
@@ -166,7 +161,11 @@ function App() {
           <Route path="/workspaces/:id" element={<WorkspaceDetailPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/models" element={<ModelsPage />} />
-          <Route path="/llm-providers" element={<LlmProvidersRedirect />} />
+          <Route path="/models/new" element={<ModelNewPage />} />
+          <Route path="/models/hosting/:deploymentId" element={<HostedModelPage />} />
+          <Route path="/models/:id" element={<ModelDetailPage />} />
+          <Route path="/llm-providers" element={<LlmProvidersPage />} />
+          <Route path="/llm-providers/new" element={<LlmProviderNewPage />} />
           <Route path="/llm-providers/:id" element={<LlmProviderDetailPage />} />
           <Route path="/analytics/*" element={<AnalyticsPage />} />
           <Route path="/memories" element={<MemoriesPage />} />

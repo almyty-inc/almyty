@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 
 import { render } from '../../../test/setup'
-import { CatalogTab } from '../catalog-tab'
+import { ModelsCatalog } from '../models-catalog'
 import { RoutingPolicyField } from '../routing-policy-editor'
 import { modelsApi } from '../../../lib/models-api'
 import { llmProvidersApi } from '../../../lib/api'
@@ -24,7 +24,6 @@ vi.mock('../../../lib/models-api', async () => {
       list: vi.fn(),
       get: vi.fn(),
       register: vi.fn(),
-      registerEndpoint: vi.fn(),
       sync: vi.fn(),
       update: vi.fn(),
       remove: vi.fn(),
@@ -37,7 +36,18 @@ vi.mock('../../../lib/api', () => ({
   llmProvidersApi: { getAll: vi.fn(), getModels: vi.fn() },
   toolsApi: { getAll: vi.fn().mockResolvedValue([]) },
   agentsApi: { getAll: vi.fn().mockResolvedValue([]) },
+  budgetsApi: { list: vi.fn().mockResolvedValue([]) },
 }))
+
+vi.mock('../../../lib/deployments-api', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/deployments-api')>('../../../lib/deployments-api')
+  return {
+    ...actual,
+    modelAdaptersApi: { list: vi.fn().mockResolvedValue([]) },
+    modelDeploymentsApi: { list: vi.fn().mockResolvedValue([]) },
+    modelVersionsApi: { list: vi.fn().mockResolvedValue([]) },
+  }
+})
 
 vi.mock('../../../store/app', () => ({
   useNotifications: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
@@ -109,7 +119,7 @@ describe('validating a card reaches every consumer of "usable"', () => {
     const user = userEvent.setup()
     render(
       <>
-        <CatalogTab />
+        <ModelsCatalog onAddModel={() => undefined} />
         <RoutingPolicyField value={{ objective: 'cheapest' }} onChange={() => {}} />
       </>,
       { queryClient },
@@ -148,7 +158,7 @@ describe('validating a card reaches every consumer of "usable"', () => {
     queryClient.setQueryData(['models', 'names'], [card()])
 
     const user = userEvent.setup()
-    render(<CatalogTab />, { queryClient })
+    render(<ModelsCatalog onAddModel={() => undefined} />, { queryClient })
 
     expect(await screen.findByText('Sonnet')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Actions for Sonnet' }))

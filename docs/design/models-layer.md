@@ -73,7 +73,7 @@ Core (Apache): entities, adapter interface, both adapters, reconcile, router tie
 Each gate is proved by specs that run in CI in fixture mode; the live halves (a real account per adapter) are run by hand with `CONFORMANCE_LIVE=<adapter>` and the evidence goes in the PR.
 
 1. Hand-registered custom OpenAI-compatible endpoint; router selects it under a privacy/cost policy; run audit shows model + version + rationale.
-   - [x] `POST /models/register-endpoint` creates the provider row + card, validation run flips it selectable: `modules/model-catalog/__tests__/model-catalog.service.spec.ts`
+   - [x] A `custom` LLM provider (`POST /llm-providers`) plus `POST /models` against it gives the card, and a validation run flips it selectable: `modules/model-catalog/__tests__/model-catalog.service.spec.ts`
    - [x] Selection under privacy ceiling, region, capability and budget headroom, with a rationale per candidate: `modules/model-catalog/routing/__tests__/model-router.spec.ts`
    - [x] Plan resolution to a callable provider (stored row or transient endpoint provider) and the `model_routed` audit row with model, version, rationale, attempt: `modules/model-catalog/routing/__tests__/model-router.service.spec.ts`
    - [x] The routed walk in the chat runner: attribution on the answer, advance on provider faults, stop on request faults: `modules/llm-providers/__tests__/routed-call.spec.ts`

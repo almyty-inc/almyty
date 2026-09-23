@@ -77,12 +77,13 @@ export class EndpointProviderHelper {
   /**
    * The same gate LlmProvidersService applies on create and update.
    *
-   * This helper writes `llm_providers.configuration.apiUrl` too, via
-   * POST /models/register-endpoint, and it did so without the check — so
-   * the documented single gate for user-supplied LLM URLs had a second
-   * door. The chat path re-gates at request time in safe-request.ts, but
-   * provider-usage does not: it fetched the URL and put 300 bytes of the
-   * response body into the sync error.
+   * This helper writes `llm_providers.configuration.apiUrl` too, when the
+   * reconcile loop turns a deployment's endpoint into a provider row, and
+   * an earlier version did so without the check — so the documented single
+   * gate for user-supplied LLM URLs had a second door. The chat path
+   * re-gates at request time in safe-request.ts, but provider-usage does
+   * not: it fetched the URL and put 300 bytes of the response body into
+   * the sync error.
    */
   private async assertEgressAllowed(apiUrl: string, organizationId: string): Promise<string | undefined> {
     if (!apiUrl) return undefined;
