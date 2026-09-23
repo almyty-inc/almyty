@@ -378,15 +378,15 @@ function CollaborationConfig({ agentId, collaboration, onChange, availableAgents
             <li key={i} className="rounded-md border p-3 space-y-3" data-testid={`participant-${i}`}>
               <div className="flex items-center gap-2">
                 {p.kind === 'agent' ? <Bot className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden /> : <Cpu className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />}
-                <span className="text-sm font-medium flex-1 min-w-0 truncate">
+                <span className="text-sm font-medium flex-1 shrink-0 whitespace-nowrap">
                   {ordered ? `${i + 1}. ` : ''}{p.kind === 'agent' ? 'Agent' : 'Model'}
                 </span>
                 <Input
                   aria-label={`Participant ${i + 1} role`}
-                  placeholder="Role, e.g. critic"
+                  placeholder="Role"
                   value={p.role || ''}
                   onChange={(e) => patch(i, { ...p, role: e.target.value || undefined })}
-                  className="w-32 sm:w-40 h-7 text-xs"
+                  className="w-24 min-w-0 sm:w-40 h-7 text-xs"
                 />
                 {ordered && (
                   <>

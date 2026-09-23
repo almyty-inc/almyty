@@ -220,7 +220,10 @@ export function ModelPicker({
 
   const providerField = (
     <div className="space-y-1.5 min-w-0">
-      <Label htmlFor={providerFieldId} className={text}>{providerLabel}</Label>
+      {/* Same row height as the Model label, which carries a toggle. */}
+      <div className="flex h-5 items-center">
+        <Label htmlFor={providerFieldId} className={text}>{providerLabel}</Label>
+      </div>
       {providersQuery.isLoading ? (
         <div className={cn('flex h-9 items-center gap-2 text-muted-foreground', hint)} data-testid={`${idPrefix}-providers-loading`}>
           <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> Loading providers
@@ -324,7 +327,7 @@ export function ModelPicker({
 
   const modelField = (
     <div className="space-y-1.5 min-w-0">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex h-5 items-center justify-between gap-2">
         <Label htmlFor={modelFieldId} className={text}>{modelLabel}</Label>
         {canToggleManual && (
           <button
