@@ -79,17 +79,32 @@ export class UnifiedEndpointController {
     const rawKey = apiKeyHeader || (authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '') || queryKey;
 
     if (!rawKey) {
-      // No auth — try to return a default agent card (first active agent gateway)
-      // This satisfies A2A spec requirement for public agent card access
-      const defaultGw = await this.gatewayRepository.findOne({
-        where: {
-          status: GatewayStatus.ACTIVE,
-          type: In([GatewayType.A2A, GatewayType.ACP, GatewayType.OPENAI_CHAT]),
-          agentId: Not(IsNull()),
-        },
-        relations: { authConfigs: true },
-        order: { createdAt: 'ASC' },
-      });
+      // No credential. The A2A spec wants a public agent card, but on a
+      // multi-tenant host there is no such thing as "the" agent — and
+      // this used to answer with `findOne(... order: createdAt ASC)`
+      // with NO organization predicate, i.e. the oldest active agent
+      // gateway on the whole platform. Any anonymous caller got that
+      // tenant's organization name, agent name, description and skill
+      // list, from a route that exists on every deployment.
+      //
+      // The per-gateway card is the one that is actually well defined
+      // and it is already public at
+      // /:orgSlug/:resourceSlug/.well-known/agent-card.json (the
+      // `isDiscovery` branch in UnifiedGatewayDelegation). A
+      // single-tenant operator who wants a root card names the gateway
+      // explicitly; everyone else gets a 404 rather than a stranger's.
+      const defaultGatewayId = this.configService.get<string>('PUBLIC_AGENT_CARD_GATEWAY_ID');
+      const defaultGw = defaultGatewayId
+        ? await this.gatewayRepository.findOne({
+            where: {
+              id: defaultGatewayId,
+              status: GatewayStatus.ACTIVE,
+              type: In([GatewayType.A2A, GatewayType.ACP, GatewayType.OPENAI_CHAT]),
+              agentId: Not(IsNull()),
+            },
+            relations: { authConfigs: true },
+          })
+        : null;
       if (defaultGw) {
         const agent = await this.agentRepository.findOne({ where: { id: defaultGw.agentId } });
         const org = await this.organizationRepository.findOne({ where: { id: defaultGw.organizationId } });

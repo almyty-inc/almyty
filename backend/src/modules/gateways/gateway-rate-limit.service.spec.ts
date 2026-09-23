@@ -1,4 +1,4 @@
-import { GatewayRateLimitService, burstPerMinute } from './gateway-rate-limit.service';
+import { GatewayRateLimitService, burstPerMinute, DEFAULT_PUBLIC_PER_IP_PER_HOUR } from './gateway-rate-limit.service';
 
 describe('GatewayRateLimitService', () => {
   // The counter is one atomic INCR+EXPIRE script, so the seam under
@@ -98,9 +98,59 @@ describe('GatewayRateLimitService', () => {
   describe('checkVisitor (per visitor / per address)', () => {
     const gw = (rateLimitConfig: any) => ({ id: 'gw-1', rateLimitConfig }) as any;
 
-    it('does nothing when the surface has no per-visitor limits', async () => {
-      await expect(service.checkVisitor(gw({ enabled: false }), { endUserId: 'eu-1', clientHash: 'h' })).resolves.toEqual({ limited: false });
+    it('does nothing when there is neither a visitor nor an address to key on', async () => {
+      await expect(
+        service.checkVisitor(gw({ enabled: false }), { endUserId: null, clientHash: null }),
+      ).resolves.toEqual({ limited: false });
       expect(redis.eval).not.toHaveBeenCalled();
+    });
+
+    it('does not count a visitor scope the surface never configured', async () => {
+      // The per-visitor ceiling stays opt-in: its id comes from a
+      // session the caller can discard or a field they invent, so it
+      // narrows an honest browser and nothing rests on it.
+      redis.eval.mockResolvedValue(1);
+      await service.checkVisitor(gw({ enabled: false }), { endUserId: 'eu-1', clientHash: null });
+      expect(redis.eval).not.toHaveBeenCalled();
+    });
+
+    // ── The floor ────────────────────────────────────────────────────
+    //
+    // `rateLimitConfig` is a nullable column with no default, so a
+    // chat_widget or hosted_chat gateway created without touching the
+    // rate-limit form used to produce NO scopes here and return
+    // `{limited: false}` — an anonymous, unmetered way to spend the
+    // tenant's model budget. An address we can key on now always gets a
+    // ceiling.
+
+    it('applies the built-in per-address ceiling when the tenant configured none', async () => {
+      redis.eval.mockResolvedValue(1);
+      await service.checkVisitor(gw(null), { endUserId: null, clientHash: 'h' });
+
+      const keys = redis.eval.mock.calls.map((c) => c[2] as string);
+      expect(keys.some((k) => k.startsWith('gw_rate:gw-1:ip:h:hour:'))).toBe(true);
+      expect(keys.some((k) => k.startsWith('gw_rate:gw-1:ip:h:minute:'))).toBe(true);
+    });
+
+    it('actually refuses once the built-in ceiling is passed', async () => {
+      redis.eval.mockResolvedValue(DEFAULT_PUBLIC_PER_IP_PER_HOUR + 1);
+      const out = await service.checkVisitor(gw(undefined), { endUserId: null, clientHash: 'h' });
+
+      expect(out.limited).toBe(true);
+      expect(out.bucket).toMatchObject({ scope: 'ip', limit: DEFAULT_PUBLIC_PER_IP_PER_HOUR });
+    });
+
+    it('lets a configured per-address limit win over the floor, in both directions', async () => {
+      // Lower than the floor.
+      redis.eval.mockResolvedValue(11);
+      const tight = await service.checkVisitor(gw({ perIpPerHour: 10 }), { clientHash: 'h' });
+      expect(tight.limited).toBe(true);
+      expect(tight.bucket).toMatchObject({ scope: 'ip', limit: 10 });
+
+      // Higher than the floor: a count the floor would have refused passes.
+      redis.eval.mockResolvedValue(DEFAULT_PUBLIC_PER_IP_PER_HOUR + 1);
+      const loose = await service.checkVisitor(gw({ perIpPerHour: 100000 }), { clientHash: 'h' });
+      expect(loose.limited).toBe(false);
     });
 
     it('keys the counters on the visitor, not the surface', async () => {

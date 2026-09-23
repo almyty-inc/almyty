@@ -128,7 +128,7 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
       event: { type: 'message', text: 'hi', user: 'U1', channel: 'C1', ts: '1.2' },
     };
     const raw = JSON.stringify(body);
-    const ts = '1720000000';
+    const ts = String(Math.floor(Date.now() / 1000)); // inside Slack's replay window
     const req = makeReq({
       body,
       rawBody: raw,
@@ -156,7 +156,7 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
     // so verification only passes if the raw body is used.
     const raw = '{ "type": "event_callback",  "event": { "text": "spaced", "user": "U1" } }';
     const body = JSON.parse(raw);
-    const ts = '1720000001';
+    const ts = String(Math.floor(Date.now() / 1000)); // inside Slack's replay window
     const req = makeReq({
       body,
       rawBody: raw,
@@ -173,7 +173,7 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
   it('rejects an invalid signature with 401 and never reaches the pipeline', async () => {
     const body = { type: 'event_callback', event: { text: 'forged' } };
     const raw = JSON.stringify(body);
-    const ts = '1720000002';
+    const ts = String(Math.floor(Date.now() / 1000)); // inside Slack's replay window
     const req = makeReq({
       body,
       rawBody: raw,
@@ -202,7 +202,7 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
   it('answers the slack url_verification handshake synchronously', async () => {
     const body = { type: 'url_verification', challenge: 'challenge-token-42' };
     const raw = JSON.stringify(body);
-    const ts = '1720000003';
+    const ts = String(Math.floor(Date.now() / 1000)); // inside Slack's replay window
     const req = makeReq({
       body,
       rawBody: raw,

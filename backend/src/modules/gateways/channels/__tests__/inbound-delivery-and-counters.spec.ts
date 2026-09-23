@@ -69,7 +69,7 @@ describe('inbound channel pipeline under concurrency', () => {
   });
 
   const signedHeaders = (payload: unknown): Record<string, string> => {
-    const timestamp = '1700000000';
+    const timestamp = String(Math.floor(Date.now() / 1000)); // inside Slack's replay window
     const basestring = `v0:${timestamp}:${JSON.stringify(payload)}`;
     return {
       'x-slack-request-timestamp': timestamp,
