@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check, ChevronRight, Globe, Bot, Server } from 'lucide-react'
+import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check, ChevronRight, Globe, Bot, Server, Store } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,10 +23,18 @@ import { formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
 import type { GatewayToolAssociation } from '@/types'
+import { isPublishable } from '@/components/tools/publish-tool-form'
 
 export function ToolDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  // The tab is in the URL, so "Test tool" on the tools list can link
+  // straight to the test form (`?tab=test`).
+  const [searchParams, setSearchParams] = useSearchParams()
+  const TABS = ['details', 'test', 'exports', 'gateways', 'stats']
+  const activeTab = TABS.includes(searchParams.get('tab') ?? '') ? searchParams.get('tab')! : 'details'
+  const setActiveTab = (tab: string) =>
+    setSearchParams(tab === 'details' ? {} : { tab }, { replace: true })
   const notifications = useNotifications()
   const queryClient = useQueryClient()
   const { currentOrganization } = useOrganizationStore()
@@ -170,7 +178,7 @@ export function ToolDetailPage() {
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center space-x-4">
           <Button variant="outline" size="sm" onClick={() => navigate('/tools')}>
             <ArrowLeft className="h-4 w-4" />
@@ -192,6 +200,14 @@ export function ToolDetailPage() {
               nothing calls it -- and a button that 404s is a worse answer
               than no button. Removed rather than left promising something
               the product cannot do. */}
+          {isPublishable(tool) && (
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/tools/${tool.id}/publish`}>
+                <Store className="mr-2 h-4 w-4" />
+                Publish to hub
+              </Link>
+            </Button>
+          )}
           <Badge variant={tool.status === 'active' ? 'success' : 'secondary'}>
             {tool.status === 'active' ? 'Active' : tool.status}
           </Badge>
@@ -209,7 +225,7 @@ export function ToolDetailPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="details" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="test">Test tool</TabsTrigger>

@@ -140,15 +140,28 @@ test.describe('A11y landmarks', () => {
   })
 })
 
+test.describe('?new=1 deep links reach the create page', () => {
+  // A converted area's `?new=1` redirects to its create page
+  // (useNewParamRedirect).
+  const redirects = [
+    { label: 'Connect API', path: '/apis?new=1', to: /\/apis\/new$/, heading: /connect api/i },
+    { label: 'Create tool', path: '/tools?new=1', to: /\/tools\/new$/, heading: /create tool/i },
+  ]
+  for (const link of redirects) {
+    test(link.label, async () => {
+      await page.goto(link.path)
+      await expect(page).toHaveURL(link.to, { timeout: 15_000 })
+      await expect(page.getByRole('heading', { name: link.heading })).toBeVisible({ timeout: 10_000 })
+    })
+  }
+})
+
 test.describe('Create dialogs open from deep-link', () => {
-  // Every list page supports `?new=1` as a deep-link to open its
-  // Create dialog. These tests verify that landing on each list
-  // page with that param actually renders a dialog with the expected
-  // heading — catches silent regressions in the `useCreateDeepLink`
-  // hook wiring on any page.
+  // Every list page that still has a create dialog supports `?new=1`
+  // as a deep-link to open it. These tests verify that landing on each
+  // list page with that param actually renders a dialog -- catches
+  // silent regressions in the `useCreateDeepLink` hook wiring.
   const deepLinks = [
-    { label: 'Create API', path: '/apis?new=1', heading: /create .*api|add .*api|new api|import api/i },
-    { label: 'Create Tool', path: '/tools?new=1', heading: /create tool|new tool/i },
     { label: 'Create Gateway', path: '/gateways?new=1', heading: /create gateway|new gateway/i },
     { label: 'Add Credential', path: '/credentials?new=1', heading: /add credential|new credential|create credential/i },
   ]

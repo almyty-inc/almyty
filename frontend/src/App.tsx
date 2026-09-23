@@ -34,8 +34,14 @@ const GatewaysPage = lazy(() => import('@/pages/gateways').then(m => ({ default:
 const GatewayDetailPage = lazy(() => import('@/pages/gateway-detail').then(m => ({ default: m.GatewayDetailPage })))
 const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisPage })))
 const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ default: m.ApiDetailPage })))
+const ApiNewPage = lazy(() => import('@/pages/api-new').then(m => ({ default: m.ApiNewPage })))
+const ApiEditPage = lazy(() => import('@/pages/api-edit').then(m => ({ default: m.ApiEditPage })))
+const ApiImportPage = lazy(() => import('@/pages/api-import').then(m => ({ default: m.ApiImportPage })))
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
 const ToolDetailPage = lazy(() => import('@/pages/tool-detail').then(m => ({ default: m.ToolDetailPage })))
+const ToolNewPage = lazy(() => import('@/pages/tool-new').then(m => ({ default: m.ToolNewPage })))
+const ToolPublishPage = lazy(() => import('@/pages/tool-publish').then(m => ({ default: m.ToolPublishPage })))
+const McpServerNewPage = lazy(() => import('@/pages/mcp-server-new').then(m => ({ default: m.McpServerNewPage })))
 const LlmProvidersPage = lazy(() => import('@/pages/llm-providers').then(m => ({ default: m.LlmProvidersPage })))
 const LlmProviderDetailPage = lazy(() => import('@/pages/llm-provider-detail').then(m => ({ default: m.LlmProviderDetailPage })))
 const ModelsPage = lazy(() => import('@/pages/models').then(m => ({ default: m.ModelsPage })))
@@ -133,9 +139,15 @@ function App() {
           <Route path="/gateways" element={<GatewaysPage />} />
           <Route path="/gateways/:id" element={<GatewayDetailPage />} />
           <Route path="/apis" element={<ApisPage />} />
+          <Route path="/apis/new" element={<ApiNewPage />} />
           <Route path="/apis/:id" element={<ApiDetailPage />} />
+          <Route path="/apis/:id/edit" element={<ApiEditPage />} />
+          <Route path="/apis/:id/import" element={<ApiImportPage />} />
           <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/tools/new" element={<ToolNewPage />} />
+          <Route path="/tools/mcp-servers/new" element={<McpServerNewPage />} />
           <Route path="/tools/:id" element={<ToolDetailPage />} />
+          <Route path="/tools/:id/publish" element={<ToolPublishPage />} />
           <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/apps" element={<AppsPage />} />

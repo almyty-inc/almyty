@@ -166,8 +166,14 @@ describe('no dialogs', () => {
  * codebase keeps producing: it compiles, its tests pass, nothing opens it.
  */
 const CONVERTED_DIALOGS: string[] = [
+  'components/SchemaImportDialog.tsx',
+  'components/apis/create-api-dialog.tsx',
   'components/llm-providers/edit-provider-dialog.tsx',
   'components/llm-providers/test-provider-dialog.tsx',
+  'components/tools/add-mcp-server-dialog.tsx',
+  'components/tools/create-tool-dialog.tsx',
+  'components/tools/publish-tool-dialog.tsx',
+  'components/tools/tool-execution-dialog.tsx',
 ]
 
 describe('converted dialogs are deleted', () => {

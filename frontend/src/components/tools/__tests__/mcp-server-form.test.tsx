@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor, fireEvent } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
-import { AddMcpServerDialog } from '../add-mcp-server-dialog'
+import { McpServerForm } from '../mcp-server-form'
 
 vi.mock('../../../lib/api', () => ({
   mcpSourcesApi: {
@@ -19,6 +19,12 @@ vi.mock('../../../lib/connections-api', () => ({
   },
 }))
 
+const navigateMock = vi.fn()
+vi.mock('react-router-dom', async () => ({
+  ...(await vi.importActual<typeof import('react-router-dom')>('react-router-dom')),
+  useNavigate: () => navigateMock,
+}))
+
 const successMock = vi.fn()
 const errorMock = vi.fn()
 vi.mock('../../../store/app', () => ({
@@ -29,22 +35,35 @@ import { mcpSourcesApi } from '../../../lib/api'
 
 const mockedCreate = mcpSourcesApi.create as ReturnType<typeof vi.fn>
 
-describe('AddMcpServerDialog', () => {
+describe('McpServerForm (/tools/mcp-servers/new)', () => {
   beforeEach(() => {
     mockedCreate.mockReset()
     successMock.mockReset()
     errorMock.mockReset()
+    navigateMock.mockReset()
   })
 
-  it('renders name, url, and optional auth token fields', () => {
-    render(<AddMcpServerDialog open onOpenChange={() => {}} organizationId="org-1" />)
+  it('renders name, url, and optional auth token fields as a page', () => {
+    render(<McpServerForm organizationId="org-1" />)
 
-    expect(screen.getByText('Add MCP server')).toBeInTheDocument()
-    expect(screen.getByLabelText(/name/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Add MCP server' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/server url/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/auth token/i)).toBeInTheDocument()
-    // Submit is disabled until name + url are filled.
-    expect(screen.getByRole('button', { name: /add server/i })).toBeDisabled()
+    const token = screen.getByLabelText(/auth token/i)
+    expect(token).toHaveAttribute('type', 'password')
+    expect(token).toHaveAttribute('data-1p-ignore', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('an empty submit marks name and URL and focuses the name', async () => {
+    render(<McpServerForm organizationId="org-1" />)
+    fireEvent.click(screen.getByRole('button', { name: /add server/i }))
+
+    const name = screen.getByLabelText(/^name/i)
+    await waitFor(() => expect(name).toHaveAttribute('aria-invalid', 'true'))
+    expect(screen.getByLabelText(/server url/i)).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(document.activeElement).toBe(name))
+    expect(mockedCreate).not.toHaveBeenCalled()
   })
 
   it('creates the source and reports discovered tool count', async () => {
@@ -53,11 +72,10 @@ describe('AddMcpServerDialog', () => {
       sync: { added: 3, updated: 0, removed: 0, total: 3 },
       syncError: null,
     })
-    const onOpenChange = vi.fn()
 
-    render(<AddMcpServerDialog open onOpenChange={onOpenChange} organizationId="org-1" />)
+    render(<McpServerForm organizationId="org-1" />)
 
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'weather' } })
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
     fireEvent.change(screen.getByLabelText(/server url/i), {
       target: { value: 'https://mcp.example.com/mcp' },
     })
@@ -74,7 +92,8 @@ describe('AddMcpServerDialog', () => {
     await waitFor(() => {
       expect(successMock).toHaveBeenCalledWith('MCP server added', expect.stringContaining('3 tools'))
     })
-    expect(onOpenChange).toHaveBeenCalledWith(false)
+    // Back to the tools list, where the discovered tools appear.
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/tools', undefined))
   })
 
   it('omits bearerToken from the payload when left empty', async () => {
@@ -84,9 +103,9 @@ describe('AddMcpServerDialog', () => {
       syncError: null,
     })
 
-    render(<AddMcpServerDialog open onOpenChange={() => {}} organizationId="org-1" />)
+    render(<McpServerForm organizationId="org-1" />)
 
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'weather' } })
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
     fireEvent.change(screen.getByLabelText(/server url/i), {
       target: { value: 'https://mcp.example.com/mcp' },
     })
@@ -107,9 +126,9 @@ describe('AddMcpServerDialog', () => {
       syncError: 'MCP server returned HTTP 401 for initialize',
     })
 
-    render(<AddMcpServerDialog open onOpenChange={() => {}} organizationId="org-1" />)
+    render(<McpServerForm organizationId="org-1" />)
 
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'weather' } })
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
     fireEvent.change(screen.getByLabelText(/server url/i), {
       target: { value: 'https://mcp.example.com/mcp' },
     })
@@ -128,9 +147,9 @@ describe('AddMcpServerDialog', () => {
       response: { data: { message: 'MCP server URL rejected: Blocked private/reserved IP' } },
     })
 
-    render(<AddMcpServerDialog open onOpenChange={() => {}} organizationId="org-1" />)
+    render(<McpServerForm organizationId="org-1" />)
 
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'internal' } })
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'internal' } })
     fireEvent.change(screen.getByLabelText(/server url/i), {
       target: { value: 'http://10.0.0.5/mcp' },
     })
@@ -143,14 +162,14 @@ describe('AddMcpServerDialog', () => {
 
   it('lists existing MCP connections and sends credentialId instead of a token when one is picked', async () => {
     mockedCreate.mockResolvedValue({ source: { id: 'src-1' }, sync: { total: 1 }, syncError: null })
-    render(<AddMcpServerDialog open onOpenChange={() => {}} organizationId="org-1" />)
+    render(<McpServerForm organizationId="org-1" />)
 
     const select = (await screen.findByLabelText(/use an existing connection/i)) as HTMLSelectElement
     await waitFor(() => expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'conn-mcp-1']))
     // Inference connections are not offered for an MCP server.
     expect(screen.queryByRole('option', { name: /OpenAI/ })).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'weather' } })
+    fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
     fireEvent.change(screen.getByLabelText(/server url/i), { target: { value: 'https://mcp.example.com/mcp' } })
     fireEvent.change(screen.getByLabelText(/auth token/i), { target: { value: 'typed-token' } })
     fireEvent.change(select, { target: { value: 'conn-mcp-1' } })

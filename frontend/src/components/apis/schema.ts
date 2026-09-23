@@ -1,7 +1,7 @@
 /**
  * apis/schema — zod schemas + form types for the Connect/Edit API flow.
  *
- * Used by `components/apis/create-api-dialog.tsx`. Kept in its own file so
+ * Used by `components/apis/api-form.tsx`. Kept in its own file so
  * the long comment about the three-generic `useForm<Input, any, Output>`
  * pattern lives next to the types it explains.
  */
@@ -42,16 +42,6 @@ export const createApiSchema = z.object({
   path: ['baseUrl'],
 })
 
-export const importSchemaSchema = z.object({
-  schemaContent: z.string().optional(),
-  schemaUrl: z.string().url().optional(),
-  description: z.string().optional(),
-  generateTools: z.boolean().optional(),
-}).refine((data) => data.schemaContent || data.schemaUrl, {
-  message: 'Either schema content or URL must be provided',
-  path: ['schemaContent'],
-})
-
 // Two separate types: `Input` is the shape the form BINDS to
 // (with optional defaults still unfilled); `Output` is the shape
 // the submit handler RECEIVES after zod has applied defaults +
@@ -62,4 +52,3 @@ export const importSchemaSchema = z.object({
 // whose submit handler wants `baseUrl: string`.
 export type CreateApiFormInput = z.input<typeof createApiSchema>
 export type CreateApiFormData = z.output<typeof createApiSchema>
-export type ImportSchemaFormData = z.output<typeof importSchemaSchema>

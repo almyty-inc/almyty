@@ -8,7 +8,7 @@ test.describe('APIs - CRUD Operations', () => {
 
   test('should display APIs page', async ({ authenticatedPage: page, assertHelper }) => {
     await assertHelper.assertPageTitle(/APIs/i)
-    await expect(page.getByRole('button', { name: /connect api|add api|create api|new api/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /connect api/i }).first()).toBeVisible()
   })
 
   test('should show empty state for new user', async ({ authenticatedPage: page }) => {
@@ -19,9 +19,10 @@ test.describe('APIs - CRUD Operations', () => {
   test('[CRITICAL BUG TEST] should create OpenAPI successfully', async ({ authenticatedPage: page, assertHelper }) => {
     // This test targets CLAUDE.md issue: "API creation via UI returns 400 error"
 
-    // Open create API dialog
-    await page.getByRole('button', { name: /connect api|add api|create api|new api/i }).click()
-    await assertHelper.assertDialogOpen(/add.*api|create.*api|new.*api/i)
+    // Connect API is a page now
+    await page.getByRole('link', { name: /connect api/i }).first().click()
+    await expect(page).toHaveURL(/\/apis\/new$/)
+    await expect(page.getByRole('heading', { name: /connect api/i })).toBeVisible()
 
     // Fill form with valid data
     await page.getByLabel('API Name').fill('Test OpenAPI')
@@ -40,7 +41,7 @@ test.describe('APIs - CRUD Operations', () => {
     )
 
     // Submit form
-    await page.getByRole('button', { name: /connect api|add api|create api|save/i }).click()
+    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
 
     // Wait for API creation request
     const createResponse = await responsePromise
@@ -54,23 +55,21 @@ test.describe('APIs - CRUD Operations', () => {
       throw new Error(`API creation returned 400: ${JSON.stringify(body)}`)
     }
 
-    // SUCCESS! API creation worked (no 400 error as CLAUDE.md claimed)
-    // Schema import dialog opens automatically after API creation
-    await expect(page.getByRole('dialog', { name: /import.*schema/i })).toBeVisible()
+    // Step 2, the schema import, is the API's own page
+    await expect(page).toHaveURL(/\/apis\/[^/]+\/import\?created=1$/)
+    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
     await assertHelper.assertToastMessage(/created|success/i)
 
-    // Close the schema import dialog to avoid interfering with next tests
-    await page.keyboard.press('Escape')
-    await assertHelper.waitForLoadingComplete()
-
-    // Verify API appears in table
-    await expect(page.getByText('Test OpenAPI')).toBeVisible()
+    // Skip the import; the API page opens
+    await page.getByRole('button', { name: /skip for now/i }).click()
+    await expect(page.getByRole('heading', { name: 'Test OpenAPI' })).toBeVisible()
 
     console.log('✅ API creation successful - CLAUDE.md bug report was incorrect!')
   })
 
   test('should create GraphQL API successfully', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('button', { name: /connect api|add api|create api|new api/i }).click()
+    await page.getByRole('link', { name: /connect api/i }).first().click()
+    await expect(page).toHaveURL(/\/apis\/new$/)
 
     await page.getByLabel('API Name').fill('Test GraphQL')
     await page.getByLabel('Base URL').fill('https://graphql.example.com/graphql')
@@ -83,21 +82,22 @@ test.describe('APIs - CRUD Operations', () => {
     // Set up response listener BEFORE clicking (API is very fast now!)
     const responsePromise = page.waitForResponse(r => r.url().includes('/apis') && r.request().method() === 'POST')
 
-    await page.getByRole('button', { name: /connect api|add api|create api|save/i }).click()
+    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
 
     // Check response status
     const response = await responsePromise
     expect(response.status()).toBe(201)
 
-    // Schema import dialog opens automatically
-    await expect(page.getByRole('dialog', { name: /import.*schema/i })).toBeVisible()
-    await page.keyboard.press('Escape')
+    // Step 2, the schema import, is the API's own page; skip it
+    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
+    await page.getByRole('button', { name: /skip for now/i }).click()
 
-    await expect(page.getByText('Test GraphQL')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Test GraphQL' })).toBeVisible()
   })
 
   test('should create SOAP API successfully', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('button', { name: /connect api|add api|create api|new api/i }).click()
+    await page.getByRole('link', { name: /connect api/i }).first().click()
+    await expect(page).toHaveURL(/\/apis\/new$/)
 
     await page.getByLabel('API Name').fill('Test SOAP')
     await page.getByLabel('Base URL').fill('https://soap.example.com/service')
@@ -110,30 +110,32 @@ test.describe('APIs - CRUD Operations', () => {
     // Set up response listener BEFORE clicking
     const responsePromise = page.waitForResponse(r => r.url().includes('/apis') && r.request().method() === 'POST')
 
-    await page.getByRole('button', { name: /connect api|add api|create api|save/i }).click()
+    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
 
     const response = await responsePromise
     expect(response.status()).toBe(201)
 
-    // Schema import dialog opens automatically
-    await expect(page.getByRole('dialog', { name: /import.*schema/i })).toBeVisible()
-    await page.keyboard.press('Escape')
+    // Step 2, the schema import, is the API's own page; skip it
+    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
+    await page.getByRole('button', { name: /skip for now/i }).click()
 
-    await expect(page.getByText('Test SOAP')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Test SOAP' })).toBeVisible()
   })
 
   test('should validate required fields', async ({ authenticatedPage: page }) => {
-    await page.getByRole('button', { name: /connect api|add api|create api|new api/i }).click()
+    await page.getByRole('link', { name: /connect api/i }).first().click()
+    await expect(page).toHaveURL(/\/apis\/new$/)
 
     // Try to submit without filling fields
-    await page.getByRole('button', { name: /connect api|add api|create api|save/i }).click()
+    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
 
     // Should show validation errors (checking for actual Zod error messages)
     await expect(page.getByText(/at least 2 characters|valid url/i).first()).toBeVisible()
   })
 
   test('should validate base URL format', async ({ authenticatedPage: page }) => {
-    await page.getByRole('button', { name: /connect api|add api|create api|new api/i }).click()
+    await page.getByRole('link', { name: /connect api/i }).first().click()
+    await expect(page).toHaveURL(/\/apis\/new$/)
 
     await page.getByLabel('API Name').fill('Invalid URL Test')
     await page.getByLabel('Base URL').fill('not-a-valid-url')
@@ -143,7 +145,7 @@ test.describe('APIs - CRUD Operations', () => {
     await page.getByRole('combobox').first().click()
     await page.getByRole('option', { name: /openapi/i }).click()
 
-    await page.getByRole('button', { name: /connect api|add api|create api|save/i }).click()
+    await page.getByRole('button', { name: /continue to schema import|connect api/i }).click()
 
     // Should show URL validation error
     await expect(page.getByText(/invalid.*url|valid.*url|url.*format/i)).toBeVisible()
@@ -177,11 +179,8 @@ test.describe('APIs - CRUD Operations', () => {
     await editMenuItem.waitFor({ state: 'visible', timeout: 5000 })
     await editMenuItem.click()
 
-    // Verify we stayed on /apis (didn't navigate away)
-    await expect(page).toHaveURL(/^.*\/apis\/?$/i)
-
-    // Wait for edit dialog to open
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 })
+    // Edit is a page of its own
+    await expect(page).toHaveURL(new RegExp(`/apis/${api.id}/edit$`))
     await expect(page.getByRole('heading', { name: /edit.*api/i })).toBeVisible()
 
     // Update fields
@@ -193,14 +192,14 @@ test.describe('APIs - CRUD Operations', () => {
     // Set up response listener before submitting
     const updatePromise = page.waitForResponse(r => r.url().includes(`/apis/${api.id}`) && (r.request().method() === 'PUT' || r.request().method() === 'PATCH'))
 
-    await page.getByRole('button', { name: /save|update/i }).click()
+    await page.getByRole('button', { name: /save changes/i }).click()
 
-    // Wait for update to complete
+    // Wait for update to complete; the API page opens
     await updatePromise
-    await assertHelper.waitForLoadingComplete()
+    await expect(page).toHaveURL(new RegExp(`/apis/${api.id}$`))
 
     // Should show updated name
-    await expect(page.getByText('Updated Name')).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('heading', { name: 'Updated Name' })).toBeVisible({ timeout: 5000 })
     await expect(page.getByText('Original Name')).not.toBeVisible()
   })
 

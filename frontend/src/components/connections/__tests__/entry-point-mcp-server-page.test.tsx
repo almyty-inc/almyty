@@ -1,13 +1,13 @@
 /**
- * One consumer end to end: the Add MCP Server dialog's "Connect an account"
+ * One consumer end to end: the Add MCP server page's "Connect an account"
  * action opens the connect sheet, and the connection it returns lands in the
- * dialog's own payload as credentialId while the pasted token is dropped.
+ * page's own payload as credentialId while the pasted token is dropped.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
-import { AddMcpServerDialog } from '../../tools/add-mcp-server-dialog'
+import { McpServerForm } from '../../tools/mcp-server-form'
 import { mcpSourcesApi } from '../../../lib/api'
 import { connectionsApi, connectorsApi } from '../../../lib/connections-api'
 import type { Connection, Connector } from '@/types/connections'
@@ -65,7 +65,7 @@ const connected: Connection = {
   updatedAt: new Date().toISOString(),
 }
 
-describe('AddMcpServerDialog connect entry point', () => {
+describe('Add MCP server page connect entry point', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(connectorsApi.list).mockResolvedValue([mcpConnector])
@@ -74,15 +74,14 @@ describe('AddMcpServerDialog connect entry point', () => {
   })
 
   it('keeps the raw token flow and offers the connect action beside it', () => {
-    render(<AddMcpServerDialog open onOpenChange={() => {}} organizationId="org-1" />)
+    render(<McpServerForm organizationId="org-1" />)
     expect(screen.getByLabelText(/auth token/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Connect an account' })).toBeInTheDocument()
     expect(screen.queryByTestId('connected-chip')).not.toBeInTheDocument()
   })
 
-  it('opens the sheet filtered to MCP connectors and selects the returned connection in the dialog', async () => {
-    const onOpenChange = vi.fn()
-    render(<AddMcpServerDialog open onOpenChange={onOpenChange} organizationId="org-1" />)
+  it('opens the sheet filtered to MCP connectors and selects the returned connection on the page', async () => {
+    render(<McpServerForm organizationId="org-1" />)
 
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: 'weather' } })
     fireEvent.change(screen.getByLabelText(/server url/i), { target: { value: 'https://mcp.example.com/mcp' } })
@@ -90,7 +89,6 @@ describe('AddMcpServerDialog connect entry point', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
     expect(await screen.findByText('Connect MCP server')).toBeInTheDocument()
-    expect(onOpenChange).not.toHaveBeenCalled()
     await waitFor(() => expect(connectorsApi.list).toHaveBeenCalled())
 
     const sheet = within(screen.getByRole('dialog', { name: 'Connect MCP server' }))
@@ -99,7 +97,8 @@ describe('AddMcpServerDialog connect entry point', () => {
     fireEvent.click(sheet.getByRole('button', { name: 'Connect' }))
 
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('mcp-custom', { method: 'api_key', owner: 'org', input: { serverUrl: 'https://mcp.example.com/mcp', apiKey: 'tok-secret' } }))
-    await waitFor(() => expect(onOpenChange).not.toHaveBeenCalled())
+    // Connecting inside the sheet does not submit the page's own form.
+    expect(mcpSourcesApi.create).not.toHaveBeenCalled()
     const chip = await screen.findByTestId('connected-chip')
     expect(chip).toHaveTextContent('MCP server')
     // The typed token was replaced by the connection.
@@ -107,11 +106,10 @@ describe('AddMcpServerDialog connect entry point', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /add server/i }))
     await waitFor(() => expect(mcpSourcesApi.create).toHaveBeenCalledWith('org-1', { name: 'weather', url: 'https://mcp.example.com/mcp', credentialId: 'conn-mcp-1' }))
-    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 
   it('lets the user drop the connection and go back to a token', async () => {
-    render(<AddMcpServerDialog open onOpenChange={() => {}} organizationId="org-1" />)
+    render(<McpServerForm organizationId="org-1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Connect an account' }))
     const sheet = within(await screen.findByRole('dialog', { name: 'Connect MCP server' }))
     fireEvent.change(await sheet.findByLabelText('Server URL'), { target: { value: 'https://mcp.example.com/mcp' } })
