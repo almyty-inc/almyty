@@ -1,3 +1,4 @@
+import { IsBoolean, IsOptional } from 'class-validator';
 /**
  * Shape of the onboarding checklist state returned by
  * GET /organizations/:organizationId/onboarding.
@@ -25,25 +26,22 @@ export interface OnboardingSteps {
 
 export interface OnboardingState {
   steps: OnboardingSteps;
-  /** True once the Petstore sample workspace has been seeded. */
-  sampleWorkspace: boolean;
   /** Per-user dismissal of the dashboard card. */
   dismissed: boolean;
-  /** Earliest successful call of any kind (sample or real), ISO string. */
-  activatedSampleAt: string | null;
-  /** Earliest successful call involving a non-sample entity, ISO string. */
+  /** Earliest successful call through a gateway the org set up itself, ISO string. */
   activatedRealAt: string | null;
 }
 
+/**
+ * The global ValidationPipe runs with `forbidNonWhitelisted: true`, and a
+ * property with no class-validator decorator is not whitelisted. Without
+ * these, PATCH .../onboarding answered 400 "property dismissed should not
+ * exist" for the one field it exists to accept, so reopening the getting
+ * started card failed every time.
+ */
 export class PatchOnboardingDto {
+  @IsOptional()
+  @IsBoolean()
   dismissed?: boolean;
 }
 
-export interface SampleWorkspaceResult {
-  apiId: string;
-  toolIds: string[];
-  gatewayId: string;
-  agentId: string | null;
-  /** True when this call actually seeded; false when it was already present. */
-  created: boolean;
-}

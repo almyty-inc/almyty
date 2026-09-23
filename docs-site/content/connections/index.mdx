@@ -1,9 +1,9 @@
 # Connections
 
-Connections is where almyty keeps every key, token and account it uses on your behalf: inference vendors, deployment providers, model registries, clouds, memory backends, MCP servers, tool sources and chat channels. You connect once; agents, [models](/models), [deployments](/models/deployments) and the registry use the connection. The secret itself never leaves the backend.
+Connections is where almyty keeps every key, token and account it uses on your behalf: inference providers, the cloud accounts you run models on, model buckets, other clouds, memory backends, MCP servers, tool sources and chat channels. You connect once; agents, [models](/models) and [models on your cloud account](/models/your-cloud) use the connection. The secret itself never leaves the backend.
 
 ```
-Connector (catalog, data)   ->   Connection (credential + account label + health)   ->   used by agents, models, deployments
+Connector (catalog, data)   ->   Connection (credential + account label + health)   ->   used by agents, models, your cloud accounts
   how to connect                   who owns it: the organization or you                   directly, or through a grant
   how to validate                  valid | failed | expired | revoked | quota | unknown
 ```
@@ -49,7 +49,7 @@ The list and detail views show all of that plus the method and the owner. Values
 
 A connection belongs to the organization or to you.
 
-- **Organization connections** are what agents and deployments use. Making one needs the `connections:manage` permission (admins and owners).
+- **Organization connections** are what agents and models on your cloud accounts use. Making one needs the `connections:manage` permission (admins and owners).
 - **Personal connections** are your own keys. Every member can keep them when the organization allows it: `allowUserScopedConnections` is on by default for free and personal organizations and off for production organizations, and an admin flips it under organization settings.
 
 Everyone with `connections:read` (every role) sees the organization's connections; a personal connection is visible to its owner and to admins. Who may actually *use* a connection in a run, beyond its owner, is decided by [grants](/connections/grants).
@@ -73,7 +73,7 @@ Built-in connectors, by kind:
 | Kind | Connectors |
 |---|---|
 | `inference` | OpenRouter (sign in or key), OpenAI, Anthropic, Google Gemini, Mistral, Groq, Together, xAI, DeepSeek, Cohere, Hugging Face, Ollama, Fireworks, Cerebras, DeepInfra, Perplexity, Z.ai, Nebius Token Factory, any OpenAI-compatible endpoint |
-| `deployment` | Modal, Baseten, RunPod, plus one connector per registered [deployment adapter](/models/deployments#adapters), derived from the adapter's own config schema |
+| `deployment` | Modal, Baseten, RunPod, plus one connector per [cloud you can run a model on](/models/your-cloud#clouds), derived from that cloud's own config schema |
 | `cloud` | Amazon Web Services (cross-account role or key pair), Google Cloud (service account), Microsoft Azure (app registration), DigitalOcean (personal access token) |
 | `registry` | S3-compatible registry (endpoint, region, bucket, prefix, access keys), Hugging Face Hub |
 | `memory`, `mcp`, `tool_source` | Memory backend over HTTP, MCP server, OpenAPI document |
@@ -105,5 +105,5 @@ Secrets are stored in one place, the organization's credential store, encrypted 
 
 - [Grants](/connections/grants): who may use a connection beyond its owner
 - [Credentials](/credentials): the vault the connections live in, and API access keys
-- [Providers](/models/providers): the vendors behind inference connections
+- [Inference providers](/models/providers): the vendors behind inference connections
 - [Connections API](/api-reference/connections-api)

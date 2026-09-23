@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Brain } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Brain } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -34,38 +34,29 @@ import { useOrganizationStore } from '@/store/organization'
 import { llmProvidersApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { TeamFilter, useTeamLookup, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { CreateProviderDialog } from '@/components/llm-providers/create-provider-dialog'
 import { EditProviderDialog } from '@/components/llm-providers/edit-provider-dialog'
 import { TestProviderDialog } from '@/components/llm-providers/test-provider-dialog'
-import {
-  buildProviderCreateBody,
-  buildProviderUpdateBody,
-  createProviderSchema,
-  type CreateProviderFormData,
-  type LlmProvider,
-} from '@/components/llm-providers/schema'
+import { buildProviderUpdateBody, type LlmProvider } from '@/components/llm-providers/schema'
 import { buildProviderColumns } from '@/components/llm-providers/columns'
 import { providerTypeOptions } from '@/components/llm-providers/provider-type-config'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
-interface LlmProvidersPageProps {
-  /** Rendered inside the Models page: no page title, the tab already names it. */
-  embedded?: boolean
-}
-
-export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {}) {
+/**
+ * Inference providers: the APIs models are called through, with their keys.
+ * Its own page, reached from the Models header. The Add model flow opens
+ * the same add dialog, so there is one form for it, not two.
+ */
+export function LlmProvidersPage() {
   useEffect(() => {
-    if (embedded) return
-    // The screen is called Models everywhere else (sidebar, /models);
-    // "AI Models" was a name nothing in the app actually uses.
-    document.title = 'Models | almyty'
+    document.title = 'Inference providers | almyty'
     return () => { document.title = 'almyty' }
-  }, [embedded])
+  }, [])
 
   const navigate = useNavigate()
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  // Honour ?new=1 from the command palette Add Provider action.
-  useCreateDeepLink(setIsCreateDialogOpen)
+  // ?new=1 (command palette, onboarding) opens the add page, which is a
+  // page now rather than a dialog.
+  useCreateDeepLink((open) => { if (open) navigate('/llm-providers/new', { replace: true }) })
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [providerToEdit, setProviderToEdit] = useState<LlmProvider | null>(null)
   const [providerToDelete, setProviderToDelete] = useState<LlmProvider | null>(null)
@@ -89,17 +80,11 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
   const notifications = useNotifications()
 
   const { data: providersRaw, isLoading, isError, error, refetch: refetchProviders } = useQuery({
-    queryKey: ['llm-providers'],
-    // No try/catch: swallowing the rejection and returning [] made
-    // isError permanently false, so a 500 or an expired session rendered
-    // the "No models configured -- connect a provider" empty state over
-    // providers that were still there, with no retry. The QueryError
-    // branch below was unreachable.
-    queryFn: async () => {
-      const d = await llmProvidersApi.getAll()
-      const result = d?.providers || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    }
+    // No try/catch (fetchLlmProviders has none): swallowing the rejection
+    // and returning [] made isError permanently false, so a 500 or an
+    // expired session rendered the "No models configured" empty state over
+    // providers that were still there, with no retry.
+    ...llmProvidersQuery,
   })
   const providers = Array.isArray(providersRaw) ? providersRaw : []
 
@@ -182,18 +167,6 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
     }
   })
 
-  // Form hook for create provider
-  const createForm = useForm<CreateProviderFormData>({
-    resolver: zodResolver(createProviderSchema),
-    defaultValues: {
-      name: '',
-      type: '',
-      apiKey: '',
-      apiUrl: '',
-      organizationId: '',
-    }
-  })
-
   // Form hook for edit provider. credentialId / usageCredentialId stay
   // undefined (keep) unless the dialog's credential slot sets them: a
   // connection id points the provider at it, null clears it.
@@ -208,30 +181,6 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
       apiUrl: '',
       credentialId: undefined,
       usageCredentialId: undefined,
-    }
-  })
-
-  const createProviderMutation = useMutation({
-    mutationFn: async (data: CreateProviderFormData) => {
-      try {
-        return await llmProvidersApi.create(buildProviderCreateBody(data))
-      } catch (error) {
-        console.error('Create provider error:', error)
-        throw error
-      }
-    },
-    onSuccess: (created: any) => {
-      queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
-      if (created?.id) {
-        queryClient.invalidateQueries({ queryKey: ['llm-provider', created.id] })
-      }
-      setIsCreateDialogOpen(false)
-      createForm.reset()
-      notifications.success('Provider added', 'AI model provider connected successfully')
-    },
-    onError: (error: any) => {
-      console.error('Create provider mutation error:', error)
-      notifications.error('Error', getApiErrorMessage(error, 'Failed to add provider'))
     }
   })
 
@@ -284,57 +233,53 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          {embedded ? (
-            <h2 className="text-lg font-semibold">Providers</h2>
-          ) : (
-            <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Models</h1>
-          )}
-          <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) · $${totalCost.toFixed(2)} total cost · ${pluralized(totalRequests, 'request')}`}
-          </p>
-        </div>
-        {/* Only show Add Provider button when not in empty state */}
-        {!(!isLoading && providers.length === 0) && (
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => setIsCreateDialogOpen(true)}
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add Provider
-            </Button>
-          </div>
-        )}
+      <div className="space-y-2">
+        <Link to="/models" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          Models
+        </Link>
+        <PageHeader
+          title="Inference providers"
+          description={
+            <>
+              The APIs your models are called through, and the keys for them.{' '}
+              {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded align-middle" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) · $${totalCost.toFixed(2)} total cost · ${pluralized(totalRequests, 'request')}`}
+            </>
+          }
+          actions={
+            // Only shown outside the empty state, which has its own add button.
+            !isLoading && providers.length === 0 ? undefined : (
+              <Button onClick={() => navigate('/llm-providers/new')} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add inference provider
+              </Button>
+            )
+          }
+        />
       </div>
 
       {/* Providers Table or Empty State */}
       {isError ? (
-        <QueryError error={error} onRetry={() => refetchProviders()} title="Couldn't load providers" />
+        <QueryError error={error} onRetry={() => refetchProviders()} title="Couldn't load inference providers" />
       ) : !isLoading && providers.length === 0 ? (
-        <Card>
-          <CardContent className="p-0">
             <EmptyState
               icon={Brain}
-              title="No models configured"
-              description="Connect a provider to power agents and tool generation. Keys stay encrypted at rest."
+              title="No inference providers yet"
+              description="An inference provider is an API that serves models, such as OpenAI, Anthropic or a server you run. Add one and its models appear on the Models page. Keys stay encrypted at rest."
               action={
-                <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+                <Button onClick={() => navigate('/llm-providers/new')} className="gap-2">
                   <Plus className="h-4 w-4" />
-                  Add provider
+                  Add inference provider
                 </Button>
               }
-              className="py-16"
+              variant="panel"
             />
-          </CardContent>
-        </Card>
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
             {/* Filters */}
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex-1 min-w-[12rem]">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -384,13 +329,6 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
         </Card>
       )}
 
-      {/* Create Provider Dialog */}
-      <CreateProviderDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        createForm={createForm}
-        createProviderMutation={createProviderMutation}
-      />
 
       {/* Edit Provider Dialog */}
       <EditProviderDialog

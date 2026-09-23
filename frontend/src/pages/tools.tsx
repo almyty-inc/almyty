@@ -3,18 +3,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2 } from 'lucide-react'
+import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
-import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
+import { PageHeader } from '@/components/layout/page-header'
+import { pluralized } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -54,7 +56,7 @@ import {
   createActionsColumn,
   createSortableColumn,
 } from '@/components/ui/data-table'
-import { toolsApi, llmProvidersApi } from '@/lib/api'
+import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
@@ -76,6 +78,7 @@ import { useMemo } from 'react'
 // Form Schema for manual tool creation
 import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { toolSourceApi, DELETED_API_LABEL } from '@/lib/tool-source'
 
 interface Tool {
   id: string
@@ -132,7 +135,6 @@ export function ToolsPage() {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const navigate = useNavigate()
-  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -233,15 +235,6 @@ export function ToolsPage() {
     enabled: !!currentOrganization,
     placeholderData: (prev) => prev, // keep previous data while loading next page
   })
-
-  const { data: providersData } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
-    enabled: !!currentOrganization,
-  })
-  const llmProvidersExtracted = providersData?.providers || providersData || []
-  const llmProviders = Array.isArray(llmProvidersExtracted) ? llmProvidersExtracted : []
-  const activeProviders = llmProviders.filter((p: any) => p.status === 'active' || p.isActive)
 
   const deleteToolMutation = useMutation({
     mutationFn: (id: string) => toolsApi.delete(id),
@@ -492,12 +485,12 @@ return new Promise((resolve, reject) => {
       !searchQuery ||
       tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (tool.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (tool.metadata?.sourceApi?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+      (toolSourceApi(tool).name || '').toLowerCase().includes(searchQuery.toLowerCase())
 
     const matchesStatus = statusFilter === 'all' || tool.status === statusFilter
     const matchesType = typeFilter === 'all' || tool.type === typeFilter
     const matchesApi =
-      apiFilter === 'all' || tool.metadata?.sourceApi?.name === apiFilter
+      apiFilter === 'all' || toolSourceApi(tool).name === apiFilter
 
     return matchesSearch && matchesStatus && matchesType && matchesApi
   })
@@ -506,7 +499,7 @@ return new Promise((resolve, reject) => {
   const apiSources = Array.from(
     new Set(
       tools
-        .map((t: Tool) => t.metadata?.sourceApi?.name)
+        .map((t: Tool) => toolSourceApi(t).name)
         .filter(Boolean)
     )
   ) as string[]
@@ -594,9 +587,7 @@ return new Promise((resolve, reject) => {
                   </Badge>
                 )}
                 {isMcpTool && (
-                  <Badge variant="outline" className="text-violet-600 border-violet-300 dark:border-violet-800 dark:text-violet-400 shrink-0">
-                    MCP
-                  </Badge>
+                  <ProtocolBadge protocol="mcp" className="shrink-0" />
                 )}
                 <VisibilityBadge
                   visibility={(tool as any).visibility}
@@ -605,7 +596,7 @@ return new Promise((resolve, reject) => {
                 />
               </div>
               <div className="text-sm text-muted-foreground truncate">
-                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
+                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : toolSourceApi(tool).name || (tool.type === 'api' ? DELETED_API_LABEL : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
               </div>
             </div>
           </div>
@@ -641,7 +632,7 @@ return new Promise((resolve, reject) => {
                   handleViewDetails(tool)
                 }}
               >
-                View Details
+                View details
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
@@ -652,7 +643,7 @@ return new Promise((resolve, reject) => {
                   setIsExecutionDialogOpen(true)
                 }}
               >
-                Test Tool
+                Test tool
               </DropdownMenuItem>
               {/*
                 Activate, here, on the row.
@@ -691,7 +682,7 @@ return new Promise((resolve, reject) => {
                     setPublishingTool(tool)
                   }}
                 >
-                  Publish to Hub
+                  Publish to hub
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
@@ -712,48 +703,42 @@ return new Promise((resolve, reject) => {
 
   if (!currentOrganization) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <p className="text-muted-foreground">No organization context</p>
-        </div>
-      </div>
+      <EmptyState
+        variant="panel"
+        icon={Building2}
+        title="No organization selected"
+        description="Select or create an organization to see its tools."
+      />
     )
   }
-
-  if (isError) {
-    return <QueryError error={toolsError} onRetry={() => refetchTools()} title="Couldn't load tools" />
-  }
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Tools</h1>
-          <p className="text-muted-foreground">
-            {toolsTotal} tool{toolsTotal !== 1 ? 's' : ''} total
-          </p>
-        </div>
-        {activeTab === 'my-tools' && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsAddMcpDialogOpen(true)}
-              disabled={!currentOrganization}
-            >
-              <Plug className="mr-2 h-4 w-4" />
-              Add MCP Server
-            </Button>
-            <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!currentOrganization}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Tool
-            </Button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title="Tools"
+        description={pluralized(toolsTotal, 'tool')}
+        actions={
+          activeTab === 'my-tools' ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setIsAddMcpDialogOpen(true)}
+                disabled={!currentOrganization}
+              >
+                <Plug className="mr-2 h-4 w-4" />
+                Add MCP server
+              </Button>
+              <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!currentOrganization}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create tool
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
 
       <Tabs value={activeTab} onValueChange={(v) => setSearchParams(v === 'hub' ? { tab: 'hub' } : {})}>
         <TabsList>
-          <TabsTrigger value="my-tools">My Tools</TabsTrigger>
+          <TabsTrigger value="my-tools">My tools</TabsTrigger>
           <TabsTrigger value="hub">Tool Hub</TabsTrigger>
         </TabsList>
         <TabsContent value="hub">
@@ -765,42 +750,24 @@ return new Promise((resolve, reject) => {
       <McpSourcesPanel organizationId={currentOrganization?.id} />
 
       {/* Tools Table */}
-      {tools.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Code className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No tools</h3>
-            <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Generate tools from API schemas automatically. Create your first tool by importing an API.
-            </p>
-            {/*
-              The sample offer belongs here, on the branch that actually
-              renders. It was only on the DataTable's emptyState, which
-              this `tools.length === 0` branch pre-empts -- so on the one
-              page where a new user has no tools at all, the button was
-              unreachable.
-            */}
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button size="lg" asChild>
-                <a href="/apis">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Go to APIs
-                </a>
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                onClick={() => seedSample.mutate()}
-                disabled={seedSample.isPending || !currentOrganization}
-              >
-                {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      {isError ? (
+        <QueryError error={toolsError} onRetry={() => refetchTools()} title="Couldn't load tools" />
+      ) : !isLoading && tools.length === 0 ? (
+        // The sample offer belongs here, on the branch that actually
+        // renders: a DataTable emptyState under this branch is never
+        // reached, which once left a new user with no way to the sample.
+        <EmptyState
+          variant="panel"
+          icon={Wrench}
+          title="No tools yet"
+          description="Tools are generated from your APIs. Import an API and its operations appear here."
+          action={
+            <Button onClick={() => navigate('/apis?new=1')}>
+              <Plus className="mr-2 h-4 w-4" />
+              Import API
+            </Button>
+          }
+        />
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
@@ -852,32 +819,6 @@ return new Promise((resolve, reject) => {
               loading={isLoading}
               onRowClick={(tool) => handleViewDetails(tool)}
               hideSelectionCount
-              emptyState={
-                tools.length === 0 ? (
-                  <EmptyState
-                    icon={Wrench}
-                    title="No tools yet"
-                    description="Tools are generated from your APIs. Import an API and its operations appear here."
-                    action={
-                      <Button onClick={() => navigate('/apis?new=1')}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Import API
-                      </Button>
-                    }
-                    secondaryAction={
-                      <Button
-                        variant="outline"
-                        className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                        onClick={() => seedSample.mutate()}
-                        disabled={seedSample.isPending || !currentOrganization}
-                      >
-                        {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
-                      </Button>
-                    }
-                    className="py-16"
-                  />
-                ) : undefined
-              }
               manualPagination
               pageCount={totalPages}
               pageIndex={page - 1}
@@ -968,7 +909,7 @@ return new Promise((resolve, reject) => {
                   <div className="text-sm space-y-1">
                     <div>
                       <span className="text-muted-foreground">API: </span>
-                      {selectedTool.metadata?.sourceApi?.name || 'Unknown'}
+                      {toolSourceApi(selectedTool).name || DELETED_API_LABEL}
                     </div>
                     <div>
                       <span className="text-muted-foreground">Type: </span>
@@ -1056,7 +997,7 @@ return new Promise((resolve, reject) => {
                   onClick={() => handleCopyEndpoint(selectedTool)}
                 >
                   <Copy className="h-3 w-3 mr-1" />
-                  Copy Endpoint
+                  Copy endpoint
                 </Button>
                 <Button
                   size="sm"
@@ -1073,7 +1014,7 @@ return new Promise((resolve, reject) => {
                   disabled={executeToolMutation.isPending}
                 >
                   <Play className="h-3 w-3 mr-1" />
-                  {executeToolMutation.isPending ? 'Testing...' : 'Test Tool'}
+                  {executeToolMutation.isPending ? 'Testing...' : 'Test tool'}
                 </Button>
                 <Button
                   size="sm"
@@ -1086,7 +1027,7 @@ return new Promise((resolve, reject) => {
                   }}
                 >
                   <ExternalLink className="h-3 w-3 mr-1" />
-                  View Parameters
+                  View parameters
                 </Button>
               </div>
             </div>
@@ -1141,7 +1082,7 @@ return new Promise((resolve, reject) => {
                   deleteToolMutation.mutate(deletingTool.id)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               Delete
             </AlertDialogAction>
@@ -1184,7 +1125,6 @@ return new Promise((resolve, reject) => {
         onAuthConfigChange={setAuthConfig}
         llmConfig={llmConfig}
         onLlmConfigChange={setLlmConfig}
-        activeProviders={activeProviders}
         availableApis={availableApis}
         sdkConfig={sdkConfig}
         onSdkConfigChange={setSdkConfig}

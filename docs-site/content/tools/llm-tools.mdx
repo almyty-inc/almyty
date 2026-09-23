@@ -12,7 +12,7 @@ larger agent flow.
 
 1. Open **Tools**, click **Create Tool**, select **LLM**.
 2. Give it a **name** and **description**.
-3. Choose an **LLM provider** and **model** from your configured providers (set these up under **AI Models** first).
+3. Choose an **LLM provider** and **model** from your configured providers (set these up under **Models > Inference providers** first).
 4. Write a **system prompt** with standing instructions for the model.
 5. Write a **user prompt template** using `{{parameters.*}}` expressions for dynamic values.
 6. Define the **input parameters** referenced in the templates.
@@ -128,7 +128,7 @@ LLM tools work with any configured provider:
 | **Anthropic** | claude-sonnet-5, claude-opus-5, claude-haiku-4-5, etc. |
 | **Custom** | Any OpenAI-compatible API endpoint |
 
-Configure providers in **AI Models** before creating LLM tools.
+Configure providers in **Models > Inference providers** before creating LLM tools.
 
 ## Cost tracking
 

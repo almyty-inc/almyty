@@ -52,7 +52,8 @@
       "title": "Seeded support agent constraints",
       "path": "screenshots/agent-constraints.png",
       "capturedAt": "2026-09-22T15:03:56.228Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "92c5d4960db84bb41e769dcf7fba75f556869c6ef60a39fd0489c3c5ab69628c",
       "source": {
         "kind": "browser",
@@ -74,7 +75,8 @@
       "title": "Autonomous support agent overview with primary model and verifier panel",
       "path": "screenshots/agent-detail-overview.png",
       "capturedAt": "2026-09-22T15:02:31.998Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "b2f5761e661b123b4ac9b14adbc07cd48d90cdcfca9257e204dd59cc043b9359",
       "source": {
         "kind": "browser",
@@ -114,7 +116,8 @@
       "title": "Verification dialog showing policy and cross-vendor reviewer fields",
       "path": "screenshots/agent-verify-config-dialog.png",
       "capturedAt": "2026-09-22T15:04:43.634Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "44d320a8ab557a0c43d1c269698fed55477d51c98cdb5167783addeb04e14364",
       "source": {
         "kind": "browser",
@@ -136,7 +139,8 @@
       "title": "Agent list with no agents in a seeded empty organization",
       "path": "screenshots/agents-empty.png",
       "capturedAt": "2026-09-23T11:03:22.543Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "6e5171fe48f8bcbf1997576c2e13791e0a55436314e7d07d8b9b3b995bf4436d",
       "source": {
         "kind": "browser",
@@ -159,7 +163,8 @@
       "title": "Agents list filtered to the seeded customer support agent",
       "path": "screenshots/agents-list.png",
       "capturedAt": "2026-09-22T15:00:19.849Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "60f6726d4c8fe298fb4e9626f31a26b1118386d99d3f7376afb91f589504d300",
       "source": {
         "kind": "browser",
@@ -180,7 +185,8 @@
       "title": "Agent analytics for seeded demo agents",
       "path": "screenshots/analytics-agents.png",
       "capturedAt": "2026-09-23T10:38:34.134Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "50891b155a11a678b90cce25d60db58930a2068731af76e4fefbd7bc8677b108",
       "source": {
         "kind": "browser",
@@ -202,7 +208,8 @@
       "title": "Audit trail recording the successful demo tool execution",
       "path": "screenshots/analytics-audit.png",
       "capturedAt": "2026-09-23T10:43:43.012Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "e80db95d1753f83c9b1f53f2451ef958788fa5db71979fa71dde8396698e82ea",
       "source": {
         "kind": "browser",
@@ -224,7 +231,8 @@
       "title": "Chargeback locked without the Enterprise entitlement",
       "path": "screenshots/analytics-chargeback-locked.png",
       "capturedAt": "2026-09-23T10:56:29.502Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "294c858ca2521da20e65163919ba19e4784929fc6467605b0912b687121b749b",
       "source": {
         "kind": "browser",
@@ -251,7 +259,8 @@
       "title": "Gateway analytics with no traffic in the selected seven-day window",
       "path": "screenshots/analytics-gateways.png",
       "capturedAt": "2026-09-23T10:42:59.978Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "1154ddc97e8e04337a73ace52c2269067ecf531bdcef0bf17e7775a5ba0b9342",
       "source": {
         "kind": "browser",
@@ -273,7 +282,8 @@
       "title": "Analytics overview recording one successful demo tool execution",
       "path": "screenshots/analytics-overview.png",
       "capturedAt": "2026-09-23T09:20:55.280Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "82de687608e52867afe5fd0e3f3c3e8dbeda29edeb61d36b1babd1a3c57ea210",
       "source": {
         "kind": "browser",
@@ -295,7 +305,8 @@
       "title": "Tool analytics recording the successful weather test",
       "path": "screenshots/analytics-tools.png",
       "capturedAt": "2026-09-23T09:20:39.134Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "2e8162663cc0063533bef60abd2171adc5076bdb459eb8737047980a8b99e84c",
       "source": {
         "kind": "browser",
@@ -326,7 +337,8 @@
       "title": "Connected Open-Meteo API with parsed operation and generated tool",
       "path": "screenshots/api-detail.png",
       "capturedAt": "2026-09-23T09:18:25.838Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "cfc481629a98c618201e51c93cadbb3d23ce69f7c1a8a684d0025ff2854d887e",
       "source": {
         "kind": "browser",
@@ -366,7 +378,8 @@
       "title": "API list with no connected APIs in a seeded empty organization",
       "path": "screenshots/apis-empty.png",
       "capturedAt": "2026-09-23T11:03:50.580Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "ffe182b475611dfedff2d5d5efea4ef0ca929824f3fa8921451f60d67c998023",
       "source": {
         "kind": "browser",
@@ -389,7 +402,8 @@
       "title": "Import OpenAPI schema from a URL with automatic tool generation",
       "path": "screenshots/apis-import-dialog.png",
       "capturedAt": "2026-09-23T09:17:23.485Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "39c5c059a9dbfd5fefb02e13c3dd6e9050d6041a44c081916538c7bfd24500dd",
       "source": {
         "kind": "browser",
@@ -412,7 +426,8 @@
       "title": "APIs list with an imported Open-Meteo demo schema",
       "path": "screenshots/apis-list.png",
       "capturedAt": "2026-09-22T15:12:24.622Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "90353bd3bc69fc6356e168ebc2365f25761db69c10e335f868657ddbeb187bcc",
       "source": {
         "kind": "browser",
@@ -443,7 +458,8 @@
       "title": "Approvals loaded with no pending requests",
       "path": "screenshots/approvals-empty.png",
       "capturedAt": "2026-09-23T10:51:24.914Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "ff8e7ee724823959cbfde07a840a530103bcf24e3868db36ac352648e4a0bf67",
       "source": {
         "kind": "browser",
@@ -722,7 +738,8 @@
       "title": "Connections catalog with all Settings sections visible",
       "path": "screenshots/connections.png",
       "capturedAt": "2026-09-23T05:53:42.281Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "d91157a54e07217ba91b2f90efe289387fd80c0477f697747a1ac992471f5afd",
       "source": {
         "kind": "browser",
@@ -744,7 +761,8 @@
       "title": "Blank Add Credential form with organization and team visibility",
       "path": "screenshots/credentials-add.png",
       "capturedAt": "2026-09-23T10:44:46.657Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "aac7105d09f3b6a414dcbfc59a6e6e5e9d383363275fa59572d30bff46dda474",
       "source": {
         "kind": "browser",
@@ -766,7 +784,8 @@
       "title": "Credential vault with seeded provider credential labels",
       "path": "screenshots/credentials-vault.png",
       "capturedAt": "2026-09-23T10:44:29.981Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "cf1d4b266fe8a01145e730c45415a1923364769634bb231fe551f705e6faa174",
       "source": {
         "kind": "browser",
@@ -851,7 +870,8 @@
       "title": "New organization with only the built-in system gateway",
       "path": "screenshots/gateways-empty.png",
       "capturedAt": "2026-09-23T11:06:30.835Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "42b72ad1a564ec60defc6ce4adda1e31e7bdcd8afc35a6b78c0601537a90f6c8",
       "source": {
         "kind": "browser",
@@ -919,7 +939,8 @@
       "title": "Long-tier seeded demo memory entries",
       "path": "screenshots/memories.png",
       "capturedAt": "2026-09-23T10:47:32.593Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "2b9544dc9b7fa57e4435dd0d436c46be9ea00dbc9bc311a4fae2fa1b44fa5e72",
       "source": {
         "kind": "browser",
@@ -941,7 +962,8 @@
       "title": "Blank New memory dialog with mode and scope selection",
       "path": "screenshots/memory-write.png",
       "capturedAt": "2026-09-23T10:47:43.651Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "f1bbdb0f928b1860a455607d829cc5a33b80eb2888fe6ffe26df7b2a1529d0a7",
       "source": {
         "kind": "browser",
@@ -963,7 +985,8 @@
       "title": "Long-tier seeded demo memories with tags and embedding status",
       "path": "screenshots/memory.png",
       "capturedAt": "2026-09-23T10:47:32.593Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "2b9544dc9b7fa57e4435dd0d436c46be9ea00dbc9bc311a4fae2fa1b44fa5e72",
       "source": {
         "kind": "browser",
@@ -985,7 +1008,8 @@
       "title": "Models catalog grid with validation and routing availability",
       "path": "screenshots/models.png",
       "capturedAt": "2026-09-23T05:31:21.070Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "43650583b6d8cea1468aab7833a72f97f7d78a03f3928cbfb490b4dd72460e72",
       "source": {
         "kind": "browser",
@@ -1007,7 +1031,8 @@
       "title": "Connected Open-Meteo API with parsed operation and generated tool",
       "path": "screenshots/quickstart-api-imported.png",
       "capturedAt": "2026-09-23T09:18:25.838Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "cfc481629a98c618201e51c93cadbb3d23ce69f7c1a8a684d0025ff2854d887e",
       "source": {
         "kind": "browser",
@@ -1101,7 +1126,8 @@
       "title": "Approval policies locked without the Business entitlement",
       "path": "screenshots/settings-approval-policies-locked.png",
       "capturedAt": "2026-09-23T10:54:31.157Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "4b7ccb7935f979db6e929787b351ce2b09f69fa8c55cf0bdbc66a817f19e0894",
       "source": {
         "kind": "browser",
@@ -1128,7 +1154,8 @@
       "title": "Audit streaming locked without the Business entitlement",
       "path": "screenshots/settings-audit-streams-locked.png",
       "capturedAt": "2026-09-23T10:55:16.352Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "54e3cea5490abcdb1cde5ff3890cbe9eff98e89cc5ce822cd3e84de15a6850a4",
       "source": {
         "kind": "browser",
@@ -1155,7 +1182,8 @@
       "title": "Compliance Pack locked without the Business entitlement",
       "path": "screenshots/settings-compliance-locked.png",
       "capturedAt": "2026-09-23T10:54:55.249Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "fa51005005706990b92167ab6fdd1bad7f8336ee615a18ffaedd7eabceff7b1b",
       "source": {
         "kind": "browser",
@@ -1182,7 +1210,8 @@
       "title": "Customer-managed keys locked without the Enterprise entitlement",
       "path": "screenshots/settings-encryption-locked.png",
       "capturedAt": "2026-09-23T10:55:42.438Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "6986ac57e3f632ebd109e0818cd3cfaf766e0f0ba2c27c23e87275e0de4e0d9d",
       "source": {
         "kind": "browser",
@@ -1209,7 +1238,8 @@
       "title": "Seeded demo profile settings",
       "path": "screenshots/settings-profile.png",
       "capturedAt": "2026-09-23T06:09:49.642Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "110e0266508f287d6e0af2f6387017b01a6f4f17df783bd06e71dbb708eeadad",
       "source": {
         "kind": "browser",
@@ -1231,7 +1261,8 @@
       "title": "Advanced RBAC locked without the Business entitlement",
       "path": "screenshots/settings-rbac-locked.png",
       "capturedAt": "2026-09-23T10:54:09.141Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "37d230e35c131e92bf9541440ac87bc0ccaf330a4dce6d0b2c08dc2b6882b197",
       "source": {
         "kind": "browser",
@@ -1258,7 +1289,8 @@
       "title": "Security settings with password form and session limitations",
       "path": "screenshots/settings-security.png",
       "capturedAt": "2026-09-23T06:08:27.178Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "9c79e3877c85ae804199b7bba684fac5561b08ba6086edeb18db9d4a2e0b74c9",
       "source": {
         "kind": "browser",
@@ -1283,7 +1315,8 @@
       "title": "Single Sign-On locked without the Business entitlement",
       "path": "screenshots/settings-sso-locked.png",
       "capturedAt": "2026-09-23T10:53:22.808Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "5c4c5e7d2665f3f52217e75d593e0e9cbb411678e9e55fbb8a2383e877301021",
       "source": {
         "kind": "browser",
@@ -1310,7 +1343,8 @@
       "title": "Members and Teams settings showing the seeded organization owner",
       "path": "screenshots/settings-teams.png",
       "capturedAt": "2026-09-23T06:10:33.702Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "bbdd844b8f42e116b403a9b0b4d2ef147ec950dd89b320de263823fa9958cb1a",
       "source": {
         "kind": "browser",
@@ -1335,7 +1369,8 @@
       "title": "Seeded support agent constraints",
       "path": "screenshots/support-agent-constraints.png",
       "capturedAt": "2026-09-22T15:03:56.228Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "92c5d4960db84bb41e769dcf7fba75f556869c6ef60a39fd0489c3c5ab69628c",
       "source": {
         "kind": "browser",
@@ -1357,7 +1392,8 @@
       "title": "Autonomous support agent overview with primary model and verifier panel",
       "path": "screenshots/support-agent-overview.png",
       "capturedAt": "2026-09-22T15:02:31.998Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "b2f5761e661b123b4ac9b14adbc07cd48d90cdcfca9257e204dd59cc043b9359",
       "source": {
         "kind": "browser",
@@ -1379,7 +1415,8 @@
       "title": "Seeded support agent autonomous run history with costs and outcomes",
       "path": "screenshots/support-agent-runs.png",
       "capturedAt": "2026-09-22T15:03:24.398Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "6f86d21633ab3174563eda7271b71a3df3b4f60e17c674f6b969b0c215de0b70",
       "source": {
         "kind": "browser",
@@ -1401,7 +1438,8 @@
       "title": "Generated weather tool details and parameter schema",
       "path": "screenshots/tool-detail.png",
       "capturedAt": "2026-09-23T09:19:05.133Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "488e344dbcb34084fb44627c7538df931641670d387cd316c6a9d7f178c0204e",
       "source": {
         "kind": "browser",
@@ -1423,7 +1461,8 @@
       "title": "Create Manual Tool execution method selector",
       "path": "screenshots/tools-create-dialog.png",
       "capturedAt": "2026-09-22T15:11:04.704Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "4888392990cc88d9f88fd0af58b5fce88b6e946d6c4075846c4a0693c4ed7a63",
       "source": {
         "kind": "browser",
@@ -1445,7 +1484,8 @@
       "title": "Tool list with no tools in a seeded empty organization",
       "path": "screenshots/tools-empty.png",
       "capturedAt": "2026-09-23T11:04:12.555Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "6a90c06c2927affd4643011f461986b84d86b14d584d583882bc44600dff0cf9",
       "source": {
         "kind": "browser",
@@ -1468,7 +1508,8 @@
       "title": "Tools list with Active filter on the current page",
       "path": "screenshots/tools-list.png",
       "capturedAt": "2026-09-22T15:10:21.424Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "3c3ac6115b5d8a46ded9a683461ecfda2dabc5f102792fc7b3fb8679ddb1622f",
       "source": {
         "kind": "browser",
@@ -1491,7 +1532,8 @@
       "title": "Tools list with Active filter on the current page",
       "path": "screenshots/tools.png",
       "capturedAt": "2026-09-22T15:10:21.424Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 23 UI refresh changes shared headers, navigation and empty states (#737), Models (#739), and sample onboarding (#733). Recapture after the revised UI reaches staging. The prior capture time, pixels and source fingerprint are preserved; this image is not verified against the revised UI.",
       "sha256": "3c3ac6115b5d8a46ded9a683461ecfda2dabc5f102792fc7b3fb8679ddb1622f",
       "source": {
         "kind": "browser",

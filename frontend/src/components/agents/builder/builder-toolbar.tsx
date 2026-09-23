@@ -27,8 +27,13 @@ export interface BuilderToolbarProps {
   agentVersion?: string
   showTestPanel: boolean
   onToggleTestPanel: () => void
-  canSave: boolean
-  validationErrors: string[]
+  /**
+   * Whether Save is greyed out. Not the same as "the agent is invalid": an
+   * untouched new draft is invalid and Save is still live, because pressing
+   * it is how the user asks what is left. The page only greys the button
+   * once the answer is already on screen.
+   */
+  saveDisabled: boolean
   isSaving: boolean
   onSave: () => void
   onExport: () => void
@@ -49,7 +54,7 @@ export function BuilderToolbar({
   agentVersion,
   showTestPanel,
   onToggleTestPanel,
-  canSave,
+  saveDisabled,
   isSaving,
   onSave,
   onExport,
@@ -137,7 +142,8 @@ export function BuilderToolbar({
         <Button
           size="sm"
           onClick={onSave}
-          disabled={isSaving || !canSave}
+          disabled={isSaving || saveDisabled}
+          title={saveDisabled ? 'Finish the steps listed above to save' : undefined}
         >
           {isSaving ? (
             <Loader2 className="h-4 w-4 sm:mr-2 animate-spin" />

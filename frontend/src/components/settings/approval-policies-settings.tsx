@@ -149,7 +149,7 @@ function ApprovalPoliciesManager() {
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-primary" /> Approval Policies
+              <ShieldCheck className="h-5 w-5 text-primary" /> Approval policies
             </CardTitle>
             <CardDescription>
               Decide when an approval is required and who must sign off. Requests that
@@ -158,7 +158,7 @@ function ApprovalPoliciesManager() {
             </CardDescription>
           </div>
           <Button onClick={openCreate} className="shrink-0">
-            <Plus className="h-4 w-4 mr-1" /> New Policy
+            <Plus className="h-4 w-4 mr-1" /> New policy
           </Button>
         </CardHeader>
         <CardContent>
@@ -264,10 +264,11 @@ function ApprovalPoliciesManager() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={() => deleting && deleteMutation.mutate(deleting.id)}
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete policy'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

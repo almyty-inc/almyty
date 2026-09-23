@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch'
 import { UpgradePrompt } from '@/components/plan-indicator'
 import { api } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 /**
  * Customer-managed encryption keys.
@@ -109,6 +110,7 @@ function Kms() {
   // under the same CMK. So an empty ARN is allowed here, unlike attach.
   const canRotate = !arnLooksWrong && !busy
 
+  const { confirm, dialog: confirmDialog } = useConfirm()
   return (
     <Card>
       <CardHeader>
@@ -176,7 +178,20 @@ function Kms() {
             what it did and for what anybody wanted. */}
         {data?.provisioned ? (
           <div className="space-y-2">
-            <Button data-testid="rotate-cmk" disabled={!canRotate} onClick={() => rotate.mutate()}>
+            <Button
+              data-testid="rotate-cmk"
+              disabled={!canRotate}
+              onClick={async () => {
+                const ok = await confirm({
+                  title: 'Rotate the encryption key?',
+                  description: cmkArn.trim() && cmkArn.trim() !== data?.cmkArn
+                    ? `New secrets will be sealed under ${cmkArn.trim()}. Secrets stored before the rotation stay readable.`
+                    : 'A fresh data key is generated under the current key. Secrets stored before the rotation stay readable.',
+                  confirmLabel: 'Rotate key',
+                })
+                if (ok) rotate.mutate()
+              }}
+            >
               {rotate.isPending ? 'Rotating...' : 'Rotate key'}
             </Button>
             <p className="text-xs text-muted-foreground">
@@ -223,6 +238,7 @@ function Kms() {
           </p>
         )}
       </CardContent>
+      {confirmDialog}
     </Card>
   )
 }

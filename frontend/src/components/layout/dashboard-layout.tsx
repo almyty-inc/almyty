@@ -14,14 +14,15 @@ import {
   Menu,
   X,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   Router,
   Activity,
   Bot,
   MessageSquare,
   Sun,
   Moon,
+  Monitor,
   Key,
   Database,
   Store,
@@ -43,10 +44,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore } from '@/store/auth'
 import { useOrganizationStore } from '@/store/organization'
 import { useAppStore, useNotifications } from '@/store/app'
+import { Theme, applyTheme, subscribeToSystemTheme } from '@/lib/theme'
 import { getInitials } from '@/lib/utils'
 import { CommandPalette } from '@/components/command-palette'
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts'
@@ -116,10 +123,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { currentOrganization, organizations, setCurrentOrganization, fetchOrganizations } = useOrganizationStore()
   const queryClient = useQueryClient()
   const { sidebarOpen, setSidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse } = useAppStore()
-  const [darkMode, setDarkMode] = useState(() => {
-    // Dark is the default; only light if explicitly stored
-    return localStorage.getItem('theme') !== 'light'
-  })
+  const { theme, setTheme } = useAppStore()
 
   // Ensure sidebar starts closed on mobile (safety net for store default)
   useEffect(() => {
@@ -128,16 +132,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [])
 
+  // Apply the stored preference, and keep following the OS for as long as
+  // the preference IS the OS. Someone whose machine flips at sunset expects
+  // the open tab to flip with it, not on next reload.
+  //
+  // index.html already set the class before first paint, so this is a
+  // re-assertion rather than the first word -- which is why there is no
+  // flash here.
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark')
-      document.documentElement.classList.remove('light')
-      localStorage.setItem('theme', 'dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-      localStorage.setItem('theme', 'light')
-    }
-  }, [darkMode])
+    applyTheme(theme)
+    if (theme !== 'system') return
+    return subscribeToSystemTheme(() => applyTheme('system'))
+  }, [theme])
 
   // Check authentication and redirect if not logged in (only after hydration)
   // Check authentication and redirect if not logged in: only after the
@@ -251,7 +257,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className={cn("flex items-center h-14 border-b", sidebarCollapsed ? "justify-center px-2" : "justify-between px-4")}>
+          <div className={cn("flex-shrink-0 flex items-center h-14 border-b", sidebarCollapsed ? "justify-center px-2" : "justify-between px-4")}>
             <div className="flex items-center gap-2">
               <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8 shrink-0" />
               {!sidebarCollapsed && <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>}
@@ -265,7 +271,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* Organization Selector */}
           {currentOrganization && !sidebarCollapsed && (
-            <div className="p-4 border-b">
+            <div className="flex-shrink-0 p-4 border-b">
               <DropdownMenu onOpenChange={(open) => { if (open) fetchOrganizations().catch(() => null) }}>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="w-full justify-between" aria-label={`Switch organization, current: ${currentOrganization.name}`}>
@@ -315,7 +321,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
            * code path that opens the dialog. Hidden when the
            * sidebar is collapsed (no room for the key hint). */}
           {!sidebarCollapsed && (
-            <div className="px-2 pt-3">
+            <div className="flex-shrink-0 border-b px-2 py-3">
               <button
                 type="button"
                 onClick={() => {
@@ -334,8 +340,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
           )}
 
-          {/* Navigation */}
-          <nav key={location.pathname} className={cn("flex-1 py-4 space-y-1 overflow-y-auto", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation">
+          {/* Navigation: the one scrolling region. `min-h-0` lets it shrink
+              below its content inside the column, so on a short window it
+              scrolls within its own box instead of pushing the footer off
+              screen or sliding under the header above. */}
+          <nav key={location.pathname} className={cn("flex-1 min-h-0 py-3 space-y-1 overflow-y-auto overscroll-contain", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation" data-testid="sidebar-nav">
             {navigation.map((item) => {
               if (item.name === 'divider') {
                 return <div key="divider" className="my-2 mx-3 border-t border-border/40" />
@@ -379,30 +388,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             })}
           </nav>
 
-          {/* Collapse toggle — desktop only */}
-          <div className="hidden lg:flex justify-end px-2 py-2 border-t">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebarCollapse}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            </Button>
-          </div>
-
-          {/* Onboarding setup pill — lingers until real activation */}
-          <div className={cn("flex-shrink-0", sidebarCollapsed ? "px-2 pt-2" : "px-4 pt-3")}>
+          {/* Footer: setup progress, then the user row with the collapse
+              control beside it. Fixed under the nav, which is the only
+              part of the sidebar that scrolls. */}
+          <div className="flex-shrink-0 border-t p-2 space-y-1" data-testid="sidebar-footer">
             <SetupPill collapsed={sidebarCollapsed} />
-          </div>
-
-          {/* User Menu */}
-          <div className={cn("flex-shrink-0 border-t", sidebarCollapsed ? "p-2" : "p-4")}>
+            <div className={cn("flex items-center gap-1", sidebarCollapsed && "flex-col")}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className={cn("w-full p-2", sidebarCollapsed ? "justify-center" : "justify-start")} aria-label="User menu">
+                <Button variant="ghost" className={cn("h-auto min-w-0 p-2", sidebarCollapsed ? "justify-center" : "flex-1 justify-start")} aria-label="User menu">
                   <Avatar className={cn("h-8 w-8", !sidebarCollapsed && "mr-3")}>
                     <AvatarImage src={user?.avatar} />
                     <AvatarFallback>
@@ -429,10 +423,37 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Settings className="mr-2 h-4 w-4" />
                   <span>Settings</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setDarkMode(!darkMode)}>
-                  {darkMode ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-                  <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
-                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    {theme === 'light' ? (
+                      <Sun className="mr-2 h-4 w-4" />
+                    ) : theme === 'dark' ? (
+                      <Moon className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Monitor className="mr-2 h-4 w-4" />
+                    )}
+                    <span>Appearance</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuRadioGroup
+                      value={theme}
+                      onValueChange={(value) => setTheme(value as Theme)}
+                    >
+                      <DropdownMenuRadioItem value="light">
+                        <Sun className="mr-2 h-4 w-4" />
+                        <span>Light</span>
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="dark">
+                        <Moon className="mr-2 h-4 w-4" />
+                        <span>Dark</span>
+                      </DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="system">
+                        <Monitor className="mr-2 h-4 w-4" />
+                        <span>System</span>
+                      </DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
@@ -440,6 +461,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+              {/* Collapse toggle: desktop only, on the user row so it sits
+                  with the other account-level control instead of floating
+                  in a band of its own. */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSidebarCollapse}
+                className="hidden lg:inline-flex h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

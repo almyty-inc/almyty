@@ -10,6 +10,17 @@ Every image has its own capture time and SHA-256. Unknown legacy capture times
 are `null`, never a Git commit time or a made-up shared date. `needs-recapture`
 explicitly records the outstanding #675 backlog. It does not mean verified.
 
+## September 23 UI refresh checkpoint
+
+The revised shared headers, navigation and empty states (#737), Models flow
+(#739), and sample onboarding (#733) invalidate the earlier browser captures.
+Those images are marked `needs-recapture` while the revised UI is awaiting a
+staging capture pass. Their observed capture dates, image hashes, source
+fingerprints and earlier review notes remain intact; the notes describe that
+earlier review, not verification against the new UI. Coordinate the next pass
+with the page-based configuration flows and platform guide rollout as well.
+Published CLI evidence is separate and is not relabeled by this UI refresh.
+
 Register a reviewed browser capture with its observed capture time:
 
 ```sh
@@ -40,15 +51,16 @@ Run `npm run test-screenshots` and `npm run check-screenshots` in `docs-site`.
 CI checks complete coverage, missing/broken references, duplicate entries,
 image hashes, per-image metadata, and source drift for refreshed images.
 `node docs-site/scripts/check-screenshots.mjs --strict` additionally fails while
-any legacy image still needs recapture; use it before calling #675 complete.
+any image still needs recapture; use it before calling #675 complete.
 Keep historical failure evidence explicitly historical rather than replacing
 it with an unrelated successful screen.
 
 ## Enabled-feature evidence still needed
 
-The `*-locked.png` captures are current evidence of a Pro organization's actual
-entitlement gates. They do **not** verify the enabled feature, its editor, or a
-successful configuration. The following views still need captures from an
+The `*-locked.png` captures record a Pro organization's actual entitlement
+gates during the earlier capture pass; they also need recapturing after the UI
+refresh. They do **not** verify the enabled feature, its editor, or a successful
+configuration. The following views still need captures from an
 authorized, seeded organization with the corresponding entitlements:
 
 - SSO configuration and provisioning controls
@@ -67,5 +79,7 @@ Capture them when an authorized fixture is available, and retain the locked-stat
 images as separate evidence.
 
 Runner list/detail also need a publishable demo fixture without private hostnames.
-The runner setup image awaits the label-description correction tracked in #717;
-do not publish the old routing claim as current documentation.
+The runner label-description correction (#717, fixed in #718) and dashboard
+inventory-label correction (#719, fixed in #720) are merged. Recapture those
+views after verifying the revised staging UI; do not publish the old routing
+or running-agent claims as current documentation.

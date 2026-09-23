@@ -1,87 +1,109 @@
 # Models
 
-An autonomous agent takes many steps, and not every step deserves the same model. A planning step wants the strongest reasoning model; a summary step wants the cheapest; anything that touches customer data may only leave the building on a private endpoint. The models layer keeps a **card** for every model your organization can call, with its price, latency, privacy tier and capabilities, and lets each step ask for the cheapest, fastest or most private model that fits. Vendor keys, a server you run, and weights you deploy yourself all end up as cards, and the router treats them alike.
+An autonomous agent takes many steps, and not every step deserves the same model. A planning step wants the strongest reasoning model; a summary step wants the cheapest; anything that touches customer data may only leave the building on a private endpoint. almyty keeps one record for every model your organization can call, with its price, latency, privacy tier and capabilities, and lets each step ask for the cheapest, fastest or most private model that fits. A vendor's API, a server you run and a model on your own cloud account all end up as models in the same list, and the router treats them alike.
 
 ```
-Provider key  --+
-Endpoint URL  --+-->  Model card  -->  validation run  -->  selectable  -->  router picks it
-Deployment    --+     (price, tier,     (one real call)                     (cheapest | fastest | private)
-                       latency, caps)
+A provider's API     --+
+A server you run     --+-->  Model  -->  validation run  -->  usable  -->  router picks it
+Your cloud account   --+     (runs on, price, tier,           (one real call)          (cheapest | fastest | private)
+                              latency, capabilities)
 ```
 
-Nothing in this layer is a hardcoded list. What almyty "supports" is whatever your cards say, and a card only counts once a real call through it has passed.
+Nothing here is a hardcoded list. What almyty "supports" is whatever your models say, and a model only counts once a real call through it has passed.
 
-## A model card
+## The Models page
 
-![Models catalog with pricing, validation status, and routing availability](/screenshots/models.png)
+**Models** lists every model your organization can use, as a grid or a table. Each one shows:
 
-A card is the machine-readable record the router reads. It carries:
+- **Runs on**: where it is called, for example "Anthropic API", "Your server (llm.example.internal)", "Your AWS account (Bedrock)" or "Your Hugging Face account (Inference Endpoint)"
+- the price per million tokens in and out, and the context length
+- its validation state
+- for a model on [your cloud account](/models/your-cloud): its status (Starting, Running, Scaled to zero, Resizing, Needs attention, Shutting down, Shut down or Failed), hourly cost and budget
+
+The page header links to **Inference providers**, where the keys almyty calls vendors with live. See [Inference providers](/models/providers).
+
+### Add a model
+
+**Add model** asks one question: **Where does it run?**
+
+- **A provider's API.** Pick an inference provider you set up, or set one up right there, then pick the model from its live list.
+- **A server you run.** Any OpenAI-compatible server (vLLM, Ollama, TGI, llama.cpp, LiteLLM): give its base URL, an optional key and the model id. See [A server you run](/models/providers#a-server-you-run).
+- **Your cloud account.** Name the model source, pick the cloud (Hugging Face Inference Endpoints, Modal, AWS Bedrock, SageMaker, Google Vertex AI, Microsoft Foundry, Baseten, Together, Fireworks, Nebius, RunPod or DigitalOcean), a size and a budget. almyty starts it there and reports its state and cost. See [Your cloud account](/models/your-cloud).
+
+**Sync from providers** imports what your inference providers currently list. Imported models become usable once a validation run passes.
+
+### A model's detail
+
+Click a model to see its facts (runs on, vendor id, price and where the price came from, context, capabilities, privacy tier, region, measured latency, last validation), and to validate, edit or remove it. A model on your cloud account also shows its status, cost, budget, endpoint URL and lineage ("Based on Llama 3.1 70B, 4-bit"), with Start, Stop, replicas and Shut down.
+
+## What a model records
+
+This is the machine-readable record the router reads, returned by the [Models API](/api-reference/models-api):
 
 | Field | Meaning |
 |---|---|
-| `name` | The label shown in dropdowns |
-| `providerId` or `endpointRef.url` | How the model is called: a stored provider (your key) or an endpoint URL (a deployment, or a server you registered) |
+| `name` | The label shown in the list and in dropdowns |
+| `providerId` or `endpointRef.url` | How the model is called: an inference provider (a vendor's API or a server you run) or the endpoint of a model on your cloud |
 | `vendorModelId` | The id sent on the wire, for example `claude-sonnet-5` |
 | `capabilities` | `tools`, `vision`, `reasoning`, `embedding`, `structuredOutput` as booleans |
 | `contextLength` | Tokens of context |
 | `privacyTier` | `local`, `private_cloud` or `public` (default `public`) |
 | `region` | Where the model runs, used by region allowlists |
-| `pricing`, `pricingSource`, `pricingOverride` | Dollars per million tokens in and out, where the number came from, and an operator override that wins while set |
+| `pricing`, `pricingSource`, `pricingOverride` | Dollars per million tokens in and out, where the number came from, and an override that wins while set |
 | `measuredLatencyMs` | `p50` and `p95` learned from real traffic |
-| `status` | `active`, `inactive`, `error` or `deploying` |
+| `status` | `active`, `inactive`, `error` or `deploying` (a model on your cloud that is still starting) |
 | `validationStatus`, `lastValidatedAt`, `lastValidationError` | The outcome of the last validation run: `never`, `passed` or `failed` |
-| `modelVersionId`, `base` | For deployed weights: the registered version and its base architecture |
+| `base`, `modelVersionId` | For a model on your cloud: what it is based on, and its pinned source |
 
-Every card belongs to one organization. Members can read cards; registering, editing, validating and deleting need the admin or owner role.
+Every model belongs to one organization. Members can read models; adding, editing, validating and removing need the admin or owner role.
 
 ## Support is data, not a list
 
-A card is **selectable** (the router may pick it, dropdowns show it) when all three hold:
+A model is **selectable** (the router may pick it, dropdowns show it) when all three hold:
 
-1. it has a way to be called: a provider row or an endpoint URL;
+1. it has a way to be called: an inference provider or an endpoint URL;
 2. its status is `active`; and
 3. one **validation run** has passed.
 
 That is the only definition of "supported". A vendor model that gets retired fails its next validation and drops out on its own; a server you brought up this morning joins the moment its validation passes. Nobody edits a list.
 
-## Where cards come from
+## Where models come from
 
-**From your providers, automatically.** Adding a provider, changing its configuration, and every passing health check import what the provider currently lists, in the background. Cards that already exist are left alone. A card whose vendor id has vanished from the list goes `inactive` with `metadata.retiredAt` and `metadata.retiredReason: "not listed by provider"`; it is never deleted, because runs and audit rows point at card ids, and it comes back on its own when the provider lists it again. An empty list (the vendor could not be asked) retires nothing. Deleting a provider retires its cards the same way and unlinks them, so they are no longer callable.
+**From your inference providers, automatically.** Adding an inference provider, changing its configuration, and every passing health check import what the provider currently lists, in the background. Models that already exist are left alone. A model whose vendor id has vanished from the list goes `inactive` with `metadata.retiredAt` and `metadata.retiredReason: "not listed by provider"`; it is never deleted, because runs and audit rows point at model ids, and it comes back on its own when the provider lists it again. An empty list (the vendor could not be asked) retires nothing. Deleting an inference provider retires its models the same way and unlinks them, so they are no longer callable.
 
-**The health check is a validation.** Testing a provider makes a real call with the provider's resolved model. When it passes, that provider's card for that model records a passed validation run (with the measured latency), and the card is created if the catalog had none. A fresh organization with one healthy provider can route right away. A `MODEL_NOT_FOUND` failure marks the card `failed` with the error; any other failure leaves the catalog alone.
+**The health check is a validation.** Testing an inference provider makes a real call with its resolved model. When it passes, that provider's model records a passed validation run (with the measured latency), and the model is created if the list had none. A fresh organization with one healthy provider can route right away. A `MODEL_NOT_FOUND` failure marks the model `failed` with the error; any other failure leaves the list alone.
 
-**On boot.** Every active provider that has no cards yet is synced once at startup. Set `MODEL_CATALOG_BACKFILL=off` to skip it.
+**On boot.** Every active inference provider that has no models yet is synced once at startup. Set `MODEL_CATALOG_BACKFILL=off` to skip it.
 
-**By hand.** Sync one provider or every active provider of the organization, register a card against a stored provider with a vendor id of your choosing, or register any OpenAI-compatible server you run:
+**By hand.** Sync one inference provider or all of them, or add a model against an inference provider with a vendor id of your choosing. A server you run is a `custom` inference provider, so its models are added the same way:
 
 ```bash
-$ npx @almyty/models sync 7c1e...            # one provider
+$ npx @almyty/models sync 7c1e...            # one inference provider
 $ npx @almyty/models register --name "Qwen3 32B on our vLLM" --provider 7c1e... --model qwen3-32b --tier private_cloud --region eu-central
-$ npx @almyty/models register-endpoint --name "Lab box" --url http://10.0.0.7:8000/v1 --model qwen3-32b --tier local
 ```
 
-`register-endpoint` stores the URL and key as a `custom` provider (the key is encrypted like every other) and points the card at it. See [Providers](/models/providers) for the vendor list and [CLI](/models/cli) for every verb.
+See [Inference providers](/models/providers) for the vendor list and [CLI](/models/cli) for every command.
 
-**From a deployment.** When a [deployment](/models/deployments) you made reaches `ready`, it fills the card it was created for with the endpoint URL.
+**On your cloud account.** Starting a model on [your cloud account](/models/your-cloud) adds it to the list at once, with status `deploying` and not yet selectable. It turns `active` when its endpoint is ready.
 
-A card registered by hand starts with `validationStatus: never`. Run the validation to make it selectable:
+A model added by hand, or started on your cloud, begins with `validationStatus: never`. Run the validation to make it selectable:
 
 ```bash
 $ npx @almyty/models validate 4f2a...
 Passed in 812 ms.
-Lab box  [qwen3-32b]  local  unpriced
+Qwen3 32B on our vLLM  [qwen3-32b]  private_cloud/eu-central  unpriced
     4f2a...  selectable
 ```
 
-The validation is one short real call through the card. It records the outcome, the latency, and an audit row. A failing call records the error on the card and leaves it unselectable.
+The validation is one short real call through the model. It records the outcome, the latency, and an audit row. A failing call records the error on the model and leaves it unselectable.
 
 ## Privacy tiers
 
-Tiers are ordered `local < private_cloud < public`. A routing policy names the most public tier a request may use, so a policy with `privacyTier: private_cloud` can pick a local card or a private-cloud card, never a public vendor. Set the tier when you register a card. A card registered against a stored provider defaults to `public`; one registered against an endpoint (a server you run, a deployment) defaults to `private_cloud`.
+Tiers are ordered `local < private_cloud < public`. A routing policy names the most public tier a request may use, so a policy with `privacyTier: private_cloud` can pick a local model or a private-cloud model, never a public vendor. Set the tier when you add a model. A model on a vendor's inference provider defaults to `public`; one on your cloud account defaults to `private_cloud`. Give a server you run the tier it deserves (`local` for a box in your office).
 
 ## Pricing
 
-Prices are automatic. A daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads the LiteLLM cost map and cross-checks the OpenRouter models API. Cards are priced from the cached feed when they are registered and refreshed by the job. When the two sources disagree by more than 25 percent, the card keeps both numbers in `metadata.pricingDisagreement` so you can decide.
+Prices are automatic. A daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads the LiteLLM cost map and cross-checks the OpenRouter models API. Models are priced from the cached feed when they are added and refreshed by the job. When the two sources disagree by more than 25 percent, the model keeps both numbers in `metadata.pricingDisagreement` so you can decide.
 
 `pricingSource` says where the number came from:
 
@@ -90,34 +112,35 @@ Prices are automatic. A daily job (`MODEL_PRICE_FEED_CRON`, default 04:00) loads
 | `feed:litellm` | The LiteLLM cost map |
 | `feed:openrouter` | The OpenRouter models API |
 | `native` | Reported by the provider itself (Together, OpenRouter) |
-| `adapter` | A deployment's cost snapshot, for weights you run |
-| `manual` | An operator override |
+| `adapter` | The cloud's own cost report, for a model on your cloud account |
+| `manual` | An override you set |
 | `unpriced` | No source had a price |
 
-An override (`pricingOverride`) wins over the feed until you clear it. A card with no price from any source is **unpriced**: the card says so, every run that used it says so, and the cost is never silently zero. Hosts that serve other authors' open models (Novita, DeepInfra and the like) are never billed at the original author's list price; without a feed quote such a model is unpriced.
+An override (`pricingOverride`) wins over the feed until you clear it. A model with no price from any source is **unpriced**: the model says so, every run that used it says so, and the cost is never silently zero. Hosts that serve other authors' open models (Novita, DeepInfra and the like) are never billed at the original author's list price; without a feed quote such a model is unpriced. A server you run has no feed price either: give it an override if you want `cheapest` to weigh it, or leave it unpriced and the router places it last.
 
 The router's `cheapest` objective ranks by a blended price, three quarters input and one quarter output per million tokens. Cost per run still uses the exact in and out prices; see [Cost governance](/cost-governance).
 
 ## Latency
 
-`fastest` ranks by `measuredLatencyMs.p50`, which real traffic keeps current. After every routed answer the router folds the response time into the answering card: p50 as a moving average (a new sample weighs one fifth), p95 jumping to a slower sample at once and drifting back toward faster ones a tenth per sample. The estimate is written to the card at most once a minute and survives restarts. A validation run or a passing health check resets both to that single measurement.
+`fastest` ranks by `measuredLatencyMs.p50`, which real traffic keeps current. After every routed answer the router folds the response time into the answering model: p50 as a moving average (a new sample weighs one fifth), p95 jumping to a slower sample at once and drifting back toward faster ones a tenth per sample. The estimate is written to the model at most once a minute and survives restarts. A validation run or a passing health check resets both to that single measurement.
 
 ## Configuration
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of providers that have no cards |
+| `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time sync of inference providers that have no models |
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
-| `MODEL_RECONCILE_CRON` | `*/2 * * * *` | Deployment reconcile sweep; `off` disables |
+| `MODEL_RECONCILE_CRON` | `*/2 * * * *` | How often models on your cloud accounts are checked and brought to the state you asked for; `off` disables |
 | `MODEL_ROUTER_VERIFY_ESCALATION` | unset | `true` lets a verifier rejection advance the route plan; see [Routing](/models/routing#verify-escalation) |
-| `MODEL_STUB_ADAPTER` | unset | `true` registers the in-memory stub adapter in production too |
-| `MODEL_REGISTRY_S3_*` | falls back to `STORAGE_S3_*` | Single-tenant seed of the one organization's registry connection on first boot; ignored with more than one organization |
-| `CONFORMANCE_LIVE` | unset | Adapter key whose conformance suite runs against the real provider |
+| `MODEL_STUB_ADAPTER` | unset | `true` registers the in-memory `stub` cloud in production too |
+| `LLM_ALLOW_PRIVATE_URLS` | unset | `true` lets a server you run sit on a private or loopback address (a vLLM box on the LAN) on a self-hosted API |
+| `MODEL_REGISTRY_S3_*` | falls back to `STORAGE_S3_*` | Single-tenant seed of the one organization's bucket connection on first boot; ignored with more than one organization |
+| `CONFORMANCE_LIVE` | unset | The `providerType` whose conformance suite runs against the real cloud |
 
 ## Related
 
 - [Routing](/models/routing): the policy an agent step carries and how a model is chosen
-- [Providers](/models/providers): every vendor, and how to add an OpenAI-compatible server
-- [Deployments](/models/deployments): run a model on 14 providers by naming it, no registration required
-- [Connections](/connections): where the keys behind providers and adapters live
+- [Inference providers](/models/providers): every vendor, and a server you run
+- [Your cloud account](/models/your-cloud): run a model on 12 clouds by naming it
+- [Connections](/connections): where the keys behind inference providers and cloud accounts live
 - [Autonomous agents](/agents/autonomous): the agents that do the routing

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { statusVariant } from './constants'
 import type { Agent } from '@/types'
@@ -60,7 +61,7 @@ export function AgentHeader({
           </Button>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="min-w-0 text-2xl font-heading font-bold [overflow-wrap:anywhere]">{agent.name}</h1>
+              <h1 className={DETAIL_TITLE_CLASSES}>{agent.name}</h1>
               <Badge variant={statusVariant[agent.status] || 'secondary'}>
                 {agent.status === 'active' ? 'Active' : agent.status === 'draft' ? 'Draft' : agent.status === 'inactive' ? 'Inactive' : agent.status}
               </Badge>
@@ -82,7 +83,7 @@ export function AgentHeader({
             title="Export EU AI Act style technical documentation (Markdown)"
           >
             <FileText className="h-4 w-4 mr-2" />
-            Tech Doc
+            Tech doc
           </Button>
           <Button variant="outline" size="sm" onClick={onDuplicate}>
             <Copy className="h-4 w-4 mr-2" />

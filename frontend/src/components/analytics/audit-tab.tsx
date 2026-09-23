@@ -185,7 +185,7 @@ export function AuditTab() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">By Resource Type</CardTitle>
+                <CardTitle className="text-lg">By resource type</CardTitle>
               </CardHeader>
               <CardContent>
                 {auditSummary.byResourceType?.length > 0 ? (
@@ -207,7 +207,7 @@ export function AuditTab() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Top Users</CardTitle>
+                <CardTitle className="text-lg">Top users</CardTitle>
               </CardHeader>
               <CardContent>
                 {auditSummary.topUsers?.length > 0 ? (

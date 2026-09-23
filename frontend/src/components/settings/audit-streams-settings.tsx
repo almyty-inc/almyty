@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { UpgradePrompt } from '@/components/plan-indicator'
 import { api } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 /**
  * Stream the audit log to a SIEM.
@@ -88,6 +89,7 @@ function AuditStreams() {
   const insecure = endpoint.trim().startsWith('http://')
   const canAdd = endpoint.trim().length > 0 && !insecure && !create.isPending
 
+  const { confirm, dialog: confirmDialog } = useConfirm()
   return (
     <Card>
       <CardHeader>
@@ -113,7 +115,15 @@ function AuditStreams() {
                   aria-label={`Remove audit stream ${row.endpoint}`}
                   data-testid={`remove-stream-${row.id}`}
                   disabled={remove.isPending}
-                  onClick={() => remove.mutate(row.id)}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: 'Remove this audit stream?',
+                      description: `Audit events stop being sent to ${row.endpoint}.`,
+                      confirmLabel: 'Remove stream',
+                      destructive: true,
+                    })
+                    if (ok) remove.mutate(row.id)
+                  }}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
@@ -193,6 +203,7 @@ function AuditStreams() {
           {create.isPending ? 'Adding...' : 'Add target'}
         </Button>
       </CardContent>
+      {confirmDialog}
     </Card>
   )
 }

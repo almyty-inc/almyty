@@ -208,7 +208,7 @@ export class AgentStepProcessor {
     }
 
     // If this is a collaboration orchestrator (and NOT a child run), delegate to collaboration handler
-    if (agent.collaboration?.strategy && agent.collaboration.agents?.length > 0 && !run.parentRunId) {
+    if (agent.collaboration?.strategy && agent.collaboration.participants?.length > 0 && !run.parentRunId) {
       return this.s.collaboration.processCollaborationStep(run, agent);
     }
 

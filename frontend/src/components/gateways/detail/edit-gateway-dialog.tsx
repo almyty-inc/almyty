@@ -11,6 +11,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -73,7 +74,7 @@ export function EditGatewayDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Edit Gateway</DialogTitle>
+          <DialogTitle>Edit gateway</DialogTitle>
           <DialogDescription>
             Update gateway settings. Note: only the gateway type (MCP/A2A/UTCP) cannot be changed after creation.
           </DialogDescription>
@@ -92,7 +93,7 @@ export function EditGatewayDialog({
               </p>
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              Type: <Badge variant="outline" className="ml-1">{gateway?.type?.toUpperCase()}</Badge> (cannot be changed)
+              Type: {gateway?.type && <ProtocolBadge protocol={gateway.type} className="ml-1" />} (cannot be changed)
             </p>
           </div>
 
@@ -155,7 +156,7 @@ export function EditGatewayDialog({
               type="submit"
               disabled={isSaving}
             >
-              {isSaving ? 'Saving...' : 'Save Changes'}
+              {isSaving ? 'Saving...' : 'Save changes'}
             </Button>
           </div>
         </form>

@@ -9,8 +9,9 @@ import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentExecutionStateHelper } from '../agent-execution-state.helper';
 import { AgentNodeExecutor } from '../agent-node-executor';
 import { AgentWebhookService } from '../agent-webhook.service';
-import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entity';
+import { Agent, AgentPipeline } from '../../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus } from '../../../entities/agent-execution.entity';
+import { fakeExecutionRepo, makeAgent, makeExecutionRow } from './agent-execution.fixtures';
 
 /**
  * A cancelled run was recorded as FAILED, with "Pipeline failed: ..." as its
@@ -28,56 +29,10 @@ import { AgentExecution, AgentExecutionStatus } from '../../../entities/agent-ex
  * the node RESOLVE after the cancel, which is the one shape that skips the
  * failure branch.
  */
-function makeExecutionRow(): AgentExecution {
-  const exec = new AgentExecution();
-  exec.id = 'exec-1';
-  exec.agentId = 'agent-1';
-  exec.organizationId = 'org-1';
-  exec.userId = 'user-1';
-  exec.status = AgentExecutionStatus.RUNNING;
-  exec.input = {};
-  exec.output = null;
-  exec.nodeResults = {};
-  exec.executionTime = 0;
-  exec.totalCost = 0;
-  exec.totalTokens = 0;
-  exec.error = null as any;
-  exec.metadata = {};
-  return exec;
-}
-
-function fakeExecutionRepo(rows: AgentExecution[]) {
-  const saved: AgentExecution[] = [];
-  return {
-    saved,
-    create: jest.fn((v: any) => Object.assign(makeExecutionRow(), v)),
-    save: jest.fn(async (e: AgentExecution) => {
-      saved.push(Object.assign(new AgentExecution(), e));
-      return e;
-    }),
-    findOne: jest.fn(async ({ where }: any) =>
-      rows.find((r) => Object.entries(where).every(([k, v]) => (r as any)[k] === v)) ?? null,
-    ),
-  };
-}
-
-function makeAgent(pipeline: AgentPipeline): Agent {
-  const agent = new Agent();
-  agent.id = 'agent-1';
-  agent.name = 'Cancellable';
-  agent.organizationId = 'org-1';
-  agent.status = AgentStatus.ACTIVE;
-  agent.pipeline = pipeline;
-  agent.variables = {};
-  agent.settings = {};
-  agent.metadata = {};
-  agent.totalExecutions = 0;
-  agent.successfulExecutions = 0;
-  agent.totalCost = 0;
-  agent.averageExecutionTime = 0;
-  agent.createdBy = 'user-1';
-  return agent;
-}
+// makeExecutionRow / fakeExecutionRepo / makeAgent are shared, in
+// ./agent-execution.fixtures — a third private copy of the fake
+// repository would drift from the guarded-write semantics the engine
+// now relies on.
 
 describe('a cancelled run is recorded as cancelled, not as a pipeline failure', () => {
   let engine: AgentExecutionEngine;

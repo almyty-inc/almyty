@@ -61,21 +61,30 @@ between the two modes.
 ## Collaboration
 
 Verification puts several models inside one agent. Collaboration goes the other
-way: point an agent at several other agents and choose how they work together.
-Each member can be a different model, and the judge that settles the result can
-be a different model again.
+way: give an agent a set of participants and choose how they work together. A
+participant is either another agent (with its own tools and loop) or a model: a
+provider and model, or a routing policy that lets the catalog pick one. A model
+participant is a single call and can carry its own instructions, temperature and
+token limit, so you can compose several models without creating an agent for
+each.
 
 ![Agents collaborating in a debate](/screenshots/agent-collab-debate.png)
 
 | Mode | What it does |
 |------|--------------|
-| Sequential | Members run one after another, each fed the previous member's output (a chain). |
-| Parallel | All members run at once on the same input. A judge merges their outputs into one answer; without a judge they are returned together. |
-| Race | All members run at once; the first to finish wins. Every racer's cost is still counted, so a budget cap holds. |
-| Debate | Members argue over several rounds, each round seeing all prior responses. A judge then reads the debate and writes the final answer. |
+| Sequential | The agent itself runs first, then each participant in order, each fed the previous one's output (a chain). |
+| Parallel | All participants run at once on the same input. A judge merges their outputs into one answer; without a judge they are returned together. |
+| Race | All participants run at once; the first to finish wins. Losing model calls are aborted, losing agents cancelled, and every racer's cost is still counted, so a budget cap holds. |
+| Debate | Participants argue over several rounds, each round seeing all prior responses. A judge then reads the debate and writes the final answer. |
 
-The judge is any agent you choose, so a Claude debate can be settled by GPT-4o,
-or the reverse.
+The judge is a participant too, agent or model, so a Claude debate can be
+settled by GPT-4o, or the reverse.
+
+The rules of engagement apply to every participant. The shared brief, role,
+output format, escalation and conflict-resolution rules go into each
+participant's prompt, and the total cost cap is checked before each participant
+starts: once the collaboration has spent it, the run stops with a
+"Collaboration total cost limit reached" error instead of making the next call.
 
 (Workflow agents have a separate **consensus** merge node: a judge that combines
 branch outputs. That is a node, not a collaboration mode.)

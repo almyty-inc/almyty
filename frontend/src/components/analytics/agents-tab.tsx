@@ -194,7 +194,7 @@ export function AgentsTab() {
       {/* Top agents by usage */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Top Agents by Usage</CardTitle>
+          <CardTitle className="text-lg">Top agents by usage</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="rounded-lg border bg-card">
@@ -284,7 +284,7 @@ export function AgentsTab() {
       {/* Recent Failures */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Recent Failures</CardTitle>
+          <CardTitle className="text-lg">Recent failures</CardTitle>
         </CardHeader>
         <CardContent>
           {agentStats.recentFailures.length === 0 ? (

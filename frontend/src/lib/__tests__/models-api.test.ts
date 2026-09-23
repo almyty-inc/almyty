@@ -40,15 +40,6 @@ describe('modelsApi', () => {
     expect(postSpy).toHaveBeenCalledWith('/models', { name: 'Sonnet', vendorModelId: 'claude-sonnet-5', providerId: 'p1' }, undefined)
   })
 
-  it('registers an endpoint', async () => {
-    await modelsApi.registerEndpoint({ name: 'Local', url: 'http://10.0.0.5:8000/v1', vendorModelId: 'qwen3', privacyTier: 'local' })
-    expect(postSpy).toHaveBeenCalledWith(
-      '/models/register-endpoint',
-      { name: 'Local', url: 'http://10.0.0.5:8000/v1', vendorModelId: 'qwen3', privacyTier: 'local' },
-      undefined,
-    )
-  })
-
   it('syncs one provider with a body and all providers without one', async () => {
     await modelsApi.sync('p1')
     expect(postSpy).toHaveBeenCalledWith('/models/sync', { providerId: 'p1' }, undefined)

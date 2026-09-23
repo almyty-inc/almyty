@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { renderWithProviders } from '../../../../test/setup'
 import { ChannelInstallationsPanel } from '../channel-installations-panel'
 import { gatewaysApi } from '@/lib/api'
@@ -120,6 +120,9 @@ describe('ChannelInstallationsPanel', () => {
     renderWithProviders(<ChannelInstallationsPanel gateway={makeGateway()} />)
 
     fireEvent.click(await screen.findByRole('button', { name: /Revoke/ }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(gatewaysApi.revokeInstallation).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke installation' }))
 
     await waitFor(() => {
       expect(gatewaysApi.revokeInstallation).toHaveBeenCalledWith('gw-1', 'inst-1')

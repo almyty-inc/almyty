@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Brain, Plus, Trash2, Search, ArrowRightLeft, HeartPulse, Tags as TagsIcon } from 'lucide-react'
+import { Brain, Plus, Trash2, Search, ArrowRightLeft, HeartPulse, Tags as TagsIcon, Building2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/layout/page-header'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   AlertDialog,
@@ -236,9 +237,12 @@ export function MemoriesPage() {
   // ── render ──────────────────────────────────────────────────────────
   if (!orgId) {
     return (
-      <div className="space-y-6">
-        <Card><CardContent className="p-0"><EmptyState icon={Brain} title="No organization" description="Switch to an organization to view memory." /></CardContent></Card>
-      </div>
+      <EmptyState
+        variant="panel"
+        icon={Building2}
+        title="No organization selected"
+        description="Select or create an organization to see its memory."
+      />
     )
   }
 
@@ -255,22 +259,20 @@ export function MemoriesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Memory</h1>
-          <p className="text-muted-foreground">
-            Canonical schema v1 — bi-temporal memory + document mode + multi-backend routing.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setTransferOpen(true)}>
-            <ArrowRightLeft className="h-4 w-4 mr-2" /> Transfer
-          </Button>
-          <Button onClick={() => setPutOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" /> New memory
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Memory"
+        description="What your agents remember across runs, per agent or shared, with full history."
+        actions={
+          <>
+            <Button variant="outline" onClick={() => setTransferOpen(true)}>
+              <ArrowRightLeft className="h-4 w-4 mr-2" /> Transfer
+            </Button>
+            <Button onClick={() => setPutOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Add memory
+            </Button>
+          </>
+        }
+      />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <TabsList>
@@ -282,7 +284,7 @@ export function MemoriesPage() {
 
         {/* ── Browse ─────────────────────────────────────────────── */}
         <TabsContent value="browse" className="space-y-4">
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Select value={modeFilter} onValueChange={(v) => setModeFilter(v as MemoryMode)}>
               <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -312,16 +314,17 @@ export function MemoriesPage() {
           {list.isError ? (
             <QueryError error={list.error} onRetry={() => list.refetch()} title="Couldn't load memories" />
           ) : list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (
-            <Card><CardContent className="p-0"><EmptyState
+            <EmptyState
+              variant="panel"
               icon={Brain}
               title="No memories yet"
               description="Memory gives agents recall across runs — per-agent or shared, with bi-temporal history."
               action={
                 <Button onClick={() => setPutOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" /> New memory
+                  <Plus className="h-4 w-4 mr-2" /> Add memory
                 </Button>
               }
-            /></CardContent></Card>
+            />
           ) : (
             <div className="grid gap-3">
               {items.map((m) => (
@@ -468,7 +471,7 @@ export function MemoriesPage() {
       <Dialog open={putOpen} onOpenChange={setPutOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New memory</DialogTitle>
+            <DialogTitle>Add memory</DialogTitle>
             <DialogDescription>
               Writes to the canonical store. Routes to whichever backend the scope is configured for.
             </DialogDescription>
@@ -525,7 +528,7 @@ export function MemoriesPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setPutOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setPutOpen(false)}>Cancel</Button>
             <Button onClick={() => putMut.mutate()} disabled={putMut.isPending || !draft.content.trim()}>
               {putMut.isPending ? <LoadingSpinner /> : 'Store'}
             </Button>
@@ -574,7 +577,7 @@ export function MemoriesPage() {
             <Label htmlFor="dry-run">Dry run (preview warnings, no writes)</Label>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setTransferOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setTransferOpen(false)}>Cancel</Button>
             <Button onClick={() => transferMut.mutate()} disabled={transferMut.isPending || transfer.source === transfer.target}>
               {transferMut.isPending ? <LoadingSpinner /> : transfer.dry_run ? 'Run dry-run' : 'Transfer'}
             </Button>
@@ -607,9 +610,9 @@ export function MemoriesPage() {
                   removeMut.mutate({ id: memoryToDelete.id, mode: 'soft' })
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              Delete Memory
+              Delete memory
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

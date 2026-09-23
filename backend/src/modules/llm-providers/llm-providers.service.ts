@@ -767,8 +767,8 @@ export class LlmProvidersService {
   fetchModelsFromProvider(provider: LlmProvider) { return this.modelsHelper.fetchModelsFromProvider(provider); }
   fetchModelsByType(type: LlmProviderType, apiKey: string) { return this.modelsHelper.fetchModelsByType(type, apiKey); }
   getDefaultCapabilities(type: LlmProviderType) { return this.modelsHelper.getDefaultCapabilities(type); }
-  calculateProviderCost(provider: LlmProvider, inputTokens: number, outputTokens: number) {
-    return this.modelsHelper.calculateProviderCost(provider, inputTokens, outputTokens);
+  calculateProviderCost(provider: LlmProvider, inputTokens: number, outputTokens: number, requestedModel?: string) {
+    return this.modelsHelper.calculateProviderCost(provider, inputTokens, outputTokens, requestedModel);
   }
 
   /**

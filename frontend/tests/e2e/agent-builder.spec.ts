@@ -151,7 +151,7 @@ test.describe('Agent Builder', () => {
     await expect(createButton).toBeVisible()
   })
 
-  test('should validate required fields when saving agent', async ({ page, assertHelper }) => {
+  test('asks for the remaining steps on a new draft, then refuses the save', async ({ page, assertHelper }) => {
     await page.goto('/agents/new')
     await assertHelper.waitForLoadingComplete()
 
@@ -159,13 +159,22 @@ test.describe('Agent Builder', () => {
     const canvas = page.locator('[role="application"]')
     await expect(canvas).toBeVisible({ timeout: 15000 })
 
-    // Verify the validation banner is shown — LLM node needs a provider
-    await expect(
-      page.getByText('LLM Call node "llm_1" is missing a provider')
-    ).toBeVisible({ timeout: 5000 })
+    // An untouched draft states what is left, and states it neutrally: no
+    // error banner before the user has done anything.
+    const nextSteps = page.getByTestId('builder-next-steps')
+    await expect(nextSteps).toBeVisible({ timeout: 5000 })
+    await expect(nextSteps).toContainText('Model Call: pick a model')
+    await expect(page.getByTestId('builder-validation-errors')).toHaveCount(0)
 
-    // Save button should be disabled due to validation errors
+    // Save is live, because pressing it is how you ask.
     const saveButton = page.getByRole('button', { name: /save/i })
+    await expect(saveButton).toBeEnabled()
+    await saveButton.click()
+
+    // And it refuses, in as many words, and greys out behind the answer.
+    await expect(page.getByTestId('builder-validation-errors')).toContainText(
+      'Model Call: pick a model',
+    )
     await expect(saveButton).toBeDisabled()
 
     // We're still on the new agent page

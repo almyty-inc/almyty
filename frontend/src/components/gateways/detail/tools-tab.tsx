@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { toolSourceApi, DELETED_API_LABEL } from '@/lib/tool-source'
 
 export type ScopingPreset = 'read-only' | 'admin' | 'public' | 'all' | 'none'
 
@@ -60,11 +61,11 @@ function isToolAssignable(tool: any): boolean {
 }
 
 function getToolApiKey(tool: any): string {
-  return tool.metadata?.sourceApi?.id || tool.apiId || '__custom__'
+  return toolSourceApi(tool).id || '__custom__'
 }
 
 function getToolApiName(tool: any): string {
-  return tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : 'Custom Tools')
+  return toolSourceApi(tool).name || (tool.type === 'api' ? DELETED_API_LABEL : 'Custom Tools')
 }
 
 export function GatewayToolsTab({
@@ -157,7 +158,7 @@ export function GatewayToolsTab({
       {/* Scoping Status */}
       <Card>
         <CardHeader>
-          <CardTitle>Tool Scoping</CardTitle>
+          <CardTitle>Tool scoping</CardTitle>
           <CardDescription>
             Control which tools are available through this gateway. {gatewayTools.length} of {allTools.length} assigned
           </CardDescription>
@@ -169,14 +170,14 @@ export function GatewayToolsTab({
               onClick={() => onApplyPreset('read-only')}
               disabled={bulkAssignPending}
             >
-              Read Only
+              Read only
             </Button>
             <Button
               variant="outline"
               onClick={() => onApplyPreset('admin')}
               disabled={bulkAssignPending}
             >
-              Admin Tools
+              Admin tools
             </Button>
             <Button
               variant="outline"
@@ -190,14 +191,14 @@ export function GatewayToolsTab({
               onClick={() => onApplyPreset('all')}
               disabled={bulkAssignPending}
             >
-              All Tools
+              All tools
             </Button>
             <Button
               variant="outline"
               onClick={onRequestRemoveAll}
               disabled={bulkAssignPending}
             >
-              Remove All
+              Remove all
             </Button>
           </div>
         </CardContent>

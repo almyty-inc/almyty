@@ -64,7 +64,7 @@ export function SecurityTab({ api, open, onOpenChange }: SecurityTabProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Configure Authentication</DialogTitle>
+          <DialogTitle>Configure authentication</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>

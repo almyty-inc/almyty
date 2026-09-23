@@ -182,16 +182,13 @@ export function ConnectionsTab() {
       )}
 
       {!loading && !connectorsQuery.isError && groups.length === 0 && (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
+        <EmptyState
+          variant="panel"
               icon={Plug}
               title={search ? 'No connector matches' : 'No connectors yet'}
               description={search ? 'Try another name or kind.' : 'The catalog is empty. Add a custom connector to get started.'}
               action={!search ? <Button type="button" variant="outline" onClick={() => setCustomOpen(true)}>Add custom connector</Button> : undefined}
             />
-          </CardContent>
-        </Card>
       )}
 
       {groups.map((group) => (

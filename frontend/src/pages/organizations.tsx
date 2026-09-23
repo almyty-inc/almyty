@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
 import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import { organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -28,6 +29,7 @@ import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { formatDate, getInitials, formatCurrency } from '@/lib/utils'
+import { PageHeader } from '@/components/layout/page-header'
 import { Organization, OrganizationMembership, OrganizationRole, OrganizationPlan } from '@/types'
 
 const createOrgSchema = z.object({
@@ -47,6 +49,7 @@ export function OrganizationsPage() {
   const { currentOrganization, organizations, setCurrentOrganization, upsertOrganization, removeOrganization } = useOrganizationStore()
   const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   React.useEffect(() => {
     document.title = 'Organizations | almyty'
@@ -201,9 +204,16 @@ export function OrganizationsPage() {
     updateMemberRoleMutation.mutate({ orgId: selectedOrg.id, userId, role })
   }
 
-  const handleRemoveMember = (userId: string) => {
+  const handleRemoveMember = async (member: OrganizationMembership) => {
     if (!selectedOrg) return
-    removeMemberMutation.mutate({ orgId: selectedOrg.id, userId })
+    const name = member.user?.name || member.email || 'This member'
+    const ok = await confirm({
+      title: 'Remove this member?',
+      description: `${name} will lose access to ${selectedOrg.name}.`,
+      confirmLabel: 'Remove member',
+      destructive: true,
+    })
+    if (ok) removeMemberMutation.mutate({ orgId: selectedOrg.id, userId: member.userId })
   }
 
   const orgColumns: ColumnDef<Organization>[] = [
@@ -289,7 +299,15 @@ export function OrganizationsPage() {
         setEditOrgDescription(org.description || '')
         setOrgDetailsOpen(true)
       },
-      (org) => deleteOrgMutation.mutate(org.id),
+      async (org) => {
+        const ok = await confirm({
+          title: 'Delete this organization?',
+          description: `"${org.name}" and all of its data, including gateways, tools and settings, will be permanently deleted. This cannot be undone.`,
+          confirmLabel: 'Delete organization',
+          destructive: true,
+        })
+        if (ok) deleteOrgMutation.mutate(org.id)
+      },
       [
         {
           label: 'View Details',
@@ -365,9 +383,11 @@ export function OrganizationsPage() {
       header: 'Joined',
       cell: ({ row }) => formatDate(row.original.joinedAt),
     },
+    // No edit action for a membership row: role changes live under
+    // "Change Role", so an "Edit" item here did nothing.
     createActionsColumn<OrganizationMembership>(
-      () => {},
-      (member) => handleRemoveMember(member.userId),
+      undefined,
+      (member) => { void handleRemoveMember(member) },
       [
         {
           label: 'Change Role',
@@ -411,16 +431,11 @@ export function OrganizationsPage() {
   const members = Array.isArray(membersData) ? membersData : []
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Organizations</h1>
-          <p className="text-muted-foreground">
-            Manage your organizations and team members
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
+    <div className="space-y-6">
+      <PageHeader
+        title="Organizations"
+        description="Manage your organizations and team members"
+        actions={
           <Dialog open={createDialogOpen} onOpenChange={(open) => {
             createOrgMutation.reset()
             setCreateDialogOpen(open)
@@ -428,12 +443,12 @@ export function OrganizationsPage() {
             <DialogTrigger asChild>
               <Button>
                 <Plus className="mr-2 h-4 w-4" />
-                Create Organization
+                Create organization
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Create New Organization</DialogTitle>
+                <DialogTitle>Create new organization</DialogTitle>
                 <DialogDescription>
                   Create a new organization to manage your team and resources.
                 </DialogDescription>
@@ -483,13 +498,13 @@ export function OrganizationsPage() {
               </form>
             </DialogContent>
           </Dialog>
-        </div>
-      </div>
+        }
+      />
 
       {/* Organizations Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Your Organizations</CardTitle>
+          <CardTitle>Your organizations</CardTitle>
           <CardDescription>
             Manage and switch between your organizations
           </CardDescription>
@@ -589,7 +604,7 @@ export function OrganizationsPage() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>Usage Limits</CardTitle>
+                    <CardTitle>Usage limits</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
@@ -636,12 +651,12 @@ export function OrganizationsPage() {
                     <DialogTrigger asChild>
                       <Button size="sm">
                         <UserPlus className="mr-2 h-4 w-4" />
-                        Invite Member
+                        Invite member
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>Invite Team Member</DialogTitle>
+                        <DialogTitle>Invite team member</DialogTitle>
                         <DialogDescription>
                           Send an invitation to join {selectedOrg.name}
                         </DialogDescription>
@@ -689,7 +704,7 @@ export function OrganizationsPage() {
                             type="submit"
                             disabled={inviteMemberMutation.isPending}
                           >
-                            {inviteMemberMutation.isPending ? 'Sending...' : 'Send Invitation'}
+                            {inviteMemberMutation.isPending ? 'Sending...' : 'Send invitation'}
                           </Button>
                         </div>
                       </form>
@@ -714,7 +729,7 @@ export function OrganizationsPage() {
               <TabsContent value="settings" className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Organization Settings</CardTitle>
+                    <CardTitle>Organization settings</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
@@ -741,7 +756,7 @@ export function OrganizationsPage() {
                         })}
                         disabled={updateOrgMutation.isPending || (editOrgName === selectedOrg.name && editOrgDescription === (selectedOrg.description || ''))}
                       >
-                        {updateOrgMutation.isPending ? 'Saving...' : 'Save Changes'}
+                        {updateOrgMutation.isPending ? 'Saving...' : 'Save changes'}
                       </Button>
                     </div>
                     <div className="flex items-center justify-between pt-4 border-t">
@@ -753,7 +768,7 @@ export function OrganizationsPage() {
                       </div>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="destructive">Delete Organization</Button>
+                          <Button variant="destructive">Delete organization</Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
@@ -768,9 +783,9 @@ export function OrganizationsPage() {
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => deleteOrgMutation.mutate(selectedOrg.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              variant="destructive"
                             >
-                              Delete Organization
+                              Delete organization
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
@@ -783,6 +798,7 @@ export function OrganizationsPage() {
           )}
         </SheetContent>
       </Sheet>
+      {confirmDialog}
     </div>
   )
 }

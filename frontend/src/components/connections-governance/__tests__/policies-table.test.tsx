@@ -81,7 +81,7 @@ describe('PoliciesTable', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Approved vendors' }))
     expect(await screen.findByText('Delete Approved vendors?')).toBeInTheDocument()
     expect(connectionPoliciesApi.remove).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete policy' }))
     await waitFor(() => expect(connectionPoliciesApi.remove).toHaveBeenCalledWith('p1'))
     await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Policy deleted', expect.any(String)))
   })

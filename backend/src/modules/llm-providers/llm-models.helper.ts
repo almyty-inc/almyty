@@ -518,18 +518,40 @@ export class LlmModelsHelper {
 
   /**
    * Calculate the cost of a provider call in dollars.
+   *
+   * `requestedModel` is the id that actually went on the wire: the provider
+   * implementations send `request.model || provider.configuration.model`
+   * (see requireModel), so pricing has to settle the same way. Pricing off
+   * `provider.configuration.model` alone charged every routed call, every
+   * `llm_call` node naming its own model and every OpenAI-compatible
+   * request at whatever the provider row happened to be configured with,
+   * and priced a provider with no configured model at exactly zero.
+   *
    * Explicit metadata pricing wins, then the live price feed, then the
    * offline seed table.
    */
-  calculateProviderCost(provider: LlmProvider, inputTokens: number, outputTokens: number): number {
-    // 1. Use the provider's configured pricing from metadata if available
+  calculateProviderCost(
+    provider: LlmProvider,
+    inputTokens: number,
+    outputTokens: number,
+    requestedModel?: string,
+  ): number {
+    const configured = provider.configuration?.model || '';
+    const model = (requestedModel || configured).toLowerCase();
+
+    // 1. The provider's configured pricing from metadata. It describes that
+    //    provider's own configured model, so a call that named a different
+    //    model is not covered by it and falls through to the feed.
     const modelInfo = provider.metadata?.modelInfo;
-    if (modelInfo?.inputTokenCost && modelInfo?.outputTokenCost) {
+    if (
+      modelInfo?.inputTokenCost &&
+      modelInfo?.outputTokenCost &&
+      model === configured.toLowerCase()
+    ) {
       return ((inputTokens / 1000) * modelInfo.inputTokenCost) + ((outputTokens / 1000) * modelInfo.outputTokenCost);
     }
 
     // 2. Feed first, seed table second (per 1K tokens, in dollars)
-    const model = (provider.configuration?.model || '').toLowerCase();
     const pricing = this.getModelPricing(model, provider.type);
     if (pricing) {
       return ((inputTokens / 1000) * pricing.input) + ((outputTokens / 1000) * pricing.output);

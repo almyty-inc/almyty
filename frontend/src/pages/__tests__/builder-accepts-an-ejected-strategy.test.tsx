@@ -102,7 +102,7 @@ describe('the builder accepts a graph ejected from a strategy', () => {
 
     await waitFor(() => expect(screen.getByDisplayValue('Cascading agent')).toBeInTheDocument())
     await waitFor(() => expect(saveButton()).toBeEnabled())
-    expect(screen.queryByText(/is missing a provider/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Model Call: pick a model/i)).not.toBeInTheDocument()
   })
 
   it('still complains about a model call that names nothing at all', async () => {
@@ -114,7 +114,9 @@ describe('the builder accepts a graph ejected from a strategy', () => {
 
     renderWithProviders(<AgentBuilderPage />)
 
-    await waitFor(() => expect(screen.getByText(/Model Call node "draft" is missing/i)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText(/Model Call: pick a model/i)).toBeInTheDocument(),
+    )
     expect(saveButton()).toBeDisabled()
   })
 

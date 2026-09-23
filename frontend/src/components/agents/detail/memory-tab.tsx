@@ -129,7 +129,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
             </div>
             <Button size="sm" onClick={() => setAddMemoryOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Add Memory
+              Add memory
             </Button>
           </div>
         </CardHeader>
@@ -199,7 +199,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
       <Dialog open={addMemoryOpen} onOpenChange={setAddMemoryOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Memory</DialogTitle>
+            <DialogTitle>Add memory</DialogTitle>
             <DialogDescription>
               Create a new memory entry scoped to this agent.
             </DialogDescription>

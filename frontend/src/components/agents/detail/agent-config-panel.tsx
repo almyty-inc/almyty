@@ -5,19 +5,20 @@
  * every answer — plus the failure-memory constraints and memory config. This is
  * the multi-LLM-in-one-agent story, which previously lived only in the DB.
  */
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Cpu, ShieldCheck, ShieldAlert, Repeat, Brain } from 'lucide-react'
-
+import { Cpu, ShieldCheck, ShieldAlert, Repeat, Brain, Settings2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { llmProvidersApi } from '@/lib/api'
-import { VerifyConfigDialog } from './verify-config-dialog'
+import { VerifyConfigEditor } from './verify-config-editor'
 import type { Agent } from '@/types'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 export function AgentConfigPanel({ agent }: { agent: Agent }) {
+  const [editingVerify, setEditingVerify] = useState(false)
   const { data: providersData } = useQuery<any>({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
+    ...llmProvidersQuery,
   })
   // getAll() may return a bare array or a { providers: [...] } envelope.
   const providers: any[] = Array.isArray(providersData)
@@ -40,16 +41,20 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
   if (mc.providerId) vendors.add(vendorOf(mc.providerId))
   if (verify?.enabled) (verify.checkers || []).forEach((c) => c.providerId && vendors.add(vendorOf(c.providerId)))
   const multiVendor = vendors.size > 1
-
   return (
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
-            <Cpu className="h-4 w-4 text-primary" /> Models &amp; Verification
+            <Cpu className="h-4 w-4 text-primary" /> Models &amp; verification
           </CardTitle>
           <div className="flex items-center gap-2">
-            <VerifyConfigDialog agent={agent} />
+            {!editingVerify && (
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setEditingVerify(true)}>
+                <Settings2 className="h-3.5 w-3.5" />
+                Configure verification
+              </Button>
+            )}
             <Badge variant="outline" className="capitalize">{agent.mode} mode</Badge>
           </div>
         </div>
@@ -61,6 +66,8 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
         )}
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Edited in place, not in a modal. */}
+        {editingVerify && <VerifyConfigEditor agent={agent} onDone={() => setEditingVerify(false)} />}
         {/* Primary model */}
         <div>
           <div className="text-xs font-medium text-muted-foreground mb-1.5">Primary model</div>

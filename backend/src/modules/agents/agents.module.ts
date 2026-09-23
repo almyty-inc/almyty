@@ -41,6 +41,7 @@ import { AgentContextCompactor } from './agent-context-compactor.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
 import { AgentRuntimeProcessor } from './agent-runtime.processor';
 import { AgentRunReaperService } from './agent-run-reaper.service';
+import { AgentExecutionReaperService } from './agent-execution-reaper.service';
 import { AgentValidationHelper } from './agent-validation.helper';
 import { AgentTechDocHelper } from './agent-tech-doc.helper';
 import { AgentsController } from './agents.controller';
@@ -106,7 +107,7 @@ import { BudgetsModule } from '../budgets/budgets.module';
     AgentConstraintsModule,
     BudgetsModule,
   ],
-  providers: [AgentReadinessService, AgentRunReaperService, OrchestratorService, StrategyPipelineResolver,
+  providers: [AgentReadinessService, AgentRunReaperService, AgentExecutionReaperService, OrchestratorService, StrategyPipelineResolver,
     AgentRolesService, AgentsService, AgentValidationHelper, AgentExecutionEngine, AgentExecutionStateHelper, AgentOpenAIStreamHelper, AgentNodeExecutor, AgentTemplateResolver, AgentWebhookService, AgentSchedulerService, AgentAuditService, AgentRuntimeService, AgentRuntimeBuilders, AgentCollaborationHelper, AgentBuiltInToolsHelper, AgentHeartbeatHelper, AgentRuntimeEventsHelper, AgentRuntimeMiscHelper, AgentStepProcessor, AgentRuntimeProcessor, AgentSubAgentExecutors, AgentVerifierHelper, AgentContextCompactor, AgentTechDocHelper, AgentExecutionCancellationService],
   controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentScheduleController, AgentRunsController, AgentOpenAICompatController, AgentAnthropicCompatController, AgentRolesController, StrategiesController, AgentExecutionSettingsController],
   exports: [

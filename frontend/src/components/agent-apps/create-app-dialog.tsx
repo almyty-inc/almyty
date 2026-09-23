@@ -97,7 +97,7 @@ export function CreateAppDialog({ open, onOpenChange }: CreateAppDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Create App</DialogTitle>
+          <DialogTitle>Create app</DialogTitle>
           <DialogDescription>
             An app is your agents under your own name. Safe spending, message-rate, and
             visitor-privacy defaults are applied automatically; change them in Settings.
@@ -153,7 +153,7 @@ export function CreateAppDialog({ open, onOpenChange }: CreateAppDialogProps) {
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button disabled={!canSubmit} onClick={() => create.mutate()}>

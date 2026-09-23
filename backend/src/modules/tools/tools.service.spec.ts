@@ -828,6 +828,17 @@ describe('ToolsService', () => {
       expect(result.totalPages).toBe(1);
     });
 
+    // A tool with an apiId but no operation (the sample seed made those)
+    // came back without an API at all, and the list printed "Unknown API".
+    it('joins the tool’s own API, not only the one behind its operation', async () => {
+      const qb = makeQueryBuilder([], 0);
+      toolRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getTools(baseFilters);
+
+      expect(qb.leftJoinAndSelect).toHaveBeenCalledWith('tool.api', 'toolApi');
+    });
+
     it('should apply search filter', async () => {
       const qb = makeQueryBuilder([], 0);
       toolRepo.createQueryBuilder.mockReturnValue(qb);

@@ -282,7 +282,12 @@ export class LlmChatRunnerHelper {
     tools: Tool[],
     startTime: number,
   ): Promise<ChatResponse> {
-    const costFn = this.modelsHelper.calculateProviderCost.bind(this.modelsHelper);
+    // Price the call on the model that actually goes on the wire
+    // (requireModel: request.model wins over the provider's configured
+    // one), not on whatever the provider row is configured with. A routed
+    // call and an llm_call node both name their own model here.
+    const costFn = (p: LlmProvider, inputTokens: number, outputTokens: number) =>
+      this.modelsHelper.calculateProviderCost(p, inputTokens, outputTokens, request.model);
     // One implementation per protocol, shared by every vendor that speaks
     // it. This replaced a list of twenty-odd case labels that had to be
     // edited by hand for each new vendor, which is how AWS_BEDROCK ended

@@ -141,7 +141,8 @@ export function RunnerNewPage() {
             <div>
               <Label>Labels (optional)</Label>
               <p className="text-xs text-muted-foreground mt-1">
-                Routing tags. e.g. <code>env=dev</code>, <code>tier=staging</code>.
+                Descriptive tags, e.g. <code>env=dev</code>, <code>tier=staging</code>.
+                {' '}Labels do not affect where work is dispatched yet.
               </p>
               <div className="space-y-2 mt-2">
                 {labels.map((label, i) => (

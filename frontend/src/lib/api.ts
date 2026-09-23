@@ -1,5 +1,11 @@
 import axios, { AxiosResponse, AxiosError } from 'axios'
 import { isHostedChatHost } from '@/lib/tenant-host'
+import {
+  clearOrganizationSelection,
+  isStaleOrganizationContext,
+  readCurrentOrgId,
+  recoverFromStaleOrganizationContext,
+} from '@/store/organization-selection'
 
 const API_BASE_URL = import.meta.env.ALMYTY_API_BASE_URL || ''
 
@@ -114,11 +120,10 @@ export function getApiBaseUrl(): string {
 api.interceptors.request.use((config) => {
   // Send the user's selected org on every request so multi-org users
   // don't get silently scoped to whichever membership happens to be
-  // first. Read the value out of the Zustand org store via its
-  // synchronous accessor to avoid a circular import of the React
-  // hook. The store persists currentOrganization to localStorage
-  // directly under key "almyty-org-store" so this also works on the
-  // first request after a hard refresh.
+  // first. The reader lives in store/organization-selection.ts, which
+  // imports nothing, because the org store imports this module and a
+  // direct import back would be a cycle. It reads the persisted copy so
+  // it also answers on the first request after a hard refresh.
   // Read lazily at request time (not module-load time) so we always
   // reflect the user's latest selection.
   if (!config.headers['X-Organization-Id']) {
@@ -133,22 +138,6 @@ api.interceptors.request.use((config) => {
 
   return config
 })
-
-// Read currentOrganizationId from the persisted Zustand store. We
-// cannot import the store directly here because it imports this file
-// (to get the organizationsApi helper), which would be a cycle. Fall
-// back to parsing localStorage directly — that's where the persist
-// middleware writes it.
-function readCurrentOrgId(): string | null {
-  try {
-    const raw = localStorage.getItem('almyty-org-store')
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as { state?: { currentOrganization?: { id?: string } } }
-    return parsed?.state?.currentOrganization?.id ?? null
-  } catch {
-    return null
-  }
-}
 
 // All backend controllers return { success: true, data: <payload>, message?: string }
 // This helper extracts the payload from any API response.
@@ -226,6 +215,10 @@ api.interceptors.response.use(
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       localStorage.removeItem('auth-storage')
+      // The organization selection belongs to the session that just
+      // ended. Left behind, it is still there when the next user signs
+      // in on this browser and gets stamped into their first request.
+      clearOrganizationSelection()
       // Clear httpOnly cookie via backend (best-effort, don't block redirect)
       api.post('/auth/logout').catch(() => {})
       window.location.href = '/auth/login'
@@ -243,6 +236,18 @@ api.interceptors.response.use(
     // prompt + resend). Suppress the generic "no permission" toast for it so
     // the two don't fight.
     const errCode = (error.response?.data as any)?.error?.code ?? (error.response?.data as any)?.code
+
+    // A stale X-Organization-Id is the client's own state gone bad, not a
+    // dead session, and the backend now says which by answering 403
+    // ORGANIZATION_CONTEXT_INVALID instead of 401. Drop the refused
+    // selection and reload so the app re-derives it from the profile.
+    // Handled before the generic 403 toast below: the user does not need
+    // to be told they lack a permission they never asked for.
+    if (isStaleOrganizationContext(error.response?.status, errCode)) {
+      recoverFromStaleOrganizationContext()
+      return Promise.reject(error)
+    }
+
     if (error.response?.status === 403 && errCode !== 'EMAIL_NOT_VERIFIED') {
       const detail = {
         url: config?.url as string | undefined,
@@ -1309,18 +1314,8 @@ export interface OnboardingState {
     first_call: boolean
     external_client: boolean
   }
-  sampleWorkspace: boolean
   dismissed: boolean
-  activatedSampleAt: string | null
   activatedRealAt: string | null
-}
-
-export interface SampleWorkspaceResult {
-  apiId: string
-  toolIds: string[]
-  gatewayId: string
-  agentId: string | null
-  created: boolean
 }
 
 export const onboardingApi = {
@@ -1328,10 +1323,6 @@ export const onboardingApi = {
     apiGet(`/organizations/${organizationId}/onboarding`),
   setDismissed: (organizationId: string, dismissed: boolean): Promise<OnboardingState> =>
     apiPatch(`/organizations/${organizationId}/onboarding`, { dismissed }),
-  seedSample: (organizationId: string): Promise<SampleWorkspaceResult> =>
-    apiPost(`/organizations/${organizationId}/sample-workspace`),
-  deleteSample: (organizationId: string): Promise<null> =>
-    apiDel(`/organizations/${organizationId}/sample-workspace`),
 }
 
 export type ApiResponse<T = any> = AxiosResponse<T>

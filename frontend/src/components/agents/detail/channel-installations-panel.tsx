@@ -28,6 +28,7 @@ import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
 import type { Gateway } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 interface ChannelInstallationsPanelProps {
   gateway: Gateway
@@ -73,6 +74,7 @@ export function ChannelInstallationsPanel({ gateway }: ChannelInstallationsPanel
     },
   })
 
+  const { confirm, dialog: confirmDialog } = useConfirm()
   if (!isMultiWorkspaceSlack) return null
 
   return (
@@ -149,7 +151,15 @@ export function ChannelInstallationsPanel({ gateway }: ChannelInstallationsPanel
                       variant="outline"
                       size="sm"
                       disabled={revokeMutation.isPending}
-                      onClick={() => revokeMutation.mutate(installation.id)}
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: 'Revoke this installation?',
+                          description: `The agent's token for ${installation.metadata?.teamName || installation.externalTenantId} is cleared and it stops answering there until the workspace installs it again.`,
+                          confirmLabel: 'Revoke installation',
+                          destructive: true,
+                        })
+                        if (ok) revokeMutation.mutate(installation.id)
+                      }}
                     >
                       Revoke
                     </Button>
@@ -160,6 +170,7 @@ export function ChannelInstallationsPanel({ gateway }: ChannelInstallationsPanel
           </ul>
         )}
       </div>
+      {confirmDialog}
     </div>
   )
 }

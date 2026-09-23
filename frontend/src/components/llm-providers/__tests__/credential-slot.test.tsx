@@ -71,7 +71,7 @@ describe('EditProviderDialog credential slots', () => {
     expect(screen.queryByLabelText('New API key')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('***masked***')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
     const data = onUpdate.mock.calls[0][0].data
     expect(data.credentialId).toBeUndefined()
@@ -92,7 +92,7 @@ describe('EditProviderDialog credential slots', () => {
     fireEvent.change(select, { target: { value: 'conn-openai' } })
     expect(await slot.findByTestId('connected-chip')).toHaveTextContent('OpenAI prod')
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
     const data = onUpdate.mock.calls[0][0].data
     expect(data.credentialId).toBe('conn-openai')
@@ -109,7 +109,7 @@ describe('EditProviderDialog credential slots', () => {
     expect(input.placeholder).toMatch(/keep the existing key/i)
     await userEvent.type(input, 'sk-new-key')
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
     const data = onUpdate.mock.calls[0][0].data
     expect(data.apiKey).toBe('sk-new-key')
@@ -125,7 +125,7 @@ describe('EditProviderDialog credential slots', () => {
     fireEvent.click(slot.getByRole('button', { name: 'Remove' }))
     expect(slot.getByTestId('credential-slot-clear')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
     await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
     expect(onUpdate.mock.calls[0][0].data.usageCredentialId).toBeNull()
   })

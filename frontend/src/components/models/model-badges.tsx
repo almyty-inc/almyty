@@ -84,7 +84,7 @@ export function SelectableIndicator({ selectable }: { selectable: boolean }) {
       Selectable
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Needs status active, a provider or endpoint, and a passing validation run">
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" title="Needs status active, an inference provider, and a passing validation run">
       <span className="h-2 w-2 rounded-full bg-zinc-400" aria-hidden />
       Not selectable
     </span>

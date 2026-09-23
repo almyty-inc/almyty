@@ -100,7 +100,7 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plug className="h-5 w-5 text-violet-500" />
-            Add MCP Server
+            Add MCP server
           </DialogTitle>
           <DialogDescription>
             Connect an external MCP server over streamable HTTP. Its tools are discovered
@@ -189,7 +189,7 @@ export function AddMcpServerDialog({ open, onOpenChange, organizationId }: AddMc
               Cancel
             </Button>
             <Button type="submit" disabled={!canSubmit}>
-              {createMutation.isPending ? 'Connecting…' : 'Add Server'}
+              {createMutation.isPending ? 'Connecting…' : 'Add server'}
             </Button>
           </DialogFooter>
         </form>

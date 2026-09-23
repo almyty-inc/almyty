@@ -89,23 +89,59 @@ const BANNED_IPV4: ReadonlyArray<readonly [string, number]> = [
 ];
 
 /**
- * IPv6 ranges refused by the guard. We express each range by a
- * lowercase normalized prefix match on the expanded form. Not as
- * surgically precise as a real prefix/mask check, but sufficient
- * for the categories we care about — Node gives us canonical
- * form from `net.isIPv6` / `dns.lookup`, so the string prefix
- * comparison is reliable.
+ * IPv6 ranges refused by the guard, as real CIDRs.
+ *
+ * This used to be a lowercase string-prefix match on the assumption —
+ * stated in the comment that stood here — that "Node gives us canonical
+ * form". It does not. The host arrives as whatever the tool code typed
+ * into a URL, and `fetch('http://[0:0:0:0:0:ffff:127.0.0.1]/')` is
+ * passed through verbatim. So the mapped-IPv4 unwrap, which only
+ * recognised the dotted `::ffff:a.b.c.d` spelling, missed both of the
+ * other two legal spellings of the same address:
+ *
+ *     ::ffff:7f00:1              // hex form of 127.0.0.1
+ *     0:0:0:0:0:ffff:127.0.0.1   // expanded form, no '::ffff:' prefix
+ *
+ * and `BANNED_IPV6_PREFIXES` then fell through because none of
+ * `fe80:`/`fc`/`fd`/`ff` match a string starting `::ffff:` or `0:`.
+ * That was live SSRF to loopback and to 169.254.169.254 using nothing
+ * but the plain `fetch` global.
+ *
+ * `net.BlockList` is Node's own range matcher: it parses the address
+ * rather than comparing its spelling, and it normalises every
+ * IPv4-mapped form back to IPv4 before testing it against an IPv4
+ * rule. Seeding one list with both families means the v4 table above
+ * stays the single source of truth for v4 ranges, however they are
+ * spelled.
  */
-const BANNED_IPV6_EXACT = new Set<string>([
-  '::1', // loopback
-  '::', // unspecified
-]);
-const BANNED_IPV6_PREFIXES: ReadonlyArray<string> = [
-  'fe80:', // link-local
-  'fc', // ULA (fc00::/7 — covers fc*/fd*)
-  'fd',
-  'ff', // multicast
+const BANNED_IPV6: ReadonlyArray<readonly [string, number]> = [
+  ['::', 128], // unspecified
+  ['::1', 128], // loopback
+  ['64:ff9b::', 96], // NAT64 well-known prefix (RFC 6052)
+  ['64:ff9b:1::', 48], // NAT64 local-use (RFC 8215)
+  ['100::', 64], // discard-only
+  ['2001:db8::', 32], // documentation
+  ['fc00::', 7], // unique local (fc00::/7 covers fc* and fd*)
+  ['fe80::', 10], // link-local
+  ['ff00::', 8], // multicast
 ];
+
+let banList: netTypes.BlockList | null = null;
+
+function bannedRanges(): netTypes.BlockList {
+  if (banList) return banList;
+  const list = new net.BlockList();
+  for (const [addr, bits] of BANNED_IPV4) {
+    if (bits === 32) list.addAddress(addr, 'ipv4');
+    else list.addSubnet(addr, bits, 'ipv4');
+  }
+  for (const [addr, bits] of BANNED_IPV6) {
+    if (bits === 128) list.addAddress(addr, 'ipv6');
+    else list.addSubnet(addr, bits, 'ipv6');
+  }
+  banList = list;
+  return list;
+}
 
 /**
  * Hostnames refused BEFORE DNS lookup runs. A DNS rebinding attack
@@ -150,18 +186,13 @@ function isBannedIPv4(ip: string): boolean {
 }
 
 function isBannedIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase();
-  if (BANNED_IPV6_EXACT.has(lower)) return true;
-  // IPv4-mapped IPv6 addresses: ::ffff:a.b.c.d — map back and
-  // reuse the v4 classifier.
-  if (lower.startsWith('::ffff:')) {
-    const v4 = lower.slice(7);
-    if (net.isIPv4(v4)) return isBannedIPv4(v4);
-  }
-  for (const prefix of BANNED_IPV6_PREFIXES) {
-    if (lower.startsWith(prefix)) return true;
-  }
-  return false;
+  // Strip any zone index (`fe80::1%eth0`) — BlockList rejects it.
+  const pct = ip.indexOf('%');
+  const bare = pct === -1 ? ip : ip.slice(0, pct);
+  // A zone index only ever appears on a link-local address, which is
+  // banned anyway; refuse rather than guess if it no longer parses.
+  if (net.isIPv6(bare) === false) return true;
+  return bannedRanges().check(bare, 'ipv6');
 }
 
 /**
@@ -212,6 +243,12 @@ function isAllowedTestTarget(host: string, port: number): boolean {
 // ── Patches ─────────────────────────────────────────────────────
 
 let installed = false;
+/**
+ * Once set, neither `installSandboxNetGuard`'s testAllow nor
+ * `resetSandboxNetGuardForTesting` may change the guard's state.
+ * See `lockSandboxNetGuard`.
+ */
+let locked = false;
 
 /**
  * Install the monkey-patches on `net.Socket.prototype.connect`,
@@ -227,6 +264,9 @@ export function installSandboxNetGuard(options: NetGuardOptions = {}): void {
   installed = true;
 
   if (options.testAllow) {
+    if (locked) {
+      throw new Error('Sandbox net guard is locked; testAllow is refused.');
+    }
     allowedTestTargets = new Set(
       options.testAllow
         .split(',')
@@ -240,8 +280,49 @@ export function installSandboxNetGuard(options: NetGuardOptions = {}): void {
   patchDgram();
 }
 
-/** Exposed for tests that want to reset state between runs. */
+/**
+ * Seal the guard's mutable state. Called by the sandbox worker once
+ * the guard is installed and before any user code runs.
+ *
+ * Without this, sandboxed code could turn the guard off from inside
+ * it. The guard lives in the same realm and the same CJS module cache
+ * as the user's tool code, and both of the functions above it are
+ * module exports, so this was a live, confirmed SSRF:
+ *
+ *     const { createRequire } = await import('node:module');
+ *     const r = createRequire('/x.js');
+ *     const g = r.cache[Object.keys(r.cache)
+ *       .find(k => k.includes('sandbox-net-guard'))].exports;
+ *     g.resetSandboxNetGuardForTesting();                     // installed = false
+ *     g.installSandboxNetGuard({ testAllow: '127.0.0.1:*' }); // blanket allow
+ *     await fetch('http://127.0.0.1:6379/');                  // reached
+ *
+ * Re-installing does not un-patch anything; the damage was that
+ * `allowedTestTargets` is module-level state read by every patch
+ * closure, so setting it once opened every layer at once — and
+ * `isAllowedTestTarget` honours `host:*` and `*:port`, so one call
+ * opened a whole class of targets.
+ *
+ * The module-resolution hook in the worker now also refuses
+ * `import('node:module')`, which is how the snippet above got its
+ * hands on the cache. This is the second lock on the same door: a
+ * fresh copy of this module obtained some other way re-patches on top
+ * of the existing patches, so the original guard still runs
+ * underneath — but only as long as it cannot be told to allow.
+ */
+export function lockSandboxNetGuard(): void {
+  locked = true;
+}
+
+/**
+ * Exposed for tests that want to reset state between runs. Refuses
+ * once the guard is locked, which is what the sandbox worker does
+ * before handing control to user code.
+ */
 export function resetSandboxNetGuardForTesting(): void {
+  if (locked) {
+    throw new Error('Sandbox net guard is locked; reset is refused.');
+  }
   installed = false;
   allowedTestTargets = new Set();
 }

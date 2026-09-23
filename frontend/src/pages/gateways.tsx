@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { Router, Plus, Search, Zap } from 'lucide-react'
+import { Router, Plus, Search, Zap, Building2 } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/layout/page-header'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -383,25 +384,30 @@ export function GatewaysPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Gateways</h1>
-          <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(gateways.length, 'gateway')} (${gateways.filter((g: Gateway) => g.status === 'active').length} active) \u00B7 ${pluralized(gateways.filter((g: Gateway) => !g.isSystem).reduce((sum: number, g: Gateway) => sum + (g.toolCount ?? g.tools?.length ?? 0), 0), 'tool assignment')}`}
-          </p>
-        </div>
-        <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Gateway
-        </Button>
-      </div>
+      <PageHeader
+        title="Gateways"
+        description={
+          isLoading ? (
+            <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" />
+          ) : (
+            `${pluralized(gateways.length, 'gateway')} · ${gateways.filter((g: Gateway) => g.status === 'active').length} active · ${pluralized(gateways.filter((g: Gateway) => !g.isSystem).reduce((sum: number, g: Gateway) => sum + (g.toolCount ?? g.tools?.length ?? 0), 0), 'tool assignment')}`
+          )
+        }
+        actions={
+          <Button onClick={() => setCreateDialogOpen(true)} disabled={!currentOrganization}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create gateway
+          </Button>
+        }
+      />
 
       {!currentOrganization ? (
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <p className="text-muted-foreground">No organization selected. Please select or create an organization.</p>
-          </div>
-        </div>
+        <EmptyState
+          variant="panel"
+          icon={Building2}
+          title="No organization selected"
+          description="Select or create an organization to see its gateways."
+        />
       ) : isError ? (
         <QueryError error={gatewaysError} onRetry={() => refetchGateways()} title="Couldn't load gateways" />
       ) : (
@@ -409,22 +415,18 @@ export function GatewaysPage() {
 
       {/* Gateways Table */}
       {!isLoading && gateways.length === 0 ? (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
-              icon={Zap}
-              title="No gateways yet"
-              description="A gateway serves a set of tools over MCP, A2A, UTCP, and Agent Skills — one endpoint, every protocol."
-              action={
-                <Button onClick={() => setCreateDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create gateway
-                </Button>
-              }
-              className="py-16"
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          variant="panel"
+          icon={Zap}
+          title="No gateways yet"
+          description="A gateway serves a set of tools over MCP, A2A, UTCP, and Agent Skills — one endpoint, every protocol."
+          action={
+            <Button onClick={() => setCreateDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create gateway
+            </Button>
+          }
+        />
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
@@ -528,9 +530,9 @@ export function GatewaysPage() {
                   deleteGatewayMutation.mutate(gatewayToDelete.id)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              Delete Gateway
+              Delete gateway
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

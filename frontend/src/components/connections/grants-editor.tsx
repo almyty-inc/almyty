@@ -268,9 +268,9 @@ export function GrantsEditor({ connectionId, canManage = true }: GrantsEditorPro
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
-            <AlertDialogAction onClick={() => toRevoke && revokeGrant.mutate(toRevoke)} disabled={revokeGrant.isPending}>
-              Revoke
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => toRevoke && revokeGrant.mutate(toRevoke)} disabled={revokeGrant.isPending}>
+              Revoke access
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

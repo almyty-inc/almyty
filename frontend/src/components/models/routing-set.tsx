@@ -47,7 +47,7 @@ export function CatalogSummary({ cards, providerNames }: { cards: ModelCard[]; p
       <p className="text-sm">
         {usable.length === 0 ? (
           <>
-            None of your {cards.length} model{cards.length === 1 ? '' : 's'} is usable yet. A card becomes usable once it is active, has a provider or endpoint, and passes a validation run.
+            None of your {cards.length} model{cards.length === 1 ? '' : 's'} is usable yet. A model becomes usable once it is active, has an inference provider to call it through, and passes a validation run.
           </>
         ) : (
           <>

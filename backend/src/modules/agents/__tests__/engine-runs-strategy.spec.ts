@@ -39,6 +39,8 @@ describe('AgentExecutionEngine and a chosen strategy', () => {
     const executionRepo = {
       create: jest.fn((data: any) => ({ id: 'exec-1', ...data })),
       save: jest.fn(async (e: any) => e),
+      // Terminal writes are a guarded UPDATE now (see commitTerminal).
+      update: jest.fn(async () => ({ affected: 1 })),
     };
     const nodeExecutor = {
       execute: jest.fn(async (node: any) => ({ nodeId: node.id, output: {}, success: true, status: 'completed' })),

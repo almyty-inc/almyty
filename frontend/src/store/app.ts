@@ -1,15 +1,16 @@
 import { create } from 'zustand'
+import { Theme, applyTheme, getStoredTheme, storeTheme } from '@/lib/theme'
 
 interface AppState {
   sidebarOpen: boolean
   sidebarCollapsed: boolean
-  theme: 'light' | 'dark'
+  theme: Theme
   notifications: Notification[]
   isLoading: boolean
   setSidebarOpen: (open: boolean) => void
   toggleSidebar: () => void
   toggleSidebarCollapse: () => void
-  setTheme: (theme: 'light' | 'dark') => void
+  setTheme: (theme: Theme) => void
   addNotification: (notification: Omit<Notification, 'id'>) => void
   removeNotification: (id: string) => void
   setLoading: (loading: boolean) => void
@@ -53,7 +54,7 @@ function writeSetting(key: string, value: string): void {
 export const useAppStore = create<AppState>()((set, get) => ({
   sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
   sidebarCollapsed: readSetting('sidebar-collapsed') === 'true',
-  theme: 'light',
+  theme: getStoredTheme(),
   notifications: [],
   isLoading: false,
 
@@ -73,15 +74,10 @@ export const useAppStore = create<AppState>()((set, get) => ({
     })
   },
 
-  setTheme: (theme: 'light' | 'dark') => {
+  setTheme: (theme: Theme) => {
     set({ theme })
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark')
-      document.documentElement.classList.remove('light')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-    writeSetting('theme', theme)
+    applyTheme(theme)
+    storeTheme(theme)
   },
 
   addNotification: (notification: Omit<Notification, 'id'>) => {

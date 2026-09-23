@@ -342,12 +342,18 @@ describe('RBAC guard pipeline (real supertest round trip)', () => {
       expect(res.status).toBe(403);
     });
 
-    it('401 when X-Organization-Id points to an org the user is not a member of', async () => {
+    // Still refused -- but as 403, not 401. The session is valid; one
+    // header is stale client state. Answering 401 is what made the web
+    // client throw a good session away and bounce the user to sign-in
+    // right after they signed in. The code is what lets the client drop
+    // its org selection and recover instead.
+    it('403 ORGANIZATION_CONTEXT_INVALID when X-Organization-Id points to an org the user is not a member of', async () => {
       const res = await request(app.getHttpServer())
         .get('/test-resources/any-member')
         .set('Authorization', `Bearer ${token}`)
         .set('X-Organization-Id', 'org-nobody');
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('ORGANIZATION_CONTEXT_INVALID');
     });
   });
 

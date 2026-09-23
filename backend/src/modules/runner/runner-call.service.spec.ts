@@ -82,6 +82,19 @@ class FakeRunnerService {
     return this.runner;
   }
 }
+/** Stands in for WorkspaceService.listActiveForRunner on the ack path. */
+class FakeWorkspaceService {
+  /** runnerId -> ids of workspaces still ACTIVE for it. */
+  active: Record<string, string[]> = {};
+  /** When set, listActiveForRunner throws instead of answering. */
+  failure: Error | null = null;
+  calls: string[] = [];
+  async listActiveForRunner(runnerId: string): Promise<Array<{ id: string }>> {
+    this.calls.push(runnerId);
+    if (this.failure) throw this.failure;
+    return (this.active[runnerId] ?? []).map((id) => ({ id }));
+  }
+}
 
 /** Flush pending microtasks so fire-and-forget liveness handlers settle. */
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -89,8 +102,9 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 function makeService() {
   const runners = new FakeRunnerService();
   const transport = new FakeTransport();
-  const svc = new RunnerCallService(runners as any, transport as any);
-  return { svc, runners, transport };
+  const workspaces = new FakeWorkspaceService();
+  const svc = new RunnerCallService(runners as any, transport as any, workspaces as any);
+  return { svc, runners, transport, workspaces };
 }
 
 describe('RunnerCallService', () => {
@@ -289,6 +303,102 @@ describe('RunnerCallService', () => {
     await flush();
     expect(runners.heartbeats).toEqual([]);
     expect(runners.sessionConnects).toEqual([]);
+  });
+
+  // ── heartbeat ack: the workspace set the runner reconciles against ──
+
+  /**
+   * Server half of workspace cleanup. `killWorkspace` on the runner had
+   * no production caller and `listActiveForRunner` here had none
+   * either, so a released or expired workspace left its processes
+   * running on the user's own machine forever. The heartbeat ack is the
+   * loop that closes it, and it is a set rather than a release RPC so a
+   * dropped message costs one beat rather than leaking permanently.
+   */
+  async function helloThenHeartbeat(
+    t: ReturnType<typeof makeService>,
+    heartbeatId = 'h1',
+  ): Promise<void> {
+    const session = { id: 'sh_session_1', organizationId: 'org-1' };
+    t.transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'event', id: 'e1', ts: Date.now(), payload: { kind: 'runner.hello', runnerId: 'runner-1' } },
+      session,
+    );
+    await flush();
+    t.transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: heartbeatId, ts: Date.now(), payload: { ts: Date.now(), inUse: 1 } },
+      session,
+    );
+    await flush();
+  }
+
+  it('acks a heartbeat with the active workspace set, correlated to that beat', async () => {
+    const t = makeService();
+    t.workspaces.active['runner-1'] = ['ws-a', 'ws-b'];
+
+    await helloThenHeartbeat(t, 'hb-7');
+
+    expect(t.workspaces.calls).toEqual(['runner-1']);
+    const ack = t.transport.pushed.find((p) => p.type === 'heartbeat');
+    expect(ack).toBeDefined();
+    expect(ack!.sessionId).toBe('sh_session_1');
+    expect(ack!.correlationId).toBe('hb-7');
+    expect(ack!.payload.workspaces).toEqual({ active: ['ws-a', 'ws-b'] });
+  });
+
+  /**
+   * An empty list is an answer, not a missing one: the backend looked
+   * and the runner should be hosting nothing. The runner only tells the
+   * two apart because they are structurally different on the wire, so
+   * the empty case must still ship the `workspaces` key.
+   */
+  it('acks with an explicitly empty set when the runner has nothing active', async () => {
+    const t = makeService();
+    t.workspaces.active['runner-1'] = [];
+
+    await helloThenHeartbeat(t);
+
+    const ack = t.transport.pushed.find((p) => p.type === 'heartbeat');
+    expect(ack!.payload.workspaces).toEqual({ active: [] });
+  });
+
+  /**
+   * Fail-closed: if the set cannot be built, the ack must omit it
+   * entirely rather than send an empty one. An empty set would tell the
+   * runner to kill everything the user has running.
+   */
+  it('omits the workspace set entirely when it cannot be built', async () => {
+    const t = makeService();
+    t.workspaces.failure = new Error('db down');
+
+    await helloThenHeartbeat(t);
+
+    const ack = t.transport.pushed.find((p) => p.type === 'heartbeat');
+    expect(ack).toBeDefined();
+    expect(ack!.payload.workspaces).toBeUndefined();
+    // The heartbeat itself still counted for liveness.
+    expect(t.runners.heartbeats).toEqual(['runner-1']);
+  });
+
+  it('does not ack a heartbeat from a session with no runner behind it', async () => {
+    const t = makeService();
+    t.transport.emitEnvelope(
+      { v: WORKER_PROTOCOL_VERSION, type: 'heartbeat', id: 'h1', ts: Date.now(), payload: { ts: Date.now() } },
+      { id: 'sh_unknown', organizationId: 'org-1' },
+    );
+    await flush();
+    expect(t.workspaces.calls).toEqual([]);
+    expect(t.transport.pushed.filter((p) => p.type === 'heartbeat')).toEqual([]);
+  });
+
+  it('an undeliverable ack does not break heartbeat handling', async () => {
+    const t = makeService();
+    t.workspaces.active['runner-1'] = ['ws-a'];
+    t.transport.sessionExists = false;
+
+    await helloThenHeartbeat(t);
+
+    expect(t.runners.heartbeats).toEqual(['runner-1']);
   });
 
   /**

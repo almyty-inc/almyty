@@ -15,8 +15,9 @@ import { LlmProvider } from './llm-provider.entity';
 /**
  * A row in the model catalog: the machine-readable model card the router
  * reads. It describes something that can answer a chat request: a vendor
- * model behind an existing LlmProvider, a hand-registered OpenAI-compatible
- * endpoint, or a version this organization deployed itself.
+ * model behind an existing LlmProvider (including a `custom` provider for
+ * a server someone runs by hand), or a version this organization deployed
+ * itself.
  *
  * "Supported" is a property of this data, never of a code list: a model
  * is selectable when its card has a working dispatch path (the provider),
@@ -40,6 +41,24 @@ export interface ModelCapabilities {
   reasoning?: boolean;
   embedding?: boolean;
   structuredOutput?: boolean;
+  /**
+   * This card can score a teacher-forced continuation and return per-token
+   * logprobs, which is what the `decide` mode's logits path needs.
+   *
+   * Registry data, like every other entry here, and for the same reason:
+   * the fact is a property of the endpoint behind this card, not of the
+   * vendor on the front of it. One provider type serves both a hosted API
+   * that cannot score and a vLLM box on the customer's own hardware that
+   * can, so a list keyed on provider type would be wrong for one of them
+   * whichever way it was written.
+   *
+   * Set by a scoring validation run against this card, never inferred.
+   * Routing picks it up with no extra code because the policy filter
+   * iterates whatever keys this interface declares, so a request may ask
+   * for `capabilities: { scoring: true }` and get only cards that proved
+   * it.
+   */
+  scoring?: boolean;
 }
 
 /** Dollars per million tokens. */

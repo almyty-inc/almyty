@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/layout/page-header'
 import { QueryError } from '@/components/ui/query-error'
 import { runnersApi, workspacesApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
@@ -92,21 +93,18 @@ export function WorkspacesPage() {
     return (
       <div className="space-y-6">
         <Header />
-        <Card>
-          <CardContent className="pt-6">
-            <EmptyState
-              icon={Layers}
-              title="No workspaces yet"
-              description="A workspace is a (runner, cwd) reservation with a TTL. Workspaces are created by agents when they need to run jobs in a specific directory; you don't create them by hand."
-              action={
-                <Button onClick={() => navigate('/runners')}>
-                  <Cpu className="mr-2 h-4 w-4" />
-                  Manage runners
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          variant="panel"
+          icon={Layers}
+          title="No workspaces yet"
+          description="A workspace is a (runner, cwd) reservation with a TTL. Workspaces are created by agents when they need to run jobs in a specific directory; you don't create them by hand."
+          action={
+            <Button variant="outline" onClick={() => navigate('/runners')}>
+              <Cpu className="mr-2 h-4 w-4" />
+              Manage runners
+            </Button>
+          }
+        />
       </div>
     )
   }
@@ -219,11 +217,9 @@ export function WorkspacesPage() {
 
 function Header() {
   return (
-    <div>
-      <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Workspaces</h1>
-      <p className="text-sm text-muted-foreground mt-1">
-        (runner, cwd) reservations with a TTL. Created by your agents; surfaced here for audit and recovery.
-      </p>
-    </div>
+    <PageHeader
+      title="Workspaces"
+      description="Directories your agents reserve on a runner, with a time limit. Listed here for audit and recovery."
+    />
   )
 }

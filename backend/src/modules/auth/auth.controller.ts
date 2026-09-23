@@ -37,6 +37,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../../entities/user.entity';
 import { REFERRAL_COOKIE, clientIpOf } from '../referrals/referrals.constants';
+import { effectiveMemberships } from '../../common/authorization/membership';
 
 /** Shared cookie options for the access_token httpOnly cookie */
 const ACCESS_TOKEN_COOKIE_OPTIONS = {
@@ -268,7 +269,21 @@ export class AuthController {
         // Non-blocking email verification state — the UI shows a
         // "verify your email" banner while false.
         emailVerified: !!(user.verifiedAt || user.isVerified),
-        organizationMemberships: user.organizationMemberships?.map(membership => ({
+        // Only the rows that actually grant access. This list is not
+        // decoration: the web client turns it into its organization
+        // switcher, picks one as the current organization, and stamps
+        // that id into `X-Organization-Id` on every subsequent request.
+        // `user_organizations` also holds pending invites and revoked
+        // ones (revocation deactivates the row rather than deleting it)
+        // and the relation load has no filter, so mapping it verbatim
+        // handed the client organizations `JwtStrategy` refuses — and,
+        // because the payload dropped `isActive`/`inviteAccepted`, no
+        // way to tell which. With no ORDER BY on the relation, whichever
+        // row Postgres returned first became the client's default: when
+        // that was an invite row, the first call after sign-in was
+        // refused and the client read the refusal as a dead session.
+        // Same predicate as the one JwtStrategy accepts the header with.
+        organizationMemberships: effectiveMemberships(user.organizationMemberships).map(membership => ({
           id: membership.id,
           role: membership.role,
           joinedAt: membership.joinedAt,

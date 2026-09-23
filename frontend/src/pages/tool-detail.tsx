@@ -5,7 +5,10 @@ import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, Boo
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
+import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -148,7 +151,7 @@ export function ToolDetailPage() {
           <p className="text-muted-foreground">Tool not found</p>
           <Button className="mt-4" onClick={() => navigate('/tools')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Tools
+            Back to tools
           </Button>
         </div>
       </div>
@@ -177,7 +180,7 @@ export function ToolDetailPage() {
               <Code className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-4xl font-heading font-extrabold tracking-tight">{tool.name}</h1>
+              <h1 className={DETAIL_TITLE_CLASSES}>{tool.name}</h1>
               <p className="text-muted-foreground">{tool.description || 'AI-generated tool from API operation'}</p>
             </div>
           </div>
@@ -209,7 +212,7 @@ export function ToolDetailPage() {
       <Tabs defaultValue="details" className="space-y-4">
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="test">Test Tool</TabsTrigger>
+          <TabsTrigger value="test">Test tool</TabsTrigger>
           <TabsTrigger value="exports">Exports</TabsTrigger>
           <TabsTrigger value="gateways">Gateways ({tool.gatewayAssociations?.length || 0})</TabsTrigger>
           <TabsTrigger value="stats">Stats</TabsTrigger>
@@ -347,7 +350,7 @@ export function ToolDetailPage() {
               <>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">Execution Method</span>
-                  <Badge>GraphQL</Badge>
+                  <ApiTypeBadge type="graphql" />
                 </div>
                 {tool.metadata?.graphqlConfig && (
                   <div className="text-xs">
@@ -376,7 +379,7 @@ export function ToolDetailPage() {
                   className="w-full mt-2"
                   onClick={() => navigate(`/apis/${tool.operation.api.id}`)}
                 >
-                  View in API Details
+                  View in API details
                 </Button>
               </>
             ) : (
@@ -392,7 +395,7 @@ export function ToolDetailPage() {
         <TabsContent value="test">
           <Card>
             <CardHeader>
-              <CardTitle>Test Tool</CardTitle>
+              <CardTitle>Test tool</CardTitle>
               <CardDescription>
                 Execute this tool with parameters
               </CardDescription>
@@ -571,7 +574,7 @@ export function ToolDetailPage() {
         <TabsContent value="gateways">
           <Card>
             <CardHeader>
-              <CardTitle>Gateway Assignments</CardTitle>
+              <CardTitle>Gateway assignments</CardTitle>
               <CardDescription>
                 This tool is available through the following gateways
               </CardDescription>
@@ -592,7 +595,7 @@ export function ToolDetailPage() {
                         <div className="font-medium">{assoc.gateway?.name || 'Unknown'}</div>
                         <div className="text-xs text-muted-foreground">{assoc.gateway?.endpoint || 'No endpoint'}</div>
                       </div>
-                      <Badge variant="outline">{assoc.gateway?.type?.toUpperCase() || 'N/A'}</Badge>
+                      {assoc.gateway?.type ? <ProtocolBadge protocol={assoc.gateway.type} /> : <Badge variant="outline">N/A</Badge>}
                     </Link>
                   ))
                 ) : (
@@ -602,7 +605,7 @@ export function ToolDetailPage() {
                     </p>
                     <Button variant="outline" onClick={() => navigate('/gateways')}>
                       <Zap className="mr-2 h-4 w-4" />
-                      Assign to Gateway
+                      Assign to gateway
                     </Button>
                   </div>
                 )}
@@ -615,7 +618,7 @@ export function ToolDetailPage() {
         <TabsContent value="stats">
           <Card>
             <CardHeader>
-              <CardTitle>Usage Statistics</CardTitle>
+              <CardTitle>Usage statistics</CardTitle>
               <CardDescription>
                 Tool execution metrics and performance data
               </CardDescription>

@@ -133,7 +133,7 @@ const TOOLS = [
         modelConfig: { type: 'object', description: '{providerId, model, temperature, maxTokens}. Leave model blank to take the provider\'s live default.', additionalProperties: true },
         memoryConfig: { type: 'object', description: '{enabled, autoSave, scopes}', additionalProperties: true },
         agentConfig: { type: 'object', description: '{canCallAgents, canCreateAgents}', additionalProperties: true },
-        collaboration: { type: 'object', description: '{strategy: sequential|parallel|race|debate, agents: [{agentId, role}], judgeAgentId, maxRounds}', additionalProperties: true },
+        collaboration: { type: 'object', description: '{strategy: sequential|parallel|race|debate, participants: [{kind: "agent", agentId, role?} | {kind: "model", providerId?, model?, routing?, role?, instructions?, temperature?, maxTokens?}] (a model participant needs providerId or routing), sharedBrief?, rules?: {maxTotalCost?, maxChainDepth?, outputFormat?: text|json, escalation?, conflictResolution?}, judge?: <participant>, maxRounds?}', additionalProperties: true },
         heartbeat: { type: 'object', description: '{enabled, intervalMinutes, prompt}', additionalProperties: true },
         variables: { type: 'object', description: 'Default variable values available to the pipeline.', additionalProperties: true },
         settings: { type: 'object', additionalProperties: true },

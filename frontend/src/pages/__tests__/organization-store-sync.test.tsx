@@ -68,11 +68,11 @@ describe('organization store stays in sync with the server', () => {
 
   it('keeps every settings section in a wrapping navigation group', async () => {
     render(<SettingsPage />)
-    const sections = screen.getByRole('group', { name: 'Settings sections' })
+    const sections = screen.getByRole('tablist', { name: 'Settings sections' })
     expect(sections).toHaveClass('flex-wrap')
-    expect(within(sections).getAllByRole('button')).toHaveLength(14)
+    expect(within(sections).getAllByRole('tab')).toHaveLength(14)
     for (const name of ['SSO', 'Roles', 'Compliance', 'Audit streaming', 'Encryption']) {
-      expect(within(sections).getByRole('button', { name, exact: true })).toBeEnabled()
+      expect(within(sections).getByRole('tab', { name, exact: true })).toBeEnabled()
     }
     await screen.findByText('Old Name')
   })
@@ -87,7 +87,7 @@ describe('organization store stays in sync with the server', () => {
 
     expect(await screen.findByText('Old Name')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Edit Organization' }))
+    await user.click(screen.getByRole('button', { name: 'Edit organization' }))
     const nameInput = screen.getByLabelText('Organization Name')
     await user.clear(nameInput)
     await user.type(nameInput, 'New Name')
@@ -113,6 +113,9 @@ describe('organization store stays in sync with the server', () => {
     const row = (await screen.findByText('Old Name')).closest('tr')!
     await user.click(within(row).getByRole('button', { name: 'Actions' }))
     await user.click(await screen.findByText('Delete'))
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete organization' }),
+    )
 
     await waitFor(() =>
       expect((organizationsApi.delete as any).mock.calls[0]?.[0]).toBe('org-1'),

@@ -35,6 +35,50 @@ function branchHandle(edge: GraphEdge): string {
   return String(edge.sourceHandle || edge.label || '')
 }
 
+/**
+ * What a person sees on the canvas: each node is drawn with its type as the
+ * header ("Model Call", "Tool Call") and never its id. Messages used to say
+ * `Pick a model for the Model Call step "llm_1"` -- naming the node by an id
+ * the reader had never seen. A node the user has labelled is called by that
+ * label; otherwise by the header it is drawn with. Which of several Model
+ * Calls an item means is answered by clicking it, not by a string.
+ */
+const STEP_NAMES: Record<string, string> = {
+  input: 'Input',
+  output: 'Output',
+  llm_call: 'Model Call',
+  tool_call: 'Tool Call',
+  condition: 'Condition',
+  decision: 'Decision',
+  transform: 'Transform',
+  loop: 'Loop',
+  parallel: 'Parallel',
+  merge: 'Merge',
+  sub_agent: 'Sub-Agent',
+  verify: 'Verify',
+  extract_context: 'Extract Context',
+}
+
+export function stepName(node: GraphNode): string {
+  const label = typeof node.data?.label === 'string' ? node.data.label.trim() : ''
+  return label || STEP_NAMES[node.type || ''] || 'Step'
+}
+
+/**
+ * One thing left to do. `nodeIds` are the nodes it is about, so the builder
+ * can outline them and take the user to them; the ids never reach the text.
+ */
+export interface BuilderIssue {
+  text: string
+  nodeIds: string[]
+}
+
+function joinNames(names: string[]): string {
+  const unique = [...new Set(names)]
+  if (unique.length <= 1) return unique[0] || ''
+  return `${unique.slice(0, -1).join(', ')} and ${unique[unique.length - 1]}`
+}
+
 /** Every reason the graph as drawn cannot be saved, in the order a reader meets them. */
 /**
  * `hasDefaultRouting` is whether the organization sets settings.defaultRouting.
@@ -49,22 +93,31 @@ export function validateWorkflowGraph(
   edges: GraphEdge[],
   options: { hasDefaultRouting?: boolean } = {},
 ): string[] {
-  const errors: string[] = []
+  return workflowIssues(nodes, edges, options).map((issue) => issue.text)
+}
+
+/** The same checks, each tied to the nodes it is about. */
+export function workflowIssues(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  options: { hasDefaultRouting?: boolean } = {},
+): BuilderIssue[] {
+  const errors: BuilderIssue[] = []
+  const add = (text: string, ...about: GraphNode[]) =>
+    errors.push({ text, nodeIds: about.map((n) => n.id) })
 
   const inputs = nodes.filter((n) => n.type === 'input')
   const outputs = nodes.filter((n) => n.type === 'output')
 
   if (inputs.length === 0) {
-    errors.push('Pipeline must have at least one Input node')
+    add('Add an Input step')
   } else if (inputs.length > 1) {
     // The server wants exactly one; the builder used to say "at least one",
     // so a second Input node passed here and 400'd on save.
-    errors.push(
-      `Pipeline must have exactly one Input node, found ${inputs.length} (${inputs.map((n) => n.id).join(', ')})`,
-    )
+    add('Keep one Input step and delete the others', ...inputs)
   }
   if (outputs.length === 0) {
-    errors.push('Pipeline must have at least one Output node')
+    add('Add an Output step')
   }
 
   const outgoing = new Map<string, GraphEdge[]>()
@@ -91,17 +144,13 @@ export function validateWorkflowGraph(
       // provider -- that portability is the point of the layer.
       case 'llm_call':
         if (!data.providerId && !data.routing && !data.roleKey && !options.hasDefaultRouting) {
-          errors.push(
-            `Model Call node "${node.id}" is missing a provider, a routing policy, or a role`,
-          )
+          add(`${stepName(node)}: pick a model`, node)
         }
         break
 
       case 'condition': {
         if (out.length !== 2) {
-          errors.push(
-            `Condition node "${node.id}" must have exactly 2 outgoing edges, found ${out.length}`,
-          )
+          add(`${stepName(node)}: connect a True path and a False path`, node)
           break
         }
         const handles = out.map(branchHandle)
@@ -109,55 +158,47 @@ export function validateWorkflowGraph(
           (handles.includes('true') && handles.includes('false')) ||
           (handles.includes('yes') && handles.includes('no'))
         if (!trueFalse) {
-          errors.push(
-            `Condition node "${node.id}" needs one edge from the True handle and one from the False handle`,
-          )
+          add(`${stepName(node)}: connect a True path and a False path`, node)
         }
         break
       }
 
       case 'merge':
         if (inc.length < 2) {
-          errors.push(
-            `Merge node "${node.id}" must have at least 2 incoming edges, found ${inc.length}`,
-          )
+          add(`${stepName(node)}: connect at least two steps into it`, node)
         }
         break
 
       case 'parallel':
         if (out.length < 2) {
-          errors.push(
-            `Parallel node "${node.id}" must have at least 2 outgoing edges, found ${out.length}`,
-          )
+          add(`${stepName(node)}: connect at least two steps out of it`, node)
         }
         break
 
       case 'tool_call':
         if (!data.toolId) {
-          errors.push(`Tool Call node "${node.id}" is missing a tool`)
+          add(`${stepName(node)}: pick a tool`, node)
         }
         break
 
       case 'sub_agent':
         if (!data.agentId && !data.target) {
-          errors.push(`Sub-Agent node "${node.id}" is missing an agent`)
+          add(`${stepName(node)}: pick an agent`, node)
         }
         break
 
       case 'verify': {
         const checkers = Array.isArray(data.checkers) ? data.checkers : []
         if (checkers.length === 0) {
-          errors.push(`Verify node "${node.id}" needs at least one checker`)
+          add(`${stepName(node)}: add a checker`, node)
         }
         checkers.forEach((checker: any, i: number) => {
           if (!checker || (!checker.providerId && !checker.roleKey)) {
-            errors.push(
-              `Verify node "${node.id}" checker #${i + 1} is missing a provider or a role`,
-            )
+            add(`${stepName(node)}: pick a model for checker ${i + 1}`, node)
           }
         })
         if (data.policy && !VERIFY_POLICIES.includes(data.policy)) {
-          errors.push(`Verify node "${node.id}" has an unknown merge policy "${data.policy}"`)
+          add(`${stepName(node)}: choose how the checkers' verdicts are combined`, node)
         }
         break
       }
@@ -166,8 +207,10 @@ export function validateWorkflowGraph(
 
   const cyclic = nodesInCycle(nodes, edges)
   if (cyclic.length) {
-    errors.push(
-      `Pipeline contains a cycle through ${cyclic.map((id) => `"${id}"`).join(', ')}. A pipeline runs forward only.`,
+    const looped = nodes.filter((n) => cyclic.includes(n.id))
+    add(
+      `${joinNames(looped.map(stepName))} loop back on each other: remove the connection that goes backwards`,
+      ...looped,
     )
   }
 
@@ -176,16 +219,14 @@ export function validateWorkflowGraph(
   // thing, so both are reported once rather than twice.
   if (inputs.length === 1 && !cyclic.length) {
     const visited = reachableFrom(inputs[0].id, nodes, edges)
-    if (outputs.length && !outputs.some((o) => visited.has(o.id))) {
-      errors.push(
-        `Output node${outputs.length === 1 ? '' : 's'} ${outputs.map((o) => `"${o.id}"`).join(', ')} cannot be reached from "${inputs[0].id}". Connect ${outputs.length === 1 ? 'it' : 'them'} with an edge.`,
-      )
+    const unreachableOutputs = outputs.some((o) => visited.has(o.id)) ? [] : outputs
+    if (unreachableOutputs.length) {
+      add(`${stepName(unreachableOutputs[0])}: connect it to the steps before it`, ...unreachableOutputs)
     }
-    const orphans = nodes.filter((n) => !visited.has(n.id))
-    if (orphans.length) {
-      errors.push(
-        `${orphans.map((n) => `"${n.id}"`).join(', ')} ${orphans.length === 1 ? 'is' : 'are'} not connected to "${inputs[0].id}". Wire ${orphans.length === 1 ? 'it' : 'them'} up or delete ${orphans.length === 1 ? 'it' : 'them'} — an unconnected node still runs, first, and is still billed.`,
-      )
+    // A step nothing leads to still runs -- first, and billed -- so each one
+    // is its own item the user can click to find.
+    for (const orphan of nodes.filter((n) => !visited.has(n.id) && !unreachableOutputs.includes(n))) {
+      add(`${stepName(orphan)}: connect it, or delete it`, orphan)
     }
   }
 

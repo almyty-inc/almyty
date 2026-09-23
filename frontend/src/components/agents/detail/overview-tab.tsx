@@ -172,7 +172,7 @@ export function OverviewTab({
         {/* Try It */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Try It</CardTitle>
+            <CardTitle className="text-base">Try it</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -349,7 +349,7 @@ export function OverviewTab({
                     }}
                   >
                     {scheduleSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Save Schedule
+                    Save schedule
                   </Button>
                   {agent.settings?.schedule?.enabled && (
                     <p className="text-xs text-muted-foreground">
@@ -366,7 +366,7 @@ export function OverviewTab({
       {/* Recent Runs */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Recent Runs</CardTitle>
+          <CardTitle className="text-base">Recent runs</CardTitle>
         </CardHeader>
         <CardContent>
           {executionsError ? (
@@ -483,7 +483,7 @@ export function OverviewTab({
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <History className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Pipeline Versions</CardTitle>
+              <CardTitle className="text-base">Pipeline versions</CardTitle>
             </div>
             <CardDescription className="text-xs">
               Current: v{agent.version}
@@ -530,7 +530,7 @@ export function OverviewTab({
           <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Change History</CardTitle>
+              <CardTitle className="text-base">Change history</CardTitle>
             </div>
             <CardDescription className="text-xs">
               All changes tracked automatically
@@ -607,7 +607,7 @@ export function OverviewTab({
         <CardHeader className="pb-2">
           <div className="flex items-center gap-2">
             <History className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base">Audit Log</CardTitle>
+            <CardTitle className="text-base">Audit log</CardTitle>
           </div>
           <CardDescription className="text-xs">
             History of changes made to this agent

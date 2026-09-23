@@ -1,5 +1,6 @@
 import type { Gateway, Tool, LlmProvider, User, Organization, Api, ApiAuthType } from './index';
 import type { RouteAttribution } from './models';
+import type { CollaborationParticipant } from '@/components/agents/builder/collaboration';
 // Usage Metrics Types
 export interface UsageMetric {
   id: string
@@ -165,7 +166,7 @@ export interface AgentPipeline {
 
 export interface PipelineNode {
   id: string
-  type: 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'loop' | 'transform' | 'merge' | 'parallel' | 'sub_agent' | 'verify' | 'extract_context'
+  type: 'input' | 'output' | 'llm_call' | 'tool_call' | 'condition' | 'loop' | 'transform' | 'merge' | 'parallel' | 'sub_agent' | 'verify' | 'extract_context' | 'decision'
   position: { x: number; y: number }
   data: Record<string, any>
 }
@@ -236,7 +237,8 @@ export interface Agent {
   isTemporary?: boolean
   collaboration?: {
     strategy: 'sequential' | 'parallel' | 'race' | 'debate'
-    agents: { agentId: string; role?: string }[]
+    /** Other agents and models, in run order for `sequential`. */
+    participants: CollaborationParticipant[]
     sharedBrief?: string
     rules?: {
       maxTotalCost?: number
@@ -245,7 +247,7 @@ export interface Agent {
       escalation?: 'never' | 'on_failure' | 'on_low_confidence'
       conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge'
     }
-    judgeAgentId?: string
+    judge?: CollaborationParticipant
     maxRounds?: number
   }
   variables?: Record<string, any>
