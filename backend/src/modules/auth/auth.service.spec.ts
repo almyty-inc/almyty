@@ -931,7 +931,6 @@ describe('AuthService', () => {
       const createDto = {
         name: 'Test Key',
         organizationId: 'org-1',
-        scopes: ['read:apis'],
       };
 
       const mockApiKey = { id: 'key-1', name: 'Test Key', keyPrefix: 'almyty_12' } as any;
@@ -944,6 +943,52 @@ describe('AuthService', () => {
       expect(result.keyData).toBe(mockApiKey);
       expect(apiKeyRepository.create).toHaveBeenCalled();
       expect(apiKeyRepository.save).toHaveBeenCalled();
+    });
+
+    /**
+     * A platform key acts as its user on every JwtAuthGuard route, and
+     * nothing on that path reads ApiKey.scopes or ApiKey.rateLimits. Both
+     * were accepted and stored anyway, so a key created with ['read']
+     * answered DELETE. Minting one is refused rather than enforced: there
+     * is no platform scope vocabulary to enforce against, and the two
+     * attenuations that exist are per gateway.
+     *
+     * Note this fixture used to pass `scopes: ['read:apis']` and assert
+     * only that a key came back -- the shape of test that let this live.
+     */
+    it('refuses to mint a platform key with scopes', async () => {
+      await expect(
+        service.createApiKey('user-1', {
+          name: 'Scoped Key',
+          organizationId: 'org-1',
+          scopes: ['read:apis'],
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(apiKeyRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('refuses to mint a platform key with rate limits', async () => {
+      await expect(
+        service.createApiKey('user-1', {
+          name: 'Throttled Key',
+          organizationId: 'org-1',
+          rateLimits: { requestsPerMinute: 60 },
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(apiKeyRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('stores neither field on the key it does mint', async () => {
+      apiKeyRepository.create.mockImplementation((data: any) => ({ ...data }));
+      apiKeyRepository.save.mockImplementation(async (entity: any) => entity);
+
+      await service.createApiKey('user-1', { name: 'Plain Key', organizationId: 'org-1' });
+
+      const created = lastCreateArg();
+      expect(created).not.toHaveProperty('scopes');
+      expect(created).not.toHaveProperty('rateLimits');
     });
 
     /**
