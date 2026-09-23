@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   HealthCheck,
@@ -66,16 +66,36 @@ export class HealthController {
   }
 
   /**
-   * Readiness probe — DB + Redis must be reachable
-   * Used by: Kubernetes readiness probe
-   * If this fails, k8s removes pod from service endpoints
+   * Readiness probe — DB + Redis must be reachable.
+   * Used by: Kubernetes readiness probe.
+   * If this fails, k8s removes the pod from service endpoints.
+   *
+   * The body is deliberately just the status. This endpoint is
+   * reachable from the internet without a credential and carries
+   * @SkipThrottle, and Terminus serialises a failing indicator's
+   * error message into the response — for a TypeORM ping that is the
+   * driver's own string, which names the database host. On a managed
+   * provider that hostname also encodes the account id, so a passer-by
+   * polling during an incident learns where the data lives.
+   *
+   * GET /health above was already trimmed for exactly this reason;
+   * this is its sibling, and it was missed. Kubernetes probes read the
+   * status code and ignore the body, so the probe loses nothing.
+   * Operators who need the per-indicator breakdown use the token-gated
+   * /monitoring/health/details.
    */
   @Get('ready')
   @HealthCheck()
-  readiness() {
-    return this.health.check([
-      () => this.db.pingCheck('database'),
-      () => this.healthService.isRedisHealthy('redis'),
-    ]);
+  async readiness() {
+    try {
+      await this.health.check([
+        () => this.db.pingCheck('database'),
+        () => this.healthService.isRedisHealthy('redis'),
+      ]);
+      return { status: 'ok' };
+    } catch {
+      // Same 503 Terminus would have thrown, carrying no detail.
+      throw new ServiceUnavailableException({ status: 'error' });
+    }
   }
 }

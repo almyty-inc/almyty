@@ -2,6 +2,10 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { Organization, User } from '@/types'
 import { organizationsApi } from '@/lib/api'
+import {
+  ORG_STORE_KEY,
+  registerOrganizationSelectionClearer,
+} from './organization-selection'
 
 interface OrganizationState {
   organizations: Organization[]
@@ -111,7 +115,7 @@ export const useOrganizationStore = create<OrganizationState>()(
   },
     }),
     {
-      name: 'almyty-org-store',
+      name: ORG_STORE_KEY,
       storage: createJSONStorage(() => localStorage),
       // Only persist the user's current-org selection. Organizations
       // are refetched from the server on each session.
@@ -120,9 +124,21 @@ export const useOrganizationStore = create<OrganizationState>()(
   ),
 )
 
-// Expose a synchronous accessor so axios interceptors (which can't
-// subscribe to React state) can read the current org id outside of
-// the React tree.
+// Hand the store's own reset to the import-free module the axios
+// interceptors and the auth store talk to. Without this, "clear the
+// organization selection" is only ever `localStorage.removeItem` —
+// which leaves `currentOrganization` live in memory for the next
+// `set()` to persist straight back. See organization-selection.ts.
+registerOrganizationSelectionClearer(() => {
+  useOrganizationStore.setState({
+    organizations: [],
+    currentOrganization: null,
+    isInitialized: false,
+  })
+})
+
+// Expose a synchronous accessor so callers that can't subscribe to React
+// state can read the current org id outside of the React tree.
 export function getCurrentOrganizationId(): string | null {
   return useOrganizationStore.getState().currentOrganization?.id ?? null
 }

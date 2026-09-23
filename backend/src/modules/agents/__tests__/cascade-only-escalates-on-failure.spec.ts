@@ -318,6 +318,8 @@ describe('a cascade checks with its verifier role and only escalates when the ch
             useValue: {
               create: jest.fn().mockReturnValue(execution),
               save: jest.fn().mockImplementation((e: any) => Promise.resolve(e)),
+              // Terminal writes are a guarded UPDATE now (see commitTerminal).
+              update: jest.fn(async () => ({ affected: 1 })),
             },
           },
           { provide: AgentNodeExecutor, useValue: nodeExecutor },

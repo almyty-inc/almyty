@@ -21,6 +21,7 @@ import { LlmProvidersService } from '../../llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { CanonicalMemoryService } from '../../memory/canonical/canonical-memory.service';
 import { AuditLogService } from '../../audit-log/audit-log.service';
+import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AgentVerifierHelper } from '../agent-verifier.helper';
 import { AgentContextCompactor } from '../agent-context-compactor.helper';
 import { AgentConstraintsService } from '../../agent-constraints/agent-constraints.service';
@@ -46,6 +47,7 @@ describe('AgentRuntimeService (integration)', () => {
   let mockQueue: any;
   let messageStore: Message[];
   let llmService: any;
+  let auditLog: any;
 
   const makeAgent = (overrides: Partial<Agent> = {}): Agent => {
     const agent = new Agent();
@@ -286,6 +288,7 @@ describe('AgentRuntimeService (integration)', () => {
 
     service = module.get<AgentRuntimeService>(AgentRuntimeService);
     llmService = module.get(LlmProvidersService) as any;
+    auditLog = module.get(AuditLogService) as any;
   });
 
   describe('startRun', () => {
@@ -585,6 +588,42 @@ describe('AgentRuntimeService (integration)', () => {
       await expect(
         service.cancelRun('non-existent', 'org-1'),
       ).rejects.toThrow(NotFoundException);
+    });
+    it('leaves an audit row naming who cancelled it', async () => {
+      // AuditAction.RUN_CANCEL was declared and emitted by nothing.
+      // Cancelling stops work the organization is paying for and any
+      // member can do it, so it belongs in the trail like run_start.
+      const run = await service.startRun('agent-1', 'org-1', 'user-1', 'cancel me');
+      auditLog.log.mockClear();
+
+      await service.cancelRun(run.id, 'org-1', undefined, 'user-9');
+      // The audit write is fire-and-forget, so let its microtask land.
+      await Promise.resolve();
+
+      const cancelRows = auditLog.log.mock.calls
+        .map((c: any[]) => c[0])
+        .filter((e: any) => e.action === AuditAction.RUN_CANCEL);
+      expect(cancelRows).toHaveLength(1);
+      expect(cancelRows[0]).toMatchObject({
+        organizationId: 'org-1',
+        userId: 'user-9',
+        resourceType: AuditResource.AGENT_RUN,
+        resourceId: run.id,
+      });
+      expect(cancelRows[0].details).toMatchObject({ kind: 'autonomous_run', agentId: 'agent-1' });
+    });
+
+    it('a refused cancel writes no audit row', async () => {
+      const run = await service.startRun('agent-1', 'org-1', 'user-1', 'done');
+      run.status = AgentRunStatus.COMPLETED;
+      await mockRunRepo.save(run);
+      auditLog.log.mockClear();
+
+      await expect(service.cancelRun(run.id, 'org-1')).rejects.toThrow(BadRequestException);
+
+      expect(
+        auditLog.log.mock.calls.filter((c: any[]) => c[0]?.action === AuditAction.RUN_CANCEL),
+      ).toHaveLength(0);
     });
   });
 

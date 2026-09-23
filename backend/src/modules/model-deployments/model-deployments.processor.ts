@@ -2,7 +2,7 @@ import { InjectQueue, OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { Injectable, Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Job, Queue } from 'bull';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 
 import { ModelDeployment, ModelDeploymentState } from '../../entities/model-deployment.entity';
 import { ModelVersion } from '../../entities/model-version.entity';
@@ -167,11 +167,21 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     // A failed row whose endpoint still exists is still costing money: keep
     // reading it so the budget cap and the orphan check keep working. A
     // failed row with nothing at the provider is left alone.
-    const failedWithEndpoint = (await this.deployments.find({
-      where: { state: 'failed' as ModelDeploymentState },
+    //
+    // The filter is in SQL, not in JS after the fact. Taking 100 failed
+    // rows and then dropping the ref-less ones starved the window: a
+    // ref-less row is never reconciled, so its `lastReconcileAt` never
+    // moves and it stays at the head of the ASC order for good, while the
+    // rows that ARE reconciled keep sorting to the back. Past a hundred of
+    // them -- and a failed deploy produces one every time, table-wide
+    // across every organization -- the window held nothing but rows that
+    // were then filtered away, and no paid endpoint behind a failed row
+    // was charged against its budget again.
+    const failedWithEndpoint = await this.deployments.find({
+      where: { state: 'failed' as ModelDeploymentState, externalRef: Not(IsNull()) },
       order: { lastReconcileAt: 'ASC' },
       take: 100,
-    })).filter((d) => Boolean(d.externalRef));
+    });
     let reconciled = 0;
     for (const d of [...active, ...failedWithEndpoint]) {
       await this.reconcile(d.id);
@@ -305,6 +315,21 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
       const wantReplicas = d.desired.replicas ?? 1;
       if (actual.replicas !== undefined && actual.replicas !== wantReplicas && actual.state !== 'scaling') {
         await adapter.scale(d.externalRef as EndpointRef, wantReplicas, creds);
+        // Persist the ref the adapter just wrote to.
+        //
+        // Several platforms expose no replica control of their own, so
+        // their adapter records the ceiling on the endpoint ref instead
+        // (Modal's `maxContainers`, Bedrock import's `maxCopies`) and
+        // readEndpoint reads that ceiling back out of the stored row.
+        // externalRef was only ever written after a deploy, so those
+        // scale() calls were discarded: the next tick read the old
+        // ceiling, diffed it again, scaled again and returned here again,
+        // leaving the deployment in `scaling` for good. Because this
+        // branch returns early, the card was never cleared and the budget
+        // was never charged again -- so the budget cap wrote its
+        // `budget_stop` audit row and sent its "scaled to zero" mail while
+        // the endpoint kept billing and the router kept routing to it.
+        await this.writeObserved(d, { externalRef: d.externalRef, actual: d.actual });
         await this.transition(d, d.state, 'scaling', undefined);
         return d;
       }
@@ -469,10 +494,12 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
       // The cap is one of the two places the reconcile loop does own a
       // desired-state change, so it merges into the row as it stands
       // now: a teardown or a manual scale committed during the provider
-      // calls above must not be overwritten by this tick's copy.
+      // calls above must not be overwritten by this tick's copy. The ref
+      // goes with it, for the adapters that carry the replica ceiling
+      // there and would otherwise lose the scale-to-zero entirely.
       const fresh = await this.deployments.findOne({ where: { id: d.id } });
       d.desired = { ...(fresh?.desired ?? d.desired), replicas: 0 };
-      await this.writeObserved(d, { desired: d.desired });
+      await this.writeObserved(d, { desired: d.desired, externalRef: d.externalRef });
       this.service.audit(d, AuditAction.MODEL_DEPLOYMENT_BUDGET_STOP, null, { spentCents: snapshot.spentCents, limitCents: budget.limitCents, budgetId: budget.id });
       void this.notifications
         ?.emit({

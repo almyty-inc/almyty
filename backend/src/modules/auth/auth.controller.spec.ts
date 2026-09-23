@@ -311,7 +311,7 @@ describe('AuthController', () => {
       expect(result.data.organizationMemberships).toHaveLength(1);
     });
 
-    it('should return profile without memberships when undefined', async () => {
+    it('should answer an empty membership list when the relation was not loaded', async () => {
       const mockUser = {
         id: 'user-1',
         email: 'test@example.com',
@@ -326,7 +326,11 @@ describe('AuthController', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.id).toBe('user-1');
-      expect(result.data.organizationMemberships).toBeUndefined();
+      // An empty list, not undefined: the route answers with the rows
+      // that grant access, and a user with none has none. Callers read
+      // this as "which organizations may I act in", and an absent answer
+      // is not a different answer from an empty one.
+      expect(result.data.organizationMemberships).toEqual([]);
     });
 
     it('should return profile with empty memberships array', async () => {

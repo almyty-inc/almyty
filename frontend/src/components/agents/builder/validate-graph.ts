@@ -35,6 +35,19 @@ function branchHandle(edge: GraphEdge): string {
   return String(edge.sourceHandle || edge.label || '')
 }
 
+/**
+ * What to call a node in a message aimed at a person.
+ *
+ * The canvas never draws a node's id, so "llm_1" named nothing the reader
+ * could point at. A node that has been given a label is called by it; the
+ * id is the fallback, and still the only handle a reader has on a node
+ * nobody has named.
+ */
+function nodeLabel(node: GraphNode): string {
+  const label = node.data?.label
+  return typeof label === 'string' ? label.trim() || node.id : node.id
+}
+
 /** Every reason the graph as drawn cannot be saved, in the order a reader meets them. */
 /**
  * `hasDefaultRouting` is whether the organization sets settings.defaultRouting.
@@ -55,7 +68,7 @@ export function validateWorkflowGraph(
   const outputs = nodes.filter((n) => n.type === 'output')
 
   if (inputs.length === 0) {
-    errors.push('Pipeline must have at least one Input node')
+    errors.push('Add an Input node: every pipeline starts at one.')
   } else if (inputs.length > 1) {
     // The server wants exactly one; the builder used to say "at least one",
     // so a second Input node passed here and 400'd on save.
@@ -64,7 +77,7 @@ export function validateWorkflowGraph(
     )
   }
   if (outputs.length === 0) {
-    errors.push('Pipeline must have at least one Output node')
+    errors.push('Add an Output node: every pipeline ends at one.')
   }
 
   const outgoing = new Map<string, GraphEdge[]>()
@@ -92,7 +105,7 @@ export function validateWorkflowGraph(
       case 'llm_call':
         if (!data.providerId && !data.routing && !data.roleKey && !options.hasDefaultRouting) {
           errors.push(
-            `Model Call node "${node.id}" is missing a provider, a routing policy, or a role`,
+            `Pick a model for the Model Call step "${nodeLabel(node)}": choose a provider, or a routing policy or role to choose one at run time.`,
           )
         }
         break
@@ -134,25 +147,25 @@ export function validateWorkflowGraph(
 
       case 'tool_call':
         if (!data.toolId) {
-          errors.push(`Tool Call node "${node.id}" is missing a tool`)
+          errors.push(`Choose a tool for the Tool Call step "${nodeLabel(node)}".`)
         }
         break
 
       case 'sub_agent':
         if (!data.agentId && !data.target) {
-          errors.push(`Sub-Agent node "${node.id}" is missing an agent`)
+          errors.push(`Choose an agent for the Sub-Agent step "${nodeLabel(node)}".`)
         }
         break
 
       case 'verify': {
         const checkers = Array.isArray(data.checkers) ? data.checkers : []
         if (checkers.length === 0) {
-          errors.push(`Verify node "${node.id}" needs at least one checker`)
+          errors.push(`Add at least one checker to the Verify step "${nodeLabel(node)}".`)
         }
         checkers.forEach((checker: any, i: number) => {
           if (!checker || (!checker.providerId && !checker.roleKey)) {
             errors.push(
-              `Verify node "${node.id}" checker #${i + 1} is missing a provider or a role`,
+              `Choose a provider or a role for checker #${i + 1} of the Verify step "${nodeLabel(node)}".`,
             )
           }
         })

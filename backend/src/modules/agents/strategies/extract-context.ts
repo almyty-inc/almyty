@@ -82,7 +82,7 @@ export function parseExtractedContext(raw: string): ExtractedContext {
 }
 
 /** The first balanced `{...}` in the text, so a fenced or prefaced answer still works. */
-function extractJsonObject(text: string): string | null {
+export function extractJsonObject(text: string): string | null {
   const start = text.indexOf('{');
   if (start === -1) return null;
   let depth = 0;

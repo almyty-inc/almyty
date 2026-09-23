@@ -324,8 +324,20 @@ export class LlmChatHelper {
         ].includes(provider.type);
 
       if (!supportsStreaming) {
-        // Fall back to non-streaming for unsupported providers
-        return this.chat(providerId, request, organizationId, userId);
+        // Fall back to non-streaming for unsupported providers.
+        //
+        // With the ORIGINAL request, the way the safety net below already
+        // does. The local `request` has had its routing policy erased and
+        // its model pinned to the head of the plan a few lines up, and
+        // `providerId` is undefined on a routed call -- so handing that to
+        // chat() made it re-plan with an EMPTY policy: privacyTier,
+        // regions, capabilities and the price ceiling were all silently
+        // dropped, the provider came from the unconstrained plan while the
+        // model id came from the constrained one, and nothing stamped the
+        // routing attribution on the response, the node result or the
+        // audit log. Gemini and custom endpoints are the types that take
+        // this branch.
+        return this.chat(providerId, originalRequest, organizationId, userId);
       }
 
       // Get or create session
@@ -383,7 +395,12 @@ export class LlmChatHelper {
         tools = await this.runner.prepareTools(request.tools || [], organizationId);
       }
 
-      const costFn = this.modelsHelper.calculateProviderCost.bind(this.modelsHelper);
+      // Price on the model that goes on the wire, not on the provider's
+      // configured one: a routed stream reassigns request.model to the
+      // candidate's vendor id just above, and this closure reads it at
+      // call time so the reassignment below is picked up too.
+      const costFn = (p: LlmProvider, inputTokens: number, outputTokens: number) =>
+        this.modelsHelper.calculateProviderCost(p, inputTokens, outputTokens, request.model);
       // Streaming bypasses the runner, so settle the model here the same
       // way: configured, else the vendor's current list. Never a literal.
       if (!request.model) {

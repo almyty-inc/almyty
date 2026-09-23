@@ -376,7 +376,16 @@ export class ProcessManager {
     ]);
   }
 
-  /** Kill all processes for a workspace and forget them. Used on workspace release. */
+  /**
+   * Kill all processes for a workspace and forget them.
+   *
+   * Called by `WorkspaceReclaimer` when a heartbeat ack shows the
+   * backend no longer lists the workspace as active — which covers
+   * release, TTL expiry and stranding alike. Forgetting the entries (not
+   * just killing them) is what makes repeated heartbeats idempotent: the
+   * workspace stops being hosted, so the next ack has nothing to say
+   * about it.
+   */
   async killWorkspace(workspaceId: string): Promise<number> {
     let killed = 0;
     for (const [id, proc] of this.processes) {
