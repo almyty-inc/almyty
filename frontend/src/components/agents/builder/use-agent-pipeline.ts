@@ -57,6 +57,20 @@ export function getDefaultData(type: PipelineNodeType): Record<string, any> {
       // `instruction: ''` replaces the built-in extraction instruction
       // with an empty system prompt.
       return {}
+    case 'decision':
+      // Seeded with its abstain option already present, because the decide
+      // contract refuses a choice question without one (ABSTAIN_MISSING) and
+      // a node you can drop but not run is not a node. Thresholds stay
+      // absent: an option with no threshold is unthresholded, and seeding
+      // zeroes would claim every answer clears its bar.
+      return {
+        question: {
+          id: 'decision',
+          type: 'choice',
+          prompt: '',
+          options: [{ id: 'abstain', description: 'The state does not answer this', abstain: true }],
+        },
+      }
     default:
       return {}
   }

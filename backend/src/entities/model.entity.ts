@@ -40,6 +40,24 @@ export interface ModelCapabilities {
   reasoning?: boolean;
   embedding?: boolean;
   structuredOutput?: boolean;
+  /**
+   * This card can score a teacher-forced continuation and return per-token
+   * logprobs, which is what the `decide` mode's logits path needs.
+   *
+   * Registry data, like every other entry here, and for the same reason:
+   * the fact is a property of the endpoint behind this card, not of the
+   * vendor on the front of it. One provider type serves both a hosted API
+   * that cannot score and a vLLM box on the customer's own hardware that
+   * can, so a list keyed on provider type would be wrong for one of them
+   * whichever way it was written.
+   *
+   * Set by a scoring validation run against this card, never inferred.
+   * Routing picks it up with no extra code because the policy filter
+   * iterates whatever keys this interface declares, so a request may ask
+   * for `capabilities: { scoring: true }` and get only cards that proved
+   * it.
+   */
+  scoring?: boolean;
 }
 
 /** Dollars per million tokens. */

@@ -775,6 +775,29 @@ export class AgentExecutionEngine {
             }
           }
 
+          // Handle decision branching: skip every option branch that was
+          // not chosen.
+          //
+          // Without this the decision node is a classifier with a label on
+          // it rather than a router. It would name the option it picked,
+          // the run would proceed down EVERY option edge anyway, and the
+          // failure would not look like a failure: each branch produces a
+          // plausible result and the merge downstream reports success. The
+          // threshold would be the most misleading part, because the whole
+          // point of routing a low-confidence answer to abstain is that the
+          // confident branches do not run.
+          if (node.type === 'decision' && result.output?.__decision) {
+            const chosen = result.output.selectedOption;
+            const outgoingEdges = pipeline.edges.filter(e => e.source === nodeId);
+
+            for (const edge of outgoingEdges) {
+              const handle = edge.sourceHandle || edge.label || '';
+              if (handle && handle !== chosen) {
+                markBranchAsSkipped(edge.target, adjacencyList, skippedNodes, pipeline.edges);
+              }
+            }
+          }
+
           // Capture output node
           if (node.type === 'output') {
             finalOutput = result.output;

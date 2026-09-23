@@ -12,6 +12,7 @@ import {
   Bot,
   ShieldCheck,
   FileSearch,
+  Scale,
 } from 'lucide-react'
 import { NODE_TYPE_CONFIG, type PipelineNodeType } from './nodes'
 
@@ -28,13 +29,14 @@ const ICONS: Record<PipelineNodeType, React.ElementType> = {
   sub_agent: Bot,
   verify: ShieldCheck,
   extract_context: FileSearch,
+  decision: Scale,
 }
 
 // What you can drag onto an empty canvas. Every type the engine runs is
 // here: a type that renders on the canvas but cannot be dragged in is one
 // you can only get by ejecting a strategy, and a type that can be dragged
 // in without a config branch hands you a node you cannot fill in. Both
-// ends are wired for all twelve.
+// ends are wired for all thirteen.
 const NODE_ORDER: PipelineNodeType[] = [
   'input',
   'llm_call',
@@ -47,6 +49,7 @@ const NODE_ORDER: PipelineNodeType[] = [
   'sub_agent',
   'verify',
   'extract_context',
+  'decision',
   'output',
 ]
 
