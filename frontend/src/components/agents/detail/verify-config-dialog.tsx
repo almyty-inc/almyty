@@ -20,10 +20,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from '@/components/ui/dialog'
 
-import { agentsApi, llmProvidersApi } from '@/lib/api'
+import { agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 type Policy = 'all_pass' | 'majority' | 'any_fail_blocks'
 type Trigger = 'on_final_output' | 'every_n_steps' | 'on_tool_result'
@@ -41,8 +42,7 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
   const [open, setOpen] = useState(false)
 
   const { data: providersData } = useQuery<any>({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
+    ...llmProvidersQuery,
   })
   const providers: any[] = Array.isArray(providersData)
     ? providersData

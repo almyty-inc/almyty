@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Boxes, ChevronDown, LayoutGrid, Plus, RefreshCw, Rows3, Server } from 'lucide-react'
-
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -34,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { llmProvidersApi } from '@/lib/api'
 import { modelsApi } from '@/lib/models-api'
 import { useNotifications } from '@/store/app'
 import {
@@ -59,6 +57,7 @@ export const MODELS_QUERY_KEY = ['models', 'catalog'] as const
 
 const ORIGIN_FILTERS: Array<'all' | ModelOrigin> = ['all', 'vendor', 'deployment', 'endpoint']
 import { getApiErrorMessage as errorMessage } from '@/lib/api-error'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 /**
  * The catalog: which models this organization can run right now, where
@@ -95,12 +94,7 @@ export function CatalogTab() {
   })
 
   const providersQuery = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: async () => {
-      const d: any = await llmProvidersApi.getAll()
-      const list = d?.providers || (Array.isArray(d) ? d : [])
-      return Array.isArray(list) ? list : []
-    },
+    ...llmProvidersQuery,
   })
 
   const providers: ProviderOption[] = useMemo(
