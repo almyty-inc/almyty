@@ -41,8 +41,6 @@ const DESTRUCTIVE_PASTE = 'bg-destructive text-destructive-foreground hover:bg-d
  * the guard covers it again.
  */
 const PASTE_PENDING_ELSEWHERE = new Set([
-  'components/models/versions/version-detail-sheet.tsx',
-  'components/models/deployments/deployment-detail-sheet.tsx',
   'pages/llm-providers.tsx',
 ])
 

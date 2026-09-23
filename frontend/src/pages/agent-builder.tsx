@@ -20,6 +20,13 @@ import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
+import {
+  EMPTY_COLLABORATION,
+  collaborationFromAgent,
+  collaborationPayload,
+  collaborationProblems,
+  type CollaborationState,
+} from '@/components/agents/builder/collaboration'
 import { workflowIssues, type BuilderIssue, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 
 import { agentsApi, toolsApi } from '@/lib/api'
@@ -28,7 +35,6 @@ import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import type { Agent, PipelineNode, PipelineEdge } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 const DEFAULT_PIPELINE_NODES: PipelineNode[] = [
   { id: 'input_1', type: 'input', position: { x: 50, y: 200 }, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } },
@@ -64,21 +70,7 @@ export function AgentBuilderPage() {
   const [agentModelConfig, setAgentModelConfig] = useState<{ providerId?: string; model?: string; temperature?: number; maxTokens?: number }>({})
   const [agentMemoryConfig, setAgentMemoryConfig] = useState<{ enabled?: boolean; autoSave?: boolean }>({ enabled: false, autoSave: false })
   const [agentConfig, setAgentConfig] = useState<{ canCallAgents?: boolean; canCreateAgents?: boolean }>({ canCallAgents: false, canCreateAgents: false })
-  const [agentCollaboration, setAgentCollaboration] = useState<{
-    enabled: boolean;
-    strategy: 'sequential' | 'parallel' | 'race' | 'debate';
-    agents: { agentId: string; role?: string }[];
-    sharedBrief?: string;
-    rules?: {
-      maxTotalCost?: number;
-      maxChainDepth?: number;
-      outputFormat?: 'text' | 'json';
-      escalation?: 'never' | 'on_failure' | 'on_low_confidence';
-      conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge';
-    };
-    judgeAgentId?: string;
-    maxRounds?: number;
-  }>({ enabled: false, strategy: 'sequential', agents: [], rules: {} })
+  const [agentCollaboration, setAgentCollaboration] = useState<CollaborationState>(EMPTY_COLLABORATION)
 
   const [showTestPanel, setShowTestPanel] = useState(false)
 
@@ -120,12 +112,6 @@ export function AgentBuilderPage() {
   })
   const availableTools = Array.isArray(rawTools) ? rawTools : (rawTools as any)?.tools || []
 
-  // Fetch LLM providers (for autonomous mode)
-  const { data: rawProviders } = useQuery({
-    ...llmProvidersQuery,
-  })
-  const availableProviders = Array.isArray(rawProviders) ? rawProviders : (rawProviders as any)?.providers || []
-
   // Fetch available agents (for collaboration)
   const { data: rawAgents } = useQuery({
     queryKey: ['agents-list'],
@@ -161,7 +147,7 @@ export function AgentBuilderPage() {
       setAgentMemoryConfig(agent.memoryConfig || { enabled: false, autoSave: false })
       setAgentConfig(agent.agentConfig || { canCallAgents: false, canCreateAgents: false })
       if (agent.collaboration) {
-        setAgentCollaboration({ enabled: true, ...agent.collaboration })
+        setAgentCollaboration(collaborationFromAgent(agent.collaboration))
       }
       const pipelineNodes = (agent.pipeline?.nodes || []).map((n: PipelineNode) => ({
         id: n.id,
@@ -249,10 +235,11 @@ export function AgentBuilderPage() {
       if (!agentModelConfig.providerId) {
         errors.push({ text: 'Pick a model', nodeIds: [] })
       }
+      errors.push(...collaborationProblems(agentCollaboration).map((text) => ({ text, nodeIds: [] })))
     }
 
     return errors
-  }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
+  }, [agentName, agentMode, agentInstructions, agentModelConfig, agentCollaboration, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
 
   const validationErrors = useMemo(() => validationIssues.map((issue) => issue.text), [validationIssues])
 
@@ -377,20 +364,7 @@ export function AgentBuilderPage() {
         payload.modelConfig = agentModelConfig
         payload.memoryConfig = agentMemoryConfig
         payload.agentConfig = agentConfig
-        if (agentCollaboration.enabled && agentCollaboration.agents.length > 0) {
-          payload.collaboration = {
-            strategy: agentCollaboration.strategy,
-            agents: agentCollaboration.agents,
-            sharedBrief: agentCollaboration.sharedBrief || undefined,
-            rules: agentCollaboration.rules && Object.values(agentCollaboration.rules).some(v => v !== undefined && v !== null)
-              ? agentCollaboration.rules
-              : undefined,
-            judgeAgentId: agentCollaboration.judgeAgentId,
-            maxRounds: agentCollaboration.maxRounds,
-          }
-        } else {
-          payload.collaboration = null
-        }
+        payload.collaboration = collaborationPayload(agentCollaboration)
         // Keep a minimal pipeline for backward compat
         payload.pipeline = payload.pipeline || { nodes: [], edges: [] }
       }
@@ -581,7 +555,6 @@ export function AgentBuilderPage() {
           onInstructionsChange={setAgentInstructions}
           modelConfig={agentModelConfig}
           onModelConfigChange={setAgentModelConfig}
-          providers={availableProviders}
           toolIds={agentToolIds}
           onToolIdsChange={setAgentToolIds}
           tools={availableTools}

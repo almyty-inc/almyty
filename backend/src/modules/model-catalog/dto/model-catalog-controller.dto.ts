@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, IsUrl, MaxLength, Min, ValidateNested } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 const PRIVACY_TIERS = ['local', 'private_cloud', 'public'] as const;
@@ -23,18 +23,6 @@ export class RegisterModelBodyDto {
   @IsOptional() @ValidateNested() @Type(() => ModelPricingDto) pricingOverride?: ModelPricingDto;
   @IsOptional() @IsString() @MaxLength(255) base?: string;
   @IsOptional() @IsObject() metadata?: Record<string, any>;
-}
-
-export class RegisterEndpointBodyDto {
-  @IsString() @MaxLength(255) name: string;
-  @IsUrl({ require_tld: false, require_protocol: true }) url: string;
-  @IsOptional() @IsString() apiKey?: string;
-  @IsString() @MaxLength(255) vendorModelId: string;
-  @IsOptional() @IsObject() capabilities?: Record<string, boolean>;
-  @IsOptional() @IsInt() @Min(1) contextLength?: number;
-  @IsOptional() @IsIn(PRIVACY_TIERS) privacyTier?: (typeof PRIVACY_TIERS)[number];
-  @IsOptional() @IsString() @MaxLength(64) region?: string;
-  @IsOptional() @ValidateNested() @Type(() => ModelPricingDto) pricingOverride?: ModelPricingDto;
 }
 
 export class UpdateModelBodyDto {

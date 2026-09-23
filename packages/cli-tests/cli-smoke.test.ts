@@ -395,7 +395,7 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
     it('--help names every command it implements', () => {
       const out = run('models-cli', ['--help']);
       for (const command of [
-        'list', 'get <id>', 'register ', 'register-endpoint', 'set <id>', 'sync', 'validate <id>',
+        'list', 'get <id>', 'register ', 'set <id>', 'sync', 'validate <id>',
         'delete <id>', 'route ', 'versions', 'register-version', 'adapters', 'deploy ',
         'deployments', 'deployment <id>', 'scale ', 'teardown ',
       ]) {
@@ -452,15 +452,12 @@ describe.skipIf(GATED)('CLI smoke tests (RUN_CLI_SMOKE=1)', () => {
       expect(stdout).toContain('card id is required');
     });
 
-    it('refuses an endpoint key passed on the command line', () => {
-      // argv is readable through `ps` and lands in shell history.
-      const { stdout, exitCode } = runOrFail('models-cli', [
-        'register-endpoint', '--name', 'smoke', '--url', 'https://example.invalid/v1',
-        '--model', 'm', '--api-key', 'not-a-real-key',
+    it('has no register-endpoint command: a server you run is a custom provider plus a card', () => {
+      const { exitCode } = runOrFail('models-cli', [
+        'register-endpoint', '--name', 'smoke', '--url', 'https://example.invalid/v1', '--model', 'm',
       ]);
       expect(exitCode).toBe(2);
-      expect(stdout).toContain('--api-key-stdin');
-      // Nothing was created: the refusal happens before the request.
+      expect(run('models-cli', ['--help'])).not.toContain('register-endpoint');
     });
 
     it('unknown command exits 2', () => {

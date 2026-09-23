@@ -54,7 +54,7 @@ describe('tool lists share one key prefix', () => {
 
 describe('the model catalog invalidates the models prefix', () => {
   it('does not invalidate only its own sibling key', () => {
-    const source = read('components/models/catalog-tab.tsx')
+    const source = read('components/models/models-catalog.tsx')
     expect(source).toContain("invalidateQueries({ queryKey: ['models'] })")
     expect(source).not.toMatch(
       /const invalidate = \(\) => queryClient\.invalidateQueries\(\{ queryKey: MODELS_QUERY_KEY \}\)/,

@@ -22,7 +22,9 @@ import {
  * (vLLM, TGI, llama.cpp, LiteLLM proxy, a vendor). It cannot deploy,
  * scale or tear anything down; it exists so the reconcile loop can watch
  * such an endpoint and the catalog can price it like every other card.
- * Registering one goes through POST /models/register-endpoint.
+ * A server someone runs by hand is added as a `custom` inference provider
+ * (POST /llm-providers) plus an ordinary card against it (POST /models);
+ * this adapter only covers such a server when it is tracked as a deployment.
  */
 export class CustomEndpointAdapter implements ModelProviderAdapter {
   readonly key = 'custom-endpoint';

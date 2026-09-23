@@ -11,11 +11,12 @@ import { KmsModule } from '../kms/kms.module';
 import { ModelRegistryService } from './model-registry.service';
 import { ModelVersionsService } from './model-versions.service';
 import { ModelVersionsController } from './model-versions.controller';
+import { HfRevisionResolver } from './hf-revision.resolver';
 
 @Module({
   imports: [ConfigModule, TypeOrmModule.forFeature([ModelVersion, ModelDeployment, Credential, Organization]), AuditLogModule, KmsModule],
-  providers: [ModelRegistryService, ModelVersionsService],
+  providers: [ModelRegistryService, ModelVersionsService, HfRevisionResolver],
   controllers: [ModelVersionsController],
-  exports: [ModelRegistryService, ModelVersionsService],
+  exports: [ModelRegistryService, ModelVersionsService, HfRevisionResolver],
 })
 export class ModelRegistryModule {}

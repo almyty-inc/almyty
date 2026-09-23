@@ -3,7 +3,7 @@ import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { useForm } from 'react-hook-form'
 
 import { render } from '../../../test/setup'
-import { CreateProviderDialog } from '../create-provider-dialog'
+import { CreateProviderForm } from '../create-provider-form'
 import { EditProviderDialog } from '../edit-provider-dialog'
 
 // The dialogs pull in the credential vault picker, the team-visibility
@@ -27,9 +27,7 @@ function CreateHarness({ type }: { type: string }) {
   })
   const mutation = { isPending: false, mutate: vi.fn() } as any
   return (
-    <CreateProviderDialog
-      open
-      onOpenChange={() => {}}
+    <CreateProviderForm
       createForm={form}
       createProviderMutation={mutation}
     />
@@ -109,7 +107,7 @@ describe('usage API key field (issue #241)', () => {
       fireEvent.change(screen.getByLabelText(USAGE_KEY_LABEL), {
         target: { value: 'sk-ant-admin-new-key' },
       })
-      fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
 
       await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
       expect(onUpdate).toHaveBeenCalledWith({

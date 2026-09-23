@@ -77,7 +77,8 @@ test.describe('Top-level nav renders without error', () => {
     { label: 'Gateways', path: '/gateways' },
     { label: 'Agents', path: '/agents' },
     { label: 'Credentials', path: '/credentials' },
-    { label: 'Models', path: '/llm-providers' },
+    { label: 'Models', path: '/models' },
+    { label: 'Inference providers', path: '/llm-providers' },
     { label: 'Memory', path: '/memories' },
     { label: 'Analytics', path: '/analytics' },
     { label: 'Settings', path: '/settings' },
@@ -157,7 +158,6 @@ test.describe('Create dialogs open from deep-link', () => {
     { label: 'Create API', path: '/apis?new=1', heading: /create .*api|add .*api|new api|import api/i },
     { label: 'Create Tool', path: '/tools?new=1', heading: /create tool|new tool/i },
     { label: 'Create Gateway', path: '/gateways?new=1', heading: /create gateway|new gateway/i },
-    { label: 'Add LLM Provider', path: '/llm-providers?new=1', heading: /add provider|new provider|create provider|add llm/i },
   ]
 
   for (const link of deepLinks) {
@@ -174,19 +174,21 @@ test.describe('Create dialogs open from deep-link', () => {
   }
 })
 
-test.describe('Old ?new=1 links land on the create page', () => {
+test.describe('Create pages open from deep-link', () => {
   // Create flows that became pages keep their old `?new=1` links working
-  // by redirecting to the page (useNewParamRedirect).
-  const redirects = [
-    { label: 'Add credential', path: '/credentials?new=1', url: /\/credentials\/new$/, heading: /add credential/i },
-    { label: 'Create organization', path: '/organizations?new=1', url: /\/organizations\/new$/, heading: /create organization/i },
+  // by forwarding to the page.
+  const deepLinks = [
+    { label: 'Add inference provider', path: '/llm-providers?new=1', lands: /\/llm-providers\/new$/, heading: 'Add inference provider' },
+    { label: 'Add model', path: '/models?new=1', lands: /\/models\/new$/, heading: 'Add model' },
+    { label: 'Add credential', path: '/credentials?new=1', lands: /\/credentials\/new$/, heading: 'Add credential' },
+    { label: 'Create organization', path: '/organizations?new=1', lands: /\/organizations\/new$/, heading: 'Create organization' },
   ]
 
-  for (const link of redirects) {
+  for (const link of deepLinks) {
     test(link.label, async () => {
       await page.goto(link.path)
-      await expect(page).toHaveURL(link.url, { timeout: 15_000 })
-      await expect(page.getByRole('heading', { name: link.heading })).toBeVisible({ timeout: 10_000 })
+      await expect(page).toHaveURL(link.lands)
+      await expect(page.getByRole('heading', { name: link.heading, level: 1 })).toBeVisible({ timeout: 10_000 })
       await expect(page.getByRole('dialog')).toHaveCount(0)
     })
   }

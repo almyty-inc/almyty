@@ -6,11 +6,9 @@ import type {
   ModelAdapter,
   ModelDeployment,
   ModelDeploymentState,
-  ModelManifestSummary,
   ModelScheme,
   ModelVersion,
   ProviderScheme,
-  RegisterModelVersionBody,
 } from '@/types/deployments'
 
 // Deployment adapters + deployments: backend/src/modules/model-deployments.
@@ -27,13 +25,12 @@ export const modelDeploymentsApi = {
   delete: (id: string) => apiDel<ModelDeployment>(`/model-deployments/${id}`),
 }
 
-// Registry versions. The backend module (model-registry) has the service
-// but no controller yet; these paths are the agreed contract.
+// Pinned weight records. The UI only reads them, for the lineage facts
+// (base model, quantization) a hosted model shows; managing them is an
+// API and CLI concern (almyty models register-version).
 export const modelVersionsApi = {
   list: () => apiGet<ModelVersion[]>('/model-versions'),
   get: (id: string) => apiGet<ModelVersion>(`/model-versions/${id}`),
-  create: (body: RegisterModelVersionBody) => apiPost<ModelVersion>('/model-versions', body),
-  delete: (id: string) => apiDel<void>(`/model-versions/${id}`),
 }
 
 /** How often the deployments list refetches while a row is still moving. */
@@ -73,9 +70,6 @@ export const ARTIFACT_SCHEMES: ArtifactScheme[] = ['hf', 's3', 'gs', 'file']
 export const PROVIDER_SCHEMES: ProviderScheme[] = ['bedrock', 'sagemaker', 'vertex', 'foundry', 'azureml', 'fireworks', 'together', 'baseten']
 export const MODEL_SCHEMES: ModelScheme[] = [...ARTIFACT_SCHEMES, ...PROVIDER_SCHEMES]
 
-/** Legacy alias: versions still speak of a registry URI, which is the artifact half of this grammar. */
-export type RegistryScheme = ModelScheme
-
 export interface ParsedModelRef {
   scheme: ModelScheme
   /** `artifact` points at bytes; `provider` names a model a platform already holds. */
@@ -89,8 +83,6 @@ export interface ParsedModelRef {
   raw: string
 }
 
-export type ParsedRegistryUri = ParsedModelRef
-
 export type ParseModelRefResult = { ok: true; value: ParsedModelRef } | { ok: false; error: string }
 
 /** How each scheme is written and what to call it in a form. */
@@ -103,9 +95,9 @@ export interface SchemeMeta {
 }
 
 export const SCHEME_META: Record<ModelScheme, SchemeMeta> = {
-  hf: { scheme: 'hf', kind: 'artifact', label: 'Hugging Face repo', example: 'hf://org/repo@sha', hint: 'A repository on the Hub, pinned to a commit.' },
-  s3: { scheme: 's3', kind: 'artifact', label: 'Amazon S3', example: 's3://bucket/prefix@etag', hint: 'A bucket the provider reads itself. The bytes never pass through almyty.' },
-  gs: { scheme: 'gs', kind: 'artifact', label: 'Cloud Storage', example: 'gs://bucket/prefix@generation', hint: 'A Google Cloud Storage prefix the provider reads itself.' },
+  hf: { scheme: 'hf', kind: 'artifact', label: 'Hugging Face repo', example: 'hf://org/repo', hint: 'A repository on the Hugging Face Hub. almyty pins it to its exact commit when you save, so it can be recreated exactly.' },
+  s3: { scheme: 's3', kind: 'artifact', label: 'Amazon S3', example: 's3://bucket/prefix@etag', hint: 'A bucket your cloud reads itself. The bytes never pass through almyty.' },
+  gs: { scheme: 'gs', kind: 'artifact', label: 'Cloud Storage', example: 'gs://bucket/prefix@generation', hint: 'A Google Cloud Storage prefix your cloud reads itself.' },
   file: { scheme: 'file', kind: 'artifact', label: 'Path on the host', example: 'file:///models/repo@sha', hint: 'An absolute path on the machine that serves the model.' },
   bedrock: { scheme: 'bedrock', kind: 'provider', label: 'Amazon Bedrock', example: 'bedrock://<model id or arn>', hint: 'A model already on Bedrock. Bedrock versions it.' },
   sagemaker: { scheme: 'sagemaker', kind: 'provider', label: 'SageMaker', example: 'sagemaker://model-package/<arn>', hint: 'A model package already in SageMaker.' },
@@ -114,7 +106,7 @@ export const SCHEME_META: Record<ModelScheme, SchemeMeta> = {
   azureml: { scheme: 'azureml', kind: 'provider', label: 'Azure ML registry', example: 'azureml://registries/<registry>/models/<name>/labels/<label>', hint: 'A model already in an Azure ML registry.' },
   fireworks: { scheme: 'fireworks', kind: 'provider', label: 'Fireworks', example: 'fireworks://accounts/<account>/models/<model>', hint: 'A model you already uploaded to Fireworks.' },
   together: { scheme: 'together', kind: 'provider', label: 'Together', example: 'together://<owner>/<model>', hint: 'A model you already uploaded to Together.' },
-  baseten: { scheme: 'baseten', kind: 'provider', label: 'Baseten', example: 'baseten://<model id>', hint: 'A model you already deployed on Baseten.' },
+  baseten: { scheme: 'baseten', kind: 'provider', label: 'Baseten', example: 'baseten://<model id>', hint: 'A model already on Baseten.' },
 }
 
 /** The scheme a reference opens with, whether or not the rest of it parses. */
@@ -139,7 +131,7 @@ const ARTIFACT_RE = new RegExp(`^(${ARTIFACT_SCHEMES.join('|')}):\\/\\/(.+?)@([A
  */
 export function parseModelRef(raw: string): ParseModelRefResult {
   const value = (raw ?? '').trim()
-  if (!value) return { ok: false, error: 'Say where the model is, for example hf://org/repo@sha or fireworks://accounts/acme/models/support' }
+  if (!value) return { ok: false, error: 'Say where the model is, for example hf://org/repo or fireworks://accounts/acme/models/support' }
 
   const scheme = schemeOf(value)
   if (scheme && PROVIDER_SCHEMES.includes(scheme as ProviderScheme)) {
@@ -151,6 +143,13 @@ export function parseModelRef(raw: string): ParseModelRefResult {
     return { ok: true, value: { scheme, kind: 'provider', location: body, prefix: '', pin, raw: value } }
   }
 
+  // A Hugging Face repository may be named without a commit: the server
+  // pins it to the exact revision before anything starts.
+  const unpinnedHf = value.match(/^hf:\/\/([\w.-]+\/[\w.-]+)$/)
+  if (unpinnedHf) {
+    if (unpinnedHf[1].includes('..')) return { ok: false, error: 'A model reference may not contain ..' }
+    return { ok: true, value: { scheme: 'hf', kind: 'artifact', location: unpinnedHf[1], prefix: '', pin: '', raw: value } }
+  }
   const m = value.match(ARTIFACT_RE)
   if (!m) {
     if (scheme && ARTIFACT_SCHEMES.includes(scheme as ArtifactScheme)) {
@@ -158,7 +157,7 @@ export function parseModelRef(raw: string): ParseModelRefResult {
     }
     return {
       ok: false,
-      error: 'Point at an artifact with a pin (hf://org/repo@sha, s3://bucket/prefix@etag, gs://bucket/prefix@generation, file:///path@sha), or at a model already on a platform (bedrock://, fireworks://, together://, baseten://, vertex://, sagemaker://, foundry://, azureml://).',
+      error: 'Name a Hugging Face repository (hf://org/repo), stored weights with a pin (s3://bucket/prefix@etag, gs://bucket/prefix@generation, file:///path@sha), or a model already on a platform (bedrock://, fireworks://, together://, baseten://, vertex://, sagemaker://, foundry://, azureml://).',
     }
   }
   const artifactScheme = m[1] as ArtifactScheme
@@ -173,15 +172,12 @@ export function parseModelRef(raw: string): ParseModelRefResult {
     return { ok: true, value: { scheme: artifactScheme, kind: 'artifact', location: bucket, prefix, pin, raw: value } }
   }
   if (artifactScheme === 'hf') {
-    if (!/^[\w.-]+\/[\w.-]+$/.test(body)) return { ok: false, error: 'A Hugging Face reference must be hf://org/repo@sha' }
+    if (!/^[\w.-]+\/[\w.-]+$/.test(body)) return { ok: false, error: 'A Hugging Face reference must be hf://org/repo' }
     return { ok: true, value: { scheme: artifactScheme, kind: 'artifact', location: body, prefix: '', pin, raw: value } }
   }
   if (!body.startsWith('/')) return { ok: false, error: 'A file:// reference must be an absolute path' }
   return { ok: true, value: { scheme: artifactScheme, kind: 'artifact', location: body, prefix: '', pin, raw: value } }
 }
-
-/** The Versions tab still calls it a registry URI; same grammar, same parser. */
-export const parseRegistryUri = parseModelRef
 
 /** One line describing what the form understood, for the field's helper text. */
 export function describeModelRef(parsed: ParsedModelRef): string {
@@ -190,6 +186,11 @@ export function describeModelRef(parsed: ParsedModelRef): string {
     return parsed.pin ? `${meta.label}: ${parsed.location.slice(0, parsed.location.lastIndexOf('@'))}, version ${parsed.pin}` : `${meta.label}: ${parsed.location}`
   }
   const where = parsed.prefix ? `${parsed.location}/${parsed.prefix}` : parsed.location
+  if (parsed.scheme === 'hf' && !/^[0-9a-f]{40}$/i.test(parsed.pin)) {
+    // No commit yet: the server resolves the branch (main by default) to one.
+    const at = parsed.pin ? ` at ${parsed.pin}` : ''
+    return `${meta.label}: ${where}${at}, pinned to its exact commit when you save`
+  }
   return `${meta.label}: ${where}, pinned to ${parsed.pin}`
 }
 
@@ -229,8 +230,8 @@ export function matchAdapters(adapters: ModelAdapter[], scheme: ModelScheme | nu
         adapter,
         ok: false,
         reason: owners.length
-          ? `${schemePrefix(scheme)} names a model on ${owners.join(' or ')}, and only that provider can run it`
-          : `${schemePrefix(scheme)} names a model held by ${SCHEME_META[scheme].label}, and only that provider can run it`,
+          ? `${schemePrefix(scheme)} names a model on ${owners.join(' or ')}, and only that cloud can run it`
+          : `${schemePrefix(scheme)} names a model held by ${SCHEME_META[scheme].label}, and only that cloud can run it`,
       }
     }
     const accepted = adapterSchemes(adapter).map(schemePrefix)
@@ -282,29 +283,4 @@ export const BLANK = '—'
 export function formatCents(cents: number | null | undefined): string {
   if (cents === null || cents === undefined || Number.isNaN(cents)) return BLANK
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100)
-}
-
-export function formatBytes(bytes: string | number | null | undefined): string {
-  if (bytes === null || bytes === undefined || bytes === '') return BLANK
-  const n = typeof bytes === 'string' ? Number(bytes) : bytes
-  if (!Number.isFinite(n) || n < 0) return BLANK
-  if (n < 1024) return `${n} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let value = n / 1024
-  let i = 0
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024
-    i += 1
-  }
-  return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[i]}`
-}
-
-/** The backend refuses to delete a version while any deployment other than torn_down references it. */
-export function holdsVersion(state: ModelDeploymentState): boolean {
-  return state !== 'torn_down'
-}
-
-export function manifestSummaryOf(version: Pick<ModelVersion, 'metadata'> | null | undefined): ModelManifestSummary | null {
-  const m = version?.metadata?.manifest
-  return m && typeof m === 'object' ? m : null
 }

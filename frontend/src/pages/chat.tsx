@@ -6,12 +6,10 @@ import {
   RotateCcw,
   Bot,
   User,
-  ChevronDown,
   Wrench,
   Plus,
   MessageSquare,
   X,
-  Sparkles,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -19,14 +17,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from '@/components/ui/dropdown-menu'
+import { ModelPicker } from '@/components/model-picker'
 import {
   Dialog,
   DialogContent,
@@ -53,6 +44,8 @@ interface ChatSession {
   id: string
   providerId: string
   providerName: string
+  /** Empty for the provider's default model. */
+  model?: string
   messages: ChatMessage[]
   createdAt: string
   title: string
@@ -70,6 +63,8 @@ export function ChatPage() {
 
   // Provider state
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)
+  // Empty means the provider's own default model.
+  const [selectedModel, setSelectedModel] = useState('')
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -134,6 +129,7 @@ export function ChatPage() {
         id: sessionId || Date.now().toString(),
         providerId: selectedProvider.id,
         providerName: selectedProvider.name,
+        model: selectedModel,
         messages: [...messages],
         createdAt: new Date().toISOString(),
         title,
@@ -159,6 +155,7 @@ export function ChatPage() {
           id: sessionId || Date.now().toString(),
           providerId: selectedProvider.id,
           providerName: selectedProvider.name,
+          model: selectedModel,
           messages: [...messages],
           createdAt: new Date().toISOString(),
           title,
@@ -169,6 +166,7 @@ export function ChatPage() {
     setMessages(session.messages)
     setSessionId(session.id)
     setSelectedProviderId(session.providerId)
+    setSelectedModel(session.model ?? '')
     setActiveSidebarSession(session.id)
   }
 
@@ -190,6 +188,7 @@ export function ChatPage() {
       const response = await llmProvidersApi.chat(selectedProvider.id, {
         messages: newMessages.map(m => ({ role: m.role, content: m.content })),
         sessionId: sessionId || undefined,
+        ...(selectedModel ? { model: selectedModel } : {}),
         ...(selectedToolIds.length > 0 && { toolIds: selectedToolIds }),
       })
 
@@ -243,16 +242,11 @@ export function ChatPage() {
         <Bot className="h-16 w-16 text-muted-foreground mb-4" />
         <h2 className="text-xl font-semibold mb-2">No models configured</h2>
         <p className="text-muted-foreground text-center max-w-md mb-4">
-          {/* The screen this points at is called Models in the sidebar and
-              lives at /models; "the AI Models page" named a screen that does
-              not exist. */}
-          To start chatting, configure at least one model provider (OpenAI,
-          Anthropic, etc.) on the Models page.
+          To start chatting, add at least one inference provider (OpenAI,
+          Anthropic, a server you run, and more).
         </p>
-        {/* A full page reload to /llm-providers only to be redirected to
-            /models?tab=providers threw the SPA away for no reason. */}
-        <Button onClick={() => navigate('/models?tab=providers')}>
-          Configure models
+        <Button onClick={() => navigate('/llm-providers/new')}>
+          Add an inference provider
         </Button>
       </div>
     )
@@ -295,42 +289,21 @@ export function ChatPage() {
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <div className="border-b px-4 py-2 flex items-center justify-between bg-background">
-          <div className="flex items-center gap-3">
-            {/* Provider Selector */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Sparkles className="h-4 w-4" />
-                  {selectedProvider?.name || 'Select Provider'}
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuLabel>Active Providers</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {activeProviders.map((provider: any) => (
-                  <DropdownMenuItem
-                    key={provider.id}
-                    onClick={() => setSelectedProviderId(provider.id)}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <span>{provider.name}</span>
-                      {provider.id === selectedProviderId && (
-                        <Badge variant="secondary" className="text-xs ml-2">Active</Badge>
-                      )}
-                    </div>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {selectedProvider && (
-              <span className="text-xs text-muted-foreground">
-                {selectedProvider.type} · {selectedProvider.configuration?.model || 'default model'}
-              </span>
-            )}
-          </div>
+        <div className="border-b px-4 py-2 flex flex-wrap items-end justify-between gap-2 bg-background">
+          {/* Provider and model: which model answers is a choice here, not
+              whatever the provider happens to default to. */}
+          <ModelPicker
+            idPrefix="chat"
+            compact
+            activeOnly
+            modelOptional
+            className="w-full sm:w-auto sm:min-w-[28rem]"
+            value={{ providerId: selectedProviderId ?? undefined, model: selectedModel }}
+            onChange={(next) => {
+              setSelectedProviderId(next.providerId ?? null)
+              setSelectedModel(next.model ?? '')
+            }}
+          />
 
           <div className="flex items-center gap-2">
             {/* Tool Selector */}
@@ -533,7 +506,7 @@ export function ChatPage() {
           </form>
           <div className="text-xs text-muted-foreground mt-1">
             Enter to send · Shift+Enter for newline
-            {selectedProvider && ` · ${selectedProvider.type} · ${selectedProvider.configuration?.model || 'default'}`}
+            {selectedProvider && ` · ${selectedProvider.type} · ${selectedModel || 'provider default model'}`}
           </div>
         </div>
       </div>
