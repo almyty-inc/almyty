@@ -157,7 +157,6 @@ test.describe('Create dialogs open from deep-link', () => {
     { label: 'Create API', path: '/apis?new=1', heading: /create .*api|add .*api|new api|import api/i },
     { label: 'Create Tool', path: '/tools?new=1', heading: /create tool|new tool/i },
     { label: 'Create Gateway', path: '/gateways?new=1', heading: /create gateway|new gateway/i },
-    { label: 'Add Credential', path: '/credentials?new=1', heading: /add credential|new credential|create credential/i },
     { label: 'Add LLM Provider', path: '/llm-providers?new=1', heading: /add provider|new provider|create provider|add llm/i },
   ]
 
@@ -171,6 +170,24 @@ test.describe('Create dialogs open from deep-link', () => {
       // is the universal close for Radix Dialog).
       await page.keyboard.press('Escape')
       await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5_000 })
+    })
+  }
+})
+
+test.describe('Old ?new=1 links land on the create page', () => {
+  // Create flows that became pages keep their old `?new=1` links working
+  // by redirecting to the page (useNewParamRedirect).
+  const redirects = [
+    { label: 'Add credential', path: '/credentials?new=1', url: /\/credentials\/new$/, heading: /add credential/i },
+    { label: 'Create organization', path: '/organizations?new=1', url: /\/organizations\/new$/, heading: /create organization/i },
+  ]
+
+  for (const link of redirects) {
+    test(link.label, async () => {
+      await page.goto(link.path)
+      await expect(page).toHaveURL(link.url, { timeout: 15_000 })
+      await expect(page.getByRole('heading', { name: link.heading })).toBeVisible({ timeout: 10_000 })
+      await expect(page.getByRole('dialog')).toHaveCount(0)
     })
   }
 })

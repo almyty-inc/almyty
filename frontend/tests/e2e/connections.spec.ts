@@ -26,17 +26,20 @@ async function openConnections(page: Page) {
 async function connectWithApiKey(page: Page) {
   const card = page.getByTestId(`connector-card-${CONNECTOR_KEY}`)
   await expect(card).toBeVisible()
-  await card.getByRole('button', { name: /^Connect / }).click()
+  await card.getByRole('link', { name: /^Connect / }).click()
 
-  const sheet = page.getByRole('dialog').filter({ hasText: /^Connect / })
-  await expect(sheet).toBeVisible()
-  const form = sheet.getByTestId('connect-form')
+  // The connect flow is a page of its own now, not a sheet.
+  await expect(page).toHaveURL(new RegExp(`/settings/connections/connect/${CONNECTOR_KEY}`))
+  const form = page.getByTestId('connect-form')
   await expect(form).toBeVisible()
   await form.locator('input[type="password"]').first().fill(API_KEY!)
   await form.getByRole('button', { name: 'Connect' }).click()
 
   const toast = page.locator('li[role="status"]').filter({ hasText: /Connected|Secret rotated/ })
   await expect(toast).toBeVisible({ timeout: 30000 })
+  // A successful connect lands on the new connection's page.
+  await expect(page.getByTestId('connection-detail')).toBeVisible({ timeout: 15000 })
+  await openConnections(page)
   await expect(card.getByTestId('connector-connections').locator('li')).toHaveCount(1, { timeout: 15000 })
   return card
 }
@@ -49,8 +52,8 @@ hooked.describe('Connections - gallery', () => {
   hooked('renders the gallery grouped by kind in gallery order', async ({ authenticatedPage: page }) => {
     await expect(page.getByRole('heading', { name: 'Personal connections' })).toBeVisible()
     await expect(page.getByRole('switch', { name: 'Allow user-scoped connections' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Add custom connector' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Add custom connector' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Connect', exact: true })).toBeVisible()
 
     // Every section is one connector kind; the sections follow the gallery order.
     const sections = page.getByRole('region').filter({ has: page.getByRole('heading', { level: 2 }) })
@@ -66,7 +69,7 @@ hooked.describe('Connections - gallery', () => {
     // Each connector card carries a connect button named after the connector.
     const firstCard = page.locator('[data-testid^="connector-card-"]').first()
     await expect(firstCard).toBeVisible()
-    await expect(firstCard.getByRole('button', { name: /^Connect / })).toBeVisible()
+    await expect(firstCard.getByRole('link', { name: /^Connect / }).or(firstCard.getByRole('button', { name: /^Connect / }))).toBeVisible()
   })
 
   hooked('filters the gallery by search', async ({ authenticatedPage: page }) => {
@@ -77,14 +80,16 @@ hooked.describe('Connections - gallery', () => {
     await expect(page.locator('[data-testid^="connector-card-"]').first()).toBeVisible()
   })
 
-  hooked('opens the connect sheet with a connector picker', async ({ authenticatedPage: page }) => {
-    await page.getByRole('button', { name: 'Connect', exact: true }).click()
-    const sheet = page.getByRole('dialog').filter({ hasText: 'Connect an account' })
-    await expect(sheet).toBeVisible()
-    await expect(sheet.getByLabel('Search connectors')).toBeVisible()
-    await expect(sheet.locator('[data-testid^="connector-option-"]').first()).toBeVisible()
-    await page.keyboard.press('Escape')
-    await expect(sheet).toBeHidden()
+  hooked('opens the connect page with a connector picker', async ({ authenticatedPage: page }) => {
+    await page.getByRole('link', { name: 'Connect', exact: true }).click()
+    await expect(page).toHaveURL(/\/settings\/connections\/connect$/)
+    await expect(page.getByRole('heading', { name: 'Connect an account' })).toBeVisible()
+    await expect(page.getByLabel('Search connectors')).toBeVisible()
+    await page.locator('[data-testid^="connector-option-"]').first().click()
+    // Picking a connector moves to its own URL, so Back returns to the list.
+    await expect(page).toHaveURL(/\/settings\/connections\/connect\/[^/]+$/)
+    await page.goBack()
+    await expect(page.getByLabel('Search connectors')).toBeVisible()
   })
 
   hooked('connects an api_key connector against the fixture', async ({ authenticatedPage: page }) => {
@@ -96,9 +101,11 @@ hooked.describe('Connections - gallery', () => {
   hooked('grants editor adds and revokes a grant', async ({ authenticatedPage: page, assertHelper }) => {
     hooked.skip(!API_KEY, 'E2E_CONNECT_API_KEY not set')
     const card = await connectWithApiKey(page)
-    await card.getByTestId('connector-connections').getByRole('button', { name: /^Open / }).first().click()
+    await card.getByTestId('connector-connections').getByRole('link', { name: /^Open / }).first().click()
 
-    const detail = page.getByRole('dialog').filter({ hasText: 'Who can use it' })
+    // The connection is a page of its own now, not a sheet.
+    await expect(page).toHaveURL(/\/settings\/connections\/[^/]+$/)
+    const detail = page.getByTestId('connection-detail')
     await expect(detail).toBeVisible()
     const form = detail.getByTestId('grant-form')
     await form.getByLabel('Principal type').selectOption('role')
@@ -117,7 +124,7 @@ hooked.describe('Connections - gallery', () => {
 })
 
 hooked.describe('Connections - from the LLM provider dialog', () => {
-  hooked('the connect sheet opens from Add Provider', async ({ authenticatedPage: page }) => {
+  hooked('the connect flow opens inline from Add Provider', async ({ authenticatedPage: page }) => {
     await page.goto('/llm-providers')
     await page.waitForLoadState('networkidle')
     await page.getByRole('button', { name: /add.*provider/i }).click()
@@ -126,11 +133,12 @@ hooked.describe('Connections - from the LLM provider dialog', () => {
     await expect(dialog).toBeVisible()
     await dialog.getByRole('button', { name: 'Connect an account' }).click()
 
-    const sheet = page.getByRole('dialog').filter({ hasText: /Connect an account|^Connect / })
-    await expect(sheet.last()).toBeVisible()
+    // Inline under the button, inside the provider form -- no second sheet.
+    const flow = page.getByTestId('connect-flow')
+    await expect(flow).toBeVisible()
     // Only inference connectors are offered; the picker (or the single
     // connector's form) is on screen.
-    const picker = sheet.last().locator('[data-testid^="connector-option-"], [data-testid="connect-form"]')
+    const picker = flow.locator('[data-testid^="connector-option-"], [data-testid="connect-form"]')
     await expect(picker.first()).toBeVisible()
   })
 })
@@ -179,15 +187,19 @@ hooked.describe('Connections - governance', () => {
       await expect(section.getByRole('button', { name: 'Export CSV' })).toBeVisible()
 
       await section.getByRole('tab', { name: 'Policies' }).click()
-      await section.getByRole('button', { name: 'Add policy' }).first().click()
-      const dialog = page.getByTestId('policy-dialog')
-      await expect(dialog).toBeVisible()
-      await expect(dialog.getByLabel('Kind')).toHaveValue('connector_allowlist')
-      await dialog.getByLabel('Kind').selectOption('expiry_rule')
-      await expect(dialog.getByLabel('Maximum age (days)')).toHaveValue('90')
-      await expect(dialog.getByLabel('Warn ahead (days)')).toHaveValue('7')
-      await dialog.getByRole('button', { name: 'Cancel' }).click()
-      await expect(dialog).toBeHidden()
+      await section.getByRole('link', { name: 'Add policy' }).first().click()
+      // Adding a policy is a page now, not a dialog.
+      await expect(page).toHaveURL(/\/settings\/connections\/policies\/new/)
+      const form = page.getByTestId('policy-form')
+      await expect(form).toBeVisible()
+      await expect(form.getByLabel('Kind')).toHaveValue('connector_allowlist')
+      await form.getByLabel('Kind').selectOption('expiry_rule')
+      await expect(form.getByLabel('Maximum age (days)')).toHaveValue('90')
+      await expect(form.getByLabel('Warn ahead (days)')).toHaveValue('7')
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      // The form is dirty, so leaving asks first.
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Discard changes' }).click()
+      await expect(page).toHaveURL(/\/settings\/connections$/)
     } else {
       if (entitled !== null) expect(entitled).toBe(false)
       await expect(locked).toContainText('Connections governance')
