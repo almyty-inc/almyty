@@ -1,6 +1,7 @@
 import { IsString, IsOptional, IsObject, IsEnum, IsArray, IsUrl, MaxLength } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';
+import type { AgentCollaboration } from '../collaboration-participants';
 
 const stripHtml = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
@@ -93,14 +94,11 @@ export class UpdateAgentDto {
     canCreateAgents?: boolean;
   };
 
+  // Shape checked in AgentsService (collaborationProblems) so a bad
+  // participant is refused with a sentence naming it.
   @IsOptional()
   @IsObject()
-  collaboration?: {
-    strategy: 'sequential' | 'parallel' | 'race' | 'debate';
-    agents: { agentId: string; role?: string }[];
-    judgeAgentId?: string;
-    maxRounds?: number;
-  };
+  collaboration?: AgentCollaboration | null;
 
   @IsOptional()
   @IsObject()
