@@ -160,7 +160,7 @@ export function CreateToolDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Manual Tool</DialogTitle>
+          <DialogTitle>Create manual tool</DialogTitle>
           <DialogDescription>
             Create a custom tool with JavaScript code or link to an API operation.
           </DialogDescription>
@@ -865,7 +865,7 @@ export function CreateToolDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={createToolMutation.isPending}>
-              {createToolMutation.isPending ? 'Creating...' : 'Create Tool'}
+              {createToolMutation.isPending ? 'Creating...' : 'Create tool'}
             </Button>
           </div>
         </form>

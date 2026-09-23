@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import { organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -29,7 +30,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
   const [inviteMemberDialogOpen, setInviteMemberDialogOpen] = useState(false)
   // Confirmed before it happens: removing someone cuts their access
   // immediately and there is no undo.
-  const [memberToRemove, setMemberToRemove] = useState<any>(null)
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [addToTeamDialogOpen, setAddToTeamDialogOpen] = useState(false)
   const [editTeamDialogOpen, setEditTeamDialogOpen] = useState(false)
   const [selectedTeam, setSelectedTeam] = useState<any>(null)
@@ -95,11 +96,9 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization-members', organizationId] })
       success('Member removed', 'They no longer have access to this organization.')
-      setMemberToRemove(null)
     },
     onError: (err: any) => {
       error('Could not remove member', getApiErrorMessage(err, 'The member was not removed.'))
-      setMemberToRemove(null)
     },
   })
 
@@ -301,19 +300,19 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle>Organization Members</CardTitle>
+              <CardTitle>Organization members</CardTitle>
               <CardDescription>
                 Manage who has access to this organization
               </CardDescription>
             </div>
             <Button onClick={() => setInviteMemberDialogOpen(true)}>
               <UserPlus className="h-4 w-4 mr-2" />
-              Invite Member
+              Invite member
             </Button>
             <Dialog open={inviteMemberDialogOpen} onOpenChange={(next) => { setInviteMemberDialogOpen(next); if (!next) { inviteMemberMutation.reset(); setNewMemberEmail(""); } }}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Invite Member</DialogTitle>
+                  <DialogTitle>Invite member</DialogTitle>
                   <DialogDescription>
                     Send an invitation to join this organization
                   </DialogDescription>
@@ -349,7 +348,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                       onClick={handleInviteMember}
                       disabled={inviteMemberMutation.isPending}
                     >
-                      {inviteMemberMutation.isPending ? 'Sending...' : 'Send Invitation'}
+                      {inviteMemberMutation.isPending ? 'Sending...' : 'Send invitation'}
                     </Button>
                   </div>
                 </div>
@@ -385,7 +384,15 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                           aria-label={`Remove ${member.firstName} ${member.lastName} from the organization`}
                           data-testid={`remove-member-${member.userId ?? member.id}`}
                           disabled={removeMemberMutation.isPending}
-                          onClick={() => setMemberToRemove(member)}
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: `Remove ${[member.firstName, member.lastName].filter(Boolean).join(' ') || 'this member'}?`,
+                              description: 'They lose access to this organization immediately. Anything they created stays, and you can invite them again.',
+                              confirmLabel: 'Remove member',
+                              destructive: true,
+                            })
+                            if (ok) removeMemberMutation.mutate(member.userId ?? member.id)
+                          }}
                         >
                           <Trash2 className="h-3 w-3 text-destructive" />
                         </Button>
@@ -401,7 +408,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
         {pendingInvites.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Pending Invites</CardTitle>
+              <CardTitle>Pending invites</CardTitle>
               <CardDescription>
                 Invitations waiting for the recipient to accept
               </CardDescription>
@@ -423,7 +430,15 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                         variant="ghost"
                         size="sm"
                         aria-label={`Revoke invite for ${invite.email}`}
-                        onClick={() => revokeInviteMutation.mutate(invite.id)}
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: 'Revoke this invite?',
+                            description: `The invite link sent to ${invite.email} stops working. You can invite them again.`,
+                            confirmLabel: 'Revoke invite',
+                            destructive: true,
+                          })
+                          if (ok) revokeInviteMutation.mutate(invite.id)
+                        }}
                         disabled={revokeInviteMutation.isPending}
                         title="Revoke invite"
                       >
@@ -449,12 +464,12 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
             </div>
             <Button onClick={() => setCreateTeamDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Team
+              Create team
             </Button>
             <Dialog open={createTeamDialogOpen} onOpenChange={setCreateTeamDialogOpen}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Create Team</DialogTitle>
+                  <DialogTitle>Create team</DialogTitle>
                   <DialogDescription>
                     Create a new team to organize your members
                   </DialogDescription>
@@ -486,7 +501,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                       onClick={handleCreateTeam}
                       disabled={createTeamMutation.isPending}
                     >
-                      {createTeamMutation.isPending ? 'Creating...' : 'Create Team'}
+                      {createTeamMutation.isPending ? 'Creating...' : 'Create team'}
                     </Button>
                   </div>
                 </div>
@@ -504,7 +519,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                 action={
                   <Button onClick={() => setCreateTeamDialogOpen(true)}>
                     <Plus className="h-4 w-4 mr-2" />
-                    Create First Team
+                    Create first team
                   </Button>
                 }
               />
@@ -555,11 +570,15 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                           aria-label={`Delete team ${team.name}`}
                           disabled={team.isDefault || deleteTeamMutation.isPending}
                           title={team.isDefault ? 'Default team cannot be deleted' : 'Delete team'}
-                          onClick={() => {
+                          onClick={async () => {
                             if (team.isDefault) return
-                            if (confirm(`Delete team "${team.name}"? This cannot be undone.`)) {
-                              deleteTeamMutation.mutate(team.id)
-                            }
+                            const ok = await confirm({
+                              title: 'Delete this team?',
+                              description: `"${team.name}" will be deleted. Its members stay in the organization. This cannot be undone.`,
+                              confirmLabel: 'Delete team',
+                              destructive: true,
+                            })
+                            if (ok) deleteTeamMutation.mutate(team.id)
                           }}
                         >
                           <Trash2 className="h-3 w-3" />
@@ -609,10 +628,14 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                                   aria-label={`Remove ${member.user?.firstName || 'member'} from ${team.name}`}
                                   disabled={removeFromTeamMutation.isPending}
                                   title="Remove from team"
-                                  onClick={() => {
-                                    if (confirm(`Remove ${member.user?.firstName || 'this member'} from "${team.name}"?`)) {
-                                      removeFromTeamMutation.mutate({ teamId: team.id, userId: member.userId })
-                                    }
+                                  onClick={async () => {
+                                    const ok = await confirm({
+                                      title: 'Remove this member from the team?',
+                                      description: `${member.user?.firstName || 'This member'} leaves "${team.name}". They stay in the organization.`,
+                                      confirmLabel: 'Remove from team',
+                                      destructive: true,
+                                    })
+                                    if (ok) removeFromTeamMutation.mutate({ teamId: team.id, userId: member.userId })
                                   }}
                                 >
                                   <Trash2 className="h-3 w-3" />
@@ -636,7 +659,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     <Dialog open={addToTeamDialogOpen} onOpenChange={setAddToTeamDialogOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Member to {selectedTeam?.name}</DialogTitle>
+          <DialogTitle>Add member to {selectedTeam?.name}</DialogTitle>
           <DialogDescription>
             Select an organization member to add to this team
           </DialogDescription>
@@ -679,7 +702,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
               onClick={handleAddToTeam}
               disabled={addToTeamMutation.isPending || !selectedMemberToAdd}
             >
-              {addToTeamMutation.isPending ? 'Adding...' : 'Add Member'}
+              {addToTeamMutation.isPending ? 'Adding...' : 'Add member'}
             </Button>
           </div>
         </div>
@@ -690,7 +713,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
     <Dialog open={editTeamDialogOpen} onOpenChange={setEditTeamDialogOpen}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Team</DialogTitle>
+          <DialogTitle>Edit team</DialogTitle>
           <DialogDescription>
             Update team settings and information
           </DialogDescription>
@@ -720,38 +743,13 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
               onClick={handleEditTeam}
               disabled={editTeamMutation.isPending}
             >
-              {editTeamMutation.isPending ? 'Saving...' : 'Save Changes'}
+              {editTeamMutation.isPending ? 'Saving...' : 'Save changes'}
             </Button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
-      <Dialog open={!!memberToRemove} onOpenChange={(open) => !open && setMemberToRemove(null)}>
-        <DialogContent data-testid="remove-member-dialog">
-          <DialogHeader>
-            <DialogTitle>
-              Remove {memberToRemove?.firstName} {memberToRemove?.lastName}?
-            </DialogTitle>
-            <DialogDescription>
-              They lose access to this organization immediately. Anything they created stays, and you can invite them
-              again.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setMemberToRemove(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              data-testid="confirm-remove-member"
-              disabled={removeMemberMutation.isPending}
-              onClick={() => removeMemberMutation.mutate(memberToRemove.userId ?? memberToRemove.id)}
-            >
-              {removeMemberMutation.isPending ? 'Removing...' : 'Remove member'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {confirmDialog}
     </>
   )
 }

@@ -44,7 +44,7 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Autonomous Runs</CardTitle>
+          <CardTitle className="text-base">Autonomous runs</CardTitle>
           <Badge variant="outline">{runs.length} run{runs.length !== 1 ? 's' : ''}</Badge>
         </div>
         <CardDescription className="text-xs">

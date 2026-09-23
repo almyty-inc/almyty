@@ -39,7 +39,7 @@ export function ToolExecutionDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <Play className="h-5 w-5" />
-            Test Tool: {toolForExecution?.name}
+            Test tool: {toolForExecution?.name}
           </DialogTitle>
           <DialogDescription>
             Execute the tool with parameters and view results

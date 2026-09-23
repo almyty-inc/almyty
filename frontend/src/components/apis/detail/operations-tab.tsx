@@ -48,7 +48,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>API Operations</CardTitle>
+              <CardTitle>API operations</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
                 {operations.length} operations parsed from schema
               </p>
@@ -56,7 +56,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
             {api.schema && (
               <Button variant="outline" size="sm" onClick={onOpenSchemaImport}>
                 <Upload className="mr-2 h-4 w-4" />
-                Update Schema
+                Update schema
               </Button>
             )}
           </div>
@@ -70,7 +70,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
               </p>
               <Button onClick={onOpenSchemaImport}>
                 <Upload className="mr-2 h-4 w-4" />
-                Import Schema
+                Import schema
               </Button>
             </div>
           ) : (
@@ -238,7 +238,7 @@ export function OperationsTab({ api, operations, apiTools, onOpenSchemaImport }:
                         <div key={tool.id} className="flex items-center justify-between p-2 border rounded">
                           <span className="text-sm">{tool.name}</span>
                           <Button size="sm" variant="ghost" onClick={() => navigate(`/tools/${tool.id}`)}>
-                            View Tool
+                            View tool
                           </Button>
                         </div>
                       ))

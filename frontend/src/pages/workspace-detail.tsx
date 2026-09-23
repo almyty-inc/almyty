@@ -19,7 +19,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { workspacesApi } from '@/lib/api'
-import { formatRelativeTime } from '@/lib/utils'
+import { cn, formatRelativeTime } from '@/lib/utils'
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { useNotifications } from '@/store/app'
 import { workspaceStatusVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -106,7 +107,7 @@ export function WorkspaceDetailPage() {
         <div className="flex items-center gap-3">
           <Layers className="h-7 w-7 text-muted-foreground" />
           <div>
-            <h1 className="text-3xl font-mono font-extrabold tracking-tight">{ws.id}</h1>
+            <h1 className={cn(DETAIL_TITLE_CLASSES, 'font-mono')}>{ws.id}</h1>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant={workspaceStatusVariant[ws.status]}>{ws.status}</Badge>
               <span className="text-sm text-muted-foreground">
@@ -177,8 +178,8 @@ export function WorkspaceDetailPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => releaseMutation.mutate()}>
-              Release
+            <AlertDialogAction variant="destructive" onClick={() => releaseMutation.mutate()}>
+              Release workspace
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -143,7 +143,7 @@ export function SchemaImportDialog({
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="file" className="flex items-center gap-2">
                 <Upload className="h-4 w-4" />
-                Upload File
+                Upload file
               </TabsTrigger>
               <TabsTrigger value="url" className="flex items-center gap-2">
                 <Link className="h-4 w-4" />
@@ -151,7 +151,7 @@ export function SchemaImportDialog({
               </TabsTrigger>
               <TabsTrigger value="paste" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                Paste Content
+                Paste content
               </TabsTrigger>
             </TabsList>
 

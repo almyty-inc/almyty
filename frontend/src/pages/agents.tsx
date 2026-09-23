@@ -20,16 +20,19 @@ import {
   Brain,
   Wrench,
   Globe,
+  Building2,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/layout/page-header'
 import { QueryError } from '@/components/ui/query-error'
 import {
   Dialog,
@@ -321,65 +324,65 @@ export function AgentsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Agents</h1>
-          <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(agents.length, 'agent')} (${activeCount} active)${externalAgents.length > 0 ? ` + ${externalAgents.length} external` : ''}`}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" disabled={!currentOrganization}>
-                <FileUp className="h-4 w-4 mr-2" />
-                Import
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
-                <FileUp className="h-4 w-4 mr-2" />
-                Import from JSON
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setImportExternalOpen(true)}>
-                <Globe className="h-4 w-4 mr-2" />
-                Import External A2A Agent
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button onClick={() => navigate('/agents/new')} disabled={!currentOrganization}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Agent
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Agents"
+        description={
+          isLoading ? (
+            <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" />
+          ) : (
+            `${pluralized(agents.length, 'agent')} · ${activeCount} active${externalAgents.length > 0 ? ` · ${externalAgents.length} external` : ''}`
+          )
+        }
+        actions={
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={!currentOrganization}>
+                  <FileUp className="h-4 w-4 mr-2" />
+                  Import
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
+                  <FileUp className="h-4 w-4 mr-2" />
+                  Import from JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setImportExternalOpen(true)}>
+                  <Globe className="h-4 w-4 mr-2" />
+                  Import external A2A agent
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button onClick={() => navigate('/agents/new')} disabled={!currentOrganization}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create agent
+            </Button>
+          </>
+        }
+      />
 
       {!currentOrganization ? (
-        <div className="flex items-center justify-center h-96">
-          <div className="text-center">
-            <p className="text-muted-foreground">No organization selected. Please select or create an organization.</p>
-          </div>
-        </div>
+        <EmptyState
+          variant="panel"
+          icon={Building2}
+          title="No organization selected"
+          description="Select or create an organization to see its agents."
+        />
       ) : isError ? (
         <QueryError error={agentsError} onRetry={() => refetchAgents()} title="Couldn't load agents" />
       ) : !isLoading && agents.length === 0 ? (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
-              icon={Bot}
-              title="Create your first agent"
-              description="Agents call models and tools to do a job — with cross-vendor verification if you want a second opinion."
-              action={
-                <Button onClick={() => navigate('/agents/new')}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create agent
-                </Button>
-              }
-              className="py-16"
-            />
-          </CardContent>
-        </Card>
+        <EmptyState
+          variant="panel"
+          icon={Bot}
+          title="No agents yet"
+          description="Agents call models and tools to do a job — with cross-vendor verification if you want a second opinion."
+          action={
+            <Button onClick={() => navigate('/agents/new')}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create agent
+            </Button>
+          }
+        />
       ) : (
         <>
           {/* Templates Section */}
@@ -584,7 +587,7 @@ export function AgentsPage() {
                     <div className="flex items-center gap-1.5">
                       <Globe className="h-3.5 w-3.5 text-cyan-500 shrink-0" />
                       <span className="font-medium">{ea.name}</span>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-cyan-300 text-cyan-600 dark:border-cyan-500/40 dark:text-cyan-400">External A2A</Badge>
+                      <ProtocolBadge protocol="a2a" label="External A2A" className="text-[10px] px-1.5 py-0 normal-case" />
                     </div>
                     <div className="text-xs text-muted-foreground truncate max-w-[300px]">
                       {ea.description || ea.agentCardUrl}
@@ -606,10 +609,13 @@ export function AgentsPage() {
             </CardContent>
           </Card>
 
-          {filteredAgents.length === 0 && searchQuery && (
-            <div className="text-center py-12 text-muted-foreground">
-              No agents match "{searchQuery}"
-            </div>
+          {!isLoading && agents.length > 0 && filteredAgents.length === 0 && (
+            <EmptyState
+              variant="panel"
+              icon={Search}
+              title="No matching agents"
+              description={searchQuery ? `Nothing matches "${searchQuery}" with the current filters.` : 'Nothing matches the current filters.'}
+            />
           )}
         </>
       )}
@@ -623,7 +629,7 @@ export function AgentsPage() {
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Agent</DialogTitle>
+            <DialogTitle>Create agent</DialogTitle>
             <DialogDescription>
               Create a new agent with a default pipeline. You can customize the pipeline after creation.
             </DialogDescription>
@@ -702,9 +708,9 @@ export function AgentsPage() {
                   deleteAgentMutation.mutate(agentToDelete.id)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              Delete Agent
+              Delete agent
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -730,7 +736,7 @@ export function AgentsPage() {
       }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Import Agent</DialogTitle>
+            <DialogTitle>Import agent</DialogTitle>
             <DialogDescription>
               Upload a .json file or paste an exported agent JSON to create a new agent.
             </DialogDescription>

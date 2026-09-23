@@ -34,6 +34,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   Select,
   SelectContent,
@@ -154,6 +155,17 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       errorNotif('Failed to revoke', 'Could not revoke API key')
     },
   })
+
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  const handleRevokeKey = async (key: { id: string; name?: string }) => {
+    const ok = await confirm({
+      title: 'Revoke this API key?',
+      description: `${key.name ? `"${key.name}"` : 'This key'} stops working immediately. Clients still using it will be refused. This cannot be undone.`,
+      confirmLabel: 'Revoke key',
+      destructive: true,
+    })
+    if (ok) revokeKeyMutation.mutate(key.id)
+  }
 
   const authConfigsRaw = authConfigsData?.authConfigs || authConfigsData || []
   const authConfigs = Array.isArray(authConfigsRaw) ? authConfigsRaw : []
@@ -307,7 +319,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
                 }}
               >
                 <Key className="h-4 w-4 mr-1" />
-                Generate Key
+                Generate key
               </Button>
             )}
             <Button
@@ -319,7 +331,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
               }}
             >
               <Plus className="h-4 w-4 mr-1" />
-              Add Auth Method
+              Add auth method
             </Button>
           </div>
         </div>
@@ -401,7 +413,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
                         variant="ghost"
                         size="sm"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => revokeKeyMutation.mutate(key.id)}
+                        onClick={() => void handleRevokeKey(key)}
                         disabled={revokeKeyMutation.isPending}
                       >
                         Revoke
@@ -419,7 +431,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       <Dialog open={addAuthDialogOpen} onOpenChange={setAddAuthDialogOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Authentication Method</DialogTitle>
+            <DialogTitle>Add authentication method</DialogTitle>
             <DialogDescription>
               Choose how clients will authenticate with {gatewayName}
             </DialogDescription>
@@ -449,7 +461,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
               onClick={handleAddAuth}
               disabled={!newAuthType || createAuthConfigMutation.isPending}
             >
-              {createAuthConfigMutation.isPending ? 'Adding...' : 'Add Auth Method'}
+              {createAuthConfigMutation.isPending ? 'Adding...' : 'Add auth method'}
             </Button>
           </div>
         </DialogContent>
@@ -459,7 +471,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Generate API Key</DialogTitle>
+            <DialogTitle>Generate API key</DialogTitle>
             <DialogDescription>
               Create a new API key for {gatewayName}. The key will only be shown once.
             </DialogDescription>
@@ -507,7 +519,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
                 onClick={() => generateKeyMutation.mutate(newKeyName || `${gatewayName} Key`)}
                 disabled={generateKeyMutation.isPending}
               >
-                {generateKeyMutation.isPending ? 'Generating...' : 'Generate Key'}
+                {generateKeyMutation.isPending ? 'Generating...' : 'Generate key'}
               </Button>
             </div>
           )}
@@ -518,7 +530,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       <AlertDialog open={!!deleteAuthId} onOpenChange={(open) => !open && setDeleteAuthId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove Authentication Method</AlertDialogTitle>
+            <AlertDialogTitle>Remove this authentication method?</AlertDialogTitle>
             <AlertDialogDescription>
               Clients using this authentication method will no longer be able to access the gateway. This cannot be undone.
             </AlertDialogDescription>
@@ -527,13 +539,14 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteAuthId && deleteAuthConfigMutation.mutate(deleteAuthId)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              {deleteAuthConfigMutation.isPending ? 'Removing...' : 'Remove'}
+              {deleteAuthConfigMutation.isPending ? 'Removing...' : 'Remove method'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {confirmDialog}
     </Card>
   )
 }

@@ -180,8 +180,8 @@ export function ConnectionDetailSheet({ connection, connector, open, onOpenChang
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
-            <AlertDialogAction onClick={() => connection && disconnect.mutate(connection.id)} disabled={disconnect.isPending}>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => connection && disconnect.mutate(connection.id)} disabled={disconnect.isPending}>
               Disconnect
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -104,7 +104,7 @@ export function CreateGatewayDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create New Gateway</DialogTitle>
+          <DialogTitle>Create new gateway</DialogTitle>
           <DialogDescription>
             Create a new gateway to expose your tools or agents via different protocols.
           </DialogDescription>
@@ -272,7 +272,7 @@ export function CreateGatewayDialog({
               type="submit"
               disabled={createGatewayMutation.isPending}
             >
-              {createGatewayMutation.isPending ? 'Creating...' : 'Create Gateway'}
+              {createGatewayMutation.isPending ? 'Creating...' : 'Create gateway'}
             </Button>
           </div>
         </form>

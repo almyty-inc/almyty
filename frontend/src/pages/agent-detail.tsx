@@ -341,7 +341,7 @@ export function AgentDetailPage() {
         <p className="text-muted-foreground">Agent not found.</p>
         <Button variant="outline" onClick={() => navigate('/agents')}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Agents
+          Back to agents
         </Button>
       </div>
     )

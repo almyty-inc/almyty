@@ -265,7 +265,7 @@ export function ChatPage() {
         <div className="p-3 border-b">
           <Button onClick={handleNewChat} className="w-full gap-2" size="sm">
             <Plus className="h-4 w-4" />
-            New Chat
+            New chat
           </Button>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
@@ -348,7 +348,7 @@ export function ChatPage() {
               </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
-                  <DialogTitle>Attach Tools</DialogTitle>
+                  <DialogTitle>Attach tools</DialogTitle>
                 </DialogHeader>
                 <p className="text-sm text-muted-foreground mb-3">
                   Select tools the AI can use during the conversation.
@@ -402,7 +402,7 @@ export function ChatPage() {
 
             <Button variant="ghost" size="sm" onClick={handleNewChat} className="gap-1">
               <RotateCcw className="h-3 w-3" />
-              New Chat
+              New chat
             </Button>
           </div>
         </div>

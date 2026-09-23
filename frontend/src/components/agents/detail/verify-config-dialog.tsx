@@ -251,7 +251,7 @@ export function VerifyConfigDialog({ agent }: { agent: Agent }) {
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)} disabled={mutation.isPending}>
+          <Button variant="outline" onClick={() => setOpen(false)} disabled={mutation.isPending}>
             Cancel
           </Button>
           <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="gap-1.5">

@@ -13,6 +13,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { PageHeader } from '@/components/layout/page-header'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -207,10 +208,6 @@ export function ApisPage() {
     },
   })
 
-  if (isError) {
-    return <QueryError error={apisError} onRetry={() => refetchApis()} title="Couldn't load APIs" />
-  }
-
   const apisExtracted = apisData?.apis || apisData || []
   const apis = Array.isArray(apisExtracted) ? apisExtracted : []
 
@@ -228,20 +225,16 @@ export function ApisPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">APIs</h1>
-          <p className="text-muted-foreground">
-            {apis.length} connected &middot; {pluralized(apis.reduce((sum: number, a: any) => sum + (a.operationCount ?? a.operations?.length ?? 0), 0), 'operation')} &middot; {pluralized(generatedToolsTotal, 'tool')} generated
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
+      <PageHeader
+        title="APIs"
+        description={`${pluralized(apis.length, 'API', 'APIs')} · ${pluralized(apis.reduce((sum: number, a: any) => sum + (a.operationCount ?? a.operations?.length ?? 0), 0), 'operation')} · ${pluralized(generatedToolsTotal, 'tool')} generated`}
+        actions={
           <Button onClick={() => setCreateDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Connect API
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       <CreateApiDialog
         open={createDialogOpen}
@@ -258,22 +251,21 @@ export function ApisPage() {
         onSelectApi={setSelectedApi}
       />
 
-      {apis.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Globe className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No APIs</h3>
-            <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Create your first API to get started. We support OpenAPI, GraphQL, SOAP, and gRPC protocols.
-            </p>
-            <Button size="lg" onClick={() => setCreateDialogOpen(true)}>
+      {isError ? (
+        <QueryError error={apisError} onRetry={() => refetchApis()} title="Couldn't load APIs" />
+      ) : !isLoading && apis.length === 0 ? (
+        <EmptyState
+          variant="panel"
+          icon={Globe}
+          title="No APIs yet"
+          description="Import an OpenAPI, GraphQL, SOAP, or Protobuf schema — every operation becomes a typed tool."
+          action={
+            <Button onClick={() => setCreateDialogOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Connect Your First API
+              Connect API
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : (
         <>
           <Card>
@@ -303,22 +295,6 @@ export function ApisPage() {
                 onRowClick={(api) => navigate(`/apis/${api.id}`)}
                 hideSelectionCount
                 hideColumnsButton
-                emptyState={
-                  apis.length === 0 ? (
-                    <EmptyState
-                      icon={Globe}
-                      title="Connect your first API"
-                      description="Import an OpenAPI, GraphQL, SOAP, or Protobuf schema — every operation becomes a typed tool."
-                      action={
-                        <Button onClick={() => setCreateDialogOpen(true)}>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Import API
-                        </Button>
-                      }
-                      className="py-16"
-                    />
-                  ) : undefined
-                }
               />
             </CardContent>
           </Card>
@@ -350,7 +326,7 @@ export function ApisPage() {
                   deleteApiMutation.mutate(deletingApi.id)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               Delete
             </AlertDialogAction>

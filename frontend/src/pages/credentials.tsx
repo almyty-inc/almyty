@@ -20,6 +20,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { DataTable, createActionsColumn } from '@/components/ui/data-table'
+import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageHeader } from '@/components/layout/page-header'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 // formatDate is the shared one from lib/utils: a local copy here returned
 // relative time ("3h ago") while every other page showed "Jan 5, 2026".
 import { cn, formatDate } from '@/lib/utils'
@@ -59,29 +64,27 @@ export function CredentialsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Credentials</h1>
-          <p className="text-muted-foreground">Manage vault credentials and access keys for your APIs and agents</p>
-        </div>
-        {tab === 'secrets' ? (
-          <Button onClick={() => setIsCreateSecretOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Add Credential
-          </Button>
-        ) : (
-          <Button onClick={() => setIsGenerateKeyOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> Generate Key
-          </Button>
-        )}
-      </div>
-      <div className="flex items-center gap-1 border-b">
-        {([{ key: 'secrets', label: 'Vault', icon: Shield }, { key: 'access-keys', label: 'Access Keys', icon: Key }] as const).map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTab(key)} className={cn(
-            'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-            tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
-          )}><Icon className="h-4 w-4" />{label}</button>
-        ))}
-      </div>
+      <PageHeader
+        title="Credentials"
+        description="Manage vault credentials and access keys for your APIs and agents"
+        actions={
+          tab === 'secrets' ? (
+            <Button onClick={() => setIsCreateSecretOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Add credential
+            </Button>
+          ) : (
+            <Button onClick={() => setIsGenerateKeyOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Generate key
+            </Button>
+          )
+        }
+      />
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="secrets" className="gap-1.5"><Shield className="h-4 w-4" />Vault</TabsTrigger>
+          <TabsTrigger value="access-keys" className="gap-1.5"><Key className="h-4 w-4" />Access keys</TabsTrigger>
+        </TabsList>
+      </Tabs>
       <div>
         {tab === 'secrets' && <SecretsTabWithDialog isCreateOpen={isCreateSecretOpen} setIsCreateOpen={setIsCreateSecretOpen} />}
         {tab === 'access-keys' && <AccessKeysTabWithDialog isOpen={isGenerateKeyOpen} setIsOpen={setIsGenerateKeyOpen} />}
@@ -106,7 +109,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
   const [credentialToDelete, setCredentialToDelete] = useState<VaultCredential | null>(null)
 
-  const { data: credentialsRaw, isLoading } = useQuery({
+  const { data: credentialsRaw, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['credentials'], queryFn: () => credentialsApi.getAll(),
   })
   const credentials: VaultCredential[] = Array.isArray(credentialsRaw) ? credentialsRaw : (credentialsRaw as any)?.credentials || []
@@ -174,6 +177,21 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
 
   return (
     <>
+      {isError ? (
+        <QueryError error={error} onRetry={() => refetch()} title="Couldn't load credentials" />
+      ) : !isLoading && credentials.length === 0 ? (
+        <EmptyState
+          variant="panel"
+          icon={Shield}
+          title="No credentials yet"
+          description="The vault holds API keys, tokens and passwords your APIs and agents use. Values are encrypted and never shown again."
+          action={
+            <Button onClick={() => setIsCreateOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Add credential
+            </Button>
+          }
+        />
+      ) : (
       <Card>
         <CardContent className="pt-6 space-y-4">
           <div className="flex items-center justify-end">
@@ -186,6 +204,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
           <DataTable columns={columns} data={visibleCredentials} loading={isLoading} searchKey="name" searchPlaceholder="Search credentials..." />
         </CardContent>
       </Card>
+      )}
       <Dialog open={isCreateOpen} onOpenChange={(open) => {
         setIsCreateOpen(open)
         if (!open) {
@@ -196,7 +215,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
       }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Add Credential</DialogTitle>
+            <DialogTitle>Add credential</DialogTitle>
             <DialogDescription>Store a credential securely in the vault.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
@@ -257,7 +276,7 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
                 teamId: visibility.teamId,
               })
             }}>
-              {createMut.isPending ? 'Creating...' : 'Create Credential'}</Button>
+              {createMut.isPending ? 'Creating...' : 'Create credential'}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -287,9 +306,9 @@ function SecretsTabWithDialog({ isCreateOpen, setIsCreateOpen }: { isCreateOpen:
                   deleteMut.mutate(credentialToDelete.id)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              Delete Credential
+              Delete credential
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -304,7 +323,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [form, setForm] = useState({ name: '', resourceType: 'gateway' as 'gateway' | 'agent', resourceId: '', scopes: ['read'] as string[] })
 
-  const { data: keysRaw, isLoading } = useQuery({ queryKey: ['access-keys'], queryFn: () => accessKeysApi.getAll() })
+  const { data: keysRaw, isLoading, isError, error, refetch } = useQuery({ queryKey: ['access-keys'], queryFn: () => accessKeysApi.getAll() })
   const keys: AccessKey[] = Array.isArray(keysRaw) ? keysRaw : (keysRaw as any)?.keys || (keysRaw as any)?.accessKeys || []
   const { data: gatewaysRaw } = useQuery({ queryKey: ['gateways'], queryFn: () => gatewaysApi.getAll() })
   const gateways: any[] = Array.isArray(gatewaysRaw) ? gatewaysRaw : (gatewaysRaw as any)?.gateways || []
@@ -321,6 +340,16 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['access-keys'] }); notify.success('Access key revoked', 'The key can no longer be used.') },
     onError: (err) => notify.error('Failed to revoke access key', getApiErrorMessage(err, 'Please try again.')),
   })
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  const handleRevoke = async (key: AccessKey) => {
+    const ok = await confirm({
+      title: 'Revoke this access key?',
+      description: `"${key.name}" stops working immediately. Anything still using it will be refused. This cannot be undone.`,
+      confirmLabel: 'Revoke key',
+      destructive: true,
+    })
+    if (ok) revokeMut.mutate(key.id)
+  }
 
   const toggleScope = (s: string) => setForm(f => ({ ...f, scopes: f.scopes.includes(s) ? f.scopes.filter(x => x !== s) : [...f.scopes, s] }))
   const handleGenerate = () => {
@@ -354,7 +383,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
     { accessorKey: 'lastUsedAt', header: 'Last Used', cell: ({ row }: any) => <span className="text-sm text-muted-foreground">{row.original.lastUsedAt ? formatDate(row.original.lastUsedAt) : 'Never'}</span> },
     { accessorKey: 'createdAt', header: 'Created', cell: ({ row }: any) => <span className="text-sm text-muted-foreground">{formatDate(row.original.createdAt)}</span> },
     createActionsColumn<AccessKey>({ cell: ({ row }: any) => (
-      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => revokeMut.mutate(row.original.id)}>
+      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => void handleRevoke(row.original)}>
         <Trash2 className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Revoke</span>
       </Button>
     )}),
@@ -362,15 +391,31 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
 
   return (
     <>
+      {isError ? (
+        <QueryError error={error} onRetry={() => refetch()} title="Couldn't load access keys" />
+      ) : !isLoading && keys.length === 0 ? (
+        <EmptyState
+          variant="panel"
+          icon={Key}
+          title="No access keys yet"
+          description="An access key lets a script or another service call one of your gateways or agents."
+          action={
+            <Button onClick={() => setIsOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Generate key
+            </Button>
+          }
+        />
+      ) : (
       <Card>
         <CardContent className="pt-6">
           <DataTable columns={columns} data={keys} loading={isLoading} searchKey="name" searchPlaceholder="Search access keys..." />
         </CardContent>
       </Card>
+      )}
       <Dialog open={isOpen} onOpenChange={handleClose}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{generatedKey ? 'Key Generated' : 'Generate Access Key'}</DialogTitle>
+            <DialogTitle>{generatedKey ? 'Key generated' : 'Generate access key'}</DialogTitle>
             <DialogDescription>{generatedKey ? 'Copy this key now. It will not be shown again.' : 'Create a new access key for a gateway or agent.'}</DialogDescription>
           </DialogHeader>
           {generatedKey ? (
@@ -419,7 +464,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
                   ))}
                 </div></div>
               <Button className="w-full" disabled={!form.name || !form.resourceId || createMut.isPending} onClick={handleGenerate}>
-                {createMut.isPending ? 'Generating...' : 'Generate Key'}</Button>
+                {createMut.isPending ? 'Generating...' : 'Generate key'}</Button>
               {/* A disabled button that does not say why is a dead end. */}
               {(!form.name || !form.resourceId) && (
                 <p className="text-xs text-muted-foreground text-center">
@@ -430,6 +475,7 @@ function AccessKeysTabWithDialog({ isOpen, setIsOpen }: { isOpen: boolean; setIs
           )}
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </>
   )
 }

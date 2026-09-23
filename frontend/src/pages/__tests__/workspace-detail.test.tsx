@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
@@ -61,10 +61,10 @@ describe('WorkspaceDetailPage', () => {
     await user.click(screen.getByRole('button', { name: /release workspace/i }))
     await waitFor(() => screen.getByText(/release this workspace\?/i))
 
-    // Dialog action button label is "Release"; the original is
-    // "Release workspace". Use the dialog scope to pick the right one.
-    const buttons = screen.getAllByRole('button', { name: /^release$/i })
-    await user.click(buttons[buttons.length - 1])
+    // The dialog's destructive action repeats the trigger's label, so
+    // pick it from inside the alert dialog.
+    const dialog = screen.getByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: /^release workspace$/i }))
     await waitFor(() => expect(release).toHaveBeenCalledWith('ws-1'))
   })
 

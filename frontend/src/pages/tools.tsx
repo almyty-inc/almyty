@@ -3,17 +3,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2 } from 'lucide-react'
+import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { PageHeader } from '@/components/layout/page-header'
+import { pluralized } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -593,9 +596,7 @@ return new Promise((resolve, reject) => {
                   </Badge>
                 )}
                 {isMcpTool && (
-                  <Badge variant="outline" className="text-violet-600 border-violet-300 dark:border-violet-800 dark:text-violet-400 shrink-0">
-                    MCP
-                  </Badge>
+                  <ProtocolBadge protocol="mcp" className="shrink-0" />
                 )}
                 <VisibilityBadge
                   visibility={(tool as any).visibility}
@@ -640,7 +641,7 @@ return new Promise((resolve, reject) => {
                   handleViewDetails(tool)
                 }}
               >
-                View Details
+                View details
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
@@ -651,7 +652,7 @@ return new Promise((resolve, reject) => {
                   setIsExecutionDialogOpen(true)
                 }}
               >
-                Test Tool
+                Test tool
               </DropdownMenuItem>
               {/*
                 Activate, here, on the row.
@@ -690,7 +691,7 @@ return new Promise((resolve, reject) => {
                     setPublishingTool(tool)
                   }}
                 >
-                  Publish to Hub
+                  Publish to hub
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
@@ -711,48 +712,42 @@ return new Promise((resolve, reject) => {
 
   if (!currentOrganization) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <p className="text-muted-foreground">No organization context</p>
-        </div>
-      </div>
+      <EmptyState
+        variant="panel"
+        icon={Building2}
+        title="No organization selected"
+        description="Select or create an organization to see its tools."
+      />
     )
   }
-
-  if (isError) {
-    return <QueryError error={toolsError} onRetry={() => refetchTools()} title="Couldn't load tools" />
-  }
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Tools</h1>
-          <p className="text-muted-foreground">
-            {toolsTotal} tool{toolsTotal !== 1 ? 's' : ''} total
-          </p>
-        </div>
-        {activeTab === 'my-tools' && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsAddMcpDialogOpen(true)}
-              disabled={!currentOrganization}
-            >
-              <Plug className="mr-2 h-4 w-4" />
-              Add MCP Server
-            </Button>
-            <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!currentOrganization}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Tool
-            </Button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title="Tools"
+        description={pluralized(toolsTotal, 'tool')}
+        actions={
+          activeTab === 'my-tools' ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setIsAddMcpDialogOpen(true)}
+                disabled={!currentOrganization}
+              >
+                <Plug className="mr-2 h-4 w-4" />
+                Add MCP server
+              </Button>
+              <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!currentOrganization}>
+                <Plus className="mr-2 h-4 w-4" />
+                Create tool
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
 
       <Tabs value={activeTab} onValueChange={(v) => setSearchParams(v === 'hub' ? { tab: 'hub' } : {})}>
         <TabsList>
-          <TabsTrigger value="my-tools">My Tools</TabsTrigger>
+          <TabsTrigger value="my-tools">My tools</TabsTrigger>
           <TabsTrigger value="hub">Tool Hub</TabsTrigger>
         </TabsList>
         <TabsContent value="hub">
@@ -764,33 +759,24 @@ return new Promise((resolve, reject) => {
       <McpSourcesPanel organizationId={currentOrganization?.id} />
 
       {/* Tools Table */}
-      {tools.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Code className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No tools</h3>
-            <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Generate tools from API schemas automatically. Create your first tool by importing an API.
-            </p>
-            {/*
-              The sample offer belongs here, on the branch that actually
-              renders. It was only on the DataTable's emptyState, which
-              this `tools.length === 0` branch pre-empts -- so on the one
-              page where a new user has no tools at all, the button was
-              unreachable.
-            */}
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button size="lg" asChild>
-                <a href="/apis">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Go to APIs
-                </a>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+      {isError ? (
+        <QueryError error={toolsError} onRetry={() => refetchTools()} title="Couldn't load tools" />
+      ) : !isLoading && tools.length === 0 ? (
+        // The sample offer belongs here, on the branch that actually
+        // renders: a DataTable emptyState under this branch is never
+        // reached, which once left a new user with no way to the sample.
+        <EmptyState
+          variant="panel"
+          icon={Wrench}
+          title="No tools yet"
+          description="Tools are generated from your APIs. Import an API and its operations appear here."
+          action={
+            <Button onClick={() => navigate('/apis?new=1')}>
+              <Plus className="mr-2 h-4 w-4" />
+              Import API
+            </Button>
+          }
+        />
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
@@ -842,22 +828,6 @@ return new Promise((resolve, reject) => {
               loading={isLoading}
               onRowClick={(tool) => handleViewDetails(tool)}
               hideSelectionCount
-              emptyState={
-                tools.length === 0 ? (
-                  <EmptyState
-                    icon={Wrench}
-                    title="No tools yet"
-                    description="Tools are generated from your APIs. Import an API and its operations appear here."
-                    action={
-                      <Button onClick={() => navigate('/apis?new=1')}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Import API
-                      </Button>
-                    }
-                    className="py-16"
-                  />
-                ) : undefined
-              }
               manualPagination
               pageCount={totalPages}
               pageIndex={page - 1}
@@ -1036,7 +1006,7 @@ return new Promise((resolve, reject) => {
                   onClick={() => handleCopyEndpoint(selectedTool)}
                 >
                   <Copy className="h-3 w-3 mr-1" />
-                  Copy Endpoint
+                  Copy endpoint
                 </Button>
                 <Button
                   size="sm"
@@ -1053,7 +1023,7 @@ return new Promise((resolve, reject) => {
                   disabled={executeToolMutation.isPending}
                 >
                   <Play className="h-3 w-3 mr-1" />
-                  {executeToolMutation.isPending ? 'Testing...' : 'Test Tool'}
+                  {executeToolMutation.isPending ? 'Testing...' : 'Test tool'}
                 </Button>
                 <Button
                   size="sm"
@@ -1066,7 +1036,7 @@ return new Promise((resolve, reject) => {
                   }}
                 >
                   <ExternalLink className="h-3 w-3 mr-1" />
-                  View Parameters
+                  View parameters
                 </Button>
               </div>
             </div>
@@ -1121,7 +1091,7 @@ return new Promise((resolve, reject) => {
                   deleteToolMutation.mutate(deletingTool.id)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               Delete
             </AlertDialogAction>

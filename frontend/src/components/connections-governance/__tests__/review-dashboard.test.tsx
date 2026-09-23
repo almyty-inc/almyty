@@ -71,12 +71,12 @@ describe('ReviewDashboard', () => {
     expect(screen.getByText(/2 agent and workspace grants will be removed/)).toBeInTheDocument()
     expect(connectionsReviewApi.revokeGrants).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Keep' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByText("Revoke grants on Jane's OpenAI key?")).not.toBeInTheDocument())
     expect(connectionsReviewApi.revokeGrants).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: "Revoke grants on Jane's OpenAI key" }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Revoke' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke grants' }))
     await waitFor(() => expect(connectionsReviewApi.revokeGrants).toHaveBeenCalledWith('c1'))
     await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Grants revoked', "2 grants on Jane's OpenAI key removed."))
   })

@@ -75,7 +75,7 @@ describe('OrganizationsPage', () => {
     }).mockImplementationOnce(() => new Promise(() => {}))
     const user = userEvent.setup()
     render(<OrganizationsPage />)
-    await user.click(await screen.findByRole('button', { name: 'Create Organization' }))
+    await user.click(await screen.findByRole('button', { name: 'Create organization' }))
     const dialog = within(screen.getByRole('dialog'))
     const name = dialog.getByLabelText('Organization Name')
     await user.type(name, 'QA First Run')
@@ -182,5 +182,94 @@ describe('OrganizationsPage', () => {
     await userEvent.keyboard('{Enter}')
 
     expect(await screen.findByRole('tab', { name: /members/i })).toBeInTheDocument()
+  })
+
+  // "Delete" in an organization's row menu deleted the whole organization
+  // on the spot -- gateways, tools, settings, no second chance. The same
+  // action inside the detail sheet had always asked; the row menu now does.
+  describe('deleting from the row menu', () => {
+    const org = {
+      id: 'org-a',
+      name: 'alpha-org',
+      slug: 'alpha-org',
+      isActive: true,
+      plan: 'free',
+      memberCount: 1,
+      createdAt: '2026-06-01T12:17:57.470Z',
+      updatedAt: '2026-06-02T00:00:00.000Z',
+    }
+
+    const openRowDelete = async (user: ReturnType<typeof userEvent.setup>) => {
+      await screen.findByText('alpha-org')
+      await user.click(screen.getByRole('button', { name: 'Actions' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    }
+
+    it('asks before deleting and does not call the API until confirmed', async () => {
+      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
+      vi.mocked(organizationsApi.delete).mockResolvedValue(undefined as any)
+      const user = userEvent.setup()
+      render(<OrganizationsPage />)
+
+      await openRowDelete(user)
+
+      const dialog = await screen.findByRole('alertdialog')
+      expect(dialog).toHaveTextContent('Delete this organization?')
+      expect(dialog).toHaveTextContent('alpha-org')
+      expect(organizationsApi.delete).not.toHaveBeenCalled()
+
+      await user.click(within(dialog).getByRole('button', { name: 'Delete organization' }))
+      await waitFor(() => expect(organizationsApi.delete).toHaveBeenCalledTimes(1))
+      expect(vi.mocked(organizationsApi.delete).mock.calls[0][0]).toBe('org-a')
+    })
+
+    it('leaves the organization alone when cancelled', async () => {
+      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
+      const user = userEvent.setup()
+      render(<OrganizationsPage />)
+
+      await openRowDelete(user)
+      await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+      expect(organizationsApi.delete).not.toHaveBeenCalled()
+    })
+  })
+
+  it('asks before removing a member, and offers no dead Edit item', async () => {
+    vi.mocked(organizationsApi.getAll).mockResolvedValue([
+      {
+        id: 'org-a',
+        name: 'alpha-org',
+        slug: 'alpha-org',
+        isActive: true,
+        plan: 'free',
+        memberCount: 1,
+        createdAt: '2026-06-01T12:17:57.470Z',
+        updatedAt: '2026-06-02T00:00:00.000Z',
+      },
+    ] as any)
+    vi.mocked(organizationsApi.getMembers).mockResolvedValue([
+      { id: 'm1', userId: 'u1', role: 'member', user: { name: 'Ada Lovelace', email: 'ada@example.com' } },
+    ] as any)
+    vi.mocked(organizationsApi.removeMember).mockResolvedValue(undefined as any)
+    const user = userEvent.setup()
+    render(<OrganizationsPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'alpha-org' }))
+    await user.click(await screen.findByRole('tab', { name: /members/i }))
+    await screen.findByText(/ada@example.com/i)
+
+    const sheet = screen.getByRole('dialog')
+    await user.click(within(sheet).getByRole('button', { name: 'Actions' }))
+    expect(screen.queryByRole('menuitem', { name: 'Edit' })).not.toBeInTheDocument()
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Remove this member?')
+    expect(organizationsApi.removeMember).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Remove member' }))
+    await waitFor(() => expect(organizationsApi.removeMember).toHaveBeenCalledWith('org-a', 'u1'))
   })
 })

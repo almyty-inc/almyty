@@ -23,6 +23,7 @@ import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
 import type { PromotedSkill } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 interface PromotedSkillsTabProps {
   agentId: string
@@ -56,13 +57,14 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
     onError: (e: any) => errorNotif('Replay failed', getApiErrorMessage(e)),
   })
 
+  const { confirm, dialog: confirmDialog } = useConfirm()
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            Promoted Skills
+            Promoted skills
           </CardTitle>
           <Badge variant="outline">{skills.length}</Badge>
         </div>
@@ -132,7 +134,15 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
                         className="gap-1 text-destructive"
                         aria-label={`Delete promoted skill ${skill.name}`}
                         disabled={removeMutation.isPending}
-                        onClick={() => removeMutation.mutate(skill.id)}
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: 'Delete this promoted skill?',
+                            description: `"${skill.name}" will no longer be offered to this agent. This cannot be undone.`,
+                            confirmLabel: 'Delete skill',
+                            destructive: true,
+                          })
+                          if (ok) removeMutation.mutate(skill.id)
+                        }}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -156,6 +166,7 @@ export function PromotedSkillsTab({ agentId }: PromotedSkillsTabProps) {
           </pre>
         </DialogContent>
       </Dialog>
+      {confirmDialog}
     </Card>
   )
 }

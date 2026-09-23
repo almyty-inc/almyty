@@ -116,7 +116,7 @@ export function NodeConfigPanel({ node, nodes, onUpdateNode, onDeleteNode, onClo
           onClick={() => onDeleteNode(node.id)}
         >
           <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-          Delete Node
+          Delete node
         </Button>
       </div>
     </div>
@@ -690,7 +690,7 @@ function ToolCallConfig({ node, updateData, onUpdateNode }: { node: Node; update
             </div>
           ))}
           <Button variant="outline" size="sm" className="w-full" onClick={addParam}>
-            Add Parameter
+            Add parameter
           </Button>
         </div>
       </div>
@@ -1080,7 +1080,7 @@ function SubAgentConfig({ node, updateData, onUpdateNode }: { node: Node; update
             </div>
           ))}
           <Button variant="outline" size="sm" className="w-full" onClick={addMapping}>
-            Add Mapping
+            Add mapping
           </Button>
         </div>
       </div>
@@ -1301,7 +1301,7 @@ function VerifyConfig({ node, updateData }: { node: Node; updateData: UpdateData
           ))}
 
           <Button variant="outline" size="sm" className="w-full" onClick={addChecker}>
-            Add Checker
+            Add checker
           </Button>
         </div>
       </div>
@@ -1634,7 +1634,7 @@ function DecisionConfig({ node, updateData }: { node: Node; updateData: UpdateDa
           ))}
 
           <Button variant="outline" size="sm" className="w-full" onClick={addOption}>
-            Add Option
+            Add option
           </Button>
         </div>
       </div>

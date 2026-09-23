@@ -9,9 +9,12 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/layout/page-header'
 import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi, onboardingApi } from '@/lib/api'
 import { GettingStartedCard, useOnboarding } from '@/components/onboarding/getting-started-card'
 import { useProductTour } from '@/components/onboarding/product-tour'
@@ -228,24 +231,16 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-gradient-to-r from-border to-transparent">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Overview of your APIs and tools
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Badge variant="outline" className="hidden sm:inline-flex">
-            {currentOrganization?.name || 'No Organization'}
-          </Badge>
-          <Button variant="outline" className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10" onClick={() => navigate('/analytics')}>
-            <Activity className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">View Analytics</span>
+      <PageHeader
+        title="Dashboard"
+        description={currentOrganization?.name ? `${currentOrganization.name}: your APIs, tools, gateways and agents at a glance` : 'Your APIs, tools, gateways and agents at a glance'}
+        actions={
+          <Button variant="outline" onClick={() => navigate('/analytics')}>
+            <Activity className="mr-2 h-4 w-4" />
+            View analytics
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {showOnboarding ? (
         <GettingStartedCard
@@ -286,7 +281,7 @@ export function DashboardPage() {
           {(apisWithNoTools.length > 0 || gatewaysWithNoAuth.length > 0) && (
             <Card className="border-t-2 border-t-amber-500/20">
               <CardHeader>
-                <CardTitle className="text-lg">Needs Attention</CardTitle>
+                <CardTitle className="text-lg">Needs attention</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -324,7 +319,7 @@ export function DashboardPage() {
       {/* Recent Activity */}
       <Card className="border-t-2 border-t-cyan-400/20">
         <CardHeader>
-          <CardTitle className="text-lg">Recent Activity</CardTitle>
+          <CardTitle className="text-lg">Recent activity</CardTitle>
         </CardHeader>
         <CardContent>
           {recentLogs.length > 0 ? (
@@ -339,13 +334,19 @@ export function DashboardPage() {
                     {log.statusCode}
                   </Badge>
                   {log.protocol && (
-                    <Badge variant="outline" className="text-xs uppercase">{log.protocol}</Badge>
+                    <ProtocolBadge protocol={log.protocol} />
                   )}
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-muted-foreground text-center py-4">No recent activity</p>
+            <EmptyState
+              variant="inline"
+              icon={Activity}
+              title="No recent activity"
+              description="Calls to your gateways and agents show up here as they happen."
+              className="py-6"
+            />
           )}
         </CardContent>
       </Card>

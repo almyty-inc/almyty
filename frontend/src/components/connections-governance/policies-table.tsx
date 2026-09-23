@@ -116,16 +116,13 @@ export function PoliciesTable() {
       )}
 
       {!policiesQuery.isLoading && !policiesQuery.isError && policies.length === 0 && (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
+        <EmptyState
+          variant="panel"
               icon={ShieldCheck}
               title="No policies yet"
               description="Without rules every connector may be connected and every grant is honoured as written."
               action={<Button type="button" variant="outline" onClick={() => setDialog({ open: true, policy: null })}>Add policy</Button>}
             />
-          </CardContent>
-        </Card>
       )}
 
       {policies.length > 0 && (
@@ -186,8 +183,8 @@ export function PoliciesTable() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
-            <AlertDialogAction onClick={() => toDelete && remove.mutate(toDelete)} disabled={remove.isPending}>Delete</AlertDialogAction>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => toDelete && remove.mutate(toDelete)} disabled={remove.isPending}>Delete policy</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
