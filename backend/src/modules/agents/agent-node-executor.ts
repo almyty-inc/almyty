@@ -24,6 +24,7 @@ import {
   parseExtractedContext,
 } from './strategies/extract-context';
 import { InputSchemaViolation, schemaConstrainsAnything, schemaProblems } from './input-schema';
+import { describeLimitTrip } from './run-limits';
 
 export interface NodeExecutionResult {
   output: any;
@@ -523,6 +524,21 @@ export class AgentNodeExecutor {
 
     if (!toolId) {
       throw new Error(`Tool call node '${node.id}' is missing 'toolId' in config`);
+    }
+
+    // The run's tool-call budget, spent here because this is the only place
+    // in the workflow path that calls a tool. `maxToolCalls` reached the
+    // execution context and was read by nothing, so an organization that
+    // capped tool calls at ten still ran a hundred-node pipeline's hundred
+    // tool nodes. Counted before the call, not after, so the ceiling is the
+    // number of calls actually made.
+    const toolBudget = context.runLimits?.maxToolCalls;
+    if (context.toolCalls && typeof toolBudget === 'number') {
+      if (context.toolCalls.count >= toolBudget) {
+        const trip = describeLimitTrip('TOOL_CALL_LIMIT_EXCEEDED');
+        throw Object.assign(new Error(`${trip.code}: ${trip.message}`), { code: trip.code });
+      }
+      context.toolCalls.count++;
     }
 
     // Resolve each parameter template
