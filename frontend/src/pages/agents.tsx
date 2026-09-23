@@ -1,9 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, Link } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
 import {
   Bot,
   Plus,
@@ -28,19 +25,9 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ProtocolBadge } from '@/components/ui/protocol-badge'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { QueryError } from '@/components/ui/query-error'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,11 +47,9 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { agentsApi, externalAgentsApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
-import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { ImportExternalA2ADialog } from '@/components/agents/import-external-a2a-dialog'
-import { VisibilityField, type VisibilityValue } from '@/components/ui/visibility-field'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Agent, ExternalAgent } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -87,25 +72,6 @@ const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'o
   error: 'destructive',
 }
 
-const createAgentSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  description: z.string().optional(),
-})
-
-type CreateAgentForm = z.infer<typeof createAgentSchema>
-
-const DEFAULT_PIPELINE = {
-  nodes: [
-    { id: 'input_1', type: 'input' as const, position: { x: 0, y: 200 }, data: { schema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] } } },
-    { id: 'llm_1', type: 'llm_call' as const, position: { x: 300, y: 200 }, data: { providerId: '', userPromptTemplate: '{{input.message}}' } },
-    { id: 'output_1', type: 'output' as const, position: { x: 600, y: 200 }, data: { mapping: '{{nodes.llm_1.output}}' } },
-  ],
-  edges: [
-    { id: 'e1', source: 'input_1', target: 'llm_1' },
-    { id: 'e2', source: 'llm_1', target: 'output_1' },
-  ],
-}
-
 export function AgentsPage() {
   useEffect(() => {
     document.title = 'Agents | almyty'
@@ -117,16 +83,12 @@ export function AgentsPage() {
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif } = useNotifications()
 
-  const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [importExternalOpen, setImportExternalOpen] = useState(false)
-  const [importJson, setImportJson] = useState('')
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [showTemplates, setShowTemplates] = useState(true)
-  const [visibility, setVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
@@ -177,13 +139,6 @@ export function AgentsPage() {
 
   const activeCount = agents.filter((a) => a.status === 'active').length
 
-  // Form setup
-  const createForm = useForm<CreateAgentForm>({
-    resolver: zodResolver(createAgentSchema),
-    defaultValues: { name: '', description: '' },
-  })
-
-
   // The same four keys the detail page drops for these operations. A
   // list-page activate used to invalidate ['agents'] only, so the
   // detail page -- and its version list and audit log, both of which
@@ -194,30 +149,6 @@ export function AgentsPage() {
     await queryClient.invalidateQueries({ queryKey: ['entity-versions', 'Agent', agentId] })
     await queryClient.invalidateQueries({ queryKey: ['agent-audit-log', agentId] })
   }
-  // Create agent mutation
-  const createAgentMutation = useMutation({
-    mutationFn: async (data: CreateAgentForm) => {
-      const payload = {
-        name: data.name,
-        description: data.description || undefined,
-        pipeline: DEFAULT_PIPELINE,
-        visibility: visibility.visibility,
-        teamId: visibility.teamId,
-      }
-      return agentsApi.create(payload, currentOrganization?.id)
-    },
-    onSuccess: async (result) => {
-      captureEvent('agent_created')
-      success('Agent Created', `${createForm.getValues('name')} is ready to configure.`)
-      await queryClient.invalidateQueries({ queryKey: ['agents'] })
-      createForm.reset()
-      setCreateDialogOpen(false)
-    },
-    onError: (err: any) => {
-      errorNotif('Error', getApiErrorMessage(err, 'Failed to create agent'))
-    },
-  })
-
   // Delete agent mutation
   const deleteAgentMutation = useMutation({
     mutationFn: async (agentId: string) => {
@@ -277,51 +208,6 @@ export function AgentsPage() {
     },
   })
 
-  // Import mutation
-  const importAgentMutation = useMutation({
-    mutationFn: async (jsonStr: string) => {
-      const data = JSON.parse(jsonStr)
-      return agentsApi.importAgent(data)
-    },
-    onSuccess: async (result: any) => {
-      success('Agent Imported', 'Agent has been imported successfully.')
-      await queryClient.invalidateQueries({ queryKey: ['agents'] })
-      setImportDialogOpen(false)
-      setImportJson('')
-      // Navigate to the newly imported agent
-      if (result?.id) {
-        navigate(`/agents/${result.id}/edit`)
-      }
-    },
-    onError: (err: any) => {
-      errorNotif('Import Failed', err?.message || 'Invalid JSON or import failed')
-    },
-  })
-
-  // File picker handler for import
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
-  const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (evt) => {
-      const text = evt.target?.result as string
-      if (text) {
-        setImportJson(text)
-      }
-    }
-    reader.onerror = () => {
-      errorNotif('Read Failed', 'Could not read the selected file.')
-    }
-    reader.readAsText(file)
-    // Reset so the same file can be re-selected
-    e.target.value = ''
-  }, [errorNotif])
-
-  const handleCreateSubmit = (data: CreateAgentForm) => {
-    createAgentMutation.mutate(data)
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -343,7 +229,7 @@ export function AgentsPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
+                <DropdownMenuItem onClick={() => navigate('/agents/import')}>
                   <FileUp className="h-4 w-4 mr-2" />
                   Import from JSON
                 </DropdownMenuItem>
@@ -620,77 +506,6 @@ export function AgentsPage() {
         </>
       )}
 
-      {/* Create Agent Dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={(open) => {
-        setCreateDialogOpen(open)
-        if (!open) {
-          createForm.reset()
-        }
-      }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Create agent</DialogTitle>
-            <DialogDescription>
-              Create a new agent with a default pipeline. You can customize the pipeline after creation.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={createForm.handleSubmit(handleCreateSubmit)} className="space-y-4">
-            <div>
-              <Label htmlFor="agent-name">Name</Label>
-              <Input
-                id="agent-name"
-                placeholder="My Agent"
-                {...createForm.register('name')}
-                className="mt-1"
-              />
-              {createForm.formState.errors.name && (
-                <p className="text-sm text-red-500 mt-1">
-                  {createForm.formState.errors.name.message}
-                </p>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="agent-description">Description (optional)</Label>
-              <Textarea
-                id="agent-description"
-                placeholder="What does this agent do?"
-                {...createForm.register('description')}
-                className="mt-1"
-              />
-            </div>
-            <div className="border-t pt-4">
-              <VisibilityField
-                organizationId={currentOrganization?.id ?? ''}
-                value={visibility}
-                onChange={setVisibility}
-              />
-            </div>
-            <div className="flex justify-end space-x-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setCreateDialogOpen(false)
-                  createForm.reset()
-                }}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={createAgentMutation.isPending}>
-                {createAgentMutation.isPending ? (
-                  <>
-                    <LoadingSpinner size="sm" className="mr-2" />
-                    Creating...
-                  </>
-                ) : (
-                  'Create'
-                )}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
       {/* Delete Agent Confirmation */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
@@ -716,84 +531,12 @@ export function AgentsPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Import Agent Dialog */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json,application/json"
-        className="hidden"
-        onChange={handleImportFile}
-      />
       {/* Import External A2A Dialog */}
       <ImportExternalA2ADialog
         open={importExternalOpen}
         onOpenChange={setImportExternalOpen}
       />
 
-      <Dialog open={importDialogOpen} onOpenChange={(open) => {
-        setImportDialogOpen(open)
-        if (!open) setImportJson('')
-      }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Import agent</DialogTitle>
-            <DialogDescription>
-              Upload a .json file or paste an exported agent JSON to create a new agent.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <FileUp className="h-4 w-4 mr-2" />
-                Choose .json file
-              </Button>
-            </div>
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">or paste JSON</span>
-              </div>
-            </div>
-            <div>
-              <Textarea
-                id="import-json"
-                className="font-mono text-xs"
-                rows={10}
-                placeholder='{"name": "My Agent", "pipeline": { ... }}'
-                value={importJson}
-                onChange={(e) => setImportJson(e.target.value)}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportJson('') }}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => importAgentMutation.mutate(importJson)}
-                disabled={importAgentMutation.isPending || !importJson.trim()}
-              >
-                {importAgentMutation.isPending ? (
-                  <>
-                    <LoadingSpinner size="sm" className="mr-2" />
-                    Importing...
-                  </>
-                ) : (
-                  <>
-                    <FileUp className="h-4 w-4 mr-2" />
-                    Import
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

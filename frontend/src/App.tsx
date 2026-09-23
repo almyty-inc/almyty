@@ -45,6 +45,7 @@ const OrganizationsPage = lazy(() => import('@/pages/organizations').then(m => (
 const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatPage })))
 const AgentsPage = lazy(() => import('@/pages/agents').then(m => ({ default: m.AgentsPage })))
 const AgentBuilderPage = lazy(() => import('@/pages/agent-builder').then(m => ({ default: m.AgentBuilderPage })))
+const AgentImportPage = lazy(() => import('@/pages/agent-import').then(m => ({ default: m.AgentImportPage })))
 const AgentDetailPage = lazy(() => import('@/pages/agent-detail').then(m => ({ default: m.AgentDetailPage })))
 const RunnersPage = lazy(() => import('@/pages/runners').then(m => ({ default: m.RunnersPage })))
 const ApprovalsPage = lazy(() => import('@/pages/approvals').then(m => ({ default: m.ApprovalsPage })))
@@ -144,6 +145,7 @@ function App() {
           <Route path="/apps" element={<AppsPage />} />
           <Route path="/apps/:slug" element={<AppDetailPage />} />
           <Route path="/agents/new" element={<AgentBuilderPage />} />
+          <Route path="/agents/import" element={<AgentImportPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/agents/:id/edit" element={<AgentBuilderPage />} />
           <Route path="/runners" element={<RunnersPage />} />
