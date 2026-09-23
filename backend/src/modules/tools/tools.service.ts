@@ -376,6 +376,10 @@ export class ToolsService {
       .leftJoinAndSelect('tool.categories', 'category')
       .leftJoinAndSelect('tool.operation', 'operation')
       .leftJoinAndSelect('operation.api', 'api')
+      // The tool's own API. Joining only through the operation left a tool
+      // with an apiId but no operation nameless, and the list printed
+      // "Unknown API" beside an API that exists.
+      .leftJoinAndSelect('tool.api', 'toolApi')
       .leftJoinAndSelect('tool.gatewayAssociations', 'gatewayAssociation')
       .leftJoinAndSelect('gatewayAssociation.gateway', 'gateway');
     if (filters.bypassTeamFilter) {

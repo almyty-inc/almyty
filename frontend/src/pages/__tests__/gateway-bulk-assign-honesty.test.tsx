@@ -135,7 +135,7 @@ describe('gateway bulk assign says what actually happened', () => {
     render(<GatewayDetailPage />)
 
     // Expand the tool group so the per-tool rows render.
-    await user.click(await screen.findByText('Unknown API'))
+    await user.click(await screen.findByText('Deleted API'))
 
     const row = (await screen.findByText('listPets')).closest('div.flex')!.parentElement!
       .parentElement!

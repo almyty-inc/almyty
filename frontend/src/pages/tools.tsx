@@ -76,6 +76,7 @@ import { useMemo } from 'react'
 // Form Schema for manual tool creation
 import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { toolSourceApi, DELETED_API_LABEL } from '@/lib/tool-source'
 
 interface Tool {
   id: string
@@ -492,12 +493,12 @@ return new Promise((resolve, reject) => {
       !searchQuery ||
       tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (tool.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (tool.metadata?.sourceApi?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+      (toolSourceApi(tool).name || '').toLowerCase().includes(searchQuery.toLowerCase())
 
     const matchesStatus = statusFilter === 'all' || tool.status === statusFilter
     const matchesType = typeFilter === 'all' || tool.type === typeFilter
     const matchesApi =
-      apiFilter === 'all' || tool.metadata?.sourceApi?.name === apiFilter
+      apiFilter === 'all' || toolSourceApi(tool).name === apiFilter
 
     return matchesSearch && matchesStatus && matchesType && matchesApi
   })
@@ -506,7 +507,7 @@ return new Promise((resolve, reject) => {
   const apiSources = Array.from(
     new Set(
       tools
-        .map((t: Tool) => t.metadata?.sourceApi?.name)
+        .map((t: Tool) => toolSourceApi(t).name)
         .filter(Boolean)
     )
   ) as string[]
@@ -605,7 +606,7 @@ return new Promise((resolve, reject) => {
                 />
               </div>
               <div className="text-sm text-muted-foreground truncate">
-                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
+                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : toolSourceApi(tool).name || (tool.type === 'api' ? DELETED_API_LABEL : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
               </div>
             </div>
           </div>
@@ -968,7 +969,7 @@ return new Promise((resolve, reject) => {
                   <div className="text-sm space-y-1">
                     <div>
                       <span className="text-muted-foreground">API: </span>
-                      {selectedTool.metadata?.sourceApi?.name || 'Unknown'}
+                      {toolSourceApi(selectedTool).name || DELETED_API_LABEL}
                     </div>
                     <div>
                       <span className="text-muted-foreground">Type: </span>
