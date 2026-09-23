@@ -60,6 +60,46 @@ describe('useOrganizationRole', () => {
     expect(result.current.canManage).toBe(false)
   })
 
+  /**
+   * THE SHAPE THAT ACTUALLY ARRIVES.
+   *
+   * `member()` above builds `{ organizationId, role }`, which nothing ever
+   * sends. `GET /auth/profile` (auth.controller.ts) re-projects every
+   * membership to `{ id, role, joinedAt, organization: { id, name, slug } }`
+   * — there is no flat `organizationId` on the wire, and the store's user
+   * only ever comes from that endpoint.
+   *
+   * Matching on the flat key alone therefore found nothing for anybody:
+   * `role` was null and `canManage` false for every user including owners,
+   * which hid the spend-budget controls from the people who own the org.
+   * The old fixture passed the whole time.
+   */
+  const profileMember = (organizationId: string, role: string) => ({
+    id: 'm-' + organizationId,
+    role,
+    joinedAt: '2026-01-01T00:00:00.000Z',
+    organization: { id: organizationId, name: 'Org ' + organizationId, slug: organizationId },
+  })
+
+  it('reads the role off the payload /auth/profile actually sends', () => {
+    currentOrganization = { id: 'org-1' }
+    user = { organizationMemberships: [profileMember('org-1', 'owner')] }
+    const { result } = renderHook(() => useOrganizationRole())
+    expect(result.current.role).toBe('owner')
+    expect(result.current.canManage).toBe(true)
+    expect(result.current.isOwner).toBe(true)
+  })
+
+  it('still picks the right org from the real payload when there are several', () => {
+    currentOrganization = { id: 'org-2' }
+    user = {
+      organizationMemberships: [profileMember('org-1', 'owner'), profileMember('org-2', 'member')],
+    }
+    const { result } = renderHook(() => useOrganizationRole())
+    expect(result.current.role).toBe('member')
+    expect(result.current.canManage).toBe(false)
+  })
+
   it('does not throw before the user or the organization has loaded', () => {
     const { result } = renderHook(() => useOrganizationRole())
     expect(result.current.canManage).toBe(false)

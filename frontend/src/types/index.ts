@@ -107,10 +107,21 @@ export interface BillingInfo {
   cancelAtPeriodEnd: boolean
 }
 
+/**
+ * A user's membership of an organization.
+ *
+ * Two differently-shaped payloads land in this type. `GET /auth/profile`
+ * re-projects each row as `{ id, role, joinedAt, organization: {...} }` —
+ * there is NO flat `organizationId` on that wire, only the nested
+ * organization — while `GET /organizations/:id/members` sends the fuller
+ * row. `organizationId` is therefore optional; declaring it required is
+ * what let `useOrganizationRole` match on a key that is always undefined
+ * for the signed-in user, so `canManage` was false even for owners.
+ */
 export interface OrganizationMembership {
   id: string
   userId: string
-  organizationId: string
+  organizationId?: string
   role: OrganizationRole
   joinedAt: string
   email?: string
