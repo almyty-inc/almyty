@@ -166,7 +166,6 @@ describe('no dialogs', () => {
  * codebase keeps producing: it compiles, its tests pass, nothing opens it.
  */
 const CONVERTED_DIALOGS: string[] = [
-  'components/keyboard-shortcuts-dialog.tsx',
   'components/llm-providers/edit-provider-dialog.tsx',
   'components/llm-providers/test-provider-dialog.tsx',
 ]
