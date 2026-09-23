@@ -29,6 +29,7 @@ import { runnersApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
+import { PageIntro } from '@/components/onboarding/page-intro'
 import { isPendingRunner, runnerStateLabel, runnerStateVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 import { formatRelativeTime } from '@/lib/utils'
 import {
@@ -215,6 +216,7 @@ export function RunnersPage() {
   return (
     <div className="space-y-6">
       <RunnersHeader runners={runners} onlineCount={onlineCount} onCreate={() => navigate('/runners/new')} />
+      <PageIntro topic="runners" />
 
       {!isLoading && runners.length === 0 ? (
         <EmptyState

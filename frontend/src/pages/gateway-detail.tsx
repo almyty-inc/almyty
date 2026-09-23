@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Info, Router, Settings, Shield, ChevronRight } from 'lucide-react'
 
@@ -36,10 +36,23 @@ import { WidgetBuilder } from '@/components/gateways/widget-builder'
 import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
 import { getApiErrorMessage } from '@/lib/api-error'
 
+/** The tabs `?tab=` may open. */
+export const GATEWAY_TABS = ['tools', 'metrics', 'integrations', 'events'] as const
+
+/** The tab to open: the requested one if it exists here, else the default. */
+export function initialGatewayTab(requested: string | null, isSystem: boolean): string {
+  const fallback = isSystem ? 'metrics' : 'tools'
+  if (!requested || !(GATEWAY_TABS as readonly string[]).includes(requested)) return fallback
+  // A system gateway has no tool-scoping tab to open.
+  if (isSystem && requested === 'tools') return fallback
+  return requested
+}
 export function GatewayDetailPage() {
   const entitlements = useEntitlements()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const requestedTab = searchParams.get('tab')
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif, warning } = useNotifications()
   const queryClient = useQueryClient()
@@ -421,8 +434,9 @@ export function GatewayDetailPage() {
         <GatewayAuthSection gatewayId={gateway.id} gatewayName={gateway.name} />
       )}
 
-      {/* Main Content */}
-      <Tabs defaultValue={gateway.isSystem ? 'metrics' : 'tools'} className="space-y-4">
+      {/* Main Content. `?tab=` opens a tab directly: the guide's "connect a
+          client" step lands on Integrations, where the command is. */}
+      <Tabs defaultValue={initialGatewayTab(requestedTab, !!gateway.isSystem)} className="space-y-4">
         <TabsList>
           {!gateway.isSystem && (
             <TabsTrigger value="tools">Tool scoping ({gatewayTools.length}/{allTools.length})</TabsTrigger>

@@ -11,8 +11,8 @@ vi.mock('@/lib/api', () => ({
   organizationsApi: { getAll: vi.fn() },
 }))
 vi.mock('@/lib/analytics', () => ({ identifyUser: vi.fn(), resetAnalytics: vi.fn() }))
-vi.mock('@/components/onboarding/setup-pill', () => ({
-  SetupPill: () => <button type="button">Setup 1/3</button>,
+vi.mock('@/components/onboarding/guide-pill', () => ({
+  GuidePill: () => <a href="/guide">Guide 2/10</a>,
 }))
 vi.mock('@/components/command-palette', () => ({ CommandPalette: () => null }))
 vi.mock('@/components/keyboard-shortcuts', () => ({ KeyboardShortcutsDialog: () => null }))
@@ -68,10 +68,10 @@ describe('dashboard sidebar layout', () => {
     expect(screen.getAllByRole('button', { name: /collapse sidebar|expand sidebar/i })).toHaveLength(1)
   })
 
-  it('puts setup progress in the footer, above the user row', () => {
+  it('puts the guide entry in the footer, above the user row', () => {
     render(<DashboardLayout><div>page</div></DashboardLayout>)
     const footer = screen.getByTestId('sidebar-footer')
-    const setup = within(footer).getByRole('button', { name: 'Setup 1/3' })
+    const setup = within(footer).getByRole('link', { name: 'Guide 2/10' })
     const userMenu = within(footer).getByRole('button', { name: 'User menu' })
     expect(setup.compareDocumentPosition(userMenu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })

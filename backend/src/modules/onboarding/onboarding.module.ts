@@ -8,6 +8,9 @@ import { Agent } from '../../entities/agent.entity';
 import { User } from '../../entities/user.entity';
 import { RequestLog } from '../../entities/request-log.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
+import { AgentApp } from '../../entities/agent-app.entity';
+import { AppDistribution } from '../../entities/agent-app-distribution.entity';
+import { Runner } from '../../entities/runner.entity';
 
 import { ApisModule } from '../apis/apis.module';
 import { GatewaysModule } from '../gateways/gateways.module';
@@ -26,8 +29,10 @@ import { OnboardingController } from './onboarding.controller';
       User,
       RequestLog,
       LlmProvider,
+      AgentApp,
+      AppDistribution,
+      Runner,
     ]),
-    ApisModule,
     GatewaysModule,
     AgentsModule,
   ],

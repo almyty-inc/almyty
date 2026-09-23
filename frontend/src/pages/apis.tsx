@@ -13,6 +13,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
 
 import { getApiErrorMessage } from '@/lib/api-error'
 import { apisApi } from '@/lib/api'
@@ -167,6 +168,7 @@ export function ApisPage() {
           </Button>
         }
       />
+      <PageIntro topic="apis" />
 
       {isError ? (
         <QueryError error={apisError} onRetry={() => refetchApis()} title="Couldn't load APIs" />

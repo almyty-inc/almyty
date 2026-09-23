@@ -15,6 +15,12 @@ import { CodeBlock } from '@/components/ui/code-block'
 import { Label } from '@/components/ui/label'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { gatewaysApi } from '@/lib/api'
+import {
+  claudeCodeCommand,
+  gatewayClientName,
+  mcpEndpointFor,
+  skillsInstallCommand,
+} from '@/lib/gateway-connect'
 
 export interface IntegrationsSectionProps {
   gatewayId: string
@@ -54,8 +60,8 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
 
   // Skills gateway
   if (gatewayType === 'skills') {
-    const gatewaySlug = (gateway.name || '').toLowerCase().replace(/\s+/g, '-')
-    const installCommand = `npx @almyty/skills install @${orgSlug}/${gatewaySlug}`
+    const gatewaySlug = gatewayClientName(gateway)
+    const installCommand = skillsInstallCommand(gateway, orgSlug)
     const watchCommand = `npx @almyty/skills watch @${orgSlug}/${gatewaySlug}`
     const loginCommand = `npx @almyty/auth login`
 
@@ -141,8 +147,8 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
 
   // MCP gateway
   if (gatewayType === 'mcp') {
-    const gwSlug = gateway.endpoint?.replace(/^\//, '') || ''
-    const mcpEndpoint = `${backendUrl}/${orgSlug}/${gwSlug}`
+    const mcpEndpoint = mcpEndpointFor(gateway, orgSlug, backendUrl)
+    const claudeCmd = claudeCodeCommand(gateway, orgSlug, backendUrl)
     const sseEndpoint = `${mcpEndpoint}/sse`
     const discoveryUrl = `${mcpEndpoint}/.well-known/mcp`
 
@@ -220,8 +226,8 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
               <h4 className="text-sm font-medium">Claude Code</h4>
               <p className="text-xs text-muted-foreground">Run in your terminal:</p>
               <div className="flex gap-2">
-                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">claude mcp add {(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')} --transport http {mcpEndpoint}</code>
-                <Button aria-label="Copy Claude Code install command" size="sm" variant="outline" onClick={() => copyToClipboard(`claude mcp add ${(gateway.name || 'gateway').toLowerCase().replace(/\s+/g, '-')} --transport http ${mcpEndpoint}`, 'claude-code-cmd')}>
+                <code className="text-sm bg-muted px-3 py-2 rounded flex-1 break-all font-mono">{claudeCmd}</code>
+                <Button aria-label="Copy Claude Code install command" size="sm" variant="outline" onClick={() => copyToClipboard(claudeCmd, 'claude-code-cmd')}>
                   {copiedField === 'claude-code-cmd' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
