@@ -95,8 +95,9 @@ test.describe('Tools - Generation & Execution', () => {
     // Click Test Tool from the menu
     await page.getByRole('menuitem', { name: /test tool/i }).click()
 
-    // Should open execution dialog
-    await assertHelper.assertDialogOpen(/test tool/i)
+    // Test tool opens the tool's page on its "Test tool" tab
+    await expect(page).toHaveURL(/\/tools\/[^/?]+\?tab=test$/)
+    await expect(page.getByRole('tab', { name: /test tool/i })).toHaveAttribute('aria-selected', 'true')
 
     // Fill parameters if any
     const paramInputs = page.locator('input[name*="param"], input[id*="param"]')
@@ -106,7 +107,7 @@ test.describe('Tools - Generation & Execution', () => {
     }
 
     // Execute
-    await page.getByRole('button', { name: /execute|run|test/i }).click()
+    await page.getByRole('button', { name: /execute tool/i }).click()
 
     // Should show results
     await expect(page.getByText(/result|response|output/i)).toBeVisible()
@@ -158,22 +159,23 @@ test.describe('Tools - Generation & Execution', () => {
     await toolRow.getByRole('button', { name: /actions/i }).click()
     await page.getByRole('menuitem', { name: /test tool/i }).click()
 
-    // Wait for execution dialog to open - get the last dialog (test dialog)
-    const testDialog = page.locator('[role="dialog"]').filter({ hasText: /test tool|execute/i }).last()
+    // Test tool opens the tool's page on its "Test tool" tab
+    await expect(page).toHaveURL(/\/tools\/[^/?]+\?tab=test$/)
+    const testDialog = page.getByRole('tabpanel', { name: /test tool/i })
     await expect(testDialog).toBeVisible({ timeout: 10000 })
 
-    // Click Execute button in the scoped dialog
+    // Execute from the test form
     await page.waitForTimeout(500)
-    const executeButton = testDialog.getByRole('button', { name: 'Execute' })
+    const executeButton = testDialog.getByRole('button', { name: /execute tool/i })
     await executeButton.click()
 
-    // Wait for execution to complete and check for success in the scoped dialog
+    // Wait for execution to complete and check for success on the test tab
     await page.waitForTimeout(2000) // Give time for mocked response
 
     // The Result section shows a badge with "Success" or "Error" text and the result data
     await expect(testDialog.getByText(/success/i).first()).toBeVisible({ timeout: 10000 })
 
-    // Check for execution time display in the scoped dialog - use .first() to handle multiple matches
+    // Check for execution time display on the test tab - use .first() to handle multiple matches
     await expect(testDialog.getByText(/150.*ms/i).first().or(testDialog.getByText(/result/i).first())).toBeVisible({ timeout: 10000 })
   })
 

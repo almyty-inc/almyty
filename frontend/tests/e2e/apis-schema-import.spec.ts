@@ -14,7 +14,7 @@ test.describe('APIs - Schema Import', () => {
     })
 
     await page.goto('/apis')
-    // Close ALL lingering dialogs/menus from previous tests
+    // Close any lingering menus from previous tests
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape') // Press twice
     await page.waitForTimeout(500)
@@ -49,11 +49,9 @@ test.describe('APIs - Schema Import', () => {
     // Click "Import Schema"
     await page.getByRole('menuitem', { name: /import.*schema|schema/i }).click()
 
-    // Wait for import dialog to appear
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 })
-    await page.waitForTimeout(500)
-    // Should open import dialog
-    await assertHelper.assertDialogOpen(/import.*schema/i)
+    // The import is a page of its own
+    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
+    await expect(page).toHaveURL(/\/apis\/[^/]+\/import/)
 
     // Click "From URL" tab to access URL input
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
@@ -68,21 +66,15 @@ test.describe('APIs - Schema Import', () => {
     }
 
     // Submit
-    await page.getByRole('button', { name: /import|submit/i }).click()
+    await page.getByRole('button', { name: /^import schema$/i }).click()
 
     // Wait for import to complete (async job, may take several seconds)
     await assertHelper.waitForLoadingComplete()
     await page.waitForTimeout(3000) // Extra wait for async job processing
     await assertHelper.assertToastMessage(/imported|success/i, { timeout: 15000 })
 
-    // Verify 20 operations were extracted by opening API details
-    // Find Petstore API row and open details
-    await page.reload() // Reload to see updated data
-    await assertHelper.waitForLoadingComplete()
-
-    const petstoreRow = page.locator('tr').filter({ hasText: TEST_APIS.PETSTORE.name })
-    await petstoreRow.getByRole('button', { name: /actions|more/i }).click()
-    await page.getByRole('menuitem', { name: /view.*details|details/i }).click()
+    // A finished import opens the API's page
+    await expect(page).toHaveURL(new RegExp(`/apis/${petstoreApi.id}$`), { timeout: 60000 })
 
     // The API detail page uses a card-based layout, NOT tabs.
     // Operations are shown in the "API Operations" card.
@@ -119,7 +111,7 @@ test.describe('APIs - Schema Import', () => {
     // Fill schema URL
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
 
-    await page.getByRole('button', { name: /import|submit/i }).click()
+    await page.getByRole('button', { name: /^import schema$/i }).click()
 
     // Wait for import to complete (async job)
     await assertHelper.waitForLoadingComplete()
@@ -177,7 +169,7 @@ test.describe('APIs - Schema Import', () => {
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
     // Try to submit without providing schema
-    await page.getByRole('button', { name: /import|submit/i }).click()
+    await page.getByRole('button', { name: /^import schema$/i }).click()
 
     // Should show validation error (look for alert/error element to avoid matching tabs)
     await expect(page.locator('[role="alert"], .error, .text-red-500, .text-destructive').getByText(/required|provide|schema/i)).toBeVisible()
@@ -189,8 +181,9 @@ test.describe('APIs - Schema Import', () => {
     await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
-    // Wait for dialog to be fully visible
-    await assertHelper.assertDialogOpen(/import.*schema/i)
+    // The import is a page of its own
+    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
+    await expect(page).toHaveURL(/\/apis\/[^/]+\/import/)
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
@@ -199,9 +192,9 @@ test.describe('APIs - Schema Import', () => {
     // Invalid URL
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://invalid-url-that-does-not-exist.com/schema.json')
 
-    await page.getByRole('button', { name: /import|submit/i }).click()
+    await page.getByRole('button', { name: /^import schema$/i }).click()
 
-    // Should show error in toast or dialog (increased timeout for network request + error handling)
+    // Should show the error in a toast or on the page (increased timeout for network request + error handling)
     await expect(
       page.locator('li[role="status"], [role="alert"], .error-message').filter({ hasText: /failed|error|not.*found|invalid.*url|couldn't.*fetch/i })
     ).toBeVisible({ timeout: 20000 })
@@ -225,7 +218,7 @@ test.describe('APIs - Schema Import', () => {
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
 
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://example.com/malformed.json')
-    await page.getByRole('button', { name: /import|submit/i }).click()
+    await page.getByRole('button', { name: /^import schema$/i }).click()
 
     // Should show error about malformed schema
     // The backend returns { message: 'Invalid schema format' } with 400 status
@@ -251,7 +244,7 @@ test.describe('APIs - Schema Import', () => {
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
 
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
-    await page.getByRole('button', { name: /import|submit/i }).click()
+    await page.getByRole('button', { name: /^import schema$/i }).click()
 
     // Should show loading indicator
     await expect(page.getByText(/importing|loading|processing/i)).toBeVisible()
@@ -270,18 +263,13 @@ test.describe('APIs - Schema Import', () => {
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
 
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
-    await page.getByRole('button', { name: /import|submit/i }).click()
+    await page.getByRole('button', { name: /^import schema$/i }).click()
 
     await assertHelper.waitForLoadingComplete()
     await assertHelper.assertToastMessage(/imported|success/i)
 
-    // Reload and open API details to view operations
-    await page.reload()
-    await assertHelper.waitForLoadingComplete()
-
-    // Reopen actions menu to view details
-    await apiRow.getByRole('button', { name: /actions|more/i }).click()
-    await page.getByRole('menuitem', { name: /view.*details|details/i }).click()
+    // A finished import opens the API's page
+    await expect(page).toHaveURL(new RegExp(`/apis/${testApi.id}$`), { timeout: 60000 })
 
     // The API detail page uses a card-based layout (NO tabs).
     // Operations are shown in the "API Operations" card.
@@ -310,15 +298,16 @@ test.describe('APIs - Schema Import', () => {
     await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema|reimport/i }).click()
 
-    // Wait for dialog to be fully visible
-    await assertHelper.assertDialogOpen(/import.*schema/i)
+    // The import is a page of its own
+    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
+    await expect(page).toHaveURL(/\/apis\/[^/]+\/import/)
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
     await page.waitForTimeout(500) // Wait for tab switch
 
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
-    await page.getByRole('button', { name: /import|submit/i }).click()
+    await page.getByRole('button', { name: /^import schema$/i }).click()
 
     // Should show success (any success/imported message is acceptable for reimport)
     await expect(page.locator('li[role="status"]').filter({ hasText: /imported|updated|success/i })).toBeVisible({ timeout: 20000 })
@@ -334,8 +323,9 @@ test.describe('APIs - Schema Import', () => {
     await actionsButton.click({ force: true })
     await page.getByRole('menuitem', { name: /import.*schema/i }).click()
 
-    // Wait for dialog to open
-    await assertHelper.assertDialogOpen(/import.*schema/i)
+    // The import is a page of its own
+    await expect(page.getByRole('heading', { name: /import schema/i })).toBeVisible()
+    await expect(page).toHaveURL(/\/apis\/[^/]+\/import/)
 
     // Click "From URL" tab
     await page.getByRole('tab', { name: /from.*url|url/i }).click()
@@ -343,10 +333,10 @@ test.describe('APIs - Schema Import', () => {
 
     // Use Petstore API which is within limits (20 operations)
     await page.getByRole('textbox', { name: /schema.*url/i }).fill('https://petstore.swagger.io/v2/swagger.json')
-    await page.getByRole('button', { name: /import|submit/i }).click()
+    await page.getByRole('button', { name: /^import schema$/i }).click()
 
-    // Wait for dialog to close
-    await expect(page.locator('dialog')).not.toBeVisible({ timeout: 10000 })
+    // A finished import leaves the import page for the API's page
+    await expect(page).toHaveURL(new RegExp(`/apis/${testApi.id}$`), { timeout: 90000 })
 
     // Wait for network to be idle
     await page.waitForLoadState('networkidle')
@@ -372,7 +362,8 @@ test.describe('APIs - Schema Import', () => {
     // Cancel instead of submit
     await page.getByRole('button', { name: /cancel/i }).click()
 
-    // Dialog should close without importing
-    await assertHelper.assertDialogClosed()
+    // The form is dirty, so leaving asks first; discard and land on the API's page
+    await page.getByRole('button', { name: /discard changes/i }).click()
+    await expect(page).toHaveURL(new RegExp(`/apis/${testApi.id}$`))
   })
 })
