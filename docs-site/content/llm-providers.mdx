@@ -1,23 +1,24 @@
-# AI Models
+# Inference Providers
 
-Bring your own model keys and every agent, Model Call node, and Model Prompt tool can use them. almyty supports every provider in the table below out of the box, including local models via Ollama, plus any OpenAI-compatible endpoint — so you are never locked to one vendor.
+Bring your own model keys and every agent, Model Call node, and Model Prompt tool can use them. An inference provider is a vendor key almyty calls models with, or the address of an OpenAI-compatible server you run. almyty supports every provider in the table below out of the box, including local models via Ollama, plus any OpenAI-compatible endpoint, so you are never locked to one vendor.
 
 ![Models page](/screenshots/models.png)
 
-## Add a provider in the UI
+## Add an inference provider in the UI
 
-1. Open **Models** in the sidebar and click **Add Provider**.
+1. Open **Models** in the sidebar and click **Inference providers** in the page header.
+2. Add a provider.
 
 ![Add Provider dialog](/screenshots/llm-providers-create.png)
 
-2. Select the provider type.
-3. Enter a display name and your API key.
-4. Choose a default model from the dropdown.
-5. Optionally adjust temperature, max tokens, and top-p.
-6. Click **Test Connection**. almyty sends a lightweight request to verify the key and model.
-7. Click **Save**.
+3. Select the provider type.
+4. Enter a display name and your API key.
+5. Choose a default model from the dropdown.
+6. Optionally adjust temperature, max tokens, and top-p.
+7. Click **Test Connection**. almyty sends a lightweight request to verify the key and model.
+8. Click **Save**.
 
-The provider now appears in the Models list, ready for Model Call nodes and Model Prompt tools.
+Its models now appear in the Models list, ready for Model Call nodes and Model Prompt tools. You can also set one up without leaving the Models page: **Add model**, then **A provider's API**, offers to set up a new inference provider before you pick the model.
 
 > **Pick from the live model list.** The dropdown is populated from the
 > provider's current models, not a hardcoded list. Providers deprecate models
@@ -73,7 +74,7 @@ OpenAI-compatible endpoint you point it at.
 
 {/* generated:providers end */}
 
-Each native type ships with the right default base URL; set `configuration.apiUrl` to point at a compatible proxy instead. For `custom`, set `configuration.apiUrl` to the provider's OpenAI-compatible endpoint. The `configuration.apiKey` field accepts whatever token the provider expects.
+Each native type ships with the right default base URL; set `configuration.apiUrl` to point at a compatible proxy instead. For `custom`, set `configuration.apiUrl` to the server's OpenAI-compatible endpoint; see [A server you run](/models/providers#a-server-you-run). The `configuration.apiKey` field accepts whatever token the provider expects.
 
 ### Types not in the table above
 
@@ -90,7 +91,7 @@ Four more provider types ship and are selectable in the create form, but have no
 
 The `ollama` type talks to an [Ollama](https://ollama.com) server. Chat, streaming, and tool calling ride Ollama's OpenAI-compatible `/v1` endpoint; the model dropdown is populated from the native `GET /api/tags` (your locally pulled models); memory embeddings use the native `POST /api/embed`. No API key is required. If you front Ollama with an authenticating reverse proxy, configure a key and it is sent as a Bearer token.
 
-Because Ollama usually listens on localhost or a private network, almyty's SSRF protection blocks such URLs by default. Self-hosted deployments opt in with `OLLAMA_ALLOW_PRIVATE_URLS=true` on the backend (see [Self-hosting](/self-hosting#local-models-with-ollama)). On hosted almyty the Ollama server must be reachable at a public URL.
+Because Ollama usually listens on localhost or a private network, almyty's SSRF protection blocks such URLs by default. Self-hosted installations opt in with `OLLAMA_ALLOW_PRIVATE_URLS=true` on the backend (see [Self-hosting](/self-hosting#local-models-with-ollama)). On hosted almyty the Ollama server must be reachable at a public URL.
 
 ### Ollama cloud
 
@@ -111,7 +112,7 @@ The same provider type also works with [Ollama's hosted service](https://ollama.
 | `configuration.temperature` | number | no | Sent when set; otherwise the vendor's own default applies |
 | `configuration.topP` | number | no | Sent when set; otherwise the vendor's own default applies |
 
-There is no top-level `baseUrl`, `apiKey` or `model` field: all three nest under `configuration`, and the base-URL override is named `apiUrl`. See the [LLM Providers API](/api-reference/llm-providers-api) for the full body.
+There is no top-level `baseUrl`, `apiKey` or `model` field: all three nest under `configuration`, and the base-URL override is named `apiUrl`. See the [Inference Providers API](/api-reference/llm-providers-api) for the full body.
 
 ## Cost tracking
 
@@ -129,4 +130,4 @@ When building an agent pipeline, Model Call nodes reference a provider by ID. Th
 
 ## API
 
-Provider CRUD, connection tests, and chat sessions are available over REST. See the [AI Models API reference](/api-reference/llm-providers-api).
+Provider CRUD, connection tests, and chat sessions are available over REST. See the [Inference Providers API reference](/api-reference/llm-providers-api).

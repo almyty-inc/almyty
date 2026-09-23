@@ -7,22 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { formatModelPrice, PRICING_SOURCE_LABELS } from '@/lib/models-api'
 import type { ModelCard, UpdateModelBody } from '@/types/models'
 import { editModelSchema, compactCapabilities, pricingFromForm, type EditModelFormData, type EditModelFormOutput } from './schema'
 import { CapabilitiesField, PrivacyTierField } from './model-form-fields'
 
-interface EditModelSheetProps {
-  card: ModelCard | null
-  onOpenChange: (open: boolean) => void
+interface EditModelFormProps {
+  card: ModelCard
+  onCancel?: () => void
   onSubmit: (id: string, body: UpdateModelBody) => Promise<unknown> | void
   submitting?: boolean
 }
@@ -46,16 +38,19 @@ function toForm(card: ModelCard): EditModelFormData {
   }
 }
 
-/** Edits the operator-owned fields of a card. Vendor id and provider stay fixed. */
-export function EditModelSheet({ card, onOpenChange, onSubmit, submitting }: EditModelSheetProps) {
+/** The operator-owned settings of a model, edited inline on its page. Vendor id and provider stay fixed. */
+export function EditModelForm({ card, onCancel, onSubmit, submitting }: EditModelFormProps) {
   const form = useForm<EditModelFormData, unknown, EditModelFormOutput>({
     resolver: zodResolver(editModelSchema),
     defaultValues: card ? toForm(card) : undefined,
   })
 
+  // Re-seed when the saved model changes (a save, a validation run), not
+  // on every refetch of the same row, which would wipe what is being typed.
   useEffect(() => {
-    if (card) form.reset(toForm(card))
-  }, [card, form])
+    form.reset(toForm(card))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card.id, card.updatedAt])
 
   const overridePrice = form.watch('overridePrice')
   const errors = form.formState.errors
@@ -77,16 +72,7 @@ export function EditModelSheet({ card, onOpenChange, onSubmit, submitting }: Edi
   const feedSource = card ? PRICING_SOURCE_LABELS[card.pricingSource] || card.pricingSource : ''
 
   return (
-    <Sheet open={!!card} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-md overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle>Edit model</SheetTitle>
-          <SheetDescription>
-            {card ? <span className="font-mono">{card.vendorModelId}</span> : null}
-          </SheetDescription>
-        </SheetHeader>
-        {card && (
-          <form onSubmit={submit} className="space-y-4 mt-4" noValidate>
+          <form onSubmit={submit} className="space-y-4" noValidate aria-label="Model settings">
             <div>
               <Label htmlFor="edit-name">Name</Label>
               <Input id="edit-name" className="mt-1" {...form.register('name')} />
@@ -151,16 +137,13 @@ export function EditModelSheet({ card, onOpenChange, onSubmit, submitting }: Edi
               )}
             </div>
 
-            <SheetFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={submitting}>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              {onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>}
+              <Button type="submit" disabled={submitting || !form.formState.isDirty}>
                 {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Save
+                Save changes
               </Button>
-            </SheetFooter>
+            </div>
           </form>
-        )}
-      </SheetContent>
-    </Sheet>
   )
 }

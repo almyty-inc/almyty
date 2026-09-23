@@ -1,118 +1,114 @@
 import { test, expect } from './setup/test-hooks'
+import type { Page } from '@playwright/test'
 import { AuthHelper } from './helpers/auth.helper'
 
-test.describe('LLM Providers - Configuration', () => {
+/**
+ * Inference providers: the APIs models are called through, with their keys.
+ * /llm-providers is its own page, reached from the Models header. Adding one
+ * is a page too (/llm-providers/new); testing and editing one are still
+ * dialogs on the list page, and a row's details are the provider's own page.
+ */
+
+/** The row actions menu: a button whose only name is the sr-only "Actions". */
+async function openRowActions(page: Page, providerName: string) {
+  const row = page.getByRole('row').filter({ hasText: providerName })
+  await expect(row).toBeVisible({ timeout: 10000 })
+  await row.getByRole('button', { name: 'Actions' }).click()
+}
+
+async function openAddPage(page: Page) {
+  await page.getByRole('button', { name: 'Add inference provider' }).first().click()
+  await expect(page).toHaveURL(/\/llm-providers\/new$/)
+  await expect(page.getByRole('heading', { name: 'Add inference provider', level: 1 })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+}
+
+test.describe('Inference providers', () => {
   test.beforeEach(async ({ authenticatedPage: page }) => {
-    // /llm-providers is a redirect; go where it lands.
-    await page.goto('/models?tab=providers')
+    await page.goto('/llm-providers')
     await page.waitForLoadState('networkidle')
   })
 
-  test('should display the models page', async ({ authenticatedPage: page }) => {
-    // The page is "Models". It was called "AI Models" and this spec was
-    // still asserting the old heading after the rename -- against a URL
-    // that is now only a <Navigate>.
-    await expect(page.getByRole('heading', { name: 'Models', level: 1 })).toBeVisible()
-
-    // Empty state shows "Add First Provider" button, non-empty shows "Add Provider"
-    const addButton = page.getByRole('button', { name: /add.*provider/i })
-    await expect(addButton).toBeVisible()
+  test('should display the inference providers page', async ({ authenticatedPage: page }) => {
+    await expect(page.getByRole('heading', { name: 'Inference providers', level: 1 })).toBeVisible()
+    // It hangs off Models; the way back is a link, not a sidebar entry.
+    await expect(page.getByRole('main').getByRole('link', { name: 'Models' }).first()).toHaveAttribute('href', '/models')
+    // Empty or not, there is one way to add one.
+    await expect(page.getByRole('button', { name: 'Add inference provider' }).first()).toBeVisible()
   })
 
-  test('should open add provider dialog and show provider types', async ({ authenticatedPage: page }) => {
-    await page.getByRole('button', { name: /add.*provider/i }).click()
+  test('should open the add page and show provider types', async ({ authenticatedPage: page }) => {
+    await openAddPage(page)
 
-    // Dialog should open with title "Add Provider"
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible()
-    await expect(dialog.getByRole('heading', { name: 'Add Provider' })).toBeVisible()
+    // Provider Name, Provider Type and the API key, on the page itself.
+    await expect(page.locator('#providerName')).toBeVisible()
+    await expect(page.locator('#providerType')).toBeVisible()
+    await expect(page.getByPlaceholder('Enter your API key')).toBeVisible()
 
-    // Should have Provider Name, Provider Type, and API Key fields
-    await expect(dialog.locator('#providerName')).toBeVisible()
-    await expect(dialog.locator('#providerType')).toBeVisible()
-    await expect(dialog.locator('#apiKey')).toBeVisible()
+    await page.locator('#providerType').click()
+    await expect(page.getByRole('option', { name: 'OpenAI', exact: true })).toBeVisible()
+    await expect(page.getByRole('option', { name: 'Anthropic', exact: true })).toBeVisible()
+    await expect(page.getByRole('option', { name: 'Google Gemini', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
 
-    // Open the provider type dropdown and verify some options
-    await dialog.locator('#providerType').click()
-    await expect(page.getByRole('option', { name: 'OpenAI' })).toBeVisible()
-    await expect(page.getByRole('option', { name: 'Anthropic' })).toBeVisible()
-    await expect(page.getByRole('option', { name: 'Google Gemini' })).toBeVisible()
+    // Cancel goes back to the list.
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page).toHaveURL(/\/llm-providers$/)
   })
 
   test('should add OpenAI provider', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('button', { name: /add.*provider/i }).click()
+    await openAddPage(page)
 
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible()
+    await page.locator('#providerName').fill('OpenAI Production')
+    await page.locator('#providerType').click()
+    await page.getByRole('option', { name: 'OpenAI', exact: true }).click()
+    // Must be at least 8 characters.
+    await page.getByPlaceholder('Enter your API key').fill('sk-test-key-1234567890')
 
-    // Fill provider name
-    await dialog.locator('#providerName').fill('OpenAI Production')
+    // Organization ID appears for OpenAI only.
+    await expect(page.locator('#organizationId')).toBeVisible()
+    await page.locator('#organizationId').fill('org-test123')
 
-    // Select provider type
-    await dialog.locator('#providerType').click()
-    await page.getByRole('option', { name: 'OpenAI' }).click()
+    await page.getByRole('button', { name: 'Add inference provider' }).click()
 
-    // Fill API key (must be >= 8 chars per validation)
-    await dialog.locator('#apiKey').fill('sk-test-key-1234567890')
-
-    // Organization ID field should appear for OpenAI
-    await expect(dialog.locator('#organizationId')).toBeVisible()
-    await dialog.locator('#organizationId').fill('org-test123')
-
-    // Submit
-    await dialog.getByRole('button', { name: 'Add Provider' }).click()
-
-    // Should show success toast
-    await assertHelper.assertToastMessage(/added|connected|success/i)
-    await expect(page.getByText('OpenAI Production')).toBeVisible()
+    await assertHelper.assertToastMessage(/Inference provider added/)
+    // Saving lands on the new provider's own page.
+    await expect(page).toHaveURL(/\/llm-providers\/[^/]+$/)
+    await expect(page.getByRole('heading', { name: 'OpenAI Production', level: 1 })).toBeVisible()
   })
 
   test('should add Anthropic provider', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('button', { name: /add.*provider/i }).click()
+    await openAddPage(page)
 
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible()
+    await page.locator('#providerName').fill('Anthropic Production')
+    await page.locator('#providerType').click()
+    await page.getByRole('option', { name: 'Anthropic', exact: true }).click()
+    await page.getByPlaceholder('Enter your API key').fill('sk-ant-test-key-1234567890')
 
-    // Fill provider name
-    await dialog.locator('#providerName').fill('Anthropic Production')
+    // Organization ID does NOT appear for Anthropic.
+    await expect(page.locator('#organizationId')).not.toBeVisible()
 
-    // Select Anthropic
-    await dialog.locator('#providerType').click()
-    await page.getByRole('option', { name: 'Anthropic' }).click()
+    await page.getByRole('button', { name: 'Add inference provider' }).click()
 
-    // Fill API key
-    await dialog.locator('#apiKey').fill('sk-ant-test-key-1234567890')
-
-    // Organization ID should NOT appear for Anthropic
-    await expect(dialog.locator('#organizationId')).not.toBeVisible()
-
-    // Submit
-    await dialog.getByRole('button', { name: 'Add Provider' }).click()
-
-    await assertHelper.assertToastMessage(/added|connected|success/i)
-    await expect(page.getByText('Anthropic Production')).toBeVisible()
+    await assertHelper.assertToastMessage(/Inference provider added/)
+    await expect(page.getByRole('heading', { name: 'Anthropic Production', level: 1 })).toBeVisible()
   })
 
   test('should validate API key is not too short', async ({ authenticatedPage: page }) => {
-    await page.getByRole('button', { name: /add.*provider/i }).click()
+    await openAddPage(page)
 
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible()
+    await page.locator('#providerName').fill('Test Provider')
+    await page.locator('#providerType').click()
+    await page.getByRole('option', { name: 'OpenAI', exact: true }).click()
+    await page.getByPlaceholder('Enter your API key').fill('short')
 
-    // Fill with short API key (< 8 chars)
-    await dialog.locator('#providerName').fill('Test Provider')
-    await dialog.locator('#providerType').click()
-    await page.getByRole('option', { name: 'OpenAI' }).click()
-    await dialog.locator('#apiKey').fill('short')
+    await page.getByRole('button', { name: 'Add inference provider' }).click()
 
-    await dialog.getByRole('button', { name: 'Add Provider' }).click()
-
-    // Should show validation error about API key being too short
-    await expect(dialog.getByText(/too short/i)).toBeVisible()
+    await expect(page.getByText('API key is too short')).toBeVisible()
+    await expect(page).toHaveURL(/\/llm-providers\/new$/)
   })
 
   test('should test provider connection', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
-    // Get token from auth and set it on llmProvidersHelper
     const token = await page.evaluate(() => localStorage.getItem('token'))
     if (token) {
       llmProvidersHelper.setToken(token)
@@ -121,7 +117,6 @@ test.describe('LLM Providers - Configuration', () => {
     // Setup mock responses for the test endpoint
     await llmProvidersHelper.setupMockResponses()
 
-    // Create provider via API helper
     await llmProvidersHelper.createLLMProvider({
       name: 'Connection Test Provider',
       type: 'openai',
@@ -132,20 +127,16 @@ test.describe('LLM Providers - Configuration', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Find provider row and click Test button
-    const providerRow = page.locator('tr').filter({ hasText: 'Connection Test Provider' })
-    await expect(providerRow).toBeVisible({ timeout: 10000 })
-    await providerRow.getByRole('button', { name: /test/i }).click()
+    await openRowActions(page, 'Connection Test Provider')
+    await page.getByRole('menuitem', { name: 'Test Connection' }).click()
 
-    // Test dialog should open with title "Test Provider: Connection Test Provider"
+    // Testing is still a dialog on the list page.
     const testDialog = page.getByRole('dialog')
     await expect(testDialog).toBeVisible({ timeout: 10000 })
     await expect(testDialog.getByText('Test Provider: Connection Test Provider')).toBeVisible()
 
-    // Click the "Test Provider" button inside the dialog
     await testDialog.getByRole('button', { name: 'Test Provider' }).click()
 
-    // Should show result (success or error)
     await expect(testDialog.getByText(/success|error|response/i).first()).toBeVisible({ timeout: 20000 })
   })
 
@@ -165,29 +156,25 @@ test.describe('LLM Providers - Configuration', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Click Edit on the provider row
-    const providerRow = page.locator('tr').filter({ hasText: 'Edit Test Provider' })
-    await expect(providerRow).toBeVisible({ timeout: 10000 })
-    await providerRow.getByRole('button', { name: /edit/i }).click()
+    // The menu has two Edit entries: the dialog one comes first, the
+    // generic one after the separator opens the provider's page.
+    await openRowActions(page, 'Edit Test Provider')
+    await page.getByRole('menuitem', { name: 'Edit', exact: true }).first().click()
 
-    // Edit dialog should open
     const editDialog = page.getByRole('dialog')
     await expect(editDialog).toBeVisible({ timeout: 10000 })
     await expect(editDialog.getByRole('heading', { name: 'Edit Provider' })).toBeVisible()
 
-    // Update the provider name
     const nameInput = editDialog.locator('#editProviderName')
     await expect(nameInput).toBeVisible()
     await nameInput.clear()
     await nameInput.fill('Updated Provider Name')
 
-    // Update temperature
     const tempInput = editDialog.locator('#editTemperature')
     await expect(tempInput).toBeVisible()
     await tempInput.clear()
     await tempInput.fill('0.5')
 
-    // Submit
     await editDialog.getByRole('button', { name: 'Update Provider' }).click()
 
     await assertHelper.assertToastMessage(/updated|saved/i)
@@ -210,24 +197,19 @@ test.describe('LLM Providers - Configuration', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Click Delete on the provider row
-    const providerRow = page.locator('tr').filter({ hasText: 'To Delete Provider' })
-    await expect(providerRow).toBeVisible({ timeout: 10000 })
-    await providerRow.getByRole('button', { name: /delete/i }).click()
+    await openRowActions(page, 'To Delete Provider')
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
 
-    // Confirmation AlertDialog should open
     const deleteDialog = page.getByRole('alertdialog')
     await expect(deleteDialog).toBeVisible({ timeout: 10000 })
-    await expect(deleteDialog.getByRole('heading', { name: 'Delete Provider' })).toBeVisible()
+    await expect(deleteDialog.getByRole('heading', { name: 'Delete provider?' })).toBeVisible()
 
-    // Confirm deletion
     await deleteDialog.getByRole('button', { name: 'Delete', exact: true }).click()
 
-    // Provider should be removed from the page
     await expect(page.getByText('To Delete Provider')).not.toBeVisible({ timeout: 10000 })
   })
 
-  test('should view provider details sheet', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
+  test('should open the provider page from View Details', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
     const token = await page.evaluate(() => localStorage.getItem('token'))
     if (token) {
       llmProvidersHelper.setToken(token)
@@ -243,23 +225,19 @@ test.describe('LLM Providers - Configuration', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Click Details button
-    const providerRow = page.locator('tr').filter({ hasText: 'Details Test Provider' })
-    await expect(providerRow).toBeVisible({ timeout: 10000 })
-    await providerRow.getByRole('button', { name: /details/i }).click()
+    await openRowActions(page, 'Details Test Provider')
+    await page.getByRole('menuitem', { name: 'View Details' }).click()
 
-    // Details sheet should open with provider name
-    const detailsSheet = page.locator('[role="dialog"]').first()
-    await expect(detailsSheet).toBeVisible({ timeout: 10000 })
-    await expect(detailsSheet.getByText('Details Test Provider')).toBeVisible()
-
-    // Should have tabs: Overview, Chat, Models, Usage, Config, Monitoring
-    await expect(detailsSheet.getByRole('tab', { name: /overview/i })).toBeVisible()
-    await expect(detailsSheet.getByRole('tab', { name: /models/i })).toBeVisible()
-    await expect(detailsSheet.getByRole('tab', { name: /usage/i })).toBeVisible()
+    // Details are the provider's own page, not a sheet.
+    await expect(page).toHaveURL(/\/llm-providers\/[^/]+$/)
+    await expect(page.getByRole('heading', { name: 'Details Test Provider', level: 1 })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Inference providers' }).first()).toHaveAttribute('href', '/llm-providers')
+    await expect(page.getByRole('tab', { name: /overview/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /models/i })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /usage/i })).toBeVisible()
   })
 
-  test('should display provider usage stats in details', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
+  test('should display provider usage stats on its page', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
     const token = await page.evaluate(() => localStorage.getItem('token'))
     if (token) {
       llmProvidersHelper.setToken(token)
@@ -275,23 +253,17 @@ test.describe('LLM Providers - Configuration', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Open details sheet
-    const providerRow = page.locator('tr').filter({ hasText: 'Usage Stats Provider' })
-    await expect(providerRow).toBeVisible({ timeout: 10000 })
-    await providerRow.getByRole('button', { name: /details/i }).click()
+    // A row click opens the provider's page.
+    await page.getByRole('row').filter({ hasText: 'Usage Stats Provider' }).getByRole('cell').first().click()
+    await expect(page).toHaveURL(/\/llm-providers\/[^/]+$/)
 
-    const detailsSheet = page.locator('[role="dialog"]').first()
-    await expect(detailsSheet).toBeVisible({ timeout: 10000 })
-
-    // Navigate to Usage tab
-    const usageTab = detailsSheet.getByRole('tab', { name: /usage/i })
+    const usageTab = page.getByRole('tab', { name: /usage/i })
     await expect(usageTab).toBeVisible()
     await usageTab.click()
 
-    // Should show Cost Breakdown section
-    await expect(detailsSheet.getByText('Cost Breakdown')).toBeVisible({ timeout: 10000 })
-    await expect(detailsSheet.getByText('Total Tokens:')).toBeVisible()
-    await expect(detailsSheet.getByText('Total Cost:')).toBeVisible()
+    await expect(page.getByText('Cost Breakdown')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Total Tokens:')).toBeVisible()
+    await expect(page.getByRole('tabpanel').getByText('Total Cost:')).toBeVisible()
   })
 
   test('should display provider status in table', async ({ authenticatedPage: page, assertHelper, llmProvidersHelper }) => {
@@ -310,7 +282,6 @@ test.describe('LLM Providers - Configuration', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Provider row should be visible with status badge
     const providerRow = page.locator('tr').filter({ hasText: 'Status Badge Provider' })
     await expect(providerRow).toBeVisible({ timeout: 10000 })
     await expect(providerRow.getByText('active').first()).toBeVisible({ timeout: 5000 })
@@ -337,15 +308,11 @@ test.describe('LLM Providers - Configuration', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Both should be visible initially
     await expect(page.getByText('Searchable Alpha')).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('Searchable Beta')).toBeVisible({ timeout: 10000 })
 
-    // Search for Alpha
-    const searchInput = page.getByPlaceholder(/search/i)
-    await searchInput.fill('Alpha')
+    await page.getByPlaceholder('Search providers...').fill('Alpha')
 
-    // Only Alpha should be visible
     await expect(page.getByText('Searchable Alpha')).toBeVisible()
     await expect(page.getByText('Searchable Beta')).not.toBeVisible()
   })
@@ -360,8 +327,13 @@ test.describe('LLM Providers - Configuration', () => {
     await assertHelper.waitForLoadingComplete()
     await page.waitForLoadState('networkidle')
 
-    // Should show empty state message and "Add First Provider" button
-    await expect(page.getByText(/no ai models configured/i)).toBeVisible({ timeout: 10000 })
-    await expect(page.getByRole('button', { name: /add first provider/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'No inference providers yet' })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('button', { name: 'Add inference provider' })).toHaveCount(1)
+  })
+
+  test('?new=1 opens the add page', async ({ authenticatedPage: page }) => {
+    await page.goto('/llm-providers?new=1')
+    await expect(page).toHaveURL(/\/llm-providers\/new$/)
+    await expect(page.getByRole('heading', { name: 'Add inference provider', level: 1 })).toBeVisible()
   })
 })

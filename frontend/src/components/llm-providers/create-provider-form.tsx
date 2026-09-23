@@ -10,13 +10,6 @@ import { ConnectAccountButton } from '@/components/connections/connect-sheet'
 import { ConnectedChip } from '@/components/connections/connected-chip'
 import type { Connection } from '@/types/connections'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -31,19 +24,22 @@ import { providerKeyUrls, providerTypeOptions, providerUsageApiSupport, usageApi
 import { BASE_URL_PRIVATE_HOST_HINT, structuralFieldsFor } from './schema'
 import { getApiErrorMessage } from '@/lib/api-error'
 
-interface CreateProviderDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+interface CreateProviderFormProps {
   createForm: UseFormReturn<any>
   createProviderMutation: UseMutationResult<any, any, any, any>
+  /** Shown as a Cancel button when given. */
+  onCancel?: () => void
 }
 
-export function CreateProviderDialog({
-  open,
-  onOpenChange,
+/**
+ * The add-inference-provider form, with no frame of its own: it sits on
+ * the Add inference provider page and inline in the Add model page.
+ */
+export function CreateProviderForm({
   createForm,
   createProviderMutation,
-}: CreateProviderDialogProps) {
+  onCancel,
+}: CreateProviderFormProps) {
   const { currentOrganization } = useOrganizationStore()
   const [visibility, setVisibility] = React.useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [testing, setTesting] = React.useState(false)
@@ -65,15 +61,6 @@ export function CreateProviderDialog({
     }
   }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Add Provider</DialogTitle>
-          <DialogDescription>
-            Select a provider type and configure your LLM integration
-          </DialogDescription>
-        </DialogHeader>
-
         <form onSubmit={createForm.handleSubmit((data: any) => createProviderMutation.mutate({ ...data, visibility: visibility.visibility, teamId: visibility.teamId }))} className="space-y-4">
           {/* Provider Name */}
           <div>
@@ -316,16 +303,16 @@ export function CreateProviderDialog({
               onChange={setVisibility}
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {onCancel && (
+              <Button type="button" variant="outline" onClick={onCancel}>
+                Cancel
+              </Button>
+            )}
             <Button type="submit" disabled={createProviderMutation.isPending}>
-              {createProviderMutation.isPending ? 'Adding...' : 'Add Provider'}
+              {createProviderMutation.isPending ? 'Adding...' : 'Add inference provider'}
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
   )
 }

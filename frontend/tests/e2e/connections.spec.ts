@@ -3,7 +3,7 @@ import { test as hooked } from './setup/test-hooks'
 
 /**
  * Settings > Connections: the connector gallery, the connect sheet (from
- * the tab and from the LLM provider dialog), grants on a connection, and
+ * the tab and from the Add inference provider page), grants on a connection, and
  * the EE governance section in its locked and unlocked states.
  *
  * Live connects need a real key: set E2E_CONNECT_API_KEY (and optionally
@@ -116,15 +116,15 @@ hooked.describe('Connections - gallery', () => {
   })
 })
 
-hooked.describe('Connections - from the LLM provider dialog', () => {
-  hooked('the connect sheet opens from Add Provider', async ({ authenticatedPage: page }) => {
-    await page.goto('/llm-providers')
+hooked.describe('Connections - from the Add inference provider page', () => {
+  hooked('the connect sheet opens from Add inference provider', async ({ authenticatedPage: page }) => {
+    await page.goto('/llm-providers/new')
     await page.waitForLoadState('networkidle')
-    await page.getByRole('button', { name: /add.*provider/i }).click()
+    await expect(page.getByRole('heading', { name: 'Add inference provider', level: 1 })).toBeVisible()
 
-    const dialog = page.getByRole('dialog').filter({ hasText: 'Add Provider' })
-    await expect(dialog).toBeVisible()
-    await dialog.getByRole('button', { name: 'Connect an account' }).click()
+    // The add form is on the page, not in a dialog.
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await page.getByRole('main').getByRole('button', { name: 'Connect an account' }).click()
 
     const sheet = page.getByRole('dialog').filter({ hasText: /Connect an account|^Connect / })
     await expect(sheet.last()).toBeVisible()

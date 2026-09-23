@@ -17,6 +17,7 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -176,12 +177,9 @@ export function LlmProviderDetailPage() {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <p className="text-muted-foreground">Provider not found</p>
-          {/* The screen is called Models (sidebar, /models); "AI Models" was
-              a name no screen in the app carries. /llm-providers is only a
-              redirect, so link at the real destination and skip the hop. */}
-          <Button className="mt-4" onClick={() => navigate('/models?tab=providers')}>
+          <Button className="mt-4" onClick={() => navigate('/llm-providers')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Models
+            Back to inference providers
           </Button>
         </div>
       </div>
@@ -196,7 +194,7 @@ export function LlmProviderDetailPage() {
     <div className="space-y-8">
       {/* Breadcrumbs */}
       <div className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/models?tab=providers" className="hover:text-foreground">Models</Link>
+        <Link to="/llm-providers" className="hover:text-foreground">Inference providers</Link>
         <ChevronRight className="h-3 w-3" />
         <span className="text-foreground">{provider.name}</span>
       </div>
@@ -212,7 +210,7 @@ export function LlmProviderDetailPage() {
               {providerLogos[provider.type] || '⚙️'}
             </div>
             <div>
-              <h1 className="text-4xl font-heading font-extrabold tracking-tight">{provider.name}</h1>
+              <h1 className={DETAIL_TITLE_CLASSES}>{provider.name}</h1>
               <p className="text-muted-foreground">{provider.description || `${provider.type} provider`}</p>
             </div>
           </div>
@@ -269,7 +267,7 @@ export function LlmProviderDetailPage() {
         <TabsContent value="overview" className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Card>
-              <CardHeader><CardTitle className="text-sm">Provider Information</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Provider information</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Type:</span>
@@ -309,7 +307,7 @@ export function LlmProviderDetailPage() {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle className="text-sm">Usage Summary</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Usage summary</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Total Requests:</span>
@@ -341,7 +339,7 @@ export function LlmProviderDetailPage() {
                 : <span>New conversation</span>}
             </div>
             <Button size="sm" variant="outline" onClick={() => { setChatMessages([]); setChatSessionId(null); setChatInput('') }} className="gap-1">
-              <RotateCcw className="h-3 w-3" /> New Chat
+              <RotateCcw className="h-3 w-3" /> New chat
             </Button>
           </div>
           <div className="border rounded-lg h-[400px] flex flex-col">
@@ -425,7 +423,7 @@ export function LlmProviderDetailPage() {
         {/* Configuration Tab */}
         <TabsContent value="configuration" className="space-y-4">
           <Card>
-            <CardHeader><CardTitle className="text-sm">API Configuration</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-sm">API configuration</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <CredentialPicker
                 label="API Key" value={credentialId}
@@ -445,7 +443,7 @@ export function LlmProviderDetailPage() {
           </Card>
           {provider.configuration?.customHeaders && (
             <Card>
-              <CardHeader><CardTitle className="text-sm">Custom Headers</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Custom headers</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {Object.entries(provider.configuration.customHeaders).map(([key, value], index) => (
                   <div key={index} className="flex gap-2">
@@ -462,7 +460,7 @@ export function LlmProviderDetailPage() {
         <TabsContent value="usage" className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Card>
-              <CardHeader><CardTitle className="text-sm">Performance Metrics</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Performance metrics</CardTitle></CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center">
@@ -477,7 +475,7 @@ export function LlmProviderDetailPage() {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle className="text-sm">Cost Breakdown</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Cost breakdown</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex justify-between text-sm"><span>Total Tokens:</span><span>{(provider.totalTokensUsed || 0).toLocaleString()}</span></div>
                 <div className="flex justify-between text-sm"><span>Avg Cost/Request:</span><span>${provider.totalRequests > 0 ? ((provider.totalCost || 0) / provider.totalRequests).toFixed(4) : '0.0000'}</span></div>
@@ -489,7 +487,7 @@ export function LlmProviderDetailPage() {
             <>
               {providerMetrics.usageByModel && (
                 <Card>
-                  <CardHeader><CardTitle className="text-sm">Usage by Model</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-sm">Usage by model</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
                     {providerMetrics.usageByModel.map((mu: any, i: number) => (
                       <div key={i} className="flex justify-between items-center">
@@ -505,7 +503,7 @@ export function LlmProviderDetailPage() {
               )}
               {providerMetrics.topErrors && providerMetrics.topErrors.length > 0 && (
                 <Card>
-                  <CardHeader><CardTitle className="text-sm">Error Analysis</CardTitle></CardHeader>
+                  <CardHeader><CardTitle className="text-sm">Error analysis</CardTitle></CardHeader>
                   <CardContent className="space-y-2">
                     {providerMetrics.topErrors.map((err: any, i: number) => (
                       <div key={i} className="flex justify-between items-center">
@@ -527,7 +525,7 @@ export function LlmProviderDetailPage() {
         <TabsContent value="monitoring" className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Card>
-              <CardHeader><CardTitle className="text-sm">Health Status</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Health status</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 <div className="flex items-center gap-2">
                   {provider.isHealthy ? <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -544,7 +542,7 @@ export function LlmProviderDetailPage() {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle className="text-sm">Recent Errors</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Recent errors</CardTitle></CardHeader>
               <CardContent>
                 {provider.lastError ? (
                   <div className="border-l-2 border-red-200 pl-3">
@@ -559,18 +557,7 @@ export function LlmProviderDetailPage() {
           </div>
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                Actions
-                <Button
-                  size="sm"
-                  onClick={() => testProviderMutation.mutate()}
-                  disabled={testProviderMutation.isPending}
-                  className="gap-2"
-                >
-                  <TestTube className="h-4 w-4" />
-                  {testProviderMutation.isPending ? 'Testing…' : 'Test Provider'}
-                </Button>
-              </CardTitle>
+              <CardTitle className="text-sm">Actions</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-2">
@@ -582,7 +569,7 @@ export function LlmProviderDetailPage() {
                   disabled={testProviderMutation.isPending}
                 >
                   <RefreshCw className={`h-4 w-4 ${testProviderMutation.isPending ? 'animate-spin' : ''}`} />
-                  Refresh Health
+                  Refresh health
                 </Button>
                 <Button size="sm" variant="outline" className="gap-2" onClick={() => {
                   toggleStatusMutation.mutate({ status: provider.status === 'active' ? 'inactive' : 'active' })

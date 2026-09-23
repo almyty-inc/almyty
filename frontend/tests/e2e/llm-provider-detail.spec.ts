@@ -12,6 +12,8 @@ test.describe('LLM Provider Detail', () => {
       await page.waitForTimeout(2000)
       await expect(page).toHaveURL(/\/llm-providers\//)
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      // The breadcrumb leads back to the inference providers page, not to Models.
+      await expect(page.getByRole('link', { name: 'Inference providers' }).first()).toHaveAttribute('href', '/llm-providers')
     }
   })
 

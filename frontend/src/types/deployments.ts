@@ -135,6 +135,10 @@ export interface CreateModelDeploymentBody {
   /** The operator path instead: a registered artifact this org tracks. */
   modelVersionId?: string
   providerType: string
+  /** What to call the model in the list; the server derives one from the source when absent. */
+  name?: string
+  /** The id sent on the wire; the server derives one from the source when absent. */
+  vendorModelId?: string
   desired?: ModelDeploymentDesired
   providerConfig?: Record<string, unknown>
   credentialId?: string

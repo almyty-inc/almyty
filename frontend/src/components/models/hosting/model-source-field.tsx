@@ -4,6 +4,7 @@ import { AlertCircle, Check } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MODEL_SCHEMES, SCHEME_META, adapterSchemes, describeModelRef, parseModelRef, schemeOf, schemePrefix } from '@/lib/deployments-api'
+import { cloudName } from '@/lib/model-hosting'
 import { cn } from '@/lib/utils'
 import type { ModelAdapter, ModelScheme } from '@/types/deployments'
 
@@ -19,7 +20,7 @@ export interface ModelSourceFieldProps {
 }
 
 /**
- * The first question the deploy flow asks: where is the model? The answer
+ * The first question the host-it-on-your-cloud flow asks: where is the model? The answer
  * is the whole model configuration, so nothing has to be registered first.
  * The chips write an example of each shape the server can actually run,
  * and the reference is parsed as it is typed with the same grammar the
@@ -41,51 +42,51 @@ export function ModelSourceField({ value, onChange, adapters, adapter, error, di
 
   return (
     <div className="space-y-2">
-      <Label htmlFor="deploy-model">Where is the model?</Label>
+      <Label htmlFor="host-model">Which model</Label>
       <p className="text-xs text-muted-foreground">
-        A Hugging Face repository, or a model you already uploaded to a platform. almyty runs it through the provider; the weights never pass through us.
+        A Hugging Face repository, weights in your own bucket, or a model already in your cloud. The weights go straight to your cloud; they never pass through almyty.
       </p>
       <Input
-        id="deploy-model"
+        id="host-model"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="hf://org/repo@sha"
+        placeholder="hf://meta-llama/Llama-3.1-8B-Instruct"
         spellCheck={false}
         autoComplete="off"
         className="font-mono text-sm"
         disabled={disabled}
         aria-invalid={!!error}
-        aria-describedby={error ? 'deploy-model-error' : 'deploy-model-parsed'}
+        aria-describedby={error ? 'host-model-error' : 'host-model-parsed'}
       />
 
       <div className="space-y-1.5" data-testid="model-source-chips">
-        {artifacts.length > 0 && <SchemeRow title="Point at the weights" schemes={artifacts} active={scheme} onPick={onChange} disabled={disabled} />}
-        {platforms.length > 0 && <SchemeRow title="Already on a platform" schemes={platforms} active={scheme} onPick={onChange} disabled={disabled} />}
+        {artifacts.length > 0 && <SchemeRow title="Weights" schemes={artifacts} active={scheme} onPick={onChange} disabled={disabled} />}
+        {platforms.length > 0 && <SchemeRow title="Already in your cloud" schemes={platforms} active={scheme} onPick={onChange} disabled={disabled} />}
       </div>
 
       {adapter && (
         <p className="text-xs text-muted-foreground" data-testid="adapter-accepts">
           {offered.length
-            ? `${adapter.displayName} accepts ${offered.map(schemePrefix).join(', ')}.`
-            : `${adapter.displayName} does not say which sources it reads.`}
+            ? `${cloudName(adapter)} accepts ${offered.map(schemePrefix).join(', ')}.`
+            : `${cloudName(adapter)} does not say which sources it reads.`}
         </p>
       )}
 
       {error ? (
-        <FieldNote id="deploy-model-error" tone="error">
+        <FieldNote id="host-model-error" tone="error">
           {error}
         </FieldNote>
       ) : parsed && !parsed.ok ? (
-        <FieldNote id="deploy-model-parsed" tone="error">
+        <FieldNote id="host-model-parsed" tone="error">
           {parsed.error}
         </FieldNote>
       ) : parsed && parsed.ok ? (
-        <FieldNote id="deploy-model-parsed" tone="ok">
+        <FieldNote id="host-model-parsed" tone="ok">
           {describeModelRef(parsed.value)}
         </FieldNote>
       ) : (
-        <p id="deploy-model-parsed" className="text-xs text-muted-foreground">
-          Nothing has to be registered first. Paste the reference and pick a provider that can run it.
+        <p id="host-model-parsed" className="text-xs text-muted-foreground">
+          Paste the repository or path, then pick the cloud that runs it.
         </p>
       )}
     </div>
