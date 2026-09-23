@@ -2,7 +2,7 @@
  * create page".
  *
  * Create flows used to be dialogs that a list page opened when it saw
- * `?new=1` (useCreateDeepLink). They are pages now, with their own route,
+ * `?new=1` (a hook since deleted). They are pages now, with their own route,
  * and every in-app entry point links there directly. This keeps any
  * `?new=1` link that still exists -- a bookmark, a doc, an email --
  * landing on the create page instead of on a list that ignores it. The

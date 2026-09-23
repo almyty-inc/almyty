@@ -115,6 +115,15 @@ export function CommandPalette() {
     { id: 'act-new-provider', label: 'Add inference provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/llm-providers/new') },
     { id: 'act-new-runner', label: 'Register runner', hint: 'Run agents on your own machine', icon: Plus, action: () => go('/runners/new') },
     { id: 'act-new-credential', label: 'Add credential', hint: 'Store a vault secret', icon: Plus, action: () => go('/credentials/new') },
+    { id: 'act-new-access-key', label: 'Generate access key', hint: 'For the CLI and the API', icon: Plus, action: () => go('/credentials/access-keys/new') },
+    { id: 'act-connect-account', label: 'Connect an account', hint: 'OAuth or an API key, kept in one place', icon: Plus, action: () => go('/settings/connections/connect') },
+    { id: 'act-new-custom-connector', label: 'Add custom connector', hint: 'Any service that takes a key or OAuth', icon: Plus, action: () => go('/settings/connections/custom/new') },
+    { id: 'act-new-connection-policy', label: 'Add connection policy', hint: 'Govern who may use which connection', icon: Plus, action: () => go('/settings/connections/policies/new') },
+    { id: 'act-new-approval-policy', label: 'Add approval policy', hint: 'Require a human to approve an action', icon: Plus, action: () => go('/settings/approvals/policies/new') },
+    { id: 'act-new-memory', label: 'Add memory', hint: 'A fact or preference agents can recall', icon: Plus, action: () => go('/memories/new') },
+    { id: 'act-transfer-memory', label: 'Transfer memory', hint: 'Move memories between backends', icon: Plus, action: () => go('/memories/transfer') },
+    { id: 'act-new-budget', label: 'Add spend budget', hint: 'Cap what a team or agent can spend', icon: Plus, action: () => go('/analytics/budgets/new') },
+    { id: 'act-new-organization', label: 'Create organization', hint: 'A separate workspace with its own members', icon: Plus, action: () => go('/organizations/new') },
   ]
 
   return (

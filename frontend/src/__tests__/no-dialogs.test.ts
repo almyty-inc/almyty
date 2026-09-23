@@ -41,7 +41,6 @@ const sources = walk(SRC)
 /** The primitives themselves, and the one thing that is a palette, not a form. */
 const PRIMITIVES = new Set([
   'components/ui/dialog.tsx',
-  'components/ui/sheet.tsx',
   // cmdk's CommandDialog wraps Dialog. The command palette is navigation
   // (type, pick, go), not a create or configure flow, and it is only
   // allowed in command-palette.tsx (checked below).
@@ -122,14 +121,12 @@ describe('no dialogs', () => {
     expect(offenders).toEqual([])
   })
 
-  it('?new=1 deep links redirect to a create page instead of opening a dialog', () => {
-    // useCreateDeepLink opens a local dialog. It survives only for a page
-    // in another workstream's area that still has one.
-    const users = sources
-      .filter(({ text }) => /\buseCreateDeepLink\s*\(/.test(text))
-      .map(({ path }) => path)
-      .filter((p) => p !== 'hooks/use-create-deep-link.ts')
-    expect(users.filter((p) => !exempt(p))).toEqual([])
+  it('?new=1 redirects to a create page; the dialog-opening hook is gone', () => {
+    // useCreateDeepLink opened a local dialog on ?new=1. Every caller now
+    // uses useNewParamRedirect, so the hook was deleted.
+    expect(existsSync(join(SRC, 'hooks/use-create-deep-link.ts'))).toBe(false)
+    const users = sources.filter(({ text }) => /\buseCreateDeepLink\b/.test(text)).map(({ path }) => path)
+    expect(users).toEqual([])
   })
 
   it('in-app links go straight to a create page, never through ?new=1', () => {
@@ -140,7 +137,9 @@ describe('no dialogs', () => {
     for (const { path, text } of sources) {
       // The two hooks that handle the parameter describe it in comments.
       if (exempt(path) || path.startsWith('hooks/use-')) continue
-      for (const m of text.matchAll(/['"`][^'"`\n]*[?&]new=1[^'"`\n]*['"`]/g)) {
+      // Comments may mention the old parameter; code may not link through it.
+      const code = text.replace(/^\s*(\/\/|\*|\/\*).*$/gm, '')
+      for (const m of code.matchAll(/['"`][^'"`\n]*[?&]new=1[^'"`\n]*['"`]/g)) {
         offenders.push(`${path}: ${m[0]}`)
       }
     }
