@@ -183,6 +183,7 @@ export function InlineFormActions({
   cancelLabel = 'Cancel',
   submitting = false,
   submitDisabled = false,
+  submitVariant = 'default',
   className,
 }: {
   onCancel: () => void
@@ -190,6 +191,8 @@ export function InlineFormActions({
   cancelLabel?: string
   submitting?: boolean
   submitDisabled?: boolean
+  /** 'destructive' when saving ends something (reject, revoke). */
+  submitVariant?: 'default' | 'destructive'
   className?: string
 }) {
   return (
@@ -197,7 +200,7 @@ export function InlineFormActions({
       <Button type="button" variant="outline" onClick={onCancel}>
         {cancelLabel}
       </Button>
-      <Button type="submit" disabled={submitting || submitDisabled}>
+      <Button type="submit" variant={submitVariant} disabled={submitting || submitDisabled}>
         {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
         {submitLabel}
       </Button>
