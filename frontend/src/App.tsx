@@ -45,6 +45,7 @@ const AccessKeyNewPage = lazy(() => import('@/pages/credential-new').then(m => (
 const MemoryNewPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryNewPage })))
 const MemoryTransferPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryTransferPage })))
 const AnalyticsBudgetPage = lazy(() => import('@/pages/analytics-budget').then(m => ({ default: m.AnalyticsBudgetPage })))
+const ApprovalPolicyPage = lazy(() => import('@/pages/approval-policy').then(m => ({ default: m.ApprovalPolicyPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
 const OrganizationsPage = lazy(() => import('@/pages/organizations').then(m => ({ default: m.OrganizationsPage })))
 const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatPage })))
@@ -170,6 +171,8 @@ function App() {
           <Route path="/credentials/new" element={<CredentialNewPage />} />
           <Route path="/credentials/access-keys/new" element={<AccessKeyNewPage />} />
           <Route path="/credentials/*" element={<CredentialsPage />} />
+          <Route path="/settings/approvals/policies/new" element={<ApprovalPolicyPage />} />
+          <Route path="/settings/approvals/policies/:policyId" element={<ApprovalPolicyPage />} />
           <Route path="/settings/*" element={<SettingsPage />} />
           <Route path="/connections" element={<ConnectionsRedirect />} />
           <Route path="/organizations" element={<OrganizationsPage />} />
