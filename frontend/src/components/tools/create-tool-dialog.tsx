@@ -34,6 +34,7 @@ import { javascript } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
 import { autocompletion } from '@codemirror/autocomplete'
 import { githubLight } from '@uiw/codemirror-theme-github'
+import { ModelPicker } from '@/components/model-picker'
 
 interface CreateToolDialogProps {
   open: boolean
@@ -67,7 +68,6 @@ interface CreateToolDialogProps {
     outputSchema: string
   }
   onLlmConfigChange: (value: any) => void
-  activeProviders: any[]
   availableApis?: any[]
   sdkConfig?: any
   onSdkConfigChange?: (value: any) => void
@@ -96,7 +96,6 @@ export function CreateToolDialog({
   onAuthConfigChange,
   llmConfig,
   onLlmConfigChange,
-  activeProviders,
   availableApis = [],
   sdkConfig,
   onSdkConfigChange,
@@ -654,17 +653,13 @@ export function CreateToolDialog({
             <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
               <Label className="text-base font-semibold">Model Configuration</Label>
 
-              <div>
-                <Label htmlFor="tool-provider">Provider</Label>
-                <Select value={llmConfig.providerId} onValueChange={(v) => onLlmConfigChange({ ...llmConfig, providerId: v })}>
-                  <SelectTrigger id="tool-provider"><SelectValue placeholder="Select provider..." /></SelectTrigger>
-                  <SelectContent>
-                    {activeProviders.map((p: any) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name} ({p.provider})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <ModelPicker
+                idPrefix="tool"
+                activeOnly
+                modelOptional
+                value={{ providerId: llmConfig.providerId, model: llmConfig.model }}
+                onChange={(next) => onLlmConfigChange({ ...llmConfig, providerId: next.providerId ?? '', model: next.model ?? '' })}
+              />
 
               <div>
                 <Label htmlFor="tool-system-prompt">System Prompt (optional)</Label>
@@ -689,25 +684,15 @@ export function CreateToolDialog({
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="tool-output-mode">Output Mode</Label>
-                  <Select value={llmConfig.outputMode} onValueChange={(v: 'text' | 'json') => onLlmConfigChange({ ...llmConfig, outputMode: v })}>
-                    <SelectTrigger id="tool-output-mode"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="text">Raw Text</SelectItem>
-                      <SelectItem value="json">Structured JSON</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="tool-model-override">Model Override (optional)</Label>
-                  <Input id="tool-model-override"
-                    placeholder="e.g. gpt-4o"
-                    value={llmConfig.model}
-                    onChange={(e) => onLlmConfigChange({ ...llmConfig, model: e.target.value })}
-                  />
-                </div>
+              <div>
+                <Label htmlFor="tool-output-mode">Output Mode</Label>
+                <Select value={llmConfig.outputMode} onValueChange={(v: 'text' | 'json') => onLlmConfigChange({ ...llmConfig, outputMode: v })}>
+                  <SelectTrigger id="tool-output-mode"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="text">Raw Text</SelectItem>
+                    <SelectItem value="json">Structured JSON</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

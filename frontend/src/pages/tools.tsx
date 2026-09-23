@@ -79,7 +79,6 @@ import { useMemo } from 'react'
 import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { toolSourceApi, DELETED_API_LABEL } from '@/lib/tool-source'
-import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 interface Tool {
   id: string
@@ -236,14 +235,6 @@ export function ToolsPage() {
     enabled: !!currentOrganization,
     placeholderData: (prev) => prev, // keep previous data while loading next page
   })
-
-  const { data: providersData } = useQuery({
-    ...llmProvidersQuery,
-    enabled: !!currentOrganization,
-  })
-  const llmProvidersExtracted = providersData || []
-  const llmProviders = Array.isArray(llmProvidersExtracted) ? llmProvidersExtracted : []
-  const activeProviders = llmProviders.filter((p: any) => p.status === 'active' || p.isActive)
 
   const deleteToolMutation = useMutation({
     mutationFn: (id: string) => toolsApi.delete(id),
@@ -1134,7 +1125,6 @@ return new Promise((resolve, reject) => {
         onAuthConfigChange={setAuthConfig}
         llmConfig={llmConfig}
         onLlmConfigChange={setLlmConfig}
-        activeProviders={activeProviders}
         availableApis={availableApis}
         sdkConfig={sdkConfig}
         onSdkConfigChange={setSdkConfig}

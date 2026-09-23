@@ -6,12 +6,14 @@ import { Agent } from '../../../entities/agent.entity';
  * Per-strategy unit tests for the four collaboration modes the product exposes:
  * sequential | parallel | race | debate. These pin the documented semantics
  * (so the site/docs can state them as tested, not just shipped):
- *   - sequential pipes each agent's output into the next agent's input
+ *   - sequential pipes each participant's output into the next one's input
  *   - parallel runs all on the SAME input, merges via the judge or concatenates
  *   - race takes the first finisher AND aggregates every racer's cost (budget
  *     safety — losers can't silently bypass maxCostCents)
  *   - debate runs maxRounds rounds (default 3), every debater per round, then
  *     a judge summarizes (or the last round is returned when there's no judge)
+ * A participant is an agent (child run) or a model (one chat call); every
+ * strategy and the judge accept both.
  *
  * The runtime + repository are the seams; we inject fakes so no real agent runs.
  */
@@ -27,10 +29,21 @@ function makeRuntime() {
     const a = idToAgent.get(id)!;
     return { agentId: a.agentId, output: `out:${a.agentId}`, totalCost: 1, totalTokens: 10 };
   });
+  // Model participants: one chat call each. Default answer names the model
+  // and echoes the user message so piping is observable.
+  const chat = jest.fn(async (providerId: string | null, req: any, _org?: string, _user?: string) => {
+    const user = req.messages.find((m: any) => m.role === 'user')?.content;
+    return {
+      message: { role: 'assistant', content: `model:${req.model ?? providerId ?? 'routed'}<${user}>` },
+      cost: 2,
+      usage: { inputTokens: 5, outputTokens: 15, totalTokens: 20 },
+    };
+  });
   return {
     startRun,
     waitForRun,
     emitEvent: jest.fn(),
+    llmProvidersService: { chat },
     _inputFor: (id: string) => idToAgent.get(id)?.input,
     _idToAgent: idToAgent,
   };
@@ -69,6 +82,9 @@ function agentWith(collaboration: any): Agent {
   return { id: 'orchestrator', collaboration } as unknown as Agent;
 }
 
+const ag = (agentId: string, role?: string) => ({ kind: 'agent', agentId, ...(role ? { role } : {}) });
+const md = (providerId: string, model: string, extra: Record<string, any> = {}) => ({ kind: 'model', providerId, model, ...extra });
+
 describe('AgentCollaborationHelper', () => {
   it('sequential: pipes each agent output into the next agent input, final = last', async () => {
     const runtime = makeRuntime();
@@ -77,7 +93,7 @@ describe('AgentCollaborationHelper', () => {
     const run = makeRun();
     const agent = agentWith({
       strategy: 'sequential',
-      agents: [{ agentId: 'a1', role: 'drafter' }, { agentId: 'a2', role: 'editor' }],
+      participants: [ag('a1', 'drafter'), ag('a2', 'editor')],
     });
 
     const result = await helper.runSequentialCollaboration(run, agent);
@@ -102,7 +118,7 @@ describe('AgentCollaborationHelper', () => {
     const run = makeRun();
     const agent = agentWith({
       strategy: 'parallel',
-      agents: [{ agentId: 'a1' }, { agentId: 'a2' }],
+      participants: [ag('a1'), ag('a2')],
     });
 
     await helper.runParallelCollaboration(run, agent);
@@ -122,8 +138,8 @@ describe('AgentCollaborationHelper', () => {
     const run = makeRun();
     const agent = agentWith({
       strategy: 'parallel',
-      agents: [{ agentId: 'a1' }, { agentId: 'a2' }],
-      judgeAgentId: 'judge',
+      participants: [ag('a1'), ag('a2')],
+      judge: ag('judge'),
     });
 
     await helper.runParallelCollaboration(run, agent);
@@ -140,7 +156,7 @@ describe('AgentCollaborationHelper', () => {
     const run = makeRun();
     const agent = agentWith({
       strategy: 'race',
-      agents: [{ agentId: 'a1' }, { agentId: 'a2' }, { agentId: 'a3' }],
+      participants: [ag('a1'), ag('a2'), ag('a3')],
     });
 
     await helper.runRaceCollaboration(run, agent);
@@ -160,8 +176,8 @@ describe('AgentCollaborationHelper', () => {
     const run = makeRun();
     const agent = agentWith({
       strategy: 'debate',
-      agents: [{ agentId: 'd1' }, { agentId: 'd2' }],
-      judgeAgentId: 'judge',
+      participants: [ag('d1'), ag('d2')],
+      judge: ag('judge'),
       maxRounds: 2,
     });
 
@@ -180,7 +196,7 @@ describe('AgentCollaborationHelper', () => {
     const runtime = makeRuntime();
     const helper = new AgentCollaborationHelper(makeRepo() as any, runtime as any);
     const run = makeRun();
-    const agent = agentWith({ strategy: 'debate', agents: [{ agentId: 'd1', role: 'pro' }] });
+    const agent = agentWith({ strategy: 'debate', participants: [ag('d1', 'pro')] });
 
     await helper.runDebateCollaboration(run, agent);
 
@@ -194,7 +210,7 @@ describe('AgentCollaborationHelper', () => {
     const repo = makeRepo();
     const helper = new AgentCollaborationHelper(repo as any, runtime as any);
     const run = makeRun();
-    const agent = agentWith({ strategy: 'telepathy', agents: [] });
+    const agent = agentWith({ strategy: 'telepathy', participants: [] });
 
     const result = await helper.processCollaborationStep(run, agent);
 
@@ -209,10 +225,218 @@ describe('AgentCollaborationHelper', () => {
     const helper = new AgentCollaborationHelper(makeRepo() as any, runtime as any);
     for (const strategy of ['sequential', 'parallel', 'race', 'debate']) {
       const run = makeRun();
-      const agent = agentWith({ strategy, agents: [{ agentId: 'x' }], maxRounds: 1 });
+      const agent = agentWith({ strategy, participants: [ag('x')], maxRounds: 1 });
       const result = await helper.processCollaborationStep(run, agent);
       expect(result).toBe('done');
       expect(run.status).toBe(AgentRunStatus.COMPLETED);
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Model participants
+  // ---------------------------------------------------------------------------
+
+  describe('model participants', () => {
+    it('sequential [model, agent]: pipes in configured order and sums every cost', async () => {
+      const runtime = makeRuntime();
+      const helper = new AgentCollaborationHelper(makeRepo() as any, runtime as any);
+      const run = makeRun();
+      const agent = agentWith({
+        strategy: 'sequential',
+        participants: [md('prov-1', 'gpt-x', { role: 'drafter', instructions: 'Be terse.', temperature: 0.2, maxTokens: 300 }), ag('a1', 'editor')],
+        sharedBrief: 'Ship the answer',
+      });
+
+      await helper.runSequentialCollaboration(run, agent);
+
+      // The model got the orchestrator's output as its user message ...
+      expect(runtime.llmProvidersService.chat).toHaveBeenCalledTimes(1);
+      const [providerId, req, org, user] = runtime.llmProvidersService.chat.mock.calls[0];
+      expect(providerId).toBe('prov-1');
+      expect(req.model).toBe('gpt-x');
+      expect(req.temperature).toBe(0.2);
+      expect(req.maxTokens).toBe(300);
+      expect(org).toBe('org-1');
+      expect(user).toBe('user-1');
+      expect(req.messages.find((m: any) => m.role === 'user').content).toBe('out:orchestrator');
+      // ... with the shared collaboration context and its own instructions.
+      const system = req.messages.find((m: any) => m.role === 'system').content;
+      expect(system).toContain('You are the "drafter" in a sequential collaboration.');
+      expect(system).toContain('Brief: Ship the answer');
+      expect(system).toContain('Team members: drafter, editor');
+      expect(system).toContain('Be terse.');
+      // ... and the agent after it got the model's output.
+      expect(runtime.startRun.mock.calls.map((c) => c[0])).toEqual(['orchestrator', 'a1']);
+      expect(runtime._inputFor('r2')).toBe('model:gpt-x<out:orchestrator>');
+      expect(run.output).toBe('out:a1');
+      // orchestrator 1 + model 2 + agent 1
+      expect(run.totalCost).toBe(4);
+      expect(run.totalTokens).toBe(10 + 20 + 10);
+      const recorded = (run.steps[0] as any).output.participantOutputs.map((o: any) => o.participant);
+      expect(recorded[1]).toEqual({ kind: 'model', providerId: 'prov-1', model: 'gpt-x', role: 'drafter' });
+      expect(recorded[2]).toEqual({ kind: 'agent', agentId: 'a1', role: 'editor' });
+    });
+
+    it('parallel with models only (no agents at all) completes through a model judge', async () => {
+      const runtime = makeRuntime();
+      const helper = new AgentCollaborationHelper(makeRepo() as any, runtime as any);
+      const run = makeRun();
+      const agent = agentWith({
+        strategy: 'parallel',
+        participants: [md('p1', 'm1'), md('p2', 'm2')],
+        judge: md('p3', 'judge-model'),
+      });
+
+      await helper.runParallelCollaboration(run, agent);
+
+      expect(runtime.startRun).not.toHaveBeenCalled();
+      const calls = runtime.llmProvidersService.chat.mock.calls;
+      expect(calls.map((c) => c[1].model)).toEqual(['m1', 'm2', 'judge-model']);
+      // Both participants saw the same original input.
+      expect(calls[0][1].messages.find((m: any) => m.role === 'user').content).toBe('solve X');
+      expect(calls[1][1].messages.find((m: any) => m.role === 'user').content).toBe('solve X');
+      // The judge read both answers and its answer is the output.
+      const judgeUser = calls[2][1].messages.find((m: any) => m.role === 'user').content;
+      expect(judgeUser).toContain('model:m1<solve X>');
+      expect(judgeUser).toContain('model:m2<solve X>');
+      expect(calls[2][1].messages.find((m: any) => m.role === 'system').content).toContain('You are the "judge"');
+      expect(String(run.output)).toMatch(/^model:judge-model</);
+      expect(run.status).toBe(AgentRunStatus.COMPLETED);
+      expect(run.totalCost).toBe(6);
+      expect((run.steps[0] as any).input.judge).toEqual({ kind: 'model', providerId: 'p3', model: 'judge-model' });
+    });
+
+    it('a routed model participant sends the policy and no model id', async () => {
+      const runtime = makeRuntime();
+      const helper = new AgentCollaborationHelper(makeRepo() as any, runtime as any);
+      const run = makeRun();
+      const routing = { objective: 'cheapest' };
+      const agent = agentWith({
+        strategy: 'parallel',
+        participants: [{ kind: 'model', routing, model: 'ignored' }],
+      });
+
+      await helper.runParallelCollaboration(run, agent);
+
+      const [providerId, req] = runtime.llmProvidersService.chat.mock.calls[0];
+      expect(providerId).toBeNull();
+      expect(req.routing).toBe(routing);
+      expect(req.model).toBeUndefined();
+    });
+
+    it('race with two models: the first answer wins and the other call is aborted', async () => {
+      const runtime = makeRuntime();
+      const signals: Record<string, AbortSignal> = {};
+      runtime.llmProvidersService.chat.mockImplementation(async (_p: any, req: any) => {
+        signals[req.model] = req.signal;
+        if (req.model === 'fast') {
+          return { message: { role: 'assistant', content: 'fast answer' }, cost: 3, usage: { totalTokens: 7 } } as any;
+        }
+        // The slow model only settles when its signal fires.
+        return new Promise((_resolve, reject) => {
+          req.signal.addEventListener('abort', () => reject(new Error('aborted')));
+        });
+      });
+      const repo = makeRepo();
+      const helper = new AgentCollaborationHelper(repo as any, runtime as any);
+      const run = makeRun();
+      const agent = agentWith({ strategy: 'race', participants: [md('p1', 'slow'), md('p2', 'fast')] });
+
+      await helper.runRaceCollaboration(run, agent);
+
+      expect(run.status).toBe(AgentRunStatus.COMPLETED);
+      expect(run.output).toBe('fast answer');
+      expect(signals.slow.aborted).toBe(true);
+      expect(signals.fast.aborted).toBe(false);
+      // Only the finished call is billed; the aborted one reported nothing.
+      expect(run.totalCost).toBe(3);
+      expect(run.totalTokens).toBe(7);
+      // No agent racer, so no run row was looked up.
+      expect(repo.findOne).not.toHaveBeenCalled();
+      expect((run.steps[0] as any).output.winner).toEqual({ kind: 'model', providerId: 'p2', model: 'fast' });
+    });
+
+    it('debate with models only runs maxRounds rounds of every model', async () => {
+      const runtime = makeRuntime();
+      const helper = new AgentCollaborationHelper(makeRepo() as any, runtime as any);
+      const run = makeRun();
+      const agent = agentWith({
+        strategy: 'debate',
+        participants: [md('p1', 'pro-model', { role: 'pro' }), md('p2', 'con-model', { role: 'con' })],
+        maxRounds: 3,
+      });
+
+      await helper.runDebateCollaboration(run, agent);
+
+      expect(runtime.startRun).not.toHaveBeenCalled();
+      const models = runtime.llmProvidersService.chat.mock.calls.map((c) => c[1].model);
+      expect(models.filter((m) => m === 'pro-model')).toHaveLength(3);
+      expect(models.filter((m) => m === 'con-model')).toHaveLength(3);
+      // Round 2 sees round 1's answers, labelled by role.
+      const round2 = runtime.llmProvidersService.chat.mock.calls[2][1].messages.find((m: any) => m.role === 'user').content;
+      expect(round2).toContain('[Round 1 - pro]:');
+      expect(round2).toContain('[Round 1 - con]:');
+      expect(run.status).toBe(AgentRunStatus.COMPLETED);
+      expect(run.totalCost).toBe(12);
+      expect(String(run.output)).toContain('[pro]:');
+    });
+
+    it('rules.outputFormat json asks a model participant for JSON', async () => {
+      const runtime = makeRuntime();
+      const helper = new AgentCollaborationHelper(makeRepo() as any, runtime as any);
+      const agent = agentWith({ strategy: 'parallel', participants: [md('p1', 'm1')], rules: { outputFormat: 'json' } });
+
+      await helper.runParallelCollaboration(makeRun(), agent);
+
+      const system = runtime.llmProvidersService.chat.mock.calls[0][1].messages.find((m: any) => m.role === 'system').content;
+      expect(system).toContain('output format: json');
+      expect(system).toMatch(/single valid JSON value only/);
+    });
+
+    it('rules.maxTotalCost stops a sequential chain before the next model is called', async () => {
+      const runtime = makeRuntime();
+      const repo = makeRepo();
+      const helper = new AgentCollaborationHelper(repo as any, runtime as any);
+      const run = makeRun();
+      const agent = agentWith({
+        strategy: 'sequential',
+        // orchestrator costs 1, m1 costs 2 -> 3 >= 3 before m2
+        participants: [md('p1', 'm1'), md('p2', 'm2')],
+        rules: { maxTotalCost: 3 },
+      });
+
+      const result = await helper.runSequentialCollaboration(run, agent);
+
+      expect(result).toBe('done');
+      expect(runtime.llmProvidersService.chat.mock.calls.map((c) => c[1].model)).toEqual(['m1']);
+      expect(run.status).toBe(AgentRunStatus.FAILED);
+      expect(run.error).toMatch(/^Collaboration total cost limit reached \(\$3\.00 >= \$3\)/);
+      expect(run.error).toContain('m2');
+      const stop = run.steps.find((s: any) => s.type === 'collaboration_cost_limit') as any;
+      expect(stop).toBeDefined();
+      expect(stop.output).toEqual({ totalCost: 3, maxTotalCost: 3 });
+      expect(runtime.emitEvent).toHaveBeenCalledWith('parent-run', 'run.failed', expect.anything());
+      expect(repo.save).toHaveBeenCalledWith(run);
+    });
+
+    it('rules.maxTotalCost stops a debate before the next round and before the judge', async () => {
+      const runtime = makeRuntime();
+      const helper = new AgentCollaborationHelper(makeRepo() as any, runtime as any);
+      const run = makeRun();
+      const agent = agentWith({
+        strategy: 'debate',
+        participants: [md('p1', 'm1'), md('p2', 'm2')],
+        judge: md('p3', 'judge-model'),
+        maxRounds: 3,
+        rules: { maxTotalCost: 4 },
+      });
+
+      await helper.runDebateCollaboration(run, agent);
+
+      // Round 1 spends 4; round 2 and the judge never run.
+      expect(runtime.llmProvidersService.chat).toHaveBeenCalledTimes(2);
+      expect(run.status).toBe(AgentRunStatus.FAILED);
+      expect(run.error).toContain('debate round 2');
+    });
   });
 });
