@@ -348,19 +348,35 @@ export class UnifiedEndpointController {
       throw new HttpException('Not found', HttpStatus.NOT_FOUND);
     }
 
-    // 2. Try to find a gateway
-    const normalizedEndpoint = `/${resourceSlug}`;
-    const gateway = await this.gatewayRepository.findOne({
-      where: {
-        endpoint: normalizedEndpoint,
-        organizationId: organization.id,
-        status: GatewayStatus.ACTIVE,
-      },
-      relations: { authConfigs: true },
-    });
+    // 2. Try to find a gateway. A published app surface lives one level
+    // deeper than a hand-made gateway -- its endpoint is
+    // /apps/<app>/<target> (endpointFor in agent-apps) -- so the callback
+    // URL Slack, Meta or Teams is given for it, /<org>/apps/<app>/<target>,
+    // arrives here with resourceSlug 'apps' and has to be matched on the
+    // full three segments. Every other path does exactly one lookup.
+    const appSurface = appSurfaceSlug(req.path, orgSlug, resourceSlug);
+    const findActive = (endpoint: string) =>
+      this.gatewayRepository.findOne({
+        where: {
+          endpoint,
+          organizationId: organization.id,
+          status: GatewayStatus.ACTIVE,
+        },
+        relations: { authConfigs: true },
+      });
+    const appGateway = appSurface ? await findActive(`/${appSurface}`) : null;
+    const gateway = appGateway ?? (await findActive(`/${resourceSlug}`));
 
     if (gateway && (await this.privateGatewayVisible(gateway, req))) {
-      return this.gatewayDelegation.handleGatewayRequest(organization, gateway, orgSlug, resourceSlug, req, res, body);
+      return this.gatewayDelegation.handleGatewayRequest(
+        organization,
+        gateway,
+        orgSlug,
+        appGateway ? appSurface! : resourceSlug,
+        req,
+        res,
+        body,
+      );
     }
 
     // 3. Try agent sub-paths (e.g., /:org/:agent/stream, /:org/:agent/invoke)
@@ -434,6 +450,21 @@ export class UnifiedEndpointController {
     const match = candidates.find(candidate => slugifyName(candidate.name) === wanted);
     return match ? this.agentRepository.findOne({ where: { id: match.id, organizationId } }) : null;
   }
+}
+
+/**
+ * The gateway slug of a published app surface, or null.
+ *
+ * `/acme/apps/support/whatsapp_cloud` names the gateway whose endpoint is
+ * `/apps/support/whatsapp_cloud`. Only paths under the reserved `apps`
+ * segment are read this way, and anything after the target (a platform
+ * sub-path) is left to the delegation, as for any other gateway.
+ */
+export function appSurfaceSlug(path: string, orgSlug: string, resourceSlug: string): string | null {
+  if (resourceSlug !== 'apps') return null;
+  const parts = (path || '').split('/').filter(Boolean);
+  if (parts.length < 4 || parts[0] !== orgSlug || parts[1] !== 'apps') return null;
+  return `apps/${parts[2]}/${parts[3]}`;
 }
 
 /**
