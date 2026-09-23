@@ -46,7 +46,7 @@ export function AgentConfigPanel({ agent }: { agent: Agent }) {
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
-            <Cpu className="h-4 w-4 text-primary" /> Models &amp; Verification
+            <Cpu className="h-4 w-4 text-primary" /> Models &amp; verification
           </CardTitle>
           <div className="flex items-center gap-2">
             <VerifyConfigDialog agent={agent} />

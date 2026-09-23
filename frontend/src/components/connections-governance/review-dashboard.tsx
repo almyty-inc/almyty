@@ -100,15 +100,12 @@ export function ReviewDashboard() {
       )}
 
       {!reviewQuery.isLoading && !reviewQuery.isError && rows.length === 0 && (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
+        <EmptyState
+          variant="panel"
               icon={Eye}
               title="Nothing to review"
               description={environment === 'any' ? 'No personal connection is granted to an agent or workspace.' : `No personal connection is granted to a ${environment} agent. Switch to any to see every environment.`}
             />
-          </CardContent>
-        </Card>
       )}
 
       {rows.length > 0 && (
@@ -182,8 +179,8 @@ export function ReviewDashboard() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
-            <AlertDialogAction onClick={() => toRevoke && revoke.mutate(toRevoke)} disabled={revoke.isPending}>Revoke</AlertDialogAction>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => toRevoke && revoke.mutate(toRevoke)} disabled={revoke.isPending}>Revoke grants</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

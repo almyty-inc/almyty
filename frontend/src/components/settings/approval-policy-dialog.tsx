@@ -169,7 +169,7 @@ export function ApprovalPolicyDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{policy ? 'Edit Approval Policy' : 'New Approval Policy'}</DialogTitle>
+          <DialogTitle>{policy ? 'Edit approval policy' : 'New approval policy'}</DialogTitle>
           <DialogDescription>
             Match conditions decide when an approval is required; steps decide who
             must sign off, in order. A request must clear every step before it is

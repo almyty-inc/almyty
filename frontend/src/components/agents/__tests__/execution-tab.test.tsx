@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor, within } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
 import { ExecutionTab } from '../execution-tab'
@@ -197,6 +197,9 @@ describe('the controls that were rendered behind props nobody passed', () => {
     render(<ExecutionTab agentId="a1" />)
 
     fireEvent.click(await screen.findByTestId('remove-role-principal'))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(api.delete).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove role' }))
 
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/agents/a1/roles/principal'))
   })
@@ -207,6 +210,7 @@ describe('the controls that were rendered behind props nobody passed', () => {
     render(<ExecutionTab agentId="a1" />)
 
     fireEvent.click(await screen.findByTestId('remove-role-principal'))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove role' }))
 
     expect(await screen.findByTestId('remove-role-error')).toHaveTextContent('A strategy still needs it')
   })

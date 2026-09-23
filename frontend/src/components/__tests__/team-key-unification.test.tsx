@@ -89,10 +89,10 @@ describe('team mutations reach every team consumer', () => {
     expect(organizationsApi.getTeams).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole('tab', { name: 'Teams' }))
-    await user.click(screen.getByRole('button', { name: /Create Team/i }))
+    await user.click(screen.getByRole('button', { name: /Create team/i }))
     const dialog = within(await screen.findByRole('dialog'))
     await user.type(dialog.getByLabelText('Team Name'), 'Platform')
-    await user.click(dialog.getByRole('button', { name: 'Create Team' }))
+    await user.click(dialog.getByRole('button', { name: 'Create team' }))
 
     await waitFor(() => expect(organizationsApi.createTeam).toHaveBeenCalled())
     await waitFor(() =>
@@ -108,7 +108,6 @@ describe('team mutations reach every team consumer', () => {
       ] as any)
       .mockResolvedValue([{ id: 't1', name: 'Existing', isDefault: true }] as any)
     vi.mocked(organizationsApi.deleteTeam).mockResolvedValue({ success: true } as any)
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     const user = userEvent.setup()
     const queryClient = new QueryClient({
@@ -122,12 +121,14 @@ describe('team mutations reach every team consumer', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Teams' }))
     await user.click(screen.getByRole('button', { name: 'Delete team Doomed' }))
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete team' }),
+    )
 
     await waitFor(() => expect(organizationsApi.deleteTeam).toHaveBeenCalled())
     await waitFor(() =>
       expect(screen.getByTestId('lookup')).not.toHaveTextContent('Doomed'),
     )
     expect(screen.getByTestId('lookup')).toHaveTextContent('Existing')
-    confirmSpy.mockRestore()
   })
 })

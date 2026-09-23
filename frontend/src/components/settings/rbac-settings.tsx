@@ -329,7 +329,7 @@ function RolesCard({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
               onClick={() => deleting && deleteMutation.mutate(deleting.id)}
               disabled={deleteMutation.isPending}
             >
@@ -736,7 +736,7 @@ function PoliciesCard({ policies, loading }: { policies: AbacPolicy[]; loading: 
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
               onClick={() => deleting && deleteMutation.mutate(deleting.id)}
               disabled={deleteMutation.isPending}
             >

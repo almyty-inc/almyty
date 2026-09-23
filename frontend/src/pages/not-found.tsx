@@ -13,6 +13,7 @@ export function NotFoundPage() {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <EmptyState
+        variant="inline"
         icon={Compass}
         title="Page not found"
         description="We couldn't find the page you were looking for. It may have moved, or the link may be out of date."

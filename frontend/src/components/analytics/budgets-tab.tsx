@@ -407,6 +407,7 @@ export function BudgetsTab() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={() => deleting && deleteMutation.mutate(deleting.id)}
               disabled={deleteMutation.isPending}
             >

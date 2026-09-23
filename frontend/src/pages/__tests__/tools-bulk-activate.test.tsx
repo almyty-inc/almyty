@@ -14,7 +14,7 @@ import { toolsApi } from '../../lib/api'
  * dashboard was one toggle on a single tool's detail page. An
  * eighteen-operation import therefore meant eighteen detail pages and
  * eighteen toggles, and no screen said so — the row menu offered only
- * View Details and Test Tool.
+ * View details and Test tool.
  */
 
 vi.mock('../../lib/api', () => ({
@@ -110,7 +110,7 @@ describe('activating generated tools from the tools list', () => {
     const row = (await screen.findAllByText('listPets'))[0].closest('tr')!
     await user.click(within(row).getByRole('button', { name: 'Actions' }))
 
-    expect(await screen.findByRole('menuitem', { name: 'Test Tool' })).toBeInTheDocument()
+    expect(await screen.findByRole('menuitem', { name: 'Test tool' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Activate' })).not.toBeInTheDocument()
   })
 

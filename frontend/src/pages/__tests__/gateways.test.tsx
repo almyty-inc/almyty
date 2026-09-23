@@ -171,12 +171,12 @@ describe('GatewaysPage', () => {
 
       await waitFor(() => {
         // New shared <EmptyState/> primitive: "No gateways yet"
-        // headline + a "Create Gateway" CTA in the action slot.
+        // headline + a "Create gateway" CTA in the action slot.
         expect(screen.getByText('No gateways yet')).toBeInTheDocument()
-        // Multiple "Create Gateway" buttons can exist on the page
+        // Multiple "Create gateway" buttons can exist on the page
         // (one in the header, one in the empty state) — just
         // assert at least one is present.
-        expect(screen.getAllByRole('button', { name: /Create Gateway/i }).length).toBeGreaterThan(0)
+        expect(screen.getAllByRole('button', { name: 'Create gateway' }).length).toBeGreaterThan(0)
       })
     })
   })
@@ -193,12 +193,12 @@ describe('GatewaysPage', () => {
       renderGatewaysPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Create Gateway')).toBeInTheDocument()
+        expect(screen.getAllByRole('button', { name: 'Create gateway' })[0]).toBeInTheDocument()
       })
 
-      await user.click(screen.getByText('Create Gateway'))
+      await user.click(screen.getAllByRole('button', { name: 'Create gateway' })[0])
 
-      expect(screen.getByText('Create New Gateway')).toBeInTheDocument()
+      expect(screen.getByText('Create new gateway')).toBeInTheDocument()
       expect(screen.getByLabelText('Gateway Name')).toBeInTheDocument()
       expect(screen.getByLabelText('Gateway Type')).toBeInTheDocument()
     })
@@ -208,10 +208,10 @@ describe('GatewaysPage', () => {
       renderGatewaysPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Create Gateway')).toBeInTheDocument()
+        expect(screen.getAllByRole('button', { name: 'Create gateway' })[0]).toBeInTheDocument()
       })
 
-      await user.click(screen.getByText('Create Gateway'))
+      await user.click(screen.getAllByRole('button', { name: 'Create gateway' })[0])
 
       // The dialog now has a kind selector defaulting to "Tools"
       expect(screen.getByText('Tools')).toBeInTheDocument()
@@ -235,10 +235,10 @@ describe('GatewaysPage', () => {
       renderGatewaysPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Create Gateway')).toBeInTheDocument()
+        expect(screen.getAllByRole('button', { name: 'Create gateway' })[0]).toBeInTheDocument()
       })
 
-      await user.click(screen.getByText('Create Gateway'))
+      await user.click(screen.getAllByRole('button', { name: 'Create gateway' })[0])
 
       // Verify form fields exist
       expect(screen.getByLabelText('Gateway Name')).toBeInTheDocument()

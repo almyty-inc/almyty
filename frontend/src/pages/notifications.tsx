@@ -5,6 +5,8 @@ import { Bell, CheckCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
+import { QueryError } from '@/components/ui/query-error'
+import { PageHeader } from '@/components/layout/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -29,7 +31,7 @@ export function NotificationsPage() {
     }
   }, [])
 
-  const { data, isLoading } = useQuery<NotificationListResult>({
+  const { data, isLoading, isError, error, refetch } = useQuery<NotificationListResult>({
     queryKey: ['notifications', 'list', { page, unreadOnly }],
     queryFn: () =>
       notificationsApi.list({
@@ -49,42 +51,39 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">
-            Notifications
-          </h1>
-          <p className="text-muted-foreground">
-            Everything that happened across your organization
-          </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="unread-only"
-              checked={unreadOnly}
-              onCheckedChange={(checked) => {
-                setUnreadOnly(checked)
-                setPage(1)
-              }}
-            />
-            <Label htmlFor="unread-only" className="text-sm text-muted-foreground">
-              Unread only
-            </Label>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => markAll.mutate()}
-            disabled={markAll.isPending || unreadCount === 0}
-          >
-            <CheckCheck className="h-4 w-4" />
-            Mark all read
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Notifications"
+        description="Everything that happened across your organization"
+        actions={
+          <>
+            <div className="flex items-center gap-2 pr-2">
+              <Switch
+                id="unread-only"
+                checked={unreadOnly}
+                onCheckedChange={(checked) => {
+                  setUnreadOnly(checked)
+                  setPage(1)
+                }}
+              />
+              <Label htmlFor="unread-only" className="text-sm text-muted-foreground">
+                Unread only
+              </Label>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => markAll.mutate()}
+              disabled={markAll.isPending || unreadCount === 0}
+            >
+              <CheckCheck className="mr-2 h-4 w-4" />
+              Mark all read
+            </Button>
+          </>
+        }
+      />
 
+      {isError ? (
+        <QueryError error={error} onRetry={() => refetch()} title="Couldn't load notifications" />
+      ) : (
       <Card>
         <CardContent className="p-2">
           {isLoading ? (
@@ -96,6 +95,7 @@ export function NotificationsPage() {
             </div>
           ) : notifications.length === 0 ? (
             <EmptyState
+              variant="inline"
               icon={Bell}
               title={unreadOnly ? 'No unread notifications' : 'No notifications yet'}
               description={
@@ -117,6 +117,7 @@ export function NotificationsPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {total > 0 && (
         <div className="flex items-center justify-between">

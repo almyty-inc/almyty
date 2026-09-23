@@ -286,7 +286,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
           <div>
             <CardTitle className="flex items-center gap-2 text-sm">
               <Shield className="h-4 w-4" />
-              Upstream Credentials
+              Upstream credentials
             </CardTitle>
             <CardDescription>
               Credentials used when tools call this API. Encrypted at rest.
@@ -302,7 +302,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
             }}
           >
             <Plus className="h-4 w-4 mr-1" />
-            Add Credential
+            Add credential
           </Button>
         </div>
       </CardHeader>
@@ -358,7 +358,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Add Credential</DialogTitle>
+            <DialogTitle>Add credential</DialogTitle>
             <DialogDescription>
               Store credentials for authenticating with {apiName}. Sensitive values are encrypted.
             </DialogDescription>
@@ -392,7 +392,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
               onClick={handleCreate}
               disabled={!newCredType || createMutation.isPending}
             >
-              {createMutation.isPending ? 'Saving...' : 'Save Credential'}
+              {createMutation.isPending ? 'Saving...' : 'Save credential'}
             </Button>
           </div>
         </DialogContent>
@@ -402,7 +402,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
       <AlertDialog open={!!deleteId} onOpenChange={open => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Credential</AlertDialogTitle>
+            <AlertDialogTitle>Delete this credential?</AlertDialogTitle>
             <AlertDialogDescription>
               Tools using this credential will no longer be able to authenticate with the API.
             </AlertDialogDescription>
@@ -411,9 +411,9 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deleteId && deleteMutation.mutate(deleteId)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete credential'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

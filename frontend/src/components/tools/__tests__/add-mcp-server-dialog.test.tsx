@@ -39,7 +39,7 @@ describe('AddMcpServerDialog', () => {
   it('renders name, url, and optional auth token fields', () => {
     render(<AddMcpServerDialog open onOpenChange={() => {}} organizationId="org-1" />)
 
-    expect(screen.getByText('Add MCP Server')).toBeInTheDocument()
+    expect(screen.getByText('Add MCP server')).toBeInTheDocument()
     expect(screen.getByLabelText(/name/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/server url/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/auth token/i)).toBeInTheDocument()

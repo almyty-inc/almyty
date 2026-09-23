@@ -1,6 +1,10 @@
 import { useEffect } from 'react'
 import { BookOpen, ExternalLink } from 'lucide-react'
 
+import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/layout/page-header'
+
 export function DocsPage() {
   useEffect(() => {
     document.title = 'Documentation | almyty'
@@ -8,22 +12,25 @@ export function DocsPage() {
   }, [])
 
   return (
-    <div className="flex flex-col items-center justify-center py-24">
-      <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
-      <h1 className="text-4xl font-heading font-extrabold tracking-tight mb-2">Documentation</h1>
-      <p className="text-muted-foreground mb-6 max-w-md text-center">
-        Complete guides, API reference, and tutorials for almyty.
-      </p>
-      <a
-        href="https://docs.almyty.com"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-      >
-        <ExternalLink className="h-4 w-4" />
-        Open Documentation
-      </a>
-      <p className="text-xs text-primary/60 mt-4">docs.almyty.com</p>
+    <div className="space-y-6">
+      <PageHeader
+        title="Documentation"
+        description="Complete guides, API reference, and tutorials for almyty."
+      />
+      <EmptyState
+        variant="panel"
+        icon={BookOpen}
+        title="The docs live at docs.almyty.com"
+        description="Guides, the API reference and tutorials open in a new tab."
+        action={
+          <Button asChild>
+            <a href="https://docs.almyty.com" target="_blank" rel="noopener noreferrer">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Open documentation
+            </a>
+          </Button>
+        }
+      />
     </div>
   )
 }

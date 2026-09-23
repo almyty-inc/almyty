@@ -58,7 +58,7 @@ export function SchemaTab({ api, open, onOpenChange }: SchemaTabProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh]">
         <DialogHeader>
-          <DialogTitle>Schema Content</DialogTitle>
+          <DialogTitle>Schema content</DialogTitle>
         </DialogHeader>
         <div className="flex items-center gap-2 mb-2">
           <Button

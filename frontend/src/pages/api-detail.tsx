@@ -12,7 +12,9 @@ import {
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
+import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
@@ -185,13 +187,13 @@ export function ApiDetailPage() {
               <TypeIcon className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-4xl font-heading font-extrabold tracking-tight">{api.name}</h1>
+              <h1 className={DETAIL_TITLE_CLASSES}>{api.name}</h1>
               <p className="text-muted-foreground">{api.baseUrl}</p>
             </div>
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Badge variant="outline">{api.type.toUpperCase()}</Badge>
+          <ApiTypeBadge type={api.type} />
           {api.version && <Badge variant="secondary">v{api.version}</Badge>}
         </div>
       </div>

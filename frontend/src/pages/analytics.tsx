@@ -20,6 +20,7 @@ import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { analyticsApi } from '@/lib/api'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageHeader } from '@/components/layout/page-header'
 
 import {
   type AnalyticsTab,
@@ -43,7 +44,7 @@ const TAB_DEFINITIONS: Array<{
   icon: React.ComponentType<{ className?: string }>
 }> = [
   { key: 'overview', label: 'Overview', icon: Activity },
-  { key: 'requests', label: 'Request Log', icon: Globe },
+  { key: 'requests', label: 'Request log', icon: Globe },
   { key: 'tools', label: 'Tools', icon: Wrench },
   { key: 'gateways', label: 'Gateways', icon: Zap },
   { key: 'llm', label: 'Models', icon: MessageSquare },
@@ -52,7 +53,7 @@ const TAB_DEFINITIONS: Array<{
   { key: 'cost', label: 'Cost', icon: DollarSign },
   { key: 'budgets', label: 'Budgets', icon: Wallet },
   { key: 'chargeback', label: 'Chargeback', icon: Receipt },
-  { key: 'audit', label: 'Audit Trail', icon: ScrollText },
+  { key: 'audit', label: 'Audit trail', icon: ScrollText },
 ]
 
 export function AnalyticsPage() {
@@ -94,22 +95,20 @@ export function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between pb-4 border-b">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">
-            Analytics
-          </h1>
-          <p className="text-muted-foreground">Real-time usage data across all protocols</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => handleExport('requests', 'csv')}>
-            <ArrowDownToLine className="h-4 w-4 mr-1" /> Export CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handleExport('requests', 'json')}>
-            <ArrowDownToLine className="h-4 w-4 mr-1" /> Export JSON
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Analytics"
+        description="Real-time usage data across all protocols"
+        actions={
+          <>
+            <Button variant="outline" onClick={() => handleExport('requests', 'csv')}>
+              <ArrowDownToLine className="h-4 w-4 mr-2" /> Export CSV
+            </Button>
+            <Button variant="outline" onClick={() => handleExport('requests', 'json')}>
+              <ArrowDownToLine className="h-4 w-4 mr-2" /> Export JSON
+            </Button>
+          </>
+        }
+      />
 
       {/* Tabs — shared pill primitive, consistent with every other module */}
       <Tabs value={tab} onValueChange={(v) => setTab(v as AnalyticsTab)}>

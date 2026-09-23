@@ -67,7 +67,7 @@ const TOOLS = [
 
 async function assignAll() {
   const user = userEvent.setup()
-  await user.click(await screen.findByRole('button', { name: 'All Tools' }))
+  await user.click(await screen.findByRole('button', { name: 'All tools' }))
 }
 
 describe('gateway bulk assign says what actually happened', () => {

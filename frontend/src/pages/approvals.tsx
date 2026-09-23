@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/layout/page-header'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog'
@@ -83,39 +85,30 @@ export function ApprovalsPage() {
     onError: (err: any) => errNotif('Reject failed', getApiErrorMessage(err, 'Unknown')),
   })
 
-  if (query.isLoading) {
-    return <div className="flex justify-center py-16"><LoadingSpinner size="lg" /></div>
-  }
-
-  if (query.isError) {
-    return <QueryError error={query.error} onRetry={() => query.refetch()} title="Couldn't load approvals" />
-  }
-
   const rows = (query.data ?? []) as ApprovalRequest[]
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">
-          Approvals
-        </h1>
-        <p className="text-muted-foreground">
-          Agent runs paused for human approval. {rows.length} pending.
-        </p>
-      </div>
+      <PageHeader
+        title="Approvals"
+        description={query.isLoading ? 'Agent runs paused for human approval.' : `${rows.length} pending · agent runs paused for human approval`}
+      />
 
-      {rows.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4">
-              <Check className="h-8 w-8 text-emerald-500" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No pending approvals</h3>
-            <p className="text-muted-foreground text-center max-w-md">
+      {query.isLoading ? (
+        <div className="flex justify-center py-16"><LoadingSpinner size="lg" /></div>
+      ) : query.isError ? (
+        <QueryError error={query.error} onRetry={() => query.refetch()} title="Couldn't load approvals" />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          variant="panel"
+          icon={Check}
+          title="No pending approvals"
+          description={
+            <>
               When an agent calls the <code className="px-1 py-0.5 bg-muted rounded">request_approval</code> tool, it appears here for review.
-            </p>
-          </CardContent>
-        </Card>
+            </>
+          }
+        />
       ) : (
         <div className="space-y-3">
           {rows.map((row) => (

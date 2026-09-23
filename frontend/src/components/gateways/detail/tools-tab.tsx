@@ -157,7 +157,7 @@ export function GatewayToolsTab({
       {/* Scoping Status */}
       <Card>
         <CardHeader>
-          <CardTitle>Tool Scoping</CardTitle>
+          <CardTitle>Tool scoping</CardTitle>
           <CardDescription>
             Control which tools are available through this gateway. {gatewayTools.length} of {allTools.length} assigned
           </CardDescription>
@@ -169,14 +169,14 @@ export function GatewayToolsTab({
               onClick={() => onApplyPreset('read-only')}
               disabled={bulkAssignPending}
             >
-              Read Only
+              Read only
             </Button>
             <Button
               variant="outline"
               onClick={() => onApplyPreset('admin')}
               disabled={bulkAssignPending}
             >
-              Admin Tools
+              Admin tools
             </Button>
             <Button
               variant="outline"
@@ -190,14 +190,14 @@ export function GatewayToolsTab({
               onClick={() => onApplyPreset('all')}
               disabled={bulkAssignPending}
             >
-              All Tools
+              All tools
             </Button>
             <Button
               variant="outline"
               onClick={onRequestRemoveAll}
               disabled={bulkAssignPending}
             >
-              Remove All
+              Remove all
             </Button>
           </div>
         </CardContent>

@@ -173,7 +173,7 @@ describe('ApprovalPoliciesSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: /Delete Refunds over \$1,000/i }))
 
     const alert = await screen.findByRole('alertdialog')
-    fireEvent.click(within(alert).getByRole('button', { name: /^Delete$/i }))
+    fireEvent.click(within(alert).getByRole('button', { name: /^Delete policy$/i }))
 
     await waitFor(() => expect(mockedDelete).toHaveBeenCalledWith('p1'))
   })

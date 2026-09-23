@@ -324,8 +324,13 @@ describe('ChannelBackingConnection', () => {
     expect(backing).toHaveTextContent('Acme Slack bot')
     expect(backing).toHaveTextContent('Slack')
     expect(within(backing).getByTestId('connection-health')).toHaveAttribute('data-status', 'valid')
-
     await user.click(screen.getByRole('button', { name: 'Disconnect' }))
+    // Disconnecting breaks the channel, so it asks first.
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Acme Slack bot')
+    expect(onDisconnect).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Disconnect' }))
+    expect(onDisconnect).toHaveBeenCalledTimes(1)
     expect(onDisconnect).toHaveBeenCalledTimes(1)
   })
 

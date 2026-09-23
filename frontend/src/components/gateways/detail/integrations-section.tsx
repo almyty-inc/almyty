@@ -73,7 +73,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BookOpen className="h-5 w-5 text-violet-500" />
-              Skills Installation
+              Skills installation
             </CardTitle>
             <CardDescription>
               Install SKILL.md files into your AI coding agent's skill directory.
@@ -152,7 +152,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Router className="h-5 w-5 text-orange-500" />
-              MCP Endpoint
+              MCP endpoint
             </CardTitle>
             <CardDescription>JSON-RPC 2.0 protocol for AI agent tool access</CardDescription>
           </CardHeader>
@@ -196,7 +196,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
 
         <Card>
           <CardHeader>
-            <CardTitle>Quick Setup</CardTitle>
+            <CardTitle>Quick setup</CardTitle>
             <CardDescription>Copy-paste configs for popular MCP clients</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -262,7 +262,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Router className="h-5 w-5 text-orange-500" />
-              A2A Endpoints
+              A2A endpoints
             </CardTitle>
             <CardDescription>Agent-to-Agent protocol for inter-agent communication</CardDescription>
           </CardHeader>
@@ -318,7 +318,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Router className="h-5 w-5 text-amber-500" />
-              ACP Endpoints
+              ACP endpoints
             </CardTitle>
             <CardDescription>Agent Communication Protocol for session-based agent interactions</CardDescription>
           </CardHeader>
@@ -351,7 +351,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
 
         <Card>
           <CardHeader>
-            <CardTitle>Quick Setup</CardTitle>
+            <CardTitle>Quick setup</CardTitle>
             <CardDescription>Connect to this ACP gateway from your IDE or agent</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -418,7 +418,7 @@ export function IntegrationsSection({ gatewayId, gateway, orgSlug }: Integration
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Router className="h-5 w-5 text-orange-500" />
-              UTCP Endpoints
+              UTCP endpoints
             </CardTitle>
             <CardDescription>Universal Tool Call Protocol — REST-based tool execution</CardDescription>
           </CardHeader>

@@ -88,7 +88,7 @@ export function SecurityPolicyForm({ initialPolicy, onSave, isSaving }: Security
       </div>
       <div className="flex justify-end gap-2 pt-2">
         <Button type="submit" disabled={isSaving}>
-          {isSaving ? 'Saving...' : 'Save Policy'}
+          {isSaving ? 'Saving...' : 'Save policy'}
         </Button>
       </div>
     </form>

@@ -126,7 +126,7 @@ describe('AppDetailPage', () => {
     expect(confirm).toHaveTextContent('Remove distribution?')
     expect(agentAppsApi.removeDistribution).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: /Remove Distribution/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove distribution' }))
 
     await waitFor(() =>
       expect(agentAppsApi.removeDistribution).toHaveBeenCalledWith('acme-support', 'slack'),

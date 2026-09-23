@@ -5,7 +5,9 @@ import { ArrowLeft, Info, Router, Settings, Shield, ChevronRight } from 'lucide-
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -283,7 +285,7 @@ export function GatewayDetailPage() {
           <p className="text-muted-foreground">Gateway not found</p>
           <Button className="mt-4" onClick={() => navigate('/gateways')}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Gateways
+            Back to gateways
           </Button>
         </div>
       </div>
@@ -311,7 +313,7 @@ export function GatewayDetailPage() {
               <Router className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-4xl font-heading font-extrabold tracking-tight break-words">{gateway.name}</h1>
+              <h1 className={DETAIL_TITLE_CLASSES}>{gateway.name}</h1>
               <p className="text-muted-foreground">{gateway.description || 'API Gateway'}</p>
             </div>
           </div>
@@ -319,14 +321,12 @@ export function GatewayDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
             <Settings className="h-4 w-4 mr-2" />
-            Edit Gateway
+            Edit gateway
           </Button>
           <Badge variant={gateway.status === 'active' ? 'success' : 'secondary'}>
             {gateway.status === 'active' ? 'Active' : gateway.status}
           </Badge>
-          <Badge variant="outline">
-            {gateway.type?.toUpperCase()}
-          </Badge>
+          {gateway.type && <ProtocolBadge protocol={gateway.type} />}
           {gateway.isSystem && (
             <Badge className="border-transparent bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">System</Badge>
           )}
@@ -444,7 +444,7 @@ export function GatewayDetailPage() {
       <Tabs defaultValue={gateway.isSystem ? 'metrics' : 'tools'} className="space-y-4">
         <TabsList>
           {!gateway.isSystem && (
-            <TabsTrigger value="tools">Tool Scoping ({gatewayTools.length}/{allTools.length})</TabsTrigger>
+            <TabsTrigger value="tools">Tool scoping ({gatewayTools.length}/{allTools.length})</TabsTrigger>
           )}
           <TabsTrigger value="metrics">Metrics</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
@@ -476,7 +476,7 @@ export function GatewayDetailPage() {
         <TabsContent value="metrics" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Performance Metrics</CardTitle>
+              <CardTitle>Performance metrics</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -538,12 +538,13 @@ export function GatewayDetailPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant="destructive"
               onClick={() => {
                 applyScopingPreset('none')
                 setRemoveAllToolsDialogOpen(false)
               }}
             >
-              Remove All Tools
+              Remove all tools
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -555,7 +556,7 @@ export function GatewayDetailPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
-              Security Policy: {securityTarget?.toolName}
+              Security policy: {securityTarget?.toolName}
             </DialogTitle>
             <DialogDescription>
               Configure security constraints for this tool in the gateway.

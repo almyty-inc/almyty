@@ -47,9 +47,9 @@ interface DataTableProps<TData, TValue> {
   hideColumnsButton?: boolean
   headerExtra?: React.ReactNode
   hidePaginationWhenSinglePage?: boolean
-  /** Optional custom empty-state block. Falls back to a generic
-   * "No results." row if not provided. Pass an <EmptyState />
-   * for the standard iconed layout. */
+  /** First-use empty state, shown only when `data` is empty. When rows
+   * exist but a search or filter hides them all, the table shows
+   * "No results" instead. Pass an inline <EmptyState />. */
   emptyState?: React.ReactNode
   /** Enable server-side pagination. When true, pagination is managed externally. */
   manualPagination?: boolean
@@ -238,7 +238,11 @@ export function DataTable<TData, TValue>({
                   colSpan={columns.length}
                   className="p-0"
                 >
-                  {emptyState ?? (
+                  {/* `emptyState` is the first-use state: it only shows
+                      when there is no data at all. Rows hidden by a search
+                      or filter always read as "No results", so a filtered
+                      list never claims the account has nothing in it. */}
+                  {data.length === 0 && emptyState ? emptyState : (
                     <EmptyState
                       title="No results"
                       description="Nothing matches your current filters."
@@ -311,7 +315,7 @@ export function createSelectColumn<T = any>(id?: string): ColumnDef<T, any> {
 }
 
 export function createActionsColumn<T = any>(
-  onEditOrColumnDef: ((item: T) => void) | Partial<ColumnDef<T, any>>,
+  onEditOrColumnDef: ((item: T) => void) | Partial<ColumnDef<T, any>> | undefined,
   onDelete?: (item: T) => void,
   customActions?: { label: string; onClick: (item: T) => void }[]
 ): ColumnDef<T, any> {
@@ -325,7 +329,7 @@ export function createActionsColumn<T = any>(
   }
 
   // Old signature: createActionsColumn(onEdit, onDelete, customActions)
-  const onEdit = onEditOrColumnDef as (item: T) => void
+  const onEdit = onEditOrColumnDef as ((item: T) => void) | undefined
   return {
     id: "actions",
     enableHiding: false,

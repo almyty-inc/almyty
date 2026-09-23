@@ -292,8 +292,8 @@ export function CreateApiDialog({
         <DialogHeader>
           <DialogTitle>
             {createStep === 'schema'
-              ? 'Import Schema'
-              : editingApi ? 'Edit API' : 'Connect New API'}
+              ? 'Import schema'
+              : editingApi ? 'Edit API' : 'Connect new API'}
           </DialogTitle>
           <DialogDescription>
             {createStep === 'schema'

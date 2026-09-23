@@ -22,6 +22,7 @@ import { ConnectAccountButton } from '@/components/connections/connect-sheet'
 import { ConnectedChip } from '@/components/connections/connected-chip'
 import { ConnectionSelect, useConnectionOptions } from '@/components/connections/connection-select'
 import { ConnectionHealthBadge } from '@/components/connections/health-badge'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   CHANNEL_FIELD_SETS,
   buildChannelConfigPatch,
@@ -225,6 +226,7 @@ export function ChannelBackingConnection({
   const [swapping, setSwapping] = useState(false)
   const id = backingConnectionId(configuration)
   const options = useConnectionOptions({ kind: 'channel', preferConnectorKey: channelConnectorKey(type), connections })
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const backing = id ? options.all.find((c) => c.id === id) ?? null : null
   if (!id) return null
 
@@ -255,11 +257,20 @@ export function ChannelBackingConnection({
           size="sm"
           className="h-6 px-2 text-xs"
           disabled={isSaving}
-          onClick={onDisconnect}
+          onClick={async () => {
+            const ok = await confirm({
+              title: 'Disconnect this connection?',
+              description: `The ${channelLabel(type)} channel stops using ${backing?.name ?? 'this connection'} and will not work until it is connected again.`,
+              confirmLabel: 'Disconnect',
+              destructive: true,
+            })
+            if (ok) onDisconnect()
+          }}
         >
           Disconnect
         </Button>
       </div>
+      {confirmDialog}
       {swapping && (
         <ConnectionSelect
           id={`swap-connection-${id}`}

@@ -111,7 +111,7 @@ describe('Tool Hub', () => {
     render(<ToolHubPage />)
 
     fireEvent.click(await screen.findByLabelText('Retract List widgets'))
-    fireEvent.click(await screen.findByRole('button', { name: /^retract$/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /^retract template$/i }))
 
     await waitFor(() => expect(toolHubApi.deleteTemplate).toHaveBeenCalledWith('tpl-own'))
   })
@@ -143,10 +143,10 @@ describe('publishing is reachable from the tools page', () => {
     'utf8',
   )
 
-  it('offers Publish to Hub in the row menu, gated on the tool being publishable', () => {
+  it('offers Publish to hub in the row menu, gated on the tool being publishable', () => {
     expect(source).toContain('isPublishable(tool)')
     expect(source).toContain('setPublishingTool(tool)')
-    expect(source).toMatch(/Publish to Hub/)
+    expect(source).toMatch(/Publish to hub/)
   })
 
   it('renders the publish dialog', () => {

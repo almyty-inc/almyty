@@ -107,7 +107,7 @@ describe('InterfacesTab channel setup', () => {
     })
     renderWithProviders(<InterfacesTab agentId="agent-1" interfaces={[]} />)
 
-    fireEvent.click(await screen.findByRole('button', { name: /Deploy Channel/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Deploy channel/ }))
     fireEvent.click(await screen.findByRole('button', { name: /^Deploy$/ }))
 
     await waitFor(() => {
@@ -131,7 +131,7 @@ describe('InterfacesTab channel connections', () => {
   async function openSlackDeployForm() {
     const user = userEvent.setup()
     renderWithProviders(<InterfacesTab agentId="agent-1" />)
-    await user.click(await screen.findByRole('button', { name: /Deploy Channel/ }))
+    await user.click(await screen.findByRole('button', { name: /Deploy channel/ }))
     await user.click(screen.getByRole('combobox'))
     await user.click(await screen.findByText('Slack'))
     return user
@@ -194,6 +194,7 @@ describe('InterfacesTab channel connections', () => {
     expect(screen.queryByText('Bot Token')).not.toBeInTheDocument()
 
     await user.click(within(backing).getByRole('button', { name: 'Disconnect' }))
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Disconnect' }))
     await waitFor(() => expect(gatewaysApi.update).toHaveBeenCalledTimes(1))
     // Same rule as the gateway-side form: credentialId goes to null and the
     // server-owned credentialKeys list is never round-tripped.
@@ -224,6 +225,7 @@ describe('InterfacesTab channel list states', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /^List$/ }))
     expect(await screen.findByText('No channels deployed yet')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Deploy channel/ })).toBeInTheDocument()
+    // The header and the empty state offer it under the same label.
+    expect(screen.getAllByRole('button', { name: /Deploy channel/ })).toHaveLength(2)
   })
 })

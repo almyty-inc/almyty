@@ -48,21 +48,40 @@ export function SetupPill({ collapsed }: SetupPillProps) {
   if (!onboarding || onboarding.activatedRealAt) return null
 
   const done = CORE_KEYS.filter((k) => onboarding.steps[k]).length
-  const label = `Setup ${done}/${CORE_KEYS.length}`
+  const total = CORE_KEYS.length
+  const label = `Setup ${done}/${total}`
 
+  // Styled as one more sidebar row -- same padding, type size and hover
+  // as the nav links above it -- rather than a bordered cyan box, so it
+  // reads as part of the sidebar instead of something floating in it.
+  // The cyan lives only in the icon and the thin progress track.
   return (
     <button
       type="button"
       onClick={() => restore.mutate()}
       title={label}
       aria-label={`${label} — open getting started`}
+      data-testid="setup-progress"
       className={cn(
-        'flex items-center rounded-md border border-cyan-400/30 bg-cyan-400/5 text-cyan-500 hover:bg-cyan-400/10 transition-colors',
-        collapsed ? 'justify-center h-8 w-8 mx-auto' : 'w-full gap-2 px-3 py-1.5 text-xs font-medium',
+        'group flex w-full items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+        collapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-1.5 text-[13px]',
       )}
     >
-      <Sparkles className="h-3.5 w-3.5 shrink-0" />
-      {!collapsed && <span className="tabular-nums">{label}</span>}
+      <Sparkles className="h-5 w-5 shrink-0 text-cyan-600 dark:text-cyan-400" aria-hidden="true" />
+      {!collapsed && (
+        <span className="flex min-w-0 flex-1 flex-col gap-1 text-left">
+          <span className="flex items-center justify-between">
+            <span>Finish setup</span>
+            <span className="text-xs tabular-nums">{done}/{total}</span>
+          </span>
+          <span className="h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+            <span
+              className="block h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400"
+              style={{ width: `${Math.round((done / total) * 100)}%` }}
+            />
+          </span>
+        </span>
+      )}
     </button>
   )
 }

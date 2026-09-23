@@ -77,7 +77,7 @@ export function AutonomousConfig({
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 max-w-4xl mx-auto w-full space-y-6">
       {/* Personality */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Personality & Style</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Personality & style</CardTitle></CardHeader>
         <CardContent>
           <Textarea value={personality} onChange={(e) => onPersonalityChange(e.target.value)}
             placeholder="You are a friendly, professional assistant. You never share personal opinions on politics or religion. You always cite your sources."
@@ -99,7 +99,7 @@ export function AutonomousConfig({
 
       {/* Model */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Model Configuration</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Model configuration</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -203,7 +203,7 @@ export function AutonomousConfig({
 
       {/* Capabilities */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Agent Capabilities</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Agent capabilities</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={agentConfig.canCallAgents || false}
@@ -334,7 +334,7 @@ function ToolGroupList({ tools, toolSearch, selectedIds, onSelectedIdsChange, ex
               <span className="text-xs text-muted-foreground">{groupTools.length} tool{groupTools.length !== 1 ? 's' : ''}{selectedInGroup > 0 ? `, ${selectedInGroup} selected` : ''}</span>
               <Button type="button" variant="ghost" size="sm" className="h-6 text-xs px-2"
                 onClick={(e) => { e.stopPropagation(); allSelectedInGroup ? deselectAll() : selectAll() }}>
-                {allSelectedInGroup ? 'Deselect All' : 'Select All'}
+                {allSelectedInGroup ? 'Deselect all' : 'Select all'}
               </Button>
             </div>
             {isExpanded && (

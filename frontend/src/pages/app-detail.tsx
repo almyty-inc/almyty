@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, Check, ChevronRight, Package, Plus, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { DETAIL_TITLE_CLASSES } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -155,7 +156,7 @@ export function AppDetailPage() {
               <Package className="h-6 w-6 text-primary" />
             </div>
             <div className="min-w-0">
-              <h1 className="truncate font-heading text-2xl font-extrabold tracking-tight sm:text-4xl">
+              <h1 className={DETAIL_TITLE_CLASSES}>
                 {app.branding?.appName || app.name}
               </h1>
               <code className="text-xs text-muted-foreground">{app.slug}</code>
@@ -201,6 +202,7 @@ export function AppDetailPage() {
         <TabsContent value="distributions" className="space-y-4">
           {distributions.length === 0 ? (
             <EmptyState
+              variant="panel"
               icon={Package}
               title="No distributions yet"
               description="Publish this app as a web app, a terminal, a desktop app, or a messaging channel."
@@ -293,9 +295,9 @@ export function AppDetailPage() {
                   removeDistribution.mutate(distributionToRemove)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              Remove Distribution
+              Remove distribution
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

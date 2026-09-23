@@ -118,7 +118,7 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
           <h4 className="text-sm font-medium">Schema Properties</h4>
           <Button variant="ghost" size="sm" onClick={() => setViewMode('source')}>
             <Code className="h-4 w-4 mr-1" />
-            View Source
+            View source
           </Button>
         </div>
         {properties.length === 0 ? (
@@ -156,7 +156,7 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
         <div className="flex justify-between items-center">
           <Label>JSON Schema Source</Label>
           <Button variant="ghost" size="sm" onClick={() => setViewMode('visual')}>
-            Visual Editor
+            Visual editor
           </Button>
         </div>
         <Textarea
@@ -177,12 +177,12 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
         <div className="flex gap-2">
           <Button variant="ghost" size="sm" onClick={() => setViewMode('source')}>
             <Code className="h-4 w-4 mr-1" />
-            View Source
+            View source
           </Button>
           {!readOnly && (
             <Button variant="outline" size="sm" onClick={addProperty}>
               <Plus className="h-4 w-4 mr-1" />
-              Add Property
+              Add property
             </Button>
           )}
         </div>
@@ -194,7 +194,7 @@ export function JsonSchemaBuilder({ value, onChange, readOnly = false }: JsonSch
           {!readOnly && (
             <Button variant="outline" size="sm" onClick={addProperty}>
               <Plus className="h-4 w-4 mr-1" />
-              Add First Property
+              Add first property
             </Button>
           )}
         </div>
