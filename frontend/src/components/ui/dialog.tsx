@@ -19,7 +19,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm duration-150 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none motion-reduce:duration-0",
       className
     )}
     {...props}
@@ -33,10 +33,28 @@ const DialogContent = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
+    {/*
+      A dialog fades in. It does not fly.
+
+      The shadcn default stacked FOUR entrance animations at once --
+      fade-in-0, zoom-in-95, slide-in-from-left-1/2 and
+      slide-in-from-top-[48%] -- so every dialog swooped in diagonally
+      while scaling. The two slides exist only to cancel the -50%
+      centring transforms, which is a workaround the user still sees.
+      Closing had no animation at all, so it vanished.
+
+      Now: a 150ms fade in, and nothing moves. Anyone who asked their OS
+      for less motion gets none.
+
+      Closing stays instant, deliberately -- see #127 and
+      __tests__/dialog.test.tsx. Radix Presence waits for animationend
+      before unmounting, and on staging that event never fired, so a
+      dialog with an exit animation stayed on screen forever.
+    */}
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 max-h-[90vh] overflow-y-auto data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
+        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-150 max-h-[90vh] overflow-y-auto data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none motion-reduce:duration-0 sm:rounded-lg",
         className
       )}
       {...props}
