@@ -182,4 +182,33 @@ describe('StreamableClient', () => {
     expect(errs.length).toBe(2);
     expect(envelopes.length).toBe(0);
   });
+
+  it('sends X-Organization-Id on POST and GET when an organization is configured', async () => {
+    const seen: Array<Record<string, string>> = [];
+    const fetchMock = async (_url: string, init: any) => {
+      seen.push(init.headers);
+      if (init.method === 'POST') return res({ status: 202, headers: { 'mcp-session-id': 'sh_1' } });
+      return streamRes({}, []);
+    };
+    const c = new StreamableClient({ baseUrl: 'http://x', token: 't', organizationId: 'org-9', fetch: fetchMock as any });
+    await c.send(envelope('event', { kind: 'runner.hello' }));
+    await c.openStream();
+    c.stop?.();
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    for (const headers of seen) {
+      expect(headers['X-Organization-Id']).toBe('org-9');
+      expect(headers['Authorization']).toBe('Bearer t');
+    }
+  });
+
+  it('sends no organization header when none is configured', async () => {
+    let headers: Record<string, string> = {};
+    const fetchMock = async (_url: string, init: any) => {
+      headers = init.headers;
+      return res({ status: 202, headers: { 'mcp-session-id': 'sh_1' } });
+    };
+    const c = new StreamableClient({ baseUrl: 'http://x', token: 't', fetch: fetchMock as any });
+    await c.send(envelope('event', {}));
+    expect(headers['X-Organization-Id']).toBeUndefined();
+  });
 });

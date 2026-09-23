@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Delete,
   Body,
   Param,
@@ -17,10 +18,10 @@ import {
 import type { Response as ExpressResponse } from 'express';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RunnerService, RegisterRunnerInput } from './runner.service';
+import { RunnerService } from './runner.service';
 import { RunnerCallService, RunnerCallError } from './runner-call.service';
 import { CodingRelayService } from './coding-relay.service';
-import { RegisterRunnerDto } from './dto/register-runner.dto';
+import { CreateRunnerDto, RegisterRunnerDto, UpdateRunnerDto } from './dto/register-runner.dto';
 import { AgentSpawnDto, AgentStatusDto } from './dto/agent-call.dto';
 import {
   CodingInputDto,
@@ -38,15 +39,16 @@ export class RunnerController {
     private readonly codingRelay: CodingRelayService,
   ) {}
 
+  /**
+   * Called by the daemon (`almyty-runner start`) with the user's own
+   * login. Owner and organization come from that credential; the body
+   * only carries the name and what the daemon detected.
+   */
   @Post('register')
   @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
   async register(@Request() req: any, @Body() body: RegisterRunnerDto) {
-    const ownerUserId = req.user?.id;
-    const organizationId = req.user?.currentOrganizationId;
-    if (!ownerUserId || !organizationId) {
-      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
-    }
-    const result = await this.service.register(body, ownerUserId, organizationId);
+    const { userId, organizationId } = this.context(req);
+    const result = await this.service.register(body, userId, organizationId);
     return {
       success: true,
       data: {
@@ -56,50 +58,63 @@ export class RunnerController {
     };
   }
 
+  /**
+   * Create the runner record from the web setup page ("Generate
+   * command"). The daemon later registers under the same name and
+   * fills it in; until then it is pending and can be edited or deleted.
+   */
+  @Post()
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async create(@Request() req: any, @Body() body: CreateRunnerDto) {
+    const { userId, organizationId } = this.context(req);
+    const data = await this.service.create(body, userId, organizationId);
+    return { success: true, data };
+  }
+
   @Get()
   async list(@Request() req: any) {
-    const ownerUserId = req.user?.id;
-    const organizationId = req.user?.currentOrganizationId;
-    if (!ownerUserId || !organizationId) {
-      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
-    }
-    const data = await this.service.listForOwner(ownerUserId, organizationId);
+    const { userId, organizationId } = this.context(req);
+    const data = await this.service.listVisible(userId, organizationId);
     return { success: true, data };
   }
 
   @Get(':id')
   async getOne(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    const ownerUserId = req.user?.id;
-    const organizationId = req.user?.currentOrganizationId;
-    if (!ownerUserId || !organizationId) {
-      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
-    }
-    const data = await this.service.getOne(id, ownerUserId, organizationId);
+    const { userId, organizationId } = this.context(req);
+    const data = await this.service.getOne(id, userId, organizationId);
+    return { success: true, data };
+  }
+
+  @Patch(':id')
+  @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }))
+  async update(
+    @Request() req: any,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateRunnerDto,
+  ) {
+    const { userId, organizationId } = this.context(req);
+    const data = await this.service.update(id, userId, organizationId, body);
     return { success: true, data };
   }
 
   @Delete(':id')
   async unregister(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    const ownerUserId = req.user?.id;
-    const organizationId = req.user?.currentOrganizationId;
-    if (!ownerUserId || !organizationId) {
-      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
-    }
-    await this.service.unregister(id, ownerUserId, organizationId);
+    const { userId, organizationId } = this.context(req);
+    await this.service.unregister(id, userId, organizationId);
     return { success: true };
   }
 
   // ── coding-agent orchestration ──────────────────────────────────────
   //
   // Thin, ownership-scoped proxies over RunnerCallService.dispatch for the
-  // runner's agent.* surface. getOne enforces that the caller owns the runner
-  // (and the org/team access policy) before any dispatch leaves the backend.
+  // runner's agent.* surface. getOwned enforces that the caller owns the
+  // runner before any dispatch leaves the backend.
 
   /** Catalog of coding-agent platforms this runner can drive. */
   @Get(':id/agents')
   async agentList(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     await this.requireOwnedRunner(req, id);
-    return this.dispatch(id, 'agent.list', {});
+    return this.dispatch(req, id, 'agent.list', {});
   }
 
   /** Launch a coding-agent CLI as an unattended member in a workspace. */
@@ -112,7 +127,7 @@ export class RunnerController {
   ) {
     await this.requireOwnedRunner(req, id);
     const { workspaceId, ...params } = body;
-    return this.dispatch(id, 'agent.spawn', params, workspaceId);
+    return this.dispatch(req, id, 'agent.spawn', params, workspaceId);
   }
 
   /** Non-destructively classify a spawned agent's live status. */
@@ -125,22 +140,24 @@ export class RunnerController {
   ) {
     await this.requireOwnedRunner(req, id);
     const { workspaceId, ...params } = body;
-    return this.dispatch(id, 'agent.status', params, workspaceId);
+    return this.dispatch(req, id, 'agent.status', params, workspaceId);
   }
 
   // ── chat-to-runner coding bridge ────────────────────────────────────
   //
   // coding.* rides the same dispatch envelope as agent.*, but the authz
-  // scope is the ORGANIZATION, not runner ownership: any authenticated org
-  // member may drive coding sessions on a runner in their org (404 unknown
-  // runner, 403 cross-org). Output streams back over the per-session SSE
-  // endpoint, relayed from the runner's event envelopes by CodingRelayService.
+  // scope is the runner's VISIBILITY, not ownership: any org member the
+  // access policy lets use the runner may drive coding sessions on it
+  // (an org-wide runner: every member; a team runner: its team; a private
+  // runner: its owner only). 404 unknown or unusable runner, 403 cross-org.
+  // Output streams back over the per-session SSE endpoint, relayed from
+  // the runner's event envelopes by CodingRelayService.
 
   /** Coding CLIs actually installed on the runner machine (fresh probe). */
   @Get(':id/coding/agents')
   async codingAgents(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
     await this.requireOrgRunner(req, id);
-    return this.dispatch(id, 'coding.list', {});
+    return this.dispatch(req, id, 'coding.list', {});
   }
 
   /** Start a coding session (spawns the CLI with the task prompt). */
@@ -152,7 +169,7 @@ export class RunnerController {
     @Body() body: CodingStartDto,
   ) {
     await this.requireOrgRunner(req, id);
-    return this.dispatch(id, 'coding.start', { ...body });
+    return this.dispatch(req, id, 'coding.start', { ...body });
   }
 
   /** Session status (or the full list via coding.status without an id). */
@@ -164,7 +181,7 @@ export class RunnerController {
   ) {
     await this.requireOrgRunner(req, id);
     this.assertSessionId(sessionId);
-    return this.dispatch(id, 'coding.status', { sessionId });
+    return this.dispatch(req, id, 'coding.status', { sessionId });
   }
 
   /** Route a line of user input to the session's stdin. */
@@ -178,7 +195,7 @@ export class RunnerController {
   ) {
     await this.requireOrgRunner(req, id);
     this.assertSessionId(sessionId);
-    return this.dispatch(id, 'coding.input', { sessionId, data: body.data });
+    return this.dispatch(req, id, 'coding.input', { sessionId, data: body.data });
   }
 
   /** Stop the session (TERM; KILL with force). */
@@ -192,7 +209,7 @@ export class RunnerController {
   ) {
     await this.requireOrgRunner(req, id);
     this.assertSessionId(sessionId);
-    return this.dispatch(id, 'coding.stop', { sessionId, force: body?.force === true });
+    return this.dispatch(req, id, 'coding.stop', { sessionId, force: body?.force === true });
   }
 
   /**
@@ -245,27 +262,29 @@ export class RunnerController {
 
   // ── helpers ─────────────────────────────────────────────────────────
 
-  private async requireOwnedRunner(req: any, id: string): Promise<void> {
-    const ownerUserId = req.user?.id;
-    const organizationId = req.user?.currentOrganizationId;
-    if (!ownerUserId || !organizationId) {
-      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
-    }
-    // Throws 404/403 if the caller doesn't own / can't access the runner.
-    await this.service.getOne(id, ownerUserId, organizationId);
-  }
-
-  /**
-   * Org-scoped gate for the coding bridge: 404 unknown runner, 403 when the
-   * runner belongs to a different organization than the caller's.
-   */
-  private async requireOrgRunner(req: any, id: string): Promise<void> {
+  private context(req: any): { userId: string; organizationId: string } {
     const userId = req.user?.id;
     const organizationId = req.user?.currentOrganizationId;
     if (!userId || !organizationId) {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
-    await this.service.getOneForOrg(id, organizationId);
+    return { userId, organizationId };
+  }
+
+  /** agent.* orchestration is the runner owner's only: 404 otherwise. */
+  private async requireOwnedRunner(req: any, id: string): Promise<void> {
+    const { userId, organizationId } = this.context(req);
+    await this.service.getOwned(id, userId, organizationId);
+  }
+
+  /**
+   * Gate for the coding bridge: 404 unknown runner or one the caller may
+   * not use (someone else's private runner, a team runner of a team they
+   * are not on), 403 when the runner belongs to a different organization.
+   */
+  private async requireOrgRunner(req: any, id: string): Promise<void> {
+    const { userId, organizationId } = this.context(req);
+    await this.service.getUsable(id, userId, organizationId);
   }
 
   private assertSessionId(sessionId: string): void {
@@ -275,13 +294,18 @@ export class RunnerController {
   }
 
   private async dispatch(
+    req: any,
     runnerId: string,
     method: string,
     params: unknown,
     workspaceId?: string,
   ) {
     try {
-      const resp = await this.calls.dispatch(runnerId, method, params, workspaceId);
+      // The caller travels with the dispatch so resolveForDispatch
+      // re-checks visibility at the point of use, not just at the gate.
+      const resp = await this.calls.dispatch(runnerId, method, params, workspaceId, {
+        callerUserId: req.user?.id ?? null,
+      });
       if (!resp.ok) {
         throw new HttpException(
           { success: false, error: resp.error },

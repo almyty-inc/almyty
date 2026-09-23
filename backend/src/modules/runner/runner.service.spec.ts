@@ -9,6 +9,7 @@ import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { RunnerService } from './runner.service';
 import { RunnerCapabilityPublisher } from './runner-capability.publisher';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { OrganizationRole } from '../../entities/user-organization.entity';
 import { STALE_THRESHOLD_MS, OFFLINE_GRACE_MS } from './runner-state';
 
 /**
@@ -23,6 +24,7 @@ describe('RunnerService', () => {
   let runners: any;
   let sessions: any;
   let workspaces: any;
+  let fakePublisher: { publish: jest.Mock; unpublish: jest.Mock; listForRunner: jest.Mock };
 
   const ownerUserId = 'user-1';
   const organizationId = 'org-1';
@@ -152,10 +154,41 @@ describe('RunnerService', () => {
     };
 
 
-    const fakePublisher = {
+    fakePublisher = {
       publish: jest.fn().mockResolvedValue([]),
       unpublish: jest.fn().mockResolvedValue(0),
       listForRunner: jest.fn().mockResolvedValue([]),
+    };
+
+    // The REAL access policy over fake membership tables, so the
+    // visibility decisions these tests make are the production ones.
+    // org-1: user-1 (the owner in most tests), a colleague and an
+    // outsider are plain members, `admin-1` is an org admin. user-1 and
+    // the colleague are on team-1; the outsider and the admin are on no
+    // team.
+    const userOrgs = {
+      rows: [
+        { userId: ownerUserId, organizationId, role: OrganizationRole.MEMBER, isActive: true },
+        { userId: 'colleague', organizationId, role: OrganizationRole.MEMBER, isActive: true },
+        { userId: 'outsider', organizationId, role: OrganizationRole.MEMBER, isActive: true },
+        { userId: 'admin-1', organizationId, role: OrganizationRole.ADMIN, isActive: true },
+      ],
+      findOne: async ({ where }: any) => userOrgs.rows.find(r =>
+        r.userId === where.userId && r.organizationId === where.organizationId && r.isActive,
+      ) ?? null,
+      manager: { getRepository: () => ({ count: async () => 1 }) },
+    };
+    const userTeams = {
+      createQueryBuilder: () => {
+        let userId = '';
+        const qb: any = {
+          innerJoin: () => qb,
+          where: (_c: string, p: any) => { userId = p.userId; return qb; },
+          select: () => qb,
+          getRawMany: async () => ([ownerUserId, 'colleague'].includes(userId) ? [{ teamId: 'team-1', role: 'member' }] : []),
+        };
+        return qb;
+      },
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -165,7 +198,7 @@ describe('RunnerService', () => {
         { provide: getRepositoryToken(RunnerSession), useValue: sessions },
         { provide: getRepositoryToken(Workspace), useValue: workspaces },
         { provide: RunnerCapabilityPublisher, useValue: fakePublisher },
-        { provide: AccessPolicyService, useValue: { canAccess: jest.fn().mockResolvedValue({ allowed: true, reason: 'ok' }), assertCanScopeToTeam: jest.fn().mockResolvedValue(undefined) } },
+        { provide: AccessPolicyService, useValue: new AccessPolicyService(userOrgs as any, userTeams as any) },
       ],
     }).compile();
     service = moduleRef.get(RunnerService);
@@ -196,22 +229,22 @@ describe('RunnerService', () => {
         runtimeInfo: validRuntimeInfo,
         config: validConfig,
         visibility: 'team',
-        teamId: 'team-uuid-1',
+        teamId: 'team-1',
       },
       ownerUserId,
       organizationId,
     );
     expect(result.runner.visibility).toBe('team');
-    expect(result.runner.teamId).toBe('team-uuid-1');
+    expect(result.runner.teamId).toBe('team-1');
   });
 
-  it('register defaults visibility to "org" and nulls teamId when input is omitted', async () => {
+  it('register defaults visibility to "private" and nulls teamId when input is omitted', async () => {
     const result = await service.register(
       { name: 'org-runner', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
       ownerUserId,
       organizationId,
     );
-    expect(result.runner.visibility).toBe('org');
+    expect(result.runner.visibility).toBe('private');
     expect(result.runner.teamId).toBeNull();
   });
 
@@ -369,7 +402,7 @@ describe('RunnerService', () => {
     );
     runner.state = RunnerState.ONLINE;
     await runners.save(runner);
-    const r = await service.resolveForDispatch(runner.id);
+    const r = await service.resolveForDispatch(runner.id, ownerUserId);
     expect(r.state).toBe(RunnerState.ONLINE);
   });
 
@@ -381,7 +414,7 @@ describe('RunnerService', () => {
     for (const s of [RunnerState.STALE, RunnerState.OFFLINE, RunnerState.DRAINING, RunnerState.REGISTERED]) {
       runner.state = s;
       await runners.save(runner);
-      await expect(service.resolveForDispatch(runner.id)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.resolveForDispatch(runner.id, ownerUserId)).rejects.toBeInstanceOf(BadRequestException);
     }
   });
 
@@ -403,28 +436,156 @@ describe('RunnerService', () => {
     expect(drained.state).toBe(RunnerState.DRAINING);
   });
 
-  // ── getOneForOrg (coding-bridge authz scope) ────────────────────────
+  // ── getUsable (coding-bridge authz scope) ───────────────────────────
 
-  it('getOneForOrg returns a runner in the caller org regardless of owner', async () => {
-    const { runner } = await service.register(
-      { name: 'r1', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
-      ownerUserId, organizationId,
-    );
-    const found = await service.getOneForOrg(runner.id, organizationId);
+  const registerAs = async (visibility?: 'org' | 'team' | 'private', owner = ownerUserId, name = 'r1') =>
+    (await service.register(
+      {
+        name, labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig,
+        ...(visibility ? { visibility, teamId: visibility === 'team' ? 'team-1' : null } : {}),
+      },
+      owner, organizationId,
+    )).runner;
+
+  it('getUsable returns an org-wide runner to another member of the org', async () => {
+    const runner = await registerAs('org');
+    const found = await service.getUsable(runner.id, 'colleague', organizationId);
     expect(found.id).toBe(runner.id);
   });
 
-  it('getOneForOrg throws Forbidden for a runner in another org', async () => {
-    const { runner } = await service.register(
-      { name: 'r1', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
-      ownerUserId, organizationId,
-    );
-    await expect(service.getOneForOrg(runner.id, 'other-org'))
+  it('getUsable throws Forbidden for a runner in another org', async () => {
+    const runner = await registerAs('org');
+    await expect(service.getUsable(runner.id, ownerUserId, 'other-org'))
       .rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('getOneForOrg throws NotFound for an unknown runner', async () => {
-    await expect(service.getOneForOrg('nope', organizationId))
+  it('getUsable throws NotFound for an unknown runner', async () => {
+    await expect(service.getUsable('nope', ownerUserId, organizationId))
       .rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  // ── private visibility: the owner and nobody else ───────────────────
+
+  describe('a private runner', () => {
+    it('is what a runner gets when nobody chose a visibility', async () => {
+      const runner = await registerAs();
+      expect(runner.visibility).toBe('private');
+    });
+
+    it('is usable by its owner on every path', async () => {
+      const runner = await registerAs('private');
+      runner.state = RunnerState.ONLINE;
+      await expect(service.getOne(runner.id, ownerUserId, organizationId)).resolves.toMatchObject({ id: runner.id });
+      await expect(service.getUsable(runner.id, ownerUserId, organizationId)).resolves.toMatchObject({ id: runner.id });
+      await expect(service.resolveForDispatch(runner.id, ownerUserId)).resolves.toMatchObject({ id: runner.id });
+    });
+
+    it('is invisible to another member of the same org: fetch, coding bridge and dispatch all 404', async () => {
+      const runner = await registerAs('private');
+      runner.state = RunnerState.ONLINE;
+      await expect(service.getOne(runner.id, 'colleague', organizationId)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getUsable(runner.id, 'colleague', organizationId)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.resolveForDispatch(runner.id, 'colleague')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('is invisible to an org admin too', async () => {
+      const runner = await registerAs('private');
+      runner.state = RunnerState.ONLINE;
+      await expect(service.getOne(runner.id, 'admin-1', organizationId)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.resolveForDispatch(runner.id, 'admin-1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('takes no dispatch with an unknown caller (an API-key gateway call, a system job)', async () => {
+      const runner = await registerAs('private');
+      runner.state = RunnerState.ONLINE;
+      await expect(service.resolveForDispatch(runner.id)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('cannot be renamed, relabelled, re-scoped or deleted by another member or an admin', async () => {
+      const runner = await registerAs('private');
+      for (const user of ['colleague', 'admin-1']) {
+        await expect(service.update(runner.id, user, organizationId, { visibility: 'org' }))
+          .rejects.toBeInstanceOf(NotFoundException);
+        await expect(service.unregister(runner.id, user, organizationId))
+          .rejects.toBeInstanceOf(NotFoundException);
+      }
+      expect(runners._store.get(runner.id)?.visibility).toBe('private');
+    });
+  });
+
+  describe('a team runner', () => {
+    it('is usable by a team member and refused to a member outside the team', async () => {
+      const runner = await registerAs('team');
+      runner.state = RunnerState.ONLINE;
+      await expect(service.resolveForDispatch(runner.id, 'colleague')).resolves.toMatchObject({ id: runner.id });
+      await expect(service.resolveForDispatch(runner.id, 'outsider')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.resolveForDispatch(runner.id)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // ── names and re-registration ───────────────────────────────────────
+
+  it('refuses a runner name another member of the org already uses (no takeover by name)', async () => {
+    await registerAs('org', ownerUserId, 'franemb');
+    await expect(registerAs('org', 'colleague', 'franemb')).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.create({ name: 'franemb' }, 'colleague', organizationId))
+      .rejects.toBeInstanceOf(ConflictException);
+    // The owner's runner, and its published tools, are untouched.
+    const rows = Array.from(runners._store.values()) as Runner[];
+    expect(rows.filter(r => r.name === 'franemb')).toHaveLength(1);
+    expect(rows.find(r => r.name === 'franemb')?.ownerUserId).toBe(ownerUserId);
+    expect(fakePublisher.publish).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-registration from the daemon keeps the visibility and labels chosen on the web', async () => {
+    const pending = await service.create(
+      { name: 'franemb', labels: { env: 'dev' }, visibility: 'team', teamId: 'team-1' },
+      ownerUserId, organizationId,
+    );
+    const { runner } = await service.register(
+      { name: 'franemb', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
+      ownerUserId, organizationId,
+    );
+    expect(runner.id).toBe(pending.id);
+    expect(runner.visibility).toBe('team');
+    expect(runner.teamId).toBe('team-1');
+    expect(runner.labels).toEqual({ env: 'dev' });
+  });
+
+  // ── pending records (setup page) ────────────────────────────────────
+
+  describe('the setup page record', () => {
+    it('create makes a pending runner with no published tools', async () => {
+      const runner = await service.create({ name: 'franemb', visibility: 'private' }, ownerUserId, organizationId);
+      expect(runner.state).toBe(RunnerState.REGISTERED);
+      expect(runner.runtimeInfo).toBeNull();
+      expect(fakePublisher.publish).not.toHaveBeenCalled();
+    });
+
+    it('create is idempotent for the same name and refuses a second name (single runner cap)', async () => {
+      const a = await service.create({ name: 'franemb' }, ownerUserId, organizationId);
+      const b = await service.create({ name: 'franemb', visibility: 'org' }, ownerUserId, organizationId);
+      expect(b.id).toBe(a.id);
+      expect(b.visibility).toBe('org');
+      await expect(service.create({ name: 'other' }, ownerUserId, organizationId))
+        .rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('a pending runner can be renamed and deleted by its owner', async () => {
+      const runner = await service.create({ name: 'franemb' }, ownerUserId, organizationId);
+      const renamed = await service.update(runner.id, ownerUserId, organizationId, { name: 'franemb2' });
+      expect(renamed.name).toBe('franemb2');
+      await service.unregister(runner.id, ownerUserId, organizationId);
+      expect(runners._store.has(runner.id)).toBe(false);
+    });
+
+    it('a runner that has connected keeps its name', async () => {
+      const { runner } = await service.register(
+        { name: 'franemb', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
+        ownerUserId, organizationId,
+      );
+      await expect(service.update(runner.id, ownerUserId, organizationId, { name: 'renamed' }))
+        .rejects.toBeInstanceOf(ConflictException);
+    });
   });
 });

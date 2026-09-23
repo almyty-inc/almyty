@@ -145,6 +145,14 @@ export class RunnerCapabilityPublisher {
           status: ToolStatus.ACTIVE,
           version: '1.0.0',
           organizationId: runner.organizationId,
+          // The tools inherit the runner's visibility and owner. They
+          // used to be minted with the column defaults -- org-wide, no
+          // owner -- so every member of the organization saw and could
+          // call `runner.<name>.shell.exec` on a runner whose owner had
+          // scoped it to a team.
+          visibility: runner.visibility ?? 'org',
+          teamId: runner.visibility === 'team' ? runner.teamId : null,
+          createdBy: runner.ownerUserId,
           parameters: cap.parameters,
           runnerConfig: {
             runnerId: runner.id,
