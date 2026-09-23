@@ -1,3 +1,4 @@
+import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LlmSessionsController } from './llm-sessions.controller';
 import { LlmModelsHelper } from './llm-models.helper';
@@ -390,6 +391,35 @@ describe('LlmProvidersController', () => {
       expect(result.data[0].id).toBe('gpt-4');
     });
   });
+
+    // A vendor rejecting the stored key answers 401. Passed through, that
+    // is this API's 401, and the dashboard signs the user out on it: the
+    // model picker opening on a provider with a bad key logged you out.
+    it("does not answer with the vendor's 401 when the provider rejects its key", async () => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      llmProvidersService.getProvider.mockResolvedValue({ id: 'provider-1', type: 'anthropic' } as any);
+      const vendorError = Object.assign(new Error('Request failed with status code 401'), { status: 401, response: { status: 401 } });
+      modelsHelper.fetchModelsFromProvider.mockRejectedValue(vendorError);
+
+      const failure = await controller.getProviderModels('provider-1', mockRequest).catch((e) => e);
+      expect(failure).toBeInstanceOf(HttpException);
+      expect(failure.getStatus()).toBe(HttpStatus.BAD_GATEWAY);
+      expect(failure.getResponse().message).toBe('Request failed with status code 401');
+    });
+
+    it('keeps the status of our own refusals, such as a provider that is not in this org', async () => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      llmProvidersService.getProvider.mockRejectedValue(new NotFoundException('Provider not found'));
+      const failure = await controller.getProviderModels('provider-1', mockRequest).catch((e) => e);
+      expect(failure.getStatus()).toBe(HttpStatus.NOT_FOUND);
+    });
+
+    it("does not answer a chat with the vendor's 401 either", async () => {
+      const mockRequest = { user: { id: 'user-1', currentOrganizationId: 'org-1' } };
+      llmProvidersService.chat.mockRejectedValue(Object.assign(new Error('Request failed with status code 401'), { status: 401 }));
+      const failure = await controller.chat('provider-1', { messages: [] } as any, mockRequest).catch((e) => e);
+      expect(failure.getStatus()).toBe(HttpStatus.BAD_GATEWAY);
+    });
 
   // Error handling tests for all branches
   describe('createProvider - error handling', () => {

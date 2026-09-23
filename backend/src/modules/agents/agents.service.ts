@@ -13,6 +13,7 @@ import { AgentExecution } from '../../entities/agent-execution.entity';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { AgentAuditService } from './agent-audit.service';
+import { AgentCollaboration, collaborationProblems } from './collaboration-participants';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 export interface AgentSearchFilters {
@@ -44,7 +45,7 @@ export interface CreateAgentInput {
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
   agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
-  collaboration?: { strategy: string; agents: { agentId: string; role?: string }[]; judgeAgentId?: string; maxRounds?: number } | null;
+  collaboration?: AgentCollaboration | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -67,7 +68,7 @@ export interface UpdateAgentInput {
   modelConfig?: { providerId?: string; model?: string; temperature?: number; maxTokens?: number };
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
   agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
-  collaboration?: { strategy: string; agents: { agentId: string; role?: string }[]; judgeAgentId?: string; maxRounds?: number } | null;
+  collaboration?: AgentCollaboration | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -177,6 +178,19 @@ export class AgentsService {
   ) {}
 
   /**
+   * Refuse a collaboration the engine cannot run: an unknown strategy, a
+   * participant of unknown kind, an agent participant with no agentId, or a
+   * model participant with nothing to call it through (no providerId and no
+   * routing policy). Checked at save time so the run does not fail later.
+   */
+  private assertCollaboration(collaboration: unknown): void {
+    const problems = collaborationProblems(collaboration);
+    if (problems.length) {
+      throw new BadRequestException(`Invalid collaboration: ${problems.join('; ')}`);
+    }
+  }
+
+  /**
    * Refuse a webhook URL the delivery path will silently drop.
    *
    * agent-webhook.service runs this same check at delivery time and, on
@@ -235,6 +249,7 @@ export class AgentsService {
       this.logger.log(`[CREATE_AGENT] Creating agent '${createDto.name}' for org=${organizationId}, user=${userId}`);
 
       this.assertWebhookUrl(createDto.webhookUrl);
+      this.assertCollaboration(createDto.collaboration);
       await this.assertToolsInOrg(createDto.toolIds, organizationId);
 
       // Verify organization
@@ -277,7 +292,7 @@ export class AgentsService {
         modelConfig: createDto.modelConfig || null,
         memoryConfig: createDto.memoryConfig || null,
         agentConfig: createDto.agentConfig || null,
-        collaboration: createDto.collaboration as Agent['collaboration'] || null,
+        collaboration: createDto.collaboration || null,
         variables: createDto.variables || {},
         settings: createDto.settings || {},
         metadata: createDto.metadata || {},
@@ -445,6 +460,7 @@ export class AgentsService {
     }
 
     this.assertWebhookUrl(updateDto.webhookUrl);
+    this.assertCollaboration(updateDto.collaboration);
     await this.assertToolsInOrg(updateDto.toolIds, agent.organizationId);
     Object.assign(agent, updateDto);
     if (updateDto.status === AgentStatus.ACTIVE) await this.readiness.assertReady(agent, userId);

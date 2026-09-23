@@ -1,4 +1,9 @@
 import type { RoutingPolicy } from '../modules/model-catalog/routing/model-router';
+import type { AgentCollaboration } from '../modules/agents/collaboration-participants';
+export type {
+  AgentCollaboration,
+  CollaborationParticipant,
+} from '../modules/agents/collaboration-participants';
 import {
   Entity,
   Column,
@@ -204,35 +209,30 @@ export class Agent {
   @Column({ nullable: true })
   parentRunId: string;
 
+  /**
+   * An autonomous agent's team: the participants it works with, how they are
+   * composed (strategy), and the rules of engagement. A participant is either
+   * another agent or a model (a provider + model, or a routing policy), so an
+   * organization with a single agent can still compose several models. See
+   * CollaborationParticipant and AgentCollaborationHelper.
+   *
+   * `rules` are read by the run engine: maxTotalCost by the collaboration
+   * helper before each participant (and by agent-step-processor across
+   * sibling child runs), maxChainDepth by agent-runtime.service, and the three
+   * formatting/escalation keys go into every participant's system prompt via
+   * buildCollaborationContext.
+   *
+   * `allowRevision` and `sharedMemoryScope` used to sit in `rules` too, with
+   * two checkboxes in autonomous-config.tsx writing them and nothing in
+   * modules/agents reading either. They are gone rather than wired because
+   * neither names an existing mechanism: a revision pass means inventing a
+   * rule for when a sequential chain hands work back to an earlier agent and
+   * how many times, and a shared memory scope means deciding what one
+   * collaborator may see of another's memory. Both are features to design,
+   * not calls to add.
+   */
   @Column({ type: 'json', nullable: true })
-  collaboration: {
-    strategy: 'sequential' | 'parallel' | 'race' | 'debate';
-    agents: Array<{ agentId: string; role?: string }>;
-    sharedBrief?: string;
-    /**
-     * Read by the run engine: maxTotalCost and maxChainDepth by
-     * agent-step-processor, the three formatting/escalation keys by
-     * agent-runtime-builders (they go into the system prompt).
-     *
-     * `allowRevision` and `sharedMemoryScope` used to sit here too, with
-     * two checkboxes in autonomous-config.tsx writing them and nothing
-     * in modules/agents reading either. They are gone rather than wired
-     * because neither names an existing mechanism: a revision pass means
-     * inventing a rule for when a sequential chain hands work back to an
-     * earlier agent and how many times, and a shared memory scope means
-     * deciding what one collaborator may see of another's memory. Both
-     * are features to design, not calls to add.
-     */
-    rules?: {
-      maxTotalCost?: number;
-      maxChainDepth?: number;
-      outputFormat?: 'text' | 'json';
-      escalation?: 'never' | 'on_failure' | 'on_low_confidence';
-      conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge';
-    };
-    judgeAgentId?: string;
-    maxRounds?: number;
-  };
+  collaboration: AgentCollaboration | null;
 
   @Column({ type: 'varchar', nullable: true })
   webhookUrl: string;
