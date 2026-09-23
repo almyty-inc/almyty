@@ -118,6 +118,8 @@ describe('/credentials/access-keys/new', () => {
 
     expect(await screen.findByRole('heading', { name: 'Key generated' })).toBeInTheDocument()
     expect(screen.getByTestId('copy-field-value')).toHaveTextContent('alm_secret_123')
+    // Session replay must never record the key.
+    expect(screen.getByTestId('copy-field-value')).toHaveAttribute('data-sensitive-text')
     expect(screen.getByRole('button', { name: 'Copy access key' })).toBeInTheDocument()
     expect(screen.getByText(/You won't see this key again/)).toBeInTheDocument()
 

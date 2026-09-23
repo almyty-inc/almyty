@@ -8,11 +8,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, KeyRound } from 'lucide-react'
+import { CheckCircle2, Copy, KeyRound } from 'lucide-react'
 
 import { Field, FormPage, FormSection } from '@/components/layout/form-page'
 import { Button } from '@/components/ui/button'
-import { CopyField } from '@/components/ui/copy-field'
+import { useCopySensitive } from '@/lib/clipboard'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
@@ -37,6 +37,7 @@ export function GenerateAccessKeyForm() {
   const qc = useQueryClient()
   const notify = useNotifications()
   const navigate = useNavigate()
+  const copySensitive = useCopySensitive()
   const [form, setForm] = useState<AccessKeyForm>(EMPTY)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
@@ -84,8 +85,19 @@ export function GenerateAccessKeyForm() {
         width="narrow"
       >
         <FormSection>
+          {/*
+            Not CopyField: the key is a live secret rendered as text, so it
+            must carry the session-replay mask attribute (rrweb records
+            every other text node verbatim), and copying it warns about the
+            clipboard instead of a plain "copied".
+          */}
           <Field id="generated-access-key" label={form.name || 'Access key'}>
-            <CopyField value={generatedKey} label="Access key" />
+            <div className="flex min-w-0 items-stretch gap-2">
+              <code className="flex min-w-0 flex-1 items-center break-all select-all rounded-lg border bg-muted px-3 py-2 font-mono text-xs" data-testid="copy-field-value" data-sensitive-text>{generatedKey}</code>
+              <Button type="button" variant="outline" size="icon" aria-label="Copy access key" onClick={() => copySensitive(generatedKey, 'Access key')}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
           </Field>
           <p className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400" role="note">
             <KeyRound className="h-4 w-4 shrink-0" aria-hidden="true" />
