@@ -41,6 +41,10 @@ class FakeRepo<T extends Record<string, any>> {
     return row;
   }
 
+  async find({ where }: any): Promise<any[]> {
+    return this.rows.filter((row) => this.matches(row, where));
+  }
+
   async findOne({ where }: any): Promise<any> {
     return this.rows.find((row) => this.matches(row, where)) ?? null;
   }

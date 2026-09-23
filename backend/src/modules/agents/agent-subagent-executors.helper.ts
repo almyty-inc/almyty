@@ -9,6 +9,7 @@ import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
 import { partsToText } from '../a2a/a2a-part.mapper';
 import { NodeExecutionOptions, NodeExecutionResult } from './agent-node-executor';
+import { isOthersPrivate } from '../../common/authorization/private-visibility';
 
 /**
  * Sub-agent execution branches extracted from AgentNodeExecutor:
@@ -120,7 +121,9 @@ export class AgentSubAgentExecutors {
     const subAgent = await this.agentRepository.findOne({
       where: { id: agentId, organizationId: options.organizationId },
     });
-    if (!subAgent) {
+    // Another member's private agent is not runnable as a sub-agent (and is
+    // reported as missing, not as forbidden). The run's user is the caller.
+    if (!subAgent || isOthersPrivate(subAgent, options.userId ?? null)) {
       throw new Error(`Sub-agent '${agentId}' not found`);
     }
 

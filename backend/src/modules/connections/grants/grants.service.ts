@@ -386,6 +386,11 @@ export class GrantsService {
   private assertOversight(connection: Credential, principal: GrantPrincipal, grants: ConnectionGrant[], what: 'list' | 'revoke'): GrantDecision {
     const decision = canManage(connection, principal, grants, { now: new Date(this.now()) });
     if (decision.allowed) return decision;
+    // No oversight exception for a private connection: it does not exist
+    // for anyone but its owner, admins included.
+    if (connection.visibility === 'private') {
+      throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+    }
     if (connection.ownerUserId && hasManagePermission(principal)) {
       return { allowed: true, reason: `connections:manage may ${what} grants on a user-scoped connection`, via: 'connections:manage' };
     }

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
@@ -54,6 +54,12 @@ export class LlmProviderSecretsHelper {
     opts: { principal?: ConnectionUsePrincipal; context?: ConnectionUseContext } = {},
   ): Promise<LlmProvider> {
     const context = opts.context ?? { purpose: 'llm_call', resourceType: 'llm_provider', resourceId: provider.id };
+    // A private provider acts for its owner and nobody else (every path
+    // into one is gated on that upstream), so a call that names no user --
+    // the health check, a model listing -- resolves its keys as the owner.
+    if (!opts.principal && provider.visibility === 'private' && provider.ownerUserId) {
+      opts = { ...opts, principal: { id: provider.ownerUserId } };
+    }
     if (provider.credentialId) {
       const resolved = await this.credentialRefs.resolve(provider.organizationId, provider.credentialId, { ...opts, context });
       provider.credential = resolved.credential;
@@ -133,6 +139,53 @@ export class LlmProviderSecretsHelper {
     if (provider[field] && provider.configuration && inlineField in provider.configuration) {
       delete (provider.configuration as any)[inlineField];
     }
+  }
+
+  /**
+   * A private connection is its owner's alone, so it can back only a
+   * provider that is private to the same owner -- otherwise everyone the
+   * provider answers would be calling with the owner's key. Another
+   * user's private connection is reported as not found. Rows this
+   * provider manages for itself follow the provider (syncManagedScope).
+   */
+  async assertKeysServable(
+    provider: Pick<LlmProvider, 'organizationId' | 'visibility' | 'ownerUserId' | 'credentialId' | 'usageCredentialId'> & { id?: string },
+    actorId: string,
+  ): Promise<void> {
+    const refs: Array<[ProviderKeyKind, string | null | undefined]> = [
+      ['inference', provider.credentialId],
+      ['usage', provider.usageCredentialId],
+    ];
+    for (const [kind, credentialId] of refs) {
+      if (!credentialId) continue;
+      const row = await this.credentialRefs.load(provider.organizationId, credentialId);
+      if (provider.id && CredentialRefResolver.isManagedBy(row, this.managedBy(provider as LlmProvider, kind))) continue;
+      if (row.visibility !== 'private') continue;
+      if (!row.ownerUserId || row.ownerUserId !== actorId) {
+        throw new NotFoundException({ code: 'CREDENTIAL_NOT_FOUND', message: 'credential not found' });
+      }
+      if (provider.visibility !== 'private' || provider.ownerUserId !== row.ownerUserId) {
+        throw new BadRequestException(
+          'This connection is private; it can only back a provider that is private to you',
+        );
+      }
+    }
+  }
+
+  /**
+   * The key rows a provider manages take the provider's scope: a private
+   * provider's pasted key is private to the same owner (so it is neither
+   * listed to nor usable by anyone else), a team provider's is the team's.
+   */
+  async syncManagedScope(provider: LlmProvider): Promise<void> {
+    const scope: Pick<Credential, 'visibility' | 'teamId' | 'ownerUserId'> =
+      provider.visibility === 'private'
+        ? { visibility: 'private', teamId: null, ownerUserId: provider.ownerUserId ?? null }
+        : provider.visibility === 'team' && provider.teamId
+          ? { visibility: 'team', teamId: provider.teamId, ownerUserId: null }
+          : { visibility: 'org', teamId: null, ownerUserId: null };
+    await this.credentialRefs.setManagedScope(provider.organizationId, provider.credentialId, this.managedBy(provider, 'inference'), scope);
+    await this.credentialRefs.setManagedScope(provider.organizationId, provider.usageCredentialId, this.managedBy(provider, 'usage'), scope);
   }
 
   /** Delete the rows this provider manages (shared connections are left alone). */

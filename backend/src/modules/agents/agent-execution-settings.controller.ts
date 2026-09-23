@@ -7,6 +7,7 @@ import { Type } from 'class-transformer';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateAgentByAgentIdGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Agent } from '../../entities/agent.entity';
 import { STRATEGY_SEEDS } from './strategies/strategy-seeds';
@@ -53,7 +54,7 @@ const validation = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: t
 @ApiTags('Agents')
 @ApiBearerAuth()
 @Controller('agents/:agentId/execution')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateAgentByAgentIdGuard)
 export class AgentExecutionSettingsController {
   constructor(
     @InjectRepository(Agent) private readonly agents: Repository<Agent>,

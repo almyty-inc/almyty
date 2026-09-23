@@ -85,7 +85,7 @@ export class CredentialsController {
   @ApiResponse({ status: 200, description: 'Credential retrieved successfully' })
   async findById(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     const organizationId = this.requireOrg(req);
-    const data = await this.credentialsService.findById(id, organizationId);
+    const data = await this.credentialsService.findById(id, organizationId, { id: req.user.id });
     return { success: true, data, message: 'Credential retrieved successfully' };
   }
 
@@ -123,7 +123,7 @@ export class CredentialsController {
     // Without this the endpoint would return success for any UUID,
     // acting as a membership oracle for other orgs' credential ids.
     const organizationId = this.requireOrg(req);
-    await this.credentialsService.findById(id, organizationId);
+    await this.credentialsService.findById(id, organizationId, { id: req.user.id });
     return { success: true, data: { valid: true }, message: 'Credential test passed' };
   }
 
@@ -133,7 +133,7 @@ export class CredentialsController {
   @ApiResponse({ status: 200, description: 'Credential usage retrieved successfully' })
   async getUsage(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
     const organizationId = this.requireOrg(req);
-    const data = await this.credentialsService.getUsage(id, organizationId);
+    const data = await this.credentialsService.getUsage(id, organizationId, { id: req.user.id });
     return { success: true, data, message: 'Credential usage retrieved successfully' };
   }
 
@@ -147,7 +147,7 @@ export class CredentialsController {
   @ApiResponse({ status: 200, description: 'Access keys retrieved successfully' })
   async findAllAccessKeys(@Request() req: any) {
     const organizationId = this.requireOrg(req);
-    const data = await this.credentialsService.findAllAccessKeys(organizationId);
+    const data = await this.credentialsService.findAllAccessKeys(organizationId, { id: req.user.id });
     return { success: true, data, message: 'Access keys retrieved successfully' };
   }
 

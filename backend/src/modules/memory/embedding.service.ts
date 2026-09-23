@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import axios from 'axios';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import {
@@ -289,6 +289,9 @@ export class EmbeddingService {
           organizationId,
           type: In(EMBEDDING_PROVIDER_PREFERENCE),
           status: LlmProviderStatus.ACTIVE,
+          // Org memory runs for nobody in particular, so it never spends a
+          // member's private ("just me") provider.
+          visibility: Not('private'),
         },
         order: { createdAt: 'ASC' },
       });

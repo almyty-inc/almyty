@@ -259,7 +259,11 @@ export class ConnectionsService {
 
   async get(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<ConnectionView> {
     const row = await this.load(organizationId, id);
-    if (!this.canSee(principal, row)) throw new ForbiddenException({ code: 'CONNECTION_FORBIDDEN', message: 'not your connection' });
+    if (!this.canSee(principal, row)) {
+      // Another user's private connection is not found, not forbidden.
+      if (row.visibility === 'private') throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+      throw new ForbiddenException({ code: 'CONNECTION_FORBIDDEN', message: 'not your connection' });
+    }
     return this.view(row, await this.catalog.find(organizationId, row.connectorKey!));
   }
 
@@ -430,6 +434,8 @@ export class ConnectionsService {
   }
 
   canSee(principal: ConnectionPrincipal, row: Credential): boolean {
+    // A private connection is its owner's alone; admins do not see it.
+    if (row.visibility === 'private') return !!row.ownerUserId && row.ownerUserId === principal.id;
     if (!row.ownerUserId) return principalHasPermission(principal, row.organizationId, CONNECTIONS_READ);
     return row.ownerUserId === principal.id || principalHasPermission(principal, row.organizationId, CONNECTIONS_MANAGE);
   }
@@ -478,6 +484,12 @@ export class ConnectionsService {
   }
 
   private assertCanManage(principal: ConnectionPrincipal, row: Credential): void {
+    // Private ("just me"): the owner and nobody else, connections:manage
+    // included -- and to anyone else it does not exist.
+    if (row.visibility === 'private') {
+      if (row.ownerUserId && row.ownerUserId === principal.id) return;
+      throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+    }
     if (!row.ownerUserId) {
       this.assertMember(principal, row.organizationId, CONNECTIONS_MANAGE);
       return;

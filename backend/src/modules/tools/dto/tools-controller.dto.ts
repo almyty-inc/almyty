@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsEnum, IsArray, IsObject, IsNumber, Min, Max, MaxLength } from 'class-validator';
+import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/authorization/access-policy.service';
 import { Transform, Type } from 'class-transformer';
 
 import { ToolType, ToolStatus, ToolExecutionMethod } from '../../../entities/tool.entity';
@@ -129,8 +130,8 @@ export class CreateToolBodyDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()
@@ -232,8 +233,8 @@ export class UpdateToolBodyDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()

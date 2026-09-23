@@ -9,13 +9,14 @@ import { ApiTags, ApiOperation, ApiParam, ApiBearerAuth } from '@nestjs/swagger'
 import { Agent } from '../../entities/agent.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateAgentByAgentIdGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AgentConstraintsService } from './agent-constraints.service';
 
 @Controller('agents/:agentId/constraints')
 @ApiTags('Agent Constraints')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateAgentByAgentIdGuard)
 export class AgentConstraintsController {
   constructor(
     private readonly service: AgentConstraintsService,

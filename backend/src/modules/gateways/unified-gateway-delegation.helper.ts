@@ -25,6 +25,7 @@ import { A2AServerService } from '../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 import { AcpServerService } from '../acp/acp-server.service';
 import { AcpDiscoveryService } from '../acp/acp-discovery.service';
+import { isPrivateGateway } from './private-gateway';
 
 /**
  * Per-protocol delegation for gateways exposed under
@@ -160,7 +161,10 @@ export class UnifiedGatewayDelegation {
     const isChannel = UnifiedGatewayDelegation.CHANNEL_TYPES.has(gateway.type);
 
     let auth: any = null;
-    if (!isDiscovery && !isChannel) {
+    // A private gateway authenticates every request, discovery and channel
+    // webhooks included: the resolver serves it to its owner only and
+    // answers everyone else with the not-found a missing gateway gets.
+    if (isPrivateGateway(gateway) || (!isDiscovery && !isChannel)) {
       // The org and the gateway (with its auth configs) are already in
       // hand from the unified controller — hand them over so the resolver
       // does not repeat both lookups.

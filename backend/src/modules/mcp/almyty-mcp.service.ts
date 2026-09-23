@@ -880,7 +880,7 @@ export class AlmytyMcpService {
           privacyTier: args.privacyTier,
           providerId: args.providerId,
           selectable: args.selectable,
-        });
+        }, userId ?? null);
         return { total: cards.length, models: cards.map(modelCardView) };
       }
       case 'sync_models': {
@@ -1074,9 +1074,9 @@ export class AlmytyMcpService {
           case 'tools':
             return get(AnalyticsService).getToolUsage(orgId, timeframe);
           case 'gateways':
-            return get(AnalyticsService).getGatewayUsage(orgId, timeframe);
+            return get(AnalyticsService).getGatewayUsage(orgId, timeframe, userId);
           case 'models':
-            return get(AnalyticsService).getLlmUsage(orgId, timeframe);
+            return get(AnalyticsService).getLlmUsage(orgId, timeframe, userId);
           case 'agent_runs':
             return get(AnalyticsService).getAgentRunsSummary(orgId);
           case 'alerts': {

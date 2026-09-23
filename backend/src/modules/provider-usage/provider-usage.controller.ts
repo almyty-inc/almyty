@@ -115,7 +115,7 @@ export class ProviderUsageController {
   ) {
     const organizationId = this.orgId(req);
     const w = this.window(period, from, to);
-    const data = await this.usage.getReconciliation(organizationId, w);
+    const data = await this.usage.getReconciliation(organizationId, w, req.user?.id ?? null);
     return {
       success: true,
       data: { from: w.from, to: w.to, providers: data },
@@ -135,6 +135,7 @@ export class ProviderUsageController {
       w.from,
       w.to,
       body.providerId,
+      req.user?.id ?? null,
     );
     return { success: true, data: { from: w.from, to: w.to, results: data } };
   }

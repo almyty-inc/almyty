@@ -358,6 +358,15 @@ describe('AgentRuntimeService (integration)', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('refuses another member\'s private agent, and a run with no user, as not found', async () => {
+      agentStore.push(makeAgent({ id: 'private-agent', visibility: 'private', createdBy: 'owner-1' } as any));
+
+      await expect(service.startRun('private-agent', 'org-1', 'user-1', 'test')).rejects.toThrow(NotFoundException);
+      await expect(service.startRun('private-agent', 'org-1', null, 'test')).rejects.toThrow(NotFoundException);
+      const own = await service.startRun('private-agent', 'org-1', 'owner-1', 'test');
+      expect(own.agentId).toBe('private-agent');
+    });
+
     it('should set parentRunId when provided', async () => {
       const run = await service.startRun('agent-1', 'org-1', 'user-1', 'sub-task', {
         parentRunId: 'parent-run-99',

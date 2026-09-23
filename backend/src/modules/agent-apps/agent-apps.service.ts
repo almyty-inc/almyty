@@ -269,13 +269,22 @@ export class AgentAppsService {
     if (!agentIds.length) return;
     const owned = await this.agentRepository.find({
       where: { id: In(agentIds), organizationId },
-      select: { id: true },
+      select: { id: true, visibility: true },
     });
     if (owned.length !== agentIds.length) {
       const ownedIds = new Set(owned.map((a) => a.id));
       const missing = agentIds.filter((id) => !ownedIds.has(id));
       throw new BadRequestException(
         `These agents do not exist in this organization: ${missing.join(', ')}`,
+      );
+    }
+    // An app is an organization's product with public surfaces; a private
+    // ("just me") agent cannot be put behind one. Named by id only.
+    const privateIds = owned.filter((a) => a.visibility === 'private').map((a) => a.id);
+    if (privateIds.length) {
+      throw new BadRequestException(
+        `These agents are private to their owner and cannot be served by an app: ${privateIds.join(', ')}. ` +
+          'Share the agent with the organization first.',
       );
     }
   }
@@ -473,6 +482,12 @@ export class AgentAppsService {
     const agent = agentId
       ? await this.agentRepository.findOne({ where: { id: agentId, organizationId } })
       : null;
+    // The agent may have been made private after the app was built.
+    if (agent?.visibility === 'private') {
+      throw new BadRequestException(
+        'This app answers with an agent that is private to its owner. Share the agent with the organization before publishing.',
+      );
+    }
 
     const publish = checkPublish(target, app, distribution.configuration, agent);
     const refusals = [...product.refusals, ...publish.refusals];

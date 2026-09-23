@@ -12,7 +12,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Not, IsNull } from 'typeorm';
+import { Repository, In, Not, IsNull, type FindOptionsWhere } from 'typeorm';
 import { Response, Request } from 'express';
 import * as crypto from 'crypto';
 import { Organization } from '../../entities/organization.entity';
@@ -25,6 +25,7 @@ import { A2AServerService } from '../a2a/a2a-server.service';
 import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 import { UnifiedAgentHelper } from './unified-agent.helper';
 import { UnifiedGatewayDelegation } from './unified-gateway-delegation.helper';
+import { isPrivateGateway } from './private-gateway';
 
 /**
  * Unified endpoint controller that provides GitHub-style URLs:
@@ -101,6 +102,8 @@ export class UnifiedEndpointController {
               status: GatewayStatus.ACTIVE,
               type: In([GatewayType.A2A, GatewayType.ACP, GatewayType.OPENAI_CHAT]),
               agentId: Not(IsNull()),
+              // A card served to anyone is never a private gateway's.
+              visibility: Not('private'),
             },
             relations: { authConfigs: true },
           })
@@ -142,9 +145,12 @@ export class UnifiedEndpointController {
       // auth configs loaded and its agent addressed. The sibling below
       // survived only because it re-scopes the agent afterwards; this path
       // had no such second check.
-      where: apiKey.gatewayId
-        ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE }
-        : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
+      where: servableToKey(
+        apiKey.gatewayId
+          ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE }
+          : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
+        apiKey.userId,
+      ),
       relations: { authConfigs: true },
     });
 
@@ -238,9 +244,12 @@ export class UnifiedEndpointController {
       // auth configs loaded and its agent addressed. The sibling below
       // survived only because it re-scopes the agent afterwards; this path
       // had no such second check.
-      where: apiKey.gatewayId
-        ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE }
-        : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
+      where: servableToKey(
+        apiKey.gatewayId
+          ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE }
+          : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
+        apiKey.userId,
+      ),
       relations: { authConfigs: true },
     });
 
@@ -298,7 +307,7 @@ export class UnifiedEndpointController {
       relations: { authConfigs: true },
     });
 
-    if (gateway) {
+    if (gateway && (await this.privateGatewayVisible(gateway, req))) {
       return this.gatewayDelegation.handleGatewayRequest(organization, gateway, orgSlug, resourceSlug, req, res, body);
     }
 
@@ -350,7 +359,7 @@ export class UnifiedEndpointController {
       relations: { authConfigs: true },
     });
 
-    if (gateway) {
+    if (gateway && (await this.privateGatewayVisible(gateway, req))) {
       return this.gatewayDelegation.handleGatewayRequest(organization, gateway, orgSlug, resourceSlug, req, res, body);
     }
 
@@ -368,6 +377,19 @@ export class UnifiedEndpointController {
   }
 
   // ─── Gateway Delegation ─────────────────────────────────────────────
+
+  /**
+   * Whether this request may see a gateway at all. Anything not private:
+   * yes, and the gateway's own auth decides the rest. A private gateway
+   * exists only for a request authenticated as its owner; for everyone
+   * else the lookup carries on exactly as if no gateway had matched
+   * (agent resolution, then the same 404), so the answer is identical to
+   * a slug nobody uses.
+   */
+  private async privateGatewayVisible(gateway: Gateway, req: Request): Promise<boolean> {
+    if (!isPrivateGateway(gateway)) return true;
+    return !!(await this.gatewayResolver.authenticatePrivateOwner(gateway, req));
+  }
 
 
 
@@ -424,4 +446,19 @@ export function slugifyName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * The gateways an API key may be routed to: every non-private one that
+ * matches `base`, plus private ones owned by the key's user. A key minted
+ * by another member (or an org-wide key with no user) never lands on
+ * someone's private gateway.
+ */
+function servableToKey(
+  base: FindOptionsWhere<Gateway>,
+  userId: string | null | undefined,
+): FindOptionsWhere<Gateway>[] {
+  const out: FindOptionsWhere<Gateway>[] = [{ ...base, visibility: Not('private' as const) }];
+  if (userId) out.push({ ...base, visibility: 'private', ownerUserId: userId });
+  return out;
 }

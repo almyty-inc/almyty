@@ -7,6 +7,7 @@ import { Tool } from '../../entities/tool.entity';
 import { Credential } from '../../entities/credential.entity';
 import { LlmProvider } from '../../entities/llm-provider.entity';
 import { Agent } from '../../entities/agent.entity';
+import { isOthersPrivate } from '../../common/authorization/private-visibility';
 
 /**
  * Map of supported entity types (from typeorm-versions `itemType`) to
@@ -44,6 +45,7 @@ export class VersionsService {
     entityType: string,
     entityId: string,
     organizationId: string,
+    callerId?: string | null,
   ): Promise<void> {
     const entityClass = SUPPORTED_ENTITIES[entityType];
     if (!entityClass) {
@@ -58,6 +60,12 @@ export class VersionsService {
       // Deliberately return "not found" rather than "forbidden" so this
       // endpoint can't be used to probe for the existence of entity ids
       // in other organizations.
+      throw new NotFoundException(`${entityType} not found`);
+    }
+    // A private row's history is its owner's alone -- snapshots are the
+    // full entity, so they would hand over exactly what 'private' hides.
+    // 404 for the same no-probing reason as above.
+    if (callerId !== undefined && isOthersPrivate(entity, callerId)) {
       throw new NotFoundException(`${entityType} not found`);
     }
   }
@@ -78,9 +86,9 @@ export class VersionsService {
     entityType: string,
     entityId: string,
     organizationId: string,
-    options: { limit?: number; offset?: number } = {},
+    options: { limit?: number; offset?: number; callerId?: string | null } = {},
   ): Promise<Version[]> {
-    await this.assertEntityBelongsToOrg(entityType, entityId, organizationId);
+    await this.assertEntityBelongsToOrg(entityType, entityId, organizationId, options.callerId);
     const take = Math.min(
       Number.isFinite(options.limit as number) && (options.limit as number) > 0
         ? (options.limit as number)
@@ -102,6 +110,7 @@ export class VersionsService {
   async getVersion(
     versionId: number,
     organizationId: string,
+    callerId?: string | null,
   ): Promise<Version | null> {
     const version = await this.dataSource
       .getRepository(Version)
@@ -111,7 +120,7 @@ export class VersionsService {
     // Look up the entity this version belongs to in the current DB
     // (we do NOT trust the snapshot's own organizationId) and verify
     // the caller's membership.
-    await this.assertEntityBelongsToOrg(version.itemType, version.itemId, organizationId);
+    await this.assertEntityBelongsToOrg(version.itemType, version.itemId, organizationId, callerId);
     return version;
   }
 
@@ -120,8 +129,9 @@ export class VersionsService {
     entityId: string,
     versionId: number,
     organizationId: string,
+    callerId?: string | null,
   ): Promise<any> {
-    await this.assertEntityBelongsToOrg(entityType, entityId, organizationId);
+    await this.assertEntityBelongsToOrg(entityType, entityId, organizationId, callerId);
     const version = await this.dataSource
       .getRepository(Version)
       .findOne({ where: { id: versionId } });

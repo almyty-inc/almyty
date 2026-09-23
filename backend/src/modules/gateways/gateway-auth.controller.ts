@@ -19,6 +19,7 @@ import { IsBoolean, IsEnum, IsObject, IsOptional } from 'class-validator';
 import { GatewaysService } from './gateways.service';
 import { GatewayAuthService, CreateGatewayAuthDto } from './gateway-auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PrivateGatewayGuard } from './private-gateway.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
@@ -69,7 +70,7 @@ class CreateGatewayAuthBodyDto {
 @Controller('gateways')
 @ApiTags('Gateways')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateGatewayGuard)
 export class GatewayAuthController {
   private readonly logger = new Logger(GatewayAuthController.name);
 

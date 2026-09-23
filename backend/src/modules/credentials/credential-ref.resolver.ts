@@ -169,6 +169,7 @@ export class CredentialRefResolver {
     if (credential.isExpired()) {
       throw new ForbiddenException({ code: 'CREDENTIAL_EXPIRED', message: 'credential has expired' });
     }
+    CredentialRefResolver.assertPrivateUse(credential, opts.principal, opts.context);
     await this.policy.assertCanUse({ organizationId, credential, principal: opts.principal, context: opts.context });
     // Org policy (EE) has the last word, on every consumer path and not
     // just the connections API: a connector the organization forbade, or
@@ -217,6 +218,31 @@ export class CredentialRefResolver {
 
   secretsOf(config: Record<string, any>): Record<string, string> {
     return CredentialRefResolver.secretsOf(config);
+  }
+
+  /**
+   * A private ("just me") credential is usable by its owner only: not by
+   * another member, not by an org admin, and not by a path that acts for
+   * nobody (a scheduler with no attributed user). Everyone else is told
+   * it does not exist. This holds for plain credentials too, which the
+   * grants policy never sees because they carry no connectorKey.
+   *
+   * A row a consumer manages for itself (an LLM provider's pasted key)
+   * follows its consumer instead: the consumer's own scope decides who
+   * reaches it, and syncManagedScope keeps the two in step.
+   */
+  static assertPrivateUse(
+    credential: Credential,
+    principal?: ConnectionUsePrincipal,
+    context?: ConnectionUseContext,
+  ): void {
+    if (credential.visibility !== 'private') return;
+    if (credential.ownerUserId && principal?.id && principal.id === credential.ownerUserId) return;
+    // Its own consumer, and only its own consumer, reaches a managed row
+    // without naming the owner (a health check, a background sync).
+    const managedBy = (credential.metadata as Record<string, any> | null | undefined)?.managedBy;
+    if (managedBy?.id && context?.resourceId === managedBy.id) return;
+    throw new NotFoundException({ code: 'CREDENTIAL_NOT_FOUND', message: 'credential not found' });
   }
 
   /** Whether `credential` was created by `managedBy` (same kind, and same id when one is given). */
@@ -330,6 +356,28 @@ export class CredentialRefResolver {
         lastUsedAt: now,
       },
     );
+  }
+
+  /**
+   * Give a row a consumer manages the consumer's scope (a private LLM
+   * provider's pasted key becomes private to the same owner). Rows the
+   * consumer does not manage -- shared connections -- are left alone.
+   */
+  async setManagedScope(
+    organizationId: string,
+    credentialId: string | null | undefined,
+    managedBy: Pick<ManagedBy, 'kind' | 'id'>,
+    scope: Pick<Credential, 'visibility' | 'teamId' | 'ownerUserId'>,
+  ): Promise<void> {
+    if (!credentialId) return;
+    const credential = await this.credentials.findOne({ where: { id: credentialId, organizationId } });
+    if (!credential || !CredentialRefResolver.isManagedBy(credential, managedBy)) return;
+    if (
+      credential.visibility === scope.visibility &&
+      (credential.teamId ?? null) === (scope.teamId ?? null) &&
+      (credential.ownerUserId ?? null) === (scope.ownerUserId ?? null)
+    ) return;
+    await this.credentials.update({ id: credential.id, organizationId }, scope);
   }
 
   /** Load a row of this org or throw CREDENTIAL_NOT_FOUND. */
