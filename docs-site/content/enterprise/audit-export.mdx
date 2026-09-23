@@ -14,6 +14,10 @@ CSV columns: `id, createdAt, organizationId, userId, userEmail, action, resource
 
 ## SIEM streaming
 
+Without the `audit_export` entitlement, **Settings → Audit streaming** is locked:
+
+![Audit streaming settings locked on a Pro demo organization](/screenshots/settings-audit-streams-locked.png)
+
 Register a stream target and audit events are forwarded as they occur. A stream is a target type, an endpoint, a token, and an optional action filter:
 
 ```json

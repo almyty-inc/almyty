@@ -206,6 +206,33 @@
       "notes": "Seeded demo identity only. No IP addresses or secrets are visible. Audit export is locked on this Pro organization; page-header exports are for request logs. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
+      "id": "analytics-chargeback-locked",
+      "title": "Chargeback locked without the Enterprise entitlement",
+      "path": "screenshots/analytics-chargeback-locked.png",
+      "capturedAt": "2026-09-23T10:56:29.502Z",
+      "status": "current",
+      "sha256": "294c858ca2521da20e65163919ba19e4784929fc6467605b0912b687121b749b",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/analytics/chargeback"
+      },
+      "sources": [
+        "frontend/src/pages/analytics.tsx",
+        "frontend/src/components/analytics",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d202cf4b2c5a8548486e3571f17c72c3394e4dcca6753b32b073f3ff45fd286b",
+      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+    },
+    {
       "id": "analytics-gateways",
       "title": "Gateway analytics with no traffic in the selected seven-day window",
       "path": "screenshots/analytics-gateways.png",
@@ -385,12 +412,24 @@
     },
     {
       "id": "approvals-empty",
-      "title": "approvals empty",
+      "title": "Approvals loaded with no pending requests",
       "path": "screenshots/approvals-empty.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "30414afdd97b2e1b08d18389cef65a56bfdc343ffd43c31ef6468b0600f406f7"
+      "capturedAt": "2026-09-23T10:51:24.914Z",
+      "status": "current",
+      "sha256": "ff8e7ee724823959cbfde07a840a530103bcf24e3868db36ac352648e4a0bf67",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/approvals.tsx",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0cabdcfe55009e438a513277dba58a0debff394a59f07491a535a7b9405ba24d",
+      "notes": "Genuine loaded empty state; no approval was approved, rejected, or created."
     },
     {
       "id": "approvals-pending",
@@ -1016,6 +1055,114 @@
       "sha256": "44cc16af94a40f8e2260d0289bb385f90f7c18e51831f73f2281f2588419896a"
     },
     {
+      "id": "settings-approval-policies-locked",
+      "title": "Approval policies locked without the Business entitlement",
+      "path": "screenshots/settings-approval-policies-locked.png",
+      "capturedAt": "2026-09-23T10:54:31.157Z",
+      "status": "current",
+      "sha256": "4b7ccb7935f979db6e929787b351ce2b09f69fa8c55cf0bdbc66a817f19e0894",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/approvals"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
+      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+    },
+    {
+      "id": "settings-audit-streams-locked",
+      "title": "Audit streaming locked without the Business entitlement",
+      "path": "screenshots/settings-audit-streams-locked.png",
+      "capturedAt": "2026-09-23T10:55:16.352Z",
+      "status": "current",
+      "sha256": "54e3cea5490abcdb1cde5ff3890cbe9eff98e89cc5ce822cd3e84de15a6850a4",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/audit-streams"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
+      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+    },
+    {
+      "id": "settings-compliance-locked",
+      "title": "Compliance Pack locked without the Business entitlement",
+      "path": "screenshots/settings-compliance-locked.png",
+      "capturedAt": "2026-09-23T10:54:55.249Z",
+      "status": "current",
+      "sha256": "fa51005005706990b92167ab6fdd1bad7f8336ee615a18ffaedd7eabceff7b1b",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/compliance"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
+      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+    },
+    {
+      "id": "settings-encryption-locked",
+      "title": "Customer-managed keys locked without the Enterprise entitlement",
+      "path": "screenshots/settings-encryption-locked.png",
+      "capturedAt": "2026-09-23T10:55:42.438Z",
+      "status": "current",
+      "sha256": "6986ac57e3f632ebd109e0818cd3cfaf766e0f0ba2c27c23e87275e0de4e0d9d",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/encryption"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
+      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+    },
+    {
       "id": "settings-profile",
       "title": "Seeded demo profile settings",
       "path": "screenshots/settings-profile.png",
@@ -1038,6 +1185,33 @@
       "notes": "Contains only the seeded Ava Chen demo identity. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
     },
     {
+      "id": "settings-rbac-locked",
+      "title": "Advanced RBAC locked without the Business entitlement",
+      "path": "screenshots/settings-rbac-locked.png",
+      "capturedAt": "2026-09-23T10:54:09.141Z",
+      "status": "current",
+      "sha256": "37d230e35c131e92bf9541440ac87bc0ccaf330a4dce6d0b2c08dc2b6882b197",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/rbac"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
+      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
+    },
+    {
       "id": "settings-security",
       "title": "Security settings with password form and session limitations",
       "path": "screenshots/settings-security.png",
@@ -1054,10 +1228,40 @@
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
+        "frontend/src/index.css",
+        "frontend/src/components/SecurityTab.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/lib/plan-catalog.ts"
+      ],
+      "sourceDigest": "611bbc6250da25666fa9c084e0f16e10bbf21a899b2f885985c220a4245b2987",
+      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved. Dependency review additionally records the directly imported settings tab and plan indicator; original pixels and capture time preserved."
+    },
+    {
+      "id": "settings-sso-locked",
+      "title": "Single Sign-On locked without the Business entitlement",
+      "path": "screenshots/settings-sso-locked.png",
+      "capturedAt": "2026-09-23T10:53:22.808Z",
+      "status": "current",
+      "sha256": "5c4c5e7d2665f3f52217e75d593e0e9cbb411678e9e55fbb8a2383e877301021",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/sso"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/entitlement-gate.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/lib/plan-catalog.ts",
+        "frontend/src/hooks/use-entitlement.ts",
+        "frontend/src/hooks/use-billing-plan.ts",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "d3f2bf3088629637a3bbdaa6900ccfa9b48ebc56a6bc90ad7e5a26e24dcc5668",
-      "notes": "Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "5205d93a732e7602134bb1c7e368b5423276c8ffbeed52b3cb9bf34ba8119b39",
+      "notes": "Actual Pro organization without this entitlement. This capture documents the locked state only, not the enabled feature or its configuration. Unlocked evidence remains pending."
     },
     {
       "id": "settings-teams",
@@ -1076,10 +1280,13 @@
         "frontend/src/components/settings",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
-        "frontend/src/index.css"
+        "frontend/src/index.css",
+        "frontend/src/components/MembersAndTeamsTab.tsx",
+        "frontend/src/components/plan-indicator.tsx",
+        "frontend/src/lib/plan-catalog.ts"
       ],
-      "sourceDigest": "d3f2bf3088629637a3bbdaa6900ccfa9b48ebc56a6bc90ad7e5a26e24dcc5668",
-      "notes": "Members tab, not the custom-role editor. Only seeded demo account data is shown. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved."
+      "sourceDigest": "07d882b0a0bc234ec860f0aa6496633fe36d38af2157ea15fcfcbaf0d06d6cdf",
+      "notes": "Members tab, not the custom-role editor. Only seeded demo account data is shown. Source review against f4c2e3e8: shared layout change only affects failed logout; removed collaboration-builder controls are outside these captured views; credential change only marks generated access-key text sensitive. Depicted UI and pixels are unchanged. Original capture time preserved. Dependency review additionally records the directly imported settings tab and plan indicator; original pixels and capture time preserved."
     },
     {
       "id": "support-agent-constraints",

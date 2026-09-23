@@ -6,6 +6,10 @@ SSO issues the same httpOnly `access_token` cookie as password login. There is n
 
 ## Configuration
 
+Without the `sso` entitlement, **Settings → SSO** shows the locked view below. This Pro demo organization has no SSO configuration controls available.
+
+![SSO settings locked on a Pro demo organization](/screenshots/settings-sso-locked.png)
+
 Each org has one SSO config, managed by org owners/admins under **Settings**. Configure OIDC (discovery-based) with just-in-time provisioning:
 
 ```json

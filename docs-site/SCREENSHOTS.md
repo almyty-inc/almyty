@@ -43,3 +43,29 @@ image hashes, per-image metadata, and source drift for refreshed images.
 any legacy image still needs recapture; use it before calling #675 complete.
 Keep historical failure evidence explicitly historical rather than replacing
 it with an unrelated successful screen.
+
+## Enabled-feature evidence still needed
+
+The `*-locked.png` captures are current evidence of a Pro organization's actual
+entitlement gates. They do **not** verify the enabled feature, its editor, or a
+successful configuration. The following views still need captures from an
+authorized, seeded organization with the corresponding entitlements:
+
+- SSO configuration and provisioning controls
+- Custom roles and attribute-based policies
+- Approval policy editor
+- Compliance policy and report
+- Audit export controls and streaming configuration
+- Connections governance controls
+- Customer-managed encryption key status and configuration
+- Chargeback report
+- White-label surface controls
+
+No entitled staging fixture was available during the September 23 capture pass.
+Do not change billing, mint a license, or bypass a gate to obtain these images.
+Capture them when an authorized fixture is available, and retain the locked-state
+images as separate evidence.
+
+Runner list/detail also need a publishable demo fixture without private hostnames.
+The runner setup image awaits the label-description correction tracked in #717;
+do not publish the old routing claim as current documentation.
