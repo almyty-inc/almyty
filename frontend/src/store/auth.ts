@@ -3,6 +3,10 @@ import { persist } from 'zustand/middleware'
 import { User, AuthResponse } from '@/types'
 import { authApi } from '@/lib/api'
 import { useOrganizationStore } from './organization'
+import {
+  armOrganizationContextRecovery,
+  clearOrganizationSelection,
+} from './organization-selection'
 import { identifyUser, resetAnalytics } from '@/lib/analytics'
 
 // Identify the logged-in user in PostHog. Called only after auth succeeds
@@ -45,9 +49,19 @@ export const useAuthStore = create<AuthState>()(
         // Drop any prior session's org selection before we make any
         // authenticated requests, otherwise the request interceptor
         // stamps the stale id into X-Organization-Id on the very first
-        // /auth/profile call after login and the backend 401s "Not a
-        // member of the requested organization".
-        localStorage.removeItem('almyty-org-store')
+        // /auth/profile call after login and the backend refuses it with
+        // "Not a member of the requested organization".
+        //
+        // This clears the STORE, not just its localStorage key. Removing
+        // the key left `currentOrganization` live in memory, so the next
+        // `set()` persisted it straight back and `initializeFromUser`
+        // below still measured the new user against the old session's
+        // org — the stale id came back either way.
+        clearOrganizationSelection()
+        // A deliberate sign-in also restores the one-reload budget the
+        // stale-org-context recovery spends. Only a person clicking Sign
+        // in can rearm it, so it cannot spin.
+        armOrganizationContextRecovery()
         try {
           const response = await authApi.login({ email, password })
           const { accessToken } = response
@@ -94,7 +108,8 @@ export const useAuthStore = create<AuthState>()(
         // Same reasoning as login(): wipe any prior session's
         // currentOrganization so the next /auth/profile call carries the
         // new user's identity, not the stale id.
-        localStorage.removeItem('almyty-org-store')
+        clearOrganizationSelection()
+        armOrganizationContextRecovery()
         try {
           const response = await authApi.register({ email, password, firstName, lastName, organizationName, captchaToken })
           const { accessToken } = response
@@ -138,13 +153,13 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem('token')
         localStorage.removeItem('user')
         localStorage.removeItem('auth-storage')
-        // Drop the previously-selected currentOrganization too. Without
-        // this, a different user signing in on the same browser inherits
-        // the prior session's org id, the request interceptor stamps it
-        // into X-Organization-Id, and the backend correctly 401s with
-        // "Not a member of the requested organization" — looks to the
-        // user as an "Invalid credentials" failure.
-        localStorage.removeItem('almyty-org-store')
+        // Drop the previously-selected currentOrganization too — from the
+        // live store, not only from storage. Without this, a different
+        // user signing in on the same browser inherits the prior
+        // session's org id, the request interceptor stamps it into
+        // X-Organization-Id, and the backend correctly refuses it with
+        // "Not a member of the requested organization".
+        clearOrganizationSelection()
 
         // Drop the PostHog identity so the next user on this browser is
         // not stitched to the previous session.

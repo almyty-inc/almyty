@@ -1,6 +1,6 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -97,7 +97,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     //
     // New behaviour:
     //   - X-Organization-Id header: must match a membership — use it.
-    //     Reject with 401 if set but not a member.
+    //     Reject with 403 if set but not a member.
     //   - No header + exactly one org: use that org (common case).
     //   - No header + multiple orgs: leave `currentOrganizationId`
     //     undefined. The RolesGuard / handlers must then refuse the
@@ -105,7 +105,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const headerOrgId = (req.headers?.['x-organization-id'] as string) || undefined;
     if (headerOrgId) {
       if (!hasEffectiveMembership(user.organizationMemberships, headerOrgId)) {
-        throw new UnauthorizedException('Not a member of the requested organization');
+        // 403, not 401. The session is fine — the cookie verified, the
+        // token version matches, the user is active. What is wrong is one
+        // request header naming an organization this caller cannot act
+        // in, which is client state, not a dead session. Answering 401
+        // made every web client treat it as one: the axios interceptor
+        // cleared local auth state and redirected to /auth/login, so a
+        // single stale org id read to the user as being signed out
+        // moments after signing in. The refusal itself is unchanged — the
+        // membership check still decides, and still refuses.
+        //
+        // The code is what makes this recoverable: a client that sees
+        // ORGANIZATION_CONTEXT_INVALID drops its organization selection
+        // and asks again, rather than throwing the session away.
+        throw new ForbiddenException({
+          code: 'ORGANIZATION_CONTEXT_INVALID',
+          message: 'Not a member of the requested organization',
+        });
       }
       (user as any).currentOrganizationId = headerOrgId;
     } else if (memberships.length === 1) {
