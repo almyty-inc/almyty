@@ -56,7 +56,7 @@ import { useAppStore, useNotifications } from '@/store/app'
 import { Theme, applyTheme, subscribeToSystemTheme } from '@/lib/theme'
 import { getInitials } from '@/lib/utils'
 import { CommandPalette } from '@/components/command-palette'
-import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts'
+import { KeyboardShortcutsListener } from '@/components/keyboard-shortcuts'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { EmailVerificationBanner } from '@/components/layout/email-verification-banner'
@@ -246,7 +246,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <CommandPalette />
       {/* Keyboard shortcuts help dialog — `?` key toggles it
        * from anywhere outside of an editable field. */}
-      <KeyboardShortcutsDialog />
+      <KeyboardShortcutsListener />
       {/* Sidebar */}
       <div
         className={cn(

@@ -15,7 +15,7 @@ vi.mock('@/components/onboarding/setup-pill', () => ({
   SetupPill: () => <button type="button">Setup 1/3</button>,
 }))
 vi.mock('@/components/command-palette', () => ({ CommandPalette: () => null }))
-vi.mock('@/components/keyboard-shortcuts', () => ({ KeyboardShortcutsDialog: () => null }))
+vi.mock('@/components/keyboard-shortcuts', () => ({ KeyboardShortcutsListener: () => null }))
 vi.mock('@/components/notifications/notification-bell', () => ({ NotificationBell: () => null }))
 vi.mock('@/components/layout/email-verification-banner', () => ({ EmailVerificationBanner: () => null }))
 vi.mock('@/components/plan-indicator', () => ({ PlanBadge: () => null }))

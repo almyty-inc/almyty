@@ -60,6 +60,7 @@ const AcceptInvitePage = lazy(() => import('@/pages/accept-invite').then(m => ({
 const CliLoginPage = lazy(() => import('@/pages/cli-login').then(m => ({ default: m.CliLoginPage })))
 const ReferralRedirectPage = lazy(() => import('@/pages/referral-redirect').then(m => ({ default: m.ReferralRedirectPage })))
 const NotificationsPage = lazy(() => import('@/pages/notifications').then(m => ({ default: m.NotificationsPage })))
+const ShortcutsPage = lazy(() => import('@/pages/shortcuts').then(m => ({ default: m.ShortcutsPage })))
 const NotFoundPage = lazy(() => import('@/pages/not-found').then(m => ({ default: m.NotFoundPage })))
 
 // Layout wrapper that mounts once via parent Route + Outlet, so
@@ -166,6 +167,7 @@ function App() {
           <Route path="/organizations" element={<OrganizationsPage />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
+          <Route path="/shortcuts" element={<ShortcutsPage />} />
           {/* Unknown authed path → a real 404 inside the shell, NOT a
               silent redirect to the dashboard (which read as "my page
               vanished"). Sits inside the DashboardLayout parent route

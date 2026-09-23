@@ -1,56 +1,37 @@
-/* Keyboard shortcuts help dialog.
+/* Keyboard shortcuts: the `?` key, and the list it opens.
  *
- * Opens on `?` (Shift+/) from anywhere that isn't an editable
- * field — same convention as GitHub, Slack, Linear. Closes on
- * Escape. Also exposes a programmatic open handle for the
- * sidebar help icon once that lands.
+ * `?` (Shift+/) from anywhere that isn't an editable field goes to
+ * /shortcuts -- same key as GitHub, Slack and Linear. It used to open a
+ * dialog; it is a page now (no dialogs), so the list has a URL and Back
+ * returns to where you were.
+ *
+ * The list names only shortcuts that exist. The dialog advertised
+ * "G then D", "N" and "/" too, and nothing ever handled them.
  */
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-
-interface Shortcut {
+export interface Shortcut {
   keys: string[]
   label: string
 }
 
-const shortcuts: { group: string; entries: Shortcut[] }[] = [
+export const SHORTCUTS: { group: string; entries: Shortcut[] }[] = [
   {
     group: 'Navigation',
-    entries: [
-      { keys: ['⌘', 'K'], label: 'Open the command palette' },
-      { keys: ['G', 'D'], label: 'Go to Dashboard' },
-      { keys: ['G', 'A'], label: 'Go to Agents' },
-      { keys: ['G', 'T'], label: 'Go to Tools' },
-      { keys: ['G', 'P'], label: 'Go to APIs' },
-      { keys: ['G', 'Y'], label: 'Go to Gateways' },
-    ],
-  },
-  {
-    group: 'Actions',
-    entries: [
-      { keys: ['N'], label: 'Create new (on any list page)' },
-      { keys: ['/'], label: 'Focus search' },
-      { keys: ['Esc'], label: 'Close dialog / cancel' },
-    ],
+    entries: [{ keys: ['⌘', 'K'], label: 'Open the command palette (Ctrl+K on Windows and Linux)' }],
   },
   {
     group: 'Help',
-    entries: [
-      { keys: ['?'], label: 'Show this shortcuts list' },
-    ],
+    entries: [{ keys: ['?'], label: 'Show this list' }],
+  },
+  {
+    group: 'Everywhere',
+    entries: [{ keys: ['Esc'], label: 'Close the command palette or a confirmation' }],
   },
 ]
 
-// A tiny event-bus so anything in the layout can request the
-// dialog to open without prop drilling.
-export const openShortcutsEvent = 'almyty:open-shortcuts'
+export const SHORTCUTS_PATH = '/shortcuts'
 
 function isEditable(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false
@@ -62,61 +43,52 @@ function isEditable(el: EventTarget | null): boolean {
   return false
 }
 
-export function KeyboardShortcutsDialog() {
-  const [open, setOpen] = useState(false)
+/** Mounted once in the dashboard layout: `?` goes to the shortcuts page. */
+export function KeyboardShortcutsListener() {
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === '?' && !e.metaKey && !e.ctrlKey && !isEditable(e.target)) {
         e.preventDefault()
-        setOpen(true)
+        navigate(SHORTCUTS_PATH)
       }
     }
     document.addEventListener('keydown', handler)
-    const openListener = () => setOpen(true)
-    window.addEventListener(openShortcutsEvent, openListener)
-    return () => {
-      document.removeEventListener('keydown', handler)
-      window.removeEventListener(openShortcutsEvent, openListener)
-    }
-  }, [])
+    return () => document.removeEventListener('keydown', handler)
+  }, [navigate])
 
+  return null
+}
+
+/** The list itself; the /shortcuts page renders it. */
+export function ShortcutList() {
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Keyboard shortcuts</DialogTitle>
-          <DialogDescription>
-            Press <kbd className="rounded border px-1.5 py-0.5 text-xs font-mono">?</kbd> anywhere to open this list.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-6 pt-2">
-          {shortcuts.map((group) => (
-            <div key={group.group}>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {group.group}
-              </h3>
-              <ul className="space-y-2">
-                {group.entries.map((entry) => (
-                  <li key={entry.label} className="flex items-center justify-between text-sm">
-                    <span className="text-foreground">{entry.label}</span>
-                    <span className="flex items-center gap-1">
-                      {entry.keys.map((k, i) => (
-                        <kbd
-                          key={i}
-                          className="inline-flex min-w-[1.75rem] items-center justify-center rounded-md border border-border/80 bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
-                        >
-                          {k}
-                        </kbd>
-                      ))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      </DialogContent>
-    </Dialog>
+    <div className="space-y-6">
+      {SHORTCUTS.map((group) => (
+        <section key={group.group} className="rounded-xl border bg-card p-4 sm:p-6">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {group.group}
+          </h2>
+          <ul className="space-y-3">
+            {group.entries.map((entry) => (
+              <li key={entry.label} className="flex items-center justify-between gap-4 text-sm">
+                <span className="text-foreground">{entry.label}</span>
+                <span className="flex shrink-0 items-center gap-1">
+                  {entry.keys.map((k, i) => (
+                    <kbd
+                      key={i}
+                      className="inline-flex min-w-[1.75rem] items-center justify-center rounded-md border border-border/80 bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground"
+                    >
+                      {k}
+                    </kbd>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
   )
 }

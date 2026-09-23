@@ -36,6 +36,7 @@ import {
   Package,
   Shield,
   BookOpen,
+  Keyboard,
 } from 'lucide-react'
 
 import {
@@ -101,11 +102,13 @@ export function CommandPalette() {
     { id: 'nav-analytics', label: 'Analytics', icon: BarChart3, action: () => go('/analytics'), keywords: ['metrics', 'usage', 'audit', 'requests', 'logs'] },
     { id: 'nav-organizations', label: 'Organizations', icon: Building, action: () => go('/organizations'), keywords: ['teams', 'members', 'orgs'] },
     { id: 'nav-docs', label: 'Docs', icon: BookOpen, action: () => go('/docs'), keywords: ['help', 'guide', 'reference'] },
+    { id: 'nav-shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, action: () => go('/shortcuts'), keywords: ['keys', 'hotkeys', 'help'] },
     { id: 'nav-settings', label: 'Settings', icon: Settings, action: () => go('/settings'), keywords: ['profile', 'account', 'security'] },
   ]
 
   const actionEntries: Entry[] = [
     { id: 'act-new-agent', label: 'Create Agent', hint: 'Open the visual agent builder', icon: Plus, action: () => go('/agents/new') },
+    { id: 'act-import-agent', label: 'Import agent', hint: 'From an exported agent JSON', icon: Plus, action: () => go('/agents/import') },
     { id: 'act-new-gateway', label: 'Create Gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways?new=1') },
     { id: 'act-new-tool', label: 'Create Tool', hint: 'HTTP, JavaScript, GraphQL, Model, or SDK', icon: Plus, action: () => go('/tools?new=1') },
     { id: 'act-new-api', label: 'Import API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis?new=1') },
