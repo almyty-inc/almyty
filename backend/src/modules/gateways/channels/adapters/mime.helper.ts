@@ -60,11 +60,32 @@ export function looksLikeMime(raw: string): boolean {
   );
 }
 
+/**
+ * Bounds on what a single message may cost to parse.
+ *
+ * `parseMimeMessage` runs on fully attacker-controlled bytes BEFORE any
+ * per-gateway authentication: `POST /channels/email/inbound` skips the
+ * svix check entirely when RESEND_INBOUND_SIGNING_SECRET is unset (the
+ * default), and `EmailAdapter.extractRecipients` parses the raw MIME to
+ * work out which gateway the mail is even for. Until now the multipart
+ * walk had no depth limit and no part limit, and each level re-splits
+ * the remaining body into a fresh line array — so N nested multiparts
+ * with distinct boundaries cost O(size x depth) on the event loop.
+ *
+ * These are ceilings, not policy: real mail nests two or three levels
+ * (multipart/mixed wrapping multipart/alternative wrapping the bodies)
+ * and carries a handful of parts. Anything past them is a message we
+ * are better off parsing partially than parsing completely.
+ */
+export const MAX_MULTIPART_DEPTH = 10;
+export const MAX_PARTS_PER_LEVEL = 100;
+export const MAX_ATTACHMENTS = 100;
+
 /** Parse a raw RFC 5322 / MIME message into normalized fields. */
 export function parseMimeMessage(raw: string): ParsedMimeMessage {
   const { headers, body } = splitHeadersBody(raw);
   const attachments: ParsedMimeAttachment[] = [];
-  const { text, html } = extractBody(headers, body, attachments);
+  const { text, html } = extractBody(headers, body, attachments, 0);
   return {
     from: headers['from'] ? decodeEncodedWords(headers['from']) : undefined,
     to: headers['to'] ? decodeEncodedWords(headers['to']) : undefined,
@@ -271,20 +292,26 @@ function splitMultipart(body: string, boundary: string): string[] {
  * text/plain and first text/html bodies found. Any non-body leaf (or a
  * part explicitly marked `Content-Disposition: attachment`) has its
  * metadata pushed onto `attachments`.
+ *
+ * `depth` bounds the recursion. See MAX_MULTIPART_DEPTH — this runs on
+ * unauthenticated input, so a message that nests past the ceiling is
+ * treated as a leaf rather than followed.
  */
 function extractBody(
   headers: Record<string, string>,
   body: string,
   attachments: ParsedMimeAttachment[] = [],
+  depth = 0,
 ): { text?: string; html?: string } {
   const ct = parseContentType(headers['content-type']);
 
-  if (ct.mimeType.startsWith('multipart/') && ct.boundary) {
+  if (ct.mimeType.startsWith('multipart/') && ct.boundary && depth < MAX_MULTIPART_DEPTH) {
     let text: string | undefined;
     let html: string | undefined;
-    for (const rawPart of splitMultipart(body, ct.boundary)) {
+    const parts = splitMultipart(body, ct.boundary).slice(0, MAX_PARTS_PER_LEVEL);
+    for (const rawPart of parts) {
       const part = splitHeadersBody(rawPart);
-      const found = extractBody(part.headers, part.body, attachments);
+      const found = extractBody(part.headers, part.body, attachments, depth + 1);
       if (!text && found.text) text = found.text;
       if (!html && found.html) html = found.html;
     }
@@ -305,13 +332,15 @@ function extractBody(
   // Everything else is an attachment (or inline non-text): record its
   // metadata. The decoded byte length gives an accurate size even when
   // the part arrived base64/quoted-printable encoded.
-  attachments.push({
-    filename: disp.filename || ct.name,
-    contentType: ct.mimeType || 'application/octet-stream',
-    size: decodedByteLength(body, headers['content-transfer-encoding']),
-    contentId: normalizeContentId(headers['content-id']),
-    disposition: disp.disposition,
-  });
+  if (attachments.length < MAX_ATTACHMENTS) {
+    attachments.push({
+      filename: disp.filename || ct.name,
+      contentType: ct.mimeType || 'application/octet-stream',
+      size: decodedByteLength(body, headers['content-transfer-encoding']),
+      contentId: normalizeContentId(headers['content-id']),
+      disposition: disp.disposition,
+    });
+  }
   return {};
 }
 
