@@ -44,6 +44,7 @@ const CredentialNewPage = lazy(() => import('@/pages/credential-new').then(m => 
 const AccessKeyNewPage = lazy(() => import('@/pages/credential-new').then(m => ({ default: m.AccessKeyNewPage })))
 const MemoryNewPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryNewPage })))
 const MemoryTransferPage = lazy(() => import('@/pages/memory-new').then(m => ({ default: m.MemoryTransferPage })))
+const AnalyticsBudgetPage = lazy(() => import('@/pages/analytics-budget').then(m => ({ default: m.AnalyticsBudgetPage })))
 const SettingsPage = lazy(() => import('@/pages/settings').then(m => ({ default: m.SettingsPage })))
 const OrganizationsPage = lazy(() => import('@/pages/organizations').then(m => ({ default: m.OrganizationsPage })))
 const ChatPage = lazy(() => import('@/pages/chat').then(m => ({ default: m.ChatPage })))
@@ -160,6 +161,8 @@ function App() {
           <Route path="/models" element={<ModelsPage />} />
           <Route path="/llm-providers" element={<LlmProvidersRedirect />} />
           <Route path="/llm-providers/:id" element={<LlmProviderDetailPage />} />
+          <Route path="/analytics/budgets/new" element={<AnalyticsBudgetPage />} />
+          <Route path="/analytics/budgets/:budgetId/edit" element={<AnalyticsBudgetPage />} />
           <Route path="/analytics/*" element={<AnalyticsPage />} />
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/memories/new" element={<MemoryNewPage />} />
