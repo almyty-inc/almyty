@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
 import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -235,6 +236,7 @@ export function ApisPage() {
           </Button>
         }
       />
+      <PageIntro topic="apis" />
 
       <CreateApiDialog
         open={createDialogOpen}

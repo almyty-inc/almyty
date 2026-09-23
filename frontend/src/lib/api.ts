@@ -1306,15 +1306,34 @@ export const approvalPoliciesApi = {
   delete: (id: string) => apiDel(`/approval-policies/${id}`),
 }
 
+/**
+ * Mirrors backend/src/modules/onboarding/dto/onboarding.dto.ts. Every step
+ * is computed server-side from what exists in the org, never from a box
+ * someone ticked.
+ */
 export interface OnboardingState {
   steps: {
     provider: boolean
     api: boolean
+    tools: boolean
     gateway: boolean
     first_call: boolean
     external_client: boolean
+    agent: boolean
+    agent_run: boolean
+    app: boolean
+    distribution: boolean
+    runner: boolean
+  }
+  /** The org's own objects a step deep-links into, when they exist. */
+  links: {
+    gateway: { id: string; name: string; type: string; endpoint: string } | null
+    agent: { id: string; name: string } | null
+    app: { slug: string; name: string } | null
   }
   dismissed: boolean
+  /** Page intros this user closed. */
+  dismissedIntros: string[]
   activatedRealAt: string | null
 }
 
@@ -1323,6 +1342,10 @@ export const onboardingApi = {
     apiGet(`/organizations/${organizationId}/onboarding`),
   setDismissed: (organizationId: string, dismissed: boolean): Promise<OnboardingState> =>
     apiPatch(`/organizations/${organizationId}/onboarding`, { dismissed }),
+  dismissIntro: (organizationId: string, topic: string): Promise<OnboardingState> =>
+    apiPatch(`/organizations/${organizationId}/onboarding`, { dismissIntro: topic }),
+  resetIntros: (organizationId: string): Promise<OnboardingState> =>
+    apiPatch(`/organizations/${organizationId}/onboarding`, { resetIntros: true }),
 }
 
 export type ApiResponse<T = any> = AxiosResponse<T>

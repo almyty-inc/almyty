@@ -12,7 +12,7 @@ vi.mock('@/lib/api', () => ({
   organizationsApi: { getAll: vi.fn() },
 }))
 vi.mock('@/lib/analytics', () => ({ identifyUser: vi.fn(), resetAnalytics: vi.fn() }))
-vi.mock('@/components/onboarding/setup-pill', () => ({ SetupPill: () => null }))
+vi.mock('@/components/onboarding/guide-pill', () => ({ GuidePill: () => null }))
 vi.mock('@/components/command-palette', () => ({ CommandPalette: () => null }))
 vi.mock('@/components/keyboard-shortcuts', () => ({ KeyboardShortcutsDialog: () => null }))
 vi.mock('@/components/notifications/notification-bell', () => ({ NotificationBell: () => null }))

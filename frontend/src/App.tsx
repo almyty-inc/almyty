@@ -30,6 +30,7 @@ import { usePageviews } from '@/hooks/use-pageviews'
 
 // Lazy-loaded pages — code-split into separate chunks
 const DashboardPage = lazy(() => import('@/pages/dashboard').then(m => ({ default: m.DashboardPage })))
+const GuidePage = lazy(() => import('@/pages/guide').then(m => ({ default: m.GuidePage })))
 const GatewaysPage = lazy(() => import('@/pages/gateways').then(m => ({ default: m.GatewaysPage })))
 const GatewayDetailPage = lazy(() => import('@/pages/gateway-detail').then(m => ({ default: m.GatewayDetailPage })))
 const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisPage })))
@@ -128,6 +129,7 @@ function App() {
             inside the layout reliably reflects the active child. */}
         <Route element={<DashboardLayoutOutlet />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/guide" element={<GuidePage />} />
           <Route path="/gateways" element={<GatewaysPage />} />
           <Route path="/gateways/:id" element={<GatewayDetailPage />} />
           <Route path="/apis" element={<ApisPage />} />

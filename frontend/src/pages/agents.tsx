@@ -33,6 +33,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
 import { QueryError } from '@/components/ui/query-error'
 import {
   Dialog,
@@ -360,6 +361,7 @@ export function AgentsPage() {
           </>
         }
       />
+      <PageIntro topic="agents" />
 
       {!currentOrganization ? (
         <EmptyState

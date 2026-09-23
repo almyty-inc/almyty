@@ -24,6 +24,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 // formatDate is the shared one from lib/utils: a local copy here returned
 // relative time ("3h ago") while every other page showed "Jan 5, 2026".
@@ -79,6 +80,7 @@ export function CredentialsPage() {
           )
         }
       />
+      <PageIntro topic="credentials" />
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="secrets" className="gap-1.5"><Shield className="h-4 w-4" />Vault</TabsTrigger>
