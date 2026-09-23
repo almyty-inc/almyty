@@ -13,7 +13,6 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmChatRunnerHelper } from '../llm-providers/llm-chat-runner.helper';
 import { LlmModelsHelper } from '../llm-providers/llm-models.helper';
-import { EndpointProviderHelper } from '../llm-providers/endpoint-provider.helper';
 import { PriceFeedService } from './pricing/price-feed.service';
 import { ModelRouterService } from './routing/model-router.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
@@ -46,20 +45,6 @@ export interface RegisterModelInput {
 export type UpdateModelInput = Partial<Omit<RegisterModelInput, 'vendorModelId'>> & {
   status?: Model['status'];
 };
-
-export interface RegisterEndpointInput {
-  name: string;
-  /** Base URL of an OpenAI-compatible chat endpoint (the part before /chat/completions). */
-  url: string;
-  apiKey?: string;
-  vendorModelId: string;
-  capabilities?: ModelCapabilities;
-  contextLength?: number | null;
-  privacyTier?: ModelPrivacyTier;
-  region?: string | null;
-  pricingOverride?: ModelPricingInput | null;
-}
-
 
 export interface ProviderSyncResult {
   created: Model[];
@@ -117,7 +102,6 @@ export class ModelCatalogService {
     @Optional() private readonly priceFeed?: PriceFeedService,
     @Optional() private readonly envelopeCrypto?: EnvelopeCryptoService,
     @Optional() private readonly auditLog?: AuditLogService,
-    @Optional() private readonly endpointProviders?: EndpointProviderHelper,
   ) {}
 
   list(organizationId: string, filter: { status?: Model['status']; privacyTier?: ModelPrivacyTier; providerId?: string; selectable?: boolean } = {}): Promise<Model[]> {
@@ -200,50 +184,6 @@ export class ModelCatalogService {
     }
     this.audit(saved, AuditAction.MODEL_REGISTERED, userId, { providerId: saved.providerId, endpoint: Boolean(saved.endpointRef?.url) });
     return saved;
-  }
-
-  /**
-   * A hand-registered OpenAI-compatible endpoint: the URL and key become a
-   * custom LLM provider row (encrypted like any other), the card points at
-   * it. Selectable after one passing validation run, like every card.
-   */
-  async registerEndpoint(organizationId: string, input: RegisterEndpointInput, userId?: string): Promise<Model> {
-    if (!this.endpointProviders) {
-      throw new BadRequestException({ code: 'ENDPOINT_REGISTRATION_UNAVAILABLE', message: 'Endpoint registration is not available in this deployment' });
-    }
-    // A registered endpoint is a real provider row on the OpenAI-compatible
-    // path (chat at <base>/chat/completions), and its key lives in the
-    // credential store like every other provider's, never inline.
-    const provider = await this.endpointProviders.upsert({
-      organizationId,
-      name: input.name,
-      apiUrl: input.url,
-      model: input.vendorModelId,
-      apiKey: input.apiKey,
-      managedById: `endpoint:${organizationId}:${input.name}`,
-      region: input.region,
-    });
-    return this.register(
-      organizationId,
-      {
-        name: input.name,
-        vendorModelId: input.vendorModelId,
-        providerId: provider.id,
-        capabilities: input.capabilities,
-        contextLength: input.contextLength,
-        privacyTier: input.privacyTier ?? 'private_cloud',
-        region: input.region,
-        pricingOverride: input.pricingOverride,
-        // The card records where it is served from, the same field a
-        // deployment fills, minus the deploymentId that marks one we run.
-        // Without this a hand-registered endpoint was indistinguishable
-        // from a vendor key, so it was badged wrong and the "your
-        // endpoint" filter matched nothing.
-        endpointRef: { url: input.url },
-        metadata: { endpoint: input.url },
-      },
-      userId,
-    );
   }
 
   /**

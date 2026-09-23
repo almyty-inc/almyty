@@ -37,7 +37,7 @@ export function TestProviderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl">
         <DialogHeader>
-          <DialogTitle>Test Provider: {testProvider?.name}</DialogTitle>
+          <DialogTitle>Test inference provider: {testProvider?.name}</DialogTitle>
           <DialogDescription>
             Send a test request to validate provider configuration and connectivity
           </DialogDescription>

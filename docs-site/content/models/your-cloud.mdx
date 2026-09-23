@@ -1,0 +1,182 @@
+# Your cloud account
+
+A model you run on your own cloud account is still just a model. Name where its weights come from, pick the cloud, choose a size and a budget, and almyty starts it there. It appears in the [Models](/models) list like every other model, with **Runs on** saying where, for example "Your Hugging Face account (Inference Endpoint)" or "Your AWS account (Bedrock)", and its running state, hourly cost and budget on the model itself. The [router](/models/routing) picks it like any vendor model.
+
+almyty does not host anything. The model runs on the cloud's own managed product, in your account, billed by that cloud to you. Weight files never pass through almyty.
+
+```
+Model source                        Your cloud                          Models list
+hf://Qwen/Qwen3-14B          ->      started, sized, watched      ->      Runs on: your account
+bedrock://...                        every 2 min                          status, cost, budget
+```
+
+## Add one
+
+1. Open **Models** and click **Add model**.
+2. Under **Where does it run?** choose **Your cloud account**.
+3. Name the model source: a Hugging Face repository such as `hf://meta-llama/Llama-3.1-8B-Instruct`, a bucket prefix such as `s3://acme-models/qwen3-14b-support@e3b0c442`, or a model the cloud already hosts. See [Model sources](#model-sources).
+4. Pick the cloud: Hugging Face Inference Endpoints, Modal, AWS Bedrock, SageMaker, Google Vertex AI, Microsoft Foundry, Baseten, Together, Fireworks, Nebius, RunPod or DigitalOcean. A cloud that cannot read the source you named is not offered.
+5. Choose the account (a saved [connection](/connections), or the cloud's own fields), the size (hardware, replicas, region) and, optionally, a [budget](/cost-governance).
+
+The model is in the list at once, with status **Starting**. It turns active when the endpoint is ready, and usable once a validation run passes, the same rule as every other model. Validate it from its detail page when it reads **Running**.
+
+## On the model
+
+Click a model that runs on your cloud to see, next to its usual facts:
+
+| | |
+|---|---|
+| **Status** | Starting, Running, Scaled to zero, Resizing, Needs attention, Shutting down, Shut down or Failed, with the cloud's last message when there is one |
+| **Cost** | Spend so far and the current hourly rate |
+| **Budget** | The limit it is tied to and how much of it is used |
+| **Endpoint** | The URL the cloud serves it on |
+| **Lineage** | Plain facts about the weights, for example "Based on Llama 3.1 70B, 4-bit" |
+| **Controls** | Start, Stop, replicas, Shut down |
+
+Start, Stop and the replica count record what you want; almyty applies it at the cloud within two minutes. Stop scales to zero. Shut down removes the endpoint at the cloud. Weights are never touched.
+
+## From the terminal
+
+The cloud's account details hold secrets, so they come from a file, from stdin or from a saved connection, never from the command line:
+
+```bash
+$ cat > hf.json <<'JSON'
+{"token":"hf_...","namespace":"acme","region":"eu-west-1","instanceType":"nvidia-a10g"}
+JSON
+$ npx @almyty/models deploy hf://Qwen/Qwen3-14B --adapter huggingface-endpoints \
+    --config-file hf.json \
+    --desired '{"replicas":1,"privacyTier":"private_cloud","region":"eu-west-1"}'
+Queued.
+c07b...  huggingface-endpoints  pending  replicas ?/1
+```
+
+The model is in `npx @almyty/models list` straight away. Once it is running, validate it and it is selectable:
+
+```bash
+$ npx @almyty/models validate 4f2a...
+Passed in 1210 ms.
+```
+
+A model the cloud already hosts starts the same way, with its reference as the source:
+
+```bash
+$ npx @almyty/models deploy fireworks://accounts/acme/models/qwen3-tuned --adapter fireworks
+```
+
+Every flag is on [the CLI page](/models/cli#your-cloud-account); the HTTP calls are in the [Models API](/api-reference/models-api#your-cloud-account).
+
+## Model sources
+
+A source is one of two kinds.
+
+**Weights** that a cloud reads:
+
+| Source | Meaning |
+|---|---|
+| `hf://org/repo` | A Hugging Face repository, the default for most clouds. almyty pins it to the exact commit it resolves to, so the model does not change under you; `hf://org/repo@sha` pins a commit yourself |
+| `s3://bucket/prefix@etag` | Your own S3-compatible bucket, read directly by the clouds that support it |
+| `gs://bucket/prefix@generation` | Google Cloud Storage, Vertex's own source |
+| `file:///abs/path@sha` | A path on your own Ollama host |
+
+**A model the cloud already hosts.** The cloud versions it itself, so no pin is needed:
+
+| Source | Cloud |
+|---|---|
+| `bedrock://<model id or arn>` | AWS Bedrock |
+| `sagemaker://model-package/<arn>` | SageMaker |
+| `vertex://publishers/<publisher>/models/<model>` | Google Vertex AI |
+| `foundry://<format>/<name>@<version>` or `azureml://registries/<registry>/models/<name>/labels/<label>` | Microsoft Foundry |
+| `fireworks://accounts/<account>/models/<model>` | Fireworks |
+| `together://<owner>/<model>` | Together |
+| `baseten://<model id>` | Baseten |
+
+A source the chosen cloud cannot read is refused when you submit, with `ADAPTER_UNSUPPORTED_SOURCE` and the list of sources that cloud does take, rather than surfacing later as a cloud error.
+
+### Weights in your own bucket
+
+Most models never need a bucket: they come from Hugging Face or from the cloud's own catalog. A bucket matters only to the clouds that read object storage directly with their own role or keys: AWS Bedrock (custom import), SageMaker, Fireworks and Baseten. Connect it once under [Connections](/connections) as an S3-compatible connection (AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces). An `s3://` source in an organization with no such connection is refused with `REGISTRY_NOT_CONNECTED`. The bucket's keys are handed to the cloud per call and never stored with the model.
+
+A single-tenant self-host can seed that connection from `MODEL_REGISTRY_S3_*` (falling back to `STORAGE_S3_*`) on first boot. With two or more organizations those variables are ignored.
+
+## Budgets and scale to zero
+
+A model tied to a budget is charged from the cloud's cost report on every check: spend so far, the current burn rate per hour, and a per-token price where the cloud has one. Reaching the budget stops it (scales it to zero), writes a `model_deployment_budget_stop` audit entry with the amount and the limit, and sends a notification. It does not repeat on later checks.
+
+What a stopped model still costs depends on the cloud. Where scaling to zero does not stop the bill (DigitalOcean bills for the accelerators it holds until shut down; Vertex keeps at least one replica), the cloud's section below says what Stop does instead and what still bills. Most clouds publish no billing API, so spend is usually the configured hourly rate times observed running time, marked as an estimate.
+
+Where the cloud reports a per-token price, the model is priced from it (`pricingSource: adapter`) unless you set a price override.
+
+## When the cloud loses it
+
+If the endpoint disappears at the cloud (deleted from the vendor console, or the account went away), the model reads **Needs attention**. One that is still starting gets 30 minutes of grace. Past that, anything left at the cloud is removed and a `model_deployment_orphan_teardown` audit entry is written. Weights are never touched.
+
+## Clouds
+
+What differs between clouds is the account you need, which sources it reads, what Stop means there, and how spend is measured. The API calls each cloud's `providerType`; it is given in each section.
+
+**Every cloud below is verified against its own documentation only.** None has been run against a real account yet. `CONFORMANCE_LIVE=<providerType>` runs the same conformance suite against the real cloud with real credentials, but it needs credentials nobody holds yet and never runs in CI. Every cloud passes that suite against recorded responses: start, wait for ready, chat, scale to zero, shut down, report a sane cost, and the failure cases (unsupported source, unsupported architecture, quota, expired credential, lost endpoint).
+
+### Hugging Face Inference Endpoints
+
+`providerType`: `huggingface-endpoints`. The only dedicated product Hugging Face runs for you (its serverless offer, Inference Providers, routes to a third party and runs nothing of yours, so it is an [inference provider](/models/providers), not a cloud here). Needs a Hugging Face token with the Inference Endpoints write scope and your namespace (user or organization); choose the vendor (`aws`, `gcp`, `azure`), region, accelerator, instance type and size, and the endpoint type (`public`, `authenticated` or `private`). Source: Hugging Face only. There is no field anywhere in the create body for object storage, a URL or an upload, so an `s3://` source is refused with `ADAPTER_UNSUPPORTED_SOURCE`. almyty sends the Hub `repository` and the pinned `revision`; a gated or third-party repo's token goes in the container secret `HF_TOKEN`, held by Hugging Face, not by us. Regions as read on 2026-09-09: aws `eu-west-1`, `us-east-1`, `us-east-2`, `us-west-2`; azure `eastus`; gcp `us-east4`. Stop calls the endpoint's scale-to-zero (nothing billed, resumed on Start); the endpoint also scales to zero on its own after its configured idle timeout. Cost is `hourlyRateCents` times running time, priced from Hugging Face's public `GET /v2/provider` list, since there is no usage API.
+
+### Modal
+
+`providerType`: `modal`. Modal Endpoints, the managed product: Modal builds, runs and autoscales the serving stack. A model of yours always runs as a Dedicated Endpoint (Shared Endpoints only serve Modal's own catalog). Needs a Modal token id and secret (`MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`) in the child process environment, never on a command line, and your workspace slug. Source: Hugging Face only, as a required repo id. Fine-tuned weights layer on top with `--custom-hf-repo` or `--custom-volume-name` (a Modal Volume you already filled yourself; almyty never writes one). There is no HTTP control plane: almyty shells out to the `modal` CLI, which must be on the API image's PATH. Start runs `modal endpoint create --model <hf repo>`; Modal has no replica flag, since capacity is its own job, so the replica count only records intent and a ceiling of 0 is reported stopped at no cost. Shut down runs `modal endpoint stop`. Cost is `hourlyRateCents` times observed running time; Modal's billing API is gated to Team and Enterprise plans and not per-endpoint, so it is not wired.
+
+### AWS Bedrock
+
+`providerType`: `aws-bedrock-import`. Amazon Bedrock, in your own AWS account, over two routes chosen by the source. `bedrock://<model id or arn>` takes Bedrock's own catalog: one application inference profile, created and billed per token by AWS, with no import and no role needed. `s3://` takes Custom Model Import: your own weights, read by AWS directly through an import role ARN; no bucket access keys are ever handed to AWS. Needs an access key pair (or temporary credentials with a session token) and the region (`us-east-1`, `us-east-2`, `us-west-2`, `eu-central-1` only for the import route); the import route also needs the role ARN. Import architectures are gated by the base model's family (Mistral, Mixtral, Flan, Llama 2/3/3.1/3.2/3.3, Mllama, GPTBigCode, Qwen2/2.5, Qwen3, GPT-OSS); weights must be Hugging Face format under 200 GB (100 GB multimodal). Bedrock is serverless on both routes: on the catalog route the replica count sends nothing, since AWS decides capacity and bills per token; on the import route it records a ceiling only and Stop marks the model standby at zero rate. There is no cancel API for an import job, so Shut down deletes the imported model once the job has finished. Cost is exact per-token pricing on the catalog route and an estimate (custom model units per copy times the per-unit rate, times hours since import) on the import route.
+
+### SageMaker
+
+`providerType`: `sagemaker`. Amazon SageMaker AI real-time inference, in your own AWS account. Needs an access key pair (or temporary credentials) and an execution role ARN that can pull the serving image and read your bucket. Source: `s3://` only, plus `sagemaker://model-package/<arn>` for a JumpStart or AWS Marketplace model, which brings its own image and weights. Choose the instance type (`ml.g5.xlarge` by default), the container image (the LMI/DJL vLLM deep learning container by default on the `s3://` route), volume size, timeouts and extra environment. Four resources are created per model (model, endpoint config, endpoint, and an inference component), cleaned up together on any failure. Scale to zero exists only through an inference component: the replica count is `UpdateInferenceComponentRuntimeConfig` on the copy count, zero included, with managed instance scaling draining the instances behind it; automatic scale-out from zero (the Application Auto Scaling alarm AWS documents for that) isn't wired, so a stopped endpoint comes back only on Start. The bucket must live in, or be shared with, that AWS account; a MinIO or cross-cloud bucket needs copying first. Cost is `hourlyRateCents` times observed instances, an estimate. An endpoint takes 8 to 15 minutes to come into service.
+
+### Google Vertex AI
+
+`providerType`: `vertex`. Google Vertex AI, in your own GCP project, over two routes chosen by the source. `vertex://publishers/<publisher>/models/<model>` or `hf://org/repo` takes Model Garden's one-call deploy, Google's own catalog and its choice of machine spec unless you name one. `gs://bucket/prefix` takes the Cloud Storage route: `models:upload` with `artifactUri` set to the prefix and a container spec that defaults to Google's own `pytorch-vllm-serve` image; Vertex requires an Artifact Registry or Container Registry image, so a Docker Hub image cannot be used here. Sources: Cloud Storage and Hugging Face; `s3://` is refused. Needs a service account key JSON with `roles/aiplatform.user` (or a short-lived access token), a project id and location (`us-central1` by default). A gated Hugging Face repository's token goes through `modelConfig.huggingFaceAccessToken` on the Model Garden route, straight to Google. Vertex never scales dedicated resources to zero on its current API (`minReplicaCount >= 1`): Stop undeploys the model and keeps the endpoint at zero burn, and Start redeploys using the machine spec Model Garden originally chose. Shut down undeploys first, since Vertex refuses to delete an endpoint with a model still on it, then deletes the endpoint and the model. Cost is `hourlyRateCents` per replica times replicas, an estimate; Vertex publishes no per-endpoint cost API.
+
+### Microsoft Foundry
+
+`providerType`: `azure-foundry`. Microsoft Foundry, in your own Azure subscription, over three routes chosen by the source. `foundry://{format}/{name}@{version}` takes a serverless API deployment (Azure's term) against the Foundry catalog: Microsoft holds the weights, nothing to transfer, and nothing container-shaped is named. `hf://{owner}/{repo}` takes a managed online endpoint fed from Azure's own Hugging Face registry (`azureml://registries/HuggingFace/models/{repo}/labels/latest`), with no environment and no image, so Azure's curated container serves it and Azure pulls the weights from the Hub itself; a gated repo needs the workspace's `HuggingFaceTokenConnection`, which almyty does not create yet. `azureml://` or a blob `https://` URL takes a managed online endpoint over a registered model asset, the only route that names a container since Azure has no curated image for arbitrary weights; no bucket URI or object-store key is ever sent on it. Sources: Hugging Face and Azure's own references; `s3://` and `gs://` are refused. Needs a subscription, resource group and workspace, and either a service principal or an ARM access token. On the catalog route Stop deletes Azure's deployment (which frees the quota) and Start recreates it at the configured token-per-minute capacity; the two managed-endpoint routes have no scale to zero either (Stop deletes Azure's deployment and keeps the endpoint URL). Cost is exact per-token pricing on the catalog route and `hourlyRateCents` times capacity over observed running time on the managed-endpoint routes; Azure's Cost Management API is not wired.
+
+### Baseten
+
+`providerType`: `baseten`. Baseten dedicated capacity through the BIS-LLM engine, config-only against a prebuilt serving image. Needs a Baseten API key; choose the accelerator, the engine backend (`vllm` or `trtllm`), the scale-down delay and the concurrency target. Sources: Hugging Face, `s3://` and `gs://`: the Baseten Delivery Network mirrors weights from all three itself (also `bt://`, `r2://`, `cw://` and `azure://`, which are accepted too). A private or gated source is authenticated by a per-source `auth` block, not by the top-level secrets config: for Hugging Face the secret is named `hf_access_token`; for S3 it is `aws_credentials` holding `aws_access_key_id`, `aws_secret_access_key`, `aws_region` under those exact key names. The secret is workspace-wide, written on every start and never deleted on shut down. Placement is enabled per workspace by Baseten and listed by `GET /v1/regions`, so almyty offers no fixed region list. Stop calls `deactivate`, immediate and free; Start and a positive replica count PATCH the replica bounds and call `activate`. Cost comes from Baseten's billing summary (a per-model breakdown, up to 31 days) and its instance price list, falling back to `hourlyRateCents` times uptime when the key lacks billing scope.
+
+### Together
+
+`providerType`: `together`. Together dedicated model inference (DMI), a v2 resource model; v1 is closed to new endpoints entirely. Needs a Together API key scoped to one project. Choose the instance type from Together's published catalog, autoscaling bounds and windows, and placement (set once, at create time only; Together cannot move a live endpoint). Source: Hugging Face only. An upload registers the model with Together against `providerConfig.baseModelId` (required, and not guessable from the source), then POSTs a remote upload naming the Hub URL and, for a private or gated repo, your own Hub token; Together streams the weights server-side. The result is a `together://ml_...` reference that later starts of the same model reuse. Routing traffic is a separate, required step on this product: Together can report the model `READY` and still send it no traffic, so almyty also sets the endpoint's traffic split once it is up. When a model publishes more than one serving profile almyty refuses and lists them; `providerConfig.configId` picks one. Stop sets both replica bounds to zero; a positive count raises the floor. Shut down clears the split, stops and deletes what Together runs, then deletes the endpoint. Cost is the published per-replica instance price times uptime; Together's usage API reports request and latency metrics but no dollars.
+
+### Fireworks
+
+`providerType`: `fireworks`. Fireworks on-demand capacity: dedicated GPUs for a model that is already a Fireworks resource. Needs a Fireworks API key and your account id; choose a `deploymentShape` (a Fireworks field; Fireworks warns that most failed creates lack one) or an explicit accelerator and count, plus precision, placement (`GLOBAL`, `US`, `EUROPE`, `APAC`, or one of 26 single regions; new accounts have quota in `GLOBAL` only, and single-region placement costs 1.5x) and the scale-to-zero window. Source: `s3://` only, and the import is your own step: Fireworks reads a bucket itself, with a role ARN or keys you give it, run through `firectl model create <MODEL_ID> s3://bucket/path/ --role-arn ...`. There is no REST field for that import, so for an `s3://` source almyty looks up the resulting model in your account and, when it is missing, refuses with `ADAPTER_UNSUPPORTED_SOURCE` and the exact `firectl` command to run. A Hugging Face source cannot be served at all: the Hugging Face URL field on a Fireworks model is training metadata, not an import source, and is refused up front. Stop sets the replica floor to zero; a stopped model answers 503 while it wakes, and Fireworks deletes a zero-floor model with no traffic after seven days. Cost comes from metered `accelerator_seconds` (Fireworks' own usage API) priced at the published per-GPU-hour rate, times 1.5 for single-region placement.
+
+### Nebius
+
+`providerType`: `nebius`. Nebius Token Factory dedicated endpoints: an isolated, Nebius-managed copy of a supported model template, not a compute VM. Needs a Nebius API token. Source: Hugging Face, narrowly: the repository must correspond to an existing Nebius model template (`model_name` plus `flavor_name`, taken from Nebius' own template list); anything else is refused by Nebius at create time. A fine-tune is named with `providerConfig.customWeightsId`: Nebius' Custom Weights Hub is support-gated beta with no upload API, so almyty can point at weights Nebius already holds but cannot upload any itself. `s3://` is refused with `ADAPTER_UNSUPPORTED_SOURCE`. The data-plane host is derived from the region (`api.tokenfactory.<region>.nebius.com`), overridable through `providerConfig.dataPlaneHost` for a region whose host differs. Stop PATCHes `{ enabled: false }`, since the minimum replica count can't go below one and this is the documented way to stop billing; Start PATCHes `{ enabled: true, scaling: {...} }`. Cost is `hourlyRateCents` per GPU per replica times the running count; Nebius publishes no usage API.
+
+### RunPod
+
+`providerType`: `runpod`. RunPod Serverless, running RunPod's own first-party vLLM worker image. Needs a RunPod API key; choose the GPU type id, count, data centers, container disk, idle timeout, scaler type and value, and flashboot. Source: Hugging Face only: the worker's `MODEL_NAME` environment variable takes a Hugging Face repo id (or a path already inside the container), `MODEL_REVISION` pins a revision, `HF_TOKEN` unlocks a gated or private repo. RunPod has no secret store for serverless templates, so those go into the template's own environment; nothing secret is kept on almyty's side. `s3://` is refused with `ADAPTER_UNSUPPORTED_SOURCE`. Start creates a template and an endpoint pointing at it. Replicas are always-on workers: the replica count sets the worker floor, and Stop sets both bounds to zero, the only way to stop an endpoint from answering; a floor of 0 with a positive ceiling reads Running with 0 replicas and cold-starts on the next request. Shut down deletes the endpoint, then the template. Cost is `hourlyRateCents` per worker times the larger of running workers and the floor; RunPod documents that billing endpoints exist but not their shape, so nothing from them is wired.
+
+### DigitalOcean
+
+`providerType`: `digitalocean`. DigitalOcean Gradient AI Dedicated Inference: a managed service DigitalOcean operates, serving a model on dedicated GPUs behind an OpenAI-compatible endpoint. **It is a DigitalOcean public preview**: enable it from the Feature Preview page in your control panel first, and expect the API to change. A token that works everywhere else on the DigitalOcean API is still refused here until you do, so that refusal is reported as `ADAPTER_PREVIEW_NOT_ENABLED` naming the opt-in rather than as a bad key, and the cloud is labelled as a preview in the **Add model** form. Needs a DigitalOcean API token; choose the region (`atl1`, `nyc2`, `tor1`), the accelerator type and scale count (AMD MI300X, MI300X 8x, MI325X, MI350X; NVIDIA H100, H100 8x, H200, H200 8x, B300, B300 8x), and an optional VPC. Source: a Hugging Face repository (`model_slug` with `model_provider: hugging_face`, and `access_tokens.hugging_face_token` for a gated repo), or a model already imported into DigitalOcean's own Model Catalog through Bring Your Own Model. BYOM import has no REST route: import once from the Control Panel (from Hugging Face or your own Spaces bucket), and name the resulting catalog entry with `providerConfig.modelSlug`. Architecture is gated by DigitalOcean itself at create time (documented support includes `Qwen2ForCausalLM` and `Qwen3ForCausalLM`); an unsupported one comes back as `ADAPTER_UNSUPPORTED_ARCHITECTURE`. The create response returns a dedicated inference bearer token, which is the only credential the data plane accepts (not the account token) and the only secret almyty keeps for the model. Scale to zero is unverified and reported unsupported: billing is per GPU-hour for the accelerators that exist, and only Shut down reliably stops it. Cost multiplies the published per-accelerator hourly rate by the current scale; there is no usage API.
+
+### From the API and CLI only
+
+Two more `providerType` values are not offered in **Add model**:
+
+- **`ollama`**: an Ollama server you already run, on your own machine or a box you rent. almyty never provisions the machine, installs Ollama, or moves weights; it talks to the server at the URL you give. Needs the server URL and, only behind a reverse proxy that checks one, a bearer token. Sources: `hf://` (pulled by Ollama itself as `hf.co/org/repo[:quant]`) and `file://` (a GGUF file or a directory of safetensors already on the server's own filesystem, or a library tag such as `qwen3:8b`). `s3://` is refused, because mirroring a bucket onto the host would make almyty the delivery route for the weights. Start pulls the Hub repo or creates the model from a host path, then loads it into memory; residency in VRAM is the closest thing Ollama has to a replica count, so 2 replicas is 1. Stop unloads with `keep_alive: 0`. Ollama bills nothing itself; set `hourlyRateCents` to account for a rented box, and it drops to zero while the model is unloaded. A private URL needs `OLLAMA_ALLOW_PRIVATE_URLS=true` on a self-hosted API. To call an Ollama server without almyty managing its models, add it as [a server you run](/models/providers#a-server-you-run) instead.
+- **`stub`**: an in-memory stand-in for development and the conformance suite, with nothing behind it. Registered outside production, or in production with `MODEL_STUB_ADAPTER=true`. Its `simulate` field forces `quota_exceeded` or `fail_ready` outcomes for tests.
+
+An OpenAI-compatible server you already run (vLLM, TGI, llama.cpp, SGLang, a LiteLLM proxy) is not a cloud here: almyty does not start, size or stop it. Add it as [a server you run](/models/providers#a-server-you-run).
+
+## Related
+
+- [Models](/models): the list, the model detail, validation and pricing
+- [Routing](/models/routing): how a model on your cloud gets picked
+- [Connections](/connections): cloud accounts and the bucket connection
+- [Cost governance](/cost-governance): budgets a model can be tied to
+- [Models CLI](/models/cli): every command with examples

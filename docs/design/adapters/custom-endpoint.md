@@ -62,10 +62,12 @@ cost reports use.
 - **It is watch-and-price only.** The reconcile loop treats an
   unsupported operation as a permanent property of the adapter, not an
   error to retry.
-- **Registration is its own route.** `POST /models/register-endpoint`
-  creates the card and the backing provider row, rather than the deploy
-  flow. That route writes the key through the credential store like every
-  other consumer; nothing is stored inline.
+- **A server someone else runs is not registered through this adapter.**
+  It is a `custom` LLM provider (`POST /llm-providers`, `type: "custom"`,
+  `configuration.apiUrl`, optional key) plus an ordinary card
+  (`POST /models` with that `providerId` and `vendorModelId`). The key
+  goes through the credential store like every other provider's; nothing
+  is stored inline.
 - **`degraded`, not `failed`, on an unreachable host.** The endpoint is
   not ours to fix, and a card that fails hard would drop out of routing
   on a transient blip.

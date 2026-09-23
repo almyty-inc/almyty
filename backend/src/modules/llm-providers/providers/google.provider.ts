@@ -4,7 +4,7 @@ import { Conversation } from '../../../entities/conversation.entity';
 import { MessageRole } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse } from '../llm-providers.service';
-import { callLlmProviderHttp } from './safe-request';
+import { callLlmProviderHttp, llmCallOptionsFor } from './safe-request';
 import { requireModel } from '../model-errors';
 
 
@@ -101,6 +101,20 @@ export async function callGoogle(
 /**
  * Handles custom/generic provider calls.
  */
+/**
+ * Where a custom provider's chat request goes. The configured URL is the
+ * OpenAI-compatible base (the same one the model list is read from, at
+ * <base>/models), so an OpenAI-format call goes to <base>/chat/completions.
+ * A URL that already names the chat endpoint, or a non-OpenAI format, is
+ * used as it is.
+ */
+export function customChatUrl(apiUrl: string, requestFormat: string): string {
+  const base = (apiUrl || '').replace(/\/+$/, '');
+  if (requestFormat !== 'openai') return apiUrl;
+  if (/\/chat\/completions$/.test(base)) return base;
+  return `${base}/chat/completions`;
+}
+
 export async function callCustomProvider(
   provider: LlmProvider,
   request: ChatRequest,
@@ -142,14 +156,18 @@ export async function callCustomProvider(
 
   const config: AxiosRequestConfig = {
     method: 'POST',
-    url: apiUrl,
+    url: customChatUrl(apiUrl, requestFormat),
     headers,
     data: requestData,
     timeout: provider.configuration.timeout || 30000,
     signal: request.signal,
   };
 
-  const response: AxiosResponse = await callLlmProviderHttp(config);
+  // llmCallOptionsFor: a custom provider is usually a server the org runs
+  // on its own network, and LLM_ALLOW_PRIVATE_URLS is what lets it be
+  // reached. The options were computed for custom providers but never
+  // passed here, so the escape hatch opened model listing and nothing else.
+  const response: AxiosResponse = await callLlmProviderHttp(config, llmCallOptionsFor(provider));
   const responseTime = Date.now() - startTime;
 
   // Try to parse response based on common formats
