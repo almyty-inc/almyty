@@ -112,21 +112,13 @@ test.describe('Command palette', () => {
 })
 
 test.describe('Keyboard shortcuts', () => {
-  test('? opens shortcuts dialog', async () => {
+  test('? opens the shortcuts page', async () => {
     await page.goto('/dashboard')
     await page.locator('main#main-content').waitFor()
     await page.keyboard.press('Shift+Slash')
-    await expect(page.getByRole('heading', { name: /keyboard shortcuts/i })).toBeVisible({ timeout: 5_000 })
-    // Close via the dialog's X button (Radix Escape handling is unreliable
-    // in headless chromium — the dialog stays open after keyboard Escape).
-    const closeBtn = page.getByRole('dialog').getByRole('button', { name: /close/i }).first()
-    if (await closeBtn.isVisible().catch(() => false)) {
-      await closeBtn.click()
-    } else {
-      // Fallback: click outside the dialog to dismiss
-      await page.locator('body').click({ position: { x: 5, y: 5 }, force: true })
-    }
-    await page.waitForTimeout(500)
+    await expect(page).toHaveURL(/\/shortcuts$/, { timeout: 5_000 })
+    await expect(page.getByRole('heading', { name: /keyboard shortcuts/i })).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 })
 
