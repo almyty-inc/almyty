@@ -108,6 +108,7 @@ export function CommandPalette() {
     { id: 'act-import-agent', label: 'Import agent', hint: 'From an exported agent JSON', icon: Plus, action: () => go('/agents/import') },
     { id: 'act-new-gateway', label: 'Create gateway', hint: 'MCP, A2A, UTCP, or Skills', icon: Plus, action: () => go('/gateways/new') },
     { id: 'act-new-tool', label: 'Create tool', hint: 'HTTP, JavaScript, GraphQL, Model, or SDK', icon: Plus, action: () => go('/tools/new') },
+    { id: 'act-new-mcp-server', label: 'Add MCP server', hint: 'Use the tools of a remote MCP server', icon: Plus, action: () => go('/tools/mcp-servers/new') },
     { id: 'act-new-api', label: 'Connect API', hint: 'OpenAPI, GraphQL, SOAP, Protobuf, SDK', icon: Plus, action: () => go('/apis/new') },
     { id: 'act-new-model', label: 'Add model', hint: 'From a provider, a server you run, or your cloud', icon: Plus, action: () => go('/models/new') },
     { id: 'act-new-provider', label: 'Add inference provider', hint: 'OpenAI, Anthropic, Gemini, etc.', icon: Plus, action: () => go('/llm-providers/new') },
