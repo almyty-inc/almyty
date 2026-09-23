@@ -15,10 +15,10 @@ $ npx @almyty/auth login
 Step by step:
 
 1. The CLI starts a temporary local HTTP server on a random port.
-2. Your default browser opens the almyty login page with a callback URL pointing to that local server.
+2. Your default browser opens `{frontend}/cli-login?callback=...&success=...&state=...`, where `callback` is the local server and `state` is a one-time value the CLI generated.
 3. You sign in (or create an account) at `app.almyty.com`.
-4. The browser redirects back to the local server with an authorization code.
-5. The CLI exchanges the code for an API key, writes it to `~/.almyty/credentials.json` (mode `0600`), and shuts down the local server.
+4. The page posts the minted token back to the local callback along with `state`. The token travels in a POST body, never in a URL, and a callback carrying the wrong `state` is refused.
+5. The CLI writes the token to `~/.almyty/credentials.json` (mode `0600`) and shuts down the local server.
 
 If you are already logged in to almyty in your browser, the flow completes in under two seconds.
 
@@ -32,19 +32,21 @@ $ npx @almyty/auth login --token ak_live_abc123...
 
 Generate API keys from **Settings > API Keys** in the almyty dashboard. Use this method in CI pipelines, Docker containers, and automation scripts.
 
-## Headless login (SSH / remote servers)
+## Login without an auto-opening browser
 
-When no browser is available, use `--no-browser` to get a URL you can open on another machine:
+When the CLI cannot open a browser for you, use `--no-browser`. It prints the same login URL and waits:
 
 ```bash
 $ npx @almyty/auth login --no-browser
-Open this URL in any browser:
-  https://app.almyty.com/cli-auth?code=xyz789
 
-Waiting for authentication...
+  almyty login
+  Open your browser to authenticate (auto-opening if available):
+    https://app.almyty.com/cli-login?callback=http%3A%2F%2F127.0.0.1%3A54312%2Fcb&success=http%3A%2F%2F127.0.0.1%3A54312%2Fsuccess&state=8f2c...
+
+  Waiting for you to complete login in your browser…
 ```
 
-Copy the URL, open it on any device where you are signed in, approve the request, and the CLI picks up the token.
+The `callback` parameter points at the temporary server on `127.0.0.1`, so the browser you open the URL in has to be able to reach that port on the machine running the CLI. On a remote box, forward it first (`ssh -L 54312:127.0.0.1:54312 host`) or skip the browser entirely and use `--token` with a key from **Settings > API Keys**.
 
 ## Staging and self-hosted environments
 

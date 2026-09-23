@@ -5,6 +5,7 @@ import { Repository, Brackets, SelectQueryBuilder, ObjectLiteral } from 'typeorm
 import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { UserTeam, TeamRole } from '../../entities/user-team.entity';
+import { isEffectiveMembership } from './membership';
 
 /**
  * Resource visibility scoping (GitHub-style two-tier model).
@@ -77,7 +78,10 @@ export class AccessPolicyService {
     const row = await this.userOrgs.findOne({
       where: { userId, organizationId, isActive: true },
     });
-    return row?.role ?? null;
+    // Same rule as the request layer (common/authorization/membership.ts):
+    // a row that still holds an invite token has not been accepted and is
+    // not a membership yet.
+    return isEffectiveMembership(row) ? (row?.role ?? null) : null;
   }
 
   /**

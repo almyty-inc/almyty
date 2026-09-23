@@ -65,15 +65,16 @@ export class MatrixAdapter extends BaseAdapter {
     const encodedRoomId = encodeURIComponent(roomId);
     const url = `${homeserverUrl}/_matrix/client/r0/rooms/${encodedRoomId}/send/m.room.message/${txnId}`;
 
+    this.assertEgress(url);
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
-    const res = await (fetch as any)(url, {
+    const res = await (fetch as any)(url, this.egressInit({
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(formattedResponse),
-    });
+    }));
 
     const body = await this.readJsonBody(res);
     if (this.httpRejected(res) || body?.errcode) {

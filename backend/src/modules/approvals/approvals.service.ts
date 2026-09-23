@@ -179,12 +179,22 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     return saved;
   }
 
-  async approve(id: string, decision: ApprovalDecision, caller: { id: string }): Promise<ApprovalRequest> {
-    return this.decide(id, 'approved', decision, caller);
+  async approve(
+    id: string,
+    decision: ApprovalDecision,
+    caller: { id: string },
+    organizationId: string,
+  ): Promise<ApprovalRequest> {
+    return this.decide(id, 'approved', decision, caller, organizationId);
   }
 
-  async reject(id: string, decision: ApprovalDecision, caller: { id: string }): Promise<ApprovalRequest> {
-    return this.decide(id, 'rejected', decision, caller);
+  async reject(
+    id: string,
+    decision: ApprovalDecision,
+    caller: { id: string },
+    organizationId: string,
+  ): Promise<ApprovalRequest> {
+    return this.decide(id, 'rejected', decision, caller, organizationId);
   }
 
   private async decide(
@@ -192,15 +202,23 @@ export class ApprovalsService extends EventEmitter implements OnModuleInit, OnMo
     next: ApprovalStatus,
     decision: ApprovalDecision,
     caller: { id: string },
+    organizationId: string,
   ): Promise<ApprovalRequest> {
-    const row = await this.approvals.findOne({ where: { id } });
+    // Scoped, like findOne() below. The controller resolved the caller's
+    // organization and then dropped it here, so the row was fetched by id
+    // alone: AccessPolicyService refused the decision itself, but the
+    // 'approval already <status>' branch ran BEFORE that check and
+    // answered for another tenant's request -- an existence-and-outcome
+    // oracle on any approval id in the install.
+    const row = await this.approvals.findOne({ where: { id, organizationId } });
     if (!row) throw new NotFoundException('approval request not found');
-    if (row.status !== 'pending') {
-      throw new BadRequestException(`approval already ${row.status}`);
-    }
 
     const can = await this.accessPolicy.canAccess(caller, row, 'manage');
     if (!can.allowed) throw new ForbiddenException(can.reason);
+
+    if (row.status !== 'pending') {
+      throw new BadRequestException(`approval already ${row.status}`);
+    }
 
     // EE (approval_policy): a policy-governed request only flips to
     // approved once its steps/quorum are satisfied. A rejection is always

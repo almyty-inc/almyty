@@ -11,6 +11,9 @@ function makeService() {
   const membershipRepo = {
     find: jest.fn().mockResolvedValue([]),
     findOne: jest.fn(),
+    // How many organizations this person belongs to. SCIM writes the
+    // shared `users` row only when this one is their only home.
+    count: jest.fn().mockResolvedValue(1),
     create: jest.fn((x: any) => ({ ...x })),
     save: jest.fn(async (x: any) => ({ id: x.id ?? 'mem-new', ...x })),
   };
@@ -173,6 +176,7 @@ describe('ScimService — deprovision notifications', () => {
     };
     const membershipRepo = {
       findOne: jest.fn(),
+      count: jest.fn().mockResolvedValue(1),
       save: jest.fn(async (x: any) => x),
     };
     const notifications = { emit: jest.fn().mockResolvedValue(undefined) };

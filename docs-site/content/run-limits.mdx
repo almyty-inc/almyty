@@ -10,16 +10,19 @@ That matters because everything else is negotiable. An organization admin can ra
 
 ## The fields
 
-| Field | What it bounds |
-|---|---|
-| **Max steps** | How many times the agent may loop before the run stops |
-| **Token budget** | Total tokens across the whole run |
-| **Cost cap** | Spend for the run, in cents |
-| **Timeout** | Wall clock, from when the run started |
-| **Max tool calls** | Total tool invocations |
-| **Truncation policy** | What happens when the context budget is reached: drop the oldest turns, summarise them, or stop |
-| **Tool error retries** | How many times a failing tool is retried |
-| **Tool error feedback** | How much of a failure re-enters the model's context |
+| Field | What it bounds | Default when no scope sets it |
+|---|---|---|
+| **Max steps** | How many times the agent may loop before the run stops | 50 |
+| **Token budget** | Total tokens across the whole run | 500000 |
+| **Cost cap** | Spend for the run, in cents | 100 |
+| **Timeout** | Wall clock, from when the run started | 900000 ms (15 minutes) |
+| **Max tool calls** | Total tool invocations | 100 |
+| **Max recursion depth** | How deep sub-agent nesting may go; depth 0 is the run itself | 3 |
+| **Truncation policy** | What happens when the context budget is reached: drop the oldest turns, summarise them, or stop | `drop_oldest` |
+| **Tool error retries** | How many times a failing tool is retried | 3 |
+| **Tool error feedback** | How much of a failure re-enters the model's context | `full` |
+
+These are the values a run gets when nothing anywhere specified one. They are not the ceiling: the environment floor below is a separate, larger set of numbers, and the gap between the two is the room an organization or an agent author has to raise a limit. A default of 15 minutes under a ceiling of an hour means a run may be given up to an hour, and gets 15 minutes if nobody says otherwise.
 
 Every one is editable per agent under **Run limits** in the agent builder.
 

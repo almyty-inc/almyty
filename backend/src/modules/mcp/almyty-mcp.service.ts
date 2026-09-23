@@ -5,7 +5,6 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import axios from 'axios';
 import { JsonRpcResponse } from './types/mcp.types';
 import { ApisService } from '../apis/apis.service';
 import { ToolsService } from '../tools/tools.service';
@@ -331,8 +330,21 @@ export class AlmytyMcpService {
         if (args.schemaContent) {
           content = String(args.schemaContent);
         } else if (args.schemaUrl) {
-          const schemaRes = await axios.get(args.schemaUrl, { timeout: 30000 });
-          content = typeof schemaRes.data === 'string' ? schemaRes.data : JSON.stringify(schemaRes.data);
+          // Through ApisService, which is the HTTP twin of this feature and
+          // now the only door onto this fetch.
+          //
+          // Two audits found this same bypass. It was a bare
+          // `axios.get(args.schemaUrl, { timeout: 30000 })`: no SSRF gate,
+          // no size cap, no redirect refusal, and the body came back to the
+          // caller as the import's schemaContent. #696 fixed it by gating
+          // and pinning here; this keeps that mechanism but moves it into
+          // `fetchSchemaFromUrl`, which the REST route has always used and
+          // which was NOT pinned -- so #696's version left the two doors
+          // enforcing different rules, with the older one weaker.
+          //
+          // One helper, both callers, so a third entrance cannot be added
+          // later with its own idea of what the gate is.
+          content = await get(ApisService).fetchSchemaFromUrl(String(args.schemaUrl));
         } else {
           throw new Error('import_schema requires either schemaUrl or schemaContent');
         }
@@ -1151,8 +1163,8 @@ export class AlmytyMcpService {
         const approvals = get(ApprovalsService);
         const decision = { decidedBy: userId, decisionReason: args.reason };
         const row = args.decision === 'reject'
-          ? await approvals.reject(String(args.approvalId), decision, { id: userId })
-          : await approvals.approve(String(args.approvalId), decision, { id: userId });
+          ? await approvals.reject(String(args.approvalId), decision, { id: userId }, orgId)
+          : await approvals.approve(String(args.approvalId), decision, { id: userId }, orgId);
         return {
           id: row.id, status: row.status, decidedBy: row.decidedBy,
           decidedAt: row.decidedAt, decisionReason: row.decisionReason,

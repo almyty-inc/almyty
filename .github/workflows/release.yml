@@ -18,34 +18,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # api and frontend build on NATIVE runners per architecture, then a
+  # manifest job stitches the two digests into one multi-arch tag.
+  #
+  # They used to build linux/amd64,linux/arm64 together on ubuntu-latest,
+  # which meant the arm64 half ran under qemu emulation: `npm ci` took
+  # about 170 seconds and, on 2026-09-22, died with ECONNRESET partway
+  # through and failed the whole build. The docs and self-host images
+  # already had this split for exactly that reason; the release matrix
+  # never got it. Every production node is amd64, so the arm64 image is
+  # for people self-hosting on Apple Silicon or Graviton, and it should
+  # not be slowing down or breaking their amd64 release.
   release:
-    name: Release ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    name: Release ${{ matrix.image }} (${{ matrix.platform }})
     strategy:
       fail-fast: false
+      # Spelled out rather than built from two lists plus `include`:
+      # include-merging silently produces a different set when a key is
+      # added, and a release is the wrong place to discover that.
       matrix:
         include:
           - image: api
+            platform: amd64
+            runner: ubuntu-latest
+            context: ./backend
+            file: ./backend/Dockerfile
+            target: production
+          - image: api
+            platform: arm64
+            runner: ubuntu-24.04-arm
             context: ./backend
             file: ./backend/Dockerfile
             target: production
           - image: frontend
+            platform: amd64
+            runner: ubuntu-latest
             context: ./frontend
             file: ./frontend/Dockerfile
             target: production
+          - image: frontend
+            platform: arm64
+            runner: ubuntu-24.04-arm
+            context: ./frontend
+            file: ./frontend/Dockerfile
+            target: production
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
-
-      - name: Resolve version
-        id: ver
-        run: |
-          # Semver from the tag: v1.2.3 -> 1.2.3, 1.2, 1 (+ latest).
-          VERSION="${GITHUB_REF_NAME#v}"
-          MAJOR="${VERSION%%.*}"
-          MINOR="${VERSION#*.}"; MINOR="${MINOR%%.*}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "major=${MAJOR}" >> "$GITHUB_OUTPUT"
-          echo "minor=${MAJOR}.${MINOR}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -54,15 +73,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build & push
+      - name: Build & push by digest
         id: build
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           target: ${{ matrix.target }}
-          platforms: linux/amd64,linux/arm64
-          push: true
+          platforms: linux/${{ matrix.platform }}
           provenance: true
           sbom: true
           # Frontend needs these baked in at build time (only the frontend
@@ -75,17 +93,76 @@ jobs:
             ALMYTY_POSTHOG_HOST=/ingest
             ALMYTY_SENTRY_DSN=${{ vars.ALMYTY_SENTRY_DSN }}
             ALMYTY_TURNSTILE_SITE_KEY=${{ vars.ALMYTY_TURNSTILE_SITE_KEY }}
-          tags: |
-            almyty/${{ matrix.image }}:${{ steps.ver.outputs.version }}
-            almyty/${{ matrix.image }}:${{ steps.ver.outputs.minor }}
-            almyty/${{ matrix.image }}:${{ steps.ver.outputs.major }}
-            almyty/${{ matrix.image }}:latest
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,scope=${{ matrix.image }},mode=max
-          # provenance + sbom above are attached inside the image index
-          # (verifiable via `docker buildx imagetools inspect`); they do NOT
-          # create sha256-*.sig/.att tags. Cosign tag-signing was removed to
-          # keep the tag list clean (moving + semver only).
+          outputs: type=image,name=almyty/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.platform }}
+          cache-to: type=gha,scope=${{ matrix.image }}-${{ matrix.platform }},mode=max
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.image }}-digest-${{ matrix.platform }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The semver tags are only created here, once BOTH architectures have
+  # pushed. That is deliberate: a half-built release never claims a tag,
+  # so `almyty/api:latest` cannot briefly point at an amd64-only image.
+  release-manifest:
+    name: Release ${{ matrix.image }} (manifest)
+    needs: release
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, frontend]
+    steps:
+      - name: Resolve version
+        id: ver
+        run: |
+          # Semver from the tag: v1.2.3 -> 1.2.3, 1.2, 1 (+ latest).
+          VERSION="${GITHUB_REF_NAME#v}"
+          MAJOR="${VERSION%%.*}"
+          MINOR="${VERSION#*.}"; MINOR="${MINOR%%.*}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major=${MAJOR}" >> "$GITHUB_OUTPUT"
+          echo "minor=${MAJOR}.${MINOR}" >> "$GITHUB_OUTPUT"
+
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: /tmp/digests
+          pattern: release-${{ matrix.image }}-digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create manifest list and push (all semver tags)
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t "almyty/${IMAGE}:${VERSION}" \
+            -t "almyty/${IMAGE}:${MINOR}" \
+            -t "almyty/${IMAGE}:${MAJOR}" \
+            -t "almyty/${IMAGE}:latest" \
+            $(printf "almyty/${IMAGE}@sha256:%s " *)
+        env:
+          IMAGE: ${{ matrix.image }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          MINOR: ${{ steps.ver.outputs.minor }}
+          MAJOR: ${{ steps.ver.outputs.major }}
 
   # Docs (Next.js/nextra) is built OUTSIDE the `release` matrix and off the
   # prod-deploy critical path: its static-generation workers crash under qemu

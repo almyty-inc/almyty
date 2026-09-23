@@ -110,8 +110,10 @@ export class SignalAdapter extends BaseAdapter {
       this.sendFailed('the inbound envelope carried no sender or group to reply to');
     }
 
+    const sendUrl = `${apiUrl}/v2/send`;
+    this.assertEgress(sendUrl);
     const fetch = globalThis.fetch || (await import('node-fetch')).default;
-    const res = await (fetch as any)(`${apiUrl}/v2/send`, {
+    const res = await (fetch as any)(sendUrl, this.egressInit({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -119,7 +121,7 @@ export class SignalAdapter extends BaseAdapter {
         number: phoneNumber,
         recipients: [recipient],
       }),
-    });
+    }));
 
     if (this.httpRejected(res)) {
       const detail = await this.readTextBody(res);

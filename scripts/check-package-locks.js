@@ -29,11 +29,13 @@ const packagesDir = path.join(repoRoot, 'packages');
 // that has started passing is itself an error, so the list cannot quietly
 // become a place for the next rot to hide.
 //
-// almyty-cli depends on @almyty/models and @almyty/connections at ^1.2.0
-// and neither name exists on the registry — npm answers 404, so
-// `npm install --package-lock-only` cannot produce a lock at all.
-// Publishing those two is the fix; then delete this entry.
-const CANNOT_REGENERATE = new Set(['almyty-cli']);
+// Empty, and worth keeping that way. It last held almyty-cli, whose lock
+// could not be regenerated while @almyty/models and @almyty/connections
+// were unpublished: npm answered 404 and `npm install --package-lock-only`
+// produced nothing at all. Both are on the registry at 1.2.0 now, the lock
+// carries them with integrity hashes, and the stale-entry check below
+// fired on this entry exactly as it was designed to.
+const CANNOT_REGENERATE = new Set();
 
 const problems = [];
 const stale = [];

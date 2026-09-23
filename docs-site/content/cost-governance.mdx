@@ -10,9 +10,11 @@ Put a hard ceiling on LLM spend before a bill surprises you. Spend fails in two 
 
 ## Per-run limits
 
-Every agent run carries a `limits` set. You can pass them when starting a run (fields: `maxCostCents`, `maxSteps`, `maxDurationMs`, `maxToolCalls`).
+Every agent run carries a `limits` set. You can pass them when starting a run (fields: `maxCostCents`, `maxSteps`, `maxTokens`, `maxDurationMs`, `maxToolCalls`, `maxRecursionDepth`).
 
-Defaults if you pass nothing: `maxSteps: 50`, `maxDurationMs: 3600000` (1 hour), `maxCostCents: 100` ($1), `maxToolCalls: 100`. Sub-agent runs spawned by an agent get tighter defaults (`maxSteps: 20`, `maxCostCents: 50`).
+Defaults if you pass nothing: `maxSteps: 50`, `maxDurationMs: 900000` (15 minutes), `maxCostCents: 100` ($1), `maxToolCalls: 100`, `maxTokens: 500000`. Sub-agent runs spawned by an agent get tighter defaults (`maxSteps: 20`, `maxCostCents: 50`).
+
+Those are defaults, not the ceiling. The operator's environment sets a hard ceiling that nothing inside the product may exceed, separately from the default: `RUN_LIMIT_MAX_DURATION_MS` is 3600000 (1 hour) out of the box, so raising `maxDurationMs` on a run raises it towards that ceiling and no further. See [Run limits](/run-limits) for the full table and how the four scopes resolve.
 
 Limits are checked after every step. When accumulated run cost crosses `maxCostCents`, the run stops with status `failed` and error `BUDGET_EXCEEDED`. This is a kill switch for a single runaway run; it knows nothing about what other runs spent.
 

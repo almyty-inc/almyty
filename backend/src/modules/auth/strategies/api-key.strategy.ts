@@ -4,6 +4,10 @@ import { Strategy } from 'passport-custom';
 import { Request } from 'express';
 import { AuthService } from '../auth.service';
 import * as crypto from 'crypto';
+import {
+  effectiveMemberships,
+  hasEffectiveMembership,
+} from '../../../common/authorization/membership';
 
 @Injectable()
 export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
@@ -50,10 +54,7 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
     // organization while holding a key scoped to it. Without it, a key
     // outlives the membership that justified it.
     if (keyOrgId) {
-      const stillAMember = user.organizationMemberships?.some(
-        (m: any) => (m.organizationId || m.organization?.id) === keyOrgId && m.isActive !== false,
-      );
-      if (!stillAMember) {
+      if (!hasEffectiveMembership(user.organizationMemberships, keyOrgId)) {
         throw new UnauthorizedException('API key is not valid for that organization');
       }
     }
@@ -61,11 +62,13 @@ export class ApiKeyStrategy extends PassportStrategy(Strategy, 'api-key') {
     (user as any).currentOrganizationId = keyOrgId;
 
     // Attach org list (matches JwtStrategy shape).
-    (user as any).organizations = user.organizationMemberships?.map((m: any) => ({
-      id: m.organizationId || m.organization?.id,
-      name: m.organization?.name,
-      role: m.role,
-    })) || [{ id: validApiKey.organizationId, name: validApiKey.organization?.name }];
+    (user as any).organizations = user.organizationMemberships
+      ? effectiveMemberships(user.organizationMemberships).map((m: any) => ({
+          id: m.organizationId || m.organization?.id,
+          name: m.organization?.name,
+          role: m.role,
+        }))
+      : [{ id: validApiKey.organizationId, name: validApiKey.organization?.name }];
 
     return user;
   }

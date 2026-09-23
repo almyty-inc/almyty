@@ -16,6 +16,7 @@ import {
   UserOrganization,
   OrganizationRole,
 } from '../../../src/entities/user-organization.entity';
+import { isEffectiveMembership } from '../../../src/common/authorization/membership';
 import { DecryptedSsoConfig, SsoConfigService } from './sso-config.service';
 
 export interface SsoUserProfile {
@@ -286,6 +287,22 @@ export class SsoService {
    * Map an asserted identity to an existing org member by email. When the user
    * is not a member: JIT-provision if the config allows it, otherwise reject
    * (deferring provisioning to SCIM / manual invite).
+   *
+   * JIT may only CREATE a user, never adopt one.
+   *
+   * `users` is a platform-wide table keyed by email, and an organization
+   * configures its own IdP certificate. Looking an asserted email up
+   * globally and then handing the row to `issueSession` meant any org
+   * owner could self-sign an assertion for someone else's address and
+   * receive a full dashboard session as that person -- with a token
+   * carrying every organization the victim belongs to. Nothing binds an
+   * asserted email to the asserting organization: there is no verified
+   * domain here, so an IdP is not entitled to name an identity that
+   * already exists outside its own membership.
+   *
+   * The legitimate version of "this person already has an almyty account"
+   * is an invite or a SCIM assignment, both of which the account holder
+   * sees and one of which they accept.
    */
   async resolveUser(
     orgId: string,
@@ -299,21 +316,25 @@ export class SsoService {
       const membership = await this.membershipRepo.findOne({
         where: { userId: user.id, organizationId: orgId },
       });
-      if (membership) {
-        if (!membership.isActive) {
-          throw new UnauthorizedException(
-            'Your access to this organization has been deactivated',
-          );
-        }
-        return user;
-      }
-      // Existing user, not yet a member of this org.
-      if (!config.jitProvisioning) {
+      if (!membership) {
+        // Existing account, not a member here. Never adopted, whatever
+        // jitProvisioning says.
         throw new UnauthorizedException(
           'You are not a member of this organization',
         );
       }
-      await this.provisionMembership(user.id, orgId, config.defaultRole);
+      if (!membership.isActive) {
+        throw new UnauthorizedException(
+          'Your access to this organization has been deactivated',
+        );
+      }
+      if (!isEffectiveMembership(membership)) {
+        // A membership row that still holds an invite token has not been
+        // accepted; the IdP does not get to accept it on the user's behalf.
+        throw new UnauthorizedException(
+          'Your invitation to this organization has not been accepted yet',
+        );
+      }
       return user;
     }
 

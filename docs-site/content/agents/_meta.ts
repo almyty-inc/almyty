@@ -3,6 +3,7 @@
 export default {
   index: 'Overview',
   autonomous: 'Autonomous agents',
+  execution: 'Roles & strategies',
   scheduling: 'Scheduling',
   webhooks: 'Webhooks',
   versioning: 'Versioning & rollback',

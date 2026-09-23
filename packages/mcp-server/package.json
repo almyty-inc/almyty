@@ -1,10 +1,10 @@
 {
   "name": "@almyty/mcp-server",
-  "version": "1.2.0",
+  "version": "1.5.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "Serve any almyty gateway to Claude Code or any MCP client \u2014 turn your APIs into MCP tools with a single command.",
+  "description": "Serve any almyty gateway to Claude Code or any MCP client — turn your APIs into MCP tools with a single command.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

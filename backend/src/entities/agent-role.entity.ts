@@ -34,6 +34,15 @@ export type RoleBinding =
  * What the role needs from whatever fills it. Kept separate from the
  * binding because it stays true when the binding changes: a verifier
  * needs tool use whether it is pinned or resolved.
+ *
+ * Every field here MUST be mapped by `requirementToPolicy()` in
+ * agents/agent-roles.service.ts and enforced by `eligible()` in
+ * model-catalog/routing/model-router.ts. A field nothing reads is a
+ * requirement the operator states and the router ignores, which is worse
+ * than not offering it: `tags?: string[]` lived here for exactly that
+ * reason and was removed, because a model card carries no tags to match
+ * against. Add one back only together with the card-side column and the
+ * `eligible()` check.
  */
 export interface RoleRequirement {
   capabilities?: Record<string, boolean>;
@@ -41,7 +50,6 @@ export interface RoleRequirement {
   maxBlendedPrice?: number;
   privacyTierCeiling?: string;
   region?: string;
-  tags?: string[];
 }
 
 @Entity('agent_roles')

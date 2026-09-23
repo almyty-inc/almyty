@@ -147,7 +147,12 @@ export class AuditStreamService {
   async deliver(cfg: AuditStreamConfig, event: Partial<AuditLog>): Promise<DeliveryResult> {
     const { url, headers, body } = this.buildRequest(cfg, event);
     try {
-      const res = await fetch(url, { method: 'POST', headers, body });
+      // redirect: 'error'. Node's fetch follows by default, so a SIEM
+      // host that passed decideEgress at write time could 302 the audit
+      // stream -- bearer token attached -- into the cluster at delivery
+      // time. The gate at write is a string check on the host, not a
+      // promise about where that host points next.
+      const res = await fetch(url, { method: 'POST', headers, body, redirect: 'error' });
       const ok = res.status >= 200 && res.status < 300;
       if (ok) {
         cfg.lastDeliveredAt = new Date();

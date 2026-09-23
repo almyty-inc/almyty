@@ -85,3 +85,9 @@ backend/uploads/
 .vibe/
 /skills/
 skills-lock.json
+
+# Local-only safety net: the pre-rewrite mirror of this repo and the
+# old-SHA -> new-SHA map from the 2026-09-22 history rewrite. Origin no
+# longer has that history, so this directory is the only copy. Never
+# committed, never pushed.
+.backup/

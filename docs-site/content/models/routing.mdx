@@ -31,7 +31,7 @@ A policy on the node always wins over the organization default. A node with neit
 |---|---|---|
 | `objective` | `cheapest`, `fastest`, `pinned` | How the eligible cards are ordered. Default `cheapest` |
 | `privacyTier` | `local`, `private_cloud`, `public` | The most public tier the request may use, in the order `local < private_cloud < public` |
-| `regions` | string[] | Allowlist of card regions; empty or absent means any. A card without a region is never excluded by this filter |
+| `regions` | string[] | Allowlist of card regions. Empty or absent means any region. When it is set it is a data-residency statement, so a card whose region is unknown cannot prove it is inside the allowlist and is excluded, with the reason `region unknown` |
 | `capabilities` | object of booleans | Every `true` flag must be present on the card (`tools`, `vision`, `reasoning`, `embedding`, `structuredOutput`) |
 | `fallbackChain` | string[] | An explicit order of card ids or vendor model ids. When set, it replaces the objective ordering; entries that are not eligible are skipped and recorded |
 | `pinnedModel` | string | With `objective: pinned`, the card (or vendor model id) that must come first; the rest of the plan follows in price order |
@@ -44,7 +44,7 @@ The organization default has the same shape and is read and written through the 
 
 Selection is pure: the same cards and the same policy always give the same plan.
 
-1. **Filter.** A card is eligible when it is [selectable](/models#support-is-data-not-a-list), its privacy tier is at or below the ceiling, its region is allowed, it has every required capability, and its price fits the budget headroom. Each card that fails records a reason (`privacy tier public above ceiling private_cloud`, `lacks tools`, `over budget headroom`, and so on).
+1. **Filter.** A card is eligible when it is [selectable](/models#support-is-data-not-a-list), its privacy tier is at or below the ceiling, its region is known and allowed, it has every required capability, and its price fits the budget headroom. Each card that fails records a reason (`privacy tier public above ceiling private_cloud`, `region unknown, policy requires one of eu-central`, `lacks tools`, `over the spend limit`, and so on).
 2. **Order.** With a `fallbackChain`, the plan is the chain in the order given. Otherwise `cheapest` sorts by blended feed price (three quarters input, one quarter output, per million tokens), `fastest` by measured p50 latency, and `pinned` moves the pinned card to the front of the price order. Unpriced or unmeasured cards sort last.
 3. **Resolve.** Each candidate is paired with something callable: the stored provider row, or a transient provider built from the card's endpoint URL and the deployment's token. A card whose provider is unhealthy or inactive is rejected at this point with the provider's status as the reason.
 

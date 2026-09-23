@@ -6,6 +6,7 @@ import {
   AdvancedRbacHook,
   RbacHookDecision,
 } from '../../../common/ee-hooks/ee-hooks';
+import { findEffectiveMembership } from '../../../common/authorization/membership';
 
 export const ROLES_KEY = 'roles';
 export const PERMISSIONS_KEY = 'permissions';
@@ -54,10 +55,10 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Organization context required');
     }
 
-    // Find user's membership in the organization
-    const membership = user.organizationMemberships?.find(
-      (m: any) => (m.organizationId ?? m.organization?.id) === organizationId
-    );
+    // Find user's membership in the organization. A revoked invite
+    // leaves its row behind (inactive) and a pending invite has one
+    // before acceptance; neither grants the role written on it.
+    const membership = findEffectiveMembership<any>(user.organizationMemberships, organizationId);
 
     if (!membership) {
       throw new ForbiddenException('User is not a member of this organization');

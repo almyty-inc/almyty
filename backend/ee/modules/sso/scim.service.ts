@@ -92,6 +92,23 @@ export class ScimService {
     const defaultRole = await this.defaultRole(orgId);
 
     let user = await this.userRepo.findOne({ where: { email } });
+    if (user) {
+      // An account with this address already exists somewhere on the
+      // platform. `users` is platform-wide and `email` is its unique key,
+      // so adopting the row here let one organization's SCIM token pull
+      // another tenant's person into its own org -- and then rename them
+      // through PUT/PATCH, which writes the shared row every other tenant
+      // reads. An IdP may provision identities; it may not claim ones that
+      // already exist outside its own membership.
+      const existingMembership = await this.membershipRepo.findOne({
+        where: { userId: user.id, organizationId: orgId },
+      });
+      if (!existingMembership) {
+        throw new ConflictException(
+          'An almyty account already exists for this address. Invite them to the organization instead; SCIM can only create new identities.',
+        );
+      }
+    }
     if (!user) {
       const passwordHash = await bcrypt.hash(randomBytes(24).toString('hex'), 12);
       user = await this.userRepo.save(
@@ -169,9 +186,11 @@ export class ScimService {
   async replaceUser(orgId: string, userId: string, input: ScimUserInput) {
     const { user, membership } = await this.loadMember(orgId, userId);
     const wasActive = membership.isActive;
-    if (input.name?.givenName !== undefined) user.firstName = input.name.givenName;
-    if (input.name?.familyName !== undefined) user.lastName = input.name.familyName;
-    await this.userRepo.save(user);
+    if (await this.mayWriteProfile(orgId, userId)) {
+      if (input.name?.givenName !== undefined) user.firstName = input.name.givenName;
+      if (input.name?.familyName !== undefined) user.lastName = input.name.familyName;
+      await this.userRepo.save(user);
+    }
     if (input.active !== undefined) {
       membership.isActive = input.active;
       await this.membershipRepo.save(membership);
@@ -180,10 +199,28 @@ export class ScimService {
     return this.toScimUser(user, membership);
   }
 
+  /**
+   * May this organization's IdP write the shared `users` row?
+   *
+   * Only when this is the person's only organization. `users` is
+   * platform-wide: a name written here shows up in every other tenant the
+   * person belongs to, so an IdP that is one of several does not get to
+   * decide what they are called everywhere. Membership alone is not
+   * enough -- that is the check `loadMember` already made.
+   */
+  private async mayWriteProfile(orgId: string, userId: string): Promise<boolean> {
+    const elsewhere = await this.membershipRepo.count({
+      where: { userId, isActive: true },
+    });
+    return elsewhere <= 1;
+  }
+
   /** PATCH — the common Okta/Entra deactivation is `replace active:false`. */
   async patchUser(orgId: string, userId: string, patch: ScimPatchOp) {
     const { user, membership } = await this.loadMember(orgId, userId);
     const wasActive = membership.isActive;
+    const mayWriteProfile = await this.mayWriteProfile(orgId, userId);
+    let profileTouched = false;
     for (const op of patch.Operations ?? []) {
       const operation = op.op?.toLowerCase();
       if (operation !== 'replace' && operation !== 'add') continue;
@@ -193,13 +230,18 @@ export class ScimService {
         membership.isActive = coerceBool(op.value);
       } else if (op.value && typeof op.value === 'object') {
         if ('active' in op.value) membership.isActive = coerceBool(op.value.active);
-        if (op.value.name?.givenName !== undefined)
+        if (!mayWriteProfile) continue;
+        if (op.value.name?.givenName !== undefined) {
           user.firstName = op.value.name.givenName;
-        if (op.value.name?.familyName !== undefined)
+          profileTouched = true;
+        }
+        if (op.value.name?.familyName !== undefined) {
           user.lastName = op.value.name.familyName;
+          profileTouched = true;
+        }
       }
     }
-    await this.userRepo.save(user);
+    if (profileTouched) await this.userRepo.save(user);
     await this.membershipRepo.save(membership);
     if (wasActive && !membership.isActive) this.notifyDeprovision(orgId, user);
     return this.toScimUser(user, membership);

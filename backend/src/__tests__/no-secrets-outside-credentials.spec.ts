@@ -125,15 +125,31 @@ export function scanEntityColumns(source: string, file: string): ScannedColumn[]
   return out;
 }
 
+/**
+ * Every `*.entity.ts` under `src`, not just `src/entities`.
+ *
+ * Four entities live beside the module that owns them --
+ * `modules/connections/connector.entity.ts` and the three under
+ * `modules/memory/canonical/` -- and a `readdirSync` of one directory
+ * never saw them. A secret column added there would have shipped with
+ * this ratchet still green.
+ */
 function entityFiles(dir: string): string[] {
-  return fs.readdirSync(dir)
-    .filter((f) => f.endsWith('.entity.ts'))
-    .map((f) => path.join(dir, f));
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...entityFiles(full));
+    else if (entry.name.endsWith('.entity.ts')) out.push(full);
+  }
+  return out;
 }
 
 describe('no secret column outside the credential store', () => {
-  const dir = path.join(__dirname, '..', 'entities');
-  const columns = entityFiles(dir).flatMap((file) => scanEntityColumns(fs.readFileSync(file, 'utf8'), path.basename(file)));
+  const dir = path.join(__dirname, '..');
+  const columns = entityFiles(dir).flatMap((file) =>
+    scanEntityColumns(fs.readFileSync(file, 'utf8'), path.basename(file)),
+  );
   const hits = columns
     .filter((c) => isSecretName(c.column) || c.nestedKeys.some(isSecretName))
     .map((c) => `${c.file}:${c.column}`);
