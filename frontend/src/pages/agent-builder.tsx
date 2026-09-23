@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Node } from '@xyflow/react'
@@ -20,7 +20,7 @@ import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
 import { TestPanel } from '@/components/agents/builder/test-panel'
 import { CanvasArea } from '@/components/agents/builder/canvas-area'
 import { AutonomousConfig } from '@/components/agents/builder/autonomous-config'
-import { validateWorkflowGraph, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
+import { workflowIssues, type BuilderIssue, type GraphNode, type GraphEdge } from '@/components/agents/builder/validate-graph'
 
 import { agentsApi, llmProvidersApi, toolsApi } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
@@ -225,16 +225,16 @@ export function AgentBuilderPage() {
   // AgentValidationHelper: everything it reports is a reason the save would
   // 400 anyway, so it costs no valid graph a save and earns the user the
   // answer before the round trip instead of after it.
-  const validationErrors = useMemo(() => {
-    const errors: string[] = []
+  const validationIssues = useMemo(() => {
+    const errors: BuilderIssue[] = []
 
     if (!agentName.trim()) {
-      errors.push('Give the agent a name.')
+      errors.push({ text: 'Name the agent', nodeIds: [] })
     }
 
     if (agentMode === 'workflow') {
       errors.push(
-        ...validateWorkflowGraph(pipeline.nodes as GraphNode[], pipeline.edges as GraphEdge[], {
+        ...workflowIssues(pipeline.nodes as GraphNode[], pipeline.edges as GraphEdge[], {
           // An organization default makes a bare Model Call node legitimate:
           // the engine resolves it, and the server's validator never had an
           // llm_call rule to begin with.
@@ -244,15 +244,17 @@ export function AgentBuilderPage() {
     } else {
       // Autonomous mode validation
       if (!agentInstructions.trim()) {
-        errors.push('Write the agent instructions: what it should do, and how.')
+        errors.push({ text: 'Write the instructions', nodeIds: [] })
       }
       if (!agentModelConfig.providerId) {
-        errors.push('Choose a model provider for the agent to run on.')
+        errors.push({ text: 'Pick a model', nodeIds: [] })
       }
     }
 
     return errors
   }, [agentName, agentMode, agentInstructions, agentModelConfig, pipeline.nodes, pipeline.edges, currentOrganization?.settings?.defaultRouting])
+
+  const validationErrors = useMemo(() => validationIssues.map((issue) => issue.text), [validationIssues])
 
   const canSave = validationErrors.length === 0
 
@@ -295,6 +297,43 @@ export function AgentBuilderPage() {
   ])
 
   const showValidationErrors = isEditing || saveAttempted || draftTouched
+
+  // An item about a step takes the user to it: selecting the node opens its
+  // settings, which is where the fix is, and the view centres on it. With
+  // two Model Calls, this -- not a node id in the text -- is how the user
+  // learns which one the item means.
+  const goToIssue = useCallback(
+    (issue: BuilderIssue) => {
+      const node = pipeline.nodes.find((n) => n.id === issue.nodeIds[0])
+      if (!node) return
+      pipeline.setSelectedNode(node)
+      pipeline.reactFlowInstance?.fitView({
+        nodes: issue.nodeIds.map((id) => ({ id })),
+        padding: 0.6,
+        maxZoom: 1.2,
+        duration: 300,
+      })
+    },
+    [pipeline.nodes, pipeline.setSelectedNode, pipeline.reactFlowInstance],
+  )
+
+  // Outline the steps the list is about, once the list is shown as errors.
+  // A fresh draft stays calm: its steps are a to-do list, not a failure.
+  const canvasNodes = useMemo(() => {
+    if (!showValidationErrors) return pipeline.nodes
+    const flagged = new Set(validationIssues.flatMap((issue) => issue.nodeIds))
+    if (!flagged.size) return pipeline.nodes
+    return pipeline.nodes.map((node) =>
+      flagged.has(node.id)
+        ? {
+            ...node,
+            className: [node.className, 'rounded-xl ring-2 ring-destructive ring-offset-2 ring-offset-background']
+              .filter(Boolean)
+              .join(' '),
+          }
+        : node,
+    )
+  }, [pipeline.nodes, validationIssues, showValidationErrors])
 
   // Build pipeline payload
   const buildPipeline = () => {
@@ -386,7 +425,7 @@ export function AgentBuilderPage() {
       // it still says which. The button only greys out once they are on
       // screen, so there is always a way to ask and always an answer.
       setSaveAttempted(true)
-      errorNotif('Not ready to save yet', validationErrors.join(' '))
+      errorNotif('Not ready to save yet', validationErrors.join(' · '))
       return
     }
     saveMutation.mutate()
@@ -480,8 +519,20 @@ export function AgentBuilderPage() {
                   report several problems at once, and an uncapped list pushed
                   the canvas off the screen. */}
               <ul className="text-xs text-destructive space-y-0.5 max-h-24 overflow-y-auto">
-                {validationErrors.map((err, i) => (
-                  <li key={i}>{err}</li>
+                {validationIssues.map((issue, i) => (
+                  <li key={i}>
+                    {issue.nodeIds.length ? (
+                      <button
+                        type="button"
+                        onClick={() => goToIssue(issue)}
+                        className="text-left underline-offset-2 hover:underline"
+                      >
+                        {issue.text}
+                      </button>
+                    ) : (
+                      issue.text
+                    )}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -498,9 +549,21 @@ export function AgentBuilderPage() {
                   To finish this agent
                 </p>
                 <ul className="text-xs text-muted-foreground space-y-0.5 max-h-24 overflow-y-auto mt-0.5">
-                  {validationErrors.map((step, i) => (
-                    <li key={i}>{step}</li>
-                  ))}
+                  {validationIssues.map((issue, i) => (
+                  <li key={i}>
+                    {issue.nodeIds.length ? (
+                      <button
+                        type="button"
+                        onClick={() => goToIssue(issue)}
+                        className="text-left underline-offset-2 hover:underline"
+                      >
+                        {issue.text}
+                      </button>
+                    ) : (
+                      issue.text
+                    )}
+                  </li>
+                ))}
                 </ul>
               </div>
             </div>
@@ -537,7 +600,7 @@ export function AgentBuilderPage() {
           // Restores the position the graph was saved at. buildPipeline has
           // always written this and nothing read it back.
           savedViewport={agentData?.pipeline?.viewport}
-          nodes={pipeline.nodes}
+          nodes={canvasNodes}
           edges={pipeline.edges}
           onNodesChange={pipeline.onNodesChange}
           onEdgesChange={pipeline.onEdgesChange}

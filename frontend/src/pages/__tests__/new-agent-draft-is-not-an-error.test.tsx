@@ -69,7 +69,7 @@ describe('a new agent draft nobody has touched yet', () => {
     // The work that is left is on screen -- nothing is being hidden.
     const steps = await screen.findByTestId('builder-next-steps')
     expect(steps).toHaveTextContent(/to finish this agent/i)
-    expect(steps).toHaveTextContent(/pick a model for the model call step/i)
+    expect(steps).toHaveTextContent(/model call: pick a model/i)
 
     // But it is not an error: no destructive banner, no alert role, and
     // nothing inside it reaching for the destructive palette.
@@ -98,13 +98,13 @@ describe('a new agent draft nobody has touched yet', () => {
 
     // And now it is an error, still phrased as the step that closes it.
     const banner = await screen.findByTestId('builder-validation-errors')
-    expect(banner).toHaveTextContent(/pick a model for the model call step/i)
+    expect(banner).toHaveTextContent(/model call: pick a model/i)
     expect(screen.queryByTestId('builder-next-steps')).not.toBeInTheDocument()
     expect(saveButton()).toBeDisabled()
 
     expect(errorNotif).toHaveBeenCalledWith(
       'Not ready to save yet',
-      expect.stringMatching(/pick a model for the model call step/i),
+      expect.stringMatching(/model call: pick a model/i),
     )
   })
 
@@ -119,7 +119,7 @@ describe('a new agent draft nobody has touched yet', () => {
     await user.clear(screen.getByDisplayValue('New Agent'))
 
     const banner = await screen.findByTestId('builder-validation-errors')
-    expect(banner).toHaveTextContent(/give the agent a name/i)
+    expect(banner).toHaveTextContent(/name the agent/i)
   })
 })
 
@@ -135,11 +135,11 @@ describe('a new autonomous draft nobody has touched yet', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('builder-next-steps')).toHaveTextContent(
-        /write the agent instructions/i,
+        /write the instructions/i,
       ),
     )
     expect(screen.getByTestId('builder-next-steps')).toHaveTextContent(
-      /choose a model provider/i,
+      /pick a model/i,
     )
 
     // Flipping the mode toggle is not filling in a form.
