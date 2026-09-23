@@ -39,6 +39,7 @@ import { formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 interface ChatMessage {
   role: 'user' | 'assistant' | 'tool'
@@ -87,13 +88,7 @@ export function ChatPage() {
 
   // Fetch providers
   const { data: providersRaw, isLoading: loadingProviders } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: async () => {
-      const response = await llmProvidersApi.getAll()
-      const d = response
-      const result = d?.providers || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    },
+    ...llmProvidersQuery,
   })
   const providers = Array.isArray(providersRaw) ? providersRaw : []
 

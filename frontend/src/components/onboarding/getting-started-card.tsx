@@ -1,13 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Bot, Check, Circle, ChevronRight, Compass, Sparkles, X } from 'lucide-react'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { onboardingApi, type OnboardingState } from '@/lib/api'
 import { captureEvent } from '@/lib/analytics'
-import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 /**
@@ -74,8 +73,6 @@ const MODEL_STEP = {
 
 export interface GettingStartedCardProps {
   state: OnboardingState
-  onSeedSample?: () => void
-  seeding?: boolean
   onDismiss?: () => void
   /** When provided, renders a 'Take a tour' button that starts the coach-mark tour on demand. */
   onStartTour?: () => void
@@ -97,9 +94,6 @@ function useOnboardingAnalytics(state: OnboardingState) {
           captureEvent('onboarding_step_completed', { step: key, via: 'observed' })
         }
       }
-      if (!before.activatedSampleAt && state.activatedSampleAt) {
-        captureEvent('activation', { kind: 'sample' })
-      }
       if (!before.activatedRealAt && state.activatedRealAt) {
         captureEvent('activation', { kind: 'real' })
       }
@@ -110,8 +104,6 @@ function useOnboardingAnalytics(state: OnboardingState) {
 
 export function GettingStartedCard({
   state,
-  onSeedSample,
-  seeding,
   onDismiss,
   onStartTour,
 }: GettingStartedCardProps) {
@@ -256,21 +248,6 @@ export function GettingStartedCard({
           )}
         </div>
 
-        {!state.sampleWorkspace && onSeedSample && (
-          <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-dashed border-cyan-400/40 p-3">
-            <div className="text-sm text-muted-foreground">
-              Prefer to explore first? Load a ready-made sample workspace.
-            </div>
-            <Button
-              variant="outline"
-              className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 shrink-0"
-              onClick={onSeedSample}
-              disabled={seeding}
-            >
-              {seeding ? 'Loading…' : 'Load sample workspace'}
-            </Button>
-          </div>
-        )}
       </CardContent>
     </Card>
   )
@@ -290,40 +267,3 @@ export function useOnboarding(orgId: string | undefined) {
   })
 }
 
-/**
- * Shared mutation for the one-click "Load the Petstore sample" action.
- * Fires `sample_workspace_loaded` and refreshes the module list caches
- * so the seeded API/tools/gateway/agent appear immediately.
- */
-export function useSeedSampleWorkspace(orgId: string | undefined) {
-  const queryClient = useQueryClient()
-  const { success, error: notifyError } = useNotifications()
-  return useMutation({
-    mutationFn: () => onboardingApi.seedSample(orgId as string),
-    onSuccess: (result: any) => {
-      captureEvent('sample_workspace_loaded')
-      queryClient.invalidateQueries({ queryKey: ['onboarding', orgId] })
-      queryClient.invalidateQueries({ queryKey: ['apis'] })
-      queryClient.invalidateQueries({ queryKey: ['tools', orgId] })
-      queryClient.invalidateQueries({ queryKey: ['gateways', orgId] })
-      queryClient.invalidateQueries({ queryKey: ['agents', orgId] })
-      success(
-        result?.created === false ? 'Sample workspace already loaded' : 'Sample workspace loaded',
-        'A Petstore API, its tools, an MCP gateway and a demo agent are ready.',
-      )
-    },
-    /*
-      The button had no onError at all. The seed 400s -- it did so on
-      every single attempt, because it tried to put draft tools on a
-      gateway -- and the only thing the user saw was the label going back
-      from "Loading…" to "Load sample workspace". Four screens offer this
-      action; all four were silent.
-    */
-    onError: (error: any) => {
-      notifyError(
-        "Couldn't load the sample workspace",
-        getApiErrorMessage(error, 'Nothing was left behind — try again.'),
-      )
-    },
-  })
-}

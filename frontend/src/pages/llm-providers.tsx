@@ -47,6 +47,7 @@ import {
 import { buildProviderColumns } from '@/components/llm-providers/columns'
 import { providerTypeOptions } from '@/components/llm-providers/provider-type-config'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 interface LlmProvidersPageProps {
   /** Rendered inside the Models page: no page title, the tab already names it. */
@@ -89,17 +90,11 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
   const notifications = useNotifications()
 
   const { data: providersRaw, isLoading, isError, error, refetch: refetchProviders } = useQuery({
-    queryKey: ['llm-providers'],
-    // No try/catch: swallowing the rejection and returning [] made
-    // isError permanently false, so a 500 or an expired session rendered
-    // the "No models configured -- connect a provider" empty state over
-    // providers that were still there, with no retry. The QueryError
-    // branch below was unreachable.
-    queryFn: async () => {
-      const d = await llmProvidersApi.getAll()
-      const result = d?.providers || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    }
+    // No try/catch (fetchLlmProviders has none): swallowing the rejection
+    // and returning [] made isError permanently false, so a 500 or an
+    // expired session rendered the "No models configured" empty state over
+    // providers that were still there, with no retry.
+    ...llmProvidersQuery,
   })
   const providers = Array.isArray(providersRaw) ? providersRaw : []
 

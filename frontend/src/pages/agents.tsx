@@ -33,8 +33,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
-import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
-import { LoadSampleButton } from '@/components/onboarding/load-sample-button'
 import { QueryError } from '@/components/ui/query-error'
 import {
   Dialog,
@@ -118,7 +116,6 @@ export function AgentsPage() {
   const queryClient = useQueryClient()
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif } = useNotifications()
-  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -384,13 +381,6 @@ export function AgentsPage() {
               <Plus className="h-4 w-4 mr-2" />
               Create agent
             </Button>
-          }
-          secondaryAction={
-            <LoadSampleButton
-              pending={seedSample.isPending}
-              disabled={!currentOrganization}
-              onClick={() => seedSample.mutate()}
-            />
           }
         />
       ) : (

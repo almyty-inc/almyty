@@ -16,7 +16,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi, onboardingApi } from '@/lib/api'
-import { GettingStartedCard, useOnboarding, useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
+import { GettingStartedCard, useOnboarding } from '@/components/onboarding/getting-started-card'
 import { useProductTour } from '@/components/onboarding/product-tour'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
@@ -76,7 +76,6 @@ export function DashboardPage() {
     return () => window.clearTimeout(t)
   }, [onboarding, maybeAutoStart])
 
-  const seedSample = useSeedSampleWorkspace(orgId)
 
   const dismissOnboarding = useMutation({
     mutationFn: () => onboardingApi.setDismissed(orgId as string, true),
@@ -246,8 +245,6 @@ export function DashboardPage() {
       {showOnboarding ? (
         <GettingStartedCard
           state={onboarding}
-          onSeedSample={() => seedSample.mutate()}
-          seeding={seedSample.isPending}
           onDismiss={() => dismissOnboarding.mutate()}
           onStartTour={() => startTour({ manual: true })}
         />

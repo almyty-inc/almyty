@@ -15,8 +15,6 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
-import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
-import { LoadSampleButton } from '@/components/onboarding/load-sample-button'
 import { PageHeader } from '@/components/layout/page-header'
 import { pluralized } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
@@ -58,7 +56,7 @@ import {
   createActionsColumn,
   createSortableColumn,
 } from '@/components/ui/data-table'
-import { toolsApi, llmProvidersApi } from '@/lib/api'
+import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
@@ -80,6 +78,8 @@ import { useMemo } from 'react'
 // Form Schema for manual tool creation
 import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { toolSourceApi, DELETED_API_LABEL } from '@/lib/tool-source'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
 interface Tool {
   id: string
@@ -136,7 +136,6 @@ export function ToolsPage() {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const navigate = useNavigate()
-  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -239,11 +238,10 @@ export function ToolsPage() {
   })
 
   const { data: providersData } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
+    ...llmProvidersQuery,
     enabled: !!currentOrganization,
   })
-  const llmProvidersExtracted = providersData?.providers || providersData || []
+  const llmProvidersExtracted = providersData || []
   const llmProviders = Array.isArray(llmProvidersExtracted) ? llmProvidersExtracted : []
   const activeProviders = llmProviders.filter((p: any) => p.status === 'active' || p.isActive)
 
@@ -496,12 +494,12 @@ return new Promise((resolve, reject) => {
       !searchQuery ||
       tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (tool.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (tool.metadata?.sourceApi?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+      (toolSourceApi(tool).name || '').toLowerCase().includes(searchQuery.toLowerCase())
 
     const matchesStatus = statusFilter === 'all' || tool.status === statusFilter
     const matchesType = typeFilter === 'all' || tool.type === typeFilter
     const matchesApi =
-      apiFilter === 'all' || tool.metadata?.sourceApi?.name === apiFilter
+      apiFilter === 'all' || toolSourceApi(tool).name === apiFilter
 
     return matchesSearch && matchesStatus && matchesType && matchesApi
   })
@@ -510,7 +508,7 @@ return new Promise((resolve, reject) => {
   const apiSources = Array.from(
     new Set(
       tools
-        .map((t: Tool) => t.metadata?.sourceApi?.name)
+        .map((t: Tool) => toolSourceApi(t).name)
         .filter(Boolean)
     )
   ) as string[]
@@ -607,7 +605,7 @@ return new Promise((resolve, reject) => {
                 />
               </div>
               <div className="text-sm text-muted-foreground truncate">
-                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
+                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : toolSourceApi(tool).name || (tool.type === 'api' ? DELETED_API_LABEL : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
               </div>
             </div>
           </div>
@@ -778,13 +776,6 @@ return new Promise((resolve, reject) => {
               Import API
             </Button>
           }
-          secondaryAction={
-            <LoadSampleButton
-              pending={seedSample.isPending}
-              disabled={!currentOrganization}
-              onClick={() => seedSample.mutate()}
-            />
-          }
         />
       ) : (
         <Card>
@@ -927,7 +918,7 @@ return new Promise((resolve, reject) => {
                   <div className="text-sm space-y-1">
                     <div>
                       <span className="text-muted-foreground">API: </span>
-                      {selectedTool.metadata?.sourceApi?.name || 'Unknown'}
+                      {toolSourceApi(selectedTool).name || DELETED_API_LABEL}
                     </div>
                     <div>
                       <span className="text-muted-foreground">Type: </span>

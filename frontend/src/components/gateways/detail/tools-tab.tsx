@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { toolSourceApi, DELETED_API_LABEL } from '@/lib/tool-source'
 
 export type ScopingPreset = 'read-only' | 'admin' | 'public' | 'all' | 'none'
 
@@ -60,11 +61,11 @@ function isToolAssignable(tool: any): boolean {
 }
 
 function getToolApiKey(tool: any): string {
-  return tool.metadata?.sourceApi?.id || tool.apiId || '__custom__'
+  return toolSourceApi(tool).id || '__custom__'
 }
 
 function getToolApiName(tool: any): string {
-  return tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : 'Custom Tools')
+  return toolSourceApi(tool).name || (tool.type === 'api' ? DELETED_API_LABEL : 'Custom Tools')
 }
 
 export function GatewayToolsTab({

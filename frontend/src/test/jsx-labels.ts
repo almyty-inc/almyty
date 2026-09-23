@@ -140,7 +140,7 @@ export const LABEL_PROPER_NOUNS = new Set([
   'A2A', 'AI', 'API', 'APIs', 'AWS', 'Anthropic', 'Azure', 'BYOK', 'Bedrock', 'CLI', 'CSV', 'Claude',
   'Codex', 'Copilot', 'Cursor', 'Discord', 'Face', 'Gemini', 'GitHub', 'Google', 'GraphQL', 'HTTP',
   'Hugging', 'I', 'ID', 'IDs', 'IRC', 'JSON', 'JavaScript', 'KMS', 'LLM', 'MCP', 'Markdown', 'Matrix',
-  'Microsoft', 'OAuth', 'OIDC', 'Ollama', 'OpenAI', 'OpenAPI', 'PDF', 'PNG', 'Petstore', 'Protobuf',
+  'Microsoft', 'OAuth', 'OIDC', 'Ollama', 'OpenAI', 'OpenAPI', 'PDF', 'PNG', 'Protobuf',
   'RBAC', 'REST', 'S3', 'SAML', 'SDK', 'SMS', 'SOAP', 'SQL', 'SSO', 'SVG', 'Signal', 'Slack', 'Stripe',
   'TOTP', 'Teams', 'Telegram', 'UTCP', 'URL', 'URLs', 'Vertex', 'WhatsApp', 'YAML', 'gRPC',
 ])

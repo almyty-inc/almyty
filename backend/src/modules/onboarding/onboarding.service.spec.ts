@@ -83,10 +83,10 @@ describe('OnboardingService', () => {
         first_call: false,
         external_client: false,
       });
-      expect(state.sampleWorkspace).toBe(false);
       expect(state.dismissed).toBe(false);
-      expect(state.activatedSampleAt).toBeNull();
       expect(state.activatedRealAt).toBeNull();
+      expect(state).not.toHaveProperty('sampleWorkspace');
+      expect(state).not.toHaveProperty('activatedSampleAt');
     });
   });
 
@@ -140,7 +140,6 @@ describe('OnboardingService', () => {
       requestLogRepo.createQueryBuilder.mockReturnValue(makeQb({ count: 0, one: log }));
       const state = await service.getState(ORG, USER);
       expect(state.steps.first_call).toBe(true);
-      expect(state.activatedSampleAt).toBe('2026-01-01T00:00:00.000Z');
     });
   });
 
@@ -169,14 +168,6 @@ describe('OnboardingService', () => {
     });
   });
 
-  describe('sampleWorkspace flag', () => {
-    it('is true when a sample-flagged API exists', async () => {
-      stubEmpty();
-      apiRepo.createQueryBuilder.mockReturnValue(makeQb({ count: 1 }));
-      const state = await service.getState(ORG, USER);
-      expect(state.sampleWorkspace).toBe(true);
-    });
-  });
 
   describe('dismissed (per-user)', () => {
     it('reflects the user preference', async () => {

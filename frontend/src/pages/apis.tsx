@@ -13,8 +13,6 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
-import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
-import { LoadSampleButton } from '@/components/onboarding/load-sample-button'
 import { PageHeader } from '@/components/layout/page-header'
 import { SchemaImportDialog } from '@/components/SchemaImportDialog'
 
@@ -40,7 +38,6 @@ export function ApisPage() {
   const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   // Get all tools to show accurate counts per API
   const { data: allToolsData } = useQuery({
@@ -267,13 +264,6 @@ export function ApisPage() {
               <Plus className="mr-2 h-4 w-4" />
               Connect API
             </Button>
-          }
-          secondaryAction={
-            <LoadSampleButton
-              pending={seedSample.isPending}
-              disabled={!currentOrganization}
-              onClick={() => seedSample.mutate()}
-            />
           }
         />
       ) : (
