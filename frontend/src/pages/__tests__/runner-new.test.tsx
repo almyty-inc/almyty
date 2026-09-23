@@ -59,6 +59,8 @@ describe('RunnerNewPage', () => {
   it('generates the correct start command for the given name + labels', async () => {
     const user = userEvent.setup()
     render(<RunnerNewPage />)
+    expect(screen.getByText(/labels do not affect where work is dispatched yet/i)).toBeInTheDocument()
+    expect(screen.queryByText(/routing tags/i)).not.toBeInTheDocument()
     await user.type(await screen.findByLabelText(/^name$/i), 'my-laptop')
     await user.click(screen.getByRole('button', { name: /add label/i }))
     const keyInputs = screen.getAllByPlaceholderText('key')
