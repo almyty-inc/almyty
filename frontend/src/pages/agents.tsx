@@ -30,7 +30,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { EmptyState } from '@/components/ui/empty-state'
-import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
 import { QueryError } from '@/components/ui/query-error'
 import {
   Dialog,
@@ -114,7 +113,6 @@ export function AgentsPage() {
   const queryClient = useQueryClient()
   const { currentOrganization } = useOrganizationStore()
   const { success, error: errorNotif } = useNotifications()
-  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -376,16 +374,6 @@ export function AgentsPage() {
                 <Button onClick={() => navigate('/agents/new')}>
                   <Plus className="h-4 w-4 mr-2" />
                   Create agent
-                </Button>
-              }
-              secondaryAction={
-                <Button
-                  variant="outline"
-                  className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                  onClick={() => seedSample.mutate()}
-                  disabled={seedSample.isPending || !currentOrganization}
-                >
-                  {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
                 </Button>
               }
               className="py-16"

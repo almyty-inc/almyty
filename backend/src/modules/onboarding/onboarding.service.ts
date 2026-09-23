@@ -48,7 +48,6 @@ export class OnboardingService {
       hasGatewayWithTool,
       firstCallLog,
       externalCallExists,
-      hasSampleWorkspace,
       dismissed,
     ] = await Promise.all([
       this.hasHealthyProvider(organizationId),
@@ -56,7 +55,6 @@ export class OnboardingService {
       this.hasGatewayWithTool(organizationId),
       this.firstSuccessfulCall(organizationId),
       this.hasExternalClientCall(organizationId),
-      this.hasSampleWorkspace(organizationId),
       this.isDismissedFor(userId),
     ]);
 
@@ -68,18 +66,15 @@ export class OnboardingService {
       external_client: externalCallExists,
     };
 
-    // A successful call through any gateway/agent is the sample-activation
-    // moment; a successful call whose entities are non-sample is the real
-    // one. We approximate the "real" timestamp with the earliest successful
-    // call once the org owns at least one non-sample gateway.
-    const activatedSampleAt = firstCallLog ? firstCallLog.timestamp.toISOString() : null;
+    // Activation is the earliest successful call once the org owns a gateway
+    // of its own. Gateways an older build seeded as a sample workspace (tagged
+    // metadata.sampleWorkspace) still do not count, so poking at one cannot
+    // close onboarding.
     const activatedRealAt = await this.realActivationAt(organizationId, firstCallLog);
 
     return {
       steps,
-      sampleWorkspace: hasSampleWorkspace,
       dismissed,
-      activatedSampleAt,
       activatedRealAt,
     };
   }
@@ -150,25 +145,15 @@ export class OnboardingService {
     return count > 0;
   }
 
-  private async hasSampleWorkspace(organizationId: string): Promise<boolean> {
-    const count = await this.apiRepo
-      .createQueryBuilder('api')
-      .where('api.organizationId = :organizationId', { organizationId })
-      .andWhere("api.metadata->>'sampleWorkspace' = :key", { key: 'petstore' })
-      .getCount();
-    return count > 0;
-  }
-
   private async isDismissedFor(userId: string): Promise<boolean> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     return user?.preferences?.onboardingDismissed === true;
   }
 
   /**
-   * The "real" activation timestamp: the earliest successful call, but
-   * only once the org owns at least one non-sample gateway (otherwise
-   * every call is against sample objects and only `activated_sample`
-   * applies).
+   * The activation timestamp: the earliest successful call, once the org
+   * owns at least one gateway it set up itself. Gateways an older build
+   * seeded as a sample workspace are excluded.
    */
   private async realActivationAt(
     organizationId: string,

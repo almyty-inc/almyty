@@ -19,9 +19,7 @@ function makeState(overrides: Partial<OnboardingState> = {}): OnboardingState {
       external_client: false,
       ...(overrides.steps || {}),
     },
-    sampleWorkspace: false,
     dismissed: false,
-    activatedSampleAt: null,
     activatedRealAt: null,
     ...overrides,
   }
@@ -86,18 +84,10 @@ describe('GettingStartedCard', () => {
     expect(screen.getByText('An external client called your gateway.')).toBeInTheDocument()
   })
 
-  it('offers the sample-workspace action until it is seeded', () => {
-    const onSeedSample = vi.fn()
-    const { rerender } = render(
-      <GettingStartedCard state={makeState()} onSeedSample={onSeedSample} />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: /load sample workspace/i }))
-    expect(onSeedSample).toHaveBeenCalledTimes(1)
-
-    rerender(
-      <GettingStartedCard state={makeState({ sampleWorkspace: true })} onSeedSample={onSeedSample} />,
-    )
-    expect(screen.queryByRole('button', { name: /load sample workspace/i })).not.toBeInTheDocument()
+  it('never offers a canned sample workspace', () => {
+    render(<GettingStartedCard state={makeState()} />)
+    expect(screen.queryByRole('button', { name: /sample/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/petstore/i)).not.toBeInTheDocument()
   })
 
   it('fires an observed step-completed event when a step flips complete between renders', () => {
@@ -116,9 +106,9 @@ describe('GettingStartedCard', () => {
   it('fires an activation event when the org first activates', () => {
     const { rerender } = render(<GettingStartedCard state={makeState()} />)
     rerender(
-      <GettingStartedCard state={makeState({ activatedSampleAt: '2026-01-01T00:00:00.000Z' })} />,
+      <GettingStartedCard state={makeState({ activatedRealAt: '2026-01-01T00:00:00.000Z' })} />,
     )
-    expect(captureEvent).toHaveBeenCalledWith('activation', { kind: 'sample' })
+    expect(captureEvent).toHaveBeenCalledWith('activation', { kind: 'real' })
   })
 
   it('invokes onDismiss when the dismiss control is clicked', () => {

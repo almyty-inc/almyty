@@ -14,7 +14,6 @@ import { GatewaysModule } from '../gateways/gateways.module';
 import { AgentsModule } from '../agents/agents.module';
 
 import { OnboardingService } from './onboarding.service';
-import { SampleWorkspaceService } from './sample-workspace.service';
 import { OnboardingController } from './onboarding.controller';
 
 @Module({
@@ -32,8 +31,8 @@ import { OnboardingController } from './onboarding.controller';
     GatewaysModule,
     AgentsModule,
   ],
-  providers: [OnboardingService, SampleWorkspaceService],
+  providers: [OnboardingService],
   controllers: [OnboardingController],
-  exports: [OnboardingService, SampleWorkspaceService],
+  exports: [OnboardingService],
 })
 export class OnboardingModule {}
