@@ -127,7 +127,8 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
       },
     }),
     createActionsColumn<LlmProvider>(
-      (provider) => navigate(`/llm-providers/${provider.id}`),
+      // Edit: in place, on the provider's Configuration tab.
+      (provider) => navigate(`/llm-providers/${provider.id}?tab=configuration&edit=1`),
       (provider) => setProviderToDelete(provider),
       [
         {
@@ -138,11 +139,6 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
           // Runs on the provider's page, where the answer is shown.
           label: 'Test connection',
           onClick: (provider) => navigate(`/llm-providers/${provider.id}?test=1`),
-        },
-        {
-          // Edits in place on the provider's Configuration tab.
-          label: 'Edit',
-          onClick: (provider) => navigate(`/llm-providers/${provider.id}?tab=configuration&edit=1`),
         },
         {
           label: 'Toggle status',
