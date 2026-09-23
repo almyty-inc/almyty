@@ -16,6 +16,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { runnersApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
+import { PageIntro } from '@/components/onboarding/page-intro'
 import { runnerStateVariant, RUNNER_HEARTBEAT_POLL_MS } from './runners-shared'
 import { formatRelativeTime } from '@/lib/utils'
 import {
@@ -183,6 +184,7 @@ export function RunnersPage() {
   return (
     <div className="space-y-6">
       <RunnersHeader runners={runners} onlineCount={onlineCount} onCreate={() => navigate('/runners/new')} />
+      <PageIntro topic="runners" />
 
       {!isLoading && runners.length === 0 ? (
         <Card>

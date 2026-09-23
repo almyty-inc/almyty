@@ -10,6 +10,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Badge } from '@/components/ui/badge'
 import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
 import { formatDateTime, pluralized } from '@/lib/utils'
 import {
   AUTH_MODE_LABELS,
@@ -55,6 +56,7 @@ export function AppsPage() {
           </Button>
         }
       />
+      <PageIntro topic="apps" />
 
       {isLoading ? (
         <div className="flex justify-center py-12">

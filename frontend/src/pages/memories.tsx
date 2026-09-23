@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   AlertDialog,
@@ -273,6 +274,7 @@ export function MemoriesPage() {
           </>
         }
       />
+      <PageIntro topic="memories" />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <TabsList>

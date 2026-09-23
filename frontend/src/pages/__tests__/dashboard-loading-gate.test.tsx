@@ -12,12 +12,10 @@ vi.mock('@/store/organization', () => ({
 vi.mock('@/store/app', () => ({
   useNotifications: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }),
 }))
-vi.mock('@/components/onboarding/getting-started-card', () => ({
-  GettingStartedCard: () => null,
+vi.mock('@/components/onboarding/guide-card', () => ({ GuideCard: () => null }))
+vi.mock('@/components/onboarding/use-onboarding', () => ({
   useOnboarding: () => ({ data: null }),
-  useSeedSampleWorkspace: () => ({ mutate: vi.fn(), isPending: false }),
 }))
-vi.mock('@/components/onboarding/product-tour', () => ({ useProductTour: () => ({ start: vi.fn() }) }))
 vi.mock('@/lib/analytics', () => ({ captureEvent: vi.fn() }))
 
 vi.mock('@/lib/api', () => ({

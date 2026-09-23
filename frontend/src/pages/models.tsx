@@ -5,6 +5,7 @@ import { KeyRound, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/layout/page-header'
 import { ModelsCatalog } from '@/components/models/models-catalog'
+import { PageIntro } from '@/components/onboarding/page-intro'
 
 /**
  * The Models page is the list of models: every model an agent may call,
@@ -57,6 +58,7 @@ export function ModelsPage() {
           </>
         }
       />
+      <PageIntro topic="models" />
 
       <ModelsCatalog />
     </div>
