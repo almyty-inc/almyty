@@ -38,14 +38,36 @@ export class UnifiedGatewayDelegation {
 
   /**
    * Channel platform webhooks (Slack events, Telegram updates, Twilio
-   * callbacks, ...) delivered to the unified endpoint. The chat widget
-   * is deliberately absent — it has its own dedicated controller and a
-   * request/response contract (runId/threadId) that does not fit the
-   * fire-and-forget webhook shape.
+   * callbacks, ...) delivered to the unified endpoint.
+   *
+   * Membership here SKIPS almyty API-key authentication (see the
+   * `isChannel` branch below), so the only thing standing between the
+   * internet and an agent run is `adapter.verifyWebhook`. That makes
+   * this set a security boundary with one invariant:
+   *
+   *   An adapter that sets `inboundIsUnauthenticatedByDesign` must NOT
+   *   be in this set.
+   *
+   * Discord was, and that was a hole: its adapter declares itself
+   * unauthenticated-by-design because its real inbound is the
+   * authenticated gateway websocket, so `verifyWebhook` returned true
+   * for anyone — an unsigned POST to /:orgSlug/:resourceSlug started an
+   * agent run in the victim's org, with the attacker choosing both the
+   * prompt and (through `channel_id`) where the reply was delivered.
+   * Discord has no HTTP webhook at all, so it does not belong here; a
+   * POST to a discord gateway now authenticates like any other
+   * non-channel type and is then refused as an unsupported direct
+   * request.
+   *
+   * The chat widget is absent for the same reason plus one more: it has
+   * its own dedicated, rate-limited controller and a request/response
+   * contract (runId/threadId) that does not fit the fire-and-forget
+   * webhook shape.
+   *
+   * `unauthenticated-inbound.guard.spec.ts` asserts the invariant.
    */
-  private static readonly CHANNEL_TYPES: ReadonlySet<GatewayType> = new Set([
+  static readonly CHANNEL_TYPES: ReadonlySet<GatewayType> = new Set([
     GatewayType.SLACK,
-    GatewayType.DISCORD,
     GatewayType.TELEGRAM,
     GatewayType.WHATSAPP,
     GatewayType.WHATSAPP_CLOUD,

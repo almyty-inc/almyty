@@ -2,8 +2,10 @@
 
 A long-running CLI daemon that lets almyty agents run commands on a machine you
 control — your laptop, a build box, a GPU host, a server in your own network.
-The code, the credentials and the output stay on that machine; almyty sends the
-command and reads the result. One common use is orchestrating a CLI coding agent
+Execution happens on that machine, but command results and requested output
+are sent back to almyty and may become agent/model context. Do not print secrets
+or return sensitive file contents unless you intend to share them.
+One common use is orchestrating a CLI coding agent
 (Claude Code, Codex, Gemini, aider, …) against your codebase in one coherent
 workspace, but nothing about the runner is specific to coding agents.
 

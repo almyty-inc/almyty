@@ -75,6 +75,22 @@ export class SlackAdapter extends BaseAdapter {
     }
   }
 
+  /**
+   * Slack requires a replay window and we did not have one.
+   *
+   * A signature authenticates a request; it does not date it. Without a
+   * freshness check a captured Slack delivery stays valid until the
+   * signing secret is rotated, and the delivery claim does not close the
+   * gap: slash commands and interactive payloads carry neither
+   * `event_id` nor `event.ts`, so `deliveryId` returns undefined for
+   * them and every replay is processed as a new message — a new agent
+   * run, a new LLM bill, each time. Slack's own guidance is to refuse
+   * anything more than five minutes from now. Same tolerance as
+   * SVIX_TIMESTAMP_TOLERANCE_SECONDS, which already did this correctly
+   * one file over.
+   */
+  static readonly TIMESTAMP_TOLERANCE_SECONDS = 5 * 60;
+
   async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
     // Fail closed: an unconfigured signing secret means we cannot tell a
     // real Slack event from a forged one, so we refuse rather than run
@@ -83,6 +99,14 @@ export class SlackAdapter extends BaseAdapter {
     const timestamp = headers['x-slack-request-timestamp'];
     const signature = headers['x-slack-signature'];
     if (!timestamp || !signature) return false;
+
+    // Age before HMAC: a stale timestamp is a refusal whatever it is
+    // signed with, and refusing here means the replay never reaches the
+    // pipeline rather than depending on the dedupe claim to notice it.
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts)) return false;
+    if (Math.abs(Date.now() / 1000 - ts) > SlackAdapter.TIMESTAMP_TOLERANCE_SECONDS) return false;
+
     const sigBasestring = `v0:${timestamp}:${rawBody ?? JSON.stringify(payload)}`;
     const mySignature = 'v0=' + crypto.createHmac('sha256', config.signing_secret).update(sigBasestring).digest('hex');
     // timingSafeEqual throws on a length mismatch, which a forged header

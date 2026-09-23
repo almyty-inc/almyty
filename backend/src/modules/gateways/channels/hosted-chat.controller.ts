@@ -23,6 +23,7 @@ import type { EndUser } from '../../../entities/end-user.entity';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
+import { trustedClientIp } from '../../../common/security/client-ip';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -91,12 +92,18 @@ export class HostedChatController {
     return (req as any).cookies?.[HostedChatService.SESSION_COOKIE];
   }
 
+  /**
+   * The visitor's address, as the outermost trusted proxy saw it.
+   *
+   * This used to take the leftmost X-Forwarded-For entry: the one hop in
+   * that header the caller writes. Since the per-IP bucket is keyed on
+   * the result, and this surface starts an LLM run on the tenant's own
+   * provider keys, that let one caller mint a fresh counter per request
+   * with `X-Forwarded-For: <anything>`. trustedClientIp counts from the
+   * right instead; see its doc comment for TRUSTED_PROXY_HOPS.
+   */
   private clientIp(req: Request): string | undefined {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (typeof forwarded === 'string' && forwarded.length > 0) {
-      return forwarded.split(',')[0].trim();
-    }
-    return req.ip;
+    return trustedClientIp(req as any);
   }
 
   /**
