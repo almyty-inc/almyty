@@ -6,7 +6,7 @@ The models layer decides which model answers a call, what it costs, and where it
 |--------|------|------|
 | Catalog | `backend/src/modules/model-catalog/` | Model cards, the router, the automatic price feed |
 | Registry | `backend/src/modules/model-registry/` | Weights and manifests (`s3://`, `file://`, `hf://`) |
-| Deployments | `backend/src/modules/model-deployments/` | Provider adapters, the reconcile loop, budgets |
+| Deployments | `backend/src/modules/model-deployments/` | Models on the customer's own cloud account: provider adapters, the reconcile loop, budgets |
 
 Design and provider deltas: `docs/design/models-layer.md`. Registry details: `docs/model-registry.md`.
 
@@ -14,7 +14,7 @@ Design and provider deltas: `docs/design/models-layer.md`. Registry details: `do
 
 There is no code list of supported models. A model is usable when its **card** exists in the org's catalog and:
 
-1. it has a way to be called (a stored LLM provider row, or an endpoint URL from a deployment),
+1. it has a way to be called (a stored LLM provider row, or an endpoint URL from a model running on the customer's cloud account),
 2. its status is `active`, and
 3. one **validation run** has passed (`POST /models/:id/validate` makes a real, short call and records the result).
 
@@ -213,9 +213,9 @@ Ways a card comes to exist:
 - **Health check as validation.** The health check makes a real call with the provider's resolved model. Passing records a validation run on that provider's card for that vendor id (`validationStatus: passed`, `lastValidatedAt`, `measuredLatencyMs`), creating the card when the catalog has none, so a fresh organization with one healthy provider can route right away. A `MODEL_NOT_FOUND` failure marks the card `failed` with the error; any other failure leaves the catalog alone. The audit row carries `source: health_check`.
 - **Backfill on boot.** Every active provider that has no cards yet is synced once at startup (a queued job with a stable id, so replicas do it once; off under `NODE_ENV=test` and `MODEL_CATALOG_BACKFILL=off`).
 - `POST /models/sync { providerId }` runs the same import for one provider by hand; `POST /models/sync` with no body runs it for every active provider of the org and returns a per-provider summary (`created`, `skipped`, `retired`, `reinstated`, `error`).
-- `POST /models` against a stored provider (admin picks the vendor id)
-- `POST /models/register-endpoint { name, url, apiKey?, vendorModelId, privacyTier?, region? }` for any OpenAI-compatible server you run yourself. The URL and key become a `custom` LLM provider row (key encrypted like every other), the card points at it.
-- A deployment reaching `ready` fills the card it was created for (`endpointRef.url`, `deploymentId`).
+- `POST /models` against a stored provider (admin picks the vendor id).
+- **A server you run.** Any OpenAI-compatible server (vLLM, Ollama, TGI, llama.cpp, LiteLLM) is a `custom` LLM provider (`POST /llm-providers { type: "custom", configuration: { apiUrl, apiKey? } }`, key encrypted like every other) plus an ordinary card (`POST /models { providerId, vendorModelId }`). Creating the provider also syncs what `GET <base>/models` lists. The UI's "A server you run" path does both calls.
+- **A model on your cloud account.** `POST /model-deployments` creates the card at once (`status: deploying`, not selectable) and links it, unless `modelId` names an existing card; optional `name` and `vendorModelId` label it. When the endpoint reaches `ready` the reconcile processor fills `endpointRef.url` and `deploymentId`, sets the card `active`, and writes its provider row; a validation run then makes it selectable.
 
 Every register, validate, price change and route is an audit row (`model_registered`, `model_validated`, `model_price_updated`, `model_routed`).
 
@@ -253,36 +253,38 @@ Autonomous agents route too: `modelConfig.routing` on the agent replaces `provid
 
 **Several models in one agent.** Routing picks one model per step and falls back when it fails. Running models *alongside* each other is the agent graph's job, not the router's: a `parallel` node fans out to as many `llm_call` nodes as you like, each with its own `routing` policy or pinned provider, and a `merge` node collects the answers. Merge strategies are `first_response` (whichever returns first), `concatenate`, `best_of_n` (a judge model picks one) and `consensus`. So Claude, Kimi, Qwen and GPT can answer the same prompt in one run and a judge can choose between them, or four steps of one agent can each use a different model. The two mechanisms compose: every branch of a fan-out still routes, still records its attribution, and still falls back on its own.
 
-Every card is called through a stored provider row. A card served by an endpoint we deployed gets one written when the deployment reaches ready, and `POST /models/register-endpoint` writes one too; both are `openai` providers pointed at the OpenAI-compatible base, so chat goes to `<base>/chat/completions` and the key lives in the credential store like any other provider's. A card with no usable provider row is not a candidate, and a provider whose connection no longer resolves for the caller drops out of the plan rather than being called without it.
+Every card is called through a stored provider row. A card served by a model on the customer's cloud account gets one written by the reconcile processor when that model reaches ready: an `openai` provider pointed at the OpenAI-compatible base, so chat goes to `<base>/chat/completions` and the key lives in the credential store like any other provider's. A server the customer runs is a `custom` provider they create themselves (`POST /llm-providers`), with the same chat path. A card with no usable provider row is not a candidate, and a provider whose connection no longer resolves for the caller drops out of the plan rather than being called without it.
 
 Routing needs the catalog module wired in (it is, in `app.module.ts`); without it a routed request fails with `ROUTING_UNAVAILABLE` rather than silently falling back.
 
-## Deployments
+## Models on your cloud account (`model-deployments`)
 
-`GET /model-adapters` describes every registered adapter as data: capabilities, the model references it accepts (`modelSchemes`), and a JSON schema for its config (`x-secret: true` marks fields that are encrypted at rest and never returned). `POST /model-deployments` records desired state; the reconcile queue (`MODEL_RECONCILE_CRON`, default every 2 minutes) is the only thing that talks to a provider. `POST /model-deployments/:id/scale { replicas }` and `/teardown` change desired state only.
+A model hosted on the customer's own cloud account is still one card in the Models list; where it runs is an attribute ("Runs on: Your Hugging Face account (Inference Endpoint)"), and its state, hourly cost, budget and start/stop/scale controls live on the card's detail. User-facing copy never says "deployment" or "tracked artifact": the docs site calls this "your cloud account" and each adapter "a cloud". The code names stay: the `model-deployments` module, the `ModelDeployment` entity, `/model-deployments`, `/model-adapters`, the CLI's `deploy`/`deployments`/`scale`/`teardown`, and `deploymentId` fields. User docs: `docs-site/content/models/your-cloud.mdx`.
+
+`GET /model-adapters` describes every registered adapter as data: capabilities, the model references it accepts (`modelSchemes`), and a JSON schema for its config (`x-secret: true` marks fields that are encrypted at rest and never returned). `POST /model-deployments` records desired state and creates the card at once (`status: deploying`, linked through `endpointRef.deploymentId` once ready; optional `name` and `vendorModelId` label it; `modelId` attaches an existing card instead). The reconcile queue (`MODEL_RECONCILE_CRON`, default every 2 minutes) is the only thing that talks to a provider. `POST /model-deployments/:id/scale { replicas }` and `/teardown` change desired state only.
 
 ### Naming the model is configuration
 
-A deployment takes the model as a string. There is nothing to register first:
+A hosted model takes its source as a string. There is nothing to register first:
 
 ```
-POST /model-deployments { "model": "hf://Qwen/Qwen3-0.6B@main", "providerType": "huggingface-endpoints" }
+POST /model-deployments { "model": "hf://Qwen/Qwen3-0.6B", "providerType": "huggingface-endpoints" }
 POST /model-deployments { "model": "fireworks://accounts/acme/models/qwen3-tuned", "providerType": "fireworks" }
 ```
 
-Two kinds of reference. An **artifact** points at bytes and is pinned, so the deployment is reproducible: `hf://org/repo@sha`, `s3://bucket/prefix@etag`, `gs://bucket/prefix@generation`, `file:///path@sha`. A **provider reference** names a model that already exists on a platform, which versions it itself, so no pin is needed: `bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`.
+Two kinds of reference. An **artifact** points at bytes and is pinned, so the model is reproducible: `hf://org/repo@sha` (a bare `hf://org/repo` is pinned to the commit it resolves to), `s3://bucket/prefix@etag`, `gs://bucket/prefix@generation`, `file:///path@sha`. A **provider reference** names a model that already exists on a platform, which versions it itself, so no pin is needed: `bedrock://`, `sagemaker://`, `vertex://`, `foundry://`, `azureml://`, `fireworks://`, `together://`, `baseten://`. Lineage (base model, quantization) is shown on the card as plain facts.
 
-`modelVersionId` still works and is the other way in. Register a version when you want lineage, a manifest digest and evaluation history attached to your own artifact; skip it when you just want to run a model that is already somewhere.
+`modelVersionId` still works and is the other way in, for power users only: the registry (`/model-versions`, `almyty models register-version`) records a manifest digest, lineage and evaluation history against an artifact. It is documented in the API and CLI references as an optional aside, never as a front-door concept.
 
 ### Where the weights come from, and who can read them
 
-almyty is not in the hosting business. A deployment runs on the provider's own managed product, and the weights come from wherever that provider natively reads them, most often a Hugging Face repository. `registrySources` on each adapter names what its provider can really read, native default first. Weight files never pass through almyty.
+almyty is not in the hosting business. A hosted model runs on the provider's own managed product, and the weights come from wherever that provider natively reads them, most often a Hugging Face repository. `registrySources` on each adapter names what its provider can really read, native default first. Weight files never pass through almyty.
 
 That means the two do not mix freely, and the API says so rather than letting you find out from a provider error. Bedrock custom import reads S3 and cannot take a Hub repo. Hugging Face Inference Endpoints serves a Hub repo and nothing else. Vertex wants Cloud Storage or Model Garden. A provider reference runs only on the provider that owns it. A mismatch is refused at submit with `ADAPTER_UNSUPPORTED_SOURCE` and the list of what that adapter does accept, and `modelSchemes` lets a form filter in either direction: the providers that can run the model you have, or the sources the provider you picked will take.
 
-That also makes our own object storage optional. It is needed only where a provider reads object storage natively: the AWS adapters and Fireworks read S3, Baseten mirrors from S3 or Cloud Storage through its delivery network, Vertex reads Cloud Storage, and a self-host points its own server at its own store. Connecting a registry bucket is not a precondition for anything else: a card from a configured provider, a registered endpoint, and a deployment from a Hugging Face repository all work without one. Each adapter passes the same conformance suite in fixture mode; set `CONFORMANCE_LIVE=<adapter key>` with real credentials to run it live. Adapters never import each other (`adapter-isolation.spec.ts` enforces it).
+That also makes our own object storage optional. It is needed only where a provider reads object storage natively: the AWS adapters and Fireworks read S3, Baseten mirrors from S3 or Cloud Storage through its delivery network, Vertex reads Cloud Storage, and a self-host points its own server at its own store. Connecting a registry bucket is not a precondition for anything else: a card from a configured provider, a server you run, and a hosted model from a Hugging Face repository all work without one. Each adapter passes the same conformance suite in fixture mode; set `CONFORMANCE_LIVE=<adapter key>` with real credentials to run it live. Adapters never import each other (`adapter-isolation.spec.ts` enforces it).
 
-A deployment with a `budgetId` is charged from the adapter's cost snapshot on every reconcile. Reaching the budget scales it to zero, writes `model_deployment_budget_stop`, and notifies.
+A hosted model with a `budgetId` is charged from the adapter's cost snapshot on every reconcile. Reaching the budget scales it to zero, writes `model_deployment_budget_stop`, and notifies.
 
 ## CLI
 
@@ -295,8 +297,6 @@ npx @almyty/models list [--selectable] [--status active|inactive|error|deploying
 npx @almyty/models get <id>
 npx @almyty/models register --name <n> --provider <providerId> --model <vendorModelId>
                            [--tier t] [--region r] [--context n]
-npx @almyty/models register-endpoint --name <n> --url <base url> --model <vendorModelId>
-                           [--api-key-stdin] [--tier t] [--region r] [--context n]
 npx @almyty/models set <id> [--name n] [--tier t] [--region r] [--context n]
                            [--status s] [--price-in n --price-out n] [--clear-price]
 npx @almyty/models sync [providerId]
@@ -332,8 +332,7 @@ Both numbers are required together: half an override would price input by hand
 and output from the feed.
 
 **No secret is taken as a flag value**, because argv is visible in `ps`, in
-shell history and in most CI logs. An endpoint key is prompted without echo or
-read with `--api-key-stdin`; adapter configuration comes from `--config-file`
+shell history and in most CI logs. A server's key goes on its `custom` provider, never on the models CLI; adapter configuration comes from `--config-file`
 or `--config-stdin`, or better, from `--credential <connectionId>` naming a
 connection. `--config` is still accepted for the fields an adapter does not
 mark `x-secret` and is refused the moment it carries one that is; `adapters`
@@ -348,8 +347,8 @@ Exit codes are the suite's shared table: 0 success, 1 unexpected, 2 usage,
 |----------|---------|---------|
 | `MODEL_CATALOG_BACKFILL` | unset | `off` skips the boot-time backfill of providers that have no cards yet |
 | `MODEL_PRICE_FEED_CRON` | `0 4 * * *` | Price feed refresh; `off` disables |
-| `MODEL_RECONCILE_CRON` | `*/2 * * * *` | Deployment reconcile sweep; `off` disables |
+| `MODEL_RECONCILE_CRON` | `*/2 * * * *` | Reconcile sweep for models on cloud accounts; `off` disables |
 | `MODEL_STUB_ADAPTER` | unset | `true` registers the stub adapter in production too |
-| `LLM_ALLOW_PRIVATE_URLS` | unset | `true` lets custom providers and endpoint cards reach private or loopback hosts (a vLLM box on the LAN); mirrors `OLLAMA_ALLOW_PRIVATE_URLS` |
+| `LLM_ALLOW_PRIVATE_URLS` | unset | `true` lets `custom` providers (a server you run) reach private or loopback hosts (a vLLM box on the LAN); mirrors `OLLAMA_ALLOW_PRIVATE_URLS` |
 | `MODEL_REGISTRY_S3_*` | falls back to `STORAGE_S3_*` | Single-tenant seed only: creates the one organization's registry connection on first boot; ignored with more than one organization |
 | `CONFORMANCE_LIVE` | unset | Adapter key whose conformance spec runs against the real provider |

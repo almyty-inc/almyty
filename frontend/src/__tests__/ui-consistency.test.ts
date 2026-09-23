@@ -28,17 +28,12 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 const isTest = (f: string) => /(__tests__|\.test\.|\.spec\.)/.test(f)
-
 /**
- * Areas another workstream is restructuring right now (the Models section
- * and the Runner pages). They are held to the same rules once that work
- * lands; until then they are listed here rather than edited twice.
+ * Areas another workstream is restructuring right now (the Runner pages).
+ * They are held to the same rules once that work lands; until then they
+ * are listed here rather than edited twice.
  */
 const OTHER_WORKSTREAMS = [
-  /^pages\/models\.tsx$/,
-  /^components\/models\//,
-  /^pages\/llm-provider/,
-  /^components\/llm-providers\//,
   /^pages\/runner/,
   /^pages\/runners/,
 ]

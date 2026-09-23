@@ -24,7 +24,7 @@ The differentiator isn't that agents loop; it's that you can *engineer* the loop
 - **Self-correction**: a cross-vendor **verifier panel** re-checks each result; on failure the agent revises and retries. See [verification](/agents/autonomous#verification).
 - **Termination**: a **revise budget** (e.g. 2 revisions, `any_fail_blocks`) is the stop condition, so a loop can't spin forever.
 - **Guardrails inside the loop**: always-on [constraints](/agents/autonomous#constraints), some *learned from past failures*, bound what each iteration may do.
-- **Multi-agent loops**: [collaboration](/agents/autonomous#collaboration) runs several agents in `sequential` chains, `parallel` fan-out, `race` first-to-finish, or `debate` (rounds of argument settled by a judge).
+- **Multi-agent loops**: [collaboration](/agents/autonomous#collaboration) runs several participants (agents or models) in `sequential` chains, `parallel` fan-out, `race` first-to-finish, or `debate` (rounds of argument settled by a judge).
 - **Human-in-the-loop**: [`request_approval`](/approvals) pauses the loop for a person before an irreversible step, then resumes.
 - **Loops that compound**: [memory](/memory) carries context across runs, and a good run can be promoted to a reusable [skill](/gateways/skills).
 

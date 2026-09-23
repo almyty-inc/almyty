@@ -15,8 +15,9 @@ import { LlmProvider } from './llm-provider.entity';
 /**
  * A row in the model catalog: the machine-readable model card the router
  * reads. It describes something that can answer a chat request: a vendor
- * model behind an existing LlmProvider, a hand-registered OpenAI-compatible
- * endpoint, or a version this organization deployed itself.
+ * model behind an existing LlmProvider (including a `custom` provider for
+ * a server someone runs by hand), or a version this organization deployed
+ * itself.
  *
  * "Supported" is a property of this data, never of a code list: a model
  * is selectable when its card has a working dispatch path (the provider),

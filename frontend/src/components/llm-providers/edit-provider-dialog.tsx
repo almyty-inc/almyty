@@ -47,7 +47,7 @@ export function EditProviderDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Edit Provider</DialogTitle>
+          <DialogTitle>Edit inference provider</DialogTitle>
           <DialogDescription>
             Update provider configuration and model settings
           </DialogDescription>
@@ -203,7 +203,7 @@ export function EditProviderDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={updateProviderMutation.isPending}>
-              {updateProviderMutation.isPending ? 'Updating...' : 'Update Provider'}
+              {updateProviderMutation.isPending ? 'Updating...' : 'Save changes'}
             </Button>
           </div>
         </form>
