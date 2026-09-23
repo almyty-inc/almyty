@@ -2,11 +2,13 @@
 
 Enterprise (`audit_export` entitlement). Hand security an evidence file, and feed the same events into the SIEM they already alert from. The audit log itself (who did what, to which resource, from which IP) is part of the open-source platform and browsable under [Analytics](/analytics). This feature adds the two things security teams ask for: **bulk export** for evidence and retention, and **streaming** into your SIEM.
 
-![The Audit Trail under Analytics, with Export CSV and Export JSON](/screenshots/analytics-audit.png)
+![Audit Trail with a successful demo tool execution and a locked Business export control](/screenshots/analytics-audit.png)
+
+This demo organization does not have the export entitlement. Its audit log is visible, while the audit export control is locked.
 
 ## Export
 
-From the **Audit Trail** tab under [Analytics](/analytics), click **Export CSV** or **Export JSON**. Exports are filterable (date range, `resourceType`, `action`, `userId`) and capped at 50,000 rows. The file downloads as an attachment (`audit-export-YYYY-MM-DD.json|csv`) with an `X-Audit-Export-Count` header.
+With the entitlement enabled, use **CSV** or **JSON** beside the filters in the **Audit Trail** tab under [Analytics](/analytics). The page-header **Export CSV** and **Export JSON** buttons export the request log, not the audit trail. Audit exports are filterable (date range, `resourceType`, `action`, `userId`) and capped at 50,000 rows. The file downloads as an attachment (`audit-export-YYYY-MM-DD.json|csv`) with an `X-Audit-Export-Count` header.
 
 CSV columns: `id, createdAt, organizationId, userId, userEmail, action, resourceType, resourceId, resourceName, status, ipAddress, details`. Admin/owner only. The export endpoint and its query parameters are in the [API reference](/api-reference).
 

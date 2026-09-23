@@ -162,48 +162,113 @@
     },
     {
       "id": "analytics-agents",
-      "title": "Analytics → Agents tab with execution metrics",
+      "title": "Agent analytics for seeded demo agents",
       "path": "screenshots/analytics-agents.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "aac9458b5d32268e06f804a44959e3f582c92170000f275c9cc6f8dd3993737f"
+      "capturedAt": "2026-09-23T10:38:34.134Z",
+      "status": "current",
+      "sha256": "50891b155a11a678b90cce25d60db58930a2068731af76e4fefbd7bc8677b108",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/analytics/agents"
+      },
+      "sources": [
+        "frontend/src/pages/analytics.tsx",
+        "frontend/src/components/analytics",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
+      "notes": "Seeded QA agent lifetime totals and time-window counters; not production reliability measurements."
     },
     {
       "id": "analytics-audit",
-      "title": "Analytics → Audit trail tab",
+      "title": "Audit trail recording the successful demo tool execution",
       "path": "screenshots/analytics-audit.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "322b1a98ed79e74a991d63db46e55add636928e9ac064c2b6215c61d250cf67d"
+      "capturedAt": "2026-09-23T10:43:43.012Z",
+      "status": "current",
+      "sha256": "e80db95d1753f83c9b1f53f2451ef958788fa5db71979fa71dde8396698e82ea",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/analytics/audit"
+      },
+      "sources": [
+        "frontend/src/pages/analytics.tsx",
+        "frontend/src/components/analytics",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
+      "notes": "Seeded demo identity only. No IP addresses or secrets are visible. Audit export is locked on this Pro organization; page-header exports are for request logs."
     },
     {
       "id": "analytics-gateways",
-      "title": "Analytics → Gateways tab with per-protocol traffic",
+      "title": "Gateway analytics with no traffic in the selected seven-day window",
       "path": "screenshots/analytics-gateways.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "b100364e3b9410879a7b8aa7a92091a3f45915b75f6e990ef8fdcbbc5cfc8b71"
+      "capturedAt": "2026-09-23T10:42:59.978Z",
+      "status": "current",
+      "sha256": "1154ddc97e8e04337a73ace52c2269067ecf531bdcef0bf17e7775a5ba0b9342",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/analytics/gateways"
+      },
+      "sources": [
+        "frontend/src/pages/analytics.tsx",
+        "frontend/src/components/analytics",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
+      "notes": "The demo organization has no gateway requests in this time window; this is the genuine loaded empty state."
     },
     {
       "id": "analytics-overview",
-      "title": "Analytics overview",
+      "title": "Analytics overview recording one successful demo tool execution",
       "path": "screenshots/analytics-overview.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "2c89a541163e6230ad8acae778aca2f1114a03c876b61830c81069179575e0a4"
+      "capturedAt": "2026-09-23T09:20:55.280Z",
+      "status": "current",
+      "sha256": "82de687608e52867afe5fd0e3f3c3e8dbeda29edeb61d36b1babd1a3c57ea210",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/analytics"
+      },
+      "sources": [
+        "frontend/src/pages/analytics.tsx",
+        "frontend/src/components/analytics",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
+      "notes": "Actual staging QA traffic from the weather-tool check; not a production performance benchmark."
     },
     {
       "id": "analytics-tools",
-      "title": "Analytics → Tools tab with live execution stats",
+      "title": "Tool analytics recording the successful weather test",
       "path": "screenshots/analytics-tools.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "a8c0ea82905ed75db98946cdf6a8d25709011cd141e1a4274704f63a29234dab"
+      "capturedAt": "2026-09-23T09:20:39.134Z",
+      "status": "current",
+      "sha256": "2e8162663cc0063533bef60abd2171adc5076bdb459eb8737047980a8b99e84c",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/analytics/tools"
+      },
+      "sources": [
+        "frontend/src/pages/analytics.tsx",
+        "frontend/src/components/analytics",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "816d1a7aeb58f0ecc62b5af14f04a33bc109914b01db5b0d47c962b6474b4a03",
+      "notes": "One actual staging UI execution; not a production reliability benchmark."
     },
     {
       "id": "api-auth-curl",
@@ -216,12 +281,24 @@
     },
     {
       "id": "api-detail",
-      "title": "api detail",
+      "title": "Connected Open-Meteo API with parsed operation and generated tool",
       "path": "screenshots/api-detail.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "0cb3a683dc857424ad4669b8368bec0a52eee82c22546166b49b21656d88be4c"
+      "capturedAt": "2026-09-23T09:18:25.838Z",
+      "status": "current",
+      "sha256": "cfc481629a98c618201e51c93cadbb3d23ce69f7c1a8a684d0025ff2854d887e",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "969a41cd997fc6ec48d707e46d91133faf834c432ebe4edecc41477e48a940bf"
     },
     {
       "id": "api-error-sample",
@@ -252,11 +329,11 @@
     },
     {
       "id": "apis-import-dialog",
-      "title": "Connect New API dialog",
+      "title": "Import OpenAPI schema from a URL with automatic tool generation",
       "path": "screenshots/apis-import-dialog.png",
-      "capturedAt": "2026-09-22T15:12:54.135Z",
+      "capturedAt": "2026-09-23T09:17:23.485Z",
       "status": "current",
-      "sha256": "5cfc507fe345926e87ffc67e875c368d18ed78701a8283b2a9744bc993c95bde",
+      "sha256": "39c5c059a9dbfd5fefb02e13c3dd6e9050d6041a44c081916538c7bfd24500dd",
       "source": {
         "kind": "browser",
         "environment": "staging",
@@ -264,12 +341,13 @@
       },
       "sources": [
         "frontend/src/pages/apis.tsx",
+        "frontend/src/components/SchemaImportDialog.tsx",
         "frontend/src/components/apis",
         "frontend/src/components/ui",
         "frontend/src/components/layout",
         "frontend/src/index.css"
       ],
-      "sourceDigest": "0bee20ea3d86fa118670887c4fccec36ba9f8e4167b11f84813555d77a4ec329"
+      "sourceDigest": "fe3ab4f09ba3a07a0f196a18cabe1a7b16319c15cb8af0bd8e75b97dbdaaa230"
     },
     {
       "id": "apis-list",
@@ -369,8 +447,8 @@
       "title": "Hosted-chat wildcard routing failure",
       "path": "screenshots/apps-hosted-chat-routing-failure.png",
       "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
+      "status": "historical",
+      "reason": "Preserved failure evidence linked from docs/qa-reports/2026-08-31-agent-factory.md, not a current product walkthrough. Exact capture time is unknown; replacing it would falsify that report.",
       "sha256": "227adb55926cb6bf2c8e6aa8aebbadaa3fa3471e4276b1460bfa42420dbba784"
     },
     {
@@ -591,21 +669,47 @@
     },
     {
       "id": "credentials-add",
-      "title": "Add Credential dialog",
+      "title": "Blank Add Credential form with organization and team visibility",
       "path": "screenshots/credentials-add.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "ff4cb9f506c0571492b1aadccd885e3be89d273d132ae5dc90bf6a245b3bf8c6"
+      "capturedAt": "2026-09-23T10:44:46.657Z",
+      "status": "current",
+      "sha256": "aac7105d09f3b6a414dcbfc59a6e6e5e9d383363275fa59572d30bff46dda474",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/credentials"
+      },
+      "sources": [
+        "frontend/src/pages/credentials.tsx",
+        "frontend/src/components/credentials",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "53dbd17ef5ea59fbaa63e197ecf8df36d52acfcfd961db938b818b539f3d6a6f",
+      "notes": "No credential was entered or created."
     },
     {
       "id": "credentials-vault",
-      "title": "Credentials vault",
+      "title": "Credential vault with seeded provider credential labels",
       "path": "screenshots/credentials-vault.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "64394c98a3a9f4c9baf4c78af32747c4a41d8b8ae49c5d84025b22dc7d0b5502"
+      "capturedAt": "2026-09-23T10:44:29.981Z",
+      "status": "current",
+      "sha256": "cf1d4b266fe8a01145e730c45415a1923364769634bb231fe551f705e6faa174",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/credentials"
+      },
+      "sources": [
+        "frontend/src/pages/credentials.tsx",
+        "frontend/src/components/credentials",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "53dbd17ef5ea59fbaa63e197ecf8df36d52acfcfd961db938b818b539f3d6a6f",
+      "notes": "Only labels and status are visible; no secret values were revealed."
     },
     {
       "id": "dashboard-empty",
@@ -774,12 +878,24 @@
     },
     {
       "id": "quickstart-api-imported",
-      "title": "quickstart api imported",
+      "title": "Connected Open-Meteo API with parsed operation and generated tool",
       "path": "screenshots/quickstart-api-imported.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "fb2dbbcf3dbdece6754f19bf741e0aa5b6a47010db5442be4326da2c08e4fa02"
+      "capturedAt": "2026-09-23T09:18:25.838Z",
+      "status": "current",
+      "sha256": "cfc481629a98c618201e51c93cadbb3d23ce69f7c1a8a684d0025ff2854d887e",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/api-detail.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "969a41cd997fc6ec48d707e46d91133faf834c432ebe4edecc41477e48a940bf"
     },
     {
       "id": "quickstart-claude-config",
@@ -855,12 +971,25 @@
     },
     {
       "id": "settings-profile",
-      "title": "settings profile",
+      "title": "Seeded demo profile settings",
       "path": "screenshots/settings-profile.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "3349356621d3414077c5860406446420e6cc5fa725762d4ad503edee74b4b7e0"
+      "capturedAt": "2026-09-23T06:09:49.642Z",
+      "status": "current",
+      "sha256": "110e0266508f287d6e0af2f6387017b01a6f4f17df783bd06e71dbb708eeadad",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/profile"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b5115ac67d220e621567efef4fdf6f656ea4328fa48a96bcc03b8513f0b4a72b",
+      "notes": "Contains only the seeded Ava Chen demo identity."
     },
     {
       "id": "settings-security",
@@ -885,12 +1014,25 @@
     },
     {
       "id": "settings-teams",
-      "title": "settings teams",
+      "title": "Members and Teams settings showing the seeded organization owner",
       "path": "screenshots/settings-teams.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "945d55a82fc88087fc3b5b0bc3adbfc3636fedce73461151ee73130cf8b69543"
+      "capturedAt": "2026-09-23T06:10:33.702Z",
+      "status": "current",
+      "sha256": "bbdd844b8f42e116b403a9b0b4d2ef147ec950dd89b320de263823fa9958cb1a",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/settings/members"
+      },
+      "sources": [
+        "frontend/src/pages/settings.tsx",
+        "frontend/src/components/settings",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "b5115ac67d220e621567efef4fdf6f656ea4328fa48a96bcc03b8513f0b4a72b",
+      "notes": "Members tab, not the custom-role editor. Only seeded demo account data is shown."
     },
     {
       "id": "support-agent-constraints",
@@ -958,12 +1100,24 @@
     },
     {
       "id": "tool-detail",
-      "title": "tool detail",
+      "title": "Generated weather tool details and parameter schema",
       "path": "screenshots/tool-detail.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "46239450d8f268ae84a2066b13de2bcc9de0ab3171b2258f5ce42a3a45cad430"
+      "capturedAt": "2026-09-23T09:19:05.133Z",
+      "status": "current",
+      "sha256": "488e344dbcb34084fb44627c7538df931641670d387cd316c6a9d7f178c0204e",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/tools"
+      },
+      "sources": [
+        "frontend/src/pages/tool-detail.tsx",
+        "frontend/src/components/tools",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "d6983605acccdde85243dc4bec02049ef78318882e7e44222f27b74bc1c02798"
     },
     {
       "id": "tools-create-dialog",
