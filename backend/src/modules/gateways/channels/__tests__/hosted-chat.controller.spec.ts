@@ -246,9 +246,14 @@ describe('HostedChatController', () => {
       expect(hostedChat.resolveEndUser).toHaveBeenCalledWith(expect.anything(), 'abc', '203.0.113.9');
     });
 
-    it('prefers the forwarded client IP over the socket peer', async () => {
+    it('takes the hop our own proxy appended, not the one the caller wrote', async () => {
       // Behind the ingress, req.ip is the proxy, so per-IP limits would
-      // otherwise bucket every visitor together.
+      // otherwise bucket every visitor together — hence reading
+      // X-Forwarded-For at all. But the header grows left to right and
+      // only the RIGHTMOST entry was appended by something we control;
+      // this used to take the leftmost, which is whatever the caller
+      // sent. That made the per-IP bucket on this unauthenticated
+      // LLM-invoking route a key the caller chose.
       await controller.listConversations(
         'acme',
         req({ headers: { 'x-forwarded-for': '198.51.100.4, 10.0.0.1' } }),
@@ -257,8 +262,20 @@ describe('HostedChatController', () => {
       expect(hostedChat.resolveEndUser).toHaveBeenCalledWith(
         expect.anything(),
         undefined,
-        '198.51.100.4',
+        '10.0.0.1',
       );
+    });
+
+    it('gives a caller rotating the forged hop the same address every time', async () => {
+      for (const forged of ['1.1.1.1', '2.2.2.2', '3.3.3.3']) {
+        await controller.listConversations(
+          'acme',
+          req({ headers: { 'x-forwarded-for': `${forged}, 10.0.0.1` } }),
+          res,
+        );
+      }
+      const addresses = hostedChat.resolveEndUser.mock.calls.map((c: any[]) => c[2]);
+      expect(new Set(addresses)).toEqual(new Set(['10.0.0.1']));
     });
   });
 

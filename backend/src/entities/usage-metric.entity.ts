@@ -13,16 +13,24 @@ import { User } from './user.entity';
 import { Organization } from './organization.entity';
 import { LlmProvider } from './llm-provider.entity';
 
+/**
+ * Every member is emitted by production code. Keep it that way: a metric
+ * type nothing writes is a row that never appears, which reads as "zero"
+ * on any chart built over it rather than as "not measured".
+ *
+ * Seven members were removed for exactly that reason -- error_rate,
+ * throughput, cache_hit_rate, bandwidth_usage, concurrent_users,
+ * api_calls and tool_executions had no emitter anywhere in src or ee, no
+ * analytics query and no chart. `throughput` came with a
+ * `createThroughputMetric` factory whose only callers were in this
+ * entity's own spec, which is how it passed as live. Emitting them is a
+ * telemetry feature, not a missing call: each needs a subsystem that
+ * counts the thing (cache hits, bytes, concurrent sessions) and a reader
+ * that shows it, and none of those exist.
+ */
 export enum MetricType {
   REQUEST_COUNT = 'request_count',
   RESPONSE_TIME = 'response_time',
-  ERROR_RATE = 'error_rate',
-  THROUGHPUT = 'throughput',
-  CACHE_HIT_RATE = 'cache_hit_rate',
-  BANDWIDTH_USAGE = 'bandwidth_usage',
-  CONCURRENT_USERS = 'concurrent_users',
-  API_CALLS = 'api_calls',
-  TOOL_EXECUTIONS = 'tool_executions',
   // Security plugin counters (emitted by PluginManager.executeHook)
   SECURITY_THREAT_BLOCKED = 'security_threat_blocked',
   PII_FILTERED = 'pii_filtered',
@@ -206,26 +214,6 @@ export class UsageMetric {
     metric.userId = data.userId;
     metric.organizationId = data.organizationId;
     metric.metadata = data.metadata;
-    metric.timestamp = new Date();
-    return metric;
-  }
-
-  static createThroughputMetric(data: {
-    gatewayId?: string;
-    organizationId?: string;
-    requestCount: number;
-    timeWindowSeconds: number;
-  }): UsageMetric {
-    const metric = new UsageMetric();
-    metric.type = MetricType.THROUGHPUT;
-    metric.value = data.requestCount / data.timeWindowSeconds;
-    metric.status = MetricStatus.SUCCESS;
-    metric.gatewayId = data.gatewayId;
-    metric.organizationId = data.organizationId;
-    metric.dimensions = {
-      requestCount: data.requestCount,
-      timeWindowSeconds: data.timeWindowSeconds,
-    };
     metric.timestamp = new Date();
     return metric;
   }

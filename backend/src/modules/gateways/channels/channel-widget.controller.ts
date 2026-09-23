@@ -20,6 +20,7 @@ import { HostedChatService } from './hosted-chat.service';
 import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { ChannelGatewayService } from './channel-gateway.service';
 import { buildWidgetScript, sanitizeWidgetConfig } from './widget-script';
+import { trustedClientIp } from '../../../common/security/client-ip';
 
 /**
  * Public (unauthenticated) surface for the embedded chat widget — the
@@ -108,8 +109,17 @@ export class ChannelWidgetController {
 
     // Each widget session (and each address) gets its own share, so one
     // browser cannot use up the whole site's allowance.
-    const forwarded = req.headers['x-forwarded-for'];
-    const ip = typeof forwarded === 'string' && forwarded ? forwarded.split(',')[0].trim() : req.ip;
+    //
+    // Both halves used to be values the caller chose. `endUserId` still
+    // is — the widget runs on a third-party page with no session of
+    // ours, so the only browser identity available is the threadId it
+    // echoes back, and a caller who wants a fresh bucket can simply
+    // invent one. It is kept because it keeps an honest browser honest,
+    // but it is not the control. The control is the address, and that
+    // was forgeable too: it came from the leftmost X-Forwarded-For hop,
+    // the one entry in the header the caller writes. trustedClientIp
+    // counts from the right, so the key is now the address our ingress
+    // actually saw.
     const own = await this.gatewayRateLimit.checkVisitor(gateway, {
       // The widget script identifies a browser by threadId (sessionId is
       // the older name some embeds still send); either is the visitor.
@@ -118,7 +128,7 @@ export class ChannelWidgetController {
         (typeof body?.threadId === 'string' && body.threadId) ||
         null,
 
-      clientHash: HostedChatService.hashClient(ip),
+      clientHash: HostedChatService.hashClient(trustedClientIp(req as any)),
     });
     if (own.limited) {
       if (own.retryAfterSeconds) res.setHeader('Retry-After', String(own.retryAfterSeconds));

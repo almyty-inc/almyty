@@ -13,7 +13,8 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # The canonical-memory migration requires CREATE EXTENSION vector.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: almyty
       POSTGRES_USER: postgres

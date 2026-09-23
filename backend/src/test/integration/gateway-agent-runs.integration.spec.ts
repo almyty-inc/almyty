@@ -681,15 +681,25 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
       expect(res.status).toBe(200);
     });
 
-    it('should return public agent card without API key', async () => {
+    it('should not hand an anonymous caller some other tenant\'s agent card', async () => {
+      // This asserted 200 and passed for the wrong reason: the handler
+      // answered with `findOne(... order: createdAt ASC)` and NO
+      // organization predicate, so an unauthenticated GET returned the
+      // oldest active agent gateway on the whole platform — its org
+      // name, agent name, description and skills. On a multi-tenant host
+      // there is no "the" agent to serve here.
+      //
+      // The per-gateway card is the well-defined one and is still public
+      // at /:orgSlug/:resourceSlug/.well-known/agent-card.json. A root
+      // card now requires an operator to name the gateway explicitly via
+      // PUBLIC_AGENT_CARD_GATEWAY_ID, which this environment does not
+      // set.
       const res = await request(app.getHttpServer())
         .get('/.well-known/agent-card.json');
 
-      // Public fallback returns the first active agent-kind gateway's card
-      // Status should be 200 (not 401/403) — public discovery is unauthenticated
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(404);
+      expect(JSON.stringify(res.body)).not.toContain(org.name);
     });
-
     it('should reject with invalid API key', async () => {
       const res = await request(app.getHttpServer())
         .get('/.well-known/agent-card.json')

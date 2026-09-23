@@ -49,8 +49,6 @@ export interface AutonomousConfigProps {
       outputFormat?: 'text' | 'json'
       escalation?: 'never' | 'on_failure' | 'on_low_confidence'
       conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge'
-      sharedMemoryScope?: boolean
-      allowRevision?: boolean
     }
     judgeAgentId?: string
     maxRounds?: number
@@ -463,20 +461,6 @@ function CollaborationConfig({ agentId, collaboration, onChange, availableAgents
             </Select>
           </div>
         )}
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={collaboration.rules?.sharedMemoryScope ?? false}
-              onChange={(e) => onChange({ ...collaboration, rules: { ...collaboration.rules, sharedMemoryScope: e.target.checked } })} className="rounded" />
-            <span className="text-xs">Shared Memory</span>
-          </label>
-          {collaboration.strategy === 'sequential' && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={collaboration.rules?.allowRevision ?? false}
-                onChange={(e) => onChange({ ...collaboration, rules: { ...collaboration.rules, allowRevision: e.target.checked } })} className="rounded" />
-              <span className="text-xs">Allow Revision</span>
-            </label>
-          )}
-        </div>
       </div>
 
       {(collaboration.strategy === 'debate' || collaboration.strategy === 'parallel') && (

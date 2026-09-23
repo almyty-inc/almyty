@@ -44,6 +44,28 @@ export function burstPerMinute(perHour: number): number {
   return Math.max(3, Math.ceil(perHour / 5));
 }
 
+/**
+ * The per-address ceiling a public surface gets when its tenant has
+ * configured none.
+ *
+ * "Unconfigured" used to mean "unlimited": `rateLimitConfig` is a
+ * nullable column with no default, `check()` returns early when
+ * `enabled` is falsy, and `checkVisitor` skipped every scope whose
+ * limit was unset — so a chat_widget or hosted_chat gateway created
+ * without touching the rate-limit form was an anonymous, unmetered way
+ * to spend the tenant's model budget. The publish gate that was meant
+ * to prevent that (`canPublishHostedChat`) never receives these values
+ * and its two public-link refusals are filtered out by the only caller,
+ * so nothing upstream required them either.
+ *
+ * This is a floor, not a policy. It applies only when the tenant set no
+ * per-address limit at all, and any configured value — higher or lower
+ * — wins over it. It is deliberately loose: it exists to bound a
+ * runaway, not to shape normal use, and a shared NAT should not hit it
+ * in ordinary conversation.
+ */
+export const DEFAULT_PUBLIC_PER_IP_PER_HOUR = 240;
+
 const WINDOWS = [
   { field: 'requestsPerMinute', label: 'minute', seconds: 60 },
   { field: 'requestsPerHour', label: 'hour', seconds: 3600 },
@@ -64,6 +86,17 @@ export class GatewayRateLimitService {
    * address behind a NAT) from using up everyone's share: each visitor
    * and each address gets its own hour bucket, plus a burst bucket per
    * minute so an hour's allowance cannot be spent in ten seconds.
+   *
+   * The address scope always applies when the caller supplies a
+   * `clientHash`, falling back to DEFAULT_PUBLIC_PER_IP_PER_HOUR when
+   * the tenant configured nothing. Before that, an unconfigured gateway
+   * produced no scopes at all and this returned `{limited: false}` —
+   * which is to say the anonymous surfaces had no ceiling whatsoever
+   * until someone remembered to fill in a form.
+   *
+   * The visitor scope stays opt-in: its id comes from a session the
+   * caller can discard (hosted chat) or a field the caller invents
+   * (the widget), so it narrows an honest browser and is not relied on.
    */
   async checkVisitor(
     gateway: Gateway,
@@ -74,8 +107,12 @@ export class GatewayRateLimitService {
     if (config?.perVisitorPerHour && config.perVisitorPerHour > 0 && who.endUserId) {
       scopes.push({ scope: 'user', id: who.endUserId, perHour: config.perVisitorPerHour, what: 'you' });
     }
-    if (config?.perIpPerHour && config.perIpPerHour > 0 && who.clientHash) {
-      scopes.push({ scope: 'ip', id: who.clientHash, perHour: config.perIpPerHour, what: 'your network' });
+    if (who.clientHash) {
+      const perIp =
+        config?.perIpPerHour && config.perIpPerHour > 0
+          ? config.perIpPerHour
+          : DEFAULT_PUBLIC_PER_IP_PER_HOUR;
+      scopes.push({ scope: 'ip', id: who.clientHash, perHour: perIp, what: 'your network' });
     }
     if (scopes.length === 0) return { limited: false };
 

@@ -16,7 +16,6 @@ describe('RateLimiterPlugin - Real Business Logic', () => {
         requestsPerHour: 100,
         requestsPerDay: 1000,
       },
-      burstLimit: 10,
       organizationLimits: {
         free: { requestsPerHour: 100 },
         pro: { requestsPerHour: 1000 },

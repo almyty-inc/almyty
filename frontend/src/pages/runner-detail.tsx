@@ -204,8 +204,10 @@ export function RunnerDetailPage() {
           <CardContent>
             {Object.keys(runner.labels ?? {}).length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No labels set. Labels are routing tags configured on the runner side via{' '}
-                <code>--label k=v</code> or in <code>~/.almyty/config.json</code>.
+                No labels set. Labels are descriptive tags configured on the runner side via{' '}
+                <code>--label k=v</code> or in <code>~/.almyty/config.json</code>. They do not
+                affect where work is dispatched yet — routing by label ships with the
+                multi-runner scheduler.
               </p>
             ) : (
               <div className="flex flex-wrap gap-1">

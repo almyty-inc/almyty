@@ -221,5 +221,37 @@ describe('WhatsAppCloudAdapter', () => {
       );
       expect(out).toBeNull();
     });
+
+    // Unauthenticated, unlimited attempts, and the caller supplies one
+    // side of the comparison — so this is a length-guarded
+    // timingSafeEqual like every other secret compare in the module,
+    // not a plain inequality. A differing length must be a refusal
+    // rather than the throw timingSafeEqual raises on its own.
+    it('rejects a token of a different length without throwing', () => {
+      expect(() =>
+        WhatsAppCloudAdapter.handleVerification(
+          { 'hub.mode': 'subscribe', 'hub.verify_token': 'x', 'hub.challenge': '1' },
+          config,
+        ),
+      ).not.toThrow();
+      expect(
+        WhatsAppCloudAdapter.handleVerification(
+          { 'hub.mode': 'subscribe', 'hub.verify_token': 'x', 'hub.challenge': '1' },
+          config,
+        ),
+      ).toBeNull();
+    });
+
+    it('rejects an absent token rather than coercing it to a match', () => {
+      expect(
+        WhatsAppCloudAdapter.handleVerification({ 'hub.mode': 'subscribe', 'hub.challenge': '1' }, config),
+      ).toBeNull();
+      expect(
+        WhatsAppCloudAdapter.handleVerification(
+          { 'hub.mode': 'subscribe', 'hub.verify_token': undefined, 'hub.challenge': '1' },
+          config,
+        ),
+      ).toBeNull();
+    });
   });
 });

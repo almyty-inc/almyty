@@ -209,14 +209,26 @@ export class Agent {
     strategy: 'sequential' | 'parallel' | 'race' | 'debate';
     agents: Array<{ agentId: string; role?: string }>;
     sharedBrief?: string;
+    /**
+     * Read by the run engine: maxTotalCost and maxChainDepth by
+     * agent-step-processor, the three formatting/escalation keys by
+     * agent-runtime-builders (they go into the system prompt).
+     *
+     * `allowRevision` and `sharedMemoryScope` used to sit here too, with
+     * two checkboxes in autonomous-config.tsx writing them and nothing
+     * in modules/agents reading either. They are gone rather than wired
+     * because neither names an existing mechanism: a revision pass means
+     * inventing a rule for when a sequential chain hands work back to an
+     * earlier agent and how many times, and a shared memory scope means
+     * deciding what one collaborator may see of another's memory. Both
+     * are features to design, not calls to add.
+     */
     rules?: {
       maxTotalCost?: number;
       maxChainDepth?: number;
       outputFormat?: 'text' | 'json';
       escalation?: 'never' | 'on_failure' | 'on_low_confidence';
       conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge';
-      allowRevision?: boolean;
-      sharedMemoryScope?: boolean;
     };
     judgeAgentId?: string;
     maxRounds?: number;
