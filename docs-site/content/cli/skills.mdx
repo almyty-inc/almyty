@@ -18,9 +18,9 @@ $ npx @almyty/skills --help
 
 | Format | Example | Resolves to |
 |--------|---------|-------------|
-| `@org/gateway` | `@acme/billing` | All skills from the `billing` gateway in the `acme` org |
-| `@org/gateway/skill` | `@acme/billing/get-invoice` | A single skill |
-| `<name>` | `get-invoice` | Search by name across all gateways |
+| `@org/gateway` | `@acme/petstore` | All skills from the `petstore` gateway in the `acme` org |
+| `@org/gateway/skill` | `@acme/petstore/get-pet` | A single skill |
+| `<name>` | `get-pet` | Search by name across all gateways |
 | `<uuid>` | `550e8400-...` | Direct gateway or tool ID |
 
 ## Listing gateways
@@ -31,9 +31,9 @@ See which gateways are available in your organization:
 $ npx @almyty/skills gateways
 Your gateways:
 
-  Billing API
+  Petstore API
     Type: skills
-    Use:  npx @almyty/skills install @acme/billing
+    Use:  npx @almyty/skills install @acme/petstore
 
   Internal Tools
     Type: mcp
@@ -49,7 +49,7 @@ List all available skills, or scope to a specific gateway:
 $ npx @almyty/skills list
 
 # Skills from a specific gateway
-$ npx @almyty/skills list @acme/billing
+$ npx @almyty/skills list @acme/petstore
 ```
 
 Search by keyword when you know what you need but not where it lives:
@@ -68,10 +68,10 @@ Found 3 skill(s):
 Install all skills from a gateway:
 
 ```bash
-$ npx @almyty/skills install @acme/billing
+$ npx @almyty/skills install @acme/petstore
 Fetching skills...
 
-@acme/billing (5 skill(s))
+@acme/petstore (5 skill(s))
 
   Claude Code: 5 skills -> .claude/skills
   Cursor: 5 skills -> .agents/skills
@@ -83,15 +83,15 @@ Skills will be automatically loaded by your AI coding agent.
 Install a single skill:
 
 ```bash
-$ npx @almyty/skills install @acme/billing/get-invoice
+$ npx @almyty/skills install @acme/petstore/get-pet
 ```
 
 The CLI detects which AI agents are configured in your project and writes SKILL.md files to the correct directories. Each skill gets its own folder:
 
 ```
-.claude/skills/get-invoice/SKILL.md
+.claude/skills/get-pet/SKILL.md
 .claude/skills/list-pets/SKILL.md
-.agents/skills/get-invoice/SKILL.md
+.agents/skills/get-pet/SKILL.md
 .agents/skills/list-pets/SKILL.md
 ```
 
@@ -117,7 +117,7 @@ See what is currently installed in your project:
 ```bash
 $ npx @almyty/skills installed
 Claude Code (.claude/skills):
-  get-invoice
+  get-pet
   list-pets
   create-pet
 ```
@@ -141,7 +141,7 @@ Only skills almyty installed are removed, identified by the `author: almyty` lin
 Execute a skill from the command line without an AI agent:
 
 ```bash
-$ npx @almyty/skills run @acme/billing/get-invoice --invoiceId inv_123
+$ npx @almyty/skills run @acme/petstore/get-pet --petId 123
 {
   "id": 123,
   "name": "Buddy",
@@ -178,8 +178,8 @@ $ npx @almyty/skills daemon --interval 30
 If you only care about one gateway, use `watch` instead of `daemon`:
 
 ```bash
-$ npx @almyty/skills watch @acme/billing
-Watching Billing API (every 60s)
+$ npx @almyty/skills watch @acme/petstore
+Watching Petstore API (every 60s)
 Syncing to 2 agent target(s):
   Claude Code: .claude/skills
   Universal (.agents/skills): .agents/skills

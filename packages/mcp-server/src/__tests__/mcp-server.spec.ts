@@ -22,7 +22,7 @@ import { ZodLike, buildZodShape, zodTypeFor } from '../schema';
 function source(overrides: Partial<DiscoverySource> = {}): DiscoverySource {
   return {
     fetchTools: async () => [{ name: 'pets_list', description: 'List pets' }],
-    fetchSkills: async () => [{ name: 'billing/invoices', content: '# pets', toolCount: 2 }],
+    fetchSkills: async () => [{ name: 'petstore/pets', content: '# pets', toolCount: 2 }],
     ...overrides,
   };
 }
@@ -178,17 +178,17 @@ describe('upstream error text', () => {
 
 describe('prompt names', () => {
   it('makes a skill name a safe identifier', () => {
-    expect(sanitizePromptName('billing/invoices')).toBe('billing_invoices');
+    expect(sanitizePromptName('petstore/pets')).toBe('petstore_pets');
     expect(sanitizePromptName('a  b')).toBe('a_b');
     expect(sanitizePromptName('__weird__')).toBe('weird');
     expect(sanitizePromptName('///')).toBe('skill');
   });
 
   it('keeps two skills that sanitize alike apart', () => {
-    expect(uniquePromptNames(['billing/invoices', 'billing-invoices', 'billing pets'])).toEqual([
-      'skill-billing_invoices',
-      'skill-billing-invoices',
-      'skill-billing_invoices-2',
+    expect(uniquePromptNames(['petstore/pets', 'petstore-pets', 'petstore pets'])).toEqual([
+      'skill-petstore_pets',
+      'skill-petstore-pets',
+      'skill-petstore_pets-2',
     ]);
   });
 });

@@ -45,7 +45,7 @@ Run any of them standalone:
 ```bash
 npx @almyty/agents run research-bot
 npx @almyty/chat acme/support-bot
-npx @almyty/skills install acme/billing
+npx @almyty/skills install acme/petstore
 ```
 
 ## Plug a gateway into Claude Code
@@ -53,7 +53,7 @@ npx @almyty/skills install acme/billing
 The fastest payoff: point Claude Code (or any MCP client) at a gateway and its tools are live in your assistant.
 
 ```bash
-claude mcp add billing -- npx -y @almyty/mcp-server acme/billing
+claude mcp add petstore -- npx -y @almyty/mcp-server acme/petstore
 ```
 
 The gateway id is `org/slug` from the gateway's detail page. See [MCP server](/cli/mcp-server) for every client config and the skill-first mode that keeps token overhead low.

@@ -112,7 +112,7 @@ export class ToolCatalog {
 
 /**
  * Sanitize a skill name into a valid MCP prompt identifier: anything outside
- * [a-zA-Z0-9_-] (a slash from `billing/invoices`, say) becomes an underscore, so
+ * [a-zA-Z0-9_-] (a slash from `petstore/pets`, say) becomes an underscore, so
  * a real-world skill name cannot break the registration.
  */
 export function sanitizePromptName(name: string): string {
@@ -124,8 +124,8 @@ export function sanitizePromptName(name: string): string {
 
 /**
  * Prompt names must be unique, and two different skill names can sanitize to
- * the same identifier (`billing/invoices` and `billing-invoices` both become
- * `billing_invoices`). The second one gets a suffix rather than overwriting the
+ * the same identifier (`petstore/pets` and `petstore-pets` both become
+ * `petstore_pets`). The second one gets a suffix rather than overwriting the
  * first.
  */
 export function uniquePromptNames(skillNames: string[]): string[] {

@@ -43,8 +43,8 @@ Pass the key one of three ways: an `X-API-Key` header, an `api_key` query parame
 ```json
 {
   "mcpServers": {
-    "billing": {
-      "url": "https://api.almyty.com/acme/billing",
+    "petstore": {
+      "url": "https://api.almyty.com/acme/petstore",
       "headers": { "x-api-key": "almyty_gw_abc123..." }
     }
   }
@@ -87,17 +87,17 @@ MCP clients handle this flow for you. On a 401, the gateway returns a `WWW-Authe
 ### Discovery endpoints
 
 ```
-https://api.almyty.com/acme/billing/.well-known/oauth-authorization-server
-https://api.almyty.com/acme/billing/.well-known/oauth-protected-resource
+https://api.almyty.com/acme/petstore/.well-known/oauth-authorization-server
+https://api.almyty.com/acme/petstore/.well-known/oauth-protected-resource
 ```
 
 ### Flow endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
-| `POST /acme/billing/register` | Dynamic Client Registration |
-| `GET /acme/billing/authorize` | Start the authorization code flow (with `code_challenge`, `code_challenge_method=S256`) |
-| `POST /acme/billing/token` | Exchange the code (plus `code_verifier`) for tokens |
+| `POST /acme/petstore/register` | Dynamic Client Registration |
+| `GET /acme/petstore/authorize` | Start the authorization code flow (with `code_challenge`, `code_challenge_method=S256`) |
+| `POST /acme/petstore/token` | Exchange the code (plus `code_verifier`) for tokens |
 
 ### Token lifetimes
 

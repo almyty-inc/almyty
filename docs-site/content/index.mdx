@@ -36,12 +36,12 @@ One gateway is reachable over every protocol at once:
 
 ## 3. Call it from your AI (the payoff)
 
-Point your assistant at the gateway and your API is live inside it. Grab the endpoint from the gateway's **Integrations** tab (it looks like `https://api.almyty.com/your-org/billing`) and a key from its **Authentication** panel. Then, in Claude Code:
+Point your assistant at the gateway and your API is live inside it. Grab the endpoint from the gateway's **Integrations** tab (it looks like `https://api.almyty.com/your-org/petstore`) and a key from its **Authentication** panel. Then, in Claude Code:
 
 ```bash
-claude mcp add billing --transport http \
+claude mcp add petstore --transport http \
   --header "x-api-key: gw_live_..." \
-  https://api.almyty.com/your-org/billing
+  https://api.almyty.com/your-org/petstore
 ```
 
 ![Your API's tools inside Claude Code](/screenshots/quickstart-claude-config.png)
@@ -53,7 +53,7 @@ Ask Claude to do something and it calls your API directly:
 If your client only speaks stdio, run the gateway as a local proxy instead:
 
 ```bash
-npx @almyty/mcp-server your-org/billing
+npx @almyty/mcp-server your-org/petstore
 ```
 
 That's the whole loop: **API → tools → gateway → your AI calling it.**

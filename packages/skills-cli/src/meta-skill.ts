@@ -47,7 +47,7 @@ npx @almyty/skills gateways
 ### List available skills
 \`\`\`bash
 npx @almyty/skills list
-npx @almyty/skills list acme/billing
+npx @almyty/skills list acme/petstore
 \`\`\`
 
 ### Search for skills
@@ -57,13 +57,13 @@ npx @almyty/skills search <query>
 
 ### Install skills (writes SKILL.md into this project's agent dirs)
 \`\`\`bash
-npx @almyty/skills install acme/billing --dry-run   # show the exact files first
-npx @almyty/skills install acme/billing/get-invoice
+npx @almyty/skills install acme/petstore --dry-run   # show the exact files first
+npx @almyty/skills install acme/petstore/get-pet
 \`\`\`
 
 ### Run a skill directly
 \`\`\`bash
-npx @almyty/skills run acme/billing/get-invoice --invoiceId inv_123
+npx @almyty/skills run acme/petstore/get-pet --petId 123
 \`\`\`
 
 ### What is installed here, and undo it
@@ -75,7 +75,7 @@ npx @almyty/skills remove
 ### Keep skills in sync on a timer
 \`\`\`bash
 npx @almyty/skills daemon              # every gateway
-npx @almyty/skills watch acme/billing # one gateway
+npx @almyty/skills watch acme/petstore # one gateway
 \`\`\`
 
 ## Exit codes

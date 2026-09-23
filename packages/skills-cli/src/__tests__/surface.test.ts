@@ -21,9 +21,9 @@ const HELP = helpText();
 
 describe('parseArgs', () => {
   it('reads a command, a ref, and flags', () => {
-    const a = parseArgs(['install', 'acme/billing', '--agent', 'codex']);
+    const a = parseArgs(['install', 'acme/petstore', '--agent', 'codex']);
     expect(a.command).toBe('install');
-    expect(a.ref).toBe('acme/billing');
+    expect(a.ref).toBe('acme/petstore');
     expect(a.flags.agent).toBe('codex');
   });
 
@@ -47,9 +47,9 @@ describe('parseArgs', () => {
   });
 
   it('never lets a switch swallow the next token', () => {
-    const a = parseArgs(['install', '--dry-run', 'acme/billing']);
+    const a = parseArgs(['install', '--dry-run', 'acme/petstore']);
     expect(a.flags['dry-run']).toBe(true);
-    expect(a.ref).toBe('acme/billing');
+    expect(a.ref).toBe('acme/petstore');
 
     const b = parseArgs(['install', '--json', '--all']);
     expect(b.flags.json).toBe(true);
@@ -57,9 +57,9 @@ describe('parseArgs', () => {
   });
 
   it('keeps a slash-bearing flag value as a value, not as the ref', () => {
-    const a = parseArgs(['install', 'acme/billing', '--path', './tmp/skills']);
+    const a = parseArgs(['install', 'acme/petstore', '--path', './tmp/skills']);
     expect(a.flags.path).toBe('./tmp/skills');
-    expect(a.ref).toBe('acme/billing');
+    expect(a.ref).toBe('acme/petstore');
   });
 
   it('passes everything after -- through untouched', () => {
@@ -68,8 +68,8 @@ describe('parseArgs', () => {
   });
 
   it('resolves the ref from the bare word, -g, or a positional', () => {
-    expect(getRef(parseArgs(['install', 'acme/billing']))).toBe('acme/billing');
-    expect(getRef(parseArgs(['install', '-g', 'acme/billing']))).toBe('acme/billing');
+    expect(getRef(parseArgs(['install', 'acme/petstore']))).toBe('acme/petstore');
+    expect(getRef(parseArgs(['install', '-g', 'acme/petstore']))).toBe('acme/petstore');
     expect(getRef(parseArgs(['search', 'weather']))).toBe('weather');
     expect(getRef(parseArgs(['list']))).toBeNull();
   });
@@ -79,7 +79,7 @@ describe('parseRunParams', () => {
   it('forwards only the skill parameters', () => {
     const args = parseArgs([
       'run',
-      'acme/pet/get-invoice',
+      'acme/pet/get-pet',
       '--petId',
       '123',
       '--json',

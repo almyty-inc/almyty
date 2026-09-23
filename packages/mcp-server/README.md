@@ -13,7 +13,7 @@ claude mcp add almyty -- npx -y @almyty/mcp-server
 Or scope it to one gateway:
 
 ```bash
-npx @almyty/mcp-server acme/billing
+npx @almyty/mcp-server acme/petstore
 ```
 
 The positional argument is `orgSlug/gatewaySlug`; with none, the server serves

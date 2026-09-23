@@ -37,14 +37,14 @@ prints where they went and exits `2`.
 ## References
 
 A skill is `org/gateway/skill`, a whole gateway is `org/gateway`, and a
-gateway UUID also works. A leading `@` is optional — `@acme/billing`
-and `acme/billing` are the same. A bare name is treated as a search,
+gateway UUID also works. A leading `@` is optional — `@acme/petstore`
+and `acme/petstore` are the same. A bare name is treated as a search,
 and installs only when it matches exactly one skill; an ambiguous name
 lists the matches and exits `2` rather than guessing.
 
 ```bash
-$ npx @almyty/skills install acme/billing
-$ npx @almyty/skills run acme/billing/get-invoice --id 123
+$ npx @almyty/skills install acme/petstore
+$ npx @almyty/skills run acme/petstore/get-pet --id 123
 ```
 
 ## Where skills get installed
@@ -68,14 +68,14 @@ about to write to before it writes anything, reports how many files it
 replaced, and `--dry-run` lists every path and writes nothing:
 
 ```bash
-$ npx @almyty/skills install acme/billing --dry-run
+$ npx @almyty/skills install acme/petstore --dry-run
 
-acme/billing (12 skill(s)) — dry run, nothing will be written:
+acme/petstore (12 skill(s)) — dry run, nothing will be written:
   Codex: /work/proj/.codex/skills
   Universal (.agents/skills): /work/proj/.agents/skills
 
   Codex: 12 skill file(s) would go to /work/proj/.codex/skills
-      /work/proj/.codex/skills/get-invoice/SKILL.md
+      /work/proj/.codex/skills/get-pet/SKILL.md
       …
 
 Dry run: 24 skill file(s) across 2 target(s), 3 of them replacing an existing file.
@@ -111,14 +111,14 @@ Re-run without --dry-run to write them.
 | `--dry-run` | Print every file `install` would write, and write nothing. |
 
 ```bash
-$ npx @almyty/skills install acme/billing                     # interactive picker
-$ npx @almyty/skills install acme/billing --all               # every project-detected
-$ npx @almyty/skills install acme/billing --all --global      # project AND home detected
-$ npx @almyty/skills install acme/billing --global            # only home-detected agents
-$ npx @almyty/skills install acme/billing -a codex            # codex, at whichever scope it lives
-$ npx @almyty/skills install acme/billing -a codex --global   # force ~/.codex/skills
-$ npx @almyty/skills install acme/billing --agent '*' -y      # every known agent, project scope
-$ npx @almyty/skills install acme/billing -p ./agents/skills  # a directory you name
+$ npx @almyty/skills install acme/petstore                     # interactive picker
+$ npx @almyty/skills install acme/petstore --all               # every project-detected
+$ npx @almyty/skills install acme/petstore --all --global      # project AND home detected
+$ npx @almyty/skills install acme/petstore --global            # only home-detected agents
+$ npx @almyty/skills install acme/petstore -a codex            # codex, at whichever scope it lives
+$ npx @almyty/skills install acme/petstore -a codex --global   # force ~/.codex/skills
+$ npx @almyty/skills install acme/petstore --agent '*' -y      # every known agent, project scope
+$ npx @almyty/skills install acme/petstore -p ./agents/skills  # a directory you name
 ```
 
 `src/agents.ts` is the registry: each entry maps a detection directory
@@ -137,7 +137,7 @@ to the `<dir>/skills` path that agent reads on session start.
 
 Both `--flag value` and `--flag=value` are accepted. `run` forwards
 every flag the CLI does not own to the skill as a parameter, so
-`run acme/billing/get-invoice --invoiceId inv_123` sends `{ invoiceId: "inv_123" }`.
+`run acme/pet/get-pet --petId 123` sends `{ petId: "123" }`.
 
 `run` prints its result as JSON always — the result *is* data. Every
 other read command prints for humans by default and takes `--json`.
