@@ -252,21 +252,45 @@
     },
     {
       "id": "apis-import-dialog",
-      "title": "Import API dialog",
+      "title": "Connect New API dialog",
       "path": "screenshots/apis-import-dialog.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "28119d9bbfe93b918cd001241b942364ea15e7c922dd501950dd98f9d8ba4e7e"
+      "capturedAt": "2026-09-22T15:12:54.135Z",
+      "status": "current",
+      "sha256": "5cfc507fe345926e87ffc67e875c368d18ed78701a8283b2a9744bc993c95bde",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0bee20ea3d86fa118670887c4fccec36ba9f8e4167b11f84813555d77a4ec329"
     },
     {
       "id": "apis-list",
-      "title": "APIs list with a Petstore import",
+      "title": "APIs list with an imported Open-Meteo demo schema",
       "path": "screenshots/apis-list.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "3e1f0d974e9ed5acd89ad2ecd8dcc5c511705986e184e15bf9bc13bae8688d60"
+      "capturedAt": "2026-09-22T15:12:24.622Z",
+      "status": "current",
+      "sha256": "90353bd3bc69fc6356e168ebc2365f25761db69c10e335f868657ddbeb187bcc",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "0bee20ea3d86fa118670887c4fccec36ba9f8e4167b11f84813555d77a4ec329"
     },
     {
       "id": "approval-refund-820",
@@ -894,12 +918,25 @@
     },
     {
       "id": "tools-create-dialog",
-      "title": "Create Tool dialog — 5 execution methods",
+      "title": "Create Manual Tool execution method selector",
       "path": "screenshots/tools-create-dialog.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "5722f2ff4938248b8cf46c3687eb054790154dc49d9a032df1bde420e5d7fc4f"
+      "capturedAt": "2026-09-22T15:11:04.704Z",
+      "status": "current",
+      "sha256": "4888392990cc88d9f88fd0af58b5fce88b6e946d6c4075846c4a0693c4ed7a63",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/tools"
+      },
+      "sources": [
+        "frontend/src/pages/tools.tsx",
+        "frontend/src/components/tools",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "ee99c5fcb77fef6e2ae5e3319f952cd43f100ef8c3ce1b6b3514b933c2026f61",
+      "notes": "Seven available execution methods shown in the open selector. No tool created or configuration saved."
     },
     {
       "id": "tools-empty",
@@ -912,21 +949,47 @@
     },
     {
       "id": "tools-list",
-      "title": "Tools list",
+      "title": "Tools list with Active filter on the current page",
       "path": "screenshots/tools-list.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "f30472439f44f3e409aa8edb9d8df2d106c99e41eee4767f58331ae0dbabcd37"
+      "capturedAt": "2026-09-22T15:10:21.424Z",
+      "status": "current",
+      "sha256": "3c3ac6115b5d8a46ded9a683461ecfda2dabc5f102792fc7b3fb8679ddb1622f",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/tools"
+      },
+      "sources": [
+        "frontend/src/pages/tools.tsx",
+        "frontend/src/pages/tool-hub.tsx",
+        "frontend/src/components/tools",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "570d4b72dc32a2084e3ba3f3a7070b14263ebd53319ba4cb82038142cf01492c"
     },
     {
       "id": "tools",
-      "title": "tools",
+      "title": "Tools list with Active filter on the current page",
       "path": "screenshots/tools.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "606dac17287b9e1b96c62c97b473b23443f40c43d677bd0ad9ae399432270076"
+      "capturedAt": "2026-09-22T15:10:21.424Z",
+      "status": "current",
+      "sha256": "3c3ac6115b5d8a46ded9a683461ecfda2dabc5f102792fc7b3fb8679ddb1622f",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/tools"
+      },
+      "sources": [
+        "frontend/src/pages/tools.tsx",
+        "frontend/src/pages/tool-hub.tsx",
+        "frontend/src/components/tools",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "570d4b72dc32a2084e3ba3f3a7070b14263ebd53319ba4cb82038142cf01492c"
     },
     {
       "id": "versioning-history",
