@@ -133,12 +133,26 @@
     },
     {
       "id": "agents-empty",
-      "title": "Agents page — empty state",
+      "title": "Agent list with no agents in a seeded empty organization",
       "path": "screenshots/agents-empty.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "3b65348a8fb2624e358c9496f97c908a1758e1c78b3f5da6afed186203082d96"
+      "capturedAt": "2026-09-23T11:03:22.543Z",
+      "status": "current",
+      "sha256": "6e5171fe48f8bcbf1997576c2e13791e0a55436314e7d07d8b9b3b995bf4436d",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/agents"
+      },
+      "sources": [
+        "frontend/src/pages/agents.tsx",
+        "frontend/src/components/agents",
+        "frontend/src/components/onboarding",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "02a490c925894745a60d9b90a78354c94e64fe914a7080f26c57f41d1813b1dd",
+      "notes": "Genuine loaded empty state in an existing seeded QA organization; no entities were deleted to obtain it."
     },
     {
       "id": "agents-list",
@@ -349,12 +363,26 @@
     },
     {
       "id": "apis-empty",
-      "title": "APIs page — empty state",
+      "title": "API list with no connected APIs in a seeded empty organization",
       "path": "screenshots/apis-empty.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "a18b3c2d086d31a361ca273ba6c49a955a303563469e2a53295e0c27c3a71f23"
+      "capturedAt": "2026-09-23T11:03:50.580Z",
+      "status": "current",
+      "sha256": "ffe182b475611dfedff2d5d5efea4ef0ca929824f3fa8921451f60d67c998023",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/apis"
+      },
+      "sources": [
+        "frontend/src/pages/apis.tsx",
+        "frontend/src/components/apis",
+        "frontend/src/components/onboarding",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "7d084c001997e1ea57b783c34b6a10ac4bc693eca19f084c13db115517a37f4f",
+      "notes": "Genuine loaded empty state in an existing seeded QA organization; no entities were deleted to obtain it."
     },
     {
       "id": "apis-import-dialog",
@@ -820,12 +848,26 @@
     },
     {
       "id": "gateways-empty",
-      "title": "Gateways page — empty state",
+      "title": "New organization with only the built-in system gateway",
       "path": "screenshots/gateways-empty.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "4cadb5f50e5b93ac41d9f3f651692d9b466f3c72105aa0d0d6033b0c603f04e2"
+      "capturedAt": "2026-09-23T11:06:30.835Z",
+      "status": "current",
+      "sha256": "42b72ad1a564ec60defc6ce4adda1e31e7bdcd8afc35a6b78c0601537a90f6c8",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/gateways"
+      },
+      "sources": [
+        "frontend/src/pages/gateways.tsx",
+        "frontend/src/components/gateways",
+        "frontend/src/components/onboarding",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "3a775b3ee9fa40b026dd2f6f59bbb9be2d8a523d940ef5243c7d3c6eb8087261",
+      "notes": "Legacy filename retained; this is NOT a zero-gateway state. New organizations include the built-in system gateway. No user-created gateways are present."
     },
     {
       "id": "interfaces-channel-config",
@@ -1400,12 +1442,26 @@
     },
     {
       "id": "tools-empty",
-      "title": "Tools page — empty state",
+      "title": "Tool list with no tools in a seeded empty organization",
       "path": "screenshots/tools-empty.png",
-      "capturedAt": null,
-      "status": "needs-recapture",
-      "reason": "Legacy image predates the UI refresh; its individual capture time is unknown unless recorded here. Tracked for #675, not verified current.",
-      "sha256": "8623dbd1af00d96a0d7a0aa0a95c1932e008c462c39f8386b174732b9fb10519"
+      "capturedAt": "2026-09-23T11:04:12.555Z",
+      "status": "current",
+      "sha256": "6a90c06c2927affd4643011f461986b84d86b14d584d583882bc44600dff0cf9",
+      "source": {
+        "kind": "browser",
+        "environment": "staging",
+        "route": "/tools"
+      },
+      "sources": [
+        "frontend/src/pages/tools.tsx",
+        "frontend/src/components/tools",
+        "frontend/src/components/onboarding",
+        "frontend/src/components/ui",
+        "frontend/src/components/layout",
+        "frontend/src/index.css"
+      ],
+      "sourceDigest": "28228b1b1097a9611588593da97cda3d55dc51692c22e870dd48bbc1be6621b8",
+      "notes": "Genuine loaded empty state in an existing seeded QA organization; no entities were deleted to obtain it."
     },
     {
       "id": "tools-list",
