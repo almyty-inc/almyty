@@ -32,6 +32,11 @@ import { usePageviews } from '@/hooks/use-pageviews'
 const DashboardPage = lazy(() => import('@/pages/dashboard').then(m => ({ default: m.DashboardPage })))
 const GatewaysPage = lazy(() => import('@/pages/gateways').then(m => ({ default: m.GatewaysPage })))
 const GatewayDetailPage = lazy(() => import('@/pages/gateway-detail').then(m => ({ default: m.GatewayDetailPage })))
+const GatewayNewPage = lazy(() => import('@/pages/gateway-new').then(m => ({ default: m.GatewayNewPage })))
+const AppNewPage = lazy(() => import('@/pages/app-new').then(m => ({ default: m.AppNewPage })))
+const AppDistributionNewPage = lazy(() => import('@/pages/app-distribution-new').then(m => ({ default: m.AppDistributionNewPage })))
+const AppDistributionPage = lazy(() => import('@/pages/app-distribution').then(m => ({ default: m.AppDistributionPage })))
+const AppSigningNewPage = lazy(() => import('@/pages/app-signing-new').then(m => ({ default: m.AppSigningNewPage })))
 const ApisPage = lazy(() => import('@/pages/apis').then(m => ({ default: m.ApisPage })))
 const ApiDetailPage = lazy(() => import('@/pages/api-detail').then(m => ({ default: m.ApiDetailPage })))
 const ToolsPage = lazy(() => import('@/pages/tools').then(m => ({ default: m.ToolsPage })))
@@ -129,6 +134,7 @@ function App() {
         <Route element={<DashboardLayoutOutlet />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/gateways" element={<GatewaysPage />} />
+          <Route path="/gateways/new" element={<GatewayNewPage />} />
           <Route path="/gateways/:id" element={<GatewayDetailPage />} />
           <Route path="/apis" element={<ApisPage />} />
           <Route path="/apis/:id" element={<ApiDetailPage />} />
@@ -137,7 +143,11 @@ function App() {
           <Route path="/tool-hub" element={<Navigate to="/tools?tab=hub" replace />} />
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/apps" element={<AppsPage />} />
+          <Route path="/apps/new" element={<AppNewPage />} />
           <Route path="/apps/:slug" element={<AppDetailPage />} />
+          <Route path="/apps/:slug/distributions/new" element={<AppDistributionNewPage />} />
+          <Route path="/apps/:slug/distributions/:target" element={<AppDistributionPage />} />
+          <Route path="/apps/:slug/distributions/:target/signing/new" element={<AppSigningNewPage />} />
           <Route path="/agents/new" element={<AgentBuilderPage />} />
           <Route path="/agents/:id" element={<AgentDetailPage />} />
           <Route path="/agents/:id/edit" element={<AgentBuilderPage />} />

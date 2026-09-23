@@ -17,16 +17,16 @@ test.describe('Gateways - CRUD & Scoping', () => {
   })
 
   test('should show only 3 gateway types (no SCOPED_TOOL type)', async ({ authenticatedPage: page, assertHelper }) => {
-    // Open create gateway dialog
-    await page.getByRole('button', { name: /create gateway/i }).click()
-    await assertHelper.assertDialogOpen()
+    // Create gateway is a page, not a dialog
+    await page.getByRole('button', { name: /create gateway/i }).first().click()
+    await expect(page).toHaveURL(/\/gateways\/new$/)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
 
-    // Click gateway type selector
-    await page.getByRole('combobox', { name: /gateway type/i }).click()
+    // Click the protocol selector
+    await page.getByRole('combobox', { name: /protocol/i }).click()
 
-    // Should show exactly 4 types (MCP, A2A, UTCP, Skills)
+    // Tool gateways: MCP, UTCP, Skills
     await expect(page.getByRole('option', { name: /MCP.*Model Context Protocol/i })).toBeVisible()
-    await expect(page.getByRole('option', { name: /A2A.*Agent.*Agent/i })).toBeVisible()
     await expect(page.getByRole('option', { name: /UTCP.*Universal Tool Call/i })).toBeVisible()
     await expect(page.getByRole('option', { name: /Skills.*Agent Skills/i })).toBeVisible()
 
@@ -35,56 +35,60 @@ test.describe('Gateways - CRUD & Scoping', () => {
   })
 
   test('should create MCP gateway', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('button', { name: /create gateway/i }).click()
+    await page.getByRole('button', { name: /create gateway/i }).first().click()
+    await expect(page).toHaveURL(/\/gateways\/new$/)
 
-    await page.getByLabel('Gateway Name').fill(TEST_GATEWAY_CONFIGS.PUBLIC_MCP.name)
-    await page.getByLabel('Endpoint Path').fill(TEST_GATEWAY_CONFIGS.PUBLIC_MCP.endpointPath)
-    await page.getByLabel('Description').fill(TEST_GATEWAY_CONFIGS.PUBLIC_MCP.description)
+    await page.getByLabel(/^Name/).fill(TEST_GATEWAY_CONFIGS.PUBLIC_MCP.name)
+    await page.getByLabel(/^Endpoint path/).fill(TEST_GATEWAY_CONFIGS.PUBLIC_MCP.endpointPath)
+    await page.getByLabel(/^Description/).fill(TEST_GATEWAY_CONFIGS.PUBLIC_MCP.description)
 
     // Select MCP type
-    await page.getByRole('combobox', { name: /gateway type/i }).click()
+    await page.getByRole('combobox', { name: /protocol/i }).click()
     await page.getByRole('option', { name: /MCP/i }).click()
 
-    await page.getByRole('button', { name: /create|save/i }).click()
+    await page.getByRole('button', { name: /^create gateway$/i }).click()
 
-    // Should show success
-    await assertHelper.assertDialogClosed()
+    // Lands on the new gateway's page
+    await expect(page).toHaveURL(/\/gateways\/(?!new)[^/]+$/)
     await assertHelper.assertToastMessage(/created|success/i)
-
-    // Should appear in list
-    await expect(page.getByText(TEST_GATEWAY_CONFIGS.PUBLIC_MCP.name)).toBeVisible()
+    await expect(page.getByRole('heading', { name: TEST_GATEWAY_CONFIGS.PUBLIC_MCP.name })).toBeVisible()
   })
 
   test('should create A2A gateway', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('button', { name: /create gateway/i }).click()
+    await page.getByRole('button', { name: /create gateway/i }).first().click()
+    await expect(page).toHaveURL(/\/gateways\/new$/)
 
-    await page.getByLabel('Gateway Name').fill(TEST_GATEWAY_CONFIGS.ADMIN_A2A.name)
-    await page.getByLabel('Endpoint Path').fill(TEST_GATEWAY_CONFIGS.ADMIN_A2A.endpointPath)
+    await page.getByRole('radio', { name: /^Agent/ }).click()
+    await page.getByLabel(/^Name/).fill(TEST_GATEWAY_CONFIGS.ADMIN_A2A.name)
+    await page.getByLabel(/^Endpoint path/).fill(TEST_GATEWAY_CONFIGS.ADMIN_A2A.endpointPath)
 
     // Select A2A type
-    await page.getByRole('combobox', { name: /gateway type/i }).click()
+    await page.getByRole('combobox', { name: /protocol/i }).click()
     await page.getByRole('option', { name: /A2A/i }).click()
+    await page.getByRole('combobox', { name: /^Agent/ }).click()
+    await page.getByRole('option').first().click()
 
-    await page.getByRole('button', { name: /create|save/i }).click()
+    await page.getByRole('button', { name: /^create gateway$/i }).click()
 
-    await assertHelper.assertDialogClosed()
-    await expect(page.getByText(TEST_GATEWAY_CONFIGS.ADMIN_A2A.name)).toBeVisible()
+    await expect(page).toHaveURL(/\/gateways\/(?!new)[^/]+$/)
+    await expect(page.getByRole('heading', { name: TEST_GATEWAY_CONFIGS.ADMIN_A2A.name })).toBeVisible()
   })
 
   test('should create UTCP gateway', async ({ authenticatedPage: page, assertHelper }) => {
-    await page.getByRole('button', { name: /create gateway/i }).click()
+    await page.getByRole('button', { name: /create gateway/i }).first().click()
+    await expect(page).toHaveURL(/\/gateways\/new$/)
 
-    await page.getByLabel('Gateway Name').fill(TEST_GATEWAY_CONFIGS.TEST_UTCP.name)
-    await page.getByLabel('Endpoint Path').fill(TEST_GATEWAY_CONFIGS.TEST_UTCP.endpointPath)
+    await page.getByLabel(/^Name/).fill(TEST_GATEWAY_CONFIGS.TEST_UTCP.name)
+    await page.getByLabel(/^Endpoint path/).fill(TEST_GATEWAY_CONFIGS.TEST_UTCP.endpointPath)
 
     // Select UTCP type
-    await page.getByRole('combobox', { name: /gateway type/i }).click()
+    await page.getByRole('combobox', { name: /protocol/i }).click()
     await page.getByRole('option', { name: /UTCP/i }).click()
 
-    await page.getByRole('button', { name: /create|save/i }).click()
+    await page.getByRole('button', { name: /^create gateway$/i }).click()
 
-    await assertHelper.assertDialogClosed()
-    await expect(page.getByText(TEST_GATEWAY_CONFIGS.TEST_UTCP.name)).toBeVisible()
+    await expect(page).toHaveURL(/\/gateways\/(?!new)[^/]+$/)
+    await expect(page.getByRole('heading', { name: TEST_GATEWAY_CONFIGS.TEST_UTCP.name })).toBeVisible()
   })
 
   test('[CRITICAL] should show scoping interface with 0/N tools initially', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {
