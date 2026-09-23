@@ -105,14 +105,14 @@ test.describe('Complete E2E Workflow', () => {
 
     // Click first create button (might be "Create Gateway" or "Create First Gateway" for empty state)
     await page.getByRole('button', { name: /create.*gateway/i }).first().click()
-    await assertHelper.assertDialogOpen()
+    await expect(page).toHaveURL(/\/gateways\/new$/)
 
     // Fill gateway form
-    await page.getByLabel(/gateway.*name|name/i).fill('E2E Test Gateway')
-    await page.getByLabel(/endpoint.*path|path/i).fill('/e2e-test')
+    await page.getByLabel(/^Name/).fill('E2E Test Gateway')
+    await page.getByLabel(/^Endpoint path/).fill('/e2e-test')
 
-    // Select MCP type (click combobox, not label)
-    await page.getByRole('combobox').click()
+    // Select MCP (click combobox, not label)
+    await page.getByRole('combobox', { name: /protocol/i }).click()
     await page.getByRole('option', { name: /mcp/i }).click()
 
     // Optional description
@@ -139,9 +139,8 @@ test.describe('Complete E2E Workflow', () => {
       throw error
     }
 
-    // Close the dialog manually and refresh page to see new gateway
-    await page.keyboard.press('Escape')
-    await page.reload()
+    // Back to the list to see the new gateway
+    await page.goto('/gateways')
     await assertHelper.waitForLoadingComplete()
 
     // Verify gateway appears with correct details

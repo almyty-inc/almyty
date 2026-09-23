@@ -1,6 +1,5 @@
-import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Package, Plus } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -18,7 +17,7 @@ import {
   grantsLocalAccess,
   type AgentApp,
 } from '@/lib/agent-apps'
-import { CreateAppDialog } from '@/components/agent-apps/create-app-dialog'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 
 /**
  * Apps: the products this organization ships.
@@ -28,7 +27,9 @@ import { CreateAppDialog } from '@/components/agent-apps/create-app-dialog'
  * actually use.
  */
 export function AppsPage() {
-  const [createOpen, setCreateOpen] = useState(false)
+  const navigate = useNavigate()
+  // Old ?new=1 links (bookmarks, docs) land on the create page.
+  useNewParamRedirect('/apps/new')
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['agent-apps'],
@@ -49,7 +50,7 @@ export function AppsPage() {
           )
         }
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => navigate('/apps/new')}>
             <Plus className="mr-2 h-4 w-4" />
             Create app
           </Button>
@@ -69,7 +70,7 @@ export function AppsPage() {
           title="No apps yet"
           description="An app gathers agents under your branding and publishes them as a web app, a messaging channel, a terminal, or a desktop app."
           action={
-            <Button onClick={() => setCreateOpen(true)}>
+            <Button onClick={() => navigate('/apps/new')}>
               <Plus className="mr-2 h-4 w-4" />
               Create app
             </Button>
@@ -144,8 +145,6 @@ export function AppsPage() {
           })}
         </div>
       )}
-
-      <CreateAppDialog open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   )
 }

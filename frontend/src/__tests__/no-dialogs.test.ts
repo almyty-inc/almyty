@@ -174,6 +174,13 @@ const CONVERTED_DIALOGS: string[] = [
   'components/tools/create-tool-dialog.tsx',
   'components/tools/publish-tool-dialog.tsx',
   'components/tools/tool-execution-dialog.tsx',
+  'components/agent-apps/add-distribution-dialog.tsx',
+  'components/agent-apps/create-app-dialog.tsx',
+  'components/agent-apps/distribution-panel.tsx',
+  'components/agent-apps/signing-credential-dialog.tsx',
+  'components/gateways/create-gateway-dialog.tsx',
+  'components/gateways/detail/edit-gateway-dialog.tsx',
+  'components/gateways/gateway-details-sheet.tsx',
 ]
 
 describe('converted dialogs are deleted', () => {

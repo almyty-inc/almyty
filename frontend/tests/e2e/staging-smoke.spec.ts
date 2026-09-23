@@ -162,7 +162,6 @@ test.describe('Create dialogs open from deep-link', () => {
   // list page with that param actually renders a dialog -- catches
   // silent regressions in the `useCreateDeepLink` hook wiring.
   const deepLinks = [
-    { label: 'Create Gateway', path: '/gateways?new=1', heading: /create gateway|new gateway/i },
     { label: 'Add Credential', path: '/credentials?new=1', heading: /add credential|new credential|create credential/i },
   ]
 
@@ -186,6 +185,8 @@ test.describe('Create pages open from deep-link', () => {
   const deepLinks = [
     { label: 'Add inference provider', path: '/llm-providers?new=1', lands: /\/llm-providers\/new$/, heading: 'Add inference provider' },
     { label: 'Add model', path: '/models?new=1', lands: /\/models\/new$/, heading: 'Add model' },
+    { label: 'Create gateway', path: '/gateways?new=1', lands: /\/gateways\/new$/, heading: 'Create gateway' },
+    { label: 'Create app', path: '/apps?new=1', lands: /\/apps\/new$/, heading: 'Create app' },
   ]
 
   for (const link of deepLinks) {

@@ -2,14 +2,14 @@
  * GatewayAuthSection — manages auth methods + API keys for a single gateway.
  *
  * Renders the active auth-method list (api_key/bearer/basic/oauth2/jwt/custom/none),
- * an API key list when api_key auth is configured, and dialogs for adding methods
- * and generating keys. Generated key copy uses useCopySensitive to surface a
- * sensitive-value warning rather than a plain success toast.
+ * an API key list when api_key auth is configured, and inline forms for adding a
+ * method and generating a key. A generated key is shown once, in place, with a
+ * copy button and a plain "you won't see it again".
  * Used by GatewayDetailPage for non-skills gateways.
  */
 import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Copy, Key, Lock, Plus, Shield, Trash2 } from 'lucide-react'
+import { Key, Lock, Plus, Shield, Trash2 } from 'lucide-react'
 
 import {
   AlertDialog,
@@ -24,15 +24,10 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { CopyField } from '@/components/ui/copy-field'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
@@ -43,7 +38,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { gatewaysApi } from '@/lib/api'
-import { useCopySensitive } from '@/lib/clipboard'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 
@@ -69,22 +63,21 @@ const AUTH_TYPE_DESCRIPTIONS: Record<string, string> = {
 
 export interface GatewayAuthSectionProps {
   gatewayId: string
-  gatewayName: string
+  gatewayName?: string
 }
 
 export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectionProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
-  const copySensitive = useCopySensitive()
-
-  // API key state
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
+  // API key state. `generating` opens the inline name form; a generated
+  // key replaces it until the user says they have saved it.
+  const [generating, setGenerating] = useState(false)
   const [newKeyName, setNewKeyName] = useState('')
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
   // Auth config state
-  const [addAuthDialogOpen, setAddAuthDialogOpen] = useState(false)
+  const [addingAuth, setAddingAuth] = useState(false)
+  const [authTypeError, setAuthTypeError] = useState<string | undefined>()
   const [newAuthType, setNewAuthType] = useState('')
   const [newAuthConfig, setNewAuthConfig] = useState<Record<string, string>>({})
   const [deleteAuthId, setDeleteAuthId] = useState<string | null>(null)
@@ -109,8 +102,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gateway-auth-configs', gatewayId] })
       queryClient.invalidateQueries({ queryKey: ['gateway', gatewayId] })
-      success('Auth Config Added', `${AUTH_TYPE_LABELS[newAuthType] || newAuthType} authentication enabled`)
-      setAddAuthDialogOpen(false)
+      success('Authentication method added', `${AUTH_TYPE_LABELS[newAuthType] || newAuthType} authentication enabled`)
+      setAddingAuth(false)
       setNewAuthType('')
       setNewAuthConfig({})
     },
@@ -124,7 +117,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gateway-auth-configs', gatewayId] })
       queryClient.invalidateQueries({ queryKey: ['gateway', gatewayId] })
-      success('Auth Config Removed', 'Authentication method has been removed')
+      success('Authentication method removed', 'Clients can no longer use it.')
       setDeleteAuthId(null)
     },
     onError: (err: any) => {
@@ -137,8 +130,9 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
     onSuccess: (response: any) => {
       const key = response?.key
       setGeneratedKey(key)
+      setGenerating(false)
       queryClient.invalidateQueries({ queryKey: ['gateway-api-keys', gatewayId] })
-      success('API Key Generated', 'Copy and save it now — it will not be shown again.')
+      success('API key generated', 'Copy and save it now. It will not be shown again.')
     },
     onError: () => {
       errorNotif('Failed to generate key', 'Could not generate API key')
@@ -149,7 +143,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
     mutationFn: (keyId: string) => gatewaysApi.revokeApiKey(gatewayId, keyId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gateway-api-keys', gatewayId] })
-      success('Key Revoked', 'API key has been revoked')
+      success('Key revoked', 'API key has been revoked')
     },
     onError: () => {
       errorNotif('Failed to revoke', 'Could not revoke API key')
@@ -177,7 +171,13 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
   const hasApiKeyAuth = authConfigs.some((c: any) => c.type === 'api_key')
   const existingTypes = authConfigs.map((c: any) => c.type)
 
-  const handleAddAuth = () => {
+  const handleAddAuth = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newAuthType) {
+      setAuthTypeError('Choose how clients authenticate.')
+      return
+    }
+    setAuthTypeError(undefined)
     const configuration: Record<string, any> = { ...newAuthConfig }
     if (newAuthType === 'api_key') {
       configuration.keyHeader = configuration.keyHeader || 'x-api-key'
@@ -190,7 +190,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       case 'api_key':
         return (
           <div>
-            <Label htmlFor="gwauth-header-name">Header Name</Label>
+            <Label htmlFor="gwauth-header-name">Header name</Label>
             <Input id="gwauth-header-name"
               value={newAuthConfig.keyHeader || 'x-api-key'}
               onChange={e => setNewAuthConfig({ ...newAuthConfig, keyHeader: e.target.value })}
@@ -203,7 +203,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       case 'bearer_token':
         return (
           <div>
-            <Label htmlFor="gwauth-token-prefix">Token Prefix</Label>
+            <Label htmlFor="gwauth-token-prefix">Token prefix</Label>
             <Input id="gwauth-token-prefix"
               value={newAuthConfig.tokenPrefix || 'Bearer'}
               onChange={e => setNewAuthConfig({ ...newAuthConfig, tokenPrefix: e.target.value })}
@@ -263,7 +263,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
         return (
           <div className="space-y-3">
             <div>
-              <Label htmlFor="gwauth-header-name-2">Header Name</Label>
+              <Label htmlFor="gwauth-header-name-2">Header name</Label>
               <Input id="gwauth-header-name-2"
                 value={newAuthConfig.headerName || ''}
                 onChange={e => setNewAuthConfig({ ...newAuthConfig, headerName: e.target.value })}
@@ -272,7 +272,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
               />
             </div>
             <div>
-              <Label htmlFor="gwauth-validation-regex">Validation Regex (optional)</Label>
+              <Label htmlFor="gwauth-validation-regex">Validation regex (optional)</Label>
               <Input id="gwauth-validation-regex"
                 value={newAuthConfig.validationRegex || ''}
                 onChange={e => setNewAuthConfig({ ...newAuthConfig, validationRegex: e.target.value })}
@@ -311,11 +311,11 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
               <Button
                 size="sm"
                 variant="outline"
+                aria-expanded={generating}
                 onClick={() => {
                   setNewKeyName('')
                   setGeneratedKey(null)
-                  setCopied(false)
-                  setGenerateDialogOpen(true)
+                  setGenerating(true)
                 }}
               >
                 <Key className="h-4 w-4 mr-1" />
@@ -324,10 +324,12 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
             )}
             <Button
               size="sm"
+              aria-expanded={addingAuth}
               onClick={() => {
                 setNewAuthType('')
                 setNewAuthConfig({})
-                setAddAuthDialogOpen(true)
+                setAuthTypeError(undefined)
+                setAddingAuth(true)
               }}
             >
               <Plus className="h-4 w-4 mr-1" />
@@ -337,6 +339,100 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {addingAuth && (
+          <form
+            noValidate
+            onSubmit={handleAddAuth}
+            aria-label="Add authentication method"
+            className="space-y-4 rounded-lg border bg-muted/30 p-4"
+          >
+            <p className="text-sm font-medium">Add authentication method</p>
+            <Field
+              id="gwauth-auth-type"
+              label="Method"
+              required
+              hint={newAuthType ? AUTH_TYPE_DESCRIPTIONS[newAuthType] : `How clients prove who they are to ${gatewayName || 'this gateway'}.`}
+              error={authTypeError}
+            >
+              <Select
+                value={newAuthType}
+                onValueChange={(v) => {
+                  setNewAuthType(v)
+                  setNewAuthConfig({})
+                  setAuthTypeError(undefined)
+                }}
+              >
+                <SelectTrigger id="gwauth-auth-type" className="sm:max-w-sm" aria-invalid={authTypeError ? true : undefined}>
+                  <SelectValue placeholder="Select authentication type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(AUTH_TYPE_LABELS)
+                    .filter(([type]) => !existingTypes.includes(type))
+                    .map(([type, label]) => (
+                      <SelectItem key={type} value={type}>{label}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            {newAuthType && renderAuthConfigFields()}
+            <InlineFormActions
+              onCancel={() => setAddingAuth(false)}
+              submitLabel="Add auth method"
+              submitting={createAuthConfigMutation.isPending}
+            />
+          </form>
+        )}
+
+        {generating && (
+          <form
+            noValidate
+            aria-label="Generate API key"
+            className="space-y-4 rounded-lg border bg-muted/30 p-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              generateKeyMutation.mutate(newKeyName.trim() || `${gatewayName || 'Gateway'} Key`)
+            }}
+          >
+            <p className="text-sm font-medium">Generate API key</p>
+            <Field
+              id="gwauth-key-name"
+              label="Key name"
+              hint="So you can tell keys apart later, e.g. Production or CI. The key itself is shown once."
+            >
+              <Input
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder="e.g. Production, CI/CD, Development"
+                autoComplete="off"
+                className="sm:max-w-sm"
+              />
+            </Field>
+            <InlineFormActions
+              onCancel={() => setGenerating(false)}
+              submitLabel="Generate key"
+              submitting={generateKeyMutation.isPending}
+            />
+          </form>
+        )}
+
+        {generatedKey && (
+          <div
+            data-testid="generated-api-key"
+            className="space-y-3 rounded-lg border border-amber-400/60 bg-amber-50 p-4 dark:bg-amber-950/30"
+          >
+            <p className="text-sm font-medium">Your new API key</p>
+            <CopyField value={generatedKey} label="API key" />
+            <p className="text-sm text-amber-800 dark:text-amber-300">
+              Copy it now. You won't see it again: once you close this, only its first characters are shown.
+            </p>
+            <div className="flex justify-end">
+              <Button type="button" size="sm" variant="outline" onClick={() => setGeneratedKey(null)}>
+                I've saved it
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Auth Configs */}
         {authLoading ? (
           <div className="flex justify-center py-4"><LoadingSpinner /></div>
@@ -346,7 +442,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
           </div>
         ) : (
           <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">Active Auth Methods</p>
+            <p className="text-sm font-medium text-muted-foreground">Active auth methods</p>
             {authConfigs.length > 1 && (
               <p className="text-xs text-muted-foreground">Clients can authenticate with any of the methods below.</p>
             )}
@@ -384,7 +480,7 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
         {/* API Keys (only show when API_KEY auth is configured) */}
         {hasApiKeyAuth && (
           <div className="space-y-2">
-            <p className="text-sm font-medium text-muted-foreground">API Keys</p>
+            <p className="text-sm font-medium text-muted-foreground">API keys</p>
             {keysLoading ? (
               <div className="flex justify-center py-4"><LoadingSpinner /></div>
             ) : keys.length === 0 ? (
@@ -426,105 +522,6 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
           </div>
         )}
       </CardContent>
-
-      {/* Add Auth Method Dialog */}
-      <Dialog open={addAuthDialogOpen} onOpenChange={setAddAuthDialogOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add authentication method</DialogTitle>
-            <DialogDescription>
-              Choose how clients will authenticate with {gatewayName}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="gwauth-auth-type">Auth Type</Label>
-              <Select value={newAuthType} onValueChange={(v) => { setNewAuthType(v); setNewAuthConfig({}) }}>
-                <SelectTrigger id="gwauth-auth-type" className="mt-1">
-                  <SelectValue placeholder="Select authentication type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(AUTH_TYPE_LABELS)
-                    .filter(([type]) => !existingTypes.includes(type))
-                    .map(([type, label]) => (
-                      <SelectItem key={type} value={type}>{label}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              {newAuthType && (
-                <p className="text-xs text-muted-foreground mt-1">{AUTH_TYPE_DESCRIPTIONS[newAuthType]}</p>
-              )}
-            </div>
-            {newAuthType && renderAuthConfigFields()}
-            <Button
-              className="w-full"
-              onClick={handleAddAuth}
-              disabled={!newAuthType || createAuthConfigMutation.isPending}
-            >
-              {createAuthConfigMutation.isPending ? 'Adding...' : 'Add auth method'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Generate Key Dialog */}
-      <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Generate API key</DialogTitle>
-            <DialogDescription>
-              Create a new API key for {gatewayName}. The key will only be shown once.
-            </DialogDescription>
-          </DialogHeader>
-          {generatedKey ? (
-            <div className="space-y-4">
-              <div>
-                <Label>Your API Key</Label>
-                <div className="flex gap-2 mt-1">
-                  <Input value={generatedKey} readOnly className="font-mono text-xs" />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-label="Copy gateway API key"
-                    onClick={async () => {
-                      await copySensitive(generatedKey, 'Gateway API key')
-                      setCopied(true)
-                      setTimeout(() => setCopied(false), 2000)
-                    }}
-                  >
-                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                </div>
-                <p className="text-xs text-destructive mt-2">
-                  Save this key now. It will not be shown again.
-                </p>
-              </div>
-              <Button className="w-full" onClick={() => setGenerateDialogOpen(false)}>
-                Done
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="gwauth-key-name">Key Name</Label>
-                <Input id="gwauth-key-name"
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  placeholder="e.g. Production, CI/CD, Development"
-                  className="mt-1"
-                />
-              </div>
-              <Button
-                className="w-full"
-                onClick={() => generateKeyMutation.mutate(newKeyName || `${gatewayName} Key`)}
-                disabled={generateKeyMutation.isPending}
-              >
-                {generateKeyMutation.isPending ? 'Generating...' : 'Generate key'}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Auth Config Confirmation */}
       <AlertDialog open={!!deleteAuthId} onOpenChange={(open) => !open && setDeleteAuthId(null)}>
