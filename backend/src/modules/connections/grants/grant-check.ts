@@ -34,7 +34,7 @@ export interface ConnectionLike {
   id: string;
   organizationId: string;
   ownerUserId?: string | null;
-  visibility?: 'org' | 'team' | null;
+  visibility?: 'org' | 'team' | 'private' | null;
   teamId?: string | null;
 }
 
@@ -111,6 +111,17 @@ function isOwner(connection: ConnectionLike, principal: GrantPrincipal): boolean
 }
 
 /**
+ * Private ("just me") connections are the owner's alone. Nothing opens
+ * them to anyone else: not `connections:manage`, and not a grant either
+ * -- a grant is a share, and a private connection is one its owner chose
+ * not to share. The owner is checked before this gate runs.
+ */
+function privateGate(connection: ConnectionLike): GrantDecision | null {
+  if (connection.visibility !== 'private') return null;
+  return deny('private connection belongs to another user');
+}
+
+/**
  * Team-visibility connections are only ever usable by members of that
  * team; `connections:manage` bypasses, as it does everywhere else in
  * AccessPolicyService.
@@ -139,7 +150,7 @@ function describe(grant: GrantLike): string {
 export function canUse(connection: ConnectionLike, principal: GrantPrincipal, grants: GrantLike[], context: GrantContext = {}): GrantDecision {
   if (isOwner(connection, principal)) return allow('connection owner', 'owner');
 
-  const gate = teamGate(connection, principal);
+  const gate = privateGate(connection) ?? teamGate(connection, principal);
   if (gate) return gate;
 
   if (!connection.ownerUserId && hasManagePermission(principal)) return allow('connections:manage on an org-scoped connection', 'connections:manage');
@@ -162,7 +173,7 @@ export function canUse(connection: ConnectionLike, principal: GrantPrincipal, gr
 export function canManage(connection: ConnectionLike, principal: GrantPrincipal, grants: GrantLike[], context: GrantContext = {}): GrantDecision {
   if (isOwner(connection, principal)) return allow('connection owner', 'owner');
 
-  const gate = teamGate(connection, principal);
+  const gate = privateGate(connection) ?? teamGate(connection, principal);
   if (gate) return gate;
 
   if (!connection.ownerUserId && hasManagePermission(principal)) return allow('connections:manage on an org-scoped connection', 'connections:manage');

@@ -1,18 +1,20 @@
 /**
- * SchemaTab — read-only viewer for the stored API schema.
+ * SchemaTab — read-only viewer for the stored API schema, inline on the
+ * API detail page.
  *
- * Renders rawSchema by default (the original text/JSON/XML/proto).
- * If the user wants the parsed object form, the "Parse" button hits
- * the on-demand parse endpoint — the parsed view is no longer kept
- * in DB (used to live as `processedSchema`, dropped because it was
- * 8-15 MB of duplicate state per import for a feature the UI calls
- * maybe once per API).
+ * "View" on the overview's Schema row opens this section in place (and
+ * scrolls to it); Close folds it away again. Renders rawSchema by default
+ * (the original text/JSON/XML/proto). If the user wants the parsed object
+ * form, the "Parsed" button hits the on-demand parse endpoint — the parsed
+ * view is no longer kept in DB (used to live as `processedSchema`, dropped
+ * because it was 8-15 MB of duplicate state per import for a feature the
+ * UI calls maybe once per API).
  */
-import { useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Loader2, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { apisApi } from '@/lib/api'
 import { Api } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -28,6 +30,13 @@ export function SchemaTab({ api, open, onOpenChange }: SchemaTabProps) {
   const [parsed, setParsed] = useState<unknown>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const sectionRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (open) sectionRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+  }, [open])
+
+  if (!open) return null
 
   const schema = api.schemas?.[0]
   // rawSchema is always a string; older deployments populated `content` so
@@ -55,12 +64,15 @@ export function SchemaTab({ api, open, onOpenChange }: SchemaTabProps) {
       : rawText
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh]">
-        <DialogHeader>
-          <DialogTitle>Schema Content</DialogTitle>
-        </DialogHeader>
-        <div className="flex items-center gap-2 mb-2">
+    <Card ref={sectionRef} id="api-schema" data-testid="api-schema-viewer">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-sm">Schema content</CardTitle>
+        <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} aria-label="Close schema content">
+          <X className="h-4 w-4" />
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant={view === 'raw' ? 'default' : 'ghost'}
             size="sm"
@@ -79,10 +91,10 @@ export function SchemaTab({ api, open, onOpenChange }: SchemaTabProps) {
           </Button>
           {error ? <span className="text-xs text-destructive">{error}</span> : null}
         </div>
-        <div className="bg-muted p-4 rounded max-h-[60vh] overflow-y-auto">
+        <div className="rounded bg-muted p-4">
           <pre className="text-xs whitespace-pre-wrap break-words">{display}</pre>
         </div>
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   )
 }

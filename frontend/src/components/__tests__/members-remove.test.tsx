@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
 import { MembersAndTeamsTab } from '../MembersAndTeamsTab'
@@ -11,6 +12,9 @@ vi.mock('@/lib/api', () => ({
     getTeams: vi.fn(),
     getPendingInvites: vi.fn(),
     removeMember: vi.fn(),
+    revokePendingInvite: vi.fn(),
+    deleteTeam: vi.fn(),
+    removeTeamMember: vi.fn(),
   },
 }))
 
@@ -37,7 +41,18 @@ describe('removing an organization member', () => {
 
     fireEvent.click(await screen.findByTestId('remove-member-u1'))
 
-    expect(await screen.findByTestId('remove-member-dialog')).toBeInTheDocument()
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Remove Ada Lovelace?')
+    expect(organizationsApi.removeMember).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when cancelled', async () => {
+    render(<MembersAndTeamsTab organizationId="org1" />)
+
+    fireEvent.click(await screen.findByTestId('remove-member-u1'))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
     expect(organizationsApi.removeMember).not.toHaveBeenCalled()
   })
 
@@ -45,7 +60,7 @@ describe('removing an organization member', () => {
     render(<MembersAndTeamsTab organizationId="org1" />)
 
     fireEvent.click(await screen.findByTestId('remove-member-u1'))
-    fireEvent.click(await screen.findByTestId('confirm-remove-member'))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove member' }))
 
     await waitFor(() => expect(organizationsApi.removeMember).toHaveBeenCalledWith('org1', 'u1'))
   })
@@ -57,11 +72,79 @@ describe('removing an organization member', () => {
     render(<MembersAndTeamsTab organizationId="org1" />)
 
     fireEvent.click(await screen.findByTestId('remove-member-u1'))
-    fireEvent.click(await screen.findByTestId('confirm-remove-member'))
+    fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Remove member' }))
 
     await waitFor(() => expect(organizationsApi.removeMember).toHaveBeenCalled())
     // The dialog closes either way; what must not happen is a success
     // message for a removal that did not happen.
-    await waitFor(() => expect(screen.queryByTestId('remove-member-dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+  })
+})
+
+/**
+ * Revoking an invite, deleting a team and removing someone from a team
+ * went straight through (the last two via window.confirm, which is
+ * unstyled and blocks the page). They now go through the shared confirm.
+ */
+describe('other destructive member and team actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(organizationsApi.getMembers as any).mockResolvedValue([])
+    ;(organizationsApi.getPendingInvites as any).mockResolvedValue([
+      { id: 'inv1', email: 'grace@example.com', role: 'member', inviteExpiresAt: '2099-01-01T00:00:00Z', isExpired: false },
+    ])
+    ;(organizationsApi.getTeams as any).mockResolvedValue([
+      {
+        id: 't1',
+        name: 'Platform',
+        isDefault: false,
+        members: [{ userId: 'u2', role: 'member', user: { firstName: 'Grace' } }],
+      },
+    ])
+    ;(organizationsApi.revokePendingInvite as any).mockResolvedValue({})
+    ;(organizationsApi.deleteTeam as any).mockResolvedValue({})
+    ;(organizationsApi.removeTeamMember as any).mockResolvedValue({})
+  })
+
+  it('revokes an invite only after confirming', async () => {
+    render(<MembersAndTeamsTab organizationId="org1" />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke invite for grace@example.com' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Revoke this invite?')
+    expect(organizationsApi.revokePendingInvite).not.toHaveBeenCalled()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke invite' }))
+    await waitFor(() => expect(organizationsApi.revokePendingInvite).toHaveBeenCalledWith('org1', 'inv1'))
+  })
+
+  it('deletes a team only after confirming, without window.confirm', async () => {
+    const nativeConfirm = vi.spyOn(window, 'confirm')
+    const user = userEvent.setup()
+    render(<MembersAndTeamsTab organizationId="org1" />)
+
+    await user.click(await screen.findByRole('tab', { name: 'Teams' }))
+    await user.click(await screen.findByRole('button', { name: 'Delete team Platform' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent('Delete this team?')
+    expect(organizationsApi.deleteTeam).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Delete team' }))
+    await waitFor(() => expect(organizationsApi.deleteTeam).toHaveBeenCalledWith('org1', 't1'))
+    expect(nativeConfirm).not.toHaveBeenCalled()
+    nativeConfirm.mockRestore()
+  })
+
+  it('removes someone from a team only after confirming', async () => {
+    const user = userEvent.setup()
+    render(<MembersAndTeamsTab organizationId="org1" />)
+
+    await user.click(await screen.findByRole('tab', { name: 'Teams' }))
+    await user.click(await screen.findByRole('button', { name: 'Remove Grace from Platform' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(organizationsApi.removeTeamMember).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Remove from team' }))
+    await waitFor(() => expect(organizationsApi.removeTeamMember).toHaveBeenCalledWith('org1', 't1', 'u2'))
   })
 })

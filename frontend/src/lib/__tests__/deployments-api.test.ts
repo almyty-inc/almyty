@@ -11,7 +11,7 @@ import {
   runnableAdapters,
   schemeOf,
 } from '@/lib/deployments-api'
-import { bedrockAdapter, fireworksAdapter, hfAdapter, makeDeployment, makeVersion, ollamaAdapter } from '@/components/models/deployments/__tests__/fixtures'
+import { bedrockAdapter, fireworksAdapter, hfAdapter, makeDeployment, makeVersion, ollamaAdapter } from '@/components/models/hosting/__tests__/fixtures'
 
 /**
  * The grammar has to match backend/src/modules/model-registry/registry-uri.ts
@@ -56,8 +56,18 @@ describe('parseModelRef', () => {
     if (r.ok) expect(r.value.pin).toBe('2')
   })
 
-  it('insists on a pin for an artifact, since the reference has to be immutable', () => {
+  it('takes a Hugging Face repository without a commit, because the server pins it', () => {
     const r = parseModelRef('hf://Qwen/Qwen3-14B')
+    expect(r).toEqual({ ok: true, value: { scheme: 'hf', kind: 'artifact', location: 'Qwen/Qwen3-14B', prefix: '', pin: '', raw: 'hf://Qwen/Qwen3-14B' } })
+    if (r.ok) expect(describeModelRef(r.value)).toBe('Hugging Face repo: Qwen/Qwen3-14B, pinned to its exact commit when you save')
+    const branch = parseModelRef('hf://Qwen/Qwen3-14B@main')
+    if (branch.ok) expect(describeModelRef(branch.value)).toBe('Hugging Face repo: Qwen/Qwen3-14B at main, pinned to its exact commit when you save')
+    const sha = parseModelRef('hf://Qwen/Qwen3-14B@5206a32e0bd3067aef1ce90f5528ade7d866253f')
+    if (sha.ok) expect(describeModelRef(sha.value)).toBe('Hugging Face repo: Qwen/Qwen3-14B, pinned to 5206a32e0bd3067aef1ce90f5528ade7d866253f')
+  })
+
+  it('still insists on a pin for stored weights, since the reference has to be immutable', () => {
+    const r = parseModelRef('s3://bucket/qwen')
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.error).toMatch(/needs an @pin/)
   })
@@ -110,7 +120,7 @@ describe('adapter matching', () => {
   it('gives a provider reference to the one platform that owns it', () => {
     expect(runnableAdapters(adapters, 'fireworks').map((a) => a.key)).toEqual(['fireworks'])
     const blocked = matchAdapters(adapters, 'fireworks').filter((m) => !m.ok)
-    expect(blocked[0].reason).toBe('fireworks:// names a model on Fireworks, and only that provider can run it')
+    expect(blocked[0].reason).toBe('fireworks:// names a model on Fireworks, and only that cloud can run it')
   })
 
   it('offers everything while no model is named, so the picker can filter the other way', () => {

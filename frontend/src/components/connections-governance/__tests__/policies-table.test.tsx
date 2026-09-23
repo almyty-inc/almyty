@@ -81,27 +81,24 @@ describe('PoliciesTable', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete Approved vendors' }))
     expect(await screen.findByText('Delete Approved vendors?')).toBeInTheDocument()
     expect(connectionPoliciesApi.remove).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete policy' }))
     await waitFor(() => expect(connectionPoliciesApi.remove).toHaveBeenCalledWith('p1'))
     await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Policy deleted', expect.any(String)))
   })
 
-  it('opens the edit dialog with the kind fixed and the stored values', async () => {
+  // Add and edit are pages now (policy-form.test.tsx drives them).
+  it('links each row to its edit page', async () => {
     render(<PoliciesTable />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit Approved vendors' }))
-    expect(await screen.findByRole('heading', { name: 'Edit policy' })).toBeInTheDocument()
-    const kind = screen.getByLabelText('Kind') as HTMLSelectElement
-    expect(kind.value).toBe('connector_allowlist')
-    expect(kind).toBeDisabled()
-    expect(screen.getByLabelText(/^Name/)).toHaveValue('Approved vendors')
-    expect(screen.getByTestId('connector-chip-openai')).toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: 'Organization connections' })).toHaveAttribute('aria-checked', 'true')
+    expect(await screen.findByRole('link', { name: 'Edit Approved vendors' })).toHaveAttribute('href', '/settings/connections/policies/p1')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('shows the empty state with an add action', async () => {
+  it('shows the empty state with add links to the create page', async () => {
     vi.mocked(connectionPoliciesApi.list).mockResolvedValue([])
     render(<PoliciesTable />)
     expect(await screen.findByText('No policies yet')).toBeInTheDocument()
-    expect(screen.getAllByRole('button', { name: 'Add policy' }).length).toBeGreaterThanOrEqual(1)
+    const links = screen.getAllByRole('link', { name: 'Add policy' })
+    expect(links).toHaveLength(2)
+    for (const link of links) expect(link).toHaveAttribute('href', '/settings/connections/policies/new')
   })
 })

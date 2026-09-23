@@ -42,7 +42,12 @@ export default defineConfig({
       // cookie lands on the wrong host and every visitor looks new on
       // every request. ALMYTY_API_TARGET overrides the port for anyone
       // whose 3000 is already taken.
-      '/api': {
+      //
+      // A regex key, anchored on the slash: a plain '/api' key is a prefix
+      // match, so it also caught '/apis' -- the APIs page's own list call
+      // -- and rewrote it to '/s', and a reload of /apis proxied the page
+      // itself to the backend.
+      '^/api(/|$)': {
         target: apiTarget,
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ''),

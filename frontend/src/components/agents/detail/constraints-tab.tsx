@@ -18,6 +18,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { useNotifications } from '@/store/app'
 import type { AgentConstraint } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 interface ConstraintsTabProps {
   agentId: string
@@ -61,6 +62,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
     onError: (e: any) => errorNotif('Remove failed', getApiErrorMessage(e)),
   })
 
+  const { confirm, dialog: confirmDialog } = useConfirm()
   return (
     <Card>
       <CardHeader>
@@ -134,7 +136,15 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
                   aria-label={`Delete constraint: ${c.rule}`}
                   className="text-destructive shrink-0"
                   disabled={removeMutation.isPending}
-                  onClick={() => removeMutation.mutate(c.id)}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: 'Delete this constraint?',
+                      description: `"${c.rule}" stops applying to this agent's runs. This cannot be undone.`,
+                      confirmLabel: 'Delete constraint',
+                      destructive: true,
+                    })
+                    if (ok) removeMutation.mutate(c.id)
+                  }}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -143,6 +153,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
           </div>
         )}
       </CardContent>
+      {confirmDialog}
     </Card>
   )
 }

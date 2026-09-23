@@ -23,6 +23,7 @@ import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRe
 import { LlmModelsHelper } from './llm-models.helper';
 import { getProviderDisplayName, getProviderDescription, getProviderFeatures, getProviderKeyUrl, getProviderDocsUrl } from './llm-provider-catalog';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PrivateProviderGuard } from './private-provider.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
@@ -35,10 +36,24 @@ import {
   LlmProviderSearchQueryDto,
 } from './dto/llm-providers-controller.dto';
 
+/**
+ * The status a failed handler answers with.
+ *
+ * Only our own HttpExceptions choose it. Every handler here used to pass
+ * `error.status` through, and an axios error from the vendor carries the
+ * vendor's status, so a provider rejecting its stored key answered this
+ * API with 401 -- which the dashboard reads as "your session ended" and
+ * signs the user out. Opening a model picker on a provider with a bad key
+ * logged you out of almyty. Anything that is not ours takes the fallback.
+ */
+export function failureStatus(error: unknown, fallback: HttpStatus): number {
+  return error instanceof HttpException ? error.getStatus() : fallback;
+}
+
 @Controller('llm-providers')
 @ApiTags('LLM Providers')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateProviderGuard)
 export class LlmProvidersController {
   constructor(
     private readonly llmProvidersService: LlmProvidersService,
@@ -87,7 +102,7 @@ export class LlmProvidersController {
           message: error.message,
           error: 'PROVIDER_CREATION_FAILED',
         },
-        error.status || HttpStatus.BAD_REQUEST,
+        failureStatus(error, HttpStatus.BAD_REQUEST),
       );
     }
   }
@@ -129,7 +144,7 @@ export class LlmProvidersController {
           message: error.message,
           error: 'PROVIDERS_RETRIEVAL_FAILED',
         },
-        error.status || HttpStatus.BAD_REQUEST,
+        failureStatus(error, HttpStatus.BAD_REQUEST),
       );
     }
   }
@@ -163,7 +178,8 @@ export class LlmProvidersController {
       const provider = await this.llmProvidersService.getProvider(
         providerId,
         organizationId,
-        canViewSecrets
+        canViewSecrets,
+        { id: req.user.id },
       );
 
       return {
@@ -178,7 +194,7 @@ export class LlmProvidersController {
           message: error.message,
           error: 'PROVIDER_NOT_FOUND',
         },
-        error.status || HttpStatus.NOT_FOUND,
+        failureStatus(error, HttpStatus.NOT_FOUND),
       );
     }
   }
@@ -259,7 +275,7 @@ export class LlmProvidersController {
           message: error.message,
           error: 'PROVIDER_UPDATE_FAILED',
         },
-        error.status || HttpStatus.BAD_REQUEST,
+        failureStatus(error, HttpStatus.BAD_REQUEST),
       );
     }
   }
@@ -296,7 +312,7 @@ export class LlmProvidersController {
           message: error.message,
           error: 'PROVIDER_DELETION_FAILED',
         },
-        error.status || HttpStatus.BAD_REQUEST,
+        failureStatus(error, HttpStatus.BAD_REQUEST),
       );
     }
   }
@@ -339,7 +355,7 @@ export class LlmProvidersController {
           message: error.message,
           error: 'CHAT_REQUEST_FAILED',
         },
-        error.status || HttpStatus.BAD_REQUEST,
+        failureStatus(error, HttpStatus.BAD_GATEWAY),
       );
     }
   }
@@ -386,7 +402,7 @@ export class LlmProvidersController {
           message: error.message,
           error: 'CONNECTION_TEST_FAILED',
         },
-        error.status || HttpStatus.BAD_REQUEST,
+        failureStatus(error, HttpStatus.BAD_GATEWAY),
       );
     }
   }
@@ -456,7 +472,7 @@ export class LlmProvidersController {
           message: error.message,
           error: 'MODELS_RETRIEVAL_FAILED',
         },
-        error.status || HttpStatus.BAD_REQUEST,
+        failureStatus(error, HttpStatus.BAD_GATEWAY),
       );
     }
   }
@@ -539,7 +555,7 @@ export class LlmProvidersController {
           message: error.message,
           error: 'MODELS_RETRIEVAL_FAILED',
         },
-        error.status || HttpStatus.BAD_REQUEST,
+        failureStatus(error, HttpStatus.BAD_GATEWAY),
       );
     }
   }

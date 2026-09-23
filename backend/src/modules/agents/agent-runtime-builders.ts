@@ -9,6 +9,7 @@ import { Organization } from '../../entities/organization.entity';
 import { Message } from '../../entities/message.entity';
 import { BUILT_IN_TOOLS } from './agent-runtime.service';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
+import { buildCollaborationContext } from './collaboration-participants';
 
 /**
  * How many recent messages a run rebuilds its thread from by default.
@@ -46,30 +47,13 @@ export class AgentRuntimeBuilders {
 
     // [COLLABORATION CONTEXT] — only if this run is part of a collaboration
     const collab = agent.collaboration;
-    if (run.parentRunId || (collab?.strategy && collab?.agents?.length > 0)) {
-      const collabParts: string[] = [];
-      // Find the role of the current agent in the collaboration
-      const currentAgentRole = collab?.agents?.find(a => a.agentId === agent.id)?.role;
-      if (currentAgentRole && collab?.strategy) {
-        collabParts.push(`You are the "${currentAgentRole}" in a ${collab.strategy} collaboration.`);
-      } else if (collab?.strategy) {
-        collabParts.push(`You are participating in a ${collab.strategy} collaboration.`);
-      }
-      if (collab?.sharedBrief) {
-        collabParts.push(`Brief: ${collab.sharedBrief}`);
-      }
-      if (collab?.rules) {
-        const rulesParts: string[] = [];
-        if (collab.rules.maxTotalCost) rulesParts.push(`max cost $${collab.rules.maxTotalCost}`);
-        if (collab.rules.outputFormat) rulesParts.push(`output format: ${collab.rules.outputFormat}`);
-        if (collab.rules.escalation) rulesParts.push(`escalation: ${collab.rules.escalation}`);
-        if (collab.rules.conflictResolution) rulesParts.push(`conflict resolution: ${collab.rules.conflictResolution}`);
-        if (rulesParts.length > 0) collabParts.push(`Rules: ${rulesParts.join(', ')}`);
-      }
-      if (collab?.agents?.length > 0) {
-        const teamList = collab.agents.map(a => `${a.role || a.agentId}`).join(', ');
-        collabParts.push(`Team members: ${teamList}`);
-      }
+    if (run.parentRunId || (collab?.strategy && collab?.participants?.length > 0)) {
+      // This agent's own role, when it is one of the listed participants.
+      const currentAgentRole = collab?.participants?.find(
+        (p) => p.kind === 'agent' && p.agentId === agent.id,
+      )?.role;
+      // Same text a model participant is given (collaboration-participants.ts).
+      const collabParts = buildCollaborationContext(collab, currentAgentRole);
       if (collabParts.length > 0) {
         parts.push(`[COLLABORATION CONTEXT]\n${collabParts.join('\n')}`);
       }

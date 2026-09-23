@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ModelCatalogService } from './model-catalog.service';
-import { ListModelsQueryDto, RegisterEndpointBodyDto, RegisterModelBodyDto, RoutePreviewBodyDto, SyncModelsBodyDto, UpdateModelBodyDto } from './dto/model-catalog-controller.dto';
+import { ListModelsQueryDto, RegisterModelBodyDto, RoutePreviewBodyDto, SyncModelsBodyDto, UpdateModelBodyDto } from './dto/model-catalog-controller.dto';
 import { ModelRouterService } from './routing/model-router.service';
 
 /** Cards in, cards out. Nothing here calls a provider except the validation run, which is the point of it. */
@@ -50,7 +50,7 @@ export class ModelCatalogController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'List models' })
   async list(@Request() req: any, @Query(new ValidationPipe({ transform: true })) query: ListModelsQueryDto) {
-    const rows = await this.catalog.list(this.orgId(req), query);
+    const rows = await this.catalog.list(this.orgId(req), query, req.user?.id ?? null);
     return { success: true, data: rows.map(view) };
   }
 
@@ -59,14 +59,6 @@ export class ModelCatalogController {
   @ApiOperation({ summary: 'Register a model against a stored provider or an endpoint' })
   async register(@Request() req: any, @Body(ValidationPipe) body: RegisterModelBodyDto) {
     const card = await this.catalog.register(this.orgId(req), body, req.user?.id);
-    return { success: true, data: view(card) };
-  }
-
-  @Post('register-endpoint')
-  @Roles('admin', 'owner')
-  @ApiOperation({ summary: 'Register a hand-run OpenAI-compatible endpoint as a model' })
-  async registerEndpoint(@Request() req: any, @Body(ValidationPipe) body: RegisterEndpointBodyDto) {
-    const card = await this.catalog.registerEndpoint(this.orgId(req), body, req.user?.id);
     return { success: true, data: view(card) };
   }
 
@@ -86,7 +78,7 @@ export class ModelCatalogController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Model detail' })
   async get(@Request() req: any, @Param('id', ParseUUIDPipe) id: string) {
-    return { success: true, data: view(await this.catalog.get(this.orgId(req), id)) };
+    return { success: true, data: view(await this.catalog.get(this.orgId(req), id, req.user?.id ?? null)) };
   }
 
   @Patch(':id')

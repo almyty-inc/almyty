@@ -68,26 +68,6 @@ describe('OrganizationsPage', () => {
     }
   })
 
-  it('keeps the API rejection visible in the creation dialog, preserves input, and clears it on retry', async () => {
-    vi.mocked(organizationsApi.getAll).mockResolvedValue([])
-    vi.mocked(organizationsApi.create).mockRejectedValueOnce({
-      response: { data: { error: { message: 'Organization with this name or slug already exists' } } },
-    }).mockImplementationOnce(() => new Promise(() => {}))
-    const user = userEvent.setup()
-    render(<OrganizationsPage />)
-    await user.click(await screen.findByRole('button', { name: 'Create Organization' }))
-    const dialog = within(screen.getByRole('dialog'))
-    const name = dialog.getByLabelText('Organization Name')
-    await user.type(name, 'QA First Run')
-    await user.click(dialog.getByRole('button', { name: 'Create', exact: true }))
-
-    expect(await dialog.findByRole('alert')).toHaveTextContent('Organization with this name or slug already exists')
-    expect(name).toHaveValue('QA First Run')
-    await user.click(dialog.getByRole('button', { name: 'Create', exact: true }))
-    await waitFor(() => expect(dialog.queryByRole('alert')).not.toBeInTheDocument())
-    expect(dialog.getByRole('button', { name: 'Creating...' })).toBeDisabled()
-  })
-
   it('renders the org row with its real name when given a flat array (post-extractData)', async () => {
     ;(organizationsApi.getAll as any).mockResolvedValue([
       {
@@ -139,26 +119,12 @@ describe('OrganizationsPage', () => {
       expect(await screen.findByText('5 members')).toBeInTheDocument()
       expect(screen.queryByText('0 members')).not.toBeInTheDocument()
     })
-
-    it('lists the members the API returned', async () => {
-      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
-      vi.mocked(organizationsApi.getMembers).mockResolvedValue([
-        { id: 'm1', userId: 'u1', role: 'owner', user: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' } },
-      ] as any)
-
-      render(<OrganizationsPage />)
-
-      await userEvent.click(await screen.findByText('alpha-org'))
-      await userEvent.click(await screen.findByRole('tab', { name: /members/i }))
-
-      expect(await screen.findByText(/ada@example.com/i)).toBeInTheDocument()
-    })
   })
 
   // The row's onRowClick was the only way into an organization, and a click
-  // handler on a <tr> is invisible to the keyboard. The name is a real
-  // button now, so it is tabbable and opens on Enter.
-  it('opens the organization from the keyboard', async () => {
+  // handler on a <tr> is invisible to the keyboard. The name is a real link
+  // to the organization's own page now: tabbable, and it opens on Enter.
+  it('links the organization name to its page', async () => {
     vi.mocked(organizationsApi.getAll).mockResolvedValue([
       {
         id: 'org-a',
@@ -171,16 +137,68 @@ describe('OrganizationsPage', () => {
         updatedAt: '2026-06-02T00:00:00.000Z',
       },
     ] as any)
-    vi.mocked(organizationsApi.getMembers).mockResolvedValue([] as any)
 
     render(<OrganizationsPage />)
 
-    const nameButton = await screen.findByRole('button', { name: 'alpha-org' })
-    nameButton.focus()
-    expect(nameButton).toHaveFocus()
+    expect(await screen.findByRole('link', { name: 'alpha-org' })).toHaveAttribute('href', '/organizations/org-a')
+  })
 
-    await userEvent.keyboard('{Enter}')
+  it('links Create organization to /organizations/new, not a dialog', async () => {
+    vi.mocked(organizationsApi.getAll).mockResolvedValue([])
+    render(<OrganizationsPage />)
+    expect(await screen.findByRole('link', { name: 'Create organization' })).toHaveAttribute('href', '/organizations/new')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
 
-    expect(await screen.findByRole('tab', { name: /members/i })).toBeInTheDocument()
+  // "Delete" in an organization's row menu deleted the whole organization
+  // on the spot -- gateways, tools, settings, no second chance. The same
+  // action inside the detail sheet had always asked; the row menu now does.
+  describe('deleting from the row menu', () => {
+    const org = {
+      id: 'org-a',
+      name: 'alpha-org',
+      slug: 'alpha-org',
+      isActive: true,
+      plan: 'free',
+      memberCount: 1,
+      createdAt: '2026-06-01T12:17:57.470Z',
+      updatedAt: '2026-06-02T00:00:00.000Z',
+    }
+
+    const openRowDelete = async (user: ReturnType<typeof userEvent.setup>) => {
+      await screen.findByText('alpha-org')
+      await user.click(screen.getByRole('button', { name: 'Actions' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+    }
+
+    it('asks before deleting and does not call the API until confirmed', async () => {
+      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
+      vi.mocked(organizationsApi.delete).mockResolvedValue(undefined as any)
+      const user = userEvent.setup()
+      render(<OrganizationsPage />)
+
+      await openRowDelete(user)
+
+      const dialog = await screen.findByRole('alertdialog')
+      expect(dialog).toHaveTextContent('Delete this organization?')
+      expect(dialog).toHaveTextContent('alpha-org')
+      expect(organizationsApi.delete).not.toHaveBeenCalled()
+
+      await user.click(within(dialog).getByRole('button', { name: 'Delete organization' }))
+      await waitFor(() => expect(organizationsApi.delete).toHaveBeenCalledTimes(1))
+      expect(vi.mocked(organizationsApi.delete).mock.calls[0][0]).toBe('org-a')
+    })
+
+    it('leaves the organization alone when cancelled', async () => {
+      vi.mocked(organizationsApi.getAll).mockResolvedValue([org] as any)
+      const user = userEvent.setup()
+      render(<OrganizationsPage />)
+
+      await openRowDelete(user)
+      await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Cancel' }))
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+      expect(organizationsApi.delete).not.toHaveBeenCalled()
+    })
   })
 })

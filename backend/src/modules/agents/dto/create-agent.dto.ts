@@ -1,6 +1,8 @@
 import { IsString, IsOptional, IsObject, IsEnum, IsArray, IsUrl, MaxLength } from 'class-validator';
+import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/authorization/access-policy.service';
 import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';
+import type { AgentCollaboration } from '../collaboration-participants';
 
 const stripHtml = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.replace(/<[^>]*>/g, '').trim() : value;
@@ -92,14 +94,11 @@ export class CreateAgentDto {
     canCreateAgents?: boolean;
   };
 
+  // Shape checked in AgentsService (collaborationProblems) so a bad
+  // participant is refused with a sentence naming it.
   @IsOptional()
   @IsObject()
-  collaboration?: {
-    strategy: 'sequential' | 'parallel' | 'race' | 'debate';
-    agents: { agentId: string; role?: string }[];
-    judgeAgentId?: string;
-    maxRounds?: number;
-  };
+  collaboration?: AgentCollaboration | null;
 
   @IsOptional()
   @IsObject()
@@ -121,8 +120,8 @@ export class CreateAgentDto {
   // The VisibilityField component always emits both; without these
   // entries on the whitelist the ValidationPipe 400s the request.
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsString()

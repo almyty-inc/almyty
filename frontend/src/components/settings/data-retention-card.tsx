@@ -107,7 +107,7 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>Data Retention</CardTitle>
+          <CardTitle>Data retention</CardTitle>
           <CardDescription>
             How long each data class is kept before it is automatically deleted. Leave a field empty to keep that data forever.
           </CardDescription>
@@ -148,7 +148,7 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
             </div>
 
             <Button onClick={handleSave} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? 'Saving...' : 'Save Retention Policy'}
+              {updateMutation.isPending ? 'Saving...' : 'Save retention policy'}
             </Button>
 
             <p className="text-xs text-muted-foreground border-t pt-4">

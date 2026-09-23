@@ -85,6 +85,7 @@ export class AnalyticsController {
       statusFilter: status,
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
+      callerId: req.user.id,
     });
     return { success: true, data, message: 'Request logs retrieved successfully' };
   }
@@ -96,7 +97,7 @@ export class AnalyticsController {
     @Query('timeframe') timeframe: string = '7d',
   ) {
     const orgId = this.requireOrg(req);
-    const data = await this.analyticsService.getToolUsage(orgId, clampTimeframe(timeframe));
+    const data = await this.analyticsService.getToolUsage(orgId, clampTimeframe(timeframe), req.user?.sub || req.user?.id);
     return { success: true, data, message: 'Tool usage retrieved successfully' };
   }
 
@@ -107,7 +108,7 @@ export class AnalyticsController {
     @Query('timeframe') timeframe: string = '7d',
   ) {
     const orgId = this.requireOrg(req);
-    const data = await this.analyticsService.getGatewayUsage(orgId, clampTimeframe(timeframe));
+    const data = await this.analyticsService.getGatewayUsage(orgId, clampTimeframe(timeframe), req.user.id);
     return { success: true, data, message: 'Gateway usage retrieved successfully' };
   }
 
@@ -118,7 +119,7 @@ export class AnalyticsController {
     @Query('timeframe') timeframe: string = '7d',
   ) {
     const orgId = this.requireOrg(req);
-    const data = await this.analyticsService.getLlmUsage(orgId, clampTimeframe(timeframe));
+    const data = await this.analyticsService.getLlmUsage(orgId, clampTimeframe(timeframe), req.user.id);
     return { success: true, data, message: 'Model usage retrieved successfully' };
   }
 
@@ -152,7 +153,7 @@ export class AnalyticsController {
   @Roles('viewer', 'member', 'admin', 'owner')
   async getAgentRuns(@Request() req) {
     const orgId = this.requireOrg(req);
-    const data = await this.analyticsService.getAgentRunsSummary(orgId);
+    const data = await this.analyticsService.getAgentRunsSummary(orgId, req.user?.sub || req.user?.id);
     return { success: true, data, message: 'Agent runs summary retrieved successfully' };
   }
 
@@ -173,6 +174,7 @@ export class AnalyticsController {
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
       type: type as 'requests' | 'tool-executions' | 'llm-sessions',
+      callerId: req.user.id,
     });
 
     // Sanitize filename components before interpolating into the

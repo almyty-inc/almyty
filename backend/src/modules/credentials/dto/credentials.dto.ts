@@ -15,6 +15,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+import { RESOURCE_VISIBILITIES, type ResourceVisibility } from '../../../common/authorization/access-policy.service';
+
 export class CreateCredentialDto {
   @IsString()
   @IsNotEmpty()
@@ -62,8 +64,8 @@ export class CreateCredentialDto {
   metadata?: Record<string, any>;
 
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsUUID()
@@ -122,8 +124,8 @@ export class UpdateCredentialDto {
   metadata?: Record<string, any>;
 
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsUUID()

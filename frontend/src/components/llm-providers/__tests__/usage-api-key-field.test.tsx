@@ -3,8 +3,8 @@ import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { useForm } from 'react-hook-form'
 
 import { render } from '../../../test/setup'
-import { CreateProviderDialog } from '../create-provider-dialog'
-import { EditProviderDialog } from '../edit-provider-dialog'
+import { CreateProviderForm } from '../create-provider-form'
+import { EditProviderForm } from '../edit-provider-form'
 
 // The dialogs pull in the credential vault picker, the team-visibility
 // selector, and the axios API client — none of which matter for the
@@ -27,9 +27,7 @@ function CreateHarness({ type }: { type: string }) {
   })
   const mutation = { isPending: false, mutate: vi.fn() } as any
   return (
-    <CreateProviderDialog
-      open
-      onOpenChange={() => {}}
+    <CreateProviderForm
       createForm={form}
       createProviderMutation={mutation}
     />
@@ -51,9 +49,8 @@ function EditHarness({
     mutate: (payload: any) => onUpdate?.(payload),
   } as any
   return (
-    <EditProviderDialog
-      open
-      onOpenChange={() => {}}
+    <EditProviderForm
+      onCancel={() => {}}
       editForm={form}
       providerToEdit={{ id: 'provider-1', type, name: 'prod' }}
       updateProviderMutation={mutation}
@@ -109,7 +106,7 @@ describe('usage API key field (issue #241)', () => {
       fireEvent.change(screen.getByLabelText(USAGE_KEY_LABEL), {
         target: { value: 'sk-ant-admin-new-key' },
       })
-      fireEvent.click(screen.getByRole('button', { name: /Update Provider/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/ }))
 
       await waitFor(() => expect(onUpdate).toHaveBeenCalledTimes(1))
       expect(onUpdate).toHaveBeenCalledWith({

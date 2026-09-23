@@ -50,7 +50,7 @@ function renderOverview(executionsError: Error | null, onRetryExecutions?: () =>
 }
 
 describe('agent detail tabs on a failed fetch', () => {
-  it('Overview shows the shared error state for Recent Runs instead of "no runs yet"', () => {
+  it('Overview shows the shared error state for Recent runs instead of "no runs yet"', () => {
     const onRetryExecutions = vi.fn()
     renderOverview(new Error('gateway timeout'), onRetryExecutions)
 
@@ -89,6 +89,7 @@ describe('agent detail tabs on a failed fetch', () => {
     renderWithProviders(<FilesTab agentId="agent-1" files={[]} />)
 
     expect(screen.getByText('No files uploaded yet')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Upload file$/ })).toBeInTheDocument()
+    // The header and the empty state offer it under the same label.
+    expect(screen.getAllByRole('button', { name: /Upload file$/ })).toHaveLength(2)
   })
 })

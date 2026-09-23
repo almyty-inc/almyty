@@ -54,7 +54,7 @@ export interface CreateToolDto {
   examples?: Array<{ name: string; description?: string; input: Record<string, any>; expectedOutput?: any }>;
 
   // Team-scoping fields from the dashboard VisibilityField.
-  visibility?: 'org' | 'team';
+  visibility?: 'org' | 'team' | 'private';
   teamId?: string | null;
   executionMethod?: ToolExecutionMethod;
   authConfig?: any;
@@ -91,7 +91,7 @@ export interface UpdateToolDto {
   examples?: Array<{ name: string; description?: string; input: Record<string, any>; expectedOutput?: any }>;
   authConfig?: any;
   // Team-scoping fields from the dashboard VisibilityField.
-  visibility?: 'org' | 'team';
+  visibility?: 'org' | 'team' | 'private';
   teamId?: string | null;
 }
 

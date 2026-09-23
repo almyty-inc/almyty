@@ -1,22 +1,33 @@
 /**
- * The inline connect flow every consumer opens: pick a connector (filtered
- * by kind), then run its best method. Form methods (api_key, service_account,
+ * The connect flow every consumer uses: pick a connector (filtered by kind),
+ * then run its best method. Form methods (api_key, service_account,
  * cloud_iam) post the JsonSchemaForm values and show a live validation
  * failure inline with retry. OAuth methods open the provider in a new tab
  * and poll by state until the callback lands, with a paste-the-code fallback.
+ *
+ * It is never a sheet or a dialog. It renders in one of two places:
+ *   - its own page, /settings/connections/connect[/:connectorKey]
+ *     (pages/connection-connect.tsx);
+ *   - inline, right under a consumer's "Connect an account" button
+ *     (ConnectAccountButton below), so a half-filled consumer form keeps its
+ *     state and gets the new connection handed straight back.
+ *
+ * Inline, it sits inside the consumer's own <form>, so it renders no <form>
+ * of its own there (a nested form is invalid and would submit the outer
+ * one): `embedded` swaps the forms for groups whose buttons and Enter key
+ * call the handler directly.
  *
  * The connection is handed back through `onConnected`; the caller decides
  * what to select. With `rotateConnection` the same UI re-runs the method
  * against POST /connections/:id/rotate.
  */
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertCircle, ArrowLeft, Check, ExternalLink, Loader2, Plug, RefreshCw, Search } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { JsonSchemaForm, schemaDefaults, validateSchemaValues, type SchemaFormValues } from '@/components/ui/json-schema-form'
 import { organizationsApi } from '@/lib/api'
 import {
@@ -52,19 +63,26 @@ import {
 
 export const CONNECTORS_QUERY_KEY = ['connectors'] as const
 
-export interface ConnectSheetProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+export interface ConnectFlowProps {
   /** Only connectors of this kind are offered. */
   kind?: ConnectorKind
   /** Skip the picker and go straight to this connector. */
   connectorKey?: string
   owner?: ConnectionOwner
   onConnected: (connection: Connection) => void
+  /** Cancel / close. */
+  onCancel: () => void
   /** Re-run the method for this connection instead of creating a new one. */
   rotateConnection?: Connection | null
   /** How often the OAuth poll asks for the connection. */
   pollIntervalMs?: number
+  /** Inline inside another form: no <form> elements, and a title of its own. */
+  embedded?: boolean
+  /**
+   * Picking a connector from the list. On a page this navigates to the
+   * connector's own URL; absent, the pick is kept in local state.
+   */
+  onPick?: (connector: Connector) => void
 }
 
 type OAuthPhase =
@@ -72,7 +90,54 @@ type OAuthPhase =
   | { phase: 'waiting'; authorizeUrl: string; state: string }
   | { phase: 'timeout'; authorizeUrl: string; state: string }
 
-export function ConnectSheet({ open, onOpenChange, kind, connectorKey, owner: ownerProp, onConnected, rotateConnection, pollIntervalMs = 2000 }: ConnectSheetProps) {
+/** The title a connect flow shows for what it is about to do. */
+export function connectTitle(connector: Connector | null | undefined, rotateConnection?: Connection | null): string {
+  if (rotateConnection) return `Rotate ${rotateConnection.name}`
+  return connector ? `Connect ${connector.displayName}` : 'Connect an account'
+}
+
+/** A <form> on a page; a group that submits on its buttons and Enter when embedded. */
+function FormBox({
+  embedded,
+  onSubmit,
+  children,
+  className,
+  testId,
+}: {
+  embedded?: boolean
+  onSubmit: (e: SyntheticEvent) => void
+  children: ReactNode
+  className?: string
+  testId?: string
+}) {
+  if (!embedded) {
+    return (
+      <form onSubmit={onSubmit} className={className} noValidate data-testid={testId}>
+        {children}
+      </form>
+    )
+  }
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') onSubmit(e)
+  }
+  return (
+    <div role="group" className={className} data-testid={testId} onKeyDown={onKeyDown}>
+      {children}
+    </div>
+  )
+}
+
+export function ConnectFlow({
+  kind,
+  connectorKey,
+  owner: ownerProp,
+  onConnected,
+  onCancel,
+  rotateConnection,
+  pollIntervalMs = 2000,
+  embedded = false,
+  onPick,
+}: ConnectFlowProps) {
   const { currentOrganization } = useOrganizationStore()
   const targetKey = rotateConnection?.connectorKey ?? connectorKey
 
@@ -94,13 +159,12 @@ export function ConnectSheet({ open, onOpenChange, kind, connectorKey, owner: ow
       const rows = await connectorsApi.list()
       return Array.isArray(rows) ? rows : []
     },
-    enabled: open,
   })
 
   const orgQuery = useQuery({
     queryKey: ['organization-details', currentOrganization?.id],
     queryFn: () => organizationsApi.getById(currentOrganization!.id),
-    enabled: open && !!currentOrganization?.id,
+    enabled: !!currentOrganization?.id,
   })
   const allowUserScoped = allowUserScopedConnections(orgQuery.data)
 
@@ -112,8 +176,8 @@ export function ConnectSheet({ open, onOpenChange, kind, connectorKey, owner: ow
 
   // One match for the requested kind: skip the picker.
   useEffect(() => {
-    if (open && !targetKey && !pickedKey && connectors.length === 1) setPickedKey(connectors[0].key)
-  }, [open, targetKey, pickedKey, connectors])
+    if (!targetKey && !pickedKey && connectors.length === 1) setPickedKey(connectors[0].key)
+  }, [targetKey, pickedKey, connectors])
   const method: ConnectMethod | null = useMemo(() => {
     if (!connector) return null
     return connector.connect.find((m) => m.type === methodType) ?? bestConnectMethod(connector)
@@ -125,23 +189,16 @@ export function ConnectSheet({ open, onOpenChange, kind, connectorKey, owner: ow
     pollAbort.current = null
   }
 
-  // Reset per open; the picker is skipped when a key is fixed.
+  // A different fixed connector starts over.
   useEffect(() => {
-    if (!open) {
-      stopPolling()
-      return
-    }
     setSearch('')
     setPickedKey(targetKey ?? null)
     setMethodType(null)
     setOwner(ownerProp ?? 'org')
-    setValues({})
-    setFieldErrors({})
-    setFailure(null)
     setOauth({ phase: 'idle' })
     setPasteMode(false)
     setCode('')
-  }, [open, targetKey, ownerProp])
+  }, [targetKey, ownerProp])
 
   useEffect(() => () => stopPolling(), [])
 
@@ -155,7 +212,6 @@ export function ConnectSheet({ open, onOpenChange, kind, connectorKey, owner: ow
   const finish = (connection: Connection) => {
     stopPolling()
     onConnected(connection)
-    onOpenChange(false)
   }
 
   const startPolling = (redirect: ConnectRedirect) => {
@@ -207,9 +263,7 @@ export function ConnectSheet({ open, onOpenChange, kind, connectorKey, owner: ow
     onError: (error: unknown) => setFailure({ message: errorMessage(error, 'The code was not accepted') }),
   })
 
-  // The sheet is portaled but still nested in the consumer's React tree; a
-  // submit here must not bubble into a consumer dialog's own <form>.
-  const submitForm = (e: FormEvent) => {
+  const submitForm = (e: SyntheticEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (!connector || !method) return
@@ -228,7 +282,7 @@ export function ConnectSheet({ open, onOpenChange, kind, connectorKey, owner: ow
     connect.mutate(undefined)
   }
 
-  const submitCode = (e: FormEvent) => {
+  const submitCode = (e: SyntheticEvent) => {
     e.preventDefault()
     e.stopPropagation()
     if (oauth.phase === 'idle' || !code.trim()) return
@@ -236,220 +290,235 @@ export function ConnectSheet({ open, onOpenChange, kind, connectorKey, owner: ow
     complete.mutate({ state: oauth.state, code: code.trim() })
   }
 
-  const title = rotateConnection ? `Rotate ${rotateConnection.name}` : connector ? `Connect ${connector.displayName}` : 'Connect an account'
+  const pick = (c: Connector) => {
+    if (onPick) onPick(c)
+    else {
+      setPickedKey(c.key)
+      setMethodType(null)
+    }
+  }
+
   const busy = connect.isPending || complete.isPending
+  const submitType = embedded ? 'button' : 'submit'
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Plug className="h-5 w-5 text-violet-500" aria-hidden="true" />
-            {title}
-          </SheetTitle>
-          <SheetDescription>
+    <div className={cn('space-y-5', embedded && 'rounded-lg border bg-muted/30 p-4')} data-testid="connect-flow">
+      {embedded && (
+        <div className="space-y-1">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Plug className="h-4 w-4 text-violet-500" aria-hidden="true" />
+            {connectTitle(connector, rotateConnection)}
+          </h3>
+          <p className="text-xs text-muted-foreground">
             {connector
               ? connector.description || `Connect ${connector.displayName} once and reuse it wherever almyty needs it.`
               : `Pick what to connect${kind ? ` for ${CONNECTOR_KIND_LABELS[kind].toLowerCase()}` : ''}. Secrets are encrypted at rest and never shown again.`}
-          </SheetDescription>
-        </SheetHeader>
+          </p>
+        </div>
+      )}
 
-        <div className="mt-4 space-y-5">
-          {connectorsQuery.isLoading && (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading connectors
-            </p>
+      {connectorsQuery.isLoading && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Loading connectors
+        </p>
+      )}
+      {connectorsQuery.isError && (
+        <p role="alert" className="text-sm text-destructive">{errorMessage(connectorsQuery.error, 'Connectors could not be loaded')}</p>
+      )}
+
+      {!connectorsQuery.isLoading && !connector && !targetKey && (
+        <ConnectorPicker connectors={connectors} search={search} onSearch={setSearch} onPick={pick} />
+      )}
+
+      {connector && (
+        <>
+          {!targetKey && (
+            <Button type="button" variant="ghost" size="sm" className="-ml-2 gap-1 text-muted-foreground" onClick={() => setPickedKey(null)}>
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> All connectors
+            </Button>
           )}
-          {connectorsQuery.isError && (
-            <p role="alert" className="text-sm text-destructive">{errorMessage(connectorsQuery.error, 'Connectors could not be loaded')}</p>
+
+          {connector.connect.length > 1 && (
+            <div className="space-y-1.5">
+              <Label>Method</Label>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Connect method">
+                {connector.connect.map((m) => (
+                  <button
+                    key={m.type}
+                    type="button"
+                    role="radio"
+                    aria-checked={method?.type === m.type}
+                    onClick={() => setMethodType(m.type)}
+                    className={cn(
+                      'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+                      method?.type === m.type ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {m.label || CONNECT_METHOD_LABELS[m.type]}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
-          {!connectorsQuery.isLoading && !connector && (
-            <ConnectorPicker connectors={connectors} search={search} onSearch={setSearch} onPick={(c) => { setPickedKey(c.key); setMethodType(null) }} />
+          {!rotateConnection && allowUserScoped && (
+            <div className="space-y-1.5">
+              <Label>Owner</Label>
+              <div className="flex gap-2" role="radiogroup" aria-label="Owner">
+                {(['org', 'user'] as ConnectionOwner[]).map((o) => (
+                  <button
+                    key={o}
+                    type="button"
+                    role="radio"
+                    aria-checked={owner === o}
+                    onClick={() => setOwner(o)}
+                    className={cn(
+                      'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                      owner === o ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {o === 'org' ? 'Whole organization' : 'Only me'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">{owner === 'org' ? 'Anyone you grant access can use it.' : 'A personal connection only you can use.'}</p>
+            </div>
           )}
 
-          {connector && (
-            <>
-              {!targetKey && (
-                <Button type="button" variant="ghost" size="sm" className="-ml-2 gap-1 text-muted-foreground" onClick={() => setPickedKey(null)}>
-                  <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> All connectors
-                </Button>
-              )}
+          {method?.description && (
+            <div className="whitespace-pre-wrap rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground" data-testid="connect-instructions">
+              {method.description}
+            </div>
+          )}
 
-              {connector.connect.length > 1 && (
-                <div className="space-y-1.5">
-                  <Label>Method</Label>
-                  <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Connect method">
-                    {connector.connect.map((m) => (
-                      <button
-                        key={m.type}
-                        type="button"
-                        role="radio"
-                        aria-checked={method?.type === m.type}
-                        onClick={() => setMethodType(m.type)}
-                        className={cn(
-                          'rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                          method?.type === m.type ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
-                        )}
-                      >
-                        {m.label || CONNECT_METHOD_LABELS[m.type]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+          <div className="flex flex-wrap gap-3">
+            {keyPageUrl && (
+              <a href={keyPageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                <ExternalLink className="h-3 w-3" aria-hidden="true" /> Get your {method?.type === 'service_account' ? 'service account' : 'key'}
+              </a>
+            )}
+            {method?.quickCreateUrl && (
+              <a href={method.quickCreateUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                <ExternalLink className="h-3 w-3" aria-hidden="true" /> Quick-create the role
+              </a>
+            )}
+            {connector.docsUrl && (
+              <a href={connector.docsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline">
+                <ExternalLink className="h-3 w-3" aria-hidden="true" /> Docs
+              </a>
+            )}
+          </div>
 
-              {!rotateConnection && allowUserScoped && (
-                <div className="space-y-1.5">
-                  <Label>Owner</Label>
-                  <div className="flex gap-2" role="radiogroup" aria-label="Owner">
-                    {(['org', 'user'] as ConnectionOwner[]).map((o) => (
-                      <button
-                        key={o}
-                        type="button"
-                        role="radio"
-                        aria-checked={owner === o}
-                        onClick={() => setOwner(o)}
-                        className={cn(
-                          'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
-                          owner === o ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
-                        )}
-                      >
-                        {o === 'org' ? 'Whole organization' : 'Only me'}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{owner === 'org' ? 'Anyone you grant access can use it.' : 'A personal connection only you can use.'}</p>
-                </div>
-              )}
-
-              {method?.description && (
-                <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground whitespace-pre-wrap" data-testid="connect-instructions">
-                  {method.description}
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-3">
-                {keyPageUrl && (
-                  <a href={keyPageUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                    <ExternalLink className="h-3 w-3" aria-hidden="true" /> Get your {method?.type === 'service_account' ? 'service account' : 'key'}
-                  </a>
-                )}
-                {method?.quickCreateUrl && (
-                  <a href={method.quickCreateUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                    <ExternalLink className="h-3 w-3" aria-hidden="true" /> Quick-create the role
-                  </a>
-                )}
-                {connector.docsUrl && (
-                  <a href={connector.docsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline">
-                    <ExternalLink className="h-3 w-3" aria-hidden="true" /> Docs
-                  </a>
+          {failure && (
+            <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm" data-testid="connect-failure">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+              <div className="space-y-1">
+                <p className="font-medium text-destructive">Validation failed</p>
+                <p className="text-muted-foreground">{failure.message}</p>
+                {failure.connection && (
+                  <p className="text-xs text-muted-foreground">The connection was kept as failed. Fix the value and try again, or find it under Settings and rotate it later.</p>
                 )}
               </div>
+            </div>
+          )}
 
-              {failure && (
-                <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm" data-testid="connect-failure">
-                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-                  <div className="space-y-1">
-                    <p className="font-medium text-destructive">Validation failed</p>
-                    <p className="text-muted-foreground">{failure.message}</p>
-                    {failure.connection && (
-                      <p className="text-xs text-muted-foreground">The connection was kept as failed. Fix the value and try again, or find it under Settings and rotate it later.</p>
-                    )}
+          {method && isFormMethod(method.type) && (
+            <FormBox embedded={embedded} onSubmit={submitForm} className="space-y-4" testId="connect-form">
+              <JsonSchemaForm schema={method.schema} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button type={submitType} onClick={embedded ? submitForm : undefined} disabled={busy}>
+                  {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : failure ? <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" /> : null}
+                  {failure ? 'Retry' : rotateConnection ? 'Rotate' : 'Connect'}
+                </Button>
+              </div>
+            </FormBox>
+          )}
+
+          {method && isRedirectMethod(method.type) && (
+            <div className="space-y-4">
+              {method.scopes && method.scopes.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Scopes requested</p>
+                  <div className="flex flex-wrap gap-1">
+                    {method.scopes.map((s) => (
+                      <span key={s} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{s}</span>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {method && isFormMethod(method.type) && (
-                <form onSubmit={submitForm} className="space-y-4" noValidate data-testid="connect-form">
-                  <JsonSchemaForm schema={method.schema} value={values} onChange={setValues} errors={fieldErrors} mode="create" disabled={busy} />
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
-                    <Button type="submit" disabled={busy}>
-                      {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : failure ? <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" /> : null}
-                      {failure ? 'Retry' : rotateConnection ? 'Rotate' : 'Connect'}
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {method && isRedirectMethod(method.type) && (
-                <div className="space-y-4">
-                  {method.scopes && method.scopes.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground">Scopes requested</p>
-                      <div className="flex flex-wrap gap-1">
-                        {method.scopes.map((s) => (
-                          <span key={s} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{s}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {oauth.phase === 'idle' && (
-                    <Button type="button" onClick={startOAuth} disabled={busy} className="w-full">
-                      {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <ExternalLink className="mr-2 h-4 w-4" aria-hidden="true" />}
-                      Continue with {connector.displayName}
-                    </Button>
-                  )}
-
-                  {oauth.phase === 'waiting' && (
-                    <div className="rounded-md border bg-muted/30 p-3 text-sm" data-testid="oauth-waiting">
-                      <p className="flex items-center gap-2 font-medium">
-                        <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" /> Waiting for {connector.displayName}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">Finish signing in on the tab that opened. This closes on its own once the account is linked.</p>
-                      <a href={oauth.authorizeUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                        <ExternalLink className="h-3 w-3" aria-hidden="true" /> Open the sign-in tab again
-                      </a>
-                    </div>
-                  )}
-
-                  {oauth.phase === 'timeout' && (
-                    <div role="alert" className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm dark:bg-amber-950/20">
-                      <p className="font-medium">Still waiting</p>
-                      <p className="mt-1 text-xs text-muted-foreground">No callback arrived. Start over or paste the code the provider showed.</p>
-                      <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setOauth({ phase: 'idle' })}>Start over</Button>
-                    </div>
-                  )}
-
-                  {oauth.phase !== 'idle' && !pasteMode && (
-                    <button type="button" className="text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setPasteMode(true)}>
-                      Paste the code instead
-                    </button>
-                  )}
-
-                  {oauth.phase !== 'idle' && pasteMode && (
-                    <form onSubmit={submitCode} className="space-y-2" data-testid="paste-code-form">
-                      <Label htmlFor="connect-oauth-code">Authorization code</Label>
-                      <div className="flex gap-2">
-                        <Input id="connect-oauth-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the code from the provider" autoComplete="off" className="font-mono" />
-                        <Button type="submit" disabled={busy || !code.trim()}>
-                          {complete.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
-                          <span className="ml-1">Finish</span>
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">For headless setups where the callback cannot reach this browser.</p>
-                    </form>
-                  )}
+              {oauth.phase === 'idle' && (
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>Cancel</Button>
+                  <Button type="button" onClick={startOAuth} disabled={busy}>
+                    {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <ExternalLink className="mr-2 h-4 w-4" aria-hidden="true" />}
+                    Continue with {connector.displayName}
+                  </Button>
                 </div>
               )}
 
-              {connector.connect.length === 0 && (
-                <p className="text-sm text-muted-foreground">This connector has no connect method configured.</p>
+              {oauth.phase === 'waiting' && (
+                <div className="rounded-md border bg-muted/30 p-3 text-sm" data-testid="oauth-waiting">
+                  <p className="flex items-center gap-2 font-medium">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden="true" /> Waiting for {connector.displayName}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Finish signing in on the tab that opened. This page moves on by itself once the account is linked.</p>
+                  <a href={oauth.authorizeUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                    <ExternalLink className="h-3 w-3" aria-hidden="true" /> Open the sign-in tab again
+                  </a>
+                </div>
               )}
-            </>
+
+              {oauth.phase === 'timeout' && (
+                <div role="alert" className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-sm dark:bg-amber-950/20">
+                  <p className="font-medium">Still waiting</p>
+                  <p className="mt-1 text-xs text-muted-foreground">No callback arrived. Start over or paste the code the provider showed.</p>
+                  <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setOauth({ phase: 'idle' })}>Start over</Button>
+                </div>
+              )}
+
+              {oauth.phase !== 'idle' && !pasteMode && (
+                <button type="button" className="text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setPasteMode(true)}>
+                  Paste the code instead
+                </button>
+              )}
+
+              {oauth.phase !== 'idle' && pasteMode && (
+                <FormBox embedded={embedded} onSubmit={submitCode} className="space-y-2" testId="paste-code-form">
+                  <Label htmlFor="connect-oauth-code">Authorization code</Label>
+                  <div className="flex gap-2">
+                    <Input id="connect-oauth-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the code from the provider" autoComplete="off" data-1p-ignore="true" data-lpignore="true" className="font-mono" />
+                    <Button type={submitType} onClick={embedded ? submitCode : undefined} disabled={busy || !code.trim()}>
+                      {complete.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+                      <span className="ml-1">Finish</span>
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">For headless setups where the callback cannot reach this browser.</p>
+                </FormBox>
+              )}
+            </div>
           )}
 
-          {!connectorsQuery.isLoading && !connector && !targetKey && connectors.length === 0 && !connectorsQuery.isError && (
-            <p className="text-sm text-muted-foreground">Nothing to connect{kind ? ` for ${CONNECTOR_KIND_LABELS[kind].toLowerCase()}` : ''} yet.</p>
+          {connector.connect.length === 0 && (
+            <p className="text-sm text-muted-foreground">This connector has no connect method configured.</p>
           )}
-          {!connectorsQuery.isLoading && targetKey && !connector && !connectorsQuery.isError && (
-            <p role="alert" className="text-sm text-destructive">Connector {targetKey} is not available.</p>
-          )}
+        </>
+      )}
+
+      {!connectorsQuery.isLoading && !connector && !targetKey && connectors.length === 0 && !connectorsQuery.isError && (
+        <p className="text-sm text-muted-foreground">Nothing to connect{kind ? ` for ${CONNECTOR_KIND_LABELS[kind].toLowerCase()}` : ''} yet.</p>
+      )}
+      {!connectorsQuery.isLoading && targetKey && !connector && !connectorsQuery.isError && (
+        <p role="alert" className="text-sm text-destructive">Connector {targetKey} is not available.</p>
+      )}
+
+      {(!connector || connector.connect.length === 0) && (
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
         </div>
-      </SheetContent>
-    </Sheet>
+      )}
+    </div>
   )
 }
 
@@ -504,19 +573,35 @@ export interface ConnectAccountButtonProps {
 }
 
 /**
- * A button that opens the connect sheet: what every consumer dialog embeds
- * next to its own credential field.
+ * "Connect an account" next to a consumer form's own credential field.
+ * The connect flow opens inline under the button, so the consumer's
+ * half-filled form stays where it is and the new connection is handed
+ * straight back through `onConnected`.
  */
 export function ConnectAccountButton({ kind, connectorKey, owner, onConnected, label = 'Connect an account', variant = 'outline', size = 'sm', className }: ConnectAccountButtonProps) {
   const [open, setOpen] = useState(false)
   return (
-    <>
-      <Button type="button" variant={variant} size={size} className={cn('gap-1.5', className)} onClick={() => setOpen(true)}>
-        <Plug className="h-3.5 w-3.5" aria-hidden="true" />
-        {label}
-      </Button>
+    <div className={cn('space-y-3', open && 'w-full basis-full')}>
+      {!open && (
+        <Button type="button" variant={variant} size={size} className={cn('gap-1.5', className)} onClick={() => setOpen(true)} aria-expanded={false}>
+          <Plug className="h-3.5 w-3.5" aria-hidden="true" />
+          {label}
+        </Button>
+      )}
       {/* Mounted only while open: consumers render outside a QueryClientProvider in some tests, and nothing is needed until then. */}
-      {open && <ConnectSheet open={open} onOpenChange={setOpen} kind={kind} connectorKey={connectorKey} owner={owner} onConnected={onConnected} />}
-    </>
+      {open && (
+        <ConnectFlow
+          embedded
+          kind={kind}
+          connectorKey={connectorKey}
+          owner={owner}
+          onCancel={() => setOpen(false)}
+          onConnected={(connection) => {
+            setOpen(false)
+            onConnected(connection)
+          }}
+        />
+      )}
+    </div>
   )
 }

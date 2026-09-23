@@ -53,6 +53,8 @@ const SESSION_RUNNER_CACHE_MAX = 10_000;
 interface EnvelopeSession {
   id: string;
   organizationId: string;
+  /** The user the session's bearer token proved. */
+  userId?: string;
 }
 @Injectable()
 export class CodingRelayService implements OnModuleDestroy {
@@ -130,21 +132,23 @@ export class CodingRelayService implements OnModuleDestroy {
     // Piggyback on runner.hello to learn the session -> runner mapping
     // without a DB round trip per event.
     //
-    // The claimed runner id is checked against the organization the
-    // session's bearer token proved, the same as in RunnerCallService.
+    // The claimed runner id is checked against the organization AND user
+    // the session's bearer token proved, the same as in RunnerCallService.
     // Caching the claim unverified let a session in one organization
-    // bind itself to another tenant's runner, and every coding.output
-    // it then posted was relayed onto that runner's SSE channel -- so
-    // the victim's chat window showed output the victim's machine
-    // never produced.
+    // bind itself to another tenant's runner (and, with only the org
+    // compared, another member's runner), and every coding.output it
+    // then posted was relayed onto that runner's SSE channel -- so the
+    // victim's chat window showed output the victim's machine never
+    // produced.
     if (payload.kind === 'runner.hello' && payload.runnerId && session) {
-      const owned = await this.runners.belongsToOrganization(
+      const owned = await this.runners.isOwnedBy(
         payload.runnerId,
         session.organizationId,
+        session.userId,
       );
       if (!owned) {
         this.logger.warn(
-          `runner.hello claiming runner ${payload.runnerId} refused: not in session's organization`,
+          `runner.hello claiming runner ${payload.runnerId} refused: not owned by the session's user`,
         );
         return;
       }

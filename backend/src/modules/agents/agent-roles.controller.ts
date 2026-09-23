@@ -9,6 +9,7 @@ import { Type } from 'class-transformer';
 
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateAgentByAgentIdGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AgentRole } from '../../entities/agent-role.entity';
 import { AgentRolesService } from './agent-roles.service';
@@ -38,7 +39,7 @@ class UpsertRoleBodyDto {
 @ApiTags('Agent roles')
 @ApiBearerAuth()
 @Controller('agents/:agentId/roles')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateAgentByAgentIdGuard)
 export class AgentRolesController {
   constructor(
     @InjectRepository(AgentRole) private readonly roles: Repository<AgentRole>,

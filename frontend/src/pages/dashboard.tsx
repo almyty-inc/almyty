@@ -9,17 +9,20 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
+import { EmptyState } from '@/components/ui/empty-state'
+import { PageHeader } from '@/components/layout/page-header'
 import { gatewaysApi, toolsApi, apisApi, agentsApi, analyticsApi, onboardingApi } from '@/lib/api'
-import { GettingStartedCard, useOnboarding, useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
-import { useProductTour } from '@/components/onboarding/product-tour'
+import { GuideCard } from '@/components/onboarding/guide-card'
+import { useOnboarding } from '@/components/onboarding/use-onboarding'
+import { nextStep, stepsDone } from '@/components/onboarding/guide-steps'
 import { captureEvent } from '@/lib/analytics'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { useAuthStore } from '@/store/auth'
 import { pluralize } from '@/lib/utils'
 import type { RequestLog } from '@/types'
 
@@ -48,40 +51,15 @@ export function DashboardPage() {
   const { error: notifyError } = useNotifications()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { user } = useAuthStore()
-
-  // Coach-mark product tour (see components/onboarding/product-tour.tsx).
-  const { startTour, maybeAutoStart } = useProductTour(user?.id)
-
-  // Server-computed onboarding checklist. Derived from real entity
-  // state, so CLI-driven completions check themselves off here too.
+  // Server-computed guide state. Derived from real entity state, so
+  // CLI-driven completions check themselves off here too.
   const { data: onboarding } = useOnboarding(orgId)
-
-  // Auto-start the coach-mark tour once, on the dashboard, for a user
-  // whose onboarding is incomplete and who has not yet seen or dismissed
-  // it. `maybeAutoStart` no-ops when the seen flag is set, when
-  // onboarding is complete, or after it has already fired this mount. The
-  // short delay lets the sidebar and getting-started card paint their
-  // `data-tour` anchors before the spotlight looks for them.
-  useEffect(() => {
-    if (!onboarding) return
-    const cardVisible = !onboarding.dismissed && !onboarding.activatedRealAt
-    if (!cardVisible) return
-    const s = onboarding.steps
-    const complete = s.provider && s.api && s.gateway && s.first_call
-    const t = window.setTimeout(() => maybeAutoStart(complete), 500)
-    return () => window.clearTimeout(t)
-  }, [onboarding, maybeAutoStart])
-
-  const seedSample = useSeedSampleWorkspace(orgId)
 
   const dismissOnboarding = useMutation({
     mutationFn: () => onboardingApi.setDismissed(orgId as string, true),
     onSuccess: (next) => {
       captureEvent('onboarding_dismissed', {
-        steps_done: next
-          ? Object.values(next.steps).filter(Boolean).length
-          : undefined,
+        steps_done: next ? stepsDone(next) : undefined,
       })
       queryClient.invalidateQueries({ queryKey: ['onboarding', orgId] })
     },
@@ -89,7 +67,7 @@ export function DashboardPage() {
     // no explanation, so the only reading was that Dismiss is broken.
     onError: (err: unknown) =>
       notifyError(
-        'Could not dismiss getting started',
+        'Could not hide the guide',
         getApiErrorMessage(err, 'The card is still here. Please try again.'),
       ),
   })
@@ -200,11 +178,14 @@ export function DashboardPage() {
 
   const recentLogs = recentLogsData?.data || []
 
-  // Onboarding: the card is shown while the org has not yet reached the
-  // "real" activation milestone and the user has not dismissed it. The
-  // completion of each step is computed server-side (see useOnboarding).
-  const showOnboarding =
-    !!onboarding && !onboarding.dismissed && !onboarding.activatedRealAt
+  // The guide card is a way into /guide: shown until every step is done,
+  // unless this user hid it. Each step's completion is computed
+  // server-side from what exists (see useOnboarding), and the guide stays
+  // reachable from the sidebar after the card is hidden.
+  const showGuide = !!onboarding && !onboarding.dismissed && nextStep(onboarding) !== null
+  // The built-in system gateway every org has does not count as something built.
+  const hasAnything =
+    apisTotal + toolsTotal + agents.length > 0 || gateways.some((g: { isSystem?: boolean }) => !g.isSystem)
 
   // Action items: APIs with no generated tools
   // Tools connect to APIs through operations, not directly via apiId
@@ -229,39 +210,29 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-gradient-to-r from-border to-transparent">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Overview of your APIs and tools
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Badge variant="outline" className="hidden sm:inline-flex">
-            {currentOrganization?.name || 'No Organization'}
-          </Badge>
-          <Button variant="outline" className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10" onClick={() => navigate('/analytics')}>
-            <Activity className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">View Analytics</span>
+      <PageHeader
+        title="Dashboard"
+        description={currentOrganization?.name ? `${currentOrganization.name}: your APIs, tools, gateways and agents at a glance` : 'Your APIs, tools, gateways and agents at a glance'}
+        actions={
+          <Button variant="outline" onClick={() => navigate('/analytics')}>
+            <Activity className="mr-2 h-4 w-4" />
+            View analytics
           </Button>
-        </div>
-      </div>
+        }
+      />
 
-      {showOnboarding ? (
-        <GettingStartedCard
-          state={onboarding}
-          onSeedSample={() => seedSample.mutate()}
-          seeding={seedSample.isPending}
-          onDismiss={() => dismissOnboarding.mutate()}
-          onStartTour={() => startTour({ manual: true })}
-        />
-      ) : (
+      {showGuide && (
+        <GuideCard state={onboarding} onDismiss={() => dismissOnboarding.mutate()} />
+      )}
+
+      {/* Four zeros tell a new org nothing; while the guide card is up
+          on an empty org it says what to do instead. */}
+      {(!showGuide || hasAnything) && (
         <>
           {/* Pipeline: APIs → Tools → Gateways → Agents */}
           <Card>
             <CardContent className="py-6">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-center">
+              <div className="grid grid-cols-2 gap-3 items-center sm:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
                 <button onClick={() => navigate('/apis')} className="flex-1 text-center p-4 rounded-lg border border-t-2 border-t-violet-500/20 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer">
                   <div className="text-2xl font-bold">{apisTotal}</div>
                   <div className="text-sm text-muted-foreground">{pluralize(apisTotal, 'API')}</div>
@@ -289,7 +260,7 @@ export function DashboardPage() {
           {(apisWithNoTools.length > 0 || gatewaysWithNoAuth.length > 0) && (
             <Card className="border-t-2 border-t-amber-500/20">
               <CardHeader>
-                <CardTitle className="text-lg">Needs Attention</CardTitle>
+                <CardTitle className="text-lg">Needs attention</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -327,7 +298,7 @@ export function DashboardPage() {
       {/* Recent Activity */}
       <Card className="border-t-2 border-t-cyan-400/20">
         <CardHeader>
-          <CardTitle className="text-lg">Recent Activity</CardTitle>
+          <CardTitle className="text-lg">Recent activity</CardTitle>
         </CardHeader>
         <CardContent>
           {recentLogs.length > 0 ? (
@@ -342,13 +313,19 @@ export function DashboardPage() {
                     {log.statusCode}
                   </Badge>
                   {log.protocol && (
-                    <Badge variant="outline" className="text-xs uppercase">{log.protocol}</Badge>
+                    <ProtocolBadge protocol={log.protocol} />
                   )}
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-muted-foreground text-center py-4">No recent activity</p>
+            <EmptyState
+              variant="inline"
+              icon={Activity}
+              title="No recent activity"
+              description="Calls to your gateways and agents show up here as they happen."
+              className="py-6"
+            />
           )}
         </CardContent>
       </Card>

@@ -240,7 +240,7 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
           </div>
           <Button size="sm" onClick={() => setDeployInterfaceOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Deploy Channel
+            Deploy channel
           </Button>
         </div>
       </div>
@@ -284,9 +284,8 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
           title="Couldn't load this agent's channels"
         />
       ) : view === 'canvas' ? null : gateways.length === 0 ? (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
+        <EmptyState
+          variant="panel"
               icon={Plug}
               title="No channels deployed yet"
               description="Deploy a channel to make this agent reachable over A2A, Slack, Discord, email and more."
@@ -297,8 +296,6 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
                 </Button>
               }
             />
-          </CardContent>
-        </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {gateways.map((gw) => {
@@ -400,7 +397,7 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
       <Dialog open={deployInterfaceOpen} onOpenChange={setDeployInterfaceOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Deploy Channel</DialogTitle>
+            <DialogTitle>Deploy channel</DialogTitle>
             <DialogDescription>
               Deploy this agent to a new channel via a gateway.
             </DialogDescription>
@@ -527,7 +524,7 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
       <Dialog open={!!setupGateway} onOpenChange={(open) => { if (!open) setSetupGateway(null) }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Channel Setup</DialogTitle>
+            <DialogTitle>Channel setup</DialogTitle>
             <DialogDescription>
               Finish connecting {setupGateway?.name || 'this channel'} on the platform's side.
             </DialogDescription>

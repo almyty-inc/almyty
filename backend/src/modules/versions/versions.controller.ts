@@ -51,6 +51,7 @@ export class VersionsController {
       const versions = await this.versionsService.getVersions(entityType, entityId, orgId, {
         limit: limit !== undefined ? parseInt(limit, 10) : undefined,
         offset: offset !== undefined ? parseInt(offset, 10) : undefined,
+        callerId: req.user?.sub || req.user?.id,
       });
       return { success: true, data: versions };
     } catch (error) {
@@ -67,7 +68,7 @@ export class VersionsController {
   async getVersion(@Param('versionId') versionId: string, @Request() req: any) {
     try {
       const orgId = this.requireOrg(req);
-      const version = await this.versionsService.getVersion(parseInt(versionId, 10), orgId);
+      const version = await this.versionsService.getVersion(parseInt(versionId, 10), orgId, req.user?.sub || req.user?.id);
       if (!version) {
         throw new HttpException({ success: false, message: 'Version not found' }, HttpStatus.NOT_FOUND);
       }

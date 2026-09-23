@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { Plus, Search, Brain } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Brain } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/layout/page-header'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
-import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,46 +33,27 @@ import { useOrganizationStore } from '@/store/organization'
 import { llmProvidersApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { TeamFilter, useTeamLookup, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { CreateProviderDialog } from '@/components/llm-providers/create-provider-dialog'
-import { EditProviderDialog } from '@/components/llm-providers/edit-provider-dialog'
-import { TestProviderDialog } from '@/components/llm-providers/test-provider-dialog'
-import {
-  buildProviderCreateBody,
-  buildProviderUpdateBody,
-  createProviderSchema,
-  type CreateProviderFormData,
-  type LlmProvider,
-} from '@/components/llm-providers/schema'
+import type { LlmProvider } from '@/components/llm-providers/schema'
 import { buildProviderColumns } from '@/components/llm-providers/columns'
 import { providerTypeOptions } from '@/components/llm-providers/provider-type-config'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
-interface LlmProvidersPageProps {
-  /** Rendered inside the Models page: no page title, the tab already names it. */
-  embedded?: boolean
-}
-
-export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {}) {
+/**
+ * Inference providers: the APIs models are called through, with their keys.
+ * Its own page, reached from the Models header. Adding one is its own page
+ * (/llm-providers/new); editing and testing one happen on its detail page.
+ */
+export function LlmProvidersPage() {
   useEffect(() => {
-    if (embedded) return
-    // The screen is called Models everywhere else (sidebar, /models);
-    // "AI Models" was a name nothing in the app actually uses.
-    document.title = 'Models | almyty'
+    document.title = 'Inference providers | almyty'
     return () => { document.title = 'almyty' }
-  }, [embedded])
+  }, [])
 
   const navigate = useNavigate()
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  // Honour ?new=1 from the command palette Add Provider action.
-  useCreateDeepLink(setIsCreateDialogOpen)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [providerToEdit, setProviderToEdit] = useState<LlmProvider | null>(null)
+  // ?new=1 (command palette, onboarding, bookmarks) lands on the add page.
+  useNewParamRedirect('/llm-providers/new')
   const [providerToDelete, setProviderToDelete] = useState<LlmProvider | null>(null)
-  const [testProvider, setTestProvider] = useState<LlmProvider | null>(null)
-  const [isTestDialogOpen, setIsTestDialogOpen] = useState(false)
-  const [testInput, setTestInput] = useState('Hello, can you help me test this connection?')
-  const [testResult, setTestResult] = useState<any>(null)
-  const [testLoading, setTestLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -81,72 +61,19 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
   const { currentOrganization } = useOrganizationStore()
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
-  // Dynamic model fetching state
-  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>([])
-  const [modelsLoading, setModelsLoading] = useState(false)
-
   const queryClient = useQueryClient()
   const notifications = useNotifications()
 
   const { data: providersRaw, isLoading, isError, error, refetch: refetchProviders } = useQuery({
-    queryKey: ['llm-providers'],
-    // No try/catch: swallowing the rejection and returning [] made
-    // isError permanently false, so a 500 or an expired session rendered
-    // the "No models configured -- connect a provider" empty state over
-    // providers that were still there, with no retry. The QueryError
-    // branch below was unreachable.
-    queryFn: async () => {
-      const d = await llmProvidersApi.getAll()
-      const result = d?.providers || (Array.isArray(d) ? d : [])
-      return Array.isArray(result) ? result : []
-    }
+    // No try/catch (fetchLlmProviders has none): swallowing the rejection
+    // and returning [] made isError permanently false, so a 500 or an
+    // expired session rendered the "No models configured" empty state over
+    // providers that were still there, with no retry.
+    ...llmProvidersQuery,
   })
   const providers = Array.isArray(providersRaw) ? providersRaw : []
 
   // Provider metrics now live on the detail page (/llm-providers/:id)
-
-  const testProviderMutation = useMutation({
-    mutationFn: async ({ providerId, input }: { providerId: string; input: string }) => {
-      setTestLoading(true)
-      const response = await llmProvidersApi.test(providerId)
-      return response
-    },
-    onSuccess: (responseData) => {
-      // API returns clean data directly
-      const result = responseData.data || responseData
-      if (!result?.isHealthy) {
-        const message = result?.error || 'Provider did not report healthy'
-        setTestResult({
-          error: message,
-          timestamp: new Date().toISOString()
-        })
-        setTestLoading(false)
-        notifications.error('Test Failed', message)
-        queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
-        return
-      }
-      setTestResult({
-        output: {
-          response: result.response || result.message || 'Connection successful',
-          usage: result.usage || { inputTokens: 0, outputTokens: 0 },
-          cost: result.cost || 0,
-          responseTime: result.responseTime || result.latency || 0
-        },
-        timestamp: new Date().toISOString()
-      })
-      setTestLoading(false)
-      notifications.success('Test Complete', 'Provider connection successful')
-      queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
-    },
-    onError: (error: any) => {
-      setTestResult({
-        error: getApiErrorMessage(error),
-        timestamp: new Date().toISOString()
-      })
-      setTestLoading(false)
-      notifications.error('Test Failed', getApiErrorMessage(error, 'Provider connection failed'))
-    }
-  })
 
   const deleteProviderMutation = useMutation({
     mutationFn: async (providerId: string) => {
@@ -182,75 +109,6 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
     }
   })
 
-  // Form hook for create provider
-  const createForm = useForm<CreateProviderFormData>({
-    resolver: zodResolver(createProviderSchema),
-    defaultValues: {
-      name: '',
-      type: '',
-      apiKey: '',
-      apiUrl: '',
-      organizationId: '',
-    }
-  })
-
-  // Form hook for edit provider. credentialId / usageCredentialId stay
-  // undefined (keep) unless the dialog's credential slot sets them: a
-  // connection id points the provider at it, null clears it.
-  const editForm = useForm<any>({
-    defaultValues: {
-      name: '',
-      model: '',
-      maxTokens: 4096,
-      temperature: 0.7,
-      apiKey: '',
-      usageApiKey: '',
-      apiUrl: '',
-      credentialId: undefined,
-      usageCredentialId: undefined,
-    }
-  })
-
-  const createProviderMutation = useMutation({
-    mutationFn: async (data: CreateProviderFormData) => {
-      try {
-        return await llmProvidersApi.create(buildProviderCreateBody(data))
-      } catch (error) {
-        console.error('Create provider error:', error)
-        throw error
-      }
-    },
-    onSuccess: (created: any) => {
-      queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
-      if (created?.id) {
-        queryClient.invalidateQueries({ queryKey: ['llm-provider', created.id] })
-      }
-      setIsCreateDialogOpen(false)
-      createForm.reset()
-      notifications.success('Provider added', 'AI model provider connected successfully')
-    },
-    onError: (error: any) => {
-      console.error('Create provider mutation error:', error)
-      notifications.error('Error', getApiErrorMessage(error, 'Failed to add provider'))
-    }
-  })
-
-  const updateProviderMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return llmProvidersApi.update(id, buildProviderUpdateBody(data))
-    },
-    onSuccess: (_result, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ['llm-providers'] })
-      queryClient.invalidateQueries({ queryKey: ['llm-provider', id] })
-      setIsEditDialogOpen(false)
-      setProviderToEdit(null)
-      notifications.success('Updated', 'Provider configuration updated successfully')
-    },
-    onError: (error: any) => {
-      notifications.error('Error', getApiErrorMessage(error, 'Failed to update provider'))
-    }
-  })
-
   const filteredProviders = filterByTeamVisibility(providers as any[], teamFilter).filter((provider: any) => {
     const matchesSearch = provider.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          (provider.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -260,81 +118,65 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
     return matchesSearch && matchesStatus && matchesType
   })
 
-  const handleTestProvider = () => {
-    if (!testProvider) return
-    testProviderMutation.mutate({ providerId: testProvider.id, input: testInput })
-  }
-
   const totalCost = providers.reduce((sum: number, provider: any) => sum + (provider.totalCost || 0), 0)
   const totalRequests = providers.reduce((sum: number, provider: any) => sum + (provider.totalRequests || 0), 0)
 
   const columns = buildProviderColumns({
     navigate,
     setProviderToDelete,
-    setTestProvider,
-    setIsTestDialogOpen,
-    setProviderToEdit,
-    editForm,
-    setIsEditDialogOpen,
-    setModelsLoading,
-    setAvailableModels,
     toggleProviderStatusMutation,
     teamLookup,
   })
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          {embedded ? (
-            <h2 className="text-lg font-semibold">Providers</h2>
-          ) : (
-            <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Models</h1>
-          )}
-          <p className="text-muted-foreground">
-            {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) · $${totalCost.toFixed(2)} total cost · ${pluralized(totalRequests, 'request')}`}
-          </p>
-        </div>
-        {/* Only show Add Provider button when not in empty state */}
-        {!(!isLoading && providers.length === 0) && (
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => setIsCreateDialogOpen(true)}
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Add Provider
-            </Button>
-          </div>
-        )}
+      <div className="space-y-2">
+        <Link to="/models" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          Models
+        </Link>
+        <PageHeader
+          title="Inference providers"
+          description={
+            <>
+              The APIs your models are called through, and the keys for them.{' '}
+              {isLoading ? <span className="inline-block w-48 h-4 bg-muted animate-pulse rounded align-middle" /> : `${pluralized(providers.length, 'provider')} (${providers.filter((p: any) => p.status === 'active').length} active) · $${totalCost.toFixed(2)} total cost · ${pluralized(totalRequests, 'request')}`}
+            </>
+          }
+          actions={
+            // Only shown outside the empty state, which has its own add button.
+            !isLoading && providers.length === 0 ? undefined : (
+              <Button onClick={() => navigate('/llm-providers/new')} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Add inference provider
+              </Button>
+            )
+          }
+        />
       </div>
 
       {/* Providers Table or Empty State */}
       {isError ? (
-        <QueryError error={error} onRetry={() => refetchProviders()} title="Couldn't load providers" />
+        <QueryError error={error} onRetry={() => refetchProviders()} title="Couldn't load inference providers" />
       ) : !isLoading && providers.length === 0 ? (
-        <Card>
-          <CardContent className="p-0">
             <EmptyState
               icon={Brain}
-              title="No models configured"
-              description="Connect a provider to power agents and tool generation. Keys stay encrypted at rest."
+              title="No inference providers yet"
+              description="An inference provider is an API that serves models, such as OpenAI, Anthropic or a server you run. Add one and its models appear on the Models page. Keys stay encrypted at rest."
               action={
-                <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+                <Button onClick={() => navigate('/llm-providers/new')} className="gap-2">
                   <Plus className="h-4 w-4" />
-                  Add provider
+                  Add inference provider
                 </Button>
               }
-              className="py-16"
+              variant="panel"
             />
-          </CardContent>
-        </Card>
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
             {/* Filters */}
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex-1 min-w-[12rem]">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -384,25 +226,6 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
         </Card>
       )}
 
-      {/* Create Provider Dialog */}
-      <CreateProviderDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        createForm={createForm}
-        createProviderMutation={createProviderMutation}
-      />
-
-      {/* Edit Provider Dialog */}
-      <EditProviderDialog
-        open={isEditDialogOpen}
-        onOpenChange={setIsEditDialogOpen}
-        editForm={editForm}
-        providerToEdit={providerToEdit}
-        updateProviderMutation={updateProviderMutation}
-        availableModels={availableModels}
-        modelsLoading={modelsLoading}
-      />
-
       {/* Delete Confirmation AlertDialog */}
       <AlertDialog open={!!providerToDelete} onOpenChange={() => setProviderToDelete(null)}>
         <AlertDialogContent>
@@ -422,25 +245,13 @@ export function LlmProvidersPage({ embedded = false }: LlmProvidersPageProps = {
                   setProviderToDelete(null)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              Delete
+              Delete provider
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Provider Test Dialog */}
-      <TestProviderDialog
-        open={isTestDialogOpen}
-        onOpenChange={setIsTestDialogOpen}
-        testProvider={testProvider}
-        testInput={testInput}
-        onTestInputChange={setTestInput}
-        onTest={handleTestProvider}
-        testLoading={testLoading}
-        testResult={testResult}
-      />
     </div>
   )
 }

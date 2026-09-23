@@ -27,9 +27,10 @@ export const capabilitiesSchema = z.object({
 
 export const privacyTierSchema = z.enum(MODEL_PRIVACY_TIERS as [string, ...string[]])
 
-export const registerEndpointSchema = z.object({
+/** A server you run: an OpenAI-compatible URL becomes a custom inference provider plus a model. */
+export const serverModelSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(255),
-  url: z.string().trim().url('Enter the base URL including https://'),
+  url: z.string().trim().url('Enter the base URL including http:// or https://').refine((v) => /^https?:\/\//i.test(v), 'Only http and https URLs'),
   apiKey: z.string().optional(),
   connectionId: z.string().optional(),
   vendorModelId: z.string().trim().min(1, 'Model id is required').max(255),
@@ -39,12 +40,12 @@ export const registerEndpointSchema = z.object({
   capabilities: capabilitiesSchema.optional(),
 })
 
-export type RegisterEndpointFormData = z.input<typeof registerEndpointSchema>
-export type RegisterEndpointFormOutput = z.output<typeof registerEndpointSchema>
+export type ServerModelFormData = z.input<typeof serverModelSchema>
+export type ServerModelFormOutput = z.output<typeof serverModelSchema>
 
 export const registerModelSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(255),
-  providerId: z.string().min(1, 'Pick a provider'),
+  providerId: z.string().min(1, 'Pick an inference provider'),
   vendorModelId: z.string().trim().min(1, 'Model id is required').max(255),
   privacyTier: privacyTierSchema,
   region: z.string().trim().max(64).optional(),

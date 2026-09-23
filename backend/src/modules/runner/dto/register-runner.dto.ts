@@ -16,6 +16,10 @@ import {
 } from 'class-validator';
 
 import { RunnerIsolationTier } from '../../../entities/runner.entity';
+import {
+  RESOURCE_VISIBILITIES,
+  ResourceVisibility,
+} from '../../../common/authorization/access-policy.service';
 
 export class DetectedCodingAgentDto {
   @IsString()
@@ -109,6 +113,9 @@ export class RunnerConfigDto {
   installBlocked!: boolean;
 }
 
+const RUNNER_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+const RUNNER_NAME_MESSAGE = 'name must match [a-zA-Z0-9_-]{1,64}';
+
 export class RegisterRunnerDto {
   // The accepted name is `[a-zA-Z0-9_-]{1,64}`: it is published as part
   // of a runner's capability tool names and shown in `/runners`, so it
@@ -118,13 +125,12 @@ export class RegisterRunnerDto {
   // error instead of a bare 400 from the service.
   @IsString()
   @MaxLength(64)
-  @Matches(/^[a-zA-Z0-9_-]{1,64}$/, {
-    message: 'name must match [a-zA-Z0-9_-]{1,64}',
-  })
+  @Matches(RUNNER_NAME_RE, { message: RUNNER_NAME_MESSAGE })
   name!: string;
 
+  @IsOptional()
   @IsObject()
-  labels!: Record<string, string>;
+  labels?: Record<string, string>;
 
   @ValidateNested()
   @Type(() => RunnerRuntimeInfoDto)
@@ -135,8 +141,49 @@ export class RegisterRunnerDto {
   config!: RunnerConfigDto;
 
   @IsOptional()
-  @IsEnum(['org', 'team'])
-  visibility?: 'org' | 'team';
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
+
+  @IsOptional()
+  @IsUUID()
+  teamId?: string | null;
+}
+
+/** POST /runners: the pending record the web setup page creates. */
+export class CreateRunnerDto {
+  @IsString()
+  @MaxLength(64)
+  @Matches(RUNNER_NAME_RE, { message: RUNNER_NAME_MESSAGE })
+  name!: string;
+
+  @IsOptional()
+  @IsObject()
+  labels?: Record<string, string>;
+
+  @IsOptional()
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
+
+  @IsOptional()
+  @IsUUID()
+  teamId?: string | null;
+}
+
+/** PATCH /runners/:id. The name only changes while the runner has never connected. */
+export class UpdateRunnerDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  @Matches(RUNNER_NAME_RE, { message: RUNNER_NAME_MESSAGE })
+  name?: string;
+
+  @IsOptional()
+  @IsObject()
+  labels?: Record<string, string>;
+
+  @IsOptional()
+  @IsEnum(RESOURCE_VISIBILITIES)
+  visibility?: ResourceVisibility;
 
   @IsOptional()
   @IsUUID()

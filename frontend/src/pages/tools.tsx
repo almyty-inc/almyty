@@ -1,21 +1,18 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { Code, Search, Play, Copy, Eye, Trash2, ExternalLink, Settings, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2 } from 'lucide-react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Code, Search, Plus, Wrench, Server, Plug, MoreHorizontal, CheckCircle2, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
-import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
-import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
-import { Switch } from '@/components/ui/switch'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
+import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
+import { pluralized } from '@/lib/utils'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
@@ -24,13 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,39 +40,25 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   DataTable,
-  createSelectColumn,
   createActionsColumn,
-  createSortableColumn,
 } from '@/components/ui/data-table'
-import { toolsApi, llmProvidersApi } from '@/lib/api'
+import { toolsApi } from '@/lib/api'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import { CreateToolDialog } from '@/components/tools/create-tool-dialog'
-import { AddMcpServerDialog } from '@/components/tools/add-mcp-server-dialog'
 import { McpSourcesPanel } from '@/components/tools/mcp-sources-panel'
-import { ToolExecutionDialog } from '@/components/tools/tool-execution-dialog'
-import { PublishToolDialog, isPublishable } from '@/components/tools/publish-tool-dialog'
+import { isPublishable } from '@/components/tools/publish-tool-form'
 import { ToolHubPage } from '@/pages/tool-hub'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { JsonSchemaBuilder } from '@/components/JsonSchemaBuilder'
-import CodeMirror from '@uiw/react-codemirror'
-import { javascript } from '@codemirror/lang-javascript'
-import { json } from '@codemirror/lang-json'
-import { autocompletion } from '@codemirror/autocomplete'
-import { githubLight } from '@uiw/codemirror-theme-github'
-import { useMemo } from 'react'
-
-// Form Schema for manual tool creation
-import { createToolSchema, type CreateToolForm } from '@/components/tools/schema'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { toolSourceApi, DELETED_API_LABEL } from '@/lib/tool-source'
 
 interface Tool {
   id: string
   name: string
   description?: string
   type: string
-  // Read all over this page (row subtitle, detail dialog) but never
+  // Read all over this page (the row subtitle) but never
   // declared, so every read went through an `any`. Publishing needs it
   // typed: only an HTTP tool can become a template.
   executionMethod?: string | null
@@ -132,7 +108,6 @@ export function ToolsPage() {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
   const navigate = useNavigate()
-  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -142,90 +117,9 @@ export function ToolsPage() {
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 10
-  const [selectedTool, setSelectedTool] = useState<Tool | null>(null)
   const [deletingTool, setDeletingTool] = useState<Tool | null>(null)
-  const [publishingTool, setPublishingTool] = useState<Tool | null>(null)
-  const [toolForExecution, setToolForExecution] = useState<Tool | null>(null)
-  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
-  const [isExecutionDialogOpen, setIsExecutionDialogOpen] = useState(false)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isAddMcpDialogOpen, setIsAddMcpDialogOpen] = useState(false)
-  // Honour ?new=1 from the command palette Create Tool action.
-  useCreateDeepLink(setIsCreateDialogOpen)
-  const [executionParameters, setExecutionParameters] = useState<Record<string, any>>({})
-  const [executionResult, setExecutionResult] = useState<any>(null)
-  const [toolParameters, setToolParameters] = useState<any>({ type: 'object', properties: {} })
-  const [toolCode, setToolCode] = useState('')
-  const [executionMethod, setExecutionMethod] = useState<'http' | 'graphql' | 'soap' | 'grpc' | 'custom' | 'llm' | 'sdk'>('http')
-  const [sdkConfig, setSdkConfig] = useState<any>(null)
-  const [llmConfig, setLlmConfig] = useState({
-    providerId: '',
-    promptTemplate: '',
-    systemPrompt: '',
-    model: '',
-    maxTokens: 1024,
-    temperature: 0.7,
-    outputMode: 'text' as 'text' | 'json',
-    outputSchema: '',
-  })
-
-  // Create parameter autocomplete extension for CodeMirror
-  const parameterAutocomplete = useMemo(() => {
-    const paramNames = Object.keys(toolParameters.properties || {});
-    return autocompletion({
-      override: [
-        (context) => {
-          const word = context.matchBefore(/\w*/);
-          if (!word || (word.from === word.to && !context.explicit)) return null;
-
-          return {
-            from: word.from,
-            options: paramNames.map((name) => ({
-              label: name,
-              type: 'variable',
-              detail: toolParameters.properties[name]?.type || 'parameter',
-              info: toolParameters.properties[name]?.description || '',
-            })),
-          };
-        },
-      ],
-    });
-  }, [toolParameters])
-  const [httpConfig, setHttpConfig] = useState({
-    method: 'GET',
-    url: '',
-    headers: {},
-    body: '',
-  })
-  const [graphqlConfig, setGraphqlConfig] = useState({
-    endpoint: '',
-    query: '',
-    variables: '',
-  })
-  const [soapConfig, setSoapConfig] = useState({
-    wsdlUrl: '',
-    operation: '',
-  })
-  const [grpcConfig, setGrpcConfig] = useState({
-    serviceUrl: '',
-    method: '',
-    protoFile: '',
-  })
-  const [authConfig, setAuthConfig] = useState({
-    type: 'none',
-    apiKey: '',
-    bearerToken: '',
-    username: '',
-    password: '',
-  })
-
-  const createForm = useForm<CreateToolForm>({
-    resolver: zodResolver(createToolSchema),
-    defaultValues: {
-      name: '',
-      description: '',
-    },
-  })
+  // Old ?new=1 links (bookmarks, docs) land on the create page.
+  useNewParamRedirect('/tools/new')
 
   const { data: toolsData, isLoading, isError, error: toolsError, refetch: refetchTools } = useQuery({
     queryKey: ['tools', currentOrganization?.id, page],
@@ -233,15 +127,6 @@ export function ToolsPage() {
     enabled: !!currentOrganization,
     placeholderData: (prev) => prev, // keep previous data while loading next page
   })
-
-  const { data: providersData } = useQuery({
-    queryKey: ['llm-providers'],
-    queryFn: () => llmProvidersApi.getAll(),
-    enabled: !!currentOrganization,
-  })
-  const llmProvidersExtracted = providersData?.providers || providersData || []
-  const llmProviders = Array.isArray(llmProvidersExtracted) ? llmProvidersExtracted : []
-  const activeProviders = llmProviders.filter((p: any) => p.status === 'active' || p.isActive)
 
   const deleteToolMutation = useMutation({
     mutationFn: (id: string) => toolsApi.delete(id),
@@ -311,175 +196,6 @@ export function ToolsPage() {
     },
   })
 
-  // Fetch available APIs for linking HTTP tools
-  const { data: apisData } = useQuery({
-    queryKey: ['apis', currentOrganization?.id],
-    queryFn: () => import('@/lib/api').then(m => m.apisApi.getAll()),
-    enabled: !!currentOrganization,
-  })
-  const apisExtracted = apisData?.apis || apisData || []
-  const availableApis = Array.isArray(apisExtracted) ? apisExtracted : []
-
-  const createToolMutation = useMutation({
-    mutationFn: (data: any) => {
-      let code = undefined;
-
-      if (executionMethod === 'custom') {
-        // Custom JavaScript: user writes their own code, no auto-generation
-        code = toolCode;
-      } else if (executionMethod === 'graphql') {
-        code = `
-// axios is available as a global — no require needed
-// Parameters available as variables
-const response = await axios.post('${graphqlConfig.endpoint}', {
-  query: \`${graphqlConfig.query}\`,
-  variables: parameters
-});
-return response;
-`;
-      } else if (executionMethod === 'soap') {
-        code = `
-// soap is available as a global — no require needed
-const client = await soap.createClientAsync('${soapConfig.wsdlUrl}');
-// Parameters available as variables
-const result = await client.${soapConfig.operation}Async(parameters);
-return result;
-`;
-      } else if (executionMethod === 'grpc') {
-        code = `
-const grpc = require('@grpc/grpc-js');
-const protoLoader = require('@grpc/proto-loader');
-
-// Load proto definition
-const packageDefinition = protoLoader.loadSync('${grpcConfig.protoFile}', {});
-const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
-
-// Create client
-const client = new protoDescriptor.${grpcConfig.method.split('/')[0]}('${grpcConfig.serviceUrl}', grpc.credentials.createInsecure());
-
-// Call method
-return new Promise((resolve, reject) => {
-  client.${grpcConfig.method.split('/')[1]}(parameters, (error, response) => {
-    if (error) reject(error);
-    else resolve(response);
-  });
-});
-`;
-      }
-      // HTTP: no code generation — uses httpConfig instead
-
-      // Auto-assign tool type based on execution method
-      let type = 'function';
-      if (executionMethod === 'http') {
-        type = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpConfig.method) ? 'action' : 'query';
-      } else if (executionMethod === 'graphql') {
-        type = graphqlConfig.query.trim().startsWith('mutation') ? 'mutation' : 'query';
-      } else if (executionMethod === 'sdk') {
-        type = 'function';
-      }
-
-      // Build LLM config if LLM execution method
-      let llmConfigPayload = undefined;
-      if (executionMethod === 'llm') {
-        llmConfigPayload = {
-          providerId: llmConfig.providerId,
-          promptTemplate: llmConfig.promptTemplate,
-          systemPrompt: llmConfig.systemPrompt || undefined,
-          model: llmConfig.model || undefined,
-          maxTokens: llmConfig.maxTokens,
-          temperature: llmConfig.temperature,
-          outputMode: llmConfig.outputMode,
-          outputSchema: llmConfig.outputMode === 'json' && llmConfig.outputSchema
-            ? JSON.parse(llmConfig.outputSchema)
-            : undefined,
-        };
-      }
-
-      // Build httpConfig payload for HTTP tools (structured, no code)
-      let httpConfigPayload = undefined;
-      if (executionMethod === 'http') {
-        httpConfigPayload = {
-          method: httpConfig.method,
-          path: httpConfig.url,
-          bodyEncoding: ['POST', 'PUT', 'PATCH'].includes(httpConfig.method) ? undefined : undefined,
-          bodyTemplate: httpConfig.body || undefined,
-          headers: httpConfig.headers && Object.keys(httpConfig.headers).length > 0 ? httpConfig.headers : undefined,
-        };
-      }
-
-      // The Authentication block was collected, rendered, and never
-      // sent, so every hand-built HTTP tool executed unauthenticated --
-      // and there is no tool edit UI, so it could not be added later
-      // either. The backend stores it nested (`{ type, config }`), while
-      // the form holds it flat, hence the reshape.
-      const inlineAuth =
-        authConfig.type === 'bearer' && authConfig.bearerToken
-          ? { type: 'bearer', config: { token: authConfig.bearerToken } }
-          : authConfig.type === 'apiKey' && authConfig.apiKey
-            ? { type: 'apiKey', config: { key: authConfig.apiKey, headerName: 'X-API-Key' } }
-            : authConfig.type === 'basic' && authConfig.username
-              ? { type: 'basic', config: { username: authConfig.username, password: authConfig.password } }
-              : null;
-
-      const payload: any = {
-        ...data,
-        type,
-        parameters: toolParameters,
-        executionMethod,
-        llmConfig: llmConfigPayload,
-        ...(inlineAuth ? { authConfig: inlineAuth } : {}),
-      };
-
-      // HTTP tools: send httpConfig, no code
-      if (executionMethod === 'http') {
-        payload.httpConfig = httpConfigPayload;
-      } else if (executionMethod === 'sdk') {
-        // SDK tools: send sdkConfig, no code
-        payload.sdkConfig = sdkConfig;
-      } else {
-        // All other methods that generate code
-        payload.code = code;
-      }
-
-      return toolsApi.create(payload, currentOrganization?.id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tools'] })
-      notifications.success('Tool created', 'It is ready to assign to a gateway.')
-      setIsCreateDialogOpen(false)
-      createForm.reset()
-      setToolParameters({ type: 'object', properties: {} })
-      setToolCode('')
-      setHttpConfig({ method: 'GET', url: '', headers: {}, body: '' })
-      setSdkConfig(null)
-      setExecutionMethod('http')
-    },
-    onError: (error: any) => {
-      const msg = getApiErrorMessage(error, 'Failed to create tool')
-      notifications.error('Error', msg)
-    },
-  })
-
-  const executeToolMutation = useMutation({
-    mutationFn: ({ id, parameters }: { id: string; parameters: Record<string, any> }) =>
-      toolsApi.execute(id, { parameters }, currentOrganization?.id || ''),
-    onSuccess: (response: any) => {
-      setExecutionResult(response)
-      if (response.success) {
-        notifications.success('Tool executed', 'The run finished successfully.')
-      } else {
-        notifications.error('Execution Failed', response.error || 'Tool execution failed')
-      }
-    },
-    onError: (error: any) => {
-      notifications.error('Error', error.message || 'Failed to execute tool')
-      setExecutionResult({
-        success: false,
-        error: error.message || 'Failed to execute tool',
-      })
-    },
-  })
-
   const toolsExtracted = toolsData?.tools || toolsData || []
   const tools = Array.isArray(toolsExtracted) ? toolsExtracted : []
   const toolsTotal = toolsData?.total ?? tools.length
@@ -492,12 +208,12 @@ return new Promise((resolve, reject) => {
       !searchQuery ||
       tool.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (tool.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (tool.metadata?.sourceApi?.name || '').toLowerCase().includes(searchQuery.toLowerCase())
+      (toolSourceApi(tool).name || '').toLowerCase().includes(searchQuery.toLowerCase())
 
     const matchesStatus = statusFilter === 'all' || tool.status === statusFilter
     const matchesType = typeFilter === 'all' || tool.type === typeFilter
     const matchesApi =
-      apiFilter === 'all' || tool.metadata?.sourceApi?.name === apiFilter
+      apiFilter === 'all' || toolSourceApi(tool).name === apiFilter
 
     return matchesSearch && matchesStatus && matchesType && matchesApi
   })
@@ -506,16 +222,10 @@ return new Promise((resolve, reject) => {
   const apiSources = Array.from(
     new Set(
       tools
-        .map((t: Tool) => t.metadata?.sourceApi?.name)
+        .map((t: Tool) => toolSourceApi(t).name)
         .filter(Boolean)
     )
   ) as string[]
-
-  const handleCopyEndpoint = (tool: Tool) => {
-    const endpoint = tool.metadata?.sourceOperation?.endpoint || tool.operation?.path || '/unknown'
-    navigator.clipboard.writeText(endpoint)
-    notifications.success('Copied', 'Endpoint copied to clipboard')
-  }
 
   const handleViewDetails = (tool: Tool) => {
     navigate(`/tools/${tool.id}`)
@@ -594,9 +304,7 @@ return new Promise((resolve, reject) => {
                   </Badge>
                 )}
                 {isMcpTool && (
-                  <Badge variant="outline" className="text-violet-600 border-violet-300 dark:border-violet-800 dark:text-violet-400 shrink-0">
-                    MCP
-                  </Badge>
+                  <ProtocolBadge protocol="mcp" className="shrink-0" />
                 )}
                 <VisibilityBadge
                   visibility={(tool as any).visibility}
@@ -605,7 +313,7 @@ return new Promise((resolve, reject) => {
                 />
               </div>
               <div className="text-sm text-muted-foreground truncate">
-                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : tool.metadata?.sourceApi?.name || (tool.type === 'api' ? 'Unknown API' : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
+                {isRunnerTool ? `runner method: ${tool.runnerConfig?.method}` : isMcpTool ? `MCP server: ${tool.metadata?.mcpSource?.name ?? "external"}` : toolSourceApi(tool).name || (tool.type === 'api' ? DELETED_API_LABEL : tool.executionMethod === 'custom' ? 'Custom JavaScript' : tool.executionMethod === 'llm' ? 'Model Tool' : tool.executionMethod === 'graphql' ? 'GraphQL Tool' : tool.executionMethod === 'http' ? 'HTTP Tool' : tool.executionMethod === 'sdk' ? 'SDK Tool' : 'Custom Tool')}
               </div>
             </div>
           </div>
@@ -641,18 +349,16 @@ return new Promise((resolve, reject) => {
                   handleViewDetails(tool)
                 }}
               >
-                View Details
+                View details
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
                   e.stopPropagation()
-                  setToolForExecution(tool)
-                  setExecutionParameters({})
-                  setExecutionResult(null)
-                  setIsExecutionDialogOpen(true)
+                  // The tool's page has the test form (its "Test tool" tab).
+                  navigate(`/tools/${tool.id}?tab=test`)
                 }}
               >
-                Test Tool
+                Test tool
               </DropdownMenuItem>
               {/*
                 Activate, here, on the row.
@@ -688,10 +394,10 @@ return new Promise((resolve, reject) => {
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation()
-                    setPublishingTool(tool)
+                    navigate(`/tools/${tool.id}/publish`)
                   }}
                 >
-                  Publish to Hub
+                  Publish to hub
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
@@ -712,48 +418,43 @@ return new Promise((resolve, reject) => {
 
   if (!currentOrganization) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <p className="text-muted-foreground">No organization context</p>
-        </div>
-      </div>
+      <EmptyState
+        variant="panel"
+        icon={Building2}
+        title="No organization selected"
+        description="Select or create an organization to see its tools."
+      />
     )
   }
-
-  if (isError) {
-    return <QueryError error={toolsError} onRetry={() => refetchTools()} title="Couldn't load tools" />
-  }
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Tools</h1>
-          <p className="text-muted-foreground">
-            {toolsTotal} tool{toolsTotal !== 1 ? 's' : ''} total
-          </p>
-        </div>
-        {activeTab === 'my-tools' && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setIsAddMcpDialogOpen(true)}
-              disabled={!currentOrganization}
-            >
-              <Plug className="mr-2 h-4 w-4" />
-              Add MCP Server
-            </Button>
-            <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!currentOrganization}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Tool
-            </Button>
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title="Tools"
+        description={pluralized(toolsTotal, 'tool')}
+        actions={
+          activeTab === 'my-tools' ? (
+            <>
+              <Button variant="outline" asChild>
+                <Link to="/tools/mcp-servers/new">
+                  <Plug className="mr-2 h-4 w-4" />
+                  Add MCP server
+                </Link>
+              </Button>
+              <Button asChild>
+                <Link to="/tools/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create tool
+                </Link>
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
+      <PageIntro topic="tools" />
 
       <Tabs value={activeTab} onValueChange={(v) => setSearchParams(v === 'hub' ? { tab: 'hub' } : {})}>
         <TabsList>
-          <TabsTrigger value="my-tools">My Tools</TabsTrigger>
+          <TabsTrigger value="my-tools">My tools</TabsTrigger>
           <TabsTrigger value="hub">Tool Hub</TabsTrigger>
         </TabsList>
         <TabsContent value="hub">
@@ -765,42 +466,31 @@ return new Promise((resolve, reject) => {
       <McpSourcesPanel organizationId={currentOrganization?.id} />
 
       {/* Tools Table */}
-      {tools.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Code className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No tools</h3>
-            <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Generate tools from API schemas automatically. Create your first tool by importing an API.
-            </p>
-            {/*
-              The sample offer belongs here, on the branch that actually
-              renders. It was only on the DataTable's emptyState, which
-              this `tools.length === 0` branch pre-empts -- so on the one
-              page where a new user has no tools at all, the button was
-              unreachable.
-            */}
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <Button size="lg" asChild>
-                <a href="/apis">
+      {isError ? (
+        <QueryError error={toolsError} onRetry={() => refetchTools()} title="Couldn't load tools" />
+      ) : !isLoading && tools.length === 0 ? (
+        // The sample offer belongs here, on the branch that actually
+        // renders: a DataTable emptyState under this branch is never
+        // reached, which once left a new user with no way to the sample.
+        <EmptyState
+          variant="panel"
+          icon={Wrench}
+          title="No tools yet"
+          description="Tools are generated from your APIs. Import an API and its operations appear here."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button asChild>
+                <Link to="/apis/new">
                   <Plus className="mr-2 h-4 w-4" />
-                  Go to APIs
-                </a>
+                  Import API
+                </Link>
               </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                onClick={() => seedSample.mutate()}
-                disabled={seedSample.isPending || !currentOrganization}
-              >
-                {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
+              <Button variant="outline" asChild>
+                <Link to="/tools/new">Create tool</Link>
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : (
         <Card>
           <CardContent className="pt-6 space-y-4">
@@ -852,32 +542,6 @@ return new Promise((resolve, reject) => {
               loading={isLoading}
               onRowClick={(tool) => handleViewDetails(tool)}
               hideSelectionCount
-              emptyState={
-                tools.length === 0 ? (
-                  <EmptyState
-                    icon={Wrench}
-                    title="No tools yet"
-                    description="Tools are generated from your APIs. Import an API and its operations appear here."
-                    action={
-                      <Button onClick={() => navigate('/apis?new=1')}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Import API
-                      </Button>
-                    }
-                    secondaryAction={
-                      <Button
-                        variant="outline"
-                        className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                        onClick={() => seedSample.mutate()}
-                        disabled={seedSample.isPending || !currentOrganization}
-                      >
-                        {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
-                      </Button>
-                    }
-                    className="py-16"
-                  />
-                ) : undefined
-              }
               manualPagination
               pageCount={totalPages}
               pageIndex={page - 1}
@@ -947,179 +611,6 @@ return new Promise((resolve, reject) => {
       </TabsContent>
       </Tabs>
 
-      {/* Tool Details Dialog */}
-      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-3">
-              <Code className="h-5 w-5" />
-              {selectedTool?.name}
-            </DialogTitle>
-            <DialogDescription>
-              {selectedTool?.description || 'AI tool generated from API operation'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedTool && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Source API</h4>
-                  <div className="text-sm space-y-1">
-                    <div>
-                      <span className="text-muted-foreground">API: </span>
-                      {selectedTool.metadata?.sourceApi?.name || 'Unknown'}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Type: </span>
-                      {selectedTool.metadata?.sourceApi?.type || 'Unknown'}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Operation: </span>
-                      {selectedTool.metadata?.sourceOperation?.name || 'Unknown'}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Method: </span>
-                      <Badge className="font-mono">
-                        {selectedTool.metadata?.sourceOperation?.method ||
-                          selectedTool.operation?.method ||
-                          'GET'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Endpoint: </span>
-                      <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                        {selectedTool.metadata?.sourceOperation?.endpoint ||
-                          selectedTool.operation?.path ||
-                          'Unknown'}
-                      </code>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Configuration</h4>
-                  <div className="text-sm space-y-1">
-                    <div>
-                      <span className="text-muted-foreground">Status: </span>
-                      <Badge
-                        variant={
-                          selectedTool.status === 'active' ? 'success' : 'secondary'
-                        }
-                      >
-                        {selectedTool.status}
-                      </Badge>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Timeout: </span>
-                      {selectedTool.configuration?.timeout || 30000}ms
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Retries: </span>
-                      {selectedTool.configuration?.retries || 3}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Cache: </span>
-                      {selectedTool.configuration?.cache?.enabled
-                        ? 'Enabled'
-                        : 'Disabled'}
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Auto-generated: </span>
-                      {selectedTool.metadata?.autoGenerated ? 'Yes' : 'No'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-medium mb-2">Assigned Gateways</h4>
-                <div className="flex gap-2 flex-wrap">
-                  {(selectedTool as any)?.gatewayAssociations?.length > 0 ? (
-                    (selectedTool as any).gatewayAssociations.map((assoc: any) => (
-                      <Badge key={assoc.id} variant="secondary">
-                        {assoc.gateway?.name || 'Unknown'} ({assoc.gateway?.type?.toUpperCase() || 'N/A'})
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Not assigned to any gateway. Go to <a href="/gateways" className="underline">Gateways page</a> to assign this tool.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-4 border-t">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleCopyEndpoint(selectedTool)}
-                >
-                  <Copy className="h-3 w-3 mr-1" />
-                  Copy Endpoint
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    // Execute tool with empty parameters for quick test
-                    if (selectedTool) {
-                      executeToolMutation.mutate({
-                        id: selectedTool.id,
-                        parameters: {}
-                      })
-                    }
-                  }}
-                  disabled={executeToolMutation.isPending}
-                >
-                  <Play className="h-3 w-3 mr-1" />
-                  {executeToolMutation.isPending ? 'Testing...' : 'Test Tool'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    // Close details dialog and open execution dialog to show parameters
-                    setIsDetailsDialogOpen(false)
-                    setToolForExecution(selectedTool)
-                    setIsExecutionDialogOpen(true)
-                  }}
-                >
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  View Parameters
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Tool Settings Dialog */}
-      {/* The Tool Settings dialog lived here. It could never open --
-          nothing ever called setIsSettingsDialogOpen(true) -- and if it
-          had, every field was uncontrolled and "Save Settings" only
-          raised a success toast: no mutation, no request. A dialog that
-          reports success without saving is worse than a missing one,
-          because the person believes the setting took. Timeout, retries,
-          rate limit, cache and per-tool auth genuinely have no UI; that
-          is now visibly true rather than faked. */}
-
-      {/* Tool Execution Dialog */}
-      <ToolExecutionDialog
-        open={isExecutionDialogOpen}
-        onOpenChange={setIsExecutionDialogOpen}
-        toolForExecution={toolForExecution}
-        executionParameters={executionParameters}
-        onExecutionParametersChange={setExecutionParameters}
-        executionResult={executionResult}
-        executeToolMutation={executeToolMutation}
-      />
-
-      <PublishToolDialog
-        tool={publishingTool}
-        onOpenChange={(open) => !open && setPublishingTool(null)}
-      />
-
       {/* Delete Confirmation Dialog */}
       <AlertDialog
         open={!!deletingTool}
@@ -1141,7 +632,7 @@ return new Promise((resolve, reject) => {
                   deleteToolMutation.mutate(deletingTool.id)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               Delete
             </AlertDialogAction>
@@ -1149,53 +640,6 @@ return new Promise((resolve, reject) => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Create Tool Dialog */}
-      <CreateToolDialog
-        open={isCreateDialogOpen}
-        onOpenChange={(open) => {
-          setIsCreateDialogOpen(open)
-          if (!open) {
-            createForm.reset()
-            createToolMutation.reset()
-            setToolParameters({ type: 'object', properties: {} })
-            setToolCode('')
-            setHttpConfig({ method: 'GET', url: '', headers: {}, body: '' })
-            setSdkConfig(null)
-            setExecutionMethod('http')
-          }
-        }}
-        createForm={createForm}
-        createToolMutation={createToolMutation}
-        executionMethod={executionMethod}
-        onExecutionMethodChange={(v) => setExecutionMethod(v as 'http' | 'graphql' | 'soap' | 'grpc' | 'custom' | 'llm' | 'sdk')}
-        toolParameters={toolParameters}
-        onToolParametersChange={setToolParameters}
-        toolCode={toolCode}
-        onToolCodeChange={setToolCode}
-        httpConfig={httpConfig}
-        onHttpConfigChange={setHttpConfig}
-        graphqlConfig={graphqlConfig}
-        onGraphqlConfigChange={setGraphqlConfig}
-        soapConfig={soapConfig}
-        onSoapConfigChange={setSoapConfig}
-        grpcConfig={grpcConfig}
-        onGrpcConfigChange={setGrpcConfig}
-        authConfig={authConfig}
-        onAuthConfigChange={setAuthConfig}
-        llmConfig={llmConfig}
-        onLlmConfigChange={setLlmConfig}
-        activeProviders={activeProviders}
-        availableApis={availableApis}
-        sdkConfig={sdkConfig}
-        onSdkConfigChange={setSdkConfig}
-      />
-
-      {/* Add MCP Server Dialog */}
-      <AddMcpServerDialog
-        open={isAddMcpDialogOpen}
-        onOpenChange={setIsAddMcpDialogOpen}
-        organizationId={currentOrganization?.id}
-      />
     </div>
   )
 }

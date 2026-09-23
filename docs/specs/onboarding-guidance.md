@@ -1,7 +1,39 @@
 # Spec: In-app onboarding guidance ("golden path")
 
-Owner: holy-fox (implementation) · green-lynx (spec, copy, analytics verification) · Status: proposed
+Owner: holy-fox (implementation) · green-lynx (spec, copy, analytics verification) · Status: superseded in part, see "What ships now"
 
+## What ships now: the platform guide
+
+The three-step "Getting started" card and the driver.js coach-mark tour are gone. The card's
+text did not match where its rows went (step 3 read "Use it from Claude Code" and opened agent
+creation), and three generic lines did not describe the platform. In their place:
+
+- **`/guide`**, a page organised by the jobs people come to do. Source of truth:
+  `frontend/src/components/onboarding/guide-steps.ts`.
+  - *Give an AI your API*: `api` (import) → `tools` → `gateway` (a gateway with a tool) →
+    `external_client` (a call from outside almyty; the step shows the real `claude mcp add` /
+    skills command for the org's own gateway and links to its Integrations tab).
+  - *Build an agent*: `provider` (active + last health check not failed) → `agent`
+    (non-temporary agent) → `agent_run` (an agent with `successfulExecutions > 0`, which both
+    engines bump). Verification, collaboration and chat are "when you want more" links.
+  - *Put it where people are*: `app` → `distribution` (one `live` or `built`).
+  - *Run it on your machines*: `runner` (this user's runner has sent a heartbeat).
+  - Credentials, Models, Memory, Approvals and Analytics as plain links.
+- **Every step is derived** by `OnboardingService` from counts or single-row lookups on indexed
+  org columns. `links` returns the org's oldest gateway (MCP first), agent and app so a step can
+  land on the object it is about.
+- **Every step prints where its button goes** ("Opens Gateways › Weather › Integrations").
+  `guide-steps.test.ts` fails when a link is not a route in `App.tsx` or the printed page is not
+  the page the route opens, and when any `data-tour` anchor or driver.js import comes back.
+- **Dashboard card**: next step, progress per job, link to the guide. Shown until every step is
+  done unless the user hid it (per user, `preferences.onboardingDismissed`). The guide stays in
+  the sidebar footer and the command palette after that.
+- **Page intros**: one dismissible line under the header on APIs, Tools, Gateways, Agents, Apps,
+  Runners, Credentials, Models and Memory. Closing is per user
+  (`preferences.onboardingDismissedIntros`, `PATCH .../onboarding { dismissIntro }`); the guide
+  page can bring them back (`{ resetIntros: true }`).
+
+The sections below are the original proposal, kept for its reasoning.
 ## Goal
 
 Get a new org from signup to a working agent call with the product itself doing the guiding.

@@ -91,7 +91,7 @@ export function GatewayEventsTab({ gatewayId }: GatewayEventsTabProps) {
     <Card>
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div>
-          <CardTitle>Channel Events</CardTitle>
+          <CardTitle>Channel events</CardTitle>
           <CardDescription>
             Recent inbound webhooks and outbound responses for this gateway. Auto-refreshes every 15s.
           </CardDescription>

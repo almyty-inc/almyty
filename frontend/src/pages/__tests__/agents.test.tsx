@@ -120,12 +120,19 @@ describe('AgentsPage', () => {
       renderAgentsPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Create your first agent')).toBeInTheDocument()
+        expect(screen.getByText('No agents yet')).toBeInTheDocument()
       })
 
-      // Should have a create button in the empty state
-      const createButtons = screen.getAllByText('Create Agent')
-      expect(createButtons.length).toBeGreaterThan(0)
+      // The page-level empty state draws its own card surface.
+      const empty = screen.getByText('No agents yet').closest('[role="status"]')!
+      expect(empty).toHaveAttribute('data-variant', 'panel')
+
+      // The header and the empty state offer the same action under the
+      // same label: sentence case in both, never "Create Agent" above
+      // "Create agent".
+      const createButtons = screen.getAllByRole('button', { name: 'Create agent' })
+      expect(createButtons).toHaveLength(2)
+      expect(screen.queryByRole('button', { name: 'Create Agent' })).not.toBeInTheDocument()
     })
 
     it('should navigate to /agents/new when empty state CTA is clicked', async () => {
@@ -133,12 +140,12 @@ describe('AgentsPage', () => {
       renderAgentsPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Create your first agent')).toBeInTheDocument()
+        expect(screen.getByText('No agents yet')).toBeInTheDocument()
       })
 
-      // There are multiple "Create Agent" buttons (header + empty state CTA).
-      // Click the larger empty state one (last match).
-      const createButtons = screen.getAllByRole('button', { name: /Create Agent/i })
+      // There are two "Create agent" buttons (header + empty state CTA).
+      // Click the empty state one (last match).
+      const createButtons = screen.getAllByRole('button', { name: /Create agent/i })
       await user.click(createButtons[createButtons.length - 1])
 
       expect(mockNavigate).toHaveBeenCalledWith('/agents/new')
@@ -312,7 +319,8 @@ describe('AgentsPage', () => {
 
       expect(screen.queryByText('Chat Agent')).not.toBeInTheDocument()
       expect(screen.queryByText('Research Agent')).not.toBeInTheDocument()
-      expect(screen.getByText(/No agents match/)).toBeInTheDocument()
+      expect(screen.getByText('No matching agents')).toBeInTheDocument()
+      expect(screen.getByText(/Nothing matches "Nonexistent"/)).toBeInTheDocument()
     })
 
     // The row's onClick was the only route to an agent's detail page, and a
@@ -438,27 +446,38 @@ describe('AgentsPage', () => {
       vi.mocked(agentsApi.getTemplates).mockResolvedValue([])
     })
 
-    it('should have a Create Agent button in the header', async () => {
+    it('should have a Create agent button in the header', async () => {
       renderAgentsPage()
 
-      // The header always has a Create Agent button
-      const createButton = screen.getByRole('button', { name: /Create Agent/i })
+      // The header always has a Create agent button
+      const createButton = screen.getByRole('button', { name: /Create agent/i })
       expect(createButton).toBeInTheDocument()
     })
 
-    it('should navigate to /agents/new when header Create Agent button is clicked', async () => {
+    it('should navigate to /agents/new when header Create agent button is clicked', async () => {
       const user = userEvent.setup()
       renderAgentsPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Create your first agent')).toBeInTheDocument()
+        expect(screen.getByText('No agents yet')).toBeInTheDocument()
       })
 
-      // Click the header Create Agent button (first one)
-      const buttons = screen.getAllByRole('button', { name: /Create Agent/i })
+      // Click the header Create agent button (first one)
+      const buttons = screen.getAllByRole('button', { name: /Create agent/i })
       await user.click(buttons[0])
 
       expect(mockNavigate).toHaveBeenCalledWith('/agents/new')
+    })
+
+    it('Import from JSON goes to the import page, not a dialog', async () => {
+      const user = userEvent.setup()
+      renderAgentsPage()
+
+      await user.click(screen.getByRole('button', { name: 'Import' }))
+      await user.click(await screen.findByRole('menuitem', { name: /Import from JSON/i }))
+
+      expect(mockNavigate).toHaveBeenCalledWith('/agents/import')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
 

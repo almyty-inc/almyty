@@ -36,6 +36,11 @@ import {
 export interface StreamableClientOptions {
   baseUrl: string;
   token: string;
+  /**
+   * Sent as X-Organization-Id on every request, so a user in several
+   * organizations opens the session in the same one it registered in.
+   */
+  organizationId?: string;
   /** Test injection: replace the global fetch with a stub. */
   fetch?: typeof globalThis.fetch;
   /** Test injection: replace setTimeout with a controllable timer. */
@@ -62,12 +67,19 @@ export class StreamableClient extends EventEmitter {
     return this.sessionId;
   }
 
+  /** Authorization plus, when configured, the organization header. */
+  private authHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Authorization': `Bearer ${this.opts.token}` };
+    if (this.opts.organizationId) headers['X-Organization-Id'] = this.opts.organizationId;
+    return headers;
+  }
+
   /** Send an envelope. Returns the parsed response envelope when the
    *  backend hands one back inline (for unary requests); otherwise null. */
   async send<T>(env: WorkerEnvelope<T>): Promise<WorkerEnvelope | null> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${this.opts.token}`,
+      ...this.authHeaders(),
     };
     if (this.sessionId) headers['Mcp-Session-Id'] = this.sessionId;
     const res = await this.fetchImpl(`${this.opts.baseUrl}/mcp/streamable`, {
@@ -98,7 +110,7 @@ export class StreamableClient extends EventEmitter {
     }
     this.streamAbort = new AbortController();
     const headers: Record<string, string> = {
-      'Authorization': `Bearer ${this.opts.token}`,
+      ...this.authHeaders(),
       'Mcp-Session-Id': this.sessionId,
       'Accept': 'text/event-stream',
     };

@@ -5,18 +5,18 @@ import { RunnerCallError, RUNNER_CALL_ERRORS } from './runner-call.service';
 
 /**
  * Coding-agent orchestration endpoints: ownership scoping + dispatch proxying.
- * getOne is the ownership gate (throws before any dispatch leaves the backend);
+ * getOwned is the ownership gate (throws before any dispatch leaves the backend);
  * RunnerCallService.dispatch is the bridge to the runner.
  */
 describe('RunnerController agent.* endpoints', () => {
   const req = { user: { id: 'u1', currentOrganizationId: 'org1' } };
 
   function make(over: {
-    getOne?: jest.Mock;
+    getOwned?: jest.Mock;
     dispatch?: jest.Mock;
   } = {}) {
     const service = {
-      getOne: over.getOne ?? jest.fn().mockResolvedValue({ id: 'r1' }),
+      getOwned: over.getOwned ?? jest.fn().mockResolvedValue({ id: 'r1' }),
     } as any;
     const calls = {
       dispatch: over.dispatch ?? jest.fn().mockResolvedValue({ ok: true, result: { x: 1 } }),
@@ -28,8 +28,8 @@ describe('RunnerController agent.* endpoints', () => {
   it('agent.list scopes ownership then dispatches agent.list', async () => {
     const { ctrl, service, calls } = make();
     const out = await ctrl.agentList(req, 'r1');
-    expect(service.getOne).toHaveBeenCalledWith('r1', 'u1', 'org1');
-    expect(calls.dispatch).toHaveBeenCalledWith('r1', 'agent.list', {}, undefined);
+    expect(service.getOwned).toHaveBeenCalledWith('r1', 'u1', 'org1');
+    expect(calls.dispatch).toHaveBeenCalledWith('r1', 'agent.list', {}, undefined, { callerUserId: 'u1' });
     expect(out).toEqual({ success: true, data: { x: 1 } });
   });
 
@@ -46,7 +46,7 @@ describe('RunnerController agent.* endpoints', () => {
       'r1',
       'agent.spawn',
       { platform: 'claude', apiKey: 'sk', configDir: '/tmp/m' },
-      'ws-1',
+      'ws-1', { callerUserId: 'u1' },
     );
   });
 
@@ -57,14 +57,14 @@ describe('RunnerController agent.* endpoints', () => {
       workspaceId: 'ws-1',
       processId: 'proc_1',
     } as any);
-    expect(dispatch).toHaveBeenCalledWith('r1', 'agent.status', { processId: 'proc_1' }, 'ws-1');
+    expect(dispatch).toHaveBeenCalledWith('r1', 'agent.status', { processId: 'proc_1' }, 'ws-1', { callerUserId: 'u1' });
     expect(out).toEqual({ success: true, data: { status: 'busy' } });
   });
 
-  it('refuses when the caller does not own the runner (getOne throws)', async () => {
-    const getOne = jest.fn().mockRejectedValue(new NotFoundException('runner not found'));
+  it('refuses when the caller does not own the runner (getOwned throws)', async () => {
+    const getOwned = jest.fn().mockRejectedValue(new NotFoundException('runner not found'));
     const dispatch = jest.fn();
-    const { ctrl } = make({ getOne, dispatch });
+    const { ctrl } = make({ getOwned, dispatch });
     await expect(ctrl.agentList(req, 'r1')).rejects.toBeInstanceOf(NotFoundException);
     expect(dispatch).not.toHaveBeenCalled(); // never dispatched
   });

@@ -7,7 +7,11 @@ import { RunnerSession } from '../../entities/runner-session.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { canAcceptWork, nextState, RunnerSnapshot } from './runner-state';
 import { RunnerCapabilityPublisher } from './runner-capability.publisher';
-import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import {
+  AccessPolicyService,
+  ResourceVisibility,
+  normaliseVisibility,
+} from '../../common/authorization/access-policy.service';
 
 /**
  * Runner ids are uuids. Checked before an id that arrived over the wire
@@ -31,14 +35,37 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  */
 export interface RegisterRunnerInput {
   name: string;
-  labels: Record<string, string>;
+  labels?: Record<string, string>;
   runtimeInfo: RunnerRuntimeInfo;
   config: RunnerConfig;
-  // Team-scoping fields. The runner CLI can pass --team-id to its
-  // local daemon, which forwards it on the register payload — the
-  // backend used to silently drop both fields so every runner ended
-  // up org-wide regardless of what the user picked.
-  visibility?: 'org' | 'team';
+  // Visibility is normally chosen in the web UI when the runner record
+  // is created (POST /runners) and left alone by the daemon, which does
+  // not send it. When a caller does send it, it is honoured. The old
+  // behaviour -- `visibility ?? 'org'` on every register -- silently
+  // widened a runner back to org-wide each time its daemon restarted.
+  visibility?: ResourceVisibility;
+  teamId?: string | null;
+}
+
+/**
+ * Input shape for POST /runners: the record the web setup page creates
+ * before the daemon has ever connected ("pending"). Holds everything
+ * the user chose -- name, labels, visibility -- so the start command
+ * only needs the name, and so an abandoned setup is a row the user can
+ * see and delete rather than nothing at all.
+ */
+export interface CreateRunnerInput {
+  name: string;
+  labels?: Record<string, string>;
+  visibility?: ResourceVisibility;
+  teamId?: string | null;
+}
+
+/** Input shape for PATCH /runners/:id. */
+export interface UpdateRunnerInput {
+  name?: string;
+  labels?: Record<string, string>;
+  visibility?: ResourceVisibility;
   teamId?: string | null;
 }
 
@@ -50,6 +77,19 @@ export interface RegisterRunnerResult {
    * shape is forward-compatible with policy work.
    */
   effectiveConfig: RunnerConfig;
+}
+
+/**
+ * A runner executes commands as its owner on its owner's machine, so a
+ * runner nobody chose a visibility for is private.
+ */
+export const DEFAULT_RUNNER_VISIBILITY: ResourceVisibility = 'private';
+
+const NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/** A runner that has never registered from a daemon: created by the setup page only. */
+export function isPendingRunner(runner: Pick<Runner, 'runtimeInfo' | 'lastHeartbeatAt'>): boolean {
+  return runner.runtimeInfo == null && runner.lastHeartbeatAt == null;
 }
 
 @Injectable()
@@ -68,26 +108,75 @@ export class RunnerService {
   ) {}
 
   /**
-   * Register or re-register a runner. v1.0 enforces single-runner-per-
-   * (user, organization). A second runner registration for the same
-   * (user, org) returns 409 Conflict; the user must release the
-   * existing one first. The data model carries no such restriction;
-   * the limit is here in policy and disappears when scheduler logic
-   * lands in v1.x.
+   * Create the runner record from the web setup page, before any daemon
+   * has connected. Idempotent for the caller's own runner of the same
+   * name (re-running setup updates labels/visibility in place).
+   *
+   * Refused with 409 when the caller already has a runner under another
+   * name (the v1.0 single-runner cap, see register) or when another
+   * member of the organization already uses the name.
+   */
+  async create(input: CreateRunnerInput, ownerUserId: string, organizationId: string): Promise<Runner> {
+    this.assertName(input.name);
+    const existing = await this.runners.findOne({ where: { ownerUserId, organizationId } });
+    if (existing && existing.name !== input.name) {
+      throw new ConflictException(
+        `single runner per account in v1.0; delete your existing runner '${existing.name}' first`,
+      );
+    }
+    await this.assertNameFreeInOrganization(input.name, ownerUserId, organizationId);
+
+    const scope = normaliseVisibility(input.visibility ?? DEFAULT_RUNNER_VISIBILITY, input.teamId);
+    await this.accessPolicy.assertCanScopeToTeam(ownerUserId, organizationId, scope.visibility, scope.teamId);
+
+    const target: Runner = existing ?? this.runners.create({
+      name: input.name,
+      ownerUserId,
+      organizationId,
+      state: RunnerState.REGISTERED,
+      runtimeInfo: null,
+      config: null,
+      lastHeartbeatAt: null,
+    });
+    target.labels = input.labels ?? existing?.labels ?? {};
+    target.visibility = scope.visibility;
+    target.teamId = scope.teamId;
+    const saved = await this.runners.save(target);
+
+    // A connected runner already has published tools; they carry its
+    // visibility, so republish when it changes. A pending one has none
+    // until its daemon registers.
+    if (!isPendingRunner(saved)) await this.capabilities.publish(saved);
+    return saved;
+  }
+
+  /**
+   * Register or re-register a runner. Called by the daemon at startup
+   * with the caller's own credential; the owner and organization come
+   * from that credential (never from the body), so a daemon can only
+   * ever claim a runner of the user it is logged in as, in an
+   * organization that user belongs to.
+   *
+   * v1.0 enforces single-runner-per-(user, organization). A second
+   * runner registration for the same (user, org) under another name
+   * returns 409 Conflict; the user must release the existing one first.
+   * The name is a label unique within the organization: a name already
+   * used by another member is refused with 409 rather than shared,
+   * because published tool names (`runner.<name>.<method>`) are unique
+   * per organization and publishing deletes by name.
    *
    * Re-registration with the same `name` (e.g. the runner restarted
-   * after a crash) updates the existing row in place and resets
-   * runtimeInfo. Workspaces pinned to the prior incarnation are not
-   * recovered: the spec says stranded = stranded.
+   * after a crash, or the pending record the setup page created) updates
+   * the existing row in place and resets runtimeInfo. Workspaces pinned
+   * to the prior incarnation are not recovered: the spec says
+   * stranded = stranded.
    */
   async register(
     input: RegisterRunnerInput,
     ownerUserId: string,
     organizationId: string,
   ): Promise<RegisterRunnerResult> {
-    if (!input.name || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.name)) {
-      throw new BadRequestException('runner name must match [a-zA-Z0-9_-]{1,64}');
-    }
+    this.assertName(input.name);
 
     const existing = await this.runners.findOne({
       where: { ownerUserId, organizationId },
@@ -102,13 +191,19 @@ export class RunnerService {
         `single runner per account in v1.0; release existing runner '${existing.name}' first`,
       );
     }
+    await this.assertNameFreeInOrganization(input.name, ownerUserId, organizationId);
 
-    await this.accessPolicy.assertCanScopeToTeam(
-      ownerUserId,
-      organizationId,
-      input.visibility,
-      input.teamId,
-    );
+    const requested = input.visibility !== undefined
+      ? normaliseVisibility(input.visibility, input.teamId)
+      : null;
+    if (requested) {
+      await this.accessPolicy.assertCanScopeToTeam(
+        ownerUserId,
+        organizationId,
+        requested.visibility,
+        requested.teamId,
+      );
+    }
 
     const target: Runner = existing ?? this.runners.create({
       name: input.name,
@@ -117,14 +212,21 @@ export class RunnerService {
     });
 
     target.name = input.name;
-    target.labels = input.labels ?? {};
+    // Labels set on the web record survive a daemon that starts without
+    // --label; labels passed on the command line replace them.
+    if (input.labels && Object.keys(input.labels).length > 0) {
+      target.labels = input.labels;
+    } else {
+      target.labels = existing?.labels ?? {};
+    }
     target.runtimeInfo = input.runtimeInfo;
     target.config = input.config;
-    // Honor team-scoping on (re-)register so flipping the runner
-    // between org-wide and team-only sticks. Drop a stray teamId
-    // when visibility is 'org'.
-    target.visibility = input.visibility ?? 'org';
-    target.teamId = input.visibility === 'team' ? (input.teamId ?? null) : null;
+    const scope = requested
+      ?? (existing
+        ? { visibility: existing.visibility, teamId: existing.teamId }
+        : { visibility: DEFAULT_RUNNER_VISIBILITY, teamId: null });
+    target.visibility = scope.visibility;
+    target.teamId = scope.teamId;
     target.state = RunnerState.REGISTERED;
     target.lastHeartbeatAt = null;
     const saved = await this.runners.save(target);
@@ -136,10 +238,46 @@ export class RunnerService {
 
     this.logger.log(
       `runner ${existing ? 're-registered' : 'registered'}: ` +
-        `name=${input.name} owner=${ownerUserId} org=${organizationId}`,
+        `name=${input.name} owner=${ownerUserId} org=${organizationId} visibility=${saved.visibility}`,
     );
 
     return { runner: saved, effectiveConfig: input.config };
+  }
+
+  /**
+   * Change a runner's name (only while it has never connected -- the
+   * daemon starts with `--name`, so renaming a live runner would orphan
+   * it), labels or visibility. Owner, or whoever the access policy lets
+   * manage it; another user's private runner answers 404.
+   */
+  async update(
+    runnerId: string,
+    userId: string,
+    organizationId: string,
+    patch: UpdateRunnerInput,
+  ): Promise<Runner> {
+    const runner = await this.loadManageable(runnerId, userId, organizationId);
+
+    if (patch.name !== undefined && patch.name !== runner.name) {
+      this.assertName(patch.name);
+      if (!isPendingRunner(runner)) {
+        throw new ConflictException(
+          'a runner that has connected keeps its name; delete it and start the daemon under the new name',
+        );
+      }
+      await this.assertNameFreeInOrganization(patch.name, runner.ownerUserId, organizationId);
+      runner.name = patch.name;
+    }
+    if (patch.labels !== undefined) runner.labels = patch.labels;
+    if (patch.visibility !== undefined) {
+      const scope = normaliseVisibility(patch.visibility, patch.teamId);
+      await this.accessPolicy.assertCanScopeToTeam(userId, organizationId, scope.visibility, scope.teamId);
+      runner.visibility = scope.visibility;
+      runner.teamId = scope.teamId;
+    }
+    const saved = await this.runners.save(runner);
+    if (!isPendingRunner(saved)) await this.capabilities.publish(saved);
+    return saved;
   }
 
   /**
@@ -300,13 +438,31 @@ export class RunnerService {
   }
 
   /**
-   * Look up the runner that should receive a workspace's traffic.
-   * Returns the runner if it can accept work, or throws a structured
-   * error the caller can convert to a HTTP/RPC response.
+   * Look up the runner that should receive a dispatch, on behalf of
+   * `callerUserId`. Returns the runner if the caller may use it and it
+   * can accept work, or throws a structured error the caller can convert
+   * to a HTTP/RPC response.
+   *
+   * Visibility is enforced here, at the one place every dispatch passes
+   * through, not only at the endpoints in front of it:
+   *   - private: only its owner. A dispatch with no known caller (a
+   *     gateway call on an API key, a system job) is refused.
+   *   - team: a caller the access policy lets use it; no caller, refused.
+   *   - org: any member of the organization; a dispatch with no known
+   *     caller is allowed, as it was before visibility existed.
+   * A caller who may not use the runner gets the same 404 as a runner
+   * that does not exist, so its existence does not leak.
    */
-  async resolveForDispatch(runnerId: string): Promise<Runner> {
+  async resolveForDispatch(runnerId: string, callerUserId?: string | null): Promise<Runner> {
     const runner = await this.runners.findOne({ where: { id: runnerId } });
     if (!runner) throw new NotFoundException('runner not found');
+    const visibility = runner.visibility ?? 'org';
+    if (callerUserId) {
+      const decision = await this.accessPolicy.canAccess({ id: callerUserId }, runner, 'use');
+      if (!decision.allowed) throw new NotFoundException('runner not found');
+    } else if (visibility !== 'org') {
+      throw new NotFoundException('runner not found');
+    }
     if (!canAcceptWork(runner.state)) {
       throw new BadRequestException(`runner ${runner.name} is ${runner.state}; cannot accept dispatch`);
     }
@@ -314,17 +470,26 @@ export class RunnerService {
   }
 
   /**
-   * Does `runnerId` name a runner inside `organizationId`?
+   * Is `runnerId` a runner owned by `userId` inside `organizationId`?
    *
    * For the envelope handlers, and deliberately non-throwing: the id
    * they pass is whatever the daemon wrote into its `runner.hello`
    * payload, not something read back from a row we wrote, so a
    * malformed or unknown id is an answer ("no") rather than an error.
-   * The organization is the one the session's bearer token proved.
+   * The organization and user are the ones the session's bearer token
+   * proved.
+   *
+   * Owner, not merely organization: checking the organization alone let
+   * any other member of the same org send a hello naming someone else's
+   * runner id. getActiveSession takes the newest connected session, so
+   * that claim became the route every dispatch for the victim's runner
+   * took -- shell commands, coding sessions, agent spawns, all delivered
+   * to the claimant's machine, with the claimant's heartbeats keeping
+   * the victim's runner "online".
    */
-  async belongsToOrganization(runnerId: string, organizationId: string): Promise<boolean> {
-    if (!organizationId || !UUID_RE.test(runnerId ?? '')) return false;
-    const count = await this.runners.count({ where: { id: runnerId, organizationId } });
+  async isOwnedBy(runnerId: string, organizationId: string, userId: string | null | undefined): Promise<boolean> {
+    if (!organizationId || !userId || !UUID_RE.test(runnerId ?? '')) return false;
+    const count = await this.runners.count({ where: { id: runnerId, organizationId, ownerUserId: userId } });
     return count > 0;
   }
 
@@ -351,11 +516,38 @@ export class RunnerService {
     return row?.runnerId ?? null;
   }
 
+  /** The caller's own runners. */
   async listForOwner(ownerUserId: string, organizationId: string): Promise<Runner[]> {
     return this.runners.find({ where: { ownerUserId, organizationId } });
   }
 
-  async getOne(runnerId: string, ownerUserId: string, organizationId: string): Promise<Runner> {
+  /**
+   * Every runner the caller may see: their own (private included),
+   * org-wide ones, and team ones for their teams. Other members'
+   * private runners are never returned, to org admins either.
+   */
+  async listVisible(userId: string, organizationId: string): Promise<Runner[]> {
+    const qb = this.runners.createQueryBuilder('r');
+    await this.accessPolicy.applyListFilter(qb, { id: userId }, organizationId, 'r', {
+      ownerColumn: 'ownerUserId',
+    });
+    return qb.orderBy('r."registeredAt"', 'DESC').getMany();
+  }
+
+  /**
+   * One runner the caller may see (see listVisible). A runner they may
+   * not see answers 404, the same as one that does not exist.
+   */
+  async getOne(runnerId: string, userId: string, organizationId: string): Promise<Runner> {
+    const runner = await this.runners.findOne({ where: { id: runnerId, organizationId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const decision = await this.accessPolicy.canAccess({ id: userId }, runner, 'read');
+    if (!decision.allowed) throw new NotFoundException('runner not found');
+    return runner;
+  }
+
+  /** One of the caller's own runners (agent.* orchestration is owner-only). */
+  async getOwned(runnerId: string, ownerUserId: string, organizationId: string): Promise<Runner> {
     const runner = await this.runners.findOne({
       where: { id: runnerId, ownerUserId, organizationId },
     });
@@ -364,40 +556,76 @@ export class RunnerService {
   }
 
   /**
-   * Org-scoped lookup for the coding bridge: any authenticated member of
-   * the runner's organization may drive coding sessions on it (the chat
-   * REPL dispatches on behalf of the user, not just the runner's owner).
-   * 404 when the runner doesn't exist, 403 when it belongs to another org.
+   * Lookup for the coding bridge: a member of the runner's organization
+   * whom the access policy lets USE the runner may drive coding sessions
+   * on it (the chat REPL dispatches on behalf of the user, not just the
+   * runner's owner). 404 when the runner doesn't exist or the caller may
+   * not use it (a private runner of someone else, a team runner of a
+   * team they're not on), 403 when it belongs to another org.
    */
-  async getOneForOrg(runnerId: string, organizationId: string): Promise<Runner> {
+  async getUsable(runnerId: string, userId: string, organizationId: string): Promise<Runner> {
     const runner = await this.runners.findOne({ where: { id: runnerId } });
     if (!runner) throw new NotFoundException('runner not found');
     if (runner.organizationId !== organizationId) {
       throw new ForbiddenException('runner belongs to a different organization');
     }
+    const decision = await this.accessPolicy.canAccess({ id: userId }, runner, 'use');
+    if (!decision.allowed) throw new NotFoundException('runner not found');
     return runner;
   }
 
   async unregister(runnerId: string, userId: string, organizationId: string): Promise<void> {
-    const runner = await this.runners.findOne({
-      where: { id: runnerId, organizationId },
-    });
-    if (!runner) throw new NotFoundException('runner not found');
-
-    // Authorization: the runner owner can always unregister their own
-    // runner. Otherwise the org owner/admin or (for team-scoped runners)
-    // a team lead may manage it via the access policy.
-    if (runner.ownerUserId !== userId) {
-      const decision = await this.accessPolicy.canAccess({ id: userId }, runner, 'manage');
-      if (!decision.allowed) {
-        throw new ForbiddenException(decision.reason);
-      }
-    }
+    const runner = await this.loadManageable(runnerId, userId, organizationId);
 
     // Drop published capabilities first so a concurrent dispatch can't
     // race against deletion and find a tool whose runner is gone.
     await this.capabilities.unpublish(runner.id);
     await this.runners.remove(runner);
+  }
+
+  // ── internals ───────────────────────────────────────────────────────
+
+  /**
+   * A runner the caller may change or delete. The owner always may.
+   * Otherwise the org owner/admin or (for team-scoped runners) a team
+   * lead may manage it via the access policy -- except a private runner,
+   * which is its owner's alone. A runner the caller cannot even see
+   * answers 404; one they can see but not manage answers 403.
+   */
+  private async loadManageable(runnerId: string, userId: string, organizationId: string): Promise<Runner> {
+    const runner = await this.runners.findOne({ where: { id: runnerId, organizationId } });
+    if (!runner) throw new NotFoundException('runner not found');
+    if (runner.ownerUserId === userId) return runner;
+    const read = await this.accessPolicy.canAccess({ id: userId }, runner, 'read');
+    if (!read.allowed) throw new NotFoundException('runner not found');
+    const manage = await this.accessPolicy.canAccess({ id: userId }, runner, 'manage');
+    if (!manage.allowed) throw new ForbiddenException(manage.reason);
+    return runner;
+  }
+
+  private assertName(name: string | undefined): void {
+    if (!name || !NAME_RE.test(name)) {
+      throw new BadRequestException('runner name must match [a-zA-Z0-9_-]{1,64}');
+    }
+  }
+
+  /**
+   * Runner names are unique within an organization. The name becomes
+   * part of the runner's published tool names (`runner.<name>.<method>`,
+   * unique per organization), and publishing replaces rows by name -- so
+   * a second member registering a name already in use used to delete
+   * the first member's tools and republish them pointing at their own
+   * machine: an agent calling `runner.<name>.shell.exec` then ran on the
+   * wrong person's computer. Refuse instead. The message does not say
+   * whose runner it is.
+   */
+  private async assertNameFreeInOrganization(name: string, ownerUserId: string, organizationId: string): Promise<void> {
+    const clash = await this.runners.findOne({ where: { organizationId, name } });
+    if (clash && clash.ownerUserId !== ownerUserId) {
+      throw new ConflictException(
+        `the runner name '${name}' is already used in this organization; pick another name`,
+      );
+    }
   }
 
   // ── internals ───────────────────────────────────────────────────────

@@ -235,7 +235,7 @@ describe('AgentsController', () => {
 
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAgent);
-      expect(agentsService.getAgent).toHaveBeenCalledWith('agent-1', 'org-1');
+      expect(agentsService.getAgent).toHaveBeenCalledWith('agent-1', 'org-1', { id: 'user-1' });
     });
 
     it('should handle not found error', async () => {
@@ -411,7 +411,7 @@ describe('AgentsController', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAgent);
       expect(result.message).toBe('Agent activated successfully');
-      expect(agentsService.activateAgent).toHaveBeenCalledWith('agent-1', 'org-1');
+      expect(agentsService.activateAgent).toHaveBeenCalledWith('agent-1', 'org-1', 'user-1');
     });
 
     it('should handle activation error', async () => {
@@ -431,7 +431,7 @@ describe('AgentsController', () => {
       expect(result.success).toBe(true);
       expect(result.data).toBe(mockAgent);
       expect(result.message).toBe('Agent deactivated successfully');
-      expect(agentsService.deactivateAgent).toHaveBeenCalledWith('agent-1', 'org-1');
+      expect(agentsService.deactivateAgent).toHaveBeenCalledWith('agent-1', 'org-1', 'user-1');
     });
 
     it('should handle deactivation error', async () => {

@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 
 import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
+import { gatewayServableTo } from '../../gateways/private-gateway';
 import { getBaseUrl, getFrontendUrl } from '../../../common/config/base-url';
 
 /**
@@ -86,8 +87,20 @@ export class McpOAuthResolveHelper {
    * Resolve an active gateway by its endpoint slug within an organization.
    * `gatewaySlug` is matched against `endpoint` (e.g. "my-gateway" maps to
    * endpoint "/my-gateway").
+   *
+   * `viewerId` is who is asking, when the step is one a person takes
+   * (discovery, consent, authorize, client registration). Another user's
+   * private gateway -- or any private gateway, for an anonymous step --
+   * answers exactly like a slug that does not exist. Omit it only on the
+   * steps whose credential is already bound to a user and a gateway (the
+   * token exchange and revocation): a code or token for a private gateway
+   * can only have been issued to its owner.
    */
-  async resolveGateway(organizationId: string, gatewaySlug: string): Promise<Gateway> {
+  async resolveGateway(
+    organizationId: string,
+    gatewaySlug: string,
+    viewerId?: string | null,
+  ): Promise<Gateway> {
     const endpoint = gatewaySlug.startsWith('/') ? gatewaySlug : `/${gatewaySlug}`;
 
     const gateway = await this.gatewayRepository.findOne({
@@ -95,7 +108,7 @@ export class McpOAuthResolveHelper {
       relations: { organization: true },
     });
 
-    if (!gateway) {
+    if (!gateway || (viewerId !== undefined && !gatewayServableTo(gateway, viewerId))) {
       throw new HttpException(`Gateway not found: ${gatewaySlug}`, HttpStatus.NOT_FOUND);
     }
     return gateway;
@@ -105,12 +118,17 @@ export class McpOAuthResolveHelper {
   async resolveOrgAndGateway(
     orgSlug: string,
     gatewaySlug: string,
+    viewerId?: string | null,
   ): Promise<{ organization: Organization; gateway: Gateway }> {
     const organization = await this.resolveOrg(orgSlug);
-    const gateway = await this.resolveGateway(organization.id, gatewaySlug);
+    const gateway = await this.resolveGateway(organization.id, gatewaySlug, viewerId);
     return { organization, gateway };
   }
 
+  /** The user id of a JWT payload or request user, or null. */
+  static userIdOf(user: any): string | null {
+    return user?.sub || user?.id || null;
+  }
   getBaseUrl(): string {
     return getBaseUrl(this.configService);
   }

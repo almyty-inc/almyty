@@ -31,6 +31,7 @@ import { UpdateAgentDto } from './dto/update-agent.dto';
 import { InvokeAgentDto } from './dto/invoke-agent.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AgentStatus } from '../../entities/agent.entity';
 import { AgentRole } from '../../entities/agent-role.entity';
@@ -69,7 +70,7 @@ class AgentSearchQueryDto {
 @Controller('agents')
 @ApiTags('Agents')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, PrivateAgentGuard)
 export class AgentsController {
   private readonly logger = new Logger(AgentsController.name);
 
@@ -274,7 +275,7 @@ export class AgentsController {
         );
       }
 
-      const agent = await this.agentsService.getAgent(id, organizationId);
+      const agent = await this.agentsService.getAgent(id, organizationId, { id: req.user.sub || req.user.id });
 
       return {
         success: true,
@@ -404,7 +405,7 @@ export class AgentsController {
         );
       }
 
-      const agent = await this.agentsService.activateAgent(id, organizationId);
+      const agent = await this.agentsService.activateAgent(id, organizationId, req.user.sub || req.user.id);
 
       return {
         success: true,
@@ -443,7 +444,7 @@ export class AgentsController {
         );
       }
 
-      const agent = await this.agentsService.deactivateAgent(id, organizationId);
+      const agent = await this.agentsService.deactivateAgent(id, organizationId, req.user.sub || req.user.id);
 
       return {
         success: true,
@@ -481,7 +482,7 @@ export class AgentsController {
         );
       }
 
-      const original = await this.agentsService.getAgent(id, organizationId);
+      const original = await this.agentsService.getAgent(id, organizationId, { id: req.user.sub || req.user.id });
       if (!original) {
         throw new HttpException(
           { success: false, message: 'Agent not found', error: 'NOT_FOUND' },
@@ -496,6 +497,10 @@ export class AgentsController {
         variables: original.variables,
         settings: original.settings,
         status: 'draft',
+        // The copy keeps the original's scope, so a private agent's copy
+        // (and the private tools it references) stays private to its owner.
+        visibility: original.visibility,
+        teamId: original.teamId,
       } as any, organizationId, req.user.id);
 
       // Roles live in their own table, so copying the agent row left them

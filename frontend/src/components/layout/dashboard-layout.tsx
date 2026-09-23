@@ -14,8 +14,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   Router,
   Activity,
   Bot,
@@ -36,7 +36,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { SetupPill } from '@/components/onboarding/setup-pill'
+import { GuidePill } from '@/components/onboarding/guide-pill'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,7 +56,7 @@ import { useAppStore, useNotifications } from '@/store/app'
 import { Theme, applyTheme, subscribeToSystemTheme } from '@/lib/theme'
 import { getInitials } from '@/lib/utils'
 import { CommandPalette } from '@/components/command-palette'
-import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts'
+import { KeyboardShortcutsListener } from '@/components/keyboard-shortcuts'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { EmailVerificationBanner } from '@/components/layout/email-verification-banner'
@@ -92,25 +92,25 @@ interface DashboardLayoutProps {
 // onboarding flow tells them. Previously Agents was first,
 // which rewarded existing users who already knew they wanted
 // an agent but left newcomers wondering what to click first.
-const navigation: { name: string; href: string; icon: any; dataTour?: string }[] = [
+const navigation: { name: string; href: string; icon: any }[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   // Core workflow — follows the APIs → Tools → Gateways → Agents → Apps
   // pipeline narrative. Apps sits directly after Agents because that is
   // the last link of the chain: you build agents, then you ship them as
   // a product. Putting it here also keeps it above the fold rather than
   // buried below Runners.
-  { name: 'APIs', href: '/apis', icon: Globe, dataTour: 'nav-api' },
+  { name: 'APIs', href: '/apis', icon: Globe },
   { name: 'Tools', href: '/tools', icon: Wrench },
-  { name: 'Gateways', href: '/gateways', icon: Zap, dataTour: 'nav-gateway' },
+  { name: 'Gateways', href: '/gateways', icon: Zap },
   { name: 'Agents', href: '/agents', icon: Bot },
-  { name: 'Apps', href: '/apps', icon: Package, dataTour: 'nav-apps' },
+  { name: 'Apps', href: '/apps', icon: Package },
   { name: 'Runners', href: '/runners', icon: Cpu },
   { name: 'Workspaces', href: '/workspaces', icon: FolderGit2 },
   { name: 'Credentials', href: '/credentials', icon: Key },
   { name: 'Approvals', href: '/approvals', icon: Shield },
   // Configuration
   { name: 'divider', href: '', icon: null as any },
-  { name: 'Models', href: '/models', icon: Brain, dataTour: 'nav-provider' },
+  { name: 'Models', href: '/models', icon: Brain },
   { name: 'Memory', href: '/memories', icon: Database },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings },
@@ -246,7 +246,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <CommandPalette />
       {/* Keyboard shortcuts help dialog — `?` key toggles it
        * from anywhere outside of an editable field. */}
-      <KeyboardShortcutsDialog />
+      <KeyboardShortcutsListener />
       {/* Sidebar */}
       <div
         className={cn(
@@ -257,7 +257,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className={cn("flex items-center h-14 border-b", sidebarCollapsed ? "justify-center px-2" : "justify-between px-4")}>
+          <div className={cn("flex-shrink-0 flex items-center h-14 border-b", sidebarCollapsed ? "justify-center px-2" : "justify-between px-4")}>
             <div className="flex items-center gap-2">
               <img src="/almyty-icon-48.svg" alt="almyty" className="w-8 h-8 shrink-0" />
               {!sidebarCollapsed && <span className="text-xl font-heading font-medium tracking-tight text-foreground">almyty</span>}
@@ -271,7 +271,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* Organization Selector */}
           {currentOrganization && !sidebarCollapsed && (
-            <div className="p-4 border-b">
+            <div className="flex-shrink-0 p-4 border-b">
               <DropdownMenu onOpenChange={(open) => { if (open) fetchOrganizations().catch(() => null) }}>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="w-full justify-between" aria-label={`Switch organization, current: ${currentOrganization.name}`}>
@@ -321,7 +321,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
            * code path that opens the dialog. Hidden when the
            * sidebar is collapsed (no room for the key hint). */}
           {!sidebarCollapsed && (
-            <div className="px-2 pt-3">
+            <div className="flex-shrink-0 border-b px-2 py-3">
               <button
                 type="button"
                 onClick={() => {
@@ -340,8 +340,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
           )}
 
-          {/* Navigation */}
-          <nav key={location.pathname} className={cn("flex-1 py-4 space-y-1 overflow-y-auto", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation">
+          {/* Navigation: the one scrolling region. `min-h-0` lets it shrink
+              below its content inside the column, so on a short window it
+              scrolls within its own box instead of pushing the footer off
+              screen or sliding under the header above. */}
+          <nav key={location.pathname} className={cn("flex-1 min-h-0 py-3 space-y-1 overflow-y-auto overscroll-contain", sidebarCollapsed ? "px-1" : "px-2")} aria-label="Main navigation" data-testid="sidebar-nav">
             {navigation.map((item) => {
               if (item.name === 'divider') {
                 return <div key="divider" className="my-2 mx-3 border-t border-border/40" />
@@ -353,7 +356,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               return (
                 <NavLink
                   key={item.name}
-                  data-tour={item.dataTour}
                   to={item.href}
                   end={item.href === '/dashboard'}
                   title={sidebarCollapsed ? item.name : undefined}
@@ -385,30 +387,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             })}
           </nav>
 
-          {/* Collapse toggle — desktop only */}
-          <div className="hidden lg:flex justify-end px-2 py-2 border-t">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebarCollapse}
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            </Button>
-          </div>
-
-          {/* Onboarding setup pill — lingers until real activation */}
-          <div className={cn("flex-shrink-0", sidebarCollapsed ? "px-2 pt-2" : "px-4 pt-3")}>
-            <SetupPill collapsed={sidebarCollapsed} />
-          </div>
-
-          {/* User Menu */}
-          <div className={cn("flex-shrink-0 border-t", sidebarCollapsed ? "p-2" : "p-4")}>
+          {/* Footer: setup progress, then the user row with the collapse
+              control beside it. Fixed under the nav, which is the only
+              part of the sidebar that scrolls. */}
+          <div className="flex-shrink-0 border-t p-2 space-y-1" data-testid="sidebar-footer">
+            <GuidePill collapsed={sidebarCollapsed} />
+            <div className={cn("flex items-center gap-1", sidebarCollapsed && "flex-col")}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className={cn("w-full p-2", sidebarCollapsed ? "justify-center" : "justify-start")} aria-label="User menu">
+                <Button variant="ghost" className={cn("h-auto min-w-0 p-2", sidebarCollapsed ? "justify-center" : "flex-1 justify-start")} aria-label="User menu">
                   <Avatar className={cn("h-8 w-8", !sidebarCollapsed && "mr-3")}>
                     <AvatarImage src={user?.avatar} />
                     <AvatarFallback>
@@ -473,6 +460,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+              {/* Collapse toggle: desktop only, on the user row so it sits
+                  with the other account-level control instead of floating
+                  in a band of its own. */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleSidebarCollapse}
+                className="hidden lg:inline-flex h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

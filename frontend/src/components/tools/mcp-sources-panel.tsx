@@ -4,6 +4,7 @@ import { Plug, RefreshCw, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ProtocolBadge } from '@/components/ui/protocol-badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   AlertDialog,
@@ -87,7 +88,7 @@ export function McpSourcesPanel({ organizationId }: McpSourcesPanelProps) {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <Plug className="h-5 w-5 text-violet-500" />
-          MCP Servers
+          MCP servers
         </CardTitle>
         <CardDescription>
           External MCP servers connected as tool sources
@@ -102,12 +103,7 @@ export function McpSourcesPanel({ organizationId }: McpSourcesPanelProps) {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-medium truncate">{source.name}</span>
-                <Badge
-                  variant="outline"
-                  className="text-violet-600 border-violet-300 dark:border-violet-800 dark:text-violet-400 shrink-0"
-                >
-                  MCP
-                </Badge>
+                <ProtocolBadge protocol="mcp" className="shrink-0" />
                 <Badge variant={source.status === 'active' ? 'success' : source.status === 'error' ? 'destructive' : 'secondary'}>
                   {source.status}
                 </Badge>
@@ -162,7 +158,7 @@ export function McpSourcesPanel({ organizationId }: McpSourcesPanelProps) {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => deletingSource && deleteMutation.mutate(deletingSource.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               Delete
             </AlertDialogAction>

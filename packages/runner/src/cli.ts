@@ -2,12 +2,13 @@
 /**
  * almyty-runner CLI.
  *
- *   almyty-runner start [--name X] [--label k=v]... [--config path] [--url URL]
+ *   almyty-runner start [--name X] [--org ORG_ID] [--label k=v]... [--config path] [--url URL]
  *   almyty-runner status
  *   almyty-runner stop
  *
  * Auth: ALMYTY_TOKEN env or ~/.almyty/credentials.json (run
- * `npx @almyty/auth login` first if neither is configured).
+ * `almyty-auth login` first if neither is configured). The runner is
+ * registered to whoever that login belongs to; the name is only a label.
  */
 
 import { RunnerDaemon, readStatus, stopDaemon } from './daemon.js';
@@ -25,8 +26,9 @@ Usage:
   almyty-runner stop               Send SIGTERM to the local daemon
 
 Options for start:
-  --name <name>           Runner name (matches [a-zA-Z0-9_-]{1,64})
-  --label key=value       Add a routing label; repeat for multiple
+  --name <name>           Runner name (matches [a-zA-Z0-9_-]{1,64}); a label, unique in the org
+  --org <org-id>          Organization to register in (needed if you belong to several)
+  --label key=value       Add a descriptive label; repeat for multiple
   --config <path>         Path to a JSON config file (overrides global+project)
   --url <backend-url>     Override backend URL (e.g. https://api.almyty.com)
 
@@ -40,7 +42,9 @@ Exit codes:
   2  usage error (unknown command, bad flags)
 
 Auth:
-  ALMYTY_TOKEN env or ~/.almyty/credentials.json (\`npx @almyty/auth login\`).
+  ALMYTY_TOKEN env or ~/.almyty/credentials.json (\`almyty-auth login\`).
+  The runner belongs to the user that login is for. Nobody else can
+  attach to it, whatever name they pick.
 `);
 }
 
@@ -78,6 +82,7 @@ async function main(): Promise<void> {
           name: flags.name,
           labels: flags.labels,
           backendUrl: flags.url,
+          organizationId: flags.org,
           configPath: flags.configPath,
         });
       } catch (err: any) {

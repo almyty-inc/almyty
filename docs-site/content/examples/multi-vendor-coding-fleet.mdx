@@ -11,8 +11,9 @@ Builds on [Give an agent a machine](/examples/expose-any-machine): driving codin
 
 1. **Start a runner** on the machine with your repo:
    ```bash
-   npx @almyty/auth login
-   npx @almyty/runner start --name my-laptop
+   npm i -g @almyty/runner @almyty/auth
+   almyty-auth login
+   almyty-runner start --name my-laptop
    ```
    It registers and reports the coding CLIs it finds on your PATH. Code and credentials stay on the box; only instructions cross the wire.
 

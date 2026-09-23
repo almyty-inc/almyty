@@ -201,7 +201,7 @@ function CompliancePolicyForm() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-primary" /> Compliance Policy
+          <ShieldCheck className="h-5 w-5 text-primary" /> Compliance policy
           {configured === false && (
             <Badge variant="outline" className="ml-1 text-muted-foreground">
               Using secure defaults
@@ -315,7 +315,7 @@ function CompliancePolicyForm() {
           <input type="hidden" {...register('securityThreshold')} />
 
           <Button type="submit" disabled={isSubmitting || saveMutation.isPending}>
-            {saveMutation.isPending ? 'Saving...' : 'Save Compliance Policy'}
+            {saveMutation.isPending ? 'Saving...' : 'Save compliance policy'}
           </Button>
         </form>
       </CardContent>
@@ -363,7 +363,7 @@ function ComplianceReportCard() {
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
           <CardTitle className="flex items-center gap-2">
-            <FileBarChart className="h-5 w-5 text-primary" /> Compliance Report
+            <FileBarChart className="h-5 w-5 text-primary" /> Compliance report
           </CardTitle>
           <CardDescription>
             Posture scored from your enforced controls over audit activity.

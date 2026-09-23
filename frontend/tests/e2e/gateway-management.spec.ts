@@ -81,29 +81,29 @@ test.describe('Gateway Management', () => {
     await expect(page.getByText(/tool assignments/i).first()).toBeVisible()
   })
 
-  test('should open create gateway dialog', async ({ authenticatedPage: page, assertHelper }) => {
+  test('should open the create gateway page', async ({ authenticatedPage: page, assertHelper }) => {
     await assertHelper.waitForLoadingComplete()
 
     // Click create gateway button
-    await page.getByRole('button', { name: /Create Gateway/i }).click()
+    await page.getByRole('button', { name: /Create Gateway/i }).first().click()
 
-    // Dialog should open
-    await expect(page.getByRole('dialog')).toBeVisible()
-    await expect(page.getByText(/Create New Gateway/i)).toBeVisible()
+    // A page with its own URL, not a dialog
+    await expect(page).toHaveURL(/\/gateways\/new$/)
+    await expect(page.getByRole('heading', { name: 'Create gateway', level: 1 })).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 
   test('should show only 3 gateway types (no SCOPED_TOOL)', async ({ authenticatedPage: page, assertHelper }) => {
     await assertHelper.waitForLoadingComplete()
 
-    // Open create dialog
-    await page.getByRole('button', { name: /Create Gateway/i }).click()
+    // Open the create page
+    await page.getByRole('button', { name: /Create Gateway/i }).first().click()
 
-    // Click gateway type selector
-    await page.getByRole('combobox', { name: /gateway type/i }).click()
+    // Click the protocol selector
+    await page.getByRole('combobox', { name: /protocol/i }).click()
 
-    // Should show exactly 4 types (MCP, A2A, UTCP, Skills)
+    // Tool gateways: MCP, UTCP, Skills
     await expect(page.getByRole('option', { name: /MCP.*Model Context Protocol/i })).toBeVisible()
-    await expect(page.getByRole('option', { name: /A2A.*Agent.*Agent/i })).toBeVisible()
     await expect(page.getByRole('option', { name: /UTCP.*Universal.*Tool/i })).toBeVisible()
     await expect(page.getByRole('option', { name: /Skills.*Agent Skills/i })).toBeVisible()
 
@@ -114,14 +114,15 @@ test.describe('Gateway Management', () => {
   test('should create new gateway', async ({ authenticatedPage: page, assertHelper }) => {
     await assertHelper.waitForLoadingComplete()
 
-    // Open create dialog
-    await page.getByRole('button', { name: /Create Gateway/i }).click()
+    // Open the create page
+    await page.getByRole('button', { name: /Create Gateway/i }).first().click()
+    await expect(page).toHaveURL(/\/gateways\/new$/)
 
     // Fill form
-    await page.getByLabel(/Gateway Name/i).fill('New Test Gateway')
-    await page.getByRole('combobox', { name: /gateway type/i }).click()
+    await page.getByLabel(/^Name/).fill('New Test Gateway')
+    await page.getByRole('combobox', { name: /protocol/i }).click()
     await page.getByRole('option', { name: /MCP/i }).click()
-    await page.getByLabel(/Endpoint/i).fill('/new-gateway')
+    await page.getByLabel(/^Endpoint path/).fill('/new-gateway')
 
     // Submit
     await page.getByRole('button', { name: /Create Gateway/i }).click()
@@ -129,8 +130,9 @@ test.describe('Gateway Management', () => {
     // Should show success notification (toast)
     await expect(page.locator('li[role="status"]').filter({ hasText: /created|success/i })).toBeVisible({ timeout: 10000 })
 
-    // Gateway should appear in list
-    await expect(page.getByText('New Test Gateway')).toBeVisible()
+    // Lands on the new gateway's page
+    await expect(page).toHaveURL(/\/gateways\/(?!new)[^/]+$/)
+    await expect(page.getByRole('heading', { name: 'New Test Gateway' })).toBeVisible()
   })
 
   test('should open gateway details', async ({ authenticatedPage: page, apiHelper, assertHelper }) => {

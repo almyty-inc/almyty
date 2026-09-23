@@ -109,7 +109,7 @@ describe('memory writes refresh the soft-cap warnings', () => {
     const before = vi.mocked(memoriesApi.listSoftcapWarnings).mock.calls.length
 
     fireEvent.click(await screen.findByTitle('Soft delete'))
-    fireEvent.click(await screen.findByRole('button', { name: /Delete Memory/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete memory' }))
 
     await waitFor(() => expect(memoriesApi.remove).toHaveBeenCalled())
     await waitFor(() =>

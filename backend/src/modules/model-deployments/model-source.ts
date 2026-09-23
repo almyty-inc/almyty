@@ -73,3 +73,36 @@ export function schemesFor(adapterKey: string, caps: AdapterCapabilities): Regis
     .map(([scheme]) => scheme as RegistryScheme);
   return [...artifacts, ...provider];
 }
+
+function lastSegment(path: string): string {
+  const parts = path.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
+
+/**
+ * The id a served endpoint answers to, for a card made from a deployment.
+ *
+ * vLLM and TGI serve a Hugging Face repository under its `org/repo`, and a
+ * provider reference names the model the platform knows (a Bedrock ARN,
+ * `accounts/x/models/y` on Fireworks), so both keep the whole location.
+ * An object-store or file artifact is served under its directory name.
+ */
+export function defaultVendorModelId(source: ModelSource): string {
+  const { parsed } = source;
+  if (parsed.scheme === 'hf' || parsed.kind === 'provider') return parsed.location;
+  if (parsed.scheme === 's3' || parsed.scheme === 'gs') return parsed.prefix ? lastSegment(parsed.prefix) : parsed.location;
+  return lastSegment(parsed.location);
+}
+
+/** A readable card name: `Llama-3.1-8B-Instruct` for hf://meta-llama/Llama-3.1-8B-Instruct@abc. */
+export function defaultCardName(source: ModelSource): string {
+  const { parsed } = source;
+  if (parsed.kind === 'provider') return lastSegment(stripPin(parsed.location)).slice(0, 255);
+  return lastSegment(defaultVendorModelId(source)).slice(0, 255);
+}
+
+/** A provider reference may carry its own `@version`; the served id does not. */
+function stripPin(location: string): string {
+  const at = location.lastIndexOf('@');
+  return at > 0 && !location.slice(at + 1).includes('/') ? location.slice(0, at) : location;
+}

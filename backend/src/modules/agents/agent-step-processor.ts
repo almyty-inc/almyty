@@ -39,6 +39,7 @@ import { shouldAutoSaveMemory } from './memory-autosave.policy';
  * execution shapes truncate at the same size and with the same marker.
  */
 import { capPersistedPayload } from './persist-cap';
+import { canReference } from '../../common/authorization/private-visibility';
 /**
  * A run in one of these is finished and no worker may write it back to
  * running — the same list `AgentRun.isDone()` answers with.
@@ -208,7 +209,7 @@ export class AgentStepProcessor {
     }
 
     // If this is a collaboration orchestrator (and NOT a child run), delegate to collaboration handler
-    if (agent.collaboration?.strategy && agent.collaboration.agents?.length > 0 && !run.parentRunId) {
+    if (agent.collaboration?.strategy && agent.collaboration.participants?.length > 0 && !run.parentRunId) {
       return this.s.collaboration.processCollaborationStep(run, agent);
     }
 
@@ -279,9 +280,14 @@ export class AgentStepProcessor {
       if (agent.agentConfig?.canCallAgents) {
         const otherAgents = await this.s.agentRepository.find({
           where: { organizationId: run.organizationId, status: 'active' as any, isTemporary: false },
-          select: { id: true, name: true, description: true },
+          select: { id: true, name: true, description: true, organizationId: true, visibility: true, createdBy: true },
         });
-        subAgentDefs = otherAgents
+        // Another member's private agents are not callable (nor named) here,
+        // and an agent that is not private cannot call even its owner's.
+        const callable = otherAgents.filter(
+          a => canReference({ visibility: agent.visibility, ownerId: agent.createdBy }, a),
+        );
+        subAgentDefs = callable
           .filter(a => a.id !== agent.id)
           .map(a => ({
             name: `call_agent_${a.name.replace(/[^a-zA-Z0-9_]/g, '_')}`,
@@ -294,7 +300,7 @@ export class AgentStepProcessor {
               required: ['input'],
             },
           }));
-        for (const a of otherAgents.filter(a => a.id !== agent.id)) {
+        for (const a of callable.filter(a => a.id !== agent.id)) {
           subAgentMap.set(`call_agent_${a.name.replace(/[^a-zA-Z0-9_]/g, '_')}`, a.id);
         }
       }

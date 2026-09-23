@@ -142,75 +142,26 @@ describe('the budgets tab', () => {
     expect(within(row).getByText(/New runs are refused at the limit/i)).toBeInTheDocument()
   })
 
-  it('creates a budget with the payload the service accepts', async () => {
+  // Creating and editing a budget are pages now (budget-form-page.test.tsx
+  // drives them); the tab only links there.
+  it('links New budget (header and empty state) to the create page', async () => {
     seed({ budgets: [] })
-    fn(budgetsApi.create).mockResolvedValue({ ...orgBudget })
-    const user = userEvent.setup()
     render(<BudgetsTab />)
 
-    await user.click((await screen.findAllByRole('button', { name: /new budget/i }))[0])
-    await user.type(await screen.findByLabelText('Limit (USD)'), '50')
-    await user.click(screen.getByRole('button', { name: /create budget/i }))
-
-    await waitFor(() =>
-      expect(budgetsApi.create).toHaveBeenCalledWith({
-        agentId: null,
-        periodType: 'month',
-        limitCents: 5000,
-        behavior: 'warn_log',
-        softThresholdPct: 80,
-        active: true,
-      }),
-    )
+    await screen.findByText('No spend budgets')
+    const links = screen.getAllByRole('link', { name: /new budget/i })
+    expect(links).toHaveLength(2)
+    for (const link of links) expect(link).toHaveAttribute('href', '/analytics/budgets/new')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('shows the backend reason for a refused create, not a generic failure', async () => {
-    seed({ budgets: [] })
-    fn(budgetsApi.create).mockRejectedValue({
-      // The wrapped shape the global exception filter emits. A raw
-      // response.data.message read here is undefined, so the person would
-      // be told "Please try again" and never why.
-      response: {
-        data: {
-          error: {
-            message:
-              'Provider-scoped budgets are not supported: spend is not attributed per LLM provider.',
-          },
-        },
-      },
-    })
-    const user = userEvent.setup()
-    render(<BudgetsTab />)
-
-    await user.click((await screen.findAllByRole('button', { name: /new budget/i }))[0])
-    await user.type(await screen.findByLabelText('Limit (USD)'), '50')
-    await user.click(screen.getByRole('button', { name: /create budget/i }))
-
-    await waitFor(() =>
-      expect(notify.error).toHaveBeenCalledWith(
-        'Failed to create budget',
-        'Provider-scoped budgets are not supported: spend is not attributed per LLM provider.',
-      ),
-    )
-  })
-
-  it('saves an edit through PATCH, carrying the row id', async () => {
+  it('links each row to its own edit page, carrying the row id', async () => {
     seed({ budgets: [orgBudget] })
-    fn(budgetsApi.update).mockResolvedValue({ ...orgBudget })
-    const user = userEvent.setup()
     render(<BudgetsTab />)
 
-    await user.click(await screen.findByRole('button', { name: /edit budget/i }))
-    const limit = await screen.findByLabelText('Limit (USD)')
-    await user.clear(limit)
-    await user.type(limit, '250')
-    await user.click(screen.getByRole('button', { name: /save budget/i }))
-
-    await waitFor(() =>
-      expect(budgetsApi.update).toHaveBeenCalledWith(
-        'b-org',
-        expect.objectContaining({ limitCents: 25000, agentId: null }),
-      ),
+    expect(await screen.findByRole('link', { name: /edit budget/i })).toHaveAttribute(
+      'href',
+      '/analytics/budgets/b-org/edit',
     )
   })
 
@@ -318,7 +269,7 @@ describe('a member sees the budgets but not the controls', () => {
     // is about not offering an action that cannot work, not about hiding
     // the numbers.
     await waitFor(() => expect(screen.getByText(/spend budgets/i)).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: /new budget/i })).toBeNull()
+    expect(screen.queryByRole('link', { name: /new budget/i })).toBeNull()
     expect(screen.queryByLabelText('Edit budget')).toBeNull()
     expect(screen.queryByLabelText('Delete budget')).toBeNull()
   })

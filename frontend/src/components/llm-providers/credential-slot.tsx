@@ -13,7 +13,7 @@ import { useState } from 'react'
 import type { UseFormReturn } from 'react-hook-form'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { SecretInput } from '@/components/ui/secret-input'
 import { Label } from '@/components/ui/label'
 import { ConnectAccountButton } from '@/components/connections/connect-sheet'
 import { ConnectedChip } from '@/components/connections/connected-chip'
@@ -126,7 +126,7 @@ export function CredentialSlot({ label, credentialRef, hasStoredKey, connectorKe
       {mode === 'paste' && (
         <div>
           <Label htmlFor={keyInputId}>{keyLabel}</Label>
-          <Input id={keyInputId} type="password" autoComplete="off" {...form.register(keyField)} placeholder={keyPlaceholder} />
+          <SecretInput id={keyInputId} {...form.register(keyField)} placeholder={keyPlaceholder} />
           {keyHelp}
         </div>
       )}

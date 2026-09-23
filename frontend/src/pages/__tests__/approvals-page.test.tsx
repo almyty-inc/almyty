@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 
 import { render } from '../../test/setup'
 import { ApprovalsPage } from '../approvals'
@@ -79,5 +79,55 @@ describe('ApprovalsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('No pending approvals')).toBeInTheDocument()
     })
+  })
+
+  it('decides inline in the row, not in a dialog', async () => {
+    const row = {
+      id: 'a-2',
+      organizationId: 'org-1',
+      teamId: null,
+      visibility: 'org',
+      runId: 'run-2',
+      agentId: 'agent-2222-3333',
+      toolCallId: null,
+      reason: 'Send the invoice email',
+      payload: null,
+      status: 'pending',
+      decidedBy: null,
+      decidedAt: null,
+      decisionReason: null,
+      expiresAt: null,
+      createdAt: new Date().toISOString(),
+    }
+    ;(approvalsApi.list as any).mockResolvedValue([row])
+    ;(approvalsApi.reject as any).mockResolvedValue({})
+    render(<ApprovalsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Reject/ }))
+    const form = screen.getByRole('form', { name: 'Reject this action' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(within(form).getByText(/cannot be resumed/)).toBeInTheDocument()
+
+    fireEvent.change(within(form).getByLabelText('Note (optional)'), { target: { value: 'Wrong customer' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Reject' }))
+    await waitFor(() => expect(approvalsApi.reject).toHaveBeenCalledWith('a-2', 'Wrong customer'))
+    expect(approvalsApi.approve).not.toHaveBeenCalled()
+  })
+
+  it('Cancel closes the inline decision without deciding', async () => {
+    ;(approvalsApi.list as any).mockResolvedValue([
+      {
+        id: 'a-3', organizationId: 'o', teamId: null, visibility: 'org', runId: 'r-3',
+        agentId: 'agent-3333', toolCallId: null, reason: 'Pay the bill', payload: null,
+        status: 'pending', decidedBy: null, decidedAt: null, decisionReason: null,
+        expiresAt: null, createdAt: new Date().toISOString(),
+      },
+    ])
+    render(<ApprovalsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Approve/ }))
+    expect(screen.getByRole('form', { name: 'Approve this action' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('form')).not.toBeInTheDocument()
+    expect(approvalsApi.approve).not.toHaveBeenCalled()
   })
 })

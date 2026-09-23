@@ -107,7 +107,7 @@ export function ImportExternalA2ADialog({ open, onOpenChange }: ImportExternalA2
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5" />
-            Import External A2A Agent
+            Import external A2A agent
           </DialogTitle>
           <DialogDescription>
             Enter the URL of an A2A agent card to preview and import an external agent.

@@ -169,7 +169,7 @@ export class Tool {
    * filters use AccessPolicyService.applyListFilter.
    */
   @Column({ type: 'varchar', length: 8, default: 'org' })
-  visibility: 'org' | 'team';
+  visibility: 'org' | 'team' | 'private';
 
   @Column({ type: 'uuid', nullable: true })
   teamId: string | null;

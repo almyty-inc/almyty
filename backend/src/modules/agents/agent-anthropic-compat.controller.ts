@@ -147,7 +147,7 @@ export class AgentAnthropicCompatController {
           );
       }
 
-      const resolved = await this.resolveAgent(internal.model, apiKey.organizationId);
+      const resolved = await this.resolveAgent(internal.model, apiKey.organizationId, apiKey.userId);
 
       // The caller's sampling, on a throwaway copy of the agent. `temperature`
       // and `max_tokens` were carried out of the request correctly and then
@@ -293,16 +293,17 @@ export class AgentAnthropicCompatController {
     return apiKey;
   }
 
-  private async resolveAgent(model: string, organizationId: string): Promise<Agent> {
+  // A private agent answers only to its owner's own API key.
+  private async resolveAgent(model: string, organizationId: string, callerId: string | null): Promise<Agent> {
     const ref = model.replace(/^agent:/, '');
 
     let agent: Agent | null = null;
     try {
-      agent = await this.agentsService.getAgent(ref, organizationId);
+      agent = await this.agentsService.getAgent(ref, organizationId, callerId ? { id: callerId } : null);
     } catch (err) {
       if (!(err instanceof NotFoundException)) throw err;
     }
-    if (!agent) agent = await this.agentsService.findByName(ref, organizationId);
+    if (!agent) agent = await this.agentsService.findByName(ref, organizationId, callerId);
     if (!agent) throw new NotFoundException(`Agent not found: ${model}`);
     if (agent.status !== 'active') {
       throw new BadRequestException(`Agent is not active: ${agent.name} (status: ${agent.status})`);

@@ -3,34 +3,41 @@
 Connect one of your machines to almyty. Agents can then run tools, shell commands, and coding CLIs on it, while your code and credentials stay local.
 
 ```bash
-npx @almyty/runner start --name my-laptop
+npm i -g @almyty/runner @almyty/auth
+almyty-auth login
+almyty-runner start --name my-laptop
 ```
+
+Install once and call the installed `almyty-runner` binary: the runner is a
+daemon you restart, query and stop on that machine. If you already have the
+umbrella [`@almyty/cli`](/cli), `almyty runner …` runs the same commands.
 
 ![A connected runner](/screenshots/runner-detail.png)
 
-Once it is running, the machine appears under **Runners** and its capabilities show up as tools any agent can call.
+Once it is running, the machine appears under **Runners** and its capabilities show up as tools. Who can see and use them follows the runner's visibility: **Private** (the default, you only), **Team**, or **Org-wide**, set on the Runners page.
 
 v1 attaches one runner per account: registering a second one for the same account returns 409 until you release the first. Multi-machine registration is not available yet.
 
 ## Commands
 
 ```bash
-almyty runner start [options]   # register this machine and run the daemon
-almyty runner status            # show the local daemon status
-almyty runner stop              # send SIGTERM to the local daemon
+almyty-runner start [options]   # register this machine and run the daemon
+almyty-runner status            # show the local daemon status
+almyty-runner stop              # send SIGTERM to the local daemon
 ```
 
 ## Options for `start`
 
 | Flag | Does |
 |------|------|
-| `--name <name>` | Runner name, `[a-zA-Z0-9_-]`, up to 64 chars |
-| `--label key=value` | Add a routing label. Repeat for several |
+| `--name <name>` | Runner name, `[a-zA-Z0-9_-]`, up to 64 chars, unique in the organization. A label, not a credential |
+| `--org <org-id>` | Organization to register in, if you belong to several. Refused for an org you are not in |
+| `--label key=value` | Add a descriptive label. Repeat for several. Labels do not affect dispatch |
 | `--config <path>` | JSON config file, overrides global and project config |
 | `--url <backend-url>` | Override the backend URL, e.g. `https://api.almyty.com` |
 
 ```bash
-almyty runner start --name build-box --label gpu=true --label region=eu
+almyty-runner start --name build-box --label gpu=true --label region=eu
 ```
 
 ## What a runner can do on your machine
@@ -72,8 +79,14 @@ With a runner online, [`almyty chat`](/cli/chat) can dispatch tasks to coding ag
 ## Authentication
 
 Reads the shared `~/.almyty/credentials.json`. Log in first, or set `ALMYTY_TOKEN`:
+Reads the shared `~/.almyty/credentials.json`. Log in first, or set `ALMYTY_TOKEN`:
 
 ```bash
-npx @almyty/auth login
-npx @almyty/runner start --name my-laptop
+almyty-auth login
+almyty-runner start --name my-laptop
 ```
+
+That login is what identifies and authorises the runner: the backend attaches
+the daemon to the logged-in user's runner. The name is only a label, unique in
+the organization, so knowing someone's runner name does not let you connect to
+it.

@@ -1,13 +1,11 @@
 /**
- * The LLM node's Model field.
+ * The LLM node's Model field, now the shared ModelPicker.
  *
  * Radix renders a Select's placeholder whenever `value` matches no SelectItem,
- * and it does so silently. The items here come from the provider's live model
- * list, so a saved model that list does not return -- a dated snapshot id, a
- * fine-tune, a retired model -- used to read as "Select model" while the node
- * still held and executed the saved value. These tests pin both guards: the
- * field opens in free-text mode when the saved model is not listed, and the
- * saved value stays selectable if the user switches back to the suggestions.
+ * and it does so silently. A saved model the provider's list does not return
+ * -- a dated snapshot id, a fine-tune, a retired model -- used to read as
+ * "Select model" while the node still held and executed the saved value.
+ * The picker keeps such a value as its own option, so it stays on screen.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, waitFor, fireEvent } from '@testing-library/react'
@@ -25,6 +23,8 @@ vi.mock('@/lib/api', () => ({
   toolsApi: { getAll: vi.fn().mockResolvedValue([]) },
   agentsApi: { getAll: vi.fn().mockResolvedValue([]) },
 }))
+// No catalog cards, so the picker lists what the provider returns.
+vi.mock('@/lib/models-api', () => ({ modelsApi: { list: vi.fn().mockResolvedValue([]) } }))
 
 vi.mock('@/store/organization', () => ({
   useOrganizationStore: (selector?: (s: any) => unknown) => {
@@ -51,17 +51,18 @@ function llmNode(model: string): Node {
   }
 }
 
-function renderPanel(model: string) {
+function renderPanel(model: string, onUpdateNode = vi.fn()) {
   const node = llmNode(model)
-  return renderWithProviders(
+  renderWithProviders(
     <NodeConfigPanel
       node={node}
       nodes={[node]}
-      onUpdateNode={vi.fn()}
+      onUpdateNode={onUpdateNode}
       onDeleteNode={vi.fn()}
       onClose={vi.fn()}
     />,
   )
+  return onUpdateNode
 }
 
 describe('LLM node model field', () => {
@@ -73,38 +74,33 @@ describe('LLM node model field', () => {
   it('shows a saved model the provider does not list instead of a blank placeholder', async () => {
     renderPanel(SAVED_BUT_UNLISTED)
 
-    // Wait for the provider's list to land first. The toggle renders only
-    // once there are suggestions, so its presence is the signal that the
-    // Select branch is now live -- assert before that and the field is still
-    // in its loading fallback and the test passes for the wrong reason.
-    // That it reads "Use suggested" is itself the fix: the field opened in
-    // custom mode because the saved model is not in the list.
-    expect(await screen.findByRole('button', { name: 'Use suggested' })).toBeInTheDocument()
-
-    // The saved value is on screen and editable, not swallowed by a Select
-    // that has no item for it.
-    expect(screen.getByDisplayValue(SAVED_BUT_UNLISTED)).toBeInTheDocument()
+    // The select only exists once the list has landed, so waiting for it is
+    // the signal that the loading state is over.
+    await screen.findByTestId('node-model-select')
+    await waitFor(() => expect(screen.getAllByText(SAVED_BUT_UNLISTED).length).toBeGreaterThan(0))
     expect(screen.queryByText('Select model')).not.toBeInTheDocument()
   })
 
-  it('offers the saved value as an option when the user switches back to suggestions', async () => {
-    renderPanel(SAVED_BUT_UNLISTED)
-
-    // The toggle only appears once suggestions have loaded; it reads
-    // "Use suggested" precisely because the field defaulted to custom.
-    const toggle = await screen.findByRole('button', { name: 'Use suggested' })
-    fireEvent.click(toggle)
-
-    // Radix keeps closed content mounted off-screen so the selected item's
-    // text reaches the trigger -- which is exactly what was missing before.
-    await waitFor(() => expect(screen.getByText(SAVED_BUT_UNLISTED)).toBeInTheDocument())
-    expect(screen.queryByText('Select model')).not.toBeInTheDocument()
-  })
-
-  it('uses the suggestion list when the saved model is one of the suggestions', async () => {
+  it('selects from the provider list rather than asking for typed text', async () => {
     renderPanel(LISTED)
 
-    expect(await screen.findByRole('button', { name: 'Custom model' })).toBeInTheDocument()
-    expect(screen.queryByDisplayValue(LISTED)).not.toBeInTheDocument()
+    await screen.findByTestId('node-model-select')
+    expect(screen.queryByTestId('node-model-input')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Use a model id not in the list' })).toBeInTheDocument()
+  })
+
+  it('writes a typed model id through the escape hatch, keeping the provider', async () => {
+    const onUpdateNode = renderPanel(LISTED)
+    await screen.findByTestId('node-model-select')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use a model id not in the list' }))
+    fireEvent.change(screen.getByTestId('node-model-input'), { target: { value: 'ft:gpt-4o:acme' } })
+
+    expect(onUpdateNode).toHaveBeenLastCalledWith('llm_1', expect.objectContaining({
+      providerId: 'prov-1',
+      providerName: 'OpenAI',
+      providerType: 'openai',
+      model: 'ft:gpt-4o:acme',
+    }))
   })
 })

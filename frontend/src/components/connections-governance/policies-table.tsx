@@ -30,7 +30,10 @@ import { POLICIES_QUERY_KEY, connectionPoliciesApi, describePolicyRule } from '@
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
 import { POLICY_KIND_LABELS, type ConnectionPolicy, type ConnectionPolicyKind } from '@/types/connections-governance'
-import { PolicyDialog } from './policy-dialog'
+import { Link } from 'react-router-dom'
+
+/** The connection policy create/edit page (policy-form.tsx). */
+export const POLICIES_PAGE_PATH = '/settings/connections/policies'
 
 const KIND_BADGE_CLASS: Record<ConnectionPolicyKind, string> = {
   connector_allowlist: 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400',
@@ -51,7 +54,6 @@ export function PolicyKindBadge({ kind, className }: { kind: ConnectionPolicyKin
 export function PoliciesTable() {
   const queryClient = useQueryClient()
   const notifications = useNotifications()
-  const [dialog, setDialog] = useState<{ open: boolean; policy: ConnectionPolicy | null }>({ open: false, policy: null })
   const [toDelete, setToDelete] = useState<ConnectionPolicy | null>(null)
 
   const policiesQuery = useQuery({
@@ -101,9 +103,11 @@ export function PoliciesTable() {
     <div className="space-y-3" data-testid="policies-panel">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">Org-wide rules over what may be connected and how connections may be used. Disabled rules are kept but never evaluated.</p>
-        <Button type="button" size="sm" onClick={() => setDialog({ open: true, policy: null })} className="shrink-0">
-          <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Add policy
+        <Button size="sm" asChild className="shrink-0">
+          <Link to={`${POLICIES_PAGE_PATH}/new`}>
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Add policy
+          </Link>
         </Button>
       </div>
 
@@ -116,16 +120,13 @@ export function PoliciesTable() {
       )}
 
       {!policiesQuery.isLoading && !policiesQuery.isError && policies.length === 0 && (
-        <Card>
-          <CardContent className="p-0">
-            <EmptyState
+        <EmptyState
+          variant="panel"
               icon={ShieldCheck}
               title="No policies yet"
               description="Without rules every connector may be connected and every grant is honoured as written."
-              action={<Button type="button" variant="outline" onClick={() => setDialog({ open: true, policy: null })}>Add policy</Button>}
+              action={<Button variant="outline" asChild><Link to={`${POLICIES_PAGE_PATH}/new`}>Add policy</Link></Button>}
             />
-          </CardContent>
-        </Card>
       )}
 
       {policies.length > 0 && (
@@ -159,8 +160,10 @@ export function PoliciesTable() {
                     </TableCell>
                     <TableCell className="align-top">
                       <div className="flex justify-end gap-1">
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${label}`} onClick={() => setDialog({ open: true, policy })}>
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                        <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                          <Link to={`${POLICIES_PAGE_PATH}/${policy.id}`} aria-label={`Edit ${label}`}>
+                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          </Link>
                         </Button>
                         <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label={`Delete ${label}`} onClick={() => setToDelete(policy)}>
                           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -175,8 +178,6 @@ export function PoliciesTable() {
         </div>
       )}
 
-      <PolicyDialog open={dialog.open} policy={dialog.policy} onOpenChange={(open) => setDialog((prev) => ({ ...prev, open }))} />
-
       <AlertDialog open={!!toDelete} onOpenChange={(next) => !next && setToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -186,8 +187,8 @@ export function PoliciesTable() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep</AlertDialogCancel>
-            <AlertDialogAction onClick={() => toDelete && remove.mutate(toDelete)} disabled={remove.isPending}>Delete</AlertDialogAction>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => toDelete && remove.mutate(toDelete)} disabled={remove.isPending}>Delete policy</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

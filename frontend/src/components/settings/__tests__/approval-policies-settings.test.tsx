@@ -107,58 +107,35 @@ describe('ApprovalPoliciesSettings', () => {
     expect(screen.getByText('Enabled')).toBeInTheDocument()
   })
 
-  it('creates a policy via POST when the form is submitted', async () => {
+  // Creating and editing are pages now (approval-policy-form.test.tsx drives
+  // the POST and PATCH); the list links there.
+  it('links New policy to the create page', async () => {
     entitlementState.granted = true
     mockedList.mockResolvedValue([])
-    mockedCreate.mockResolvedValue({ ...samplePolicy, id: 'new' })
 
     render(<ApprovalPoliciesSettings />)
 
     await waitFor(() => {
       expect(screen.getByText(/No approval policies yet/i)).toBeInTheDocument()
     })
-
-    fireEvent.click(screen.getByRole('button', { name: /New Policy/i }))
-
-    const dialog = await screen.findByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText('Name'), {
-      target: { value: 'Deploy approvals' },
-    })
-    // Fill the default first step so validation passes.
-    fireEvent.change(within(dialog).getByLabelText('Step 1 name'), {
-      target: { value: 'lead' },
-    })
-
-    fireEvent.click(within(dialog).getByRole('button', { name: /Create policy/i }))
-
-    await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1))
-    const payload = mockedCreate.mock.calls[0][0]
-    expect(payload.name).toBe('Deploy approvals')
-    expect(payload.steps).toEqual([
-      { name: 'lead', approverRole: '*', minApprovals: 1 },
-    ])
+    expect(screen.getByRole('link', { name: /New policy/i })).toHaveAttribute(
+      'href',
+      '/settings/approvals/policies/new',
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('edits a policy via PATCH to the right id', async () => {
+  it('links each row to its own edit page', async () => {
     entitlementState.granted = true
     mockedList.mockResolvedValue([samplePolicy])
-    mockedUpdate.mockResolvedValue(samplePolicy)
 
     render(<ApprovalPoliciesSettings />)
 
     await waitFor(() => expect(screen.getByText('Refunds over $1,000')).toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: /Edit Refunds over \$1,000/i }))
-
-    const dialog = await screen.findByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText('Name'), {
-      target: { value: 'Refunds over $2,000' },
-    })
-    fireEvent.click(within(dialog).getByRole('button', { name: /Save changes/i }))
-
-    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1))
-    expect(mockedUpdate.mock.calls[0][0]).toBe('p1')
-    expect(mockedUpdate.mock.calls[0][1].name).toBe('Refunds over $2,000')
+    expect(screen.getByRole('link', { name: /Edit Refunds over \$1,000/i })).toHaveAttribute(
+      'href',
+      '/settings/approvals/policies/p1',
+    )
   })
 
   it('deletes a policy via DELETE after confirmation', async () => {
@@ -173,7 +150,7 @@ describe('ApprovalPoliciesSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: /Delete Refunds over \$1,000/i }))
 
     const alert = await screen.findByRole('alertdialog')
-    fireEvent.click(within(alert).getByRole('button', { name: /^Delete$/i }))
+    fireEvent.click(within(alert).getByRole('button', { name: /^Delete policy$/i }))
 
     await waitFor(() => expect(mockedDelete).toHaveBeenCalledWith('p1'))
   })

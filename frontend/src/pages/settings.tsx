@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { cn, formatDate } from '@/lib/utils'
+import { EmptyState } from '@/components/ui/empty-state'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
 import { MembersAndTeamsTab } from '@/components/MembersAndTeamsTab'
@@ -25,6 +27,8 @@ import { NotificationPreferences } from '@/components/settings/notification-pref
 import { ConnectionsTab } from '@/components/connections/connections-tab'
 import { BillingTab } from '@/components/BillingTab'
 import { PlanBadge } from '@/components/plan-indicator'
+import { PageHeader } from '@/components/layout/page-header'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { authApi, organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 
@@ -53,51 +57,44 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Settings</h1>
-          <p className="text-muted-foreground">
-            Manage your organization and account settings
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0 pt-1">
-          <span className="text-sm text-muted-foreground">Plan</span>
-          <PlanBadge />
-        </div>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="Manage your organization and account settings"
+        actions={
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Plan</span>
+            <PlanBadge />
+          </div>
+        }
+      />
 
-      <div role="group" aria-label="Settings sections" className="flex flex-wrap items-center gap-1 border-b">
-        {([
-          { key: 'organization' as SettingsTab, label: 'Organization', icon: Building },
-          { key: 'members' as SettingsTab, label: 'Members & Teams', icon: Users },
-          { key: 'connections' as SettingsTab, label: 'Connections', icon: Plug },
-          { key: 'billing' as SettingsTab, label: 'Billing', icon: CreditCard },
-          { key: 'referrals' as SettingsTab, label: 'Referrals', icon: Gift },
-          { key: 'profile' as SettingsTab, label: 'Profile', icon: User },
-          { key: 'notifications' as SettingsTab, label: 'Notifications', icon: Bell },
-          { key: 'security' as SettingsTab, label: 'Security', icon: Shield },
-          { key: 'sso' as SettingsTab, label: 'SSO', icon: ShieldCheck },
-          { key: 'rbac' as SettingsTab, label: 'Roles', icon: KeyRound },
-          { key: 'approvals' as SettingsTab, label: 'Approvals', icon: ShieldAlert },
-          { key: 'compliance' as SettingsTab, label: 'Compliance', icon: ScrollText },
-          { key: 'audit-streams' as SettingsTab, label: 'Audit streaming', icon: Radio },
-          { key: 'encryption' as SettingsTab, label: 'Encryption', icon: Lock },
-        ]).map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => setSettingsTab(key)}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              settingsTab === key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* The shared pill tabs, as on Analytics, Tools and Memory; each
+          section is still its own URL. */}
+      <Tabs value={settingsTab} onValueChange={setSettingsTab}>
+        <TabsList aria-label="Settings sections" className="h-auto flex-wrap justify-start">
+          {([
+            { key: 'organization' as SettingsTab, label: 'Organization', icon: Building },
+            { key: 'members' as SettingsTab, label: 'Members & teams', icon: Users },
+            { key: 'connections' as SettingsTab, label: 'Connections', icon: Plug },
+            { key: 'billing' as SettingsTab, label: 'Billing', icon: CreditCard },
+            { key: 'referrals' as SettingsTab, label: 'Referrals', icon: Gift },
+            { key: 'profile' as SettingsTab, label: 'Profile', icon: User },
+            { key: 'notifications' as SettingsTab, label: 'Notifications', icon: Bell },
+            { key: 'security' as SettingsTab, label: 'Security', icon: Shield },
+            { key: 'sso' as SettingsTab, label: 'SSO', icon: ShieldCheck },
+            { key: 'rbac' as SettingsTab, label: 'Roles', icon: KeyRound },
+            { key: 'approvals' as SettingsTab, label: 'Approvals', icon: ShieldAlert },
+            { key: 'compliance' as SettingsTab, label: 'Compliance', icon: ScrollText },
+            { key: 'audit-streams' as SettingsTab, label: 'Audit streaming', icon: Radio },
+            { key: 'encryption' as SettingsTab, label: 'Encryption', icon: Lock },
+          ]).map(({ key, label, icon: Icon }) => (
+            <TabsTrigger key={key} value={key} className="gap-1.5">
+              <Icon className="h-4 w-4" />
+              {label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       <div>
         {settingsTab === 'organization' && <OrganizationTab organization={currentOrganization} />}
@@ -199,11 +196,12 @@ function OrganizationTab({ organization }: { organization: any }) {
 
   if (!organization) {
     return (
-      <Card>
-        <CardContent className="text-center py-8">
-          <div className="text-muted-foreground">No organization selected</div>
-        </CardContent>
-      </Card>
+      <EmptyState
+        variant="panel"
+        icon={Building}
+        title="No organization selected"
+        description="Select or create an organization to manage its settings."
+      />
     )
   }
 
@@ -239,13 +237,13 @@ function OrganizationTab({ organization }: { organization: any }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Organization Details</CardTitle>
+            <CardTitle>Organization details</CardTitle>
             <CardDescription>Manage your organization settings</CardDescription>
           </div>
           {!isEditing ? (
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setIsEditing(true)}>
-                Edit Organization
+                Edit organization
               </Button>
               {/*
                 Creating one was possible and unreachable: the
@@ -253,7 +251,7 @@ function OrganizationTab({ organization }: { organization: any }) {
                 sidebar nor anywhere a person looks for it.
               */}
               <Button variant="outline" asChild data-testid="new-organization">
-                <Link to="/organizations?new=1">New Organization</Link>
+                <Link to="/organizations/new">New organization</Link>
               </Button>
             </div>
           ) : (
@@ -315,7 +313,7 @@ function OrganizationTab({ organization }: { organization: any }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Agent Defaults</CardTitle>
+            <CardTitle>Agent defaults</CardTitle>
             <CardDescription>Default configuration applied to all agents in this organization</CardDescription>
           </div>
         </CardHeader>
@@ -372,7 +370,7 @@ function OrganizationTab({ organization }: { organization: any }) {
           </div>
 
           <Button onClick={handleSaveAgentDefaults} disabled={updateAgentDefaultsMutation.isPending}>
-            {updateAgentDefaultsMutation.isPending ? 'Saving...' : 'Save Agent Defaults'}
+            {updateAgentDefaultsMutation.isPending ? 'Saving...' : 'Save agent defaults'}
           </Button>
         </CardContent>
       </Card>
@@ -420,11 +418,9 @@ function ProfileTab() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardContent className="text-center py-8">
-          <div className="text-muted-foreground">Loading profile...</div>
-        </CardContent>
-      </Card>
+      <div className="flex justify-center py-12" aria-label="Loading profile">
+        <LoadingSpinner />
+      </div>
     )
   }
   
@@ -476,12 +472,12 @@ function ProfileTab() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
-          <CardTitle>Profile Information</CardTitle>
+          <CardTitle>Profile information</CardTitle>
           <CardDescription>Your account details and information</CardDescription>
         </div>
         {!isEditing ? (
           <Button variant="outline" onClick={() => setIsEditing(true)}>
-            Edit Profile
+            Edit profile
           </Button>
         ) : (
           <div className="flex gap-2">

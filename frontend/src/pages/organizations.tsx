@@ -1,66 +1,44 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef } from '@tanstack/react-table'
-import { Plus, Users, Settings, Shield, MoreVertical, Eye, Edit, Trash2, UserPlus, Crown, Mail } from 'lucide-react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import { Link, useNavigate } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { DataTable, createSelectColumn, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Progress } from '@/components/ui/progress'
 import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import { organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import { formatDate, getInitials, formatCurrency } from '@/lib/utils'
-import { Organization, OrganizationMembership, OrganizationRole, OrganizationPlan } from '@/types'
+import { formatDate, getInitials } from '@/lib/utils'
+import { PageHeader } from '@/components/layout/page-header'
+import { Organization, OrganizationPlan } from '@/types'
 
-const createOrgSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  description: z.string().optional(),
-})
-
-const inviteMemberSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  role: z.nativeEnum(OrganizationRole),
-})
-
-type CreateOrgFormData = z.infer<typeof createOrgSchema>
-type InviteMemberFormData = z.infer<typeof inviteMemberSchema>
-
+/**
+ * The organizations list. Creating one is /organizations/new; an
+ * organization's overview, members and settings are /organizations/:id.
+ */
 export function OrganizationsPage() {
-  const { currentOrganization, organizations, setCurrentOrganization, upsertOrganization, removeOrganization } = useOrganizationStore()
-  const { success, error, warning } = useNotifications()
+  const { setCurrentOrganization, removeOrganization } = useOrganizationStore()
+  const { success, error } = useNotifications()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const { confirm, dialog: confirmDialog } = useConfirm()
+
+  // Old `?new=1` links (Settings, the palette, bookmarks) land on the create page.
+  useNewParamRedirect('/organizations/new')
 
   React.useEffect(() => {
     document.title = 'Organizations | almyty'
     return () => { document.title = 'almyty' }
   }, [])
-  
-  const [selectedOrg, setSelectedOrg] = React.useState<Organization | null>(null)
-  const [selectedOrgId, setSelectedOrgId] = React.useState<string | null>(null)
-  const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
-  // Honour ?new=1, so Settings and the palette can send you straight to
-  // the dialog -- there was no create affordance anywhere else.
-  useCreateDeepLink(setCreateDialogOpen)
-  const [inviteDialogOpen, setInviteDialogOpen] = React.useState(false)
-  const [orgDetailsOpen, setOrgDetailsOpen] = React.useState(false)
 
   const {
     data: organizationsData,
@@ -73,95 +51,6 @@ export function OrganizationsPage() {
     queryFn: () => organizationsApi.getAll(),
   })
 
-  const { data: membersData, isLoading: membersLoading } = useQuery({
-    queryKey: ['organization-members', selectedOrgId],
-    queryFn: () => selectedOrgId ? organizationsApi.getMembers(selectedOrgId) : null,
-    enabled: !!selectedOrgId,
-  })
-
-  const createOrgMutation = useMutation({
-    mutationFn: organizationsApi.create,
-    onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ['organizations'] })
-      success('Organization created', 'Your new organization has been created successfully.')
-      setCreateDialogOpen(false)
-      upsertOrganization(response)
-      setCurrentOrganization(response)
-    },
-    onError: (err: any) => {
-      error('Failed to create organization', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
-
-  const inviteMemberMutation = useMutation({
-    mutationFn: ({ orgId, data }: { orgId: string; data: InviteMemberFormData }) =>
-      organizationsApi.addMember(orgId, data),
-    onSuccess: (result: any) => {
-      queryClient.invalidateQueries({ queryKey: ['organization-members'] })
-      // Same branch as the other invite dialog: the mail service returns
-      // false rather than throwing, so this said "sent" over a send that
-      // was refused.
-      if ((result as any)?.inviteSent === false) {
-        warning(
-          'Invite created, email not delivered',
-          'They are invited, but the email could not be sent. Share the invite link with them directly.',
-        )
-      } else {
-        success('Member invited', 'Invitation sent successfully.')
-      }
-      setInviteDialogOpen(false)
-    },
-    onError: (err: any) => {
-      error('Failed to invite member', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
-
-  const updateMemberRoleMutation = useMutation({
-    mutationFn: ({ orgId, userId, role }: { orgId: string; userId: string; role: string }) =>
-      organizationsApi.updateMemberRole(orgId, userId, { role }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organization-members'] })
-      success('Member role updated', 'Role has been updated successfully.')
-    },
-    onError: (err: any) => {
-      error('Failed to update role', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
-
-  const removeMemberMutation = useMutation({
-    mutationFn: ({ orgId, userId }: { orgId: string; userId: string }) =>
-      organizationsApi.removeMember(orgId, userId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['organization-members'] })
-      success('Member removed', 'Member has been removed from the organization.')
-    },
-    onError: (err: any) => {
-      error('Failed to remove member', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
-
-  const [editOrgName, setEditOrgName] = React.useState('')
-  const [editOrgDescription, setEditOrgDescription] = React.useState('')
-
-  const updateOrgMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name: string; description: string } }) =>
-      organizationsApi.update(id, data),
-    onSuccess: (updated: any, { id, data }) => {
-      queryClient.invalidateQueries({ queryKey: ['organizations'] })
-      queryClient.invalidateQueries({ queryKey: ['organization-details', id] })
-      // The store is the other owner of this entity and its
-      // currentOrganization is persisted, so a rename that only
-      // invalidated a query key survived a reload as the old name.
-      upsertOrganization(
-        updated && updated.id ? updated : ({ id, ...data } as Organization),
-      )
-      success('Organization updated', 'Settings saved successfully.')
-    },
-    onError: (err: any) => {
-      error('Failed to update organization', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
-
   const deleteOrgMutation = useMutation({
     mutationFn: organizationsApi.delete,
     onSuccess: (_result, id: string) => {
@@ -172,39 +61,13 @@ export function OrganizationsPage() {
       // every request the app made afterwards.
       removeOrganization(id)
       success('Organization deleted', 'Organization has been deleted successfully.')
-      setOrgDetailsOpen(false)
     },
     onError: (err: any) => {
       error('Failed to delete organization', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
-  const createForm = useForm<CreateOrgFormData>({
-    resolver: zodResolver(createOrgSchema),
-  })
-
-  const inviteForm = useForm<InviteMemberFormData>({
-    resolver: zodResolver(inviteMemberSchema),
-  })
-
-  const handleCreateOrg = (data: CreateOrgFormData) => {
-    createOrgMutation.mutate(data)
-  }
-
-  const handleInviteMember = (data: InviteMemberFormData) => {
-    if (!selectedOrg) return
-    inviteMemberMutation.mutate({ orgId: selectedOrg.id, data })
-  }
-
-  const handleUpdateMemberRole = (userId: string, role: string) => {
-    if (!selectedOrg) return
-    updateMemberRoleMutation.mutate({ orgId: selectedOrg.id, userId, role })
-  }
-
-  const handleRemoveMember = (userId: string) => {
-    if (!selectedOrg) return
-    removeMemberMutation.mutate({ orgId: selectedOrg.id, userId })
-  }
+  const orgPath = (org: Organization, tab?: string) => `/organizations/${org.id}${tab ? `?tab=${tab}` : ''}`
 
   const orgColumns: ColumnDef<Organization>[] = [
     createSelectColumn('select'),
@@ -212,30 +75,19 @@ export function OrganizationsPage() {
       ...createSortableColumn('name', 'Name'),
       cell: ({ row }) => {
         const org = row.original
-        const openDetails = () => {
-          setSelectedOrg(org)
-          setSelectedOrgId(org.id)
-          setOrgDetailsOpen(true)
-        }
         return (
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
               <span className="text-sm font-medium">{getInitials(org.name)}</span>
             </div>
             <div>
-              {/*
-                The row's onRowClick was the only way into an organization, and
-                a click handler on a <tr> is invisible to the keyboard. A real
-                button here is tabbable and announces itself; DataTable skips
-                onRowClick for clicks on a <button>, so it does not double-fire.
-              */}
-              <button
-                type="button"
-                onClick={openDetails}
+              {/* A real link: tabbable, announces itself, opens in a new tab. */}
+              <Link
+                to={orgPath(org)}
                 className="font-medium text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
               >
                 {org.name}
-              </button>
+              </Link>
               <div className="text-sm text-muted-foreground">
                 {org.memberCount ?? org.members?.length ?? 0} members
               </div>
@@ -249,10 +101,8 @@ export function OrganizationsPage() {
       header: 'Plan',
       cell: ({ row }) => {
         // Plan can be undefined on freshly-created orgs whose
-        // /organizations list response trims it; the DB column has a
-        // 'free' default but the API serializer doesn't always include
-        // it. Fall back to 'free' so the column renders and the page
-        // doesn't crash with a TypeError on the .charAt call.
+        // /organizations list response trims it; fall back to 'free' so
+        // the column renders instead of crashing on .charAt.
         const plan = row.original.plan || 'free'
         const colors = {
           [OrganizationPlan.FREE]: 'secondary',
@@ -282,101 +132,24 @@ export function OrganizationsPage() {
       ),
     },
     createActionsColumn<Organization>(
-      (org) => {
-        setSelectedOrg(org)
-        setSelectedOrgId(org.id)
-        setEditOrgName(org.name)
-        setEditOrgDescription(org.description || '')
-        setOrgDetailsOpen(true)
+      (org) => navigate(orgPath(org, 'settings')),
+      async (org) => {
+        const ok = await confirm({
+          title: 'Delete this organization?',
+          description: `"${org.name}" and all of its data, including gateways, tools and settings, will be permanently deleted. This cannot be undone.`,
+          confirmLabel: 'Delete organization',
+          destructive: true,
+        })
+        if (ok) deleteOrgMutation.mutate(org.id)
       },
-      (org) => deleteOrgMutation.mutate(org.id),
       [
         {
-          label: 'View Details',
-          onClick: (org) => {
-            setSelectedOrg(org)
-            setSelectedOrgId(org.id)
-            setOrgDetailsOpen(true)
-          },
+          label: 'View details',
+          onClick: (org) => navigate(orgPath(org)),
         },
         {
-          label: 'Switch To',
+          label: 'Switch to',
           onClick: (org) => setCurrentOrganization(org),
-        },
-      ]
-    ),
-  ]
-
-  const memberColumns: ColumnDef<OrganizationMembership>[] = [
-    {
-      accessorKey: 'user.name',
-      header: 'Member',
-      cell: ({ row }) => {
-        const member = row.original
-        const userName = member.user?.name || member.email || 'Unknown User'
-        const userEmail = member.user?.email || member.email || ''
-        return (
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-secondary rounded-full flex items-center justify-center">
-              <span className="text-sm font-medium">
-                {getInitials(userName)}
-              </span>
-            </div>
-            <div>
-              <div className="font-medium">{userName}</div>
-              <div className="text-sm text-muted-foreground">{userEmail}</div>
-            </div>
-          </div>
-        )
-      },
-    },
-    {
-      accessorKey: 'role',
-      header: 'Role',
-      cell: ({ row }) => {
-        // Same defensive treatment as the Plan column above — role
-        // can be undefined when the membership list doesn't carry it
-        // (e.g. an invitation that's been accepted but the row was
-        // built from a stripped payload). Default to 'member'.
-        const role = row.original.role || OrganizationRole.MEMBER
-        const colors = {
-          [OrganizationRole.OWNER]: 'destructive',
-          [OrganizationRole.ADMIN]: 'default',
-          [OrganizationRole.MEMBER]: 'secondary',
-          [OrganizationRole.VIEWER]: 'outline',
-        }
-        const icons = {
-          [OrganizationRole.OWNER]: Crown,
-          [OrganizationRole.ADMIN]: Shield,
-          [OrganizationRole.MEMBER]: Users,
-          [OrganizationRole.VIEWER]: Eye,
-        }
-        const Icon = icons[role] ?? Users
-        return (
-          <Badge variant={(colors[role] ?? 'secondary') as any} className="flex items-center gap-1">
-            <Icon className="w-3 h-3" />
-            {role.charAt(0).toUpperCase() + role.slice(1)}
-          </Badge>
-        )
-      },
-    },
-    {
-      accessorKey: 'joinedAt',
-      header: 'Joined',
-      cell: ({ row }) => formatDate(row.original.joinedAt),
-    },
-    createActionsColumn<OrganizationMembership>(
-      () => {},
-      (member) => handleRemoveMember(member.userId),
-      [
-        {
-          label: 'Change Role',
-          onClick: (member) => {
-            const newRole = prompt('Enter new role (owner, admin, member, viewer):')
-            if (newRole && Object.values(OrganizationRole).includes(newRole as OrganizationRole)) {
-              handleUpdateMemberRole(member.userId, newRole)
-            }
-          },
         },
       ]
     ),
@@ -391,105 +164,33 @@ export function OrganizationsPage() {
   }
 
   // Every signed-in user belongs to at least one organization, so an
-  // empty table here is always a failure rather than a fact -- and it
-  // rendered with no message and no retry.
+  // empty table here is always a failure rather than a fact.
   if (orgsError) {
     return <QueryError error={orgsErrorValue} onRetry={() => refetchOrgs()} title="Couldn't load your organizations" />
   }
 
   // organizationsApi.getAll() runs through apiGet → extractData, so
-  // organizationsData is already the array. The previous `?.data`
-  // double-unwrap was always undefined, dropping us into the stale
-  // Zustand-store fallback whose 'organizations' entries miss
-  // createdAt/isActive — that's why the table showed 'Invalid Date'
-  // and 'Inactive' for the active org.
+  // organizationsData is already the array.
   const orgs = Array.isArray(organizationsData) ? organizationsData : []
-  // getMembers also runs through apiGet → extractData, so membersData is
-  // already the array. Reaching for `.data` on it was undefined, so the
-  // Members tab was permanently empty no matter how many people were in
-  // the organization.
-  const members = Array.isArray(membersData) ? membersData : []
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Organizations</h1>
-          <p className="text-muted-foreground">
-            Manage your organizations and team members
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Dialog open={createDialogOpen} onOpenChange={(open) => {
-            createOrgMutation.reset()
-            setCreateDialogOpen(open)
-          }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Create Organization
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Organization</DialogTitle>
-                <DialogDescription>
-                  Create a new organization to manage your team and resources.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={createForm.handleSubmit(handleCreateOrg)} className="space-y-4">
-                {createOrgMutation.isError && (
-                  <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                    {getApiErrorMessage(createOrgMutation.error, 'Could not create the organization. Please try again.')}
-                  </p>
-                )}
-                <div>
-                  <Label htmlFor="name">Organization Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="Enter organization name"
-                    {...createForm.register('name')}
-                  />
-                  {createForm.formState.errors.name && (
-                    <p className="text-sm text-red-500 mt-1">
-                      {createForm.formState.errors.name.message}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <Label htmlFor="description">Description (Optional)</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Enter organization description"
-                    {...createForm.register('description')}
-                  />
-                </div>
-                <div className="flex justify-end space-x-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setCreateDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={createOrgMutation.isPending}
-                  >
-                    {createOrgMutation.isPending ? 'Creating...' : 'Create'}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Organizations"
+        description="Manage your organizations and team members"
+        actions={
+          <Button asChild>
+            <Link to="/organizations/new">
+              <Plus className="mr-2 h-4 w-4" />
+              Create organization
+            </Link>
+          </Button>
+        }
+      />
 
-      {/* Organizations Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Your Organizations</CardTitle>
+          <CardTitle>Your organizations</CardTitle>
           <CardDescription>
             Manage and switch between your organizations
           </CardDescription>
@@ -500,289 +201,11 @@ export function OrganizationsPage() {
             data={orgs}
             searchKey="name"
             searchPlaceholder="Search organizations..."
-            onRowClick={(org) => {
-              setSelectedOrg(org)
-              setSelectedOrgId(org.id)
-              setOrgDetailsOpen(true)
-            }}
+            onRowClick={(org) => navigate(orgPath(org))}
           />
         </CardContent>
       </Card>
-
-      {/* Organization Details Sheet */}
-      <Sheet open={orgDetailsOpen} onOpenChange={(open) => {
-        setOrgDetailsOpen(open)
-        if (!open) {
-          setSelectedOrgId(null)
-        }
-      }}>
-        <SheetContent className="w-[600px] sm:w-[800px]">
-          <SheetHeader>
-            <SheetTitle className="flex items-center space-x-2">
-              {selectedOrg && (
-                <>
-                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <span className="text-sm font-medium">
-                      {getInitials(selectedOrg.name)}
-                    </span>
-                  </div>
-                  <span>{selectedOrg.name}</span>
-                </>
-              )}
-            </SheetTitle>
-            <SheetDescription>
-              Manage organization settings and members
-            </SheetDescription>
-          </SheetHeader>
-
-          {selectedOrg && (
-            <Tabs defaultValue="overview" className="w-full mt-6">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="members">Members</TabsTrigger>
-                <TabsTrigger value="settings">Settings</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="overview" className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Members</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {selectedOrg.memberCount ?? members.length}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Plan</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Badge variant="default">
-                        {selectedOrg.plan ? String(selectedOrg.plan).charAt(0).toUpperCase() + String(selectedOrg.plan).slice(1) : 'Free'}
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Gateways</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {selectedOrg.gateways?.length || 0}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Tools</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {selectedOrg.tools?.length || 0}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Usage Limits</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Gateways</span>
-                        <span>
-                          {selectedOrg.gateways?.length || 0} / {selectedOrg.settings?.maxGateways || 10}
-                        </span>
-                      </div>
-                      <Progress
-                        value={((selectedOrg.gateways?.length || 0) / (selectedOrg.settings?.maxGateways || 10)) * 100}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>APIs</span>
-                        <span>
-                          {selectedOrg.apis?.length || 0} / {selectedOrg.settings?.maxApis || 50}
-                        </span>
-                      </div>
-                      <Progress
-                        value={((selectedOrg.apis?.length || 0) / (selectedOrg.settings?.maxApis || 50)) * 100}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span>Tools</span>
-                        <span>
-                          {selectedOrg.tools?.length || 0} / {selectedOrg.settings?.maxTools || 100}
-                        </span>
-                      </div>
-                      <Progress
-                        value={((selectedOrg.tools?.length || 0) / (selectedOrg.settings?.maxTools || 100)) * 100}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="members" className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Team Members</h3>
-                  <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm">
-                        <UserPlus className="mr-2 h-4 w-4" />
-                        Invite Member
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Invite Team Member</DialogTitle>
-                        <DialogDescription>
-                          Send an invitation to join {selectedOrg.name}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <form onSubmit={inviteForm.handleSubmit(handleInviteMember)} className="space-y-4">
-                        <div>
-                          <Label htmlFor="email">Email Address</Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            placeholder="Enter email address"
-                            {...inviteForm.register('email')}
-                          />
-                          {inviteForm.formState.errors.email && (
-                            <p className="text-sm text-red-500 mt-1">
-                              {inviteForm.formState.errors.email.message}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <Label htmlFor="role">Role</Label>
-                          <Select
-                            onValueChange={(value) => inviteForm.setValue('role', value as OrganizationRole)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={OrganizationRole.VIEWER}>Viewer</SelectItem>
-                              <SelectItem value={OrganizationRole.MEMBER}>Member</SelectItem>
-                              <SelectItem value={OrganizationRole.ADMIN}>Admin</SelectItem>
-                              <SelectItem value={OrganizationRole.OWNER}>Owner</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex justify-end space-x-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setInviteDialogOpen(false)}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="submit"
-                            disabled={inviteMemberMutation.isPending}
-                          >
-                            {inviteMemberMutation.isPending ? 'Sending...' : 'Send Invitation'}
-                          </Button>
-                        </div>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-                
-                {membersLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <LoadingSpinner />
-                  </div>
-                ) : (
-                  <DataTable
-                    columns={memberColumns}
-                    data={members}
-                    searchKey="user.name"
-                    searchPlaceholder="Search members..."
-                  />
-                )}
-              </TabsContent>
-
-              <TabsContent value="settings" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Organization Settings</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label htmlFor="orgName">Organization Name</Label>
-                      <Input
-                        id="orgName"
-                        value={editOrgName}
-                        onChange={(e) => setEditOrgName(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="orgDescription">Description</Label>
-                      <Textarea
-                        id="orgDescription"
-                        value={editOrgDescription}
-                        onChange={(e) => setEditOrgDescription(e.target.value)}
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <Button
-                        onClick={() => updateOrgMutation.mutate({
-                          id: selectedOrg.id,
-                          data: { name: editOrgName, description: editOrgDescription },
-                        })}
-                        disabled={updateOrgMutation.isPending || (editOrgName === selectedOrg.name && editOrgDescription === (selectedOrg.description || ''))}
-                      >
-                        {updateOrgMutation.isPending ? 'Saving...' : 'Save Changes'}
-                      </Button>
-                    </div>
-                    <div className="flex items-center justify-between pt-4 border-t">
-                      <div>
-                        <h4 className="font-medium">Delete Organization</h4>
-                        <p className="text-sm text-muted-foreground">
-                          This action cannot be undone. All data will be lost.
-                        </p>
-                      </div>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="destructive">Delete Organization</Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete organization?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete {selectedOrg.name}?
-                              This action cannot be undone and will permanently delete
-                              all organization data including gateways, tools, and settings.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteOrgMutation.mutate(selectedOrg.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              Delete Organization
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-          )}
-        </SheetContent>
-      </Sheet>
+      {confirmDialog}
     </div>
   )
 }

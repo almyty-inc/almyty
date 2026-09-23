@@ -117,7 +117,7 @@ export function NotificationPreferences() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Notification Preferences</CardTitle>
+        <CardTitle>Notification preferences</CardTitle>
         <CardDescription>
           Choose how you want to be notified for each kind of event
         </CardDescription>

@@ -3,8 +3,8 @@ import { screen } from '@testing-library/react'
 import { useForm } from 'react-hook-form'
 
 import { render } from '../../../test/setup'
-import { CreateProviderDialog } from '../create-provider-dialog'
-import { EditProviderDialog } from '../edit-provider-dialog'
+import { CreateProviderForm } from '../create-provider-form'
+import { EditProviderForm } from '../edit-provider-form'
 
 vi.mock('@/components/credential-picker', () => ({
   CredentialPicker: () => <div data-testid="credential-picker" />,
@@ -21,15 +21,14 @@ vi.mock('@/lib/connections-api', () => ({
 
 function CreateHarness({ type }: { type: string }) {
   const form = useForm<any>({ defaultValues: { name: '', type, apiKey: '', apiUrl: '' } })
-  return <CreateProviderDialog open onOpenChange={() => {}} createForm={form} createProviderMutation={{ isPending: false, mutate: vi.fn() } as any} />
+  return <CreateProviderForm createForm={form} createProviderMutation={{ isPending: false, mutate: vi.fn() } as any} />
 }
 
 function EditHarness({ type, apiUrl }: { type: string; apiUrl?: string }) {
   const form = useForm<any>({ defaultValues: { name: 'prod', model: '', maxTokens: 4096, temperature: 0.7, apiKey: '', usageApiKey: '', apiUrl: apiUrl ?? '' } })
   return (
-    <EditProviderDialog
-      open
-      onOpenChange={() => {}}
+    <EditProviderForm
+      onCancel={() => {}}
       editForm={form}
       providerToEdit={{ id: 'p-1', type, name: 'prod', configuration: { apiUrl } }}
       updateProviderMutation={{ isPending: false, mutate: vi.fn() } as any}

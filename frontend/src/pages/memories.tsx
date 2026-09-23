@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Brain, Plus, Trash2, Search, ArrowRightLeft, HeartPulse, Tags as TagsIcon } from 'lucide-react'
+import { Brain, Plus, Trash2, Search, ArrowRightLeft, HeartPulse, Tags as TagsIcon, Building2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,7 +8,9 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
+import { Link } from 'react-router-dom'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,46 +110,6 @@ export function MemoriesPage() {
     }
   }
 
-  // ── put dialog ──────────────────────────────────────────────────────
-  const [putOpen, setPutOpen] = useState(false)
-  const [draft, setDraft] = useState({
-    content: '',
-    tier: 'short' as MemoryTier,
-    tags: '',
-    mode: 'memory' as MemoryMode,
-    source_uri: '',
-  })
-
-  const putMut = useMutation({
-    mutationFn: () => memoriesApi.put({
-      mode: draft.mode,
-      scope: scope!,
-      content: draft.content,
-      tier: draft.mode === 'memory' ? draft.tier : undefined,
-      tags: draft.tags.split(',').map((t) => t.trim()).filter(Boolean),
-      source_uri: draft.mode === 'document' ? draft.source_uri : undefined,
-      source_version: draft.mode === 'document' ? 1 : undefined,
-      provenance: {
-        agent_id: null, session_id: null, collab_id: null,
-        model: null, provider: null, tool_chain: ['ui_put'],
-        created_by: 'user', source_backend: 'almyty-native',
-      },
-    }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
-      // The soft-cap warning list is a sibling key, not a descendant,
-      // and storing is exactly what trips a soft cap.
-      qc.invalidateQueries({ queryKey: ['memories', 'softcap-warnings', orgId] })
-      setPutOpen(false)
-      setDraft({ content: '', tier: 'short', tags: '', mode: 'memory', source_uri: '' })
-      notify.success('Memory stored')
-    },
-    onError: (err: any) => {
-      notify.error('Store failed', err.message ?? String(err))
-    },
-  })
-
-  // ── delete ──────────────────────────────────────────────────────────
   const [memoryToDelete, setMemoryToDelete] = useState<Item | null>(null)
   const removeMut = useMutation({
     mutationFn: ({ id, mode }: { id: string; mode: 'soft' | 'hard' }) => memoriesApi.remove(id, mode),
@@ -176,33 +138,6 @@ export function MemoriesPage() {
     queryFn: () => memoriesApi.backendsHealth(),
     enabled: tab === 'backends',
     refetchInterval: 30_000,
-  })
-
-  const [transferOpen, setTransferOpen] = useState(false)
-  const [transfer, setTransfer] = useState({ source: 'almyty-native', target: 'mem0', dry_run: true })
-  const transferMut = useMutation({
-    mutationFn: () => memoriesApi.transfer({
-      scope_type: scope!.scope_type, scope_id: scope!.scope_id,
-      source: transfer.source, target: transfer.target,
-      mode: 'memory', dry_run: transfer.dry_run,
-    }),
-    onSuccess: (res: any) => {
-      const r = res?.data ?? res
-      notify.success(
-        transfer.dry_run ? 'Dry run complete' : 'Transfer complete',
-        `${r.succeeded ?? 0} of ${r.total_source ?? 0} items, ${r.warnings?.length ?? 0} warnings`,
-      )
-      setTransferOpen(false)
-      // Same reason the config mutation does it: what was transferred and
-      // which backend is healthy both just changed.
-      if (!transfer.dry_run) {
-        qc.invalidateQueries({ queryKey: ['memories', 'list', orgId] })
-        qc.invalidateQueries({ queryKey: ['memories', 'backends', 'health'] })
-      }
-    },
-    onError: (err: any) => {
-      notify.error('Transfer failed', err.message ?? String(err))
-    },
   })
 
   // ── workspace config (per-scope routing + credentials) ─────────────
@@ -236,9 +171,12 @@ export function MemoriesPage() {
   // ── render ──────────────────────────────────────────────────────────
   if (!orgId) {
     return (
-      <div className="space-y-6">
-        <Card><CardContent className="p-0"><EmptyState icon={Brain} title="No organization" description="Switch to an organization to view memory." /></CardContent></Card>
-      </div>
+      <EmptyState
+        variant="panel"
+        icon={Building2}
+        title="No organization selected"
+        description="Select or create an organization to see its memory."
+      />
     )
   }
 
@@ -255,22 +193,21 @@ export function MemoriesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">Memory</h1>
-          <p className="text-muted-foreground">
-            Canonical schema v1 — bi-temporal memory + document mode + multi-backend routing.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setTransferOpen(true)}>
-            <ArrowRightLeft className="h-4 w-4 mr-2" /> Transfer
-          </Button>
-          <Button onClick={() => setPutOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" /> New memory
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Memory"
+        description="What your agents remember across runs, per agent or shared, with full history."
+        actions={
+          <>
+            <Button variant="outline" asChild>
+              <Link to="/memories/transfer"><ArrowRightLeft className="h-4 w-4 mr-2" /> Transfer</Link>
+            </Button>
+            <Button asChild>
+              <Link to="/memories/new"><Plus className="h-4 w-4 mr-2" /> Add memory</Link>
+            </Button>
+          </>
+        }
+      />
+      <PageIntro topic="memories" />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
         <TabsList>
@@ -282,7 +219,7 @@ export function MemoriesPage() {
 
         {/* ── Browse ─────────────────────────────────────────────── */}
         <TabsContent value="browse" className="space-y-4">
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Select value={modeFilter} onValueChange={(v) => setModeFilter(v as MemoryMode)}>
               <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -312,16 +249,17 @@ export function MemoriesPage() {
           {list.isError ? (
             <QueryError error={list.error} onRetry={() => list.refetch()} title="Couldn't load memories" />
           ) : list.isLoading ? <LoadingSpinner /> : items.length === 0 ? (
-            <Card><CardContent className="p-0"><EmptyState
+            <EmptyState
+              variant="panel"
               icon={Brain}
               title="No memories yet"
               description="Memory gives agents recall across runs — per-agent or shared, with bi-temporal history."
               action={
-                <Button onClick={() => setPutOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" /> New memory
+                <Button asChild>
+                  <Link to="/memories/new"><Plus className="h-4 w-4 mr-2" /> Add memory</Link>
                 </Button>
               }
-            /></CardContent></Card>
+            />
           ) : (
             <div className="grid gap-3">
               {items.map((m) => (
@@ -463,125 +401,6 @@ export function MemoriesPage() {
           <SoftcapAuditList orgId={orgId} enabled={tab === 'audit'} />
         </TabsContent>
       </Tabs>
-
-      {/* ── Put dialog ───────────────────────────────────────────── */}
-      <Dialog open={putOpen} onOpenChange={setPutOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New memory</DialogTitle>
-            <DialogDescription>
-              Writes to the canonical store. Routes to whichever backend the scope is configured for.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Mode</Label>
-                <Select value={draft.mode} onValueChange={(v) => setDraft({ ...draft, mode: v as MemoryMode })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="memory">memory</SelectItem>
-                    <SelectItem value="document">document</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {draft.mode === 'memory' ? (
-                <div>
-                  <Label>Scope</Label>
-                  <Select value={draft.tier} onValueChange={(v) => setDraft({ ...draft, tier: v as MemoryTier })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TIERS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div>
-                  <Label>Source URI</Label>
-                  <Input
-                    placeholder="https://… or almyty:file/…"
-                    value={draft.source_uri}
-                    onChange={(e) => setDraft({ ...draft, source_uri: e.target.value })}
-                  />
-                </div>
-              )}
-            </div>
-            <div>
-              <Label>Content</Label>
-              <Textarea
-                rows={6}
-                placeholder="The fact, preference, decision, or document body."
-                value={draft.content}
-                onChange={(e) => setDraft({ ...draft, content: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Tags (comma-separated)</Label>
-              <Input
-                placeholder="user-pref, infrastructure"
-                value={draft.tags}
-                onChange={(e) => setDraft({ ...draft, tags: e.target.value })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setPutOpen(false)}>Cancel</Button>
-            <Button onClick={() => putMut.mutate()} disabled={putMut.isPending || !draft.content.trim()}>
-              {putMut.isPending ? <LoadingSpinner /> : 'Store'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Transfer dialog ──────────────────────────────────────── */}
-      <Dialog open={transferOpen} onOpenChange={setTransferOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Transfer memory between backends</DialogTitle>
-            <DialogDescription>
-              Streams items from the source's list into the target's batchPut. Capabilities the source
-              has and the target lacks (bi_temporal, ttl, soft_delete, document mode) appear as warnings —
-              dry run shows the warnings without writing.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Source</Label>
-              <Select value={transfer.source} onValueChange={(v) => setTransfer({ ...transfer, source: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {backends.map((b) => <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Target</Label>
-              <Select value={transfer.target} onValueChange={(v) => setTransfer({ ...transfer, target: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {backends.map((b) => <SelectItem key={b.id} value={b.id}>{b.id}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              id="dry-run"
-              type="checkbox"
-              checked={transfer.dry_run}
-              onChange={(e) => setTransfer({ ...transfer, dry_run: e.target.checked })}
-            />
-            <Label htmlFor="dry-run">Dry run (preview warnings, no writes)</Label>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setTransferOpen(false)}>Cancel</Button>
-            <Button onClick={() => transferMut.mutate()} disabled={transferMut.isPending || transfer.source === transfer.target}>
-              {transferMut.isPending ? <LoadingSpinner /> : transfer.dry_run ? 'Run dry-run' : 'Transfer'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/*
         The trash button sits inches from the memory body, so deleting used
         to happen on a single stray click with no way back. Confirm first,
@@ -607,9 +426,9 @@ export function MemoriesPage() {
                   removeMut.mutate({ id: memoryToDelete.id, mode: 'soft' })
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
-              Delete Memory
+              Delete memory
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

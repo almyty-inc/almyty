@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor, within } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
 import { AuditStreamsSettings } from '../audit-streams-settings'
@@ -59,6 +59,10 @@ describe('audit streaming settings', () => {
 
     expect(await screen.findByText('Splunk HEC')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('remove-stream-s1'))
+    // Asks first: removing a stream silently stops the export.
+    const dialog = await screen.findByRole('alertdialog')
+    expect(api.delete).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Remove stream' }))
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith('/audit-export/streams/s1'))
   })
 

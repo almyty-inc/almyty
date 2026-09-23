@@ -31,7 +31,7 @@ describe('RunnersPage', () => {
     mockedGetAll.mockResolvedValue([])
     render(<RunnersPage />)
     await waitFor(() => {
-      expect(screen.getByText(/no runners registered/i)).toBeInTheDocument()
+      expect(screen.getByText(/no runners yet/i)).toBeInTheDocument()
     })
     // CTA appears in both the header and the empty-state body. Testing
     // that at least one is wired to /runners/new.
@@ -57,6 +57,18 @@ describe('RunnersPage', () => {
     })
   })
 
+  it('marks an abandoned setup as never connected and shows a private runner as private', async () => {
+    mockedGetAll.mockResolvedValue([
+      makeRunner({ id: 'r1', name: 'half-set-up', state: 'registered', runtimeInfo: null, lastHeartbeatAt: null, visibility: 'private' }),
+    ])
+    render(<RunnersPage />)
+    await waitFor(() => {
+      expect(screen.getByText('half-set-up')).toBeInTheDocument()
+      expect(screen.getByText('never connected')).toBeInTheDocument()
+      expect(screen.getByText('private')).toBeInTheDocument()
+    })
+  })
+
   it('renders an error state with retry when the query fails', async () => {
     mockedGetAll.mockRejectedValue(new Error('boom'))
     render(<RunnersPage />)
@@ -72,13 +84,14 @@ function makeRunner(overrides: Partial<any>): any {
     name: overrides.name ?? 'r-x',
     state: overrides.state ?? 'online',
     labels: overrides.labels ?? {},
-    runtimeInfo: overrides.runtimeInfo ?? {
+    visibility: overrides.visibility ?? 'org',
+    runtimeInfo: 'runtimeInfo' in overrides ? overrides.runtimeInfo : {
       os: 'darwin', arch: 'arm64', hostname: 'host',
       cpuCount: 8, memoryMb: 16000, runnerVersion: '0.1.0',
       binaries: { node: 'v20', git: 'git 2.47.0', python: null },
     },
     config: overrides.config ?? { maxConcurrent: 4 },
-    lastHeartbeatAt: overrides.lastHeartbeatAt ?? new Date(Date.now() - 5000).toISOString(),
+    lastHeartbeatAt: 'lastHeartbeatAt' in overrides ? overrides.lastHeartbeatAt : new Date(Date.now() - 5000).toISOString(),
     registeredAt: overrides.registeredAt ?? new Date().toISOString(),
   }
 }

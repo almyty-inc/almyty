@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Globe } from 'lucide-react'
 
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,21 +12,19 @@ import {
 } from '@/components/ui/alert-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
-import { useCreateDeepLink } from '@/hooks/use-create-deep-link'
-import { useSeedSampleWorkspace } from '@/components/onboarding/getting-started-card'
-import { SchemaImportDialog } from '@/components/SchemaImportDialog'
+import { PageHeader } from '@/components/layout/page-header'
+import { PageIntro } from '@/components/onboarding/page-intro'
+import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
 
 import { getApiErrorMessage } from '@/lib/api-error'
 import { apisApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import { Api, ApiType } from '@/types'
+import { Api } from '@/types'
 import { ApisFilters } from '@/components/apis/apis-filters'
 import { createApisColumns } from '@/components/apis/apis-columns'
-import { CreateApiDialog } from '@/components/apis/create-api-dialog'
 import { TeamFilter, useTeamLookup, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
-import type { ImportSchemaFormData } from '@/components/apis/schema'
 
 export function ApisPage() {
   React.useEffect(() => {
@@ -38,7 +36,6 @@ export function ApisPage() {
   const { success, error, warning } = useNotifications()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const seedSample = useSeedSampleWorkspace(currentOrganization?.id)
 
   // Get all tools to show accurate counts per API
   const { data: allToolsData } = useQuery({
@@ -55,14 +52,9 @@ export function ApisPage() {
   // manually. operationId is the entity field that distinguishes them.
   const generatedToolsTotal = allTools.filter((t: any) => t.operationId).length
 
-  const [selectedApi, setSelectedApi] = React.useState<Api | null>(null)
-  const [editingApi, setEditingApi] = React.useState<Api | null>(null)
   const [deletingApi, setDeletingApi] = React.useState<Api | null>(null)
-  const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
-  // Honour ?new=1 from the command palette Create API action.
-  useCreateDeepLink(setCreateDialogOpen)
-  const [uploadDialogOpen, setUploadDialogOpen] = React.useState(false)
-  const [uploadFile, setUploadFile] = React.useState<File | null>(null)
+  // Old ?new=1 links (bookmarks, docs) land on the create page.
+  useNewParamRedirect('/apis/new')
   const [searchQuery, setSearchQuery] = React.useState('')
   const [typeFilter, setTypeFilter] = React.useState('all')
   const [healthFilter, setHealthFilter] = React.useState('all')
@@ -85,48 +77,6 @@ export function ApisPage() {
     },
     onError: (err: any) => {
       error('Failed to delete API', getApiErrorMessage(err, 'Please try again.'))
-    },
-  })
-
-  const importSchemaMutation = useMutation({
-    mutationFn: async ({ id, data, file }: { id: string; data: any; file?: File }) => {
-      const importResult = await apisApi.importSchema(id, data, file)
-
-      // If response contains jobId, poll for completion
-      if (importResult?.jobId) {
-        try {
-          return await apisApi.pollImportStatus(id, importResult.jobId)
-        } catch (pollError) {
-          console.error('Schema import polling failed:', pollError)
-          throw pollError
-        }
-      }
-
-      return importResult
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['apis'] })
-      // The API detail page reads schemas from their own key, so a
-      // successful import here has to drop that cache too.
-      queryClient.invalidateQueries({ queryKey: ['api-schemas'] })
-      queryClient.invalidateQueries({ queryKey: ['api-operations'] })
-      queryClient.invalidateQueries({ queryKey: ['tools'] })
-      queryClient.invalidateQueries({ queryKey: ['tools', currentOrganization?.id] })
-      // Force refetch for currently displayed API operations
-      if (selectedApi) {
-        queryClient.refetchQueries({ queryKey: ['api-operations', selectedApi.id] })
-      }
-      // Handle both direct result and async job result formats
-      // For async jobs: result.result contains the job's returnvalue
-      const jobResult = result?.result || result
-      const opCount = jobResult?.operations?.length || jobResult?.operationCount || 0
-      const toolCount = jobResult?.tools?.length || jobResult?.toolCount || 0
-      success('Schema imported', `Schema imported successfully. ${opCount} operations found, ${toolCount} tools generated.`)
-      setUploadDialogOpen(false)
-      setUploadFile(null)
-    },
-    onError: (err: any) => {
-      error('Failed to import schema', getApiErrorMessage(err, 'Please try again.'))
     },
   })
 
@@ -175,43 +125,20 @@ export function ApisPage() {
     },
   })
 
-  const handleImportSchema = (data: ImportSchemaFormData) => {
-    if (!selectedApi) return
-
-    importSchemaMutation.mutate({
-      id: selectedApi.id,
-      data,
-      file: uploadFile || undefined
-    })
-  }
-
   const apiColumns = createApisColumns({
     allTools,
     teamLookup,
-    onEdit: (api) => {
-      setEditingApi(api)
-      setCreateDialogOpen(true)
-    },
+    onEdit: (api) => navigate(`/apis/${api.id}/edit`),
     onDelete: (api) => setDeletingApi(api),
     onViewDetails: (api) => navigate(`/apis/${api.id}`),
-    onTestConnection: (api) => {
-      setSelectedApi(api)
-      testApiMutation.mutate({ id: api.id })
-    },
-    onImportSchema: (api) => {
-      setSelectedApi(api)
-      setUploadDialogOpen(true)
-    },
+    onTestConnection: (api) => testApiMutation.mutate({ id: api.id }),
+    onImportSchema: (api) => navigate(`/apis/${api.id}/import`),
     onGenerateTools: (api) => generateToolsMutation.mutate({ id: api.id }),
     onCopyBaseUrl: (api) => {
       navigator.clipboard.writeText(api.baseUrl)
       success('Copied', 'Base URL copied to clipboard')
     },
   })
-
-  if (isError) {
-    return <QueryError error={apisError} onRetry={() => refetchApis()} title="Couldn't load APIs" />
-  }
 
   const apisExtracted = apisData?.apis || apisData || []
   const apis = Array.isArray(apisExtracted) ? apisExtracted : []
@@ -230,52 +157,37 @@ export function ApisPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-4xl font-heading font-extrabold tracking-tight bg-gradient-to-r from-violet-500 to-cyan-400 bg-clip-text text-transparent">APIs</h1>
-          <p className="text-muted-foreground">
-            {apis.length} connected &middot; {pluralized(apis.reduce((sum: number, a: any) => sum + (a.operationCount ?? a.operations?.length ?? 0), 0), 'operation')} &middot; {pluralized(generatedToolsTotal, 'tool')} generated
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Connect API
-          </Button>
-        </div>
-      </div>
-
-      <CreateApiDialog
-        open={createDialogOpen}
-        onOpenChange={(open) => {
-          setCreateDialogOpen(open)
-          if (!open) {
-            setEditingApi(null)
-          }
-        }}
-        editingApi={editingApi}
-        uploadFile={uploadFile}
-        setUploadFile={setUploadFile}
-        importSchemaMutation={importSchemaMutation}
-        onSelectApi={setSelectedApi}
-      />
-
-      {apis.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Globe className="h-8 w-8 text-primary" />
-            </div>
-            <h3 className="text-xl font-semibold mb-2">No APIs</h3>
-            <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Create your first API to get started. We support OpenAPI, GraphQL, SOAP, and gRPC protocols.
-            </p>
-            <Button size="lg" onClick={() => setCreateDialogOpen(true)}>
+      <PageHeader
+        title="APIs"
+        description={`${pluralized(apis.length, 'API', 'APIs')} · ${pluralized(apis.reduce((sum: number, a: any) => sum + (a.operationCount ?? a.operations?.length ?? 0), 0), 'operation')} · ${pluralized(generatedToolsTotal, 'tool')} generated`}
+        actions={
+          <Button asChild>
+            <Link to="/apis/new">
               <Plus className="mr-2 h-4 w-4" />
-              Connect Your First API
+              Connect API
+            </Link>
+          </Button>
+        }
+      />
+      <PageIntro topic="apis" />
+
+      {isError ? (
+        <QueryError error={apisError} onRetry={() => refetchApis()} title="Couldn't load APIs" />
+      ) : !isLoading && apis.length === 0 ? (
+        <EmptyState
+          variant="panel"
+          icon={Globe}
+          title="No APIs yet"
+          description="Import an OpenAPI, GraphQL, SOAP, or Protobuf schema — every operation becomes a typed tool."
+          action={
+            <Button asChild>
+              <Link to="/apis/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Connect API
+              </Link>
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       ) : (
         <>
           <Card>
@@ -305,45 +217,11 @@ export function ApisPage() {
                 onRowClick={(api) => navigate(`/apis/${api.id}`)}
                 hideSelectionCount
                 hideColumnsButton
-                emptyState={
-                  apis.length === 0 ? (
-                    <EmptyState
-                      icon={Globe}
-                      title="Connect your first API"
-                      description="Import an OpenAPI, GraphQL, SOAP, or Protobuf schema — every operation becomes a typed tool."
-                      action={
-                        <Button onClick={() => setCreateDialogOpen(true)}>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Import API
-                        </Button>
-                      }
-                      secondaryAction={
-                        <Button
-                          variant="outline"
-                          className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
-                          onClick={() => seedSample.mutate()}
-                          disabled={seedSample.isPending || !currentOrganization}
-                        >
-                          {seedSample.isPending ? 'Loading…' : 'Load the Petstore sample'}
-                        </Button>
-                      }
-                      className="py-16"
-                    />
-                  ) : undefined
-                }
               />
             </CardContent>
           </Card>
         </>
       )}
-
-      <SchemaImportDialog
-        open={uploadDialogOpen}
-        onOpenChange={setUploadDialogOpen}
-        apiType={selectedApi?.type || ApiType.OPENAPI}
-        onImport={handleImportSchema}
-        isLoading={importSchemaMutation.isPending}
-      />
 
       <AlertDialog open={!!deletingApi} onOpenChange={(open) => !open && setDeletingApi(null)}>
         <AlertDialogContent>
@@ -362,7 +240,7 @@ export function ApisPage() {
                   deleteApiMutation.mutate(deletingApi.id)
                 }
               }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              variant="destructive"
             >
               Delete
             </AlertDialogAction>

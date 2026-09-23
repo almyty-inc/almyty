@@ -86,7 +86,9 @@ describe('ModelDeploymentsService', () => {
     ).rejects.toMatchObject({ response: { code: 'ADAPTER_UNSUPPORTED_SOURCE' } });
   });
 
-  it('refuses an unpinned artifact and a deployment that names no model at all', async () => {
+  // With the Hub resolver wired, hf://org/repo is pinned instead (see
+  // deployment-makes-its-card.spec.ts); without it the parser refuses it.
+  it('without the Hub resolver, refuses an unpinned artifact; and refuses a deployment that names no model at all', async () => {
     await expect(
       service.create('org-1', 'u-1', { model: 'hf://Qwen/Qwen3-0.6B', providerType: 'stub', providerConfig: { token: 'valid' } }),
     ).rejects.toMatchObject({ response: { code: 'REGISTRY_URI_INVALID' } });

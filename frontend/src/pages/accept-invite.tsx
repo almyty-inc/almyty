@@ -78,7 +78,7 @@ export function AcceptInvitePage() {
           <div className="text-center space-y-4">
             <XCircle className="h-12 w-12 text-destructive mx-auto" />
             <p className="text-lg font-medium">{error}</p>
-            <Button onClick={() => navigate('/auth/login')}>Go to Login</Button>
+            <Button onClick={() => navigate('/auth/login')}>Go to login</Button>
           </div>
         )}
 
@@ -89,7 +89,7 @@ export function AcceptInvitePage() {
             <p className="text-sm text-muted-foreground">
               This invitation to {details.organizationName} has expired. Ask the admin to send a new one.
             </p>
-            <Button onClick={() => navigate('/auth/login')}>Go to Login</Button>
+            <Button onClick={() => navigate('/auth/login')}>Go to login</Button>
           </div>
         )}
 
@@ -119,7 +119,7 @@ export function AcceptInvitePage() {
               ) : (
                 <LogIn className="h-4 w-4 mr-2" />
               )}
-              {user ? 'Accept Invitation' : 'Log in to Accept'}
+              {user ? 'Accept invitation' : 'Log in to accept'}
             </Button>
           </div>
         )}
@@ -129,7 +129,7 @@ export function AcceptInvitePage() {
             <CheckCircle className="h-12 w-12 text-green-500 mx-auto" />
             <p className="text-lg font-medium">Welcome to {details?.organizationName}!</p>
             <p className="text-sm text-muted-foreground">You've joined as {details?.role}.</p>
-            <Button onClick={() => navigate('/dashboard')}>Go to Dashboard</Button>
+            <Button onClick={() => navigate('/dashboard')}>Go to dashboard</Button>
           </div>
         )}
       </div>

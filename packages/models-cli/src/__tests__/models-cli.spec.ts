@@ -17,7 +17,6 @@ import {
   parseArgs,
   parseJsonObject,
   registerBody,
-  registerEndpointBody,
   registerVersionBody,
   routePolicy,
   secretFields,
@@ -60,14 +59,6 @@ describe('@almyty/models', () => {
     const flags = parseArgs(['register', '--name', 'Sonnet', '--provider', 'p1', '--model', 'claude-sonnet-5', '--tier', 'public', '--context', '200000']).flags;
     expect(registerBody(flags)).toEqual({ name: 'Sonnet', providerId: 'p1', vendorModelId: 'claude-sonnet-5', privacyTier: 'public', contextLength: 200000 });
     expect(() => registerBody(parseArgs(['register', '--name', 'x', '--model', 'm']).flags)).toThrow('--provider is required');
-  });
-
-  it('builds an endpoint registration with the key only when one was supplied', () => {
-    const flags = parseArgs(['register-endpoint', '--name', 'box', '--url', 'https://vllm.internal/v1', '--model', 'llama', '--region', 'eu']).flags;
-    expect(registerEndpointBody(flags)).toEqual({ name: 'box', url: 'https://vllm.internal/v1', vendorModelId: 'llama', region: 'eu' });
-    // The key is no longer read from the flags: it arrives from a prompt or stdin.
-    expect(registerEndpointBody(flags, 'k').apiKey).toBe('k');
-    expect(registerEndpointBody({ ...flags, 'api-key': 'leaked' }).apiKey).toBeUndefined();
   });
 
   it('takes the model as the positional argument, because naming it is configuration', () => {

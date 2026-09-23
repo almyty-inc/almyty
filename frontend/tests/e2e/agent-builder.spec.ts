@@ -163,7 +163,7 @@ test.describe('Agent Builder', () => {
     // error banner before the user has done anything.
     const nextSteps = page.getByTestId('builder-next-steps')
     await expect(nextSteps).toBeVisible({ timeout: 5000 })
-    await expect(nextSteps).toContainText('Pick a model for the Model Call step')
+    await expect(nextSteps).toContainText('Model Call: pick a model')
     await expect(page.getByTestId('builder-validation-errors')).toHaveCount(0)
 
     // Save is live, because pressing it is how you ask.
@@ -173,7 +173,7 @@ test.describe('Agent Builder', () => {
 
     // And it refuses, in as many words, and greys out behind the answer.
     await expect(page.getByTestId('builder-validation-errors')).toContainText(
-      'Pick a model for the Model Call step',
+      'Model Call: pick a model',
     )
     await expect(saveButton).toBeDisabled()
 
