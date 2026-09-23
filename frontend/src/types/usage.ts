@@ -32,16 +32,18 @@ export interface UsageMetric {
   llmProvider?: LlmProvider
 }
 
+/** Mirrors backend MetricType. Members exist only where an emitter does. */
 export enum MetricType {
   REQUEST_COUNT = 'request_count',
   RESPONSE_TIME = 'response_time',
-  ERROR_RATE = 'error_rate',
-  THROUGHPUT = 'throughput',
-  CACHE_HIT_RATE = 'cache_hit_rate',
-  BANDWIDTH_USAGE = 'bandwidth_usage',
-  CONCURRENT_USERS = 'concurrent_users',
-  API_CALLS = 'api_calls',
-  TOOL_EXECUTIONS = 'tool_executions',
+  SECURITY_THREAT_BLOCKED = 'security_threat_blocked',
+  PII_FILTERED = 'pii_filtered',
+  MCP_SESSION = 'mcp_session',
+  MCP_TOOL_CALL = 'mcp_tool_call',
+  UTCP_MANUAL = 'utcp_manual',
+  UTCP_DIRECT_CALL = 'utcp_direct_call',
+  A2A_MESSAGE = 'a2a_message',
+  A2A_WORKFLOW = 'a2a_workflow',
 }
 
 export enum MetricStatus {
@@ -242,8 +244,6 @@ export interface Agent {
       outputFormat?: 'text' | 'json'
       escalation?: 'never' | 'on_failure' | 'on_low_confidence'
       conflictResolution?: 'judge' | 'majority' | 'first_wins' | 'merge'
-      sharedMemoryScope?: boolean
-      allowRevision?: boolean
     }
     judgeAgentId?: string
     maxRounds?: number

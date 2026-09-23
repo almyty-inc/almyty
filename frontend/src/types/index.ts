@@ -215,8 +215,6 @@ export interface RateLimitConfig {
   requestsPerMinute?: number
   requestsPerHour?: number
   requestsPerDay?: number
-  burstLimit?: number
-  windowSize?: number
 }
 
 export interface CorsConfig {

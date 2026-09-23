@@ -46,7 +46,6 @@ export class RateLimiterPlugin {
             requestsPerHour: 1000,
             requestsPerDay: 10000,
           },
-          burstLimit: 10,
           organizationLimits: {
             free: { requestsPerHour: 100 },
             pro: { requestsPerHour: 1000 },

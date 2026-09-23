@@ -241,6 +241,26 @@ export class Conversation {
     }
   }
 
+  /**
+   * NOT IMPLEMENTED beyond creation. Every conversation is written
+   * ACTIVE by createConversation and nothing ever transitions it: this
+   * method has no caller in src or ee, only in this entity's own spec.
+   *
+   * So `completedAt` is always null, `failureReason` is always null,
+   * `metadata.sessionDuration` is never stamped, `isCompleted()` is
+   * always false, and the `status: ACTIVE` filters in hosted-chat match
+   * every row rather than the live ones.
+   *
+   * Wiring it is a product decision, not a missing call. There is no
+   * terminal event to hang it on: a chat has no explicit "end session",
+   * agent runs end without ending the conversation that spawned them,
+   * and the retention sweep deletes old conversations by age without
+   * reading status. Somebody has to choose the trigger (an explicit
+   * close, an idle timeout and its length, or run completion) before
+   * this has a correct call site. Left here, unwired and labelled,
+   * rather than deleted: the columns are real and a chosen trigger
+   * would use exactly this.
+   */
   updateStatus(status: ConversationStatus, reason?: string): void {
     this.status = status;
 

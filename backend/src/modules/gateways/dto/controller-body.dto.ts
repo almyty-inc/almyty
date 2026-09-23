@@ -40,8 +40,6 @@ export class CreateGatewayBodyDto {
     requestsPerMinute?: number;
     requestsPerHour?: number;
     requestsPerDay?: number;
-    burstLimit?: number;
-    windowSize?: number;
   };
 
   @IsOptional()
@@ -135,8 +133,6 @@ export class UpdateGatewayBodyDto {
     requestsPerMinute?: number;
     requestsPerHour?: number;
     requestsPerDay?: number;
-    burstLimit?: number;
-    windowSize?: number;
   };
 
   @IsOptional()

@@ -50,13 +50,24 @@ export interface PolicyProgress {
 @Injectable()
 export class ApprovalPolicyEvaluator {
   /**
-   * Return the highest-priority enabled policy whose `match` conditions
-   * hold for the context, or null when nothing matches (→ falls back to
-   * the OSS single-gate approval).
+   * Return the highest-priority enabled policy whose team scope and
+   * `match` conditions both hold for the context, or null when nothing
+   * matches (→ falls back to the OSS single-gate approval).
+   *
+   * Team scope mirrors the approval_requests visibility model: a policy
+   * with `teamId` set governs only requests raised for that team; a
+   * policy with `teamId: null` is org-wide and governs every request.
+   * ApprovalsService.resolveGoverningPolicy already puts the request's
+   * `teamId` in the context, and this filtered on `match` alone -- so a
+   * "payments team needs two approvals" policy fired for every team in
+   * the organization, gating people it was never configured for and
+   * attributing their approvals to a team they are not on.
    */
   resolvePolicy(policies: ApprovalPolicy[], ctx: ApprovalContext): ApprovalPolicy | null {
+    const requestTeamId = (ctx.teamId ?? null) as string | null;
     const matching = policies
       .filter((p) => p.enabled)
+      .filter((p) => !p.teamId || p.teamId === requestTeamId)
       .filter((p) => this.matches(p.match ?? [], ctx));
     if (matching.length === 0) return null;
     return matching.reduce((best, p) => (p.priority > best.priority ? p : best));

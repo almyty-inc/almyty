@@ -22,7 +22,6 @@ import {
   PluginRegistry,
   PluginManagerConfig,
   PluginInstallation,
-  BuiltInPluginType,
   PluginEvent,
 } from './types/plugin.types';
 

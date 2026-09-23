@@ -169,7 +169,7 @@ export class ToolExecutorService {
       if (options.gatewayId) {
         gatewayTool = await this.gatewayToolRepository.findOne({
           where: { gatewayId: options.gatewayId, toolId: tool.id },
-          select: { id: true, securityPolicy: true, permissions: true },
+          select: { id: true, securityPolicy: true, permissions: true, transformations: true },
         });
         if (options.securityPolicy === undefined) {
           options = { ...options, securityPolicy: gatewayTool?.securityPolicy ?? null };
@@ -209,6 +209,17 @@ export class ToolExecutorService {
       if (!access.allowed) {
         throw new Error(`Refused by this gateway tool's permissions: ${access.reason}`);
       }
+
+      // Apply this gateway tool's input mapping before anything reads the
+      // parameters. It renames the caller-facing keys the gateway
+      // advertises (getEffectiveParameters) to the keys the underlying
+      // tool declares, so it has to run ahead of schema validation, the
+      // cache key and dispatch alike -- otherwise the rename would be
+      // validated against the wrong schema and cached under the wrong key.
+      if (gatewayTool?.transformations?.inputMapping) {
+        parameters = gatewayTool.transformInput(parameters);
+      }
+
 
       // Parameter schema validation (if the tool has one).
       const validation = await this.stats.validateParameters(tool, parameters);
@@ -313,13 +324,13 @@ export class ToolExecutorService {
             executionTime: Date.now() - startTime,
             retryCount: 0,
           });
-          return {
+          return this.applyOutputTransform(gatewayTool, {
             ...cachedResult,
             cached: true,
             rateLimited: false,
             retryCount: 0,
             executionTime: Date.now() - startTime,
-          };
+          });
         }
       }
 
@@ -371,7 +382,7 @@ export class ToolExecutorService {
           cached,
           retryCount: 0,
         });
-        return { ...result, cached, rateLimited, retryCount: 0 };
+        return this.applyOutputTransform(gatewayTool, { ...result, cached, rateLimited, retryCount: 0 });
       }
 
       // Legacy API-operation path (spec-imported tools without a
@@ -397,13 +408,13 @@ export class ToolExecutorService {
             retryCount,
           });
 
-          return {
+          return this.applyOutputTransform(gatewayTool, {
             ...opResult,
             executionTime: Date.now() - startTime,
             cached,
             rateLimited,
             retryCount,
-          };
+          });
         } catch (error: any) {
           lastError = error;
           retryCount++;
@@ -469,6 +480,38 @@ export class ToolExecutorService {
 
       return errorResult;
     }
+  }
+
+  /**
+   * Apply `gateway_tools.transformations.outputMapping` to a successful
+   * result before it leaves the executor.
+   *
+   * `transformations` had a column, both halves of the gateway-tool DTO
+   * (create and PATCH), an entry in UPDATABLE_GATEWAY_TOOL_FIELDS and a
+   * copy in gateway-tool-transfer -- and `transformInput`/`transformOutput`
+   * had no caller anywhere in src or ee. The entity methods were unit
+   * tested in isolation, which is why this survived: the mapping was
+   * saved, echoed back by the API, and then dropped on every call.
+   *
+   * Scoped to the gateway paths, like securityPolicy and permissions: the
+   * mapping belongs to one tool on one gateway, so a direct API call or
+   * an agent node that never came through a gateway is not rewritten by
+   * it. A failed result is returned untouched -- an error payload is not
+   * the tool's output and renaming its fields would only obscure it.
+   *
+   * `headerMapping` is still read by nothing. Unlike the two mappings
+   * here, it has no entity method and no obvious seam: outbound headers
+   * are assembled per executor, under the security policy's allowed-host
+   * and HTTPS checks, so wiring it is a deliberate change to what leaves
+   * the process rather than a rename of an existing payload. Left
+   * unimplemented on purpose; see GatewayTool.transformations.
+   */
+  private applyOutputTransform(
+    gatewayTool: GatewayTool | null,
+    result: ToolExecutionResult,
+  ): ToolExecutionResult {
+    if (!gatewayTool?.transformations?.outputMapping || !result.success) return result;
+    return { ...result, data: gatewayTool.transformOutput(result.data) };
   }
 
   // ─── Legacy operation-based dispatch ───────────────────────────
