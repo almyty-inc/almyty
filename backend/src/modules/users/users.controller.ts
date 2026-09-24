@@ -29,6 +29,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { User } from '../../entities/user.entity';
 import { OrganizationRole } from '../../entities/user-organization.entity';
+import { assertMayChangeLoginEmail } from '../auth/sso-session';
 
 @ApiTags('Users')
 @Controller('users')
@@ -184,6 +185,7 @@ export class UsersController {
     @CurrentUser() user: User,
     @Body() updateUserDto: UpdateUserDto,
   ) {
+    assertMayChangeLoginEmail(user, updateUserDto.email);
     const updatedUser = await this.usersService.update(user.id, updateUserDto);
     
     const { passwordHash, resetPasswordToken, verificationToken, ...profile } = updatedUser;
@@ -206,7 +208,8 @@ export class UsersController {
     @Req() req: any,
   ) {
     const organizationId = this.requireOrg(req);
-    const updatedUser = await this.usersService.updateInOrg(id, organizationId, updateUserDto);
+    if (req.user?.id === id) assertMayChangeLoginEmail(req.user, updateUserDto.email);
+    const updatedUser = await this.usersService.updateInOrg(id, organizationId, updateUserDto, req.user?.id);
 
     const { passwordHash, resetPasswordToken, verificationToken, ...profile } = updatedUser;
 
@@ -224,7 +227,7 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   async deactivate(@Param('id') id: string, @Req() req: any) {
     const organizationId = this.requireOrg(req);
-    await this.usersService.deactivateInOrg(id, organizationId);
+    await this.usersService.deactivateInOrg(id, organizationId, req.user?.id);
 
     return {
       message: 'User deactivated successfully',

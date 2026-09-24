@@ -153,7 +153,7 @@ describe('UsersController', () => {
 
       expect(result.message).toBe('User updated successfully');
       expect(result.user).toEqual({ id: 'user-1', firstName: 'Updated' });
-      expect(usersService.updateInOrg).toHaveBeenCalledWith('user-1', 'org-1', updateDto);
+      expect(usersService.updateInOrg).toHaveBeenCalledWith('user-1', 'org-1', updateDto, undefined);
       expect(usersService.update).not.toHaveBeenCalled();
     });
   });
@@ -166,7 +166,7 @@ describe('UsersController', () => {
       const result = await controller.deactivate('user-1', reqWithOrg('org-1'));
 
       expect(result.message).toBe('User deactivated successfully');
-      expect(usersService.deactivateInOrg).toHaveBeenCalledWith('user-1', 'org-1');
+      expect(usersService.deactivateInOrg).toHaveBeenCalledWith('user-1', 'org-1', undefined);
     });
   });
 

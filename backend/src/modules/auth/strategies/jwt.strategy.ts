@@ -10,6 +10,7 @@ import { JwtPayload } from '../auth.service';
 import {
   effectiveMemberships,
   hasEffectiveMembership,
+  membershipOrgId,
 } from '../../../common/authorization/membership';
 
 /**
@@ -71,6 +72,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // until the user's first bump.
     if (((payload as any).tv ?? 0) !== (user.tokenVersion ?? 0)) {
       throw new UnauthorizedException('Token has been revoked');
+    }
+
+    // An SSO session reaches the organization whose IdP asserted it and
+    // no other (see sso-session.ts). Narrowing the loaded rows here means
+    // the header check below, RolesGuard and every handler that reads
+    // `organizationMemberships` see the one organization.
+    if (payload.sso) {
+      user.organizationMemberships = (user.organizationMemberships ?? []).filter(
+        (membership) => membershipOrgId(membership) === payload.sso,
+      );
+      (user as any).ssoOrganizationId = payload.sso;
     }
 
     // Only rows that actually grant access. A revoked invite keeps its

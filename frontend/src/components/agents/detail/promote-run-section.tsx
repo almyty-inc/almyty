@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 import { promotedSkillsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
@@ -29,6 +30,9 @@ export function PromoteRunSection({ runId }: PromoteRunSectionProps) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  // A named-but-unpromoted skill asks before a navigation throws it away;
+  // Cancel and a successful promote both clear the fields, so neither asks.
+  const guard = useLeaveGuard(open && (name !== '' || description !== ''))
   const uid = useId()
   const formId = `promote-run-${uid}`
 
@@ -74,46 +78,49 @@ export function PromoteRunSection({ runId }: PromoteRunSectionProps) {
   }
 
   return (
-    <form
-      id={formId}
-      aria-label="Promote run to skill"
-      className="space-y-3 rounded-md border bg-background p-4"
-      onSubmit={(e: FormEvent) => {
-        e.preventDefault()
-        mutation.mutate()
-      }}
-    >
-      <div className="space-y-1">
-        <h4 className="flex items-center gap-1.5 text-sm font-medium">
-          <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-          Promote run to skill
-        </h4>
-        <p className="text-xs text-muted-foreground">
-          Distill this successful run into a reusable skill other agents can follow. Leave fields
-          blank to derive them from the agent.
-        </p>
-      </div>
-      <Field id={`${formId}-name`} label="Name">
-        <Input
-          value={name}
-          maxLength={120}
-          placeholder="e.g. Quarterly revenue report"
-          onChange={(e) => setName(e.target.value)}
+    <>
+      <form
+        id={formId}
+        aria-label="Promote run to skill"
+        className="space-y-3 rounded-md border bg-background p-4"
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault()
+          mutation.mutate()
+        }}
+      >
+        <div className="space-y-1">
+          <h4 className="flex items-center gap-1.5 text-sm font-medium">
+            <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+            Promote run to skill
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            Distill this successful run into a reusable skill other agents can follow. Leave fields
+            blank to derive them from the agent.
+          </p>
+        </div>
+        <Field id={`${formId}-name`} label="Name">
+          <Input
+            value={name}
+            maxLength={120}
+            placeholder="e.g. Quarterly revenue report"
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
+        <Field id={`${formId}-description`} label="Description">
+          <Textarea
+            value={description}
+            maxLength={500}
+            placeholder="When should an agent reach for this skill?"
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </Field>
+        <InlineFormActions
+          onCancel={close}
+          submitLabel="Promote"
+          submitting={mutation.isPending}
         />
-      </Field>
-      <Field id={`${formId}-description`} label="Description">
-        <Textarea
-          value={description}
-          maxLength={500}
-          placeholder="When should an agent reach for this skill?"
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </Field>
-      <InlineFormActions
-        onCancel={close}
-        submitLabel="Promote"
-        submitting={mutation.isPending}
-      />
-    </form>
+      </form>
+      {guard.element}
+    </>
   )
 }

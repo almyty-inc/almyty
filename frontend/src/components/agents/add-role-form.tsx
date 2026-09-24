@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 
 import { Input } from '@/components/ui/input'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 /**
  * Creating a role.
@@ -35,6 +36,9 @@ export interface AddRoleFormProps {
 export function AddRoleForm({ existingKeys, neededKeys = [], onCreate, onCancel, saving, error }: AddRoleFormProps) {
   const [key, setKey] = useState('')
   const [displayName, setDisplayName] = useState('')
+  // Typed-in work asks before a navigation throws it away. Cancel unmounts
+  // the form and submitting empties the fields, so neither asks.
+  const guard = useLeaveGuard(key !== '' || displayName !== '')
 
   const trimmed = key.trim()
   const duplicate = existingKeys.includes(trimmed)
@@ -53,72 +57,75 @@ export function AddRoleForm({ existingKeys, neededKeys = [], onCreate, onCancel,
   }
 
   return (
-    <form
-      data-testid="add-role-form"
-      aria-label="Add a role"
-      noValidate
-      onSubmit={submit}
-      className="mb-4 space-y-4 rounded-lg border bg-muted/30 p-4"
-    >
-      <p className="text-sm text-muted-foreground">
-        A role is a job in this agent, like principal or verifier. A strategy fills its slots from these, and you change
-        model by rebinding a role rather than editing the graph.
-      </p>
-
-      <Field
-        id="role-key"
-        label="Key"
-        required
-        error={
-          duplicate ? (
-            <span data-testid="role-key-duplicate">This agent already has a role called {trimmed}.</span>
-          ) : malformed ? (
-            <span data-testid="role-key-malformed">
-              Lowercase letters, digits and underscores, starting with a letter — strategies match slots by this name.
-            </span>
-          ) : undefined
-        }
+    <>
+      <form
+        data-testid="add-role-form"
+        aria-label="Add a role"
+        noValidate
+        onSubmit={submit}
+        className="mb-4 space-y-4 rounded-lg border bg-muted/30 p-4"
       >
-        <Input value={key} placeholder="principal" autoFocus onChange={(e) => setKey(e.target.value)} />
-      </Field>
-
-      {offered.length > 0 && (
-        <div>
-          <p className="text-xs text-muted-foreground">
-            {neededKeys.length > 0 ? 'Slots your strategies need:' : 'Common roles:'}
-          </p>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {offered.slice(0, 8).map((slot) => (
-              <button
-                key={slot}
-                type="button"
-                data-testid={`suggest-${slot}`}
-                onClick={() => setKey(slot)}
-                className="rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent"
-              >
-                {slot}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <Field id="role-name" label="Name (optional)">
-        <Input value={displayName} placeholder={trimmed || 'Principal'} onChange={(e) => setDisplayName(e.target.value)} />
-      </Field>
-
-      {error && (
-        <p data-testid="add-role-error" className="text-xs text-red-600 dark:text-red-400">
-          {error}
+        <p className="text-sm text-muted-foreground">
+          A role is a job in this agent, like principal or verifier. A strategy fills its slots from these, and you change
+          model by rebinding a role rather than editing the graph.
         </p>
-      )}
 
-      <InlineFormActions
-        onCancel={onCancel}
-        submitLabel={saving ? 'Adding...' : 'Add role'}
-        submitting={saving}
-        submitDisabled={!canCreate}
-      />
-    </form>
+        <Field
+          id="role-key"
+          label="Key"
+          required
+          error={
+            duplicate ? (
+              <span data-testid="role-key-duplicate">This agent already has a role called {trimmed}.</span>
+            ) : malformed ? (
+              <span data-testid="role-key-malformed">
+                Lowercase letters, digits and underscores, starting with a letter — strategies match slots by this name.
+              </span>
+            ) : undefined
+          }
+        >
+          <Input value={key} placeholder="principal" autoFocus onChange={(e) => setKey(e.target.value)} />
+        </Field>
+
+        {offered.length > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground">
+              {neededKeys.length > 0 ? 'Slots your strategies need:' : 'Common roles:'}
+            </p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {offered.slice(0, 8).map((slot) => (
+                <button
+                  key={slot}
+                  type="button"
+                  data-testid={`suggest-${slot}`}
+                  onClick={() => setKey(slot)}
+                  className="rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent"
+                >
+                  {slot}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <Field id="role-name" label="Name (optional)">
+          <Input value={displayName} placeholder={trimmed || 'Principal'} onChange={(e) => setDisplayName(e.target.value)} />
+        </Field>
+
+        {error && (
+          <p data-testid="add-role-error" className="text-xs text-red-600 dark:text-red-400">
+            {error}
+          </p>
+        )}
+
+        <InlineFormActions
+          onCancel={onCancel}
+          submitLabel={saving ? 'Adding...' : 'Add role'}
+          submitting={saving}
+          submitDisabled={!canCreate}
+        />
+      </form>
+      {guard.element}
+    </>
   )
 }

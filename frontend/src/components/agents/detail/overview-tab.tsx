@@ -52,6 +52,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { formatDateTime, formatRelativeTime } from '@/lib/utils'
 import { execStatusVariant, diffObjects, formatDiffValue } from './constants'
 import { IntegrationSnippets } from './integration-snippets'
@@ -125,6 +126,19 @@ export function OverviewTab({
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [rollbackIndex, setRollbackIndex] = useState<number | null>(null)
   const [expandedVersionId, setExpandedVersionId] = useState<number | null>(null)
+
+  // A webhook URL or schedule edited but not saved asks before a navigation
+  // throws it away. Saving refetches the agent, which brings the fields and
+  // the saved values back in line.
+  const savedSchedule = agent.settings?.schedule
+  const webhookDirty = !webhookSaving && webhookUrl !== (agent.webhookUrl || '')
+  const scheduleDirty =
+    !scheduleSaving &&
+    scheduleEnabled &&
+    (!savedSchedule?.enabled ||
+      scheduleInterval !== (savedSchedule.intervalMinutes || 60) ||
+      scheduleInput !== JSON.stringify(savedSchedule.input || {}, null, 2))
+  const guard = useLeaveGuard(webhookDirty || scheduleDirty)
   // The Recent Runs empty state sends the user to Try It rather than telling
   // them to go find it; the input is the only way to start a run from here.
   const testInputRef = React.useRef<HTMLInputElement>(null)
@@ -683,6 +697,7 @@ export function OverviewTab({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {guard.element}
     </>
   )
 }

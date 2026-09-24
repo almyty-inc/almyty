@@ -12,6 +12,7 @@ import { Field, InlineFormActions } from '@/components/layout/form-page'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 export interface SecurityPolicyFormProps {
   /** Distinguishes the ids when several rows are open. */
@@ -29,12 +30,30 @@ export function SecurityPolicyForm({
   onCancel,
   isSaving,
 }: SecurityPolicyFormProps) {
-  const [allowedDomains, setAllowedDomains] = useState(initialPolicy?.allowedDomains?.join(', ') || '')
-  const [blockedDomains, setBlockedDomains] = useState(initialPolicy?.blockedDomains?.join(', ') || '')
-  const [allowedMethods, setAllowedMethods] = useState(initialPolicy?.allowedHttpMethods?.join(', ') || '')
-  const [maxResponseSize, setMaxResponseSize] = useState(initialPolicy?.maxResponseSizeBytes?.toString() || '')
-  const [requireHttps, setRequireHttps] = useState(initialPolicy?.requireHttps || false)
+  const initial = {
+    allowedDomains: initialPolicy?.allowedDomains?.join(', ') || '',
+    blockedDomains: initialPolicy?.blockedDomains?.join(', ') || '',
+    allowedMethods: initialPolicy?.allowedHttpMethods?.join(', ') || '',
+    maxResponseSize: initialPolicy?.maxResponseSizeBytes?.toString() || '',
+    requireHttps: !!initialPolicy?.requireHttps,
+  }
+  const [allowedDomains, setAllowedDomains] = useState(initial.allowedDomains)
+  const [blockedDomains, setBlockedDomains] = useState(initial.blockedDomains)
+  const [allowedMethods, setAllowedMethods] = useState(initial.allowedMethods)
+  const [maxResponseSize, setMaxResponseSize] = useState(initial.maxResponseSize)
+  const [requireHttps, setRequireHttps] = useState(initial.requireHttps)
   const [sizeError, setSizeError] = useState<string | undefined>()
+
+  // An edited policy asks before a navigation throws it away. Not while it
+  // is being saved: the row closes itself once the save lands, and Cancel
+  // closes it too, so neither asks.
+  const edited =
+    allowedDomains !== initial.allowedDomains ||
+    blockedDomains !== initial.blockedDomains ||
+    allowedMethods !== initial.allowedMethods ||
+    maxResponseSize !== initial.maxResponseSize ||
+    requireHttps !== initial.requireHttps
+  const guard = useLeaveGuard(edited && !isSaving)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -97,6 +116,7 @@ export function SecurityPolicyForm({
         <Switch id={id('require-https')} checked={requireHttps} onCheckedChange={setRequireHttps} />
       </div>
       <InlineFormActions onCancel={onCancel} submitLabel="Save policy" submitting={isSaving} />
+      {guard.element}
     </form>
   )
 }

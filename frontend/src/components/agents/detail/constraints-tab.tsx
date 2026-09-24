@@ -19,6 +19,7 @@ import { useNotifications } from '@/store/app'
 import type { AgentConstraint } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 interface ConstraintsTabProps {
   agentId: string
@@ -28,6 +29,9 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
   const queryClient = useQueryClient()
   const { success, error: errorNotif } = useNotifications()
   const [rule, setRule] = useState('')
+  // A typed but unadded rule asks before a navigation throws it away; adding
+  // it empties the field, so a saved rule does not.
+  const guard = useLeaveGuard(rule !== '')
 
   const { data, isLoading, isError, error, refetch } = useQuery<AgentConstraint[]>({
     queryKey: ['agent-constraints', agentId],
@@ -154,6 +158,7 @@ export function ConstraintsTab({ agentId }: ConstraintsTabProps) {
         )}
       </CardContent>
       {confirmDialog}
+      {guard.element}
     </Card>
   )
 }

@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { SpendGranularity, normalizeGranularity } from './spend-period.util';
+import { notOthersPrivateAgent } from '../monitoring/private-rows';
 
 export interface SpendScope {
   organizationId: string;
@@ -127,17 +128,28 @@ export class SpendService {
 
   /**
    * Spend over time + breakdown by agent for the Cost tab (T2.2).
+   *
+   * `viewerId` is the calling user. The per-agent breakdown leaves out
+   * another member's private agents: a row names the agent and its
+   * spend. A null viewer gets no private agent's row. The total and the
+   * timeseries stay org-wide sums -- they are the org's spend, which the
+   * org-wide budgets are measured against, and name no agent.
    */
   async getSummary(
     organizationId: string,
-    opts: { from: Date; to?: Date; granularity?: SpendGranularity | string },
+    opts: {
+      from: Date;
+      to?: Date;
+      granularity?: SpendGranularity | string;
+      viewerId: string | null;
+    },
   ): Promise<SpendSummary> {
     const bucket = normalizeGranularity(opts.granularity as string | undefined);
 
     const [totalCents, timeseries, byAgent] = await Promise.all([
       this.periodToDateCents({ organizationId, from: opts.from, to: opts.to }),
       this.timeseries(organizationId, opts.from, opts.to, bucket),
-      this.byAgent(organizationId, opts.from, opts.to),
+      this.byAgent(organizationId, opts.from, opts.to, opts.viewerId ?? null),
     ]);
 
     return { totalCents, timeseries, byAgent };
@@ -189,6 +201,7 @@ export class SpendService {
     organizationId: string,
     from: Date,
     to: Date | undefined,
+    viewerId: string | null,
   ): Promise<SpendByAgent[]> {
     const perSource = await Promise.all(
       this.spendSources().map(async ({ repo, alias }) => {
@@ -199,6 +212,7 @@ export class SpendService {
           .addSelect('COUNT(*)', 'count')
           .where(`${alias}.organizationId = :orgId`, { orgId: organizationId })
           .andWhere(`${alias}.createdAt >= :from`, { from })
+          .andWhere(notOthersPrivateAgent(`${alias}."agentId"`), { privateViewerId: viewerId })
           .groupBy(`${alias}.agentId`)
           .orderBy(`COALESCE(SUM(${alias}.totalCost), 0)`, 'DESC')
           .limit(50);

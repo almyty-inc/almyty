@@ -26,6 +26,7 @@ describe('BudgetsService', () => {
   let alertRepo: FakeRepository<SpendAlert>;
   let userOrgRepo: FakeRepository<any>;
   let userRepo: FakeRepository<any>;
+  let agentRepo: FakeRepository<any>;
   let spend: { periodToDateCents: jest.Mock };
   let mail: { send: jest.Mock };
   let service: BudgetsService;
@@ -51,6 +52,11 @@ describe('BudgetsService', () => {
     spend = { periodToDateCents: jest.fn().mockResolvedValue(0) };
     mail = { send: jest.fn().mockResolvedValue(true) };
 
+    agentRepo = fakeRepository([
+      { id: 'agent-A', organizationId: 'org-1', visibility: 'org', createdBy: 'member-1' },
+      { id: 'agent-B', organizationId: 'org-1', visibility: 'org', createdBy: 'member-1' },
+    ]);
+
     service = new BudgetsService(
       budgetRepo as any,
       alertRepo as any,
@@ -58,6 +64,8 @@ describe('BudgetsService', () => {
       userRepo as any,
       spend as any,
       mail as any,
+      undefined,
+      agentRepo as any,
     );
   });
 
@@ -66,58 +74,58 @@ describe('BudgetsService', () => {
   // ── CRUD + validation ────────────────────────────────────────────
 
   it('creates, lists, updates and deletes a budget', async () => {
-    const b = await service.create('org-1', { limitCents: 5000, periodType: 'month' });
+    const b = await service.create('org-1', { limitCents: 5000, periodType: 'month' }, 'owner-1');
     expect(b.id).toBeDefined();
     expect(b.limitCents).toBe(5000);
     expect(b.behavior).toBe('warn_log');
     expect(b.softThresholdPct).toBe(80);
 
-    expect(await service.list('org-1')).toHaveLength(1);
+    expect(await service.list('org-1', 'owner-1')).toHaveLength(1);
 
-    const updated = await service.update(b.id, 'org-1', { limitCents: 8000, behavior: 'reject' });
+    const updated = await service.update(b.id, 'org-1', { limitCents: 8000, behavior: 'reject' }, 'owner-1');
     expect(updated.limitCents).toBe(8000);
     expect(updated.behavior).toBe('reject');
 
-    await service.remove(b.id, 'org-1');
-    expect(await service.list('org-1')).toHaveLength(0);
+    await service.remove(b.id, 'org-1', 'owner-1');
+    expect(await service.list('org-1', 'owner-1')).toHaveLength(0);
   });
 
   // The object `update()` returns is its own copy; only the table says
   // whether the change was written.
   it('update reaches the table, not only the object it returns', async () => {
-    const b = await service.create('org-1', { limitCents: 5000 });
-    await service.update(b.id, 'org-1', { limitCents: 8000, behavior: 'reject' });
+    const b = await service.create('org-1', { limitCents: 5000 }, 'owner-1');
+    await service.update(b.id, 'org-1', { limitCents: 8000, behavior: 'reject' }, 'owner-1');
 
     expect(budgetRepo.row(b.id)).toMatchObject({ limitCents: 8000, behavior: 'reject' });
   });
 
   it('rejects invalid budget input', async () => {
-    await expect(service.create('org-1', { limitCents: 0 })).rejects.toThrow(BadRequestException);
-    await expect(service.create('org-1', { limitCents: -5 })).rejects.toThrow(BadRequestException);
+    await expect(service.create('org-1', { limitCents: 0 }, 'owner-1')).rejects.toThrow(BadRequestException);
+    await expect(service.create('org-1', { limitCents: -5 }, 'owner-1')).rejects.toThrow(BadRequestException);
     await expect(
-      service.create('org-1', { limitCents: 100, periodType: 'year' as any }),
+      service.create('org-1', { limitCents: 100, periodType: 'year' as any }, 'owner-1'),
     ).rejects.toThrow(BadRequestException);
     await expect(
-      service.create('org-1', { limitCents: 100, behavior: 'silent' as any }),
+      service.create('org-1', { limitCents: 100, behavior: 'silent' as any }, 'owner-1'),
     ).rejects.toThrow(BadRequestException);
     await expect(
-      service.create('org-1', { limitCents: 100, softThresholdPct: 150 }),
+      service.create('org-1', { limitCents: 100, softThresholdPct: 150 }, 'owner-1'),
     ).rejects.toThrow(BadRequestException);
   });
 
   // ── Tenancy ──────────────────────────────────────────────────────
 
   it('no other organization can read, change or delete a budget', async () => {
-    const mine = await service.create('org-1', { limitCents: 5000 });
+    const mine = await service.create('org-1', { limitCents: 5000 }, 'owner-1');
 
-    await expect(service.get(mine.id, 'org-2')).rejects.toThrow(NotFoundException);
-    await expect(service.update(mine.id, 'org-2', { limitCents: 1 })).rejects.toThrow(
+    await expect(service.get(mine.id, 'org-2', 'owner-1')).rejects.toThrow(NotFoundException);
+    await expect(service.update(mine.id, 'org-2', { limitCents: 1 }, 'owner-1')).rejects.toThrow(
       NotFoundException,
     );
-    await expect(service.remove(mine.id, 'org-2')).rejects.toThrow(NotFoundException);
+    await expect(service.remove(mine.id, 'org-2', 'owner-1')).rejects.toThrow(NotFoundException);
 
     expect(budgetRepo.row(mine.id)).toMatchObject({ organizationId: 'org-1', limitCents: 5000 });
-    expect(await service.list('org-2')).toHaveLength(0);
+    expect(await service.list('org-2', 'owner-1')).toHaveLength(0);
   });
 
   // ── Enforcement ──────────────────────────────────────────────────
@@ -131,8 +139,8 @@ describe('BudgetsService', () => {
   it('enforcement reads only this organization’s active budgets', async () => {
     // Another tenant's ceiling and a deactivated one of our own, both far
     // past their limit: neither may stop this run.
-    await service.create('org-2', { limitCents: 1, behavior: 'reject' });
-    await service.create('org-1', { limitCents: 1, behavior: 'reject', active: false });
+    await service.create('org-2', { limitCents: 1, behavior: 'reject' }, 'owner-1');
+    await service.create('org-1', { limitCents: 1, behavior: 'reject', active: false }, 'owner-1');
     spend.periodToDateCents.mockResolvedValue(99999);
 
     await expect(service.enforceForRun('org-1', 'agent-1')).resolves.toBeUndefined();
@@ -141,7 +149,7 @@ describe('BudgetsService', () => {
   });
 
   it('reject budget over limit → throws BudgetExceededException and logs a hard alert', async () => {
-    await service.create('org-1', { limitCents: 1000, behavior: 'reject' });
+    await service.create('org-1', { limitCents: 1000, behavior: 'reject' }, 'owner-1');
     spend.periodToDateCents.mockResolvedValue(1200);
 
     await expect(service.enforceForRun('org-1', 'agent-1')).rejects.toThrow(
@@ -153,7 +161,7 @@ describe('BudgetsService', () => {
   });
 
   it('warn_log budget over limit → records hard alert but proceeds', async () => {
-    await service.create('org-1', { limitCents: 1000, behavior: 'warn_log' });
+    await service.create('org-1', { limitCents: 1000, behavior: 'warn_log' }, 'owner-1');
     spend.periodToDateCents.mockResolvedValue(1500);
 
     await expect(service.enforceForRun('org-1', 'agent-1')).resolves.toBeUndefined();
@@ -162,7 +170,7 @@ describe('BudgetsService', () => {
   });
 
   it('soft threshold breach → records soft alert and proceeds', async () => {
-    await service.create('org-1', { limitCents: 1000, behavior: 'reject', softThresholdPct: 80 });
+    await service.create('org-1', { limitCents: 1000, behavior: 'reject', softThresholdPct: 80 }, 'owner-1');
     spend.periodToDateCents.mockResolvedValue(850); // 85% > 80% soft, < 100%
 
     await expect(service.enforceForRun('org-1', 'agent-1')).resolves.toBeUndefined();
@@ -171,7 +179,7 @@ describe('BudgetsService', () => {
   });
 
   it('spend below soft threshold → no alert', async () => {
-    await service.create('org-1', { limitCents: 1000 });
+    await service.create('org-1', { limitCents: 1000 }, 'owner-1');
     spend.periodToDateCents.mockResolvedValue(500);
 
     await service.enforceForRun('org-1', 'agent-1');
@@ -179,7 +187,7 @@ describe('BudgetsService', () => {
   });
 
   it('agent-scoped budget does not apply to a different agent', async () => {
-    await service.create('org-1', { limitCents: 1000, agentId: 'agent-A', behavior: 'reject' });
+    await service.create('org-1', { limitCents: 1000, agentId: 'agent-A', behavior: 'reject' }, 'owner-1');
     spend.periodToDateCents.mockResolvedValue(9999);
 
     await expect(service.enforceForRun('org-1', 'agent-B')).resolves.toBeUndefined();
@@ -190,7 +198,7 @@ describe('BudgetsService', () => {
   // ── Alert dedup + email ──────────────────────────────────────────
 
   it('records an alert once per period and emails only this org’s owners/admins', async () => {
-    await service.create('org-1', { limitCents: 1000, behavior: 'warn_log' });
+    await service.create('org-1', { limitCents: 1000, behavior: 'warn_log' }, 'owner-1');
     spend.periodToDateCents.mockResolvedValue(1100);
 
     await service.enforceForRun('org-1', 'agent-1');
@@ -209,15 +217,15 @@ describe('BudgetsService', () => {
 
   it('refuses to create a provider-scoped budget', async () => {
     await expect(
-      service.create('org-1', { limitCents: 1000, llmProviderId: 'prov-1' }),
+      service.create('org-1', { limitCents: 1000, llmProviderId: 'prov-1' }, 'owner-1'),
     ).rejects.toThrow(BadRequestException);
     expect(budgets()).toHaveLength(0);
   });
 
   it('refuses to narrow an existing budget to a provider', async () => {
-    const b = await service.create('org-1', { limitCents: 1000 });
+    const b = await service.create('org-1', { limitCents: 1000 }, 'owner-1');
     await expect(
-      service.update(b.id, 'org-1', { llmProviderId: 'prov-1' }),
+      service.update(b.id, 'org-1', { llmProviderId: 'prov-1' }, 'owner-1'),
     ).rejects.toThrow(BadRequestException);
     expect(budgetRepo.row(b.id)?.llmProviderId).toBeNull();
   });
@@ -242,5 +250,168 @@ describe('BudgetsService', () => {
     await expect(service.enforceForRun('org-1', 'agent-1')).resolves.toBeUndefined();
     expect(spend.periodToDateCents).not.toHaveBeenCalled();
     expect(alerts()).toHaveLength(0);
+  });
+
+  // ── Another member's private agent ───────────────────────────────
+  //
+  // member-1 owns a private agent. To everyone else -- the org owner
+  // included -- a budget or breach on it answers like a missing one, a
+  // budget cannot be pointed at it, and its breach is told to member-1
+  // alone. A private agent with no recorded owner is nobody's.
+
+  describe('budgets and alerts on a private agent', () => {
+    let notifications: { emit: jest.Mock; filterUsersWithEmailEnabled: jest.Mock };
+
+    const seedBudget = (id: string, agentId: string | null, extra: Record<string, unknown> = {}) =>
+      budgetRepo.seed({
+        id,
+        organizationId: 'org-1',
+        agentId,
+        llmProviderId: null,
+        periodType: 'month',
+        limitCents: 1000,
+        behavior: 'warn_log',
+        softThresholdPct: 80,
+        active: true,
+        createdAt: new Date('2026-09-01T00:00:00Z'),
+        ...extra,
+      } as any);
+
+    const seedAlert = (id: string, agentId: string | null, at: string) =>
+      alertRepo.seed({
+        id,
+        budgetId: 'b-x',
+        organizationId: 'org-1',
+        agentId,
+        llmProviderId: null,
+        level: 'soft',
+        periodType: 'month',
+        periodStart: new Date('2026-09-01T00:00:00Z'),
+        spentCents: 900,
+        limitCents: 1000,
+        at: new Date(at),
+      } as any);
+
+    beforeEach(() => {
+      agentRepo.seed({ id: 'agent-priv', organizationId: 'org-1', visibility: 'private', createdBy: 'member-1' });
+      agentRepo.seed({ id: 'agent-orphan', organizationId: 'org-1', visibility: 'private', createdBy: null });
+      notifications = {
+        emit: jest.fn().mockResolvedValue(undefined),
+        filterUsersWithEmailEnabled: jest.fn(async (_type: string, ids: string[]) => ids),
+      };
+      service = new BudgetsService(
+        budgetRepo as any,
+        alertRepo as any,
+        userOrgRepo as any,
+        userRepo as any,
+        spend as any,
+        mail as any,
+        notifications as any,
+        agentRepo as any,
+      );
+    });
+
+    it('is not listed, fetched, changed or deleted by anyone but the agent owner', async () => {
+      seedBudget('b-priv', 'agent-priv');
+      seedBudget('b-org', null);
+
+      expect((await service.list('org-1', 'owner-1')).map((b) => b.id)).toEqual(['b-org']);
+      expect((await service.list('org-1', null)).map((b) => b.id)).toEqual(['b-org']);
+      await expect(service.get('b-priv', 'org-1', 'owner-1')).rejects.toThrow(NotFoundException);
+      await expect(service.get('b-priv', 'org-1', undefined)).rejects.toThrow(NotFoundException);
+      await expect(service.update('b-priv', 'org-1', { limitCents: 1 }, 'owner-1')).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.remove('b-priv', 'org-1', 'owner-1')).rejects.toThrow(NotFoundException);
+      expect(budgetRepo.row('b-priv')).toMatchObject({ limitCents: 1000 });
+
+      expect((await service.list('org-1', 'member-1')).map((b) => b.id).sort()).toEqual(['b-org', 'b-priv']);
+      await expect(service.get('b-priv', 'org-1', 'member-1')).resolves.toMatchObject({ id: 'b-priv' });
+    });
+
+    it('cannot be created or re-pointed at by someone who cannot see the agent', async () => {
+      await expect(
+        service.create('org-1', { limitCents: 1000, agentId: 'agent-priv' }, 'owner-1'),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.create('org-1', { limitCents: 1000, agentId: 'agent-orphan' }, 'member-1'),
+      ).rejects.toThrow(NotFoundException);
+      // Same answer as for an agent that does not exist in this org.
+      await expect(
+        service.create('org-1', { limitCents: 1000, agentId: 'agent-nope' }, 'owner-1'),
+      ).rejects.toThrow('Agent not found');
+      expect(budgets()).toHaveLength(0);
+
+      const mine = await service.create('org-1', { limitCents: 1000 }, 'owner-1');
+      await expect(
+        service.update(mine.id, 'org-1', { agentId: 'agent-priv' }, 'owner-1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(budgetRepo.row(mine.id)?.agentId).toBeNull();
+
+      // The owner may.
+      const own = await service.create('org-1', { limitCents: 1000, agentId: 'agent-priv' }, 'member-1');
+      expect(own.agentId).toBe('agent-priv');
+    });
+
+    it('keeps breach alerts on the agent from everyone but its owner', async () => {
+      seedAlert('a-org', null, '2026-09-10T00:00:00Z');
+      seedAlert('a-shared', 'agent-A', '2026-09-11T00:00:00Z');
+      seedAlert('a-priv', 'agent-priv', '2026-09-12T00:00:00Z');
+      seedAlert('a-orphan', 'agent-orphan', '2026-09-13T00:00:00Z');
+
+      const ids = async (viewer: string | null | undefined, limit?: number) =>
+        (await service.listAlerts('org-1', viewer, limit)).map((a) => a.id);
+
+      expect(await ids('owner-1')).toEqual(['a-shared', 'a-org']);
+      expect(await ids(undefined)).toEqual(['a-shared', 'a-org']);
+      expect(await ids('member-1')).toEqual(['a-priv', 'a-shared', 'a-org']);
+      // The limit counts rows the viewer may see, not rows dropped after.
+      expect(await ids('owner-1', 1)).toEqual(['a-shared']);
+    });
+
+    it('notifies only the agent owner of a breach, never the org admins', async () => {
+      seedBudget('b-priv', 'agent-priv');
+      spend.periodToDateCents.mockResolvedValue(1100);
+
+      await service.enforceForRun('org-1', 'agent-priv');
+      await flush();
+
+      expect(alerts()).toHaveLength(1);
+      expect(mail.send.mock.calls.map((c) => c[0].to)).toEqual(['member@example.com']);
+      expect(notifications.emit).toHaveBeenCalledTimes(1);
+      expect(notifications.emit.mock.calls[0][0].userIds).toEqual(['member-1']);
+    });
+
+    it('notifies nobody when the private agent has no owner or the owner left', async () => {
+      seedBudget('b-orphan', 'agent-orphan');
+      spend.periodToDateCents.mockResolvedValue(1100);
+      await service.enforceForRun('org-1', 'agent-orphan');
+      await flush();
+      expect(alerts()).toHaveLength(1);
+      expect(mail.send).not.toHaveBeenCalled();
+      expect(notifications.emit).not.toHaveBeenCalled();
+
+      await userOrgRepo.update({ id: 'm-2' }, { isActive: false });
+      seedBudget('b-priv', 'agent-priv');
+      await service.enforceForRun('org-1', 'agent-priv');
+      await flush();
+      expect(mail.send).not.toHaveBeenCalled();
+      expect(notifications.emit).not.toHaveBeenCalled();
+    });
+
+    it('still tells the admins about a budget on an agent they can see', async () => {
+      seedBudget('b-shared', 'agent-A');
+      spend.periodToDateCents.mockResolvedValue(1100);
+      await service.enforceForRun('org-1', 'agent-A');
+      await flush();
+      expect(mail.send.mock.calls.map((c) => c[0].to)).toEqual(['owner@example.com']);
+      expect(notifications.emit.mock.calls[0][0].userIds).toEqual(['owner-1']);
+    });
+
+    it('still enforces a hidden budget: making the agent private does not shed it', async () => {
+      seedBudget('b-priv', 'agent-priv', { behavior: 'reject' });
+      spend.periodToDateCents.mockResolvedValue(1100);
+      await expect(service.enforceForRun('org-1', 'agent-priv')).rejects.toThrow(BudgetExceededException);
+    });
   });
 });
