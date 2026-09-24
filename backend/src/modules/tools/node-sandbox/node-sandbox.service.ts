@@ -19,6 +19,14 @@ const DEFAULT_MAX_WORKERS = 4;
  * and eventually OOM the backend process.
  */
 const DEFAULT_MAX_QUEUE_SIZE = 100;
+/**
+ * Ceiling on the timeout any single execution gets, whatever it asks
+ * for. A worker keeps its pool slot until its timer fires, so an
+ * uncapped tenant-supplied timeout is a way to hold a slot indefinitely.
+ * Matches the 300s ceiling on ExecuteToolDto.timeout and on a tool's
+ * `configuration.timeout`.
+ */
+const DEFAULT_MAX_TIMEOUT_MS = 300_000;
 
 /**
  * Tool-invocation message types used by the worker's `tools.invoke`
@@ -43,13 +51,20 @@ interface InvokeToolResponseMessage {
 export class NodeSandboxService {
   private readonly logger = new Logger(NodeSandboxService.name);
 
-  /** Currently running workers — used to enforce concurrency limits */
+  /** Pool workers currently running -- used to enforce concurrency limits */
   private activeWorkers = 0;
+
+  /** Pool workers currently running, per organization bucket */
+  private readonly activeByOrg = new Map<string, number>();
+
+  /** Nested `tools.invoke` workers currently running (outside the pool) */
+  private activeNestedWorkers = 0;
 
   /** Queue of pending executions waiting for a worker slot */
   private readonly queue: Array<{
     resolve: (result: SandboxExecutionResult) => void;
     request: SandboxExecutionRequest;
+    orgKey: string;
   }> = [];
 
   constructor(private readonly depManager: DependencyManagerService) {}
@@ -60,45 +75,104 @@ export class NodeSandboxService {
 
   /**
    * Execute user code inside a Worker thread with resource limits.
+   *
+   * The pool is process-wide and shared by every organization, so it is
+   * rationed per organization as well as in total:
+   *
+   *   - at most SANDBOX_MAX_WORKERS run at once (default 4), and at most
+   *     SANDBOX_MAX_WORKERS_PER_ORG of them for one organization (default
+   *     half the pool);
+   *   - at most SANDBOX_MAX_QUEUE_SIZE wait (default 100), and at most
+   *     SANDBOX_MAX_QUEUE_PER_ORG of them for one organization (default a
+   *     quarter of the queue). Past either, the request is refused rather
+   *     than parked in front of everyone else.
+   *
+   * A nested `tools.invoke` execution (`request.nested`) skips the pool:
+   * its caller is holding a slot and waiting on it, so queueing it would
+   * deadlock as soon as the pool is full. It is bounded by the caller's
+   * invocation budget and by SANDBOX_MAX_NESTED_WORKERS, past which it is
+   * refused -- never queued.
    */
   async execute(request: SandboxExecutionRequest): Promise<SandboxExecutionResult> {
-    const maxWorkers = parseInt(process.env.SANDBOX_MAX_WORKERS || '', 10) || DEFAULT_MAX_WORKERS;
-    const maxQueueSize =
-      parseInt(process.env.SANDBOX_MAX_QUEUE_SIZE || '', 10) || DEFAULT_MAX_QUEUE_SIZE;
+    const limits = this.limits();
 
     // Pre-flight cancellation check. Saves the queue + worker spawn.
     if (request.signal?.aborted) {
       return { success: false, error: 'Sandbox execution cancelled', executionTimeMs: 0 };
     }
 
-    // If we're at capacity, wait in the queue — but reject immediately
-    // when the queue is already full so a flood of requests doesn't
-    // OOM the backend.
-    if (this.activeWorkers >= maxWorkers) {
-      if (this.queue.length >= maxQueueSize) {
+    if (request.nested) {
+      if (this.activeNestedWorkers >= limits.maxNestedWorkers) {
         return {
           success: false,
-          error: `Sandbox queue full (${maxQueueSize} pending). Try again shortly.`,
+          error: `Too many nested sandbox executions in flight (${limits.maxNestedWorkers}). Try again shortly.`,
           executionTimeMs: 0,
         };
       }
-      return new Promise<SandboxExecutionResult>((resolve) => {
-        this.queue.push({ resolve, request });
-      });
+      return this.runWorker(request, null);
     }
 
-    return this.runWorker(request);
+    const orgKey = request.organizationId || '';
+
+    if (
+      this.activeWorkers < limits.maxWorkers &&
+      this.orgActive(orgKey) < limits.maxWorkersPerOrg
+    ) {
+      return this.runWorker(request, orgKey);
+    }
+
+    // At capacity (overall or for this organization): wait in the queue --
+    // but refuse immediately when the queue, or this organization's share
+    // of it, is already full, so a flood of requests neither OOMs the
+    // backend nor pushes every other tenant out.
+    if (this.queue.length >= limits.maxQueueSize) {
+      return {
+        success: false,
+        error: `Sandbox queue full (${limits.maxQueueSize} pending). Try again shortly.`,
+        executionTimeMs: 0,
+      };
+    }
+    if (this.orgQueued(orgKey) >= limits.maxQueuePerOrg) {
+      return {
+        success: false,
+        error: `Sandbox queue full for this organization (${limits.maxQueuePerOrg} pending). Try again shortly.`,
+        executionTimeMs: 0,
+      };
+    }
+    return new Promise<SandboxExecutionResult>((resolve) => {
+      this.queue.push({ resolve, request, orgKey });
+    });
   }
 
   // ──────────────────────────────────────────────
   // Internal
   // ──────────────────────────────────────────────
 
-  private async runWorker(request: SandboxExecutionRequest): Promise<SandboxExecutionResult> {
-    this.activeWorkers++;
+  /**
+   * Run one worker. `orgKey` is the pool bucket the worker counts
+   * against, or null for a nested execution, which counts only against
+   * the nested ceiling (see `execute`).
+   */
+  private async runWorker(
+    request: SandboxExecutionRequest,
+    orgKey: string | null,
+  ): Promise<SandboxExecutionResult> {
+    if (orgKey === null) {
+      this.activeNestedWorkers++;
+    } else {
+      this.activeWorkers++;
+      this.activeByOrg.set(orgKey, this.orgActive(orgKey) + 1);
+    }
     const start = Date.now();
-    const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    // Clamped whatever the tool asked for: `configuration.timeout` and an
+    // API's `timeoutMs` are tenant-supplied, and a worker holds its pool
+    // slot for as long as its timer allows.
+    const timeoutMs = effectiveSandboxTimeoutMs(request.timeoutMs, this.limits().maxTimeoutMs);
     const memoryLimitMb = request.memoryLimitMb ?? DEFAULT_MEMORY_LIMIT_MB;
+    // Handed to nested `tools.invoke` calls instead of the outer request's
+    // signal: aborted when this worker ends for any reason, and also when
+    // the outer request is cancelled (that path settles the worker too).
+    const nestedAbort = new AbortController();
 
     try {
       // Resolve dependencies if any
@@ -159,6 +233,7 @@ export class NodeSandboxService {
           // dangling promises). Force-terminate so jest --detectOpenHandles
           // stays clean and prod processes don't accumulate zombie workers.
           worker.terminate();
+          nestedAbort.abort();
           resolve(r);
         };
 
@@ -207,25 +282,36 @@ export class NodeSandboxService {
               } as InvokeToolResponseMessage);
               return;
             }
+            // The nested call gets THIS worker's signal, not the outer
+            // request's: it fires when this worker ends for any reason,
+            // including its own timeout, so nested work never outlives it.
+            const reply = (message: InvokeToolResponseMessage) => {
+              if (settled) return;
+              try {
+                worker.postMessage(message);
+              } catch {
+                /* worker already gone */
+              }
+            };
             try {
               const nested = await request.invokeTool(
                 invokeMsg.toolId,
                 invokeMsg.params,
-                request.signal,
+                nestedAbort.signal,
               );
-              worker.postMessage({
+              reply({
                 type: 'invoke-tool-response',
                 id: invokeMsg.id,
                 ok: true,
                 result: nested,
-              } as InvokeToolResponseMessage);
+              });
             } catch (err: any) {
-              worker.postMessage({
+              reply({
                 type: 'invoke-tool-response',
                 id: invokeMsg.id,
                 ok: false,
                 error: err?.message ?? String(err),
-              } as InvokeToolResponseMessage);
+              });
             }
             return;
           }
@@ -271,7 +357,16 @@ export class NodeSandboxService {
         executionTimeMs: Date.now() - start,
       };
     } finally {
-      this.activeWorkers--;
+      // Whatever ended this worker, nested work it started ends with it.
+      nestedAbort.abort();
+      if (orgKey === null) {
+        this.activeNestedWorkers--;
+      } else {
+        this.activeWorkers--;
+        const n = this.orgActive(orgKey) - 1;
+        if (n > 0) this.activeByOrg.set(orgKey, n);
+        else this.activeByOrg.delete(orgKey);
+      }
       this.drainQueue();
     }
   }
@@ -411,16 +506,27 @@ export class NodeSandboxService {
     return path.dirname(workerPath);
   }
 
-  /** Process the next queued request if we have capacity */
+  /**
+   * Start queued requests while there is capacity. Walks the queue in
+   * order but skips an entry whose organization is already at its
+   * per-organization cap, so one tenant's backlog at the head of the
+   * queue does not hold up another tenant's request behind it.
+   */
   private drainQueue(): void {
-    const maxWorkers = parseInt(process.env.SANDBOX_MAX_WORKERS || '', 10) || DEFAULT_MAX_WORKERS;
+    const limits = this.limits();
 
-    while (this.queue.length > 0 && this.activeWorkers < maxWorkers) {
-      const next = this.queue.shift()!;
+    let i = 0;
+    while (i < this.queue.length && this.activeWorkers < limits.maxWorkers) {
+      const next = this.queue[i];
+      if (this.orgActive(next.orgKey) >= limits.maxWorkersPerOrg) {
+        i++;
+        continue;
+      }
+      this.queue.splice(i, 1);
       // runWorker has its own try/catch and should always resolve, but
       // attach a .catch as a safety net so a queued caller never hangs
       // forever if a future refactor introduces a rejection path.
-      this.runWorker(next.request).then(next.resolve, (err: any) => {
+      this.runWorker(next.request, next.orgKey).then(next.resolve, (err: any) => {
         next.resolve({
           success: false,
           error: err?.message ?? String(err),
@@ -429,4 +535,61 @@ export class NodeSandboxService {
       });
     }
   }
+
+  private orgActive(orgKey: string): number {
+    return this.activeByOrg.get(orgKey) ?? 0;
+  }
+
+  private orgQueued(orgKey: string): number {
+    let n = 0;
+    for (const entry of this.queue) if (entry.orgKey === orgKey) n++;
+    return n;
+  }
+
+  /** Pool limits, read from the environment on every call. */
+  private limits(): {
+    maxWorkers: number;
+    maxQueueSize: number;
+    maxWorkersPerOrg: number;
+    maxQueuePerOrg: number;
+    maxNestedWorkers: number;
+    maxTimeoutMs: number;
+  } {
+    const maxWorkers = positiveIntFromEnv('SANDBOX_MAX_WORKERS', DEFAULT_MAX_WORKERS);
+    const maxQueueSize = positiveIntFromEnv('SANDBOX_MAX_QUEUE_SIZE', DEFAULT_MAX_QUEUE_SIZE);
+    return {
+      maxWorkers,
+      maxQueueSize,
+      // Half the pool by default: a single tenant can use a lot of it,
+      // never all of it.
+      maxWorkersPerOrg: Math.min(
+        maxWorkers,
+        positiveIntFromEnv('SANDBOX_MAX_WORKERS_PER_ORG', Math.max(1, Math.ceil(maxWorkers / 2))),
+      ),
+      maxQueuePerOrg: Math.min(
+        maxQueueSize,
+        positiveIntFromEnv('SANDBOX_MAX_QUEUE_PER_ORG', Math.max(1, Math.ceil(maxQueueSize / 4))),
+      ),
+      maxNestedWorkers: positiveIntFromEnv('SANDBOX_MAX_NESTED_WORKERS', maxWorkers * 4),
+      maxTimeoutMs: positiveIntFromEnv('SANDBOX_MAX_TIMEOUT_MS', DEFAULT_MAX_TIMEOUT_MS),
+    };
+  }
+}
+
+function positiveIntFromEnv(name: string, fallback: number): number {
+  const n = parseInt(process.env[name] || '', 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/**
+ * The timeout a worker actually gets: what was asked for, clamped to
+ * (0, max]. Anything that is not a positive finite number gets the
+ * default, itself clamped.
+ */
+export function effectiveSandboxTimeoutMs(requested: unknown, maxTimeoutMs: number): number {
+  const wanted =
+    typeof requested === 'number' && Number.isFinite(requested) && requested > 0
+      ? requested
+      : DEFAULT_TIMEOUT_MS;
+  return Math.min(wanted, maxTimeoutMs);
 }

@@ -8,6 +8,7 @@ import {
   ToolStatus,
   ToolType,
 } from '../../entities/tool.entity';
+import { assertToolQuota } from '../tools/tool-quota';
 
 interface CapabilityDef {
   method: string;
@@ -136,6 +137,13 @@ export class RunnerCapabilityPublisher {
           names,
         })
         .execute();
+      // Counted after the deletes and on the same transaction, so a
+      // re-registration that only replaces its own rows needs no slots.
+      await assertToolQuota(
+        mgr,
+        runner.organizationId,
+        RunnerCapabilityPublisher.CAPABILITIES.length,
+      );
       const rows: Tool[] = [];
       for (const cap of RunnerCapabilityPublisher.CAPABILITIES) {
         const row = repo.create({

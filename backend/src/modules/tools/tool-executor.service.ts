@@ -179,6 +179,12 @@ export class ToolExecutorService {
       // (including explicit `null`) to skip re-reading that field, but the
       // access list is always read here: an access control a caller can opt
       // out of by passing one unrelated argument is not an access control.
+      //
+      // A nested `tools.invoke` call carries the gatewayId (and scopes) of
+      // the call that made it, so the nested tool's own row on that gateway
+      // -- access list and policy -- is read here like any other. Where
+      // that row has no policy, the calling tool's policy
+      // (`inheritedSecurityPolicy`) still applies.
       let gatewayTool: GatewayTool | null = null;
       if (options.gatewayId) {
         gatewayTool = await this.gatewayToolRepository.findOne({
@@ -186,8 +192,13 @@ export class ToolExecutorService {
           select: { id: true, securityPolicy: true, permissions: true, transformations: true },
         });
         if (options.securityPolicy === undefined) {
-          options = { ...options, securityPolicy: gatewayTool?.securityPolicy ?? null };
+          options = {
+            ...options,
+            securityPolicy: gatewayTool?.securityPolicy ?? options.inheritedSecurityPolicy ?? null,
+          };
         }
+      } else if (options.securityPolicy === undefined && options.inheritedSecurityPolicy) {
+        options = { ...options, securityPolicy: options.inheritedSecurityPolicy };
       }
 
       // User permission check (skipped for MCP unauthenticated sessions,

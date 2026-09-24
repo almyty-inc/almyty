@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { unlimitedToolQuotaManager } from '../../../test/tool-quota.fake';
 
 import { ToolGeneratorService } from '../tool-generator.service';
 import { Tool } from '../../../entities/tool.entity';
@@ -69,6 +70,8 @@ describe('ToolGeneratorService - generated tools carry their organization', () =
         {
           provide: getRepositoryToken(Tool),
           useValue: {
+            manager: unlimitedToolQuotaManager(),
+            count: jest.fn().mockResolvedValue(0),
             create: jest.fn((dto: any) => {
               created.push(dto);
               return { ...dto };

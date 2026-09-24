@@ -7,6 +7,7 @@ import { Tool, ToolType, ToolExecutionMethod } from '../../entities/tool.entity'
 import { Operation } from '../../entities/operation.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
 import { ToolsService } from './tools.service';
+import { assertToolQuota, capGeneratedDescription } from './tool-quota';
 
 @Injectable()
 export class ToolsOperationHelper {
@@ -31,6 +32,11 @@ export class ToolsOperationHelper {
       organizationId: string;
     }
   ): Promise<Tool> {
+    // Per-row check. The bulk caller (ApisToolGeneratorHelper) has
+    // already rejected a batch that would not fit; this covers every
+    // other caller of ToolsService.createFromOperation.
+    await assertToolQuota(this.toolRepository.manager, options.organizationId);
+
     // Load the operation with its API
     const operationWithApi = await this.operationRepository.findOne({
       where: { id: operation.id },
@@ -58,7 +64,7 @@ export class ToolsOperationHelper {
     // Create the tool
     const tool = this.toolRepository.create({
       name: options.name,
-      description: options.description,
+      description: capGeneratedDescription(options.description),
       type: this.mapOperationToToolType(operationWithApi),
       parameters: toolParameters,
       configuration: toolConfiguration,
@@ -131,7 +137,7 @@ export class ToolsOperationHelper {
     const toolParameters = await this.generateToolParametersFromOperation(operationWithApi);
 
     // Update tool fields
-    tool.description = options.description;
+    tool.description = capGeneratedDescription(options.description);
     tool.parameters = toolParameters;
     tool.metadata = {
       ...tool.metadata,

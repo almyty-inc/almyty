@@ -23,6 +23,11 @@ class FakeRepo {
     }
     return { affected: 0 };
   }
+  // The tool quota reads the organization through the same transactional
+  // manager; no organization row means no maxTools, so publishing fits.
+  async findOne() {
+    return null;
+  }
   createQueryBuilder() {
     const self = this;
     const filters: Array<(r: Tool) => boolean> = [];

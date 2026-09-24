@@ -21,6 +21,7 @@ import {
   scrubStringMap,
 } from './template-sanitizer';
 import { PublishToolTemplateDto, UpdateToolTemplateDto } from './dto/tool-hub.dto';
+import { assertToolQuota, capGeneratedDescription } from '../tools/tool-quota';
 
 export interface ListTemplatesFilters {
   category?: string;
@@ -179,6 +180,9 @@ export class ToolHubService {
   ): Promise<{ tool: Tool; api?: Api }> {
     // Pass orgId so cross-org templates are rejected up front.
     const template = await this.getTemplate(templateId, orgId);
+    // Before any Api is created for the template: a refused install
+    // must not leave an orphan API behind.
+    await assertToolQuota(this.toolRepository.manager, orgId);
     let api: Api | undefined;
 
     // If template has apiConfig, resolve or create an Api
@@ -227,7 +231,7 @@ export class ToolHubService {
     // Create the Tool from the template
     const tool = this.toolRepository.create({
       name: template.name,
-      description: template.description,
+      description: capGeneratedDescription(template.description),
       type: ToolType.FUNCTION,
       executionMethod: template.executionMethod as ToolExecutionMethod || ToolExecutionMethod.HTTP,
       httpConfig: template.httpConfig || null,

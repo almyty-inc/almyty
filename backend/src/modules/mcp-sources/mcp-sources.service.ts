@@ -14,6 +14,7 @@ import { CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { computeToolHash } from '../../common/security/tool-integrity';
+import { assertToolQuota, assertWithinPerSchemaCap, capGeneratedDescription } from '../tools/tool-quota';
 import {
   McpClientService,
   McpClientError,
@@ -192,13 +193,24 @@ export class McpSourcesService {
         mine.map((t) => [t.configuration!.mcp!.remoteName, t] as const),
       );
 
+      // A remote server decides how many tools it lists; the quota and
+      // the per-server cap decide how many we materialize. Checked for
+      // the whole list before any row is written (reject, not truncate
+      // -- see tools/tool-quota.ts). Remote tools we already hold are
+      // updated in place and add no row.
+      assertWithinPerSchemaCap(remoteTools.length, `MCP server '${source.name}'`);
+      const newRemoteNames = new Set(
+        remoteTools.map((r) => r.name).filter((name) => !byRemoteName.has(name)),
+      );
+      await assertToolQuota(this.toolRepository.manager, source.organizationId, newRemoteNames.size);
+
       let added = 0;
       let updated = 0;
 
       for (const remote of remoteTools) {
         const existing = byRemoteName.get(remote.name);
         if (existing) {
-          existing.description = remote.description ?? existing.description;
+          existing.description = capGeneratedDescription(remote.description ?? existing.description);
           existing.parameters = remote.inputSchema ?? { type: 'object', properties: {} };
           existing.configuration = {
             ...(existing.configuration ?? {}),
@@ -215,7 +227,7 @@ export class McpSourcesService {
         } else {
           const tool = this.toolRepository.create({
             name: this.toolName(source, remote.name),
-            description: remote.description ?? `Tool '${remote.name}' from MCP server '${source.name}'`,
+            description: capGeneratedDescription(remote.description ?? `Tool '${remote.name}' from MCP server '${source.name}'`),
             type: ToolType.MCP,
             status: ToolStatus.ACTIVE,
             version: '1.0.0',
