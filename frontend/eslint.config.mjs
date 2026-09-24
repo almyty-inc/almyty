@@ -47,7 +47,18 @@ export default [
       // codebase predates enforced linting; these rules are opt-in cleanups,
       // not gate failures. Lint is intentionally outside the CI gate.
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
+      // Dead imports and variables pile up fast under bulk edits; this is
+      // the one relaxed rule worth enforcing. Prefix with `_` to keep a
+      // positional parameter or a deliberately ignored value.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
       '@typescript-eslint/no-empty-object-type': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',
       '@typescript-eslint/no-require-imports': 'off',
