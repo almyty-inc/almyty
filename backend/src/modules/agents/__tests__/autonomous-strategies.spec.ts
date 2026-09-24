@@ -255,10 +255,6 @@ describe('autonomous strategies drive the loop, role by role', () => {
         resolveLimits: async (run: AgentRun, organization: any) => resolveRunLimits({ organization, agent: run.agent, run }),
         bumpAgentStats: async () => undefined,
         autoSaveMemory: async () => undefined,
-        waitForRun: async (runId: string) => {
-          await drive(runId);
-          return runRepository.findOne({ where: { id: runId } });
-        },
       },
       builders: new AgentRuntimeBuilders(messageRepository as any, { listActiveRules: async () => [] } as any),
       builtInTools: {
@@ -269,12 +265,16 @@ describe('autonomous strategies drive the loop, role by role', () => {
       },
       toolExecutorService,
       llmProvidersService,
+      processStep: (runId: string) => processor.processStep(runId),
       startRun: async (agentId: string, organizationId: string, _userId: string, input: string, options: any) => {
         if (agentId !== agent.id || organizationId !== 'org-1') throw new NotFoundException('Agent not found');
+        // Nothing here works the queue: a child run a strategy starts must be
+        // one it drives itself, or it would wait behind its own parent.
+        if (options.inline !== true) throw new Error('a strategy child run was queued instead of driven inline');
         const id = `child-${++childSeq}`;
         const conversationId = `conv-${id}`;
         await messageRepository.save(Message.createUserMessage(conversationId, input));
-        const childLimits = { ...limits, maxSteps: options.maxSteps, maxCostCents: options.maxCostCents };
+        const childLimits = { ...limits, maxSteps: options.maxSteps, maxCostCents: options.maxCostCents, maxDurationMs: options.maxDurationMs };
         await runRepository.save(
           Object.assign(new AgentRun(), runRow(id, conversationId, {
             input,

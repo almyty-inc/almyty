@@ -443,17 +443,29 @@ export class AutonomousStrategyRunner {
     const startedAt = Date.now();
     let childRunId: string | undefined;
     try {
+      // The child gets what is left of this run's time, and at most the
+      // strategy's own ceiling, as its duration limit.
+      const elapsed = Date.now() - new Date(run.createdAt ?? Date.now()).getTime();
+      const maxDurationMs = Math.max(1_000, Math.min(CHILD_RUN_TIMEOUT_MS, limits.maxDurationMs - elapsed));
       const child = await this.s.startRun(agentId, run.organizationId, run.userId ?? null, input, {
         parentRunId: run.id,
         maxSteps: CHILD_RUN_MAX_STEPS,
         maxCostCents: maxCostCents ?? this.remainingCents(run, limits),
+        maxDurationMs,
         principal: principalOfRun(run),
+        // Driven here, by this worker, step by step: queued, it would wait
+        // behind the very job that is waiting for it.
+        inline: true,
         ...(metadata ? { metadata } : {}),
       });
       childRunId = child.id;
-      const elapsed = Date.now() - new Date(run.createdAt ?? Date.now()).getTime();
-      const timeoutMs = Math.max(1_000, Math.min(CHILD_RUN_TIMEOUT_MS, limits.maxDurationMs - elapsed));
-      const done = await this.s.misc.waitForRun(child.id, timeoutMs);
+      // Every step either advances the run or ends it, and the child's own
+      // limits end it at the latest by maxSteps; the bound is a backstop.
+      let result: 'continue' | 'done' | 'waiting' = 'continue';
+      for (let i = 0; result === 'continue' && i <= CHILD_RUN_MAX_STEPS + 1; i++) {
+        result = await this.s.processStep(child.id);
+      }
+      const done = await this.s.runRepository.findOne({ where: { id: child.id } });
       const cost = done?.totalCost || 0;
       const tokens = done?.totalTokens || 0;
       run.totalCost += cost;

@@ -210,6 +210,12 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       await expect(start('private-agent', userPrincipal(CAST.member))).rejects.toThrow(NotFoundException);
       expect(runs.rows()).toHaveLength(1);
     });
+
+    it('queues no first step for a run its starter drives inline, and the run is still written', async () => {
+      const run = await runtime.startRun('team-agent', CAST.org, CAST.member, 'go', { principal: userPrincipal(CAST.member), inline: true });
+      expect(runs.row(run.id)).toBeDefined();
+      expect(queue.add).not.toHaveBeenCalled();
+    });
   });
 
   describe('every step of an autonomous run re-checks the run scope', () => {

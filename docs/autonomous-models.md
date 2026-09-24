@@ -100,7 +100,11 @@ Experimental, and not claimed to save money (see `docs/strategies.md`).
 - The run's first step is the exploration: every explorer is its own run
   of this agent (`metadata.actAs`), on the explorer's model, with the
   agent's tools, told to gather rather than answer, in parallel. Each
-  child run gets an equal share of the parent's remaining budget.
+  child run gets an equal share of the parent's remaining budget and at
+  most five minutes, and is driven step by step by the worker running its
+  parent (`startRun(..., { inline: true })`) rather than queued, so a
+  parent never holds the only worker while its child waits behind it. The
+  same goes for an agent panelist's or teammate's run.
 - The summariser compresses their findings into the `extract_context`
   brief (same instruction, same strict parse). A brief that does not
   validate fails the run with `EXTRACTED_CONTEXT_INVALID` rather than
