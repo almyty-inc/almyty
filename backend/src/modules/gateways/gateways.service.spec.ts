@@ -1391,20 +1391,57 @@ describe('GatewaysService', () => {
       gatewayEndpoint: string | null;
       gatewayStatus: string;
       gatewayOrgId: string;
+      gatewayVisibility: string;
+      gatewayOwnerUserId: string | null;
       toolId: string;
       toolName: string;
       toolDescription: string | null;
+      toolVisibility: string;
+      toolCreatedBy: string | null;
       gatewayToolActive: boolean;
     }
 
     let qbCalls: { joins: string[]; wheres: string[]; limit: number | null; params: Record<string, any> };
 
+    /** ILIKE with backslash escapes, as Postgres reads it. */
+    const ilike = (value: string, pattern: string): boolean => {
+      const literal = (c: string) => c.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+      let source = '';
+      for (let i = 0; i < pattern.length; i++) {
+        const c = pattern[i];
+        if (c === '\\' && i + 1 < pattern.length) source += literal(pattern[++i]);
+        else if (c === '%') source += '.*';
+        else if (c === '_') source += '.';
+        else source += literal(c);
+      }
+      return new RegExp(`^${source}$`, 'is').test(value);
+    };
+
+    /**
+     * Every clause the search may send, with what it means for a row.
+     *
+     * A clause not listed here throws instead of being ignored: a fake that
+     * skipped the visibility predicates let the private-gateway and
+     * private-tool clauses be deleted with the suite green. A comparison
+     * with NULL is never true in SQL, which the `!= null` guards reproduce.
+     */
+    const CLAUSES: Record<string, (r: FakeRow, p: Record<string, any>) => boolean> = {
+      'gateway.organizationId = :organizationId': (r, p) => r.gatewayOrgId === p.organizationId,
+      'gateway.status = :status': (r, p) => r.gatewayStatus === p.status,
+      'gatewayTool.isActive = true': (r) => r.gatewayToolActive,
+      [`(gateway.visibility <> 'private' OR gateway."ownerUserId" = :callerId)`]: (r, p) =>
+        r.gatewayVisibility !== 'private' ||
+        (r.gatewayOwnerUserId != null && p.callerId != null && r.gatewayOwnerUserId === p.callerId),
+      [`(tool.visibility <> 'private' OR tool."createdBy" = :callerId)`]: (r, p) =>
+        r.toolVisibility !== 'private' ||
+        (r.toolCreatedBy != null && p.callerId != null && r.toolCreatedBy === p.callerId),
+      '(tool.name ILIKE :q OR tool.description ILIKE :q)': (r, p) =>
+        ilike(r.toolName, p.q) || (r.toolDescription != null && ilike(r.toolDescription, p.q)),
+    };
+
     const useRows = (rows: FakeRow[]) => {
       qbCalls = { joins: [], wheres: [], limit: null, params: {} };
-      let orgId: string | null = null;
-      let status: string | null = null;
-      let activeOnly = false;
-      let pattern: string | null = null;
+      let predicates: Array<(r: FakeRow) => boolean> = [];
 
       const qb: any = {
         innerJoin: (rel: string) => {
@@ -1423,23 +1460,16 @@ describe('GatewaysService', () => {
           qbCalls.limit = n;
           return qb;
         },
-        where: (clause: string, params?: any) => apply(clause, params),
+        where: (clause: string, params?: any) => {
+          // TypeORM's `where` replaces the clauses before it.
+          predicates = [];
+          qbCalls.wheres = [];
+          return apply(clause, params);
+        },
         andWhere: (clause: string, params?: any) => apply(clause, params),
-        getRawMany: async () => {
-          const like = pattern
-            ? new RegExp(
-                `^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*')}$`,
-                'i',
-              )
-            : null;
-          return rows
-            .filter((r) => !orgId || r.gatewayOrgId === orgId)
-            .filter((r) => !status || r.gatewayStatus === status)
-            .filter((r) => !activeOnly || r.gatewayToolActive)
-            .filter(
-              (r) =>
-                !like || like.test(r.toolName) || (r.toolDescription != null && like.test(r.toolDescription)),
-            )
+        getRawMany: async () =>
+          rows
+            .filter((r) => predicates.every((matches) => matches(r)))
             .map((r) => ({
               gatewayId: r.gatewayId,
               gatewayName: r.gatewayName,
@@ -1447,17 +1477,16 @@ describe('GatewaysService', () => {
               toolId: r.toolId,
               toolName: r.toolName,
               toolDescription: r.toolDescription,
-            }));
-        },
+            })),
       };
 
       const apply = (clause: string, params?: any) => {
+        const evaluate = CLAUSES[clause];
+        if (!evaluate) throw new Error(`search fake: unmodelled clause ${clause}`);
         qbCalls.wheres.push(clause);
         Object.assign(qbCalls.params, params ?? {});
-        if (clause.includes('gateway.organizationId')) orgId = params.organizationId;
-        else if (clause.includes('gateway.status')) status = params.status;
-        else if (clause.includes('gatewayTool.isActive')) activeOnly = true;
-        else if (clause.includes('ILIKE')) pattern = params.q;
+        // Parameters are bound for the whole query, as in SQL: read at execution.
+        predicates.push((r) => evaluate(r, qbCalls.params));
         return qb;
       };
 
@@ -1472,9 +1501,13 @@ describe('GatewaysService', () => {
       gatewayEndpoint: '/my-gateway',
       gatewayStatus: 'active',
       gatewayOrgId: 'org-1',
+      gatewayVisibility: 'organization',
+      gatewayOwnerUserId: null,
       toolId: 'tool-1',
       toolName: 'Get Users',
       toolDescription: 'Fetches all users from the API',
+      toolVisibility: 'organization',
+      toolCreatedBy: 'user-2',
       gatewayToolActive: true,
       ...over,
     });
@@ -1587,6 +1620,111 @@ describe('GatewaysService', () => {
       // `%` typed by a user is a character to find, not "match anything".
       expect(qbCalls.wheres).toContain('(tool.name ILIKE :q OR tool.description ILIKE :q)');
       expect(qbCalls.params.q).toBe('%100\\%%');
+    });
+
+    it('finds a literal % and not every tool when the query contains one', async () => {
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([
+        row({ toolId: 'tool-1', toolName: 'Discount 100% off', toolDescription: null }),
+        row({ toolId: 'tool-2', toolName: 'Discount 1000 off', toolDescription: null }),
+      ]);
+
+      const results = await service.searchSkillsAcrossGateways('org-1', '100%', 'user-1');
+
+      expect(results.map((r) => r.toolId)).toEqual(['tool-1']);
+    });
+
+    describe('private gateways and tools', () => {
+      const scenario = [
+        row({ gatewayId: 'gw-org', toolId: 'org-tool', toolName: 'Org Tool' }),
+        row({
+          gatewayId: 'gw-mine',
+          gatewayVisibility: 'private',
+          gatewayOwnerUserId: 'user-1',
+          toolId: 'tool-behind-my-gateway',
+          toolName: 'Tool behind my private gateway',
+        }),
+        row({
+          gatewayId: 'gw-theirs',
+          gatewayVisibility: 'private',
+          gatewayOwnerUserId: 'user-2',
+          toolId: 'tool-behind-their-gateway',
+          toolName: 'Tool behind their private gateway',
+        }),
+        row({
+          gatewayId: 'gw-org',
+          toolId: 'my-private-tool',
+          toolName: 'My private tool',
+          toolVisibility: 'private',
+          toolCreatedBy: 'user-1',
+        }),
+        row({
+          gatewayId: 'gw-org',
+          toolId: 'their-private-tool',
+          toolName: 'Their private tool',
+          toolVisibility: 'private',
+          toolCreatedBy: 'user-2',
+        }),
+      ];
+
+      it("excludes another member's private gateway and private tool", async () => {
+        organizationRepository.findOne.mockResolvedValue(org);
+        useRows(scenario);
+
+        const ids = (await service.searchSkillsAcrossGateways('org-1', 'tool', 'user-1')).map((r) => r.toolId);
+
+        expect(ids).not.toContain('tool-behind-their-gateway');
+        expect(ids).not.toContain('their-private-tool');
+      });
+
+      it("includes the caller's own private gateway and private tool", async () => {
+        organizationRepository.findOne.mockResolvedValue(org);
+        useRows(scenario);
+
+        const ids = (await service.searchSkillsAcrossGateways('org-1', 'tool', 'user-1')).map((r) => r.toolId);
+
+        expect(ids).toContain('tool-behind-my-gateway');
+        expect(ids).toContain('my-private-tool');
+      });
+
+      it('includes org-visible gateways and tools', async () => {
+        organizationRepository.findOne.mockResolvedValue(org);
+        useRows(scenario);
+
+        const ids = (await service.searchSkillsAcrossGateways('org-1', 'tool', 'user-1')).map((r) => r.toolId);
+
+        expect(ids.sort()).toEqual(['my-private-tool', 'org-tool', 'tool-behind-my-gateway'].sort());
+      });
+
+      it('shows the other member exactly their own private rows', async () => {
+        organizationRepository.findOne.mockResolvedValue(org);
+        useRows(scenario);
+
+        const ids = (await service.searchSkillsAcrossGateways('org-1', 'tool', 'user-2')).map((r) => r.toolId);
+
+        expect(ids.sort()).toEqual(['org-tool', 'their-private-tool', 'tool-behind-their-gateway'].sort());
+      });
+
+      it('does not treat a private row with no owner as the caller\'s', async () => {
+        organizationRepository.findOne.mockResolvedValue(org);
+        useRows([
+          row({ toolId: 'orphan-gw', gatewayVisibility: 'private', gatewayOwnerUserId: null }),
+          row({ toolId: 'orphan-tool', toolVisibility: 'private', toolCreatedBy: null }),
+        ]);
+
+        const results = await service.searchSkillsAcrossGateways('org-1', 'users', 'user-1');
+
+        expect(results).toEqual([]);
+      });
+    });
+
+    it('keeps another organization out even for a matching caller', async () => {
+      organizationRepository.findOne.mockResolvedValue(org);
+      useRows([row({ toolId: 'foreign', gatewayOrgId: 'org-2', gatewayOwnerUserId: 'user-1' })]);
+
+      const results = await service.searchSkillsAcrossGateways('org-1', 'users', 'user-1');
+
+      expect(results).toEqual([]);
     });
   });
   describe('getAllUserGateways', () => {
