@@ -235,6 +235,14 @@ export class AgentRuntimeService implements OnModuleInit {
        * stays in the scope it started in. Without one the run is `userId`'s.
        */
       principal?: ExecutionPrincipal;
+      /**
+       * The caller drives this run's steps itself, through processStep, and
+       * waits on nothing: no first step is queued. A strategy's child run
+       * (an explorer, an agent panelist or teammate) is driven this way by
+       * the worker already running its parent, so a parent never holds the
+       * only worker while its child waits in the queue behind it.
+       */
+      inline?: boolean;
     },
 
   ): Promise<AgentRun> {
@@ -411,14 +419,16 @@ export class AgentRuntimeService implements OnModuleInit {
     // Create event emitter for this run (for SSE streaming)
     this.events.ensureRunEmitter(savedRun.id);
 
-    // Enqueue first step
-    await this.runtimeQueue.add('next-step', { runId: savedRun.id, seq: 0 }, {
-      jobId: `step:${savedRun.id}:0`,
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 },
-      removeOnComplete: 100,
-      removeOnFail: 50,
-    });
+    // Enqueue first step, unless the caller drives the run itself.
+    if (!options?.inline) {
+      await this.runtimeQueue.add('next-step', { runId: savedRun.id, seq: 0 }, {
+        jobId: `step:${savedRun.id}:0`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      });
+    }
 
     this.logger.log(`Started run ${savedRun.id} for agent ${agent.name}`);
     return savedRun;

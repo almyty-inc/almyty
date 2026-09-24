@@ -14,6 +14,7 @@ import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { AgentAuditService } from './agent-audit.service';
 import { AgentCollaboration, collaborationProblems } from './collaboration-participants';
+import { AgentModels, agentModelsProblems, syncMainRole } from './autonomous-models';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import {
   assertAttachable,
@@ -55,6 +56,7 @@ export interface CreateAgentInput {
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
   agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
   collaboration?: AgentCollaboration | null;
+  models?: AgentModels | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -78,6 +80,7 @@ export interface UpdateAgentInput {
   memoryConfig?: { enabled?: boolean; autoSave?: boolean; scopes?: string[] };
   agentConfig?: { canCallAgents?: boolean; canCreateAgents?: boolean };
   collaboration?: AgentCollaboration | null;
+  models?: AgentModels | null;
   variables?: Record<string, any>;
   settings?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -201,6 +204,37 @@ export class AgentsService {
   }
 
   /**
+   * Refuse models the autonomous engine cannot run: a strategy whose slots
+   * are not all filled, a role with nothing to call, an agent where a model
+   * has to be. Checked at save time, where somebody is looking, so the page
+   * and the API get the same sentences (agentModelsProblems).
+   */
+  private assertModels(models: unknown): void {
+    const problems = agentModelsProblems(models);
+    if (problems.length) {
+      throw new BadRequestException(`Invalid models: ${problems.join('; ')}`);
+    }
+  }
+
+  /**
+   * The models and modelConfig an agent is saved with. On an autonomous
+   * agent the main role and modelConfig are kept equal (syncMainRole), so
+   * a client that still writes modelConfig alone moves the main role, and
+   * the page, which writes models, moves modelConfig. A workflow agent has
+   * no models: its multi-model shape is its graph.
+   */
+  private modelsFor(
+    mode: 'workflow' | 'autonomous',
+    models: AgentModels | null | undefined,
+    modelConfig: Agent['modelConfig'] | null | undefined,
+    modelsWritten: boolean,
+  ): { models: AgentModels | null; modelConfig: Agent['modelConfig'] | null } {
+    if (mode !== 'autonomous') return { models: null, modelConfig: modelConfig ?? null };
+    const synced = syncMainRole({ models, modelConfig, modelsWritten });
+    return { models: synced.models, modelConfig: (synced.modelConfig as Agent['modelConfig']) ?? null };
+  }
+
+  /**
    * Refuse a webhook URL the delivery path will silently drop.
    *
    * agent-webhook.service runs this same check at delivery time and, on
@@ -268,6 +302,7 @@ export class AgentsService {
       toolIds?: string[] | null;
       pipeline?: AgentPipeline | null;
       collaboration?: Agent['collaboration'] | null;
+      models?: AgentModels | null;
     },
     organizationId: string,
   ): Promise<void> {
@@ -335,6 +370,7 @@ export class AgentsService {
 
       this.assertWebhookUrl(createDto.webhookUrl);
       this.assertCollaboration(createDto.collaboration);
+      this.assertModels(createDto.models);
       await this.assertToolsInOrg(createDto.toolIds, organizationId);
 
       // Verify organization
@@ -371,6 +407,13 @@ export class AgentsService {
         this.validation.validatePipeline(createDto.pipeline);
       }
 
+      const next = this.modelsFor(
+        mode,
+        createDto.models,
+        createDto.modelConfig as Agent['modelConfig'],
+        createDto.models !== undefined,
+      );
+
       await this.assertPrivateReferencesAllowed(
         {
           visibility: scope.visibility,
@@ -378,15 +421,17 @@ export class AgentsService {
           toolIds: createDto.toolIds,
           pipeline: createDto.pipeline,
           collaboration: createDto.collaboration as Agent['collaboration'],
+          models: next.models,
         },
         organizationId,
       );
       await this.assertProvidersUsable(
         {
-          modelConfig: createDto.modelConfig as Agent['modelConfig'],
+          modelConfig: next.modelConfig,
           pipeline: createDto.pipeline,
           agentConfig: createDto.agentConfig as Agent['agentConfig'],
           collaboration: createDto.collaboration as Agent['collaboration'],
+          models: next.models,
         },
         null,
         organizationId,
@@ -405,7 +450,8 @@ export class AgentsService {
         personality: createDto.personality || null,
         heartbeat: createDto.heartbeat || null,
         toolIds: createDto.toolIds || [],
-        modelConfig: createDto.modelConfig || null,
+        modelConfig: next.modelConfig,
+        models: next.models,
         memoryConfig: createDto.memoryConfig || null,
         agentConfig: createDto.agentConfig || null,
         collaboration: createDto.collaboration || null,
@@ -606,7 +652,17 @@ export class AgentsService {
 
     this.assertWebhookUrl(updateDto.webhookUrl);
     this.assertCollaboration(updateDto.collaboration);
+    this.assertModels(updateDto.models);
     await this.assertToolsInOrg(updateDto.toolIds, agent.organizationId);
+
+    // An autonomous agent's main role and its modelConfig say the same
+    // thing, whichever of the two this update writes (syncMainRole).
+    const next = this.modelsFor(
+      effectiveMode,
+      updateDto.models !== undefined ? updateDto.models : agent.models,
+      updateDto.modelConfig !== undefined ? (updateDto.modelConfig as Agent['modelConfig']) : agent.modelConfig,
+      updateDto.models !== undefined,
+    );
 
     // Only the agent's owner may make it (or keep it) private; an agent
     // with no recorded owner becomes the caller's.
@@ -626,7 +682,10 @@ export class AgentsService {
     // one when the agent itself stops being private). Checked whenever
     // the scope or any reference changes.
     const referencesChanging =
-      updateDto.toolIds !== undefined || updateDto.pipeline !== undefined || updateDto.collaboration !== undefined;
+      updateDto.toolIds !== undefined ||
+      updateDto.pipeline !== undefined ||
+      updateDto.collaboration !== undefined ||
+      updateDto.models !== undefined;
     if (scopeChanging || referencesChanging) {
       await this.assertPrivateReferencesAllowed(
         {
@@ -636,6 +695,7 @@ export class AgentsService {
           toolIds: updateDto.toolIds ?? agent.toolIds,
           pipeline: updateDto.pipeline ?? agent.pipeline,
           collaboration: (updateDto.collaboration as Agent['collaboration']) ?? agent.collaboration,
+          models: next.models,
         },
         organizationId,
       );
@@ -652,10 +712,11 @@ export class AgentsService {
     }
     await this.assertProvidersUsable(
       {
-        modelConfig: updateDto.modelConfig !== undefined ? (updateDto.modelConfig as Agent['modelConfig']) : agent.modelConfig,
+        modelConfig: next.modelConfig as Agent['modelConfig'],
         pipeline: updateDto.pipeline ?? agent.pipeline,
         agentConfig: updateDto.agentConfig !== undefined ? (updateDto.agentConfig as Agent['agentConfig']) : agent.agentConfig,
         collaboration: updateDto.collaboration !== undefined ? (updateDto.collaboration as Agent['collaboration']) : agent.collaboration,
+        models: next.models,
       },
       agent,
       organizationId,
@@ -664,6 +725,8 @@ export class AgentsService {
 
     const { visibility: _v, teamId: _t, ...rest } = updateDto;
     Object.assign(agent, rest);
+    agent.modelConfig = next.modelConfig as Agent['modelConfig'];
+    agent.models = next.models;
     if (scope) {
       agent.visibility = scope.visibility;
       agent.teamId = scope.teamId;
