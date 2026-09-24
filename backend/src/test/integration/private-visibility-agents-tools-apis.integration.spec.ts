@@ -41,6 +41,9 @@ import { AnalyticsService } from '../../modules/monitoring/analytics.service';
 import { AnalyticsSummariesHelper } from '../../modules/monitoring/analytics-summaries.helper';
 import { VersionsService } from '../../modules/versions/versions.service';
 import { ToolHubService } from '../../modules/tool-hub/tool-hub.service';
+import { AgentBuiltInToolsHelper } from '../../modules/agents/agent-builtin-tools.helper';
+import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
+import * as crypto from 'crypto';
 
 /**
  * The "Private (just me)" tier on agents, tools and APIs, against a real
@@ -267,6 +270,42 @@ describeIfDb('private visibility on agents, tools and APIs (real Postgres)', () 
   // ── Agents ────────────────────────────────────────────────────────────
 
   describe('agents', () => {
+
+    // create_agent builds a temporary agent on the parent's model config.
+    // Left at the column default it was org-visible: while the parent run
+    // lived, any member could fetch it by id or name and run it.
+    it("keeps a private agent's temporary agent private to the same owner", async () => {
+      const executionAccess = new ExecutionAccessService(policy);
+      const helper = new AgentBuiltInToolsHelper(
+        ds.getRepository(Agent),
+        {} as any,
+        {} as any,
+        { executionAccess } as any,
+        {} as any,
+      );
+      const parent = await ds.getRepository(Agent).findOneByOrFail({ id: privateAgent.id });
+      parent.agentConfig = { ...(parent.agentConfig ?? {}), canCreateAgents: true } as any;
+      const out = await helper.executeBuiltInTool(
+        'create_agent',
+        { name: `Owner Temp ${Date.now()}`, instructions: 'help' },
+        { id: crypto.randomUUID(), organizationId: orgId, agentId: parent.id, userId: users.owner } as any,
+        parent,
+      );
+      expect(out?.error).toBeUndefined();
+      const temp = await ds.getRepository(Agent).findOneByOrFail({ id: out!.result.agentId });
+      expect(temp.isTemporary).toBe(true);
+      expect(temp.visibility).toBe('private');
+      expect(temp.createdBy).toBe(users.owner);
+
+      expect((await agents.getAgent(temp.id, orgId, { id: users.owner })).id).toBe(temp.id);
+      expect((await executionAccess.canExecute(userPrincipal(users.owner), temp)).allowed).toBe(true);
+      for (const who of others) {
+        await expect(agents.getAgent(temp.id, orgId, { id: users[who] })).rejects.toBeInstanceOf(NotFoundException);
+        expect(await agents.findByName(temp.name, orgId, users[who])).toBeNull();
+        expect((await executionAccess.canExecute(userPrincipal(users[who]), temp)).allowed).toBe(false);
+      }
+      await ds.getRepository(Agent).delete({ id: temp.id });
+    });
     it('lists, counts and searches the private agent for its owner only', async () => {
       const mine = await agents.getAgents({ organizationId: orgId, caller: { id: users.owner } });
       expect(mine.data.map((a) => a.id).sort()).toEqual([privateAgent.id, orgAgent.id].sort());
