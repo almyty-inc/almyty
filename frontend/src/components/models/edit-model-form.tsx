@@ -11,6 +11,7 @@ import { formatModelPrice, PRICING_SOURCE_LABELS } from '@/lib/models-api'
 import type { ModelCard, UpdateModelBody } from '@/types/models'
 import { editModelSchema, compactCapabilities, pricingFromForm, type EditModelFormData, type EditModelFormOutput } from './schema'
 import { CapabilitiesField, PrivacyTierField } from './model-form-fields'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 interface EditModelFormProps {
   card: ModelCard
@@ -51,6 +52,10 @@ export function EditModelForm({ card, onCancel, onSubmit, submitting }: EditMode
     form.reset(toForm(card))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.id, card.updatedAt])
+
+  // Unsaved edits ask before a navigation throws them away. A save lands as
+  // a new updatedAt, which re-seeds the form and makes it clean again.
+  const guard = useLeaveGuard(form.formState.isDirty && !submitting)
 
   const overridePrice = form.watch('overridePrice')
   const errors = form.formState.errors
@@ -144,6 +149,7 @@ export function EditModelForm({ card, onCancel, onSubmit, submitting }: EditMode
                 Save changes
               </Button>
             </div>
+            {guard.element}
           </form>
   )
 }

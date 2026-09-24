@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
@@ -36,6 +36,28 @@ export interface DecryptedSsoConfig extends OrgSsoConfig {
 }
 
 const SCIM_TOKEN_PREFIX = 'scim_';
+
+/**
+ * Roles JIT and SCIM may hand a new identity. Never owner: an admin can
+ * edit these settings but may not make anyone an owner (updateMemberRole
+ * and inviteUser both refuse it), and with owner allowed here an admin
+ * could point the org at an IdP they control and sign in a fresh identity
+ * of their own as one.
+ */
+export const PROVISIONABLE_ROLES: readonly OrganizationRole[] = [
+  OrganizationRole.ADMIN,
+  OrganizationRole.MEMBER,
+  OrganizationRole.VIEWER,
+];
+
+export function isProvisionableRole(role: unknown): role is OrganizationRole {
+  return typeof role === 'string' && (PROVISIONABLE_ROLES as readonly string[]).includes(role);
+}
+
+/** The role to provision with, whatever a stored row says. */
+export function provisioningRole(configured: unknown): OrganizationRole {
+  return isProvisionableRole(configured) ? configured : OrganizationRole.MEMBER;
+}
 
 @Injectable()
 export class SsoConfigService {
@@ -163,6 +185,11 @@ export class SsoConfigService {
     assignIfDefined('protocol', dto.protocol);
     assignIfDefined('enabled', dto.enabled);
     assignIfDefined('jitProvisioning', dto.jitProvisioning);
+    if (dto.defaultRole !== undefined && !isProvisionableRole(dto.defaultRole)) {
+      throw new BadRequestException(
+        `defaultRole must be one of: ${PROVISIONABLE_ROLES.join(', ')}. SSO and SCIM never create owners.`,
+      );
+    }
     assignIfDefined('defaultRole', dto.defaultRole);
     assignIfDefined('samlEntryPoint', dto.samlEntryPoint);
     assignIfDefined('samlIssuer', dto.samlIssuer);

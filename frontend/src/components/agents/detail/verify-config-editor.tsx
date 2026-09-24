@@ -24,6 +24,7 @@ import { agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 type Policy = 'all_pass' | 'majority' | 'any_fail_blocks'
 type Trigger = 'on_final_output' | 'every_n_steps' | 'on_tool_result'
@@ -92,6 +93,12 @@ export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: ()
     },
     onError: (e: any) => errorNotif('Save failed', getApiErrorMessage(e)),
   })
+
+  // Edited settings ask before a navigation throws them away. Cancel and a
+  // save that lands both unmount the editor, so neither asks.
+  const current = JSON.stringify({ enabled, policy, maxReviseLoops, triggers, everyNSteps, checkers })
+  const [seeded] = useState(current)
+  const guard = useLeaveGuard(current !== seeded && !mutation.isPending)
 
   return (
     <section aria-label="Verification settings" className="space-y-4 rounded-md border p-3" data-testid="verify-config-editor">
@@ -223,6 +230,7 @@ export function VerifyConfigEditor({ agent, onDone }: { agent: Agent; onDone: ()
           Save verification
         </Button>
       </div>
+      {guard.element}
     </section>
   )
 }

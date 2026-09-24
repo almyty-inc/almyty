@@ -50,6 +50,7 @@ import { useCopy } from '@/lib/clipboard'
 import { useNotifications } from '@/store/app'
 import { buildWidgetEmbedSnippet } from '@/components/agents/detail/channel-setup'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
@@ -183,6 +184,10 @@ export function WidgetBuilder({ gateway }: WidgetBuilderProps) {
       errorNotif('Failed to save widget', getApiErrorMessage(err, 'Please try again.'))
     },
   })
+
+  // A restyled widget not yet saved asks before a navigation throws it
+  // away. A save refetches the gateway, which resets the form to it.
+  const guard = useLeaveGuard(form.formState.isDirty && !saveMutation.isPending)
 
   const apiBase = getApiBaseUrl()
   const scriptSrc = `${apiBase}/gateways/${gateway.id}/widget.js`
@@ -416,6 +421,7 @@ export function WidgetBuilder({ gateway }: WidgetBuilderProps) {
           </div>
         </div>
       </CardContent>
+      {guard.element}
     </Card>
   )
 }

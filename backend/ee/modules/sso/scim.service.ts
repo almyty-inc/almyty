@@ -18,7 +18,8 @@ import {
 } from '../../../src/entities/user-organization.entity';
 import { Team } from '../../../src/entities/team.entity';
 import { UserTeam, TeamRole } from '../../../src/entities/user-team.entity';
-import { SsoConfigService } from './sso-config.service';
+import { SsoConfigService, provisioningRole } from './sso-config.service';
+import { isEffectiveMembership } from '../../../src/common/authorization/membership';
 
 const USER_SCHEMA = 'urn:ietf:params:scim:schemas:core:2.0:User';
 const GROUP_SCHEMA = 'urn:ietf:params:scim:schemas:core:2.0:Group';
@@ -291,7 +292,8 @@ export class ScimService {
 
   private async defaultRole(orgId: string): Promise<OrganizationRole> {
     const config = await this.configService.get(orgId);
-    return (config?.defaultRole as OrganizationRole) || OrganizationRole.MEMBER;
+    // Never owner, whatever the stored row says (see PROVISIONABLE_ROLES).
+    return provisioningRole(config?.defaultRole);
   }
 
   private toScimUser(user: User, membership: UserOrganization) {
@@ -326,8 +328,8 @@ export class ScimService {
         description: 'Provisioned via SCIM',
       }),
     );
-    await this.syncGroupMembers(team.id, input.members ?? []);
-    return this.toScimGroup(team, input.members?.map((m) => m.value) ?? []);
+    const kept = await this.syncGroupMembers(orgId, team.id, input.members ?? []);
+    return this.toScimGroup(team, kept);
   }
 
   async getGroup(orgId: string, groupId: string) {
@@ -366,7 +368,7 @@ export class ScimService {
           ? op.value.map((v: any) => v.value)
           : [];
         if (operation === 'add') {
-          await this.syncGroupMembers(team.id, values.map((value) => ({ value })));
+          await this.syncGroupMembers(orgId, team.id, values.map((value) => ({ value })));
         } else if (operation === 'remove') {
           await this.removeGroupMembers(team.id, values);
         }
@@ -394,11 +396,25 @@ export class ScimService {
     return team;
   }
 
+  /**
+   * Put `members` on the team -- the ones who are members of this
+   * organization. The ids come straight from the request; written as given
+   * they let one tenant's SCIM token put any user on the platform on its
+   * teams. Returns the ids that were kept.
+   */
   private async syncGroupMembers(
+    orgId: string,
     teamId: string,
     members: { value: string }[],
-  ): Promise<void> {
+  ): Promise<string[]> {
+    const kept: string[] = [];
     for (const m of members) {
+      if (typeof m?.value !== 'string' || !m.value) continue;
+      const membership = await this.membershipRepo.findOne({
+        where: { userId: m.value, organizationId: orgId },
+      });
+      if (!isEffectiveMembership(membership)) continue;
+      kept.push(m.value);
       const existing = await this.userTeamRepo.findOne({
         where: { teamId, userId: m.value },
       });
@@ -418,6 +434,7 @@ export class ScimService {
         );
       }
     }
+    return kept;
   }
 
   private async removeGroupMembers(

@@ -436,8 +436,10 @@ export class OrganizationsService {
     // The departed member's private resources would otherwise be nobody's:
     // visible to no one, deletable by no one. They move to whoever removed
     // them -- or, when the member leaves on their own, to the organization's
-    // longest-standing remaining owner -- and stay private. Same
-    // transaction as the membership removal, so neither happens alone.
+    // longest-standing remaining owner -- and stay private. Their runners
+    // are deregistered, their own connections revoked and grants naming
+    // them removed (ResourceHandoverHelper says why). Same transaction as
+    // the membership removal, so neither happens alone.
     const reason = userId === actorUserId ? 'member_left' : 'member_removed';
     const audit = await this.userOrganizationRepository.manager.transaction(async (manager) => {
       const toUserId =
