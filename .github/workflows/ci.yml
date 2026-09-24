@@ -132,7 +132,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: npm ci --ignore-scripts --legacy-peer-deps
+        run: npm ci --ignore-scripts
 
       # The DB integration specs use spec-specific Postgres schemas
       # so parallel Jest workers don't collide on DROP TABLE cycles.
@@ -181,7 +181,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci --ignore-scripts --legacy-peer-deps
+        run: npm ci --ignore-scripts
 
       - name: Run vitest
         working-directory: frontend
@@ -265,7 +265,7 @@ jobs:
       # dependency graph the published artifact was never built from.
       - name: Install dependencies
         working-directory: packages/${{ matrix.package }}
-        run: npm ci --ignore-scripts --legacy-peer-deps --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       # Every CLI here takes @almyty/client from the npm registry, so each
       # leg was testing its package against the LAST PUBLISHED client rather
@@ -287,7 +287,7 @@ jobs:
             echo "packages/${{ matrix.package }} does not depend on @almyty/client — nothing to link"
             exit 0
           fi
-          npm --prefix packages/client ci --ignore-scripts --legacy-peer-deps --no-audit --no-fund
+          npm --prefix packages/client ci --ignore-scripts --no-audit --no-fund
           npm --prefix packages/client run build
           rm -rf "$target/dist"
           cp -R packages/client/dist "$target/dist"
@@ -340,7 +340,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: npm ci --ignore-scripts --legacy-peer-deps
+        run: npm ci --ignore-scripts
 
       - name: tsc --noEmit
         working-directory: backend
@@ -392,7 +392,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci --ignore-scripts --legacy-peer-deps
+        run: npm ci --ignore-scripts
 
       - name: tsc --noEmit && vite build
         working-directory: frontend
