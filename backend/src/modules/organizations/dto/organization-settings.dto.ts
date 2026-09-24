@@ -69,19 +69,66 @@ export function egressAllowlistViolations(value: unknown): string[] {
 }
 
 /**
- * Validates the typed parts of an organization's `settings` object without
- * touching the keys other features keep there (limits, pending invites).
+ * The only `settings` keys an organization's own admins may write.
+ *
+ * Everything else in the column belongs to the platform: `maxApis`,
+ * `maxTools` and `maxGateways` are the plan's limits, and
+ * `pendingInvites` is written by the invite flow and carries the tokens
+ * it hands out. Accepting those from PATCH let an admin lift their own
+ * limits, or plant an invite token of their choosing. An allowlist rather
+ * than a denylist, so a limit added later is closed by default.
+ */
+export const ADMIN_WRITABLE_SETTINGS: readonly string[] = Object.freeze([
+  'defaultRouting',
+  'egressAllowlist',
+  'allowUserScopedConnections',
+]);
+
+/** Keys of a settings patch an admin may not write; empty when it is clean. */
+export function nonWritableSettingsKeys(value: unknown): string[] {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.keys(value).filter((key) => !ADMIN_WRITABLE_SETTINGS.includes(key));
+}
+
+/**
+ * The writable part of a settings patch. The DTO already refuses the
+ * rest; this is the second lock, for any caller that reaches the service
+ * without going through validation.
+ */
+export function pickWritableSettings<T extends Record<string, any>>(value: T | null | undefined): Partial<T> {
+  const out: Partial<T> = {};
+  if (value == null || typeof value !== 'object') return out;
+  for (const key of ADMIN_WRITABLE_SETTINGS) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) (out as any)[key] = (value as any)[key];
+  }
+  return out;
+}
+
+function settingsViolations(value: unknown): string[] {
+  if (value == null || typeof value !== 'object') return [];
+  const v = value as Record<string, unknown>;
+  const problems = [...routingPolicyViolations(v.defaultRouting), ...egressAllowlistViolations(v.egressAllowlist)];
+  const allow = v.allowUserScopedConnections;
+  if (allow !== undefined && allow !== null && typeof allow !== 'boolean') {
+    problems.push('settings.allowUserScopedConnections must be a boolean');
+  }
+  const refused = nonWritableSettingsKeys(value);
+  if (refused.length) {
+    problems.push(`settings.${refused.join(', settings.')} cannot be changed here: limits come from the plan`);
+  }
+  return problems;
+}
+
+/**
+ * Validates an organization's `settings` patch: the typed keys are
+ * checked, and any key outside ADMIN_WRITABLE_SETTINGS is refused.
  */
 @ValidatorConstraint({ name: 'organizationSettings', async: false })
 export class OrganizationSettingsConstraint implements ValidatorConstraintInterface {
   validate(value: unknown): boolean {
-    if (value == null || typeof value !== 'object') return true;
-    const v = value as Record<string, unknown>;
-    return routingPolicyViolations(v.defaultRouting).length === 0 && egressAllowlistViolations(v.egressAllowlist).length === 0;
+    return settingsViolations(value).length === 0;
   }
   defaultMessage(args: ValidationArguments): string {
-    const value = args.value as Record<string, unknown> | null | undefined;
-    const problems = [...routingPolicyViolations(value?.defaultRouting), ...egressAllowlistViolations(value?.egressAllowlist)];
-    return problems.join('; ') || 'settings is invalid';
+    return settingsViolations(args.value).join('; ') || 'settings is invalid';
   }
 }
