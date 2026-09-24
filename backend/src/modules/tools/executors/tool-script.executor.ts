@@ -283,6 +283,10 @@ export class ToolScriptExecutor {
         }
         const result = await orchestrator.executeTool(toolId, params, {
           userId: options.userId,
+          // The nested call runs in the outer call's scope, unchanged: a
+          // sandboxed tool cannot reach a team or private tool its caller
+          // could not have run directly.
+          principal: options.principal,
           organizationId: options.organizationId,
           signal: signal ?? options.signal,
           gatewayId: options.gatewayId ?? undefined,

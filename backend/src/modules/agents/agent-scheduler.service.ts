@@ -9,6 +9,12 @@ import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
 import { agentOwnerUserId } from './agent-owner';
+import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execution.entity';
+import {
+  ExecutionAccessService,
+  UserPrincipal,
+  userPrincipal,
+} from '../../common/authorization/execution-access.service';
 
 
 export interface AgentScheduleConfig {
@@ -80,6 +86,11 @@ export class AgentSchedulerService implements OnModuleInit {
     private readonly agentRepo: Repository<Agent>,
     @InjectQueue(QUEUE_NAME)
     private readonly schedulerQueue: Queue,
+    // Fire-time authorization: a tick runs as the agent's owner now, and
+    // only if that owner may still run the agent.
+    private readonly executionAccess: ExecutionAccessService,
+    @InjectRepository(AgentExecution)
+    private readonly executionRepo: Repository<AgentExecution>,
   ) {}
 
   async onModuleInit() {
@@ -166,6 +177,49 @@ export class AgentSchedulerService implements OnModuleInit {
     this.logger.warn(
       `[SCHEDULED_RUN] Paused schedule for agent ${agentId}: model "${issue.model}" is no longer served by its provider`,
     );
+  }
+
+  /**
+   * Stop a schedule whose owner can no longer run its agent -- they left
+   * the agent's team, or the organization, or the agent became somebody
+   * else's private agent. Not a silent skip: a FAILED execution is written
+   * with a reason a person can act on (it shows in the agent's run
+   * history), and the schedule is disabled with the same reason on
+   * `schedule.pausedReason`. Re-enabling it -- by someone who can run the
+   * agent, since a schedule runs as the agent's owner -- starts it again.
+   */
+  async pauseForLostAccess(agent: Agent, principal: UserPrincipal, reason: string): Promise<void> {
+    const message = principal.userId
+      ? `Scheduled run refused: the agent's owner (${principal.userId}) can no longer run this agent ` +
+        `(${reason}). The schedule has been paused.`
+      : `Scheduled run refused: this agent has no owner who can run it (${reason}). The schedule has been paused.`;
+    try {
+      await this.executionRepo.save(
+        this.executionRepo.create({
+          agentId: agent.id,
+          organizationId: agent.organizationId,
+          userId: principal.userId,
+          status: AgentExecutionStatus.FAILED,
+          input: {},
+          error: message,
+          metadata: { triggerType: 'scheduled', refusedBy: 'execution_access' },
+        }),
+      );
+    } catch (err: any) {
+      this.logger.error(`[SCHEDULED_RUN] Could not record the refused run for agent ${agent.id}: ${err.message}`);
+    }
+    const settings = { ...(agent.settings || {}) };
+    if (settings.schedule) {
+      settings.schedule = {
+        ...settings.schedule,
+        enabled: false,
+        pausedReason: { code: 'OWNER_CANNOT_RUN', message, detectedAt: new Date().toISOString() } as any,
+      };
+    }
+    agent.settings = settings;
+    await this.agentRepo.save(agent);
+    await this.removeRepeatableJob(agent.id);
+    this.logger.warn(`[SCHEDULED_RUN] Paused schedule for agent ${agent.id}: ${message}`);
   }
 
   async unscheduleAgent(agentId: string, organizationId: string): Promise<Agent> {
@@ -368,16 +422,25 @@ export class AgentSchedulerService implements OnModuleInit {
       }
 
       this.logger.log(`[SCHEDULED_RUN] Executing agent ${agentId}`);
-      this.logger.log(`[SCHEDULED_RUN] Executing agent ${agentId}`);
       // As the agent's owner now, not the `userId` snapshotted into the
-      // job when the schedule was enqueued (see agentOwnerUserId).
+      // job when the schedule was enqueued (see agentOwnerUserId), and
+      // authorized as them now: a schedule whose owner has left the agent's
+      // team (or the organization) must stop, visibly, rather than keep
+      // running a team agent for somebody outside the team.
+      const principal = userPrincipal(agentOwnerUserId(agent), 'schedule');
+      const access = await this.executionAccess.canExecute(principal, agent);
+      if (!access.allowed) {
+        await this.pauseForLostAccess(agent, principal, access.reason);
+        return;
+      }
       const execution = await this.executionEngine.execute(
         agent,
         organizationId,
-        agentOwnerUserId(agent),
+        principal.userId,
         {
           input,
           metadata: { triggerType: 'scheduled' },
+          principal,
         },
       );
       // The engine reports node failures in the returned execution rather

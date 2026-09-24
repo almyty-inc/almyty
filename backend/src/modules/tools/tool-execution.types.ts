@@ -11,11 +11,22 @@
 
 import { GatewayToolSecurityPolicy } from '../../common/security/gateway-tool-policy';
 import type { ToolInvocationBudget } from './executors/tool-invocation-budget';
+import type { ExecutionPrincipal } from '../../common/authorization/execution-access.service';
 export { GatewayToolSecurityPolicy };
 
 export interface ToolExecutionOptions {
   userId: string;
   organizationId: string;
+  /**
+   * Whose scope this call executes in: the user who started it, or the
+   * gateway it came through, inherited unchanged by every nested call.
+   * The executor refuses (as "not found") a team tool the principal is not
+   * a member for and anyone's private tool but the owner's
+   * (ExecutionAccessService). Every production caller passes it --
+   * `execution-access-guard.spec.ts` enforces that; without one the call
+   * is authorized as `userId`.
+   */
+  principal?: ExecutionPrincipal;
   timeout?: number;
   retries?: number;
   skipCache?: boolean;

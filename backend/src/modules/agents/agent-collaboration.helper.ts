@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Agent } from '../../entities/agent.entity';
 import { batchAsync } from '../../common/utils/batch-async';
+import { principalOfRun } from '../../common/authorization/execution-access.service';
 import { AgentRuntimeService } from './agent-runtime.service';
 import {
   AgentCollaboration,
@@ -135,7 +136,12 @@ export class AgentCollaborationHelper {
       run.organizationId,
       run.userId,
       inputText,
-      { parentRunId: run.id, maxSteps: LIMITS_MAIN.maxSteps, maxCostCents: LIMITS_MAIN.maxCostCents },
+      {
+        parentRunId: run.id,
+        maxSteps: LIMITS_MAIN.maxSteps,
+        maxCostCents: LIMITS_MAIN.maxCostCents,
+        principal: principalOfRun(run),
+      },
     );
     const orchestratorResult = await this.runtime.waitForRun(orchestratorRun.id, LIMITS_MAIN.timeoutMs);
 
@@ -445,7 +451,8 @@ export class AgentCollaborationHelper {
         run.organizationId,
         run.userId,
         input,
-        { parentRunId: run.id, maxSteps: limits.maxSteps, maxCostCents: limits.maxCostCents },
+        // A participant runs in the orchestrating run's scope, unchanged.
+        { parentRunId: run.id, maxSteps: limits.maxSteps, maxCostCents: limits.maxCostCents, principal: principalOfRun(run) },
       );
       const result = this.runtime.waitForRun(subRun.id, limits.timeoutMs).then((r) => ({
         output: r?.output ? asText(r.output) : 'No output',

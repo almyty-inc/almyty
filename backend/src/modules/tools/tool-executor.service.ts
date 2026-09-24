@@ -56,6 +56,7 @@ import { RunnerCallService, RunnerCallError } from '../runner/runner-call.servic
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
+import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -64,20 +65,6 @@ export {
   GraphQLRequest,
   SOAPRequest,
 };
-
-/**
- * May a call made on behalf of `userId` execute `tool`? Only private
- * tools are decided here: they run for their owner (`createdBy`) alone,
- * and a call with no known user is refused. Org and team tools are
- * gated by the listing and gateway layers in front of the executor.
- */
-export function isPrivateToolCallAllowed(
-  tool: Pick<Tool, 'visibility' | 'createdBy'>,
-  userId: string | null | undefined,
-): boolean {
-  if (tool.visibility !== 'private') return true;
-  return !!userId && !!tool.createdBy && tool.createdBy === userId;
-}
 
 @Injectable()
 export class ToolExecutorService {
@@ -110,6 +97,11 @@ export class ToolExecutorService {
     // for this service construct it positionally, and a plugin pipeline that
     // is absent must not stop a tool running.
     @Optional() private readonly pluginManager?: PluginManagerService,
+    // The team/private execution gate. @Optional() only so the positional
+    // spec harnesses keep their order; unlike the plugin manager its
+    // absence is not tolerated -- executeTool refuses to run anything
+    // without it. ToolsModule imports AuthorizationModule, which provides it.
+    @Optional() private readonly executionAccess?: ExecutionAccessService,
   ) {}
 
   // ─── Public entry point ────────────────────────────────────────
@@ -123,6 +115,7 @@ export class ToolExecutorService {
     let retryCount = 0;
     let cached = false;
     let rateLimited = false;
+    let accessDenied = false;
 
     // Short-circuit before any DB work if the caller already aborted
     // (e.g. the HTTP request was cancelled between queueing and
@@ -149,6 +142,27 @@ export class ToolExecutorService {
       });
 
       if (!tool) {
+        throw new Error('Tool not found');
+      }
+
+      // Team and private scope are an execution boundary, whichever surface
+      // the call came through (REST, an agent run, a gateway, MCP, a nested
+      // tools.invoke). The call is authorized against the principal the run
+      // inherited -- not against whoever the tool's own row names -- by the
+      // one shared check every executor uses. Answered exactly as a missing
+      // tool, and before anything else about the tool (its status, its
+      // gateway access list) is revealed; nothing is recorded against it.
+      if (!this.executionAccess) {
+        // Fail closed: an executor wired without the check runs nothing.
+        throw new Error('Tool execution access check is not configured');
+      }
+      // Resolved once and written back onto the options, so everything this
+      // call starts (a sandboxed tools.invoke) inherits the same scope.
+      options = { ...options, principal: options.principal ?? userPrincipal(options.userId) };
+      try {
+        await this.executionAccess.assertCanExecute(options.principal!, tool, 'Tool');
+      } catch {
+        accessDenied = true;
         throw new Error('Tool not found');
       }
 
@@ -233,14 +247,6 @@ export class ToolExecutorService {
       });
       if (!access.allowed) {
         throw new Error(`Refused by this gateway tool's permissions: ${access.reason}`);
-      }
-
-      // A private tool runs for its owner and nobody else, whichever
-      // surface the call came through (REST, an agent run, a gateway, MCP).
-      // A call with no known user cannot be the owner's. Answered as a
-      // missing tool so the refusal does not confirm it exists.
-      if (!isPrivateToolCallAllowed(tool, options.userId)) {
-        throw new NotFoundException('Tool not found');
       }
 
       // Apply this gateway tool's input mapping before anything reads the
@@ -495,7 +501,7 @@ export class ToolExecutorService {
         // path would load a cross-org tool just to write an audit
         // record against it, confirming the tool's existence and
         // polluting its execution stats.
-        if (options.organizationId) {
+        if (options.organizationId && !accessDenied) {
           const tool = await this.toolRepository.findOne({
             where: { id: toolId, organizationId: options.organizationId },
           });
