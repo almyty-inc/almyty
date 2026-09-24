@@ -569,7 +569,11 @@ export class AgentStepProcessor {
 
           try {
             const execOptions: ToolExecutionOptions = {
-              userId: run.userId || 'system',
+              // No user is no user: 'system' is not a users.id, and the
+              // executor's membership lookup sent it to a uuid column,
+              // which Postgres refuses -- every tool call of a userless
+              // run (heartbeat, A2A) failed on that error.
+              userId: run.userId ?? undefined,
               organizationId: run.organizationId,
               // Retries are an agent-level budget decision, not a
               // per-tool default: a run with a tight wall clock cannot
