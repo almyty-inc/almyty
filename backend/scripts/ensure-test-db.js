@@ -65,9 +65,24 @@ async function main() {
   const db = new Client({ host, port, user, password, database });
   await db.connect();
   try {
+    // In `public`, explicitly, and moved back there if an earlier run
+    // left one in a spec's schema -- the same rule the jest globalSetup
+    // applies (src/test/integration/test-db-extensions.ts). A bare
+    // CREATE EXTENSION is a no-op when the extension already exists
+    // somewhere else, which is how `uuid_generate_v4() does not exist`
+    // came to depend on test order.
     for (const ext of EXTENSIONS) {
       try {
-        await db.query(`CREATE EXTENSION IF NOT EXISTS "${ext}"`);
+        const { rows } = await db.query(
+          `SELECT n.nspname AS schema FROM pg_extension e
+             JOIN pg_namespace n ON n.oid = e.extnamespace WHERE e.extname = $1`,
+          [ext],
+        );
+        if (rows.length === 0) {
+          await db.query(`CREATE EXTENSION IF NOT EXISTS "${ext}" WITH SCHEMA public`);
+        } else if (rows[0].schema !== 'public') {
+          await db.query(`ALTER EXTENSION "${ext}" SET SCHEMA public`);
+        }
       } catch (err) {
         console.error(
           `ensure-test-db: could not create extension "${ext}": ${err.message}\n` +
