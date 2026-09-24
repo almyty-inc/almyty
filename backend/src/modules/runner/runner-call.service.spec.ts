@@ -91,6 +91,8 @@ class FakeRunnerService {
 class FakeWorkspaceService {
   /** runnerId -> ids of workspaces still ACTIVE for it. */
   active: Record<string, string[]> = {};
+  /** Live workspaces a dispatch may name, as (id, runnerId, ownerUserId). */
+  owned: Array<{ id: string; runnerId: string; ownerUserId: string }> = [];
   /** When set, listActiveForRunner throws instead of answering. */
   failure: Error | null = null;
   calls: string[] = [];
@@ -98,6 +100,9 @@ class FakeWorkspaceService {
     this.calls.push(runnerId);
     if (this.failure) throw this.failure;
     return (this.active[runnerId] ?? []).map((id) => ({ id }));
+  }
+  async findForDispatch(id: string, runnerId: string, callerUserId?: string | null): Promise<{ id: string } | null> {
+    return this.owned.find((w) => w.id === id && w.runnerId === runnerId && w.ownerUserId === callerUserId) ?? null;
   }
 }
 
@@ -132,8 +137,9 @@ describe('RunnerCallService', () => {
   });
 
   it('dispatch with workspaceId tags the envelope payload', async () => {
-    const { svc, transport } = makeService();
-    const p = svc.dispatch('runner-1', 'shell.exec', { command: 'ls' }, 'ws-1', { timeoutMs: 200 });
+    const { svc, transport, workspaces } = makeService();
+    workspaces.owned.push({ id: 'ws-1', runnerId: 'runner-1', ownerUserId: 'owner-1' });
+    const p = svc.dispatch('runner-1', 'shell.exec', { command: 'ls' }, 'ws-1', { timeoutMs: 200, callerUserId: 'owner-1' });
     p.catch(() => {});
     await transport.waitForPush();
     expect(transport.pushed[0].payload).toEqual({
