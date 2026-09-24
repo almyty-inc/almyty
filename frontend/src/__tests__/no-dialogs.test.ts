@@ -186,6 +186,8 @@ const CONVERTED_DIALOGS: string[] = [
   'components/connections/connection-detail-sheet.tsx',
   'components/connections/custom-connector-dialog.tsx',
   'components/settings/approval-policy-dialog.tsx',
+  'components/agents/import-external-a2a-dialog.tsx',
+  'components/agents/detail/promote-run-dialog.tsx',
 ]
 
 describe('converted dialogs are deleted', () => {
