@@ -351,7 +351,21 @@ export class ChannelGatewayService {
           // message.
           principal: gatewayPrincipal(gateway),
         },
-      );
+      ).catch(async (err: any) => {
+        // Refused before it started: the agent is outside this gateway's
+        // scope (a team agent behind a gateway not scoped to its team, or
+        // one moved to another team since). Recorded on the delivery with
+        // a reason an operator can act on, not dropped silently.
+        if (err instanceof NotFoundException) {
+          await this.markInboundOutcome(claim, {
+            status: 'failed',
+            errorMessage: 'run refused: this gateway does not serve its agent (not found, or outside the gateway scope)',
+          });
+          return null;
+        }
+        throw err;
+      });
+      if (!newRun) return;
 
       await this.markInboundOutcome(claim, { runId: newRun.id });
       this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized, effectiveConfig, claim);
