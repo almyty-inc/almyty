@@ -43,8 +43,18 @@ export const USER_SECRET_FIELDS = [
   'twoFactorSecret',
 ] as const;
 
+/**
+ * Organization columns no organization payload carries. `billingInfo`
+ * holds the Stripe customer and subscription ids and the signed license
+ * token. Every member can read GET /organizations/:id and GET
+ * /organizations; the billing routes answer plan questions for admins,
+ * and nothing in the dashboard reads this column off an organization.
+ */
+export const ORGANIZATION_PRIVATE_FIELDS = ['billingInfo'] as const;
+
 /** Remove user credentials from anything carrying loaded member relations. */
 export function stripMemberSecrets<T extends { members?: any[]; settings?: any }>(organization: T): T {
+  for (const field of ORGANIZATION_PRIVATE_FIELDS) delete (organization as any)[field];
   for (const membership of organization.members ?? []) {
     if (membership?.user) for (const field of USER_SECRET_FIELDS) delete membership.user[field];
     // The membership row carries its own invite token.
@@ -197,7 +207,9 @@ export class OrganizationsService {
         byId.get(organization.id) ?? 0;
     }
 
-    return organizations;
+    // Each member can list its organizations; the same payload rules as
+    // findOne apply (billing ids, license token, pending-invite tokens).
+    return organizations.map(organization => stripMemberSecrets(organization));
   }
 
   /**
@@ -256,7 +268,12 @@ export class OrganizationsService {
   }
 
   async update(id: string, updateOrganizationDto: UpdateOrganizationDto): Promise<Organization> {
-    const organization = await this.findOne(id);
+    // The stored row, not findOne's payload: findOne strips the
+    // pending-invite tokens out of settings, and this row is written back.
+    const organization = await this.organizationRepository.findOne({ where: { id } });
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
 
     // Check for conflicts if name or slug is being updated
     if (updateOrganizationDto.name || updateOrganizationDto.slug) {
@@ -295,7 +312,10 @@ export class OrganizationsService {
       organization.settings = { ...(organization.settings ?? {}), ...pickWritableSettings(settings) };
     }
 
-    return this.organizationRepository.save(organization);
+    // Stripped after the write, never before: the row read above is the
+    // stored one, pending-invite tokens included, and saving a stripped
+    // copy would erase every outstanding invite on any settings change.
+    return stripMemberSecrets(await this.organizationRepository.save(organization));
   }
 
   /**
