@@ -479,6 +479,17 @@ describe('AgentsPage', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/agents/import')
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
+
+    it('Import external A2A agent goes to the A2A import page, not a dialog', async () => {
+      const user = userEvent.setup()
+      renderAgentsPage()
+
+      await user.click(screen.getByRole('button', { name: 'Import' }))
+      await user.click(await screen.findByRole('menuitem', { name: /Import external A2A agent/i }))
+
+      expect(mockNavigate).toHaveBeenCalledWith('/agents/import?source=a2a')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
   })
 
   describe('Error Handling', () => {
