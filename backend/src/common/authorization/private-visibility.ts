@@ -133,15 +133,25 @@ export function assertAttachable(
 
 /**
  * The tools a gateway may serve. A gateway is reached by whoever holds
- * its URL or key, not by a user the policy can check, so a private tool
- * is only served on a gateway that is itself private to the tool's own
- * owner. Every org/team tool passes (gateway membership gates those).
+ * its URL or key, not by a user the policy can check, so what it serves is
+ * bounded by its own scope -- the membership-free part of the gateway rule
+ * in ExecutionAccessService: a private tool only on a gateway private to
+ * the tool's own owner, a team tool only on a gateway scoped to that team
+ * (or a private gateway, whose owner's membership is checked per call).
+ * Org tools pass.
  */
 export function servableOnGateway<T extends ResourceLike>(
   tools: T[],
-  gateway: { visibility?: ResourceVisibility | null; ownerUserId?: string | null } | null | undefined,
+  gateway:
+    | { visibility?: ResourceVisibility | null; ownerUserId?: string | null; teamId?: string | null }
+    | null
+    | undefined,
 ): T[] {
   return tools.filter((tool) => {
+    if (tool.visibility === 'team') {
+      if (gateway?.visibility === 'private') return true;
+      return gateway?.visibility === 'team' && !!tool.teamId && gateway.teamId === tool.teamId;
+    }
     if (tool.visibility !== 'private') return true;
     const owner = resourceOwnerId(tool);
     return !!owner && gateway?.visibility === 'private' && gateway.ownerUserId === owner;

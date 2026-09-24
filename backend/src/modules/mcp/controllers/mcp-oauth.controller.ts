@@ -17,7 +17,7 @@ import {
 import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 
-import { McpOAuthService } from '../services/mcp-oauth.service';
+import { McpOAuthService, MCP_OAUTH_SCOPES } from '../services/mcp-oauth.service';
 import { McpOAuthResolveHelper } from './mcp-oauth-resolve.helper';
 import { validateRedirectUri } from '../services/mcp-oauth-helpers.helper';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -66,6 +66,29 @@ export class McpOAuthController {
     }
   }
 
+  /**
+   * RFC 8707 `resource`: the audience the client wants the token for.
+   *
+   * The only resource this authorization server protects under this path
+   * is this gateway, whose identifier the protected-resource metadata
+   * publishes as `{base}/{org}/{gateway}`. A resource naming anything else
+   * is `invalid_target`; one naming this gateway (or a path under it, such
+   * as its MCP endpoint) is kept and ends up on the code and the tokens.
+   * Absent is allowed: the token is still bound to this gateway by id.
+   */
+  private checkResource(orgSlug: string, gatewaySlug: string, resource: unknown): string | undefined {
+    if (resource === undefined || resource === null || resource === '') return undefined;
+    const gatewayResource = `${this.resolve.getBaseUrl()}/${orgSlug}/${gatewaySlug}`;
+    const given = typeof resource === 'string' ? resource.replace(/\/+$/, '') : '';
+    if (given !== gatewayResource && !given.startsWith(`${gatewayResource}/`)) {
+      throw new HttpException(
+        { error: 'invalid_target', error_description: 'resource is not this gateway' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return given;
+  }
+
 
   // ---------------------------------------------------------------------------
   // 1. Authorization Server Metadata (RFC 8414)
@@ -99,7 +122,7 @@ export class McpOAuthController {
         'client_secret_post',
       ],
       code_challenge_methods_supported: ['S256'],
-      scopes_supported: ['mcp:tools', 'mcp:resources', 'mcp:prompts', 'mcp:*'],
+      scopes_supported: MCP_OAUTH_SCOPES,
       service_documentation: `${base}/docs`,
     };
   }
@@ -126,7 +149,7 @@ export class McpOAuthController {
     return {
       resource: prefix,
       authorization_servers: [prefix],
-      scopes_supported: ['mcp:tools', 'mcp:resources', 'mcp:prompts', 'mcp:*'],
+      scopes_supported: MCP_OAUTH_SCOPES,
       bearer_methods_supported: ['header'],
       resource_name: gateway.name,
       resource_documentation: `${base}/docs`,
@@ -224,6 +247,7 @@ export class McpOAuthController {
     }
 
     this.assertMember(user, organization.id);
+    this.checkResource(orgSlug, gatewaySlug, resource);
 
     // --- User is authenticated — show the consent screen ---
     // OAuth 2.1 best practice: do NOT silently mint a code. Validate the
@@ -342,6 +366,7 @@ export class McpOAuthController {
     const codeChallengeMethod = body.code_challenge_method;
     const scope = body.scope;
     const state = body.state;
+    const resource = this.checkResource(orgSlug, gatewaySlug, body.resource);
 
     this.logger.log(
       `OAuth authorize (POST): org=${orgSlug}, gateway=${gateway.name}, client=${clientId}`,
@@ -388,7 +413,9 @@ export class McpOAuthController {
       user.sub || user.id,
       gateway.id,
       organization.id,
-      { redirectUri, codeChallenge, codeChallengeMethod, scope: scope || 'mcp:*' },
+      // No scope asked for means the client's registered scope, never a
+      // blanket `mcp:*` the client did not register.
+      { redirectUri, codeChallenge, codeChallengeMethod, scope: scope || undefined, resource },
     );
 
     return {
@@ -444,7 +471,15 @@ export class McpOAuthController {
         );
       }
 
-      return this.mcpOAuthService.exchangeCode(code, clientId, code_verifier, redirect_uri, gateway.id, client_secret);
+      return this.mcpOAuthService.exchangeCode(
+        code,
+        clientId,
+        code_verifier,
+        redirect_uri,
+        gateway.id,
+        client_secret,
+        typeof body.resource === 'string' ? body.resource : undefined,
+      );
     }
 
     if (grantType === 'refresh_token') {

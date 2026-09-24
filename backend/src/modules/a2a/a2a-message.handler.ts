@@ -6,6 +6,7 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Message } from '../../entities/message.entity';
 
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
+import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
 import { MetricType } from '../../entities/usage-metric.entity';
 import { agentRunToTask } from './a2a-task.mapper';
@@ -118,7 +119,10 @@ export class A2AMessageHandler {
         gateway.organizationId,
         null,
         text,
-        existingRun.conversationId ? { conversationId: existingRun.conversationId } : undefined,
+        {
+          ...(existingRun.conversationId ? { conversationId: existingRun.conversationId } : {}),
+          principal: gatewayPrincipal(gateway),
+        },
       );
       this.recordWorkflow(gateway);
       // Return task with the ORIGINAL task ID (the one the client sent)
@@ -164,6 +168,9 @@ export class A2AMessageHandler {
       gateway.organizationId,
       null, // no user context in A2A calls
       text,
+      // Runs in the gateway's scope: an A2A gateway serves its agent only
+      // when its own visibility covers it, re-checked on every message.
+      { principal: gatewayPrincipal(gateway) },
     );
     this.recordWorkflow(gateway);
 
@@ -225,6 +232,7 @@ export class A2AMessageHandler {
           gateway.organizationId,
           null,
           text,
+          { principal: gatewayPrincipal(gateway) },
         );
         this.recordWorkflow(gateway);
       }
@@ -234,6 +242,7 @@ export class A2AMessageHandler {
         gateway.organizationId,
         null,
         text,
+        { principal: gatewayPrincipal(gateway) },
       );
       this.recordWorkflow(gateway);
     }

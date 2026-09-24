@@ -1,7 +1,9 @@
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
 import { Agent } from '../../../entities/agent.entity';
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
-import { fakeRepository, FakeRepository } from '../../../test/fake-repository';
+import { fakeManager, fakeRepository, FakeRepository } from '../../../test/fake-repository';
+import { Tool } from '../../../entities/tool.entity';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 
 /**
  * `create_agent` and `invoke_agent` are the two built-ins an autonomous
@@ -22,7 +24,7 @@ describe('built-in create_agent / invoke_agent stay inside the parent', () => {
   const run: any = { id: 'run-1', organizationId: ORG, userId: 'user-1' };
 
   let agents: FakeRepository<Agent>;
-  let runtime: { startRun: jest.Mock; waitForRun: jest.Mock };
+  let runtime: { startRun: jest.Mock; waitForRun: jest.Mock; executionAccess: any };
   let helper: AgentBuiltInToolsHelper;
 
   const parent = (agentConfig: Record<string, any>, over: Partial<Agent> = {}) =>
@@ -49,9 +51,21 @@ describe('built-in create_agent / invoke_agent stay inside the parent', () => {
         { id: 'foreign', organizationId: 'org-2', status: 'active', isTemporary: false, visibility: 'org' } as any,
       ],
     });
+    // The tools a child may be given are also checked against the run's
+    // scope; here every tool is org-wide and user-1 is a member.
+    const tools = fakeRepository<Tool>({
+      seed: [
+        { id: 'tool-a', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'user-1' } as any,
+        { id: 'tool-admin', organizationId: ORG, visibility: 'org', teamId: null, createdBy: 'user-1' } as any,
+      ],
+    });
+    fakeManager([[Agent, agents], [Tool, tools]]);
+    const m = membershipFixture();
+    m.member(ORG, 'user-1');
     runtime = {
       startRun: jest.fn(async (agentId: string) => ({ id: `child-of-${agentId}` })),
       waitForRun: jest.fn(async () => ({ status: AgentRunStatus.COMPLETED, output: 'done' })),
+      executionAccess: m.executionAccess,
     };
     helper = new AgentBuiltInToolsHelper(agents as any, {} as any, {} as any, runtime as any, {} as any);
   });

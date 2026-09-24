@@ -32,7 +32,7 @@ describe('SSE message posting is bound to the connection owner', () => {
       on: jest.fn(),
     };
     const transport = new SseTransport({ handleJsonRpc } as any, sessions as any);
-    const controller = new McpTransportController({} as any, transport, {} as any, {} as any);
+    const controller = new McpTransportController({} as any, transport, {} as any);
     return { transport, controller, handleJsonRpc };
   }
 

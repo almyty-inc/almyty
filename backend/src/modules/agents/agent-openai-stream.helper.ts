@@ -4,6 +4,7 @@ import { Request, Response } from 'express';
 import { Agent } from '../../entities/agent.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
+import { compatPrincipal } from './compat-auth.helper';
 
 export type LogRequestFn = (
   req: Request,
@@ -81,7 +82,7 @@ export class AgentOpenAIStreamHelper {
       agent,
       apiKey.organizationId,
       apiKey.userId || null,
-      { input },
+      { input, principal: compatPrincipal(apiKey) },
     );
 
     res.setHeader(USAGE_SPLIT_HEADER, usageSplitState(execution));
@@ -176,7 +177,7 @@ export class AgentOpenAIStreamHelper {
         agent,
         apiKey.organizationId,
         apiKey.userId || null,
-        { input, signal: abortController.signal },
+        { input, signal: abortController.signal, principal: compatPrincipal(apiKey) },
         (event: StreamEvent) => {
           if (!clientAlive) return;
 

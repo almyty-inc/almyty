@@ -27,6 +27,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 @Controller('agents')
 @ApiTags('Agents')
@@ -120,6 +121,7 @@ export class AgentRunsController {
         maxCostCents: body.maxCostCents,
         maxDurationMs: body.maxDurationMs,
         conversationId: body.conversationId,
+        principal: userPrincipal(userId),
       });
 
       return {

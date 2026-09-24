@@ -1,3 +1,6 @@
+import { userPrincipal } from '../../../common/authorization/execution-access.service';
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AgentManagementController } from '../agent-management.controller';
@@ -75,11 +78,14 @@ describe('AgentsController', () => {
       sendInput: jest.fn(),
       getRunEmitter: jest.fn().mockReturnValue(null),
       processStep: jest.fn(),
+      // The real execution gate: the controller refuses before the engine does.
+      executionAccess: membershipFixture().executionAccess,
     };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentsController, AgentExecutionController, AgentManagementController, AgentRunsController],
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         {
           provide: AgentsService,
           useValue: mockAgentsService,
@@ -321,6 +327,7 @@ describe('AgentsController', () => {
           input: invokeDto.input,
           variables: undefined,
           metadata: undefined,
+          principal: userPrincipal('user-1'),
         },
       );
     });
@@ -369,6 +376,8 @@ describe('AgentsController', () => {
         'org-1',
         'user-1',
         invokeDto.input,
+        // The caller's own scope ('user-1' is not a user id, so: nobody).
+        { principal: userPrincipal('user-1') },
       );
       // The pipeline engine must NOT be used for autonomous agents — that path
       // returns an empty "completed" run and the agent never actually runs.

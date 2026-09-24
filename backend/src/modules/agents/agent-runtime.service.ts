@@ -28,7 +28,11 @@ import { AgentStepProcessor } from './agent-step-processor';
 import { ApprovalsService } from '../approvals/approvals.service';
 import { describeLimitTrip } from './run-limits';
 import { BudgetsService } from '../budgets/budgets.service';
-import { isOthersPrivate } from '../../common/authorization/private-visibility';
+import {
+  ExecutionAccessService,
+  ExecutionPrincipal,
+  userPrincipal,
+} from '../../common/authorization/execution-access.service';
 
 /**
  * Built-in tool definitions that the agent runtime injects for autonomous agents.
@@ -194,6 +198,8 @@ export class AgentRuntimeService implements OnModuleInit {
     @Inject(forwardRef(() => ApprovalsService))
     readonly approvals: ApprovalsService,
     readonly budgets: BudgetsService,
+    // The team/private execution gate every run start goes through.
+    readonly executionAccess: ExecutionAccessService,
   ) {}
 
   /**
@@ -222,14 +228,23 @@ export class AgentRuntimeService implements OnModuleInit {
       endUserId?: string | null;
       /** Extra run metadata the surface wants the runtime to see (e.g. visitorMemory). */
       metadata?: Record<string, any>;
+      /**
+       * Whose scope the run executes in. A top-level run is its starter's
+       * (session, API key, the owner at a heartbeat) or its gateway's; a
+       * child run passes its parent's (principalOfRun) so the whole tree
+       * stays in the scope it started in. Without one the run is `userId`'s.
+       */
+      principal?: ExecutionPrincipal;
     },
 
   ): Promise<AgentRun> {
+    const principal: ExecutionPrincipal = options?.principal ?? userPrincipal(userId);
     const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
-    // Another member's private agent is not runnable -- as a top-level run,
-    // a collaboration participant, or a child run -- and a run with no
-    // known user cannot be its owner. Same answer as a missing agent.
-    if (!agent || isOthersPrivate(agent, userId ?? null)) throw new NotFoundException('Agent not found');
+    // A team agent runs only for its team (and org owners/admins, the same
+    // rule that lets them see it); another member's private agent runs for
+    // nobody else -- as a top-level run, a collaboration participant, or a
+    // child run. Same answer as a missing agent.
+    await this.executionAccess.assertCanExecute(principal, agent, 'Agent');
 
     if (agent.mode !== 'autonomous') {
       throw new BadRequestException('Agent is not in autonomous mode. Use /invoke for workflow agents.');
@@ -371,6 +386,10 @@ export class AgentRuntimeService implements OnModuleInit {
         maxToolCalls: 100,
       },
       parentRunId: options?.parentRunId || null,
+      // Whose scope the run executes in, for every step the queue worker
+      // processes later: child runs and tool calls are authorized against
+      // this, not against the resources they name.
+      principal,
       // The nesting ledger, counted above. Written here so the per-step
       // `checkRunLimits` compares a real number instead of the column's
       // default 0 -- which is what made RECURSION_DEPTH_EXCEEDED dead code.

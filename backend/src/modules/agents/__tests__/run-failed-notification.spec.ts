@@ -1,3 +1,5 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
+import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentExecutionStatus } from '../../../entities/agent-execution.entity';
 
@@ -36,6 +38,12 @@ describe('AgentExecutionEngine run.failed notification', () => {
       webhook,
       state,
       withNotifications ? (notifications as any) : undefined,
+      undefined, // strategyPipelines
+      undefined, // agentRoles
+      undefined, // organizationRepository
+      undefined, // budgets
+      undefined, // cancellations
+      membershipFixture().executionAccess, // the real execution gate
     );
   }
 
@@ -109,28 +117,45 @@ describe('AgentExecutionEngine run.failed notification', () => {
   });
 
   // A private agent's failure (its name and error text) is its owner's
-  // alone. The run's userId is what the scheduler or webhook stamped,
-  // which can predate the agent going private or being handed over.
+  // alone. The run's userId is what the surface stamped -- a run through
+  // the owner's private gateway carries no user of its own -- so the owner
+  // is who hears about it.
   describe('on a private agent', () => {
     const privateAgent = (createdBy: string | null) =>
-      ({ ...brokenAgent, visibility: 'private', createdBy }) as any;
+      ({ ...brokenAgent, organizationId: 'org-1', visibility: 'private', createdBy }) as any;
+    // The only surface a private agent runs through without its owner's
+    // own session: a gateway private to that owner.
+    const ownersGateway = (owner: string) =>
+      gatewayPrincipal({ id: 'gw-1', organizationId: 'org-1', visibility: 'private', ownerUserId: owner });
 
-    it('notifies the owner, not the member the run was stamped with', async () => {
+    it('notifies the owner, not the user the run was stamped with', async () => {
       const engine = makeEngine();
-      await runFailing(engine, { triggerType: 'scheduled' }, 'user-1', privateAgent('owner-9'));
+      await engine.execute(privateAgent('owner-9'), 'org-1', 'user-1', {
+        input: {},
+        metadata: { triggerType: 'scheduled' },
+        principal: ownersGateway('owner-9'),
+      });
+      await new Promise((r) => setImmediate(r));
       expect(notifications.emit).toHaveBeenCalledTimes(1);
       expect(notifications.emit.mock.calls[0][0].userIds).toEqual(['owner-9']);
     });
 
-    it('notifies the owner when the owner started it', async () => {
+    it('notifies the owner when the run carries no user at all', async () => {
       const engine = makeEngine();
-      await runFailing(engine, { triggerType: 'webhook' }, 'owner-9', privateAgent('owner-9'));
+      await engine.execute(privateAgent('owner-9'), 'org-1', null, {
+        input: {},
+        metadata: { triggerType: 'webhook' },
+        principal: ownersGateway('owner-9'),
+      });
+      await new Promise((r) => setImmediate(r));
       expect(notifications.emit.mock.calls[0][0].userIds).toEqual(['owner-9']);
     });
 
-    it('notifies nobody when the private agent has no recorded owner', async () => {
+    it('a private agent with no recorded owner runs for nobody, so nobody is notified', async () => {
       const engine = makeEngine();
-      await runFailing(engine, { triggerType: 'scheduled' }, 'user-1', privateAgent(null));
+      await expect(runFailing(engine, { triggerType: 'scheduled' }, 'user-1', privateAgent(null))).rejects.toThrow(
+        'Agent not found',
+      );
       expect(notifications.emit).not.toHaveBeenCalled();
     });
   });

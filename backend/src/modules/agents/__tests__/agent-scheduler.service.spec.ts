@@ -1,3 +1,7 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
+import { AgentExecution } from '../../../entities/agent-execution.entity';
+import { fakeRepository } from '../../../test/fake-repository';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
@@ -10,7 +14,6 @@ import { ModelNotFoundError } from '../../llm-providers/model-errors';
 
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
 import { User } from '../../../entities/user.entity';
-import { fakeRepository } from '../../../test/fake-repository';
 
 describe('AgentSchedulerService', () => {
   let service: AgentSchedulerService;
@@ -45,13 +48,19 @@ describe('AgentSchedulerService', () => {
       execute: jest.fn().mockResolvedValue({}),
     };
 
+    // The execution gate sees the same memberships as the users table: only
+    // ...0001 is an active member of org-1.
+    const access = membershipFixture();
+    access.member('org-1', '11111111-1111-4111-8111-000000000001');
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: ExecutionAccessService, useValue: access.executionAccess },
         AgentSchedulerService,
         { provide: AgentsService, useValue: agentsService },
         { provide: AgentExecutionEngine, useValue: executionEngine },
         { provide: getRepositoryToken(Agent), useValue: agentRepo },
         { provide: getQueueToken('agent-scheduler'), useValue: queue },
+        { provide: getRepositoryToken(AgentExecution), useValue: fakeRepository<any>([]) },
         { provide: getRepositoryToken(User), useValue: users },
       ],
     }).compile();

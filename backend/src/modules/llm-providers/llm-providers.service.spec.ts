@@ -2818,7 +2818,7 @@ describe('LlmProvidersService', () => {
         'tool-1',
         { location: 'NYC' },
         // No user is passed as no user, not as a 'system' id Postgres would refuse.
-        { userId: undefined, organizationId: 'org-1' }
+        { userId: undefined, organizationId: 'org-1', principal: { kind: 'user', userId: null, source: 'session' } }
       );
     });
   });
