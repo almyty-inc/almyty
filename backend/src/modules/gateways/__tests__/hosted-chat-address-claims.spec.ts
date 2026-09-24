@@ -141,13 +141,39 @@ describe('hosted-chat address claims', () => {
         ...over,
       } as unknown as Gateway);
 
+    /**
+     * A query builder that applies the clauses it is given to `rows`.
+     *
+     * The canned version returned `rows` whatever was asked, so the
+     * hostname was never compared and the `status = 'active'` clause -- the
+     * one that keeps an unverified claim off a live domain -- could be
+     * deleted with every test green. A clause not modelled here throws.
+     */
+    const CLAUSES: Record<string, (row: any, params: any) => boolean> = {
+      'gateway.type = :type': (row, p) => row.type === p.type,
+      "gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname": (row, p) =>
+        row.configuration?.customDomain?.hostname === p.hostname,
+      "gateway.configuration -> 'customDomain' ->> 'status' = :status": (row, p) =>
+        row.configuration?.customDomain?.status === p.status,
+    };
+
     const serviceFor = (rows: Gateway[]) => {
       const gatewayRepository: any = {
-        createQueryBuilder: jest.fn(() => ({
-          where: jest.fn().mockReturnThis(),
-          andWhere: jest.fn().mockReturnThis(),
-          getMany: jest.fn().mockResolvedValue(rows),
-        })),
+        createQueryBuilder: jest.fn(() => {
+          const filters: Array<(row: any) => boolean> = [];
+          const add = (clause: string, params: any) => {
+            const test = CLAUSES[clause];
+            if (!test) throw new Error(`unmodelled clause in findByCustomDomain: ${clause}`);
+            filters.push((row) => test(row, params));
+            return qb;
+          };
+          const qb: any = {
+            where: add,
+            andWhere: add,
+            getMany: async () => rows.filter((row) => filters.every((f) => f(row))),
+          };
+          return qb;
+        }),
       };
       return new HostedChatService(
         gatewayRepository,
@@ -158,10 +184,30 @@ describe('hosted-chat address claims', () => {
       );
     };
 
-    it('resolves the single live claimant', async () => {
+    it('resolves the single live claimant, matching the hostname case-insensitively', async () => {
       await expect(serviceFor([gateway()]).findByCustomDomain('Chat.Acme.com ')).resolves.toMatchObject(
         { id: 'gw-1' },
       );
+    });
+
+    // Serving a claim still `pending` would let anyone point a hostname at
+    // the platform and take delivery before proving they own it.
+    it('does not serve a claim that has not finished verification', async () => {
+      const pending = gateway({
+        configuration: { customDomain: { hostname: 'chat.acme.com', status: 'pending' } },
+      } as any);
+
+      await expect(serviceFor([pending]).findByCustomDomain('chat.acme.com')).resolves.toBeNull();
+    });
+
+    it('does not answer with a gateway that claims a different hostname', async () => {
+      await expect(serviceFor([gateway()]).findByCustomDomain('chat.other.com')).resolves.toBeNull();
+    });
+
+    it('does not answer with a gateway of another type holding the same claim', async () => {
+      const widget = gateway({ type: GatewayType.CHAT_WIDGET } as any);
+
+      await expect(serviceFor([widget]).findByCustomDomain('chat.acme.com')).resolves.toBeNull();
     });
 
     it('refuses to serve a hostname two live gateways claim', async () => {

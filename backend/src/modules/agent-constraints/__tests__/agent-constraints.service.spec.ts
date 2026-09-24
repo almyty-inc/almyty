@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 
 import { AgentConstraintsService } from '../agent-constraints.service';
+import { fakeRepository, FakeRepository } from '../../../test/fake-repository';
 
 /**
  * Unit tests for AgentConstraintsService — the failure-memory store: CRUD,
@@ -8,53 +9,18 @@ import { AgentConstraintsService } from '../agent-constraints.service';
  * failed run (deterministic + LLM distiller, with dedup).
  */
 describe('AgentConstraintsService', () => {
-  let store: any[];
-  let repo: any;
+  // A table that evaluates its criteria and stores copies. The hand-rolled
+  // double this replaces handed out the stored object itself, so the
+  // `save` in `setActive` could be deleted unnoticed, and its `delete` was
+  // never asked about another organization's row.
+  let repo: FakeRepository<any>;
   let llm: { chat: jest.Mock };
   let service: AgentConstraintsService;
 
   beforeEach(() => {
-    store = [];
-    let idc = 0;
-    repo = {
-      find: jest.fn(({ where }: any) =>
-        Promise.resolve(
-          store.filter(
-            (c) =>
-              c.organizationId === where.organizationId &&
-              (where.agentId ? c.agentId === where.agentId : true) &&
-              (where.active === undefined ? true : c.active === where.active),
-          ),
-        ),
-      ),
-      findOne: jest.fn(({ where }: any) =>
-        Promise.resolve(
-          store.find(
-            (c) =>
-              (where.id ? c.id === where.id : true) &&
-              c.organizationId === where.organizationId &&
-              (where.agentId ? c.agentId === where.agentId : true) &&
-              (where.rule ? c.rule === where.rule : true) &&
-              (where.active === undefined ? true : c.active === where.active),
-          ) || null,
-        ),
-      ),
-      create: jest.fn((x: any) => ({ ...x })),
-      save: jest.fn((c: any) => {
-        if (!c.id) c.id = `c-${++idc}`;
-        const i = store.findIndex((x) => x.id === c.id);
-        if (i >= 0) store[i] = c;
-        else store.push(c);
-        return Promise.resolve(c);
-      }),
-      delete: jest.fn(({ id, organizationId }: any) => {
-        const before = store.length;
-        store = store.filter((c) => !(c.id === id && c.organizationId === organizationId));
-        return Promise.resolve({ affected: before - store.length });
-      }),
-    };
+    repo = fakeRepository<any>({ idPrefix: 'c' });
     llm = { chat: jest.fn() };
-    service = new AgentConstraintsService(repo, llm as any);
+    service = new AgentConstraintsService(repo as any, llm as any);
   });
 
   it('adds and lists active rules for prompt injection', async () => {
@@ -88,7 +54,7 @@ describe('AgentConstraintsService', () => {
     const first = await service.recordFromRun(run);
     const second = await service.recordFromRun(run);
     expect(second?.id).toBe(first?.id);
-    expect(store).toHaveLength(1);
+    expect(repo.rows()).toHaveLength(1);
   });
 
   it('uses the LLM distiller when configured', async () => {
@@ -101,5 +67,20 @@ describe('AgentConstraintsService', () => {
 
   it('throws NotFound removing a missing constraint', async () => {
     await expect(service.remove('nope', 'org-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('persists a flipped constraint', async () => {
+    const c = await service.add('org-1', 'a1', 'Always cite sources', 'u1');
+
+    await service.setActive(c.id, 'org-1', false, 'a1');
+
+    expect(repo.row(c.id)!.active).toBe(false);
+  });
+
+  it('does not remove a constraint owned by another organization', async () => {
+    const c = await service.add('org-1', 'a1', 'Always cite sources', 'u1');
+
+    await expect(service.remove(c.id, 'org-2')).rejects.toBeInstanceOf(NotFoundException);
+    expect(repo.rows()).toHaveLength(1);
   });
 });

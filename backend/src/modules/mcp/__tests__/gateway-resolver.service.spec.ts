@@ -86,37 +86,52 @@ describe('GatewayResolverService', () => {
       });
     });
 
-    it('should find org by name-based slug fallback', async () => {
-      // First findOne (by slug) returns null
-      jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(null);
-      // Fallback: JSONB query via createQueryBuilder (previously
-      // this path loaded every org into memory via `.find()` — now
-      // it's a single targeted SQL query). Monkey-patch the
-      // createQueryBuilder property onto the mocked repo since
-      // mockRepository() doesn't provide it.
-      const orgWithName = { ...mockOrganization, name: 'My Cool Org', slug: 'something-else' };
-      const qbStub: any = {
-        where: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue(orgWithName),
+    /**
+     * The name-based fallback, against a query builder that evaluates the
+     * one clause it models over a table of organizations and throws on any
+     * other SQL. A fluent `mockReturnThis()` stub answered its canned org
+     * whatever the predicate or the bound slug said.
+     */
+    const NAME_SLUG_SQL = `REPLACE(LOWER(org.name), ' ', '-') = :slug`;
+    function nameSlugQueryBuilder(orgs: Array<Partial<Organization>>) {
+      let matches: Array<Partial<Organization>> = [];
+      const qb: any = {
+        where: jest.fn((sql: string, params: { slug: string }) => {
+          if (sql !== NAME_SLUG_SQL) throw new Error(`unmodelled where: ${sql}`);
+          matches = orgs.filter(
+            (o) => String(o.name).toLowerCase().replace(/ /g, '-') === params.slug,
+          );
+          return qb;
+        }),
+        getOne: jest.fn(async () => matches[0] ?? null),
       };
-      (organizationRepository as any).createQueryBuilder = jest.fn().mockReturnValue(qbStub);
+      (organizationRepository as any).createQueryBuilder = jest.fn(() => qb);
+      return qb;
+    }
+
+    const orgWithName = { ...mockOrganization, name: 'My Cool Org', slug: 'something-else' };
+    const otherOrg = { ...mockOrganization, id: 'org-other', name: 'Other Org', slug: 'other' };
+
+    it('should find org by name-based slug fallback', async () => {
+      jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(null);
+      nameSlugQueryBuilder([otherOrg, orgWithName]);
 
       const result = await service.resolveOrganization('my-cool-org');
 
       expect(result).toEqual(orgWithName);
-      expect(qbStub.where).toHaveBeenCalled();
-      expect(qbStub.getOne).toHaveBeenCalled();
+    });
+
+    it('matches the name-based slug case-insensitively', async () => {
+      jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(null);
+      nameSlugQueryBuilder([otherOrg, orgWithName]);
+
+      await expect(service.resolveOrganization('My-Cool-Org')).resolves.toEqual(orgWithName);
     });
 
     it('should throw 404 for non-existent org', async () => {
       jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(null);
-      const qbStub: any = {
-        where: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue(null),
-      };
-      (organizationRepository as any).createQueryBuilder = jest.fn().mockReturnValue(qbStub);
+      nameSlugQueryBuilder([otherOrg, orgWithName]);
 
-      await expect(service.resolveOrganization('does-not-exist')).rejects.toThrow(HttpException);
       await expect(service.resolveOrganization('does-not-exist')).rejects.toMatchObject({
         status: HttpStatus.NOT_FOUND,
       });

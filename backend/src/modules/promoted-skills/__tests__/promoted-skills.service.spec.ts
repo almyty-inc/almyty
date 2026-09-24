@@ -3,6 +3,7 @@ import { NotFoundException, BadRequestException, ConflictException } from '@nest
 import { PromotedSkillsService } from '../promoted-skills.service';
 import { PromotedSkillRenderer } from '../promoted-skill-renderer';
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
+import { fakeRepository } from '../../../test/fake-repository';
 
 /**
  * Unit tests for PromotedSkillsService — promoting a completed run into a
@@ -206,5 +207,19 @@ describe('PromotedSkillsService', () => {
       ).rejects.toBeInstanceOf(ConflictException);
       expect(skillStore.find((s) => s.id === 'mine').content).toBe('private body');
     });
+  });
+
+  /**
+   * `runRepo.findOne` above answers its canned run for any `where`, so the
+   * organization half of the run lookup was never exercised. Against a
+   * table, a run in another organization is not found, and no skill (which
+   * would embed that run's transcript) is written.
+   */
+  it('refuses to promote a run that belongs to another organization', async () => {
+    const runs = fakeRepository<any>([completedRun({ organizationId: 'org-2' })]);
+    service = new PromotedSkillsService(skillRepo, runs as any, new PromotedSkillRenderer(), llm as any);
+
+    await expect(service.promoteFromRun('run-1', 'org-1', 'u', {})).rejects.toBeInstanceOf(NotFoundException);
+    expect(skillStore).toHaveLength(0);
   });
 });

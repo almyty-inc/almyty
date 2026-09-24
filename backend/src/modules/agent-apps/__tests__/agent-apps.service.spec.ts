@@ -6,6 +6,7 @@ import {
   DistributionStatus,
   DistributionTarget,
 } from '../../../entities/agent-app-distribution.entity';
+import { fakeRepository } from '../../../test/fake-repository';
 
 describe('AgentAppsService', () => {
   let appRepository: any;
@@ -17,6 +18,13 @@ describe('AgentAppsService', () => {
   let service: AgentAppsService;
 
   const ORG = 'org-1';
+
+  /** Agents as a table that evaluates its `where`: one ours, one another tenant's. */
+  const agentTable = () =>
+    fakeRepository<any>([
+      { id: 'agent-1', organizationId: ORG, visibility: 'org' },
+      { id: 'theirs', organizationId: 'org-2', visibility: 'org' },
+    ]);
 
   const app = (overrides: any = {}) => ({
     id: 'h-1',
@@ -195,11 +203,14 @@ describe('AgentAppsService', () => {
 
     it('refuses agents belonging to another organization', async () => {
       // Otherwise a product could serve another tenant's agent under
-      // its own branding.
-      agentRepository.find.mockResolvedValueOnce([{ id: 'agent-1' }]);
+      // its own branding. The agent table is real, so the refusal has to
+      // come from the organization in the query, not from a canned answer.
+      agentRepository.find.mockImplementation(agentTable().find);
+      appRepository.findOne.mockResolvedValueOnce(null); // no slug clash
       await expect(
-        service.create(ORG, { name: 'Acme', slug: 'acme', agentIds: ['agent-1', 'not-ours'] }),
-      ).rejects.toThrow(/not-ours/);
+        service.create(ORG, { name: 'Acme', slug: 'acme', agentIds: ['agent-1', 'theirs'] }),
+      ).rejects.toThrow(/theirs/);
+      expect(appRepository.save).not.toHaveBeenCalled();
     });
 
     it('allows a product with no agents yet, so it can be built up', async () => {
@@ -213,10 +224,11 @@ describe('AgentAppsService', () => {
 
   describe('update', () => {
     it('checks ownership again when the agent list changes', async () => {
-      agentRepository.find.mockResolvedValueOnce([]);
-      await expect(service.update(ORG, 'acme-support', { agentIds: ['stolen'] })).rejects.toThrow(
+      agentRepository.find.mockImplementation(agentTable().find);
+      await expect(service.update(ORG, 'acme-support', { agentIds: ['theirs'] })).rejects.toThrow(
         BadRequestException,
       );
+      expect(appRepository.save).not.toHaveBeenCalled();
     });
 
     it('allows keeping the same slug', async () => {

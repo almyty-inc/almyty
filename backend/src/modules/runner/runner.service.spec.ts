@@ -10,6 +10,7 @@ import { RunnerCapabilityPublisher } from './runner-capability.publisher';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 import { OrganizationRole } from '../../entities/user-organization.entity';
 import { STALE_THRESHOLD_MS, OFFLINE_GRACE_MS } from './runner-state';
+import { FakeRepository, fakeRepository } from '../../test/fake-repository';
 
 /**
  * Service-level tests with mocked repositories. The pure FSM is tested
@@ -20,9 +21,9 @@ import { STALE_THRESHOLD_MS, OFFLINE_GRACE_MS } from './runner-state';
  */
 describe('RunnerService', () => {
   let service: RunnerService;
-  let runners: any;
-  let sessions: any;
-  let workspaces: any;
+  let runners: FakeRepository<Runner>;
+  let sessions: FakeRepository<RunnerSession>;
+  let workspaces: FakeRepository<Workspace> & { createQueryBuilder?: jest.Mock };
   let fakePublisher: { publish: jest.Mock; unpublish: jest.Mock; listForRunner: jest.Mock };
 
   const ownerUserId = 'user-1';
@@ -42,115 +43,63 @@ describe('RunnerService', () => {
   };
 
   beforeEach(async () => {
-    runners = {
-      _store: new Map<string, Runner>(),
-      findOne: jest.fn(async ({ where }: any) => {
-        for (const r of runners._store.values()) {
-          if (Object.entries(where).every(([k, v]: [string, any]) => (r as any)[k] === v)) return r;
-        }
-        return null;
-      }),
-      find: jest.fn(async ({ where }: any) => {
-        const all = Array.from(runners._store.values());
-        if (Array.isArray(where)) {
-          return all.filter(r => where.some((w: any) => Object.entries(w).every(([k, v]: any) => (r as any)[k] === v)));
-        }
-        return all.filter(r => Object.entries(where).every(([k, v]: [string, any]) => (r as any)[k] === v));
-      }),
-      create: jest.fn((data: Partial<Runner>) => ({
-        id: data.id ?? `r-${runners._store.size + 1}`,
+    // The shared truthful tables: rows copied in and out, every `where`
+    // evaluated, `update` a real compare-and-set. The doubles they replace
+    // handed out the stored row (so `update()`'s save could be deleted),
+    // matched session updates on a hard-coded shape, had no `count` (so
+    // `isOwnedBy` was never exercised) and held one organization's rows.
+    runners = fakeRepository<Runner>({
+      idPrefix: 'r',
+      make: () => Object.assign(new Runner(), {
         labels: {}, runtimeInfo: null, config: null, lastHeartbeatAt: null,
-        state: RunnerState.REGISTERED,
-        registeredAt: new Date(), updatedAt: new Date(),
-        ...data,
-      })),
-      save: jest.fn(async (r: Runner) => { runners._store.set(r.id, r); return r; }),
-      /**
-       * Conditional state write, modelled rather than stubbed. Every FSM
-       * transition carries the state it believes the runner is in, and
-       * the guard is the fix — a mock that always reported a hit would
-       * let a heartbeat overwrite a drain without a test going red.
-       */
-      update: jest.fn(async (criteria: any, patch: any) => {
-        let affected = 0;
-        for (const r of runners._store.values()) {
-          if (!Object.entries(criteria).every(([k, v]: any) => (r as any)[k] === v)) continue;
-          Object.assign(r, patch);
-          affected += 1;
-        }
-        return { affected };
+        state: RunnerState.REGISTERED, registeredAt: new Date(), updatedAt: new Date(),
       }),
-      remove: jest.fn(async (r: Runner) => { runners._store.delete(r.id); }),
+    });
+    sessions = fakeRepository<RunnerSession>({
+      idPrefix: 's',
+      make: () => Object.assign(new RunnerSession(), { connectedAt: new Date(), disconnectedAt: null, remoteAddress: null }),
+    });
+    workspaces = fakeRepository<Workspace>({ idPrefix: 'w' });
+    /**
+     * SELECT DISTINCT ws."runnerId" FROM workspaces ws JOIN runners r ...
+     * -- the self-heal lookup. Evaluates the exact clauses it models over
+     * both tables and throws on any other; the builder it replaces took
+     * the status and the states from the parameters and ignored the SQL.
+     */
+    const STRANDED_WORK_CLAUSES: Record<string, (ws: any, r: any, p: any) => boolean> = {
+      'ws.status = :active': (ws, _r, p) => ws.status === p.active,
+      'r.state IN (:...gone)': (_ws, r, p) => (p.gone as string[]).includes(r.state),
     };
-    sessions = {
-      _store: new Map<string, RunnerSession>(),
-      findOne: jest.fn(async ({ where, order }: any) => {
-        const matches: RunnerSession[] = Array.from(sessions._store.values() as Iterable<RunnerSession>).filter(s => {
-          for (const [k, v] of Object.entries(where)) {
-            // crude IsNull() impl for the test
-            if (v && typeof v === 'object' && (v as any)._type === 'isNull') {
-              if ((s as any)[k] !== null) return false;
-              continue;
-            }
-            if ((s as any)[k] !== v) return false;
+    workspaces.createQueryBuilder = jest.fn(() => {
+      const clauses: Array<{ sql: string; params: any }> = [];
+      const qb: any = {
+        select: (sql: string) => {
+          if (sql !== 'DISTINCT ws."runnerId"') throw new Error(`select ${sql} is not modelled`);
+          return qb;
+        },
+        innerJoin: (_entity: any, alias: string, on: string) => {
+          if (alias !== 'r' || on !== 'r.id = ws."runnerId"') throw new Error(`join ${alias} ON ${on} is not modelled`);
+          return qb;
+        },
+        where: (sql: string, params: any = {}) => { clauses.push({ sql, params }); return qb; },
+        andWhere: (sql: string, params: any = {}) => { clauses.push({ sql, params }); return qb; },
+        getRawMany: async () => {
+          const params = Object.assign({}, ...clauses.map((c) => c.params));
+          const predicates = clauses.map(({ sql }) => {
+            const p = STRANDED_WORK_CLAUSES[sql];
+            if (!p) throw new Error(`the clause "${sql}" is not modelled`);
+            return p;
+          });
+          const ids = new Set<string>();
+          for (const ws of workspaces.rows() as any[]) {
+            const r = runners.row(ws.runnerId);
+            if (r && predicates.every((p) => p(ws, r, params))) ids.add(ws.runnerId);
           }
-          return true;
-        });
-        if (order?.connectedAt === 'DESC') matches.sort((a, b) => b.connectedAt.getTime() - a.connectedAt.getTime());
-        return matches[0] ?? null;
-      }),
-      create: jest.fn((data: Partial<RunnerSession>) => ({
-        id: data.id ?? `s-${sessions._store.size + 1}`,
-        connectedAt: new Date(),
-        disconnectedAt: null,
-        remoteAddress: null,
-        ...data,
-      })),
-      save: jest.fn(async (s: RunnerSession) => { sessions._store.set(s.id, s); return s; }),
-      update: jest.fn(async (where: any, set: any) => {
-        for (const s of sessions._store.values()) {
-          if (s.streamableSessionId === where.streamableSessionId && s.disconnectedAt === null) {
-            Object.assign(s, set);
-          }
-        }
-      }),
-    };
-    workspaces = {
-      _store: new Map<string, Workspace>(),
-      count: jest.fn(async ({ where }: any) =>
-        Array.from(workspaces._store.values()).filter(ws =>
-          Object.entries(where).every(([k, v]: any) => (ws as any)[k] === v),
-        ).length,
-      ),
-      /**
-       * SELECT DISTINCT ws."runnerId" ... JOIN runners r ... WHERE
-       * ws.status = 'active' AND r.state IN ('offline','registered') —
-       * the self-heal lookup for a runner that can no longer be running
-       * the workspaces still pinned to it: flipped offline without its
-       * fan-out, or re-registered after a crash.
-       */
-      createQueryBuilder: jest.fn(() => {
-        let activeStatus: string | undefined;
-        let goneStates: string[] | undefined;
-        const qb: any = {
-          select: () => qb,
-          innerJoin: () => qb,
-          where: (_clause: string, params: any) => { activeStatus = params?.active; return qb; },
-          andWhere: (_clause: string, params: any) => { goneStates = params?.gone; return qb; },
-          getRawMany: async () => {
-            const ids = new Set<string>();
-            for (const ws of workspaces._store.values() as Iterable<Workspace>) {
-              if (activeStatus && ws.status !== activeStatus) continue;
-              const runner = runners._store.get(ws.runnerId);
-              if (!runner || !goneStates || !goneStates.includes(runner.state)) continue;
-              ids.add(ws.runnerId);
-            }
-            return [...ids].map((runnerId) => ({ runnerId }));
-          },
-        };
-        return qb;
-      }),
-    };
+          return [...ids].map((runnerId) => ({ runnerId }));
+        },
+      };
+      return qb;
+    });
 
 
     fakePublisher = {
@@ -171,6 +120,9 @@ describe('RunnerService', () => {
         { userId: 'colleague', organizationId, role: OrganizationRole.MEMBER, isActive: true },
         { userId: 'outsider', organizationId, role: OrganizationRole.MEMBER, isActive: true },
         { userId: 'admin-1', organizationId, role: OrganizationRole.ADMIN, isActive: true },
+        // user-1 is also a member of org-2, so a scope check cannot lean on
+        // the access policy refusing a stranger.
+        { userId: ownerUserId, organizationId: 'org-2', role: OrganizationRole.MEMBER, isActive: true },
       ],
       findOne: async ({ where }: any) => userOrgs.rows.find(r =>
         r.userId === where.userId && r.organizationId === where.organizationId && r.isActive,
@@ -321,7 +273,7 @@ describe('RunnerService', () => {
       { name: 'r1', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
       ownerUserId, organizationId,
     );
-    workspaces._store.set('w1', { id: 'w1', runnerId: runner.id, status: WorkspaceStatus.ACTIVE } as any);
+    workspaces.seed({ id: 'w1', runnerId: runner.id, status: WorkspaceStatus.ACTIVE } as any);
     const updated = await service.heartbeat(runner.id);
     expect(updated.state).toBe(RunnerState.BUSY);
   });
@@ -334,8 +286,7 @@ describe('RunnerService', () => {
       ownerUserId, organizationId,
     );
     await service.heartbeat(runner.id);
-    runner.lastHeartbeatAt = new Date(Date.now() - STALE_THRESHOLD_MS - 5_000);
-    await runners.save(runner);
+    await runners.update(runner.id, { lastHeartbeatAt: new Date(Date.now() - STALE_THRESHOLD_MS - 5_000) });
 
     const result = await service.tick(new Date());
     expect(result.transitioned).toBe(1);
@@ -378,7 +329,7 @@ describe('RunnerService', () => {
     const r1 = await service.onSessionConnect(runner.id, 'sh_abc');
     const r2 = await service.onSessionConnect(runner.id, 'sh_abc');
     expect(r2.id).toBe(r1.id);
-    expect(sessions._store.size).toBe(1);
+    expect(sessions.rows()).toHaveLength(1);
   });
 
   it('onSessionDisconnect stamps disconnectedAt on the matching row', async () => {
@@ -388,7 +339,7 @@ describe('RunnerService', () => {
     );
     await service.onSessionConnect(runner.id, 'sh_abc');
     await service.onSessionDisconnect('sh_abc');
-    const row = Array.from(sessions._store.values())[0] as RunnerSession;
+    const row = sessions.rows()[0];
     expect(row.disconnectedAt).toBeInstanceOf(Date);
   });
 
@@ -473,7 +424,7 @@ describe('RunnerService', () => {
 
     it('is usable by its owner on every path', async () => {
       const runner = await registerAs('private');
-      runner.state = RunnerState.ONLINE;
+      await runners.update(runner.id, { state: RunnerState.ONLINE });
       await expect(service.getOne(runner.id, ownerUserId, organizationId)).resolves.toMatchObject({ id: runner.id });
       await expect(service.getUsable(runner.id, ownerUserId, organizationId)).resolves.toMatchObject({ id: runner.id });
       await expect(service.resolveForDispatch(runner.id, ownerUserId)).resolves.toMatchObject({ id: runner.id });
@@ -508,14 +459,14 @@ describe('RunnerService', () => {
         await expect(service.unregister(runner.id, user, organizationId))
           .rejects.toBeInstanceOf(NotFoundException);
       }
-      expect(runners._store.get(runner.id)?.visibility).toBe('private');
+      expect(runners.row(runner.id)?.visibility).toBe('private');
     });
   });
 
   describe('a team runner', () => {
     it('is usable by a team member and refused to a member outside the team', async () => {
       const runner = await registerAs('team');
-      runner.state = RunnerState.ONLINE;
+      await runners.update(runner.id, { state: RunnerState.ONLINE });
       await expect(service.resolveForDispatch(runner.id, 'colleague')).resolves.toMatchObject({ id: runner.id });
       await expect(service.resolveForDispatch(runner.id, 'outsider')).rejects.toBeInstanceOf(NotFoundException);
       await expect(service.resolveForDispatch(runner.id)).rejects.toBeInstanceOf(NotFoundException);
@@ -530,7 +481,7 @@ describe('RunnerService', () => {
     await expect(service.create({ name: 'franemb' }, 'colleague', organizationId))
       .rejects.toBeInstanceOf(ConflictException);
     // The owner's runner, and its published tools, are untouched.
-    const rows = Array.from(runners._store.values()) as Runner[];
+    const rows = runners.rows();
     expect(rows.filter(r => r.name === 'franemb')).toHaveLength(1);
     expect(rows.find(r => r.name === 'franemb')?.ownerUserId).toBe(ownerUserId);
     expect(fakePublisher.publish).toHaveBeenCalledTimes(1);
@@ -575,7 +526,7 @@ describe('RunnerService', () => {
       const renamed = await service.update(runner.id, ownerUserId, organizationId, { name: 'franemb2' });
       expect(renamed.name).toBe('franemb2');
       await service.unregister(runner.id, ownerUserId, organizationId);
-      expect(runners._store.has(runner.id)).toBe(false);
+      expect(runners.row(runner.id)).toBeUndefined();
     });
 
     it('a runner that has connected keeps its name', async () => {
@@ -586,5 +537,100 @@ describe('RunnerService', () => {
       await expect(service.update(runner.id, ownerUserId, organizationId, { name: 'renamed' }))
         .rejects.toBeInstanceOf(ConflictException);
     });
+  });
+
+  // ── what the truthful tables can now see ────────────────────────────
+  //
+  // Every guard below could be deleted with this module green: no test
+  // put a second organization's runner in the table, the old runner
+  // double had no `count` at all, and its rows were the objects the
+  // service mutated, so a dropped save went unnoticed.
+
+  describe('organization and owner scoping', () => {
+    const RUNNER_ID = '5f0c8a4e-2b7d-4c1e-9a3f-6d2e8b1c7a90';
+    // The same user's runner in another organization they belong to.
+    const seedElsewhere = () =>
+      runners.seed({
+        id: RUNNER_ID, name: 'r1', ownerUserId, organizationId: 'org-2', visibility: 'org', teamId: null,
+        state: RunnerState.ONLINE, labels: { keep: 'me' }, runtimeInfo: validRuntimeInfo as any, config: validConfig,
+      });
+
+    it('isOwnedBy answers yes only for the owner, inside the runner’s own organization', async () => {
+      runners.seed({ id: RUNNER_ID, name: 'r1', ownerUserId, organizationId, visibility: 'org', state: RunnerState.ONLINE });
+
+      expect(await service.isOwnedBy(RUNNER_ID, organizationId, ownerUserId)).toBe(true);
+      // A colleague naming this runner in a hello must not become its route.
+      expect(await service.isOwnedBy(RUNNER_ID, organizationId, 'colleague')).toBe(false);
+      expect(await service.isOwnedBy(RUNNER_ID, 'org-2', ownerUserId)).toBe(false);
+    });
+
+    it('a runner in another organization cannot be read, owned, changed or deleted from this one', async () => {
+      seedElsewhere();
+
+      await expect(service.getOne(RUNNER_ID, ownerUserId, organizationId)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.getOwned(RUNNER_ID, ownerUserId, organizationId)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.update(RUNNER_ID, ownerUserId, organizationId, { labels: {} })).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.unregister(RUNNER_ID, ownerUserId, organizationId)).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(runners.row(RUNNER_ID)).toMatchObject({ organizationId: 'org-2', labels: { keep: 'me' } });
+    });
+
+    it('getOwned refuses a colleague’s org-wide runner', async () => {
+      const runner = await registerAs('org');
+      await expect(service.getOwned(runner.id, 'colleague', organizationId)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('a runner in another organization does not count against the single-runner cap here', async () => {
+      seedElsewhere();
+
+      const created = await service.create({ name: 'r2' }, ownerUserId, organizationId);
+      const registered = await service.register(
+        { name: 'r2', labels: {}, runtimeInfo: validRuntimeInfo, config: validConfig },
+        ownerUserId, organizationId,
+      );
+
+      expect(created).toMatchObject({ organizationId, name: 'r2' });
+      expect(registered.runner.id).toBe(created.id);
+      expect(runners.row(RUNNER_ID)).toMatchObject({ organizationId: 'org-2', name: 'r1', state: RunnerState.ONLINE });
+    });
+  });
+
+  it('update writes the change to the table', async () => {
+    const runner = await registerAs('org');
+    await service.update(runner.id, ownerUserId, organizationId, { labels: { tier: 'b' } });
+    expect(runners.row(runner.id)?.labels).toEqual({ tier: 'b' });
+  });
+
+  it('heartbeat counts only ACTIVE workspaces: a released one leaves the runner ONLINE', async () => {
+    const runner = await registerAs('org');
+    workspaces.seed({ id: 'w-done', runnerId: runner.id, status: WorkspaceStatus.RELEASED } as any);
+    expect((await service.heartbeat(runner.id)).state).toBe(RunnerState.ONLINE);
+  });
+
+  it('a disconnect closes only the open session, and a closed one is never the active route', async () => {
+    const runner = await registerAs('org');
+    const earlier = new Date(Date.now() - 60_000);
+    sessions.seed({ id: 's-old', runnerId: runner.id, streamableSessionId: 'sh_abc', connectedAt: earlier, disconnectedAt: earlier });
+    await service.onSessionConnect(runner.id, 'sh_new');
+    sessions.seed({ id: 's-reused', runnerId: runner.id, streamableSessionId: 'sh_abc', connectedAt: new Date(Date.now() + 1000), disconnectedAt: null });
+
+    await service.onSessionDisconnect('sh_abc');
+
+    expect(sessions.row('s-old')?.disconnectedAt).toEqual(earlier);
+    expect(sessions.row('s-reused')?.disconnectedAt).toBeInstanceOf(Date);
+    expect(await service.getActiveSession(runner.id)).toMatchObject({ streamableSessionId: 'sh_new' });
+    await service.onSessionDisconnect('sh_new');
+    expect(await service.getActiveSession(runner.id)).toBeNull();
+  });
+
+  it('tick re-strands only runners that are gone and still hold ACTIVE work', async () => {
+    runners.seed({ id: 'r-off', name: 'off', ownerUserId, organizationId, state: RunnerState.OFFLINE });
+    runners.seed({ id: 'r-done', name: 'done', ownerUserId, organizationId, state: RunnerState.OFFLINE });
+    runners.seed({ id: 'r-live', name: 'live', ownerUserId, organizationId, state: RunnerState.ONLINE, lastHeartbeatAt: new Date() });
+    workspaces.seed({ id: 'w-1', runnerId: 'r-off', status: WorkspaceStatus.ACTIVE } as any);
+    workspaces.seed({ id: 'w-2', runnerId: 'r-done', status: WorkspaceStatus.STRANDED } as any);
+    workspaces.seed({ id: 'w-3', runnerId: 'r-live', status: WorkspaceStatus.ACTIVE } as any);
+
+    expect((await service.tick(new Date())).markStrandedFor).toEqual(['r-off']);
   });
 });

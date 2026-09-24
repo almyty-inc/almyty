@@ -11,10 +11,11 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ModuleRef } from '@nestjs/core';
 import { ToolAuthService } from './tool-auth.service';
-import { Credential } from '../../../entities/credential.entity';
+import { Credential, CredentialType } from '../../../entities/credential.entity';
 import { Api } from '../../../entities/api.entity';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
+import { fakeRepository } from '../../../test/fake-repository';
 
 describe('ToolAuthService.applyApiAuth — api_key field-name compatibility', () => {
   let service: ToolAuthService;
@@ -90,5 +91,74 @@ describe('ToolAuthService.applyApiAuth — api_key field-name compatibility', ()
       opts,
     );
     expect(cfg2.headers.Authorization).toBe(`Basic ${Buffer.from('u:p').toString('base64')}`);
+  });
+});
+
+/**
+ * The stored-credential lookup is `where: { apiId, organizationId,
+ * isActive: true }`. Every spec that reaches it stubs `findOne` with a
+ * canned answer, so the `organizationId` half could go and an execution
+ * in one tenant would pick up another tenant's credential for the same
+ * api id. Here the credential table is real.
+ */
+describe('ToolAuthService.applyApiAuth — credential lookup is tenant-scoped', () => {
+  const storedBearer = (organizationId: string, over: Record<string, any> = {}) => ({
+    id: `cred-${organizationId}`,
+    apiId: 'api-1',
+    organizationId,
+    isActive: true,
+    type: CredentialType.BEARER_TOKEN,
+    config: { token: `token-of-${organizationId}` },
+    createdAt: new Date('2026-01-01'),
+    ...over,
+  });
+
+  async function build(rows: any[]): Promise<ToolAuthService> {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        ToolAuthService,
+        { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
+        {
+          provide: getRepositoryToken(Credential),
+          useValue: fakeRepository<any>({ seed: rows, make: () => new Credential() }),
+        },
+        { provide: ModuleRef, useValue: { get: jest.fn() } },
+      ],
+    }).compile();
+    return moduleRef.get(ToolAuthService);
+  }
+
+  const api = { id: 'api-1', authentication: null } as any;
+
+  it('uses the credential that belongs to the calling organization', async () => {
+    // The other tenant's row is newer, so it would win a lookup that
+    // forgot the organization.
+    const service = await build([
+      storedBearer('org-1'),
+      storedBearer('org-2', { createdAt: new Date('2026-06-01') }),
+    ]);
+    const config: any = { headers: {} };
+
+    await service.applyApiAuth(config, api, { organizationId: 'org-1' } as any);
+
+    expect(config.headers.Authorization).toBe('Bearer token-of-org-1');
+  });
+
+  it('does not reach for another organization’s credential', async () => {
+    const service = await build([storedBearer('org-2')]);
+    const config: any = { headers: {} };
+
+    await service.applyApiAuth(config, api, { organizationId: 'org-1' } as any);
+
+    expect(config.headers.Authorization).toBeUndefined();
+  });
+
+  it('ignores a deactivated credential', async () => {
+    const service = await build([storedBearer('org-1', { isActive: false })]);
+    const config: any = { headers: {} };
+
+    await service.applyApiAuth(config, api, { organizationId: 'org-1' } as any);
+
+    expect(config.headers.Authorization).toBeUndefined();
   });
 });

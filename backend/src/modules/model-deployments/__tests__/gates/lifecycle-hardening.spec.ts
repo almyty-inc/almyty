@@ -223,13 +223,8 @@ describe('deployment lifecycle hardening', () => {
    */
   it('a teardown committed while a provider read is in flight survives the tick that missed it', async () => {
     await processor.reconcile(id);
-    // Two requests get two entities, the way TypeORM hands each its own.
-    deployments.findOne.mockImplementation(async (opts: any) => {
-      const row: any = [...deployments.rows.values()].find(
-        (r: any) => r.id === opts?.where?.id && (opts?.where?.organizationId === undefined || r.organizationId === opts.where.organizationId),
-      );
-      return row ? Object.assign(new ModelDeployment(), row) : null;
-    });
+    // Two requests get two entities: the repository hands each read its
+    // own copy, the way TypeORM does.
 
     const read = jest.spyOn(stub, 'readEndpoint').mockImplementationOnce(async () => {
       await service.teardown(ORG, id, 'owner-1');

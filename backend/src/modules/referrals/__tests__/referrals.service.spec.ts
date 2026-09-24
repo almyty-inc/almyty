@@ -14,8 +14,9 @@ describe('ReferralsService', () => {
   let audit: ReturnType<typeof makeAudit>;
   let service: ReferralsService;
 
-  const referrerOrg = () => orgRepo.store.find((o) => o.id === 'org-referrer');
-  const referredOrg = () => orgRepo.store.find((o) => o.id === 'org-referred');
+  // Reads of the table as it stands, never of an object the service held.
+  const referrerOrg = () => orgRepo.row('org-referrer');
+  const referredOrg = () => orgRepo.row('org-referred');
 
   beforeEach(() => {
     codeRepo = makeRepo('code');
@@ -53,7 +54,7 @@ describe('ReferralsService', () => {
 
       expect(first.code).toMatch(/^[A-Z2-9]{8}$/);
       expect(second.code).toBe(first.code);
-      expect(codeRepo.store).toHaveLength(1);
+      expect(codeRepo.rows()).toHaveLength(1);
       expect(first.createdFromIp).toBe('10.0.0.1');
     });
 
@@ -71,7 +72,7 @@ describe('ReferralsService', () => {
 
       expect(second.code).toBe('FRESH234');
       expect(spy).toHaveBeenCalledTimes(3);
-      const codes = codeRepo.store.map((c) => c.code);
+      const codes = codeRepo.rows().map((c) => c.code);
       expect(new Set(codes).size).toBe(codes.length);
     });
 
@@ -82,7 +83,7 @@ describe('ReferralsService', () => {
     });
 
     it('rejects enterprise organizations', async () => {
-      referrerOrg().plan = 'enterprise';
+      orgRepo.patch('org-referrer', { plan: 'enterprise' });
       await expect(service.getOrCreateCode('user-1', 'org-referrer')).rejects.toThrow(
         ForbiddenException,
       );
@@ -132,8 +133,7 @@ describe('ReferralsService', () => {
     });
 
     it('does not touch a referred org that is not on free', async () => {
-      referredOrg().plan = 'pro';
-      referredOrg().planExpiresAt = new Date(Date.now() + 5 * DAY_MS);
+      orgRepo.patch('org-referred', { plan: 'pro', planExpiresAt: new Date(Date.now() + 5 * DAY_MS) });
       const referral = await attribute();
 
       expect(referral).not.toBeNull();
@@ -147,20 +147,20 @@ describe('ReferralsService', () => {
       code.active = false;
       await codeRepo.save(code);
       expect(await attribute()).toBeNull();
-      expect(referralRepo.store).toHaveLength(0);
+      expect(referralRepo.rows()).toHaveLength(0);
     });
 
     it('excludes enterprise referrer orgs from attribution', async () => {
-      referrerOrg().plan = 'enterprise';
+      orgRepo.patch('org-referrer', { plan: 'enterprise' });
       expect(await attribute()).toBeNull();
-      expect(referralRepo.store).toHaveLength(0);
+      expect(referralRepo.rows()).toHaveLength(0);
       expect(referredOrg().plan).toBe('free');
     });
 
     it('excludes enterprise referred orgs from attribution', async () => {
-      referredOrg().plan = 'enterprise';
+      orgRepo.patch('org-referred', { plan: 'enterprise' });
       expect(await attribute()).toBeNull();
-      expect(referralRepo.store).toHaveLength(0);
+      expect(referralRepo.rows()).toHaveLength(0);
     });
 
     it('ignores self-referrals', async () => {
@@ -170,7 +170,7 @@ describe('ReferralsService', () => {
     it('attributes a referred user at most once', async () => {
       await attribute();
       expect(await attribute({ organizationId: 'org-referred' })).toBeNull();
-      expect(referralRepo.store).toHaveLength(1);
+      expect(referralRepo.rows()).toHaveLength(1);
     });
 
     it('flags same-IP referrals (code IP) and withholds the referee reward', async () => {
@@ -182,7 +182,7 @@ describe('ReferralsService', () => {
     });
 
     it('flags same-IP referrals across sibling referrals of the same referrer', async () => {
-      orgRepo.store.push({ id: 'org-referred-2', plan: 'free', planExpiresAt: null });
+      orgRepo.seed({ id: 'org-referred-2', plan: 'free', planExpiresAt: null });
       await attribute(); // first referral from 203.0.113.7 — clean
 
       const second = await attribute({
@@ -225,18 +225,17 @@ describe('ReferralsService', () => {
     });
 
     it('extends planExpiresAt for a pro referrer (tier 1)', async () => {
-      referrerOrg().plan = 'pro';
       const expiry = new Date(Date.now() + 10 * DAY_MS);
-      referrerOrg().planExpiresAt = expiry;
+      orgRepo.patch('org-referrer', { plan: 'pro', planExpiresAt: expiry });
 
       const granted = await service.awardReferrerDays(referral, 14, 'tier1');
 
       expect(granted).toBe(14);
-      expect(referral.rewardDays).toBe(14);
+      expect(referralRepo.row(referral.id)!.rewardDays).toBe(14);
       expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(
         expiry.getTime() + 14 * DAY_MS,
       );
-      expect(code.accruedRewardDays).toBe(0);
+      expect(codeRepo.row(code.id)!.accruedRewardDays).toBe(0);
     });
 
     it('banks days for a free referrer instead of applying them', async () => {
@@ -245,22 +244,21 @@ describe('ReferralsService', () => {
       expect(granted).toBe(14);
       expect(referrerOrg().plan).toBe('free');
       expect(referrerOrg().planExpiresAt).toBeNull();
-      expect(codeRepo.store[0].accruedRewardDays).toBe(14);
-      expect(referral.rewardDays).toBe(14);
+      expect(codeRepo.row(code.id)!.accruedRewardDays).toBe(14);
+      expect(referralRepo.row(referral.id)!.rewardDays).toBe(14);
     });
 
     it('stacks tier-1 then tier-2 on the same referral', async () => {
-      referrerOrg().plan = 'pro';
-      referrerOrg().planExpiresAt = new Date(Date.now() + DAY_MS);
+      orgRepo.patch('org-referrer', { plan: 'pro', planExpiresAt: new Date(Date.now() + DAY_MS) });
 
       await service.awardReferrerDays(referral, 14, 'tier1');
       await service.awardReferrerDays(referral, 30, 'tier2');
 
-      expect(referral.rewardDays).toBe(44);
+      expect(referralRepo.row(referral.id)!.rewardDays).toBe(44);
     });
 
     it('enforces the 365-day yearly cap across a referrer referrals', async () => {
-      referrerOrg().plan = 'pro';
+      orgRepo.patch('org-referrer', { plan: 'pro' });
       // Bank 360 days across earlier referrals qualified within the year.
       await referralRepo.save({
         referrerUserId: 'user-referrer',
@@ -280,7 +278,7 @@ describe('ReferralsService', () => {
     });
 
     it('ignores grants older than a year for the cap window', async () => {
-      referrerOrg().plan = 'pro';
+      orgRepo.patch('org-referrer', { plan: 'pro' });
       await referralRepo.save({
         referrerUserId: 'user-referrer',
         referredUserId: 'user-ancient',
@@ -296,12 +294,13 @@ describe('ReferralsService', () => {
 
     it('never rewards flagged referrals', async () => {
       referral.abuseFlag = ReferralAbuseFlag.SAME_IP;
+      referralRepo.patch(referral.id, { abuseFlag: ReferralAbuseFlag.SAME_IP });
       expect(await service.awardReferrerDays(referral, 14, 'tier1')).toBe(0);
-      expect(referral.rewardDays).toBe(0);
+      expect(referralRepo.row(referral.id)!.rewardDays).toBe(0);
     });
 
     it('never rewards enterprise referrer orgs', async () => {
-      referrerOrg().plan = 'enterprise';
+      orgRepo.patch('org-referrer', { plan: 'enterprise' });
       expect(await service.awardReferrerDays(referral, 14, 'tier1')).toBe(0);
     });
   });
@@ -311,14 +310,14 @@ describe('ReferralsService', () => {
       const code = await service.getOrCreateCode('user-referrer', 'org-referrer');
       code.accruedRewardDays = 20;
       await codeRepo.save(code);
-      referrerOrg().plan = 'pro';
-      referrerOrg().planExpiresAt = null;
+      orgRepo.patch('org-referrer', { plan: 'pro', planExpiresAt: null });
 
       const before = Date.now();
       const applied = await service.applyAccruedDays(code);
 
       expect(applied).toBe(20);
-      expect(code.accruedRewardDays).toBe(0);
+      // The bank is claimed in the table, not just zeroed on this copy.
+      expect(codeRepo.row(code.id)!.accruedRewardDays).toBe(0);
       const expiry = new Date(referrerOrg().planExpiresAt).getTime();
       expect(expiry).toBeGreaterThanOrEqual(before + 19 * DAY_MS);
     });
@@ -326,9 +325,10 @@ describe('ReferralsService', () => {
     it('does nothing while the org is still on free', async () => {
       const code = await service.getOrCreateCode('user-referrer', 'org-referrer');
       code.accruedRewardDays = 20;
+      await codeRepo.save(code);
 
       expect(await service.applyAccruedDays(code)).toBe(0);
-      expect(code.accruedRewardDays).toBe(20);
+      expect(codeRepo.row(code.id)!.accruedRewardDays).toBe(20);
     });
 
     it('extends from the current expiry when it is in the future, from now when lapsed', () => {
@@ -375,7 +375,7 @@ describe('ReferralsService', () => {
       expect(rows).toHaveLength(3);
       expect(rows[0].status).toBe('pending_review'); // newest first, flagged
       expect(rows.map((r: any) => r.id)).not.toContain(
-        referralRepo.store.find((r) => r.referrerUserId === 'user-b')!.id,
+        referralRepo.rows().find((r) => r.referrerUserId === 'user-b')!.id,
       );
       // No referred-user PII in the payload
       expect(Object.keys(rows[0])).toEqual(
@@ -440,7 +440,7 @@ describe('ReferralsService verified gating + notifications', () => {
     const granted = await service.awardReferrerDays(referral, 14, 'tier1');
 
     expect(granted).toBe(0);
-    expect(referral.rewardDays).toBe(0);
+    expect(referralRepo.row(referral.id)!.rewardDays).toBe(0);
     expect(notifications.emit).not.toHaveBeenCalled();
   });
 
@@ -472,7 +472,7 @@ describe('ReferralsService verified gating + notifications', () => {
   });
 
   it('isRefereeVerified accepts the legacy isVerified boolean too', async () => {
-    userRepo.store.push({ id: 'user-legacy', verifiedAt: null, isVerified: true });
+    userRepo.seed({ id: 'user-legacy', verifiedAt: null, isVerified: true });
     const referral = await seed('user-legacy');
     expect(await service.isRefereeVerified(referral)).toBe(true);
   });
