@@ -266,10 +266,24 @@ describe('ConnectAccountButton', () => {
     expect(owner).not.toHaveTextContent(/only me/i)
 
     fireEvent.click(screen.getByRole('radio', { name: 'Personal' }))
-    expect(screen.getByText(/Only you can use it\. Unlike Private, admins who manage connections can still see and revoke it\./)).toBeInTheDocument()
+    expect(screen.getByTestId('connect-owner-hint')).toHaveTextContent('admins who manage connections can still see and revoke it')
 
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
     await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'user' })))
+  })
+
+  it('offers Private as its own tier, says how it differs, and sends owner: private', async () => {
+    vi.mocked(connectionsApi.connect).mockResolvedValue({ pending: false, connection: connection({ owner: 'private' }) })
+    render(<ConnectFlow embedded onCancel={() => {}} connectorKey="openai" onConnected={() => {}} />)
+    await screen.findByLabelText('API key')
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Private' }))
+    expect(screen.getByRole('radio', { name: 'Private' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('connect-owner-hint')).toHaveTextContent(/Only you\. Nobody else can see, use or revoke it, admins included/)
+
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-test-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+    await waitFor(() => expect(connectionsApi.connect).toHaveBeenCalledWith('openai', expect.objectContaining({ owner: 'private' })))
   })
 })
