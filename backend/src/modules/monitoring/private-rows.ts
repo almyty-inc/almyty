@@ -20,3 +20,13 @@ export function notOthersPrivateProvider(column: string): string {
   return `NOT EXISTS (SELECT 1 FROM llm_providers pp WHERE pp.id = ${column} ` +
     `AND pp.visibility = 'private' AND pp."ownerUserId" IS DISTINCT FROM :privateViewerId)`;
 }
+
+export function notOthersPrivateTool(column: string): string {
+  return `NOT EXISTS (SELECT 1 FROM tools pt WHERE pt.id = ${column} ` +
+    `AND pt.visibility = 'private' AND pt."createdBy" IS DISTINCT FROM :privateViewerId)`;
+}
+
+export function notOthersPrivateAgent(column: string): string {
+  return `NOT EXISTS (SELECT 1 FROM agents pa WHERE pa.id = ${column} ` +
+    `AND pa.visibility = 'private' AND pa."createdBy" IS DISTINCT FROM :privateViewerId)`;
+}
