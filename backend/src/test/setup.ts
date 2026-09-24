@@ -97,33 +97,14 @@ export const createMockProviders = (entities: any[]) => {
   }));
 };
 
-// Mock external HTTP calls
-export const mockAxios = {
-  get: jest.fn(),
-  post: jest.fn(),
-  put: jest.fn(),
-  delete: jest.fn(),
-  patch: jest.fn(),
-  request: jest.fn(),
-};
-
-jest.mock('axios', () => mockAxios);
-
-// Mock Redis
-export const mockRedis = {
-  get: jest.fn(),
-  set: jest.fn(),
-  del: jest.fn(),
-  exists: jest.fn(),
-  expire: jest.fn(),
-  ttl: jest.fn(),
-  keys: jest.fn(),
-  flushdb: jest.fn(),
-};
-
-jest.mock('redis', () => ({
-  createClient: () => mockRedis,
-}));
+// axios and redis stay real here too. The global doubles they replaced
+// answered every HTTP call and every redis command with `undefined`: a spec
+// could reach a real outbound request or a redis read without knowing it,
+// and pass, and a spec that declared its own axios mock silently got this
+// file's double instead of the one it asked for. A spec that needs HTTP
+// stubbed mocks axios itself or spies on the method it expects; one that
+// needs redis uses src/test/fake-redis.ts.
+// Pinned by __tests__/no-global-http-redis-doubles.spec.ts.
 
 // bcrypt and bcryptjs stay real here: a global double that says every
 // password matches makes every wrong-password path untestable. Specs that
@@ -159,8 +140,6 @@ export class TestHelper {
 
   static resetAllMocks() {
     jest.clearAllMocks();
-    Object.values(mockAxios).forEach(mock => mock.mockReset());
-    Object.values(mockRedis).forEach(mock => mock.mockReset());
   }
 }
 
