@@ -4,6 +4,7 @@ import { Conversation } from '../../../entities/conversation.entity';
 import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
 import { ChatRequest, ChatResponse, StreamChunk } from '../llm-providers.service';
+import { stepKindSignal } from '../dto/llm-providers.dto';
 import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
 import { requireModel } from '../model-errors';
 
@@ -271,6 +272,16 @@ export async function callOpenAIStream(
   let totalTokens = 0;
   const toolCallAccumulator: Map<number, { id: string; name: string; arguments: string }> = new Map();
 
+  // Whether this reply is an answer or a tool step, reported once that
+  // is certain. Chat completions can stream content and THEN tool_calls
+  // in one message, and some compatible servers (Ollama among them)
+  // report finish_reason "stop" on a reply that did call tools, so the
+  // text verdict waits for the end of the stream and is read off what
+  // was actually accumulated. The one earlier certainty: a request that
+  // offered no tools cannot get a tool call back.
+  const stepKind = stepKindSignal(onChunk);
+  if (tools.length === 0) stepKind.decide('text');
+
   return new Promise<ChatResponse>((resolve, reject) => {
     let buffer = '';
 
@@ -315,7 +326,8 @@ export async function callOpenAIStream(
           }
 
           // Tool call deltas
-          if (delta.tool_calls) {
+          if (Array.isArray(delta.tool_calls)) {
+            if (delta.tool_calls.length > 0) stepKind.decide('tool');
             for (const tc of delta.tool_calls) {
               const index = tc.index ?? 0;
               if (!toolCallAccumulator.has(index)) {
@@ -339,6 +351,9 @@ export async function callOpenAIStream(
     });
 
     stream.on('end', () => {
+      // The stream is over, so what it accumulated is what the runtime
+      // will act on: tool calls make it a tool step, none a plain answer.
+      stepKind.decide(toolCallAccumulator.size > 0 ? 'tool' : 'text');
       const responseTime = Date.now() - startTime;
 
       // Build tool calls from accumulated data

@@ -337,6 +337,38 @@ describe('HostedChatPage', { retry: 2 }, () => {
     expect(await screen.findByText('hi there')).toBeInTheDocument()
   })
 
+  it('renders a streamed reply token by token, before the run finishes', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+
+    render(<HostedChatPage slug="acme" />)
+    await sendMessage('hello')
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+
+    await emitAndSettle('token', { content: 'Your order' })
+    expect(await screen.findByText('Your order')).toBeInTheDocument()
+    await emitAndSettle('token', { content: ' ships Monday.' })
+    expect(await screen.findByText('Your order ships Monday.')).toBeInTheDocument()
+  })
+
+  it('clears text the server took back, leaving none of it on screen', async () => {
+    ;(hostedChatApi.branding as any).mockResolvedValue(branding())
+    ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })
+
+    render(<HostedChatPage slug="acme" />)
+    await sendMessage('hello')
+    await waitFor(() => expect(hostedChatApi.send).toHaveBeenCalled())
+
+    await emitAndSettle('token', { content: 'Looking up account 4411' })
+    expect(await screen.findByText('Looking up account 4411')).toBeInTheDocument()
+    await emitAndSettle('reset', {})
+    expect(screen.queryByText(/4411/)).not.toBeInTheDocument()
+
+    await emitAndSettle('token', { content: 'Your order ships Monday.' })
+    expect(await screen.findByText('Your order ships Monday.')).toBeInTheDocument()
+    expect(screen.queryByText(/4411/)).not.toBeInTheDocument()
+  })
+
   it('tells the visitor when the run failed instead of going quiet', async () => {
     ;(hostedChatApi.branding as any).mockResolvedValue(branding())
     ;(hostedChatApi.send as any).mockResolvedValue({ runId: 'run-1', conversationId: 'c1' })

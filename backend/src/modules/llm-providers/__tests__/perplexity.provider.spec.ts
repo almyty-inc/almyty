@@ -1,5 +1,6 @@
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { MessageRole } from '../../../entities/message.entity';
+import type { StreamChunk } from '../dto/llm-providers.dto';
 import {
   buildPerplexityInput,
   buildPerplexityTools,
@@ -203,5 +204,37 @@ describe('callPerplexityStream', () => {
     expect(res.message.content).toBe('answer');
     expect(res.usage).toEqual({ inputTokens: 3, outputTokens: 2, totalTokens: 5 });
     expect((callLlmProviderHttpStream as jest.Mock).mock.calls[0][0].data.stream).toBe(true);
+  });
+
+  /**
+   * Function calls only arrive on response.completed, after any text has
+   * streamed, so that is where the step's kind becomes certain.
+   */
+  describe('step kind', () => {
+    const lookup = [{ name: 'lookup', description: 'lookup', parameters: { type: 'object', properties: {} } }] as any;
+    const run = async (events: string[]) => {
+      (callLlmProviderHttpStream as jest.Mock).mockReset().mockResolvedValue({ data: fakeStream(events) });
+      const chunks: StreamChunk[] = [];
+      await callPerplexityStream(makeProvider(), { messages: [], stream: true } as any, session, lookup, Date.now(), () => 0, (c) => chunks.push(c));
+      return chunks;
+    };
+
+    it('calls text followed by a function_call a tool step', async () => {
+      const chunks = await run([
+        'data: {"type":"response.output_text.delta","delta":"Checking "}\n',
+        'data: {"type":"response.output_text.delta","delta":"account 4411"}\n',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"function_call","call_id":"c1","name":"lookup","arguments":"{}"}]}}\n',
+      ]);
+      expect(chunks).toEqual([{ content: 'Checking ' }, { content: 'account 4411' }, { stepKind: 'tool' }]);
+    });
+
+    it('calls a reply with no function_call a text step, after all of its text', async () => {
+      const chunks = await run([
+        'data: {"type":"response.output_text.delta","delta":"Ships "}\n',
+        'data: {"type":"response.output_text.delta","delta":"Monday."}\n',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[]}}\n',
+      ]);
+      expect(chunks).toEqual([{ content: 'Ships ' }, { content: 'Monday.' }, { stepKind: 'text' }]);
+    });
   });
 });
