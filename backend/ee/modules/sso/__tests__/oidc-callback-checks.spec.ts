@@ -1,6 +1,8 @@
 import { UnauthorizedException } from '@nestjs/common';
 
 import { SsoService } from '../sso.service';
+import { SamlReplayCache } from '../saml-replay-cache';
+import { FakeRedis } from '../../../../src/test/fake-redis';
 
 /**
  * Two checks the OIDC callback owes before it believes an identity.
@@ -34,6 +36,7 @@ describe('OIDC callback checks', () => {
       {} as any,
       {} as any,
       { getDecrypted: jest.fn(async () => config) } as any,
+      new SamlReplayCache(new FakeRedis()),
     );
     jest.spyOn(service, 'buildOidcClient').mockResolvedValue({ callback } as any);
     return { service, callback };

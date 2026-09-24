@@ -27,6 +27,7 @@ describe('BudgetsService', () => {
   let userOrgRepo: FakeRepository<any>;
   let userRepo: FakeRepository<any>;
   let agentRepo: FakeRepository<any>;
+  let userTeamRepo: FakeRepository<any>;
   let spend: { periodToDateCents: jest.Mock };
   let mail: { send: jest.Mock };
   let service: BudgetsService;
@@ -56,6 +57,7 @@ describe('BudgetsService', () => {
       { id: 'agent-A', organizationId: 'org-1', visibility: 'org', createdBy: 'member-1' },
       { id: 'agent-B', organizationId: 'org-1', visibility: 'org', createdBy: 'member-1' },
     ]);
+    userTeamRepo = fakeRepository<any>([]);
 
     service = new BudgetsService(
       budgetRepo as any,
@@ -66,6 +68,7 @@ describe('BudgetsService', () => {
       mail as any,
       undefined,
       agentRepo as any,
+      userTeamRepo as any,
     );
   });
 
@@ -308,6 +311,7 @@ describe('BudgetsService', () => {
         mail as any,
         notifications as any,
         agentRepo as any,
+        userTeamRepo as any,
       );
     });
 
@@ -412,6 +416,66 @@ describe('BudgetsService', () => {
       seedBudget('b-priv', 'agent-priv', { behavior: 'reject' });
       spend.periodToDateCents.mockResolvedValue(1100);
       await expect(service.enforceForRun('org-1', 'agent-priv')).rejects.toThrow(BudgetExceededException);
+    });
+  });
+
+  /**
+   * A team agent is visible to its team and to the org's owners/admins.
+   * A budget or breach on one names the agent and its spend, so it
+   * follows the agent: members outside the team neither see it listed
+   * nor fetch it, exactly as if it did not exist.
+   */
+  describe('budgets and alerts on a team agent', () => {
+    const budget = (id: string, agentId: string | null, createdAt: string) =>
+      budgetRepo.seed({
+        id, organizationId: 'org-1', agentId, llmProviderId: null, periodType: 'month',
+        limitCents: 1000, behavior: 'warn_log', softThresholdPct: 80, active: true, createdAt: new Date(createdAt),
+      } as any);
+    const alert = (id: string, agentId: string | null, at: string) =>
+      alertRepo.seed({
+        id, budgetId: 'b-x', organizationId: 'org-1', agentId, llmProviderId: null, level: 'soft', periodType: 'month',
+        periodStart: new Date('2026-09-01T00:00:00Z'), spentCents: 900, limitCents: 1000, at: new Date(at),
+      } as any);
+
+    beforeEach(() => {
+      userOrgRepo.seed({ id: 'm-4', organizationId: 'org-1', userId: 'outsider', role: OrganizationRole.MEMBER, isActive: true });
+      userOrgRepo.seed({ id: 'm-5', organizationId: 'org-1', userId: 'lapsed', role: OrganizationRole.MEMBER, isActive: true });
+      agentRepo.seed({ id: 'agent-team', organizationId: 'org-1', visibility: 'team', teamId: 'team-1', createdBy: 'member-1' });
+      agentRepo.seed({ id: 'agent-teamless', organizationId: 'org-1', visibility: 'team', teamId: null, createdBy: 'member-1' });
+      userTeamRepo.seed({ id: 't-1', userId: 'member-1', teamId: 'team-1', isActive: true });
+      // A team row that is no longer active is no membership.
+      userTeamRepo.seed({ id: 't-2', userId: 'lapsed', teamId: 'team-1', isActive: false });
+      // The same user in a team of that name elsewhere proves nothing here.
+      userTeamRepo.seed({ id: 't-3', userId: 'outsider', teamId: 'team-2', isActive: true });
+
+      budget('b-org', null, '2026-09-01T00:00:00Z');
+      budget('b-team', 'agent-team', '2026-09-02T00:00:00Z');
+      budget('b-teamless', 'agent-teamless', '2026-09-03T00:00:00Z');
+      alert('a-org', null, '2026-09-10T00:00:00Z');
+      alert('a-team', 'agent-team', '2026-09-11T00:00:00Z');
+    });
+
+    it('is hidden from members outside the team', async () => {
+      for (const viewer of ['outsider', 'lapsed', 'stranger', null]) {
+        expect((await service.list('org-1', viewer)).map((b) => b.id)).toEqual(['b-org']);
+        expect((await service.listAlerts('org-1', viewer)).map((a) => a.id)).toEqual(['a-org']);
+        await expect(service.get('b-team', 'org-1', viewer)).rejects.toThrow(NotFoundException);
+      }
+    });
+
+    it('is visible to the team and to the org owners/admins', async () => {
+      expect((await service.list('org-1', 'member-1')).map((b) => b.id)).toEqual(['b-team', 'b-org']);
+      expect((await service.listAlerts('org-1', 'member-1')).map((a) => a.id)).toEqual(['a-team', 'a-org']);
+      expect((await service.get('b-team', 'org-1', 'member-1')).id).toBe('b-team');
+
+      expect((await service.list('org-1', 'owner-1')).map((b) => b.id)).toEqual(['b-teamless', 'b-team', 'b-org']);
+      expect((await service.get('b-team', 'org-1', 'owner-1')).id).toBe('b-team');
+    });
+
+    it('names the hidden agents for the spend breakdown', async () => {
+      expect((await service.hiddenAgentIds('org-1', 'outsider')).sort()).toEqual(['agent-team', 'agent-teamless']);
+      expect(await service.hiddenAgentIds('org-1', 'member-1')).toEqual(['agent-teamless']);
+      expect(await service.hiddenAgentIds('org-1', 'owner-1')).toEqual([]);
     });
   });
 });

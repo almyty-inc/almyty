@@ -612,8 +612,46 @@ export class ConnectionsGovernanceService {
     });
   }
 
-  async export(organizationId: string, format: 'json' | 'csv', filters: ExportFilters = {}): Promise<ExportResult> {
-    const rows = await this.collectEvents(organizationId, filters);
+  /**
+   * Drop the events of members' private connections from an export.
+   *
+   * The export is an admin surface, and private means not even org admins
+   * see the connection: its events name it, its account label and who
+   * used it for what. The caller's own private connections stay in.
+   *
+   * A connection that still exists is judged by what it is now. One that
+   * was deleted is judged by what its events recorded: any event of it
+   * that says `owner: 'private'` marks it private, and since its owner can
+   * no longer be read, its events are dropped for everyone.
+   */
+  async withoutOthersPrivateConnections(organizationId: string, rows: AuditLog[], viewerId: string | null): Promise<AuditLog[]> {
+    const connectionIds = [...new Set(
+      rows.filter((r) => r.resourceType === AuditResource.CONNECTION && r.resourceId).map((r) => r.resourceId as string),
+    )];
+    if (connectionIds.length === 0) return rows;
+    const existing = await this.credentials.find({
+      where: { organizationId, id: In(connectionIds) },
+      select: { id: true, visibility: true, ownerUserId: true },
+    });
+    const current = new Map(existing.map((c) => [c.id, c]));
+    const recordedPrivate = new Set(
+      rows
+        .filter((r) => r.resourceType === AuditResource.CONNECTION && (r.details as any)?.owner === 'private')
+        .map((r) => r.resourceId as string),
+    );
+    const hidden = new Set(
+      connectionIds.filter((id) => {
+        const connection = current.get(id);
+        if (!connection) return recordedPrivate.has(id);
+        return connection.visibility === 'private' && (!connection.ownerUserId || connection.ownerUserId !== viewerId);
+      }),
+    );
+    if (hidden.size === 0) return rows;
+    return rows.filter((r) => !(r.resourceType === AuditResource.CONNECTION && hidden.has(r.resourceId as string)));
+  }
+
+  async export(organizationId: string, format: 'json' | 'csv', filters: ExportFilters = {}, viewerId: string | null = null): Promise<ExportResult> {
+    const rows = await this.withoutOthersPrivateConnections(organizationId, await this.collectEvents(organizationId, filters), viewerId);
     const stamp = this.now().toISOString().slice(0, 10);
     const retentionDays = this.retentionDays();
     if (format === 'csv') {

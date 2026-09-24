@@ -70,7 +70,7 @@ export class OrgLicenseResolver {
       );
     }
 
-    const snapshot = this.licenseService.resolveToken(token);
+    const snapshot = this.licenseService.resolveToken(token, organizationId);
     // An upgrade or downgrade that committed while the org row was being
     // read had nothing to invalidate yet, and this snapshot predates it:
     // serve it, but do not put it in front of the next 30 seconds of

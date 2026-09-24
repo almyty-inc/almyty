@@ -6,7 +6,7 @@ import { createHash, randomBytes } from 'crypto';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { EndUser } from '../../../entities/end-user.entity';
 import { Conversation, ConversationStatus } from '../../../entities/conversation.entity';
-import { Message, MessageRole } from '../../../entities/message.entity';
+import { Message, MessageRole, MessageType } from '../../../entities/message.entity';
 import { AgentRun } from '../../../entities/agent-run.entity';
 import {
   HostedChatConfig,
@@ -386,10 +386,17 @@ export class HostedChatService {
     return grouped;
   }
 
-  /** Tool calls and system scaffolding stay out of a public transcript. */
+  /**
+   * Tool calls and system scaffolding stay out of a public transcript. An
+   * assistant turn that called tools is scaffolding too: its text is the
+   * agent narrating its working (what it is about to look up, what the
+   * last tool said), saved alongside the call, not an answer.
+   */
   private isPublicTurn(m: Message): boolean {
     return (
       (m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT) &&
+      m.type !== MessageType.TOOL_CALL &&
+      !(Array.isArray(m.toolCalls) && m.toolCalls.length > 0) &&
       m.metadata?.internal !== true
     );
   }

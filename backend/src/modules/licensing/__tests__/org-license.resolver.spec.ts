@@ -46,7 +46,7 @@ describe('OrgLicenseResolver', () => {
     const { publicPem, privatePem } = keypair();
     process.env[PUBLIC_KEY_ENV] = publicPem;
     const token = signLicense(
-      { entitlements: [EE_ENTITLEMENTS.ADVANCED_RBAC], limits: { seats: 5 }, expiresAt: null },
+      { entitlements: [EE_ENTITLEMENTS.ADVANCED_RBAC], limits: { seats: 5 }, expiresAt: null, organizationId: 'org-paid' },
       privatePem,
     );
 
@@ -139,7 +139,7 @@ describe('OrgLicenseResolver', () => {
     const { publicPem, privatePem } = keypair();
     process.env[PUBLIC_KEY_ENV] = publicPem;
     const upgraded = signLicense(
-      { entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null },
+      { entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null, organizationId: 'org-up' },
       privatePem,
     );
     const tokens: Record<string, string | null> = { 'org-up': null };

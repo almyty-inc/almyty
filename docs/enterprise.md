@@ -16,7 +16,12 @@ agree.
 Licensing is **per organization**, not per deployment. Billing mints a
 signed token per org on a Stripe webhook; `EntitlementGuard` resolves the
 requesting org's entitlements on every guarded route, and
-`GET /licensing/entitlements` answers for the requesting org.
+`GET /licensing/entitlements` answers for the requesting org. Each minted
+token carries an `organizationId` claim and `resolveToken` honours a
+stored token only for that org, so a token copied into another org's
+billing record grants nothing there. An environment token without the
+claim is install-wide; one with it serves that org alone and is never
+applied process-wide.
 
 There is a second, deployment-global `LicenseService` that reads a token
 from the environment. It answers a different question — "is this

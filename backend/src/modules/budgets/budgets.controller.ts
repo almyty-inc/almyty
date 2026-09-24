@@ -61,6 +61,9 @@ export class BudgetsController {
       from,
       granularity: granularity ?? 'day',
       viewerId: req.user?.id ?? null,
+      // Same visibility as the budget list: a team agent's spend is its
+      // team's and the admins' to read.
+      hiddenAgentIds: await this.budgets.hiddenAgentIds(organizationId, req.user?.id),
     });
     return { success: true, data: { period: periodType, from, ...data } };
   }

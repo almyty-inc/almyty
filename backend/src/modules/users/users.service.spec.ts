@@ -458,7 +458,7 @@ describe('UsersService', () => {
   describe('findAll', () => {
     function makeQB() {
       return {
-        innerJoin: jest.fn().mockReturnThis(),
+        innerJoinAndSelect: jest.fn().mockReturnThis(),
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -489,7 +489,7 @@ describe('UsersService', () => {
       expect(result.total).toBe(2);
       // The org filter must run as an inner join — without that the previous
       // shape returned every user in the database to any caller.
-      expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith(
+      expect(mockQueryBuilder.innerJoinAndSelect).toHaveBeenCalledWith(
         'user.organizationMemberships',
         'membership',
         'membership.organizationId = :organizationId',

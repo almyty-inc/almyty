@@ -69,6 +69,7 @@ import { VisitorEmailOtpService } from './channels/visitor-email-otp.service';
 import { VisitorEmailCode } from '../../entities/visitor-email-code.entity';
 import { CustomDomainController } from './channels/custom-domain.controller';
 import { CUSTOM_DOMAIN_STORE, CustomDomainService, PgCustomDomainStore } from './channels/custom-domain.service';
+import { SurfaceCorsService } from './channels/surface-cors';
 // Multi-workspace channel installations (OAuth installs)
 import { ChannelInstallation } from '../../entities/channel-installation.entity';
 import { ChannelInstallationService } from './channels/channel-installation.service';
@@ -107,6 +108,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
     VisitorEmailOtpService,
     CustomDomainService,
     { provide: CUSTOM_DOMAIN_STORE, useClass: PgCustomDomainStore },
+    SurfaceCorsService,
     GatewaysService,
     GatewayProtocolService,
     GatewayRateLimitService,
@@ -158,6 +160,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
   exports: [
     GatewaysService,
     HostedChatService,
+    SurfaceCorsService,
     GatewayProtocolService,
     GatewayRateLimitService,
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,

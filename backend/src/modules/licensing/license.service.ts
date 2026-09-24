@@ -87,6 +87,15 @@ export class LicenseService implements OnModuleInit {
       );
       return;
     }
+    // A token minted for one organization is not an install license: it
+    // is honoured for that organization through resolveToken(), never
+    // process-wide, where every other org would inherit it.
+    if (result.payload.organizationId !== undefined) {
+      this.logger.warn(
+        'License token in the environment is bound to one organization; it applies to that organization only.',
+      );
+      return;
+    }
 
     this.applyPayload(result.payload);
     this.logger.log(
@@ -113,8 +122,14 @@ export class LicenseService implements OnModuleInit {
    * `load()` uses, and returns a snapshot. Fall-back order when the passed token
    * is absent/invalid/expired: (a) the process-global env token, then
    * (b) the community set. Does NOT mutate the singleton's global state.
+   *
+   * `organizationId` is the org asking. A stored token counts only when it
+   * was minted for that same org (its `organizationId` claim), so a token
+   * copied out of one org's billing record grants nothing in another. With no
+   * org there is no stored token to honour. The env token is install-wide
+   * unless it carries an org claim, in which case it serves that org only.
    */
-  resolveToken(token: string | null | undefined): EntitlementSnapshot {
+  resolveToken(token: string | null | undefined, organizationId?: string | null): EntitlementSnapshot {
     // Honor the key the service was loaded with (load() persists it), so a
     // programmatically-configured verification key resolves per-org tokens
     // too — not only the env/default key. Falls back to env/default when the
@@ -124,13 +139,14 @@ export class LicenseService implements OnModuleInit {
       process.env[LICENSE_PUBLIC_KEY_ENV] ??
       DEFAULT_LICENSE_PUBLIC_KEY;
 
-    const fromToken = token ? this.snapshotFromToken(token, publicKey) : null;
+    const fromToken =
+      token && organizationId ? this.snapshotFromToken(token, publicKey, organizationId) : null;
     if (fromToken) return fromToken;
 
-    // Passed token absent/invalid/expired → try the global env token.
+    // Passed token absent/invalid/expired/another org's → try the global env token.
     const envToken =
       process.env[LICENSE_TOKEN_ENV] ?? process.env[LICENSE_TOKEN_ENV_ALT] ?? '';
-    const fromEnv = envToken ? this.snapshotFromToken(envToken, publicKey) : null;
+    const fromEnv = envToken ? this.snapshotFromToken(envToken, publicKey, organizationId ?? null, true) : null;
     if (fromEnv) return fromEnv;
 
     // Nothing valid → community.
@@ -140,15 +156,27 @@ export class LicenseService implements OnModuleInit {
   /**
    * Verify a single token and, if valid, return the enterprise snapshot it
    * grants (unioned with community). Returns null on any missing/invalid/expired
-   * token so callers can fall through. Never mutates instance state.
+   * token, and on one bound to another org, so callers can fall through. Never
+   * mutates instance state.
+   *
+   * A per-org token must carry `organizationId`'s claim. The install-wide env
+   * token (`installWide`) may carry none; when it does carry one it applies
+   * to that org alone.
    */
   private snapshotFromToken(
     token: string,
     publicKey: string,
+    organizationId: string | null,
+    installWide = false,
   ): EntitlementSnapshot | null {
-    const result = verifyLicense(token, publicKey);
+    const result = installWide
+      ? verifyLicense(token, publicKey)
+      : verifyLicense(token, publicKey, { organizationId: organizationId ?? '' });
     if (!result.valid) return null;
     const payload = result.payload;
+    if (installWide && payload.organizationId !== undefined && payload.organizationId !== organizationId) {
+      return null;
+    }
     return {
       edition: EDITION_ENTERPRISE,
       entitlements: [
