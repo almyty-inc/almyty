@@ -112,17 +112,17 @@ jest.mock('redis', () => ({
   createClient: () => mockRedis,
 }));
 
-// Mock JWT
-jest.mock('jsonwebtoken', () => ({
-  sign: jest.fn(() => 'mock-jwt-token'),
-  verify: jest.fn(() => ({ sub: 'user-id', username: 'test-user' })),
-}));
-
 // bcrypt and bcryptjs stay real here: a global double that says every
 // password matches makes every wrong-password path untestable. Specs that
 // want speed hash with a low cost factor (hash(pw, 4)); a spec that wants a
 // double declares its own jest.mock. Pinned by
 // __tests__/no-global-bcrypt-stub.spec.ts.
+
+// jsonwebtoken stays real for the same reason: a global double whose verify
+// returned a fixed payload for any string let forged, expired and
+// wrong-secret tokens through every real JwtService in the suite. Specs sign
+// real tokens with src/test/jwt.ts. Pinned by
+// __tests__/no-global-jwt-stub.spec.ts.
 
 // Global test helpers
 export class TestHelper {

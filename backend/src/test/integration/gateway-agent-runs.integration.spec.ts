@@ -12,8 +12,6 @@
  * Requires: RUN_DB_INTEGRATION=1 and a running PostgreSQL.
  */
 
-jest.unmock('jsonwebtoken');
-
 const SKIP = !process.env.RUN_DB_INTEGRATION;
 
 import * as crypto from 'crypto';

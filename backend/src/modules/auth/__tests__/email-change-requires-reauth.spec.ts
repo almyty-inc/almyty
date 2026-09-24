@@ -1,7 +1,3 @@
-// The global test setup replaces bcryptjs (compare always true) and
-// jsonwebtoken; a password check has to be the real one to be tested.
-jest.unmock('bcryptjs');
-jest.unmock('jsonwebtoken');
 import { BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
