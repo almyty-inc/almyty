@@ -10,6 +10,8 @@ import { AddRoleForm } from './add-role-form'
 import { OrchestratorSettings, type OrchestratorConfigView } from './orchestrator-settings'
 import { RolesPanel, type AgentRoleView, type ResolvedRoleView } from './roles-panel'
 import { StrategyPicker, type StrategyView } from './strategy-picker'
+import { AutonomousModelsSummary } from './detail/autonomous-models-summary'
+import type { AgentModels } from '@/types/agent-models'
 
 /**
  * How this agent runs: which model fills each role, what shape the work
@@ -39,22 +41,26 @@ interface ExecutionSettings {
 }
 
 /**
- * Strategies, roles and the orchestrator all act on a pipeline graph: a
- * strategy compiles to one, a role fills its role-named nodes, and the
- * orchestrator picks a strategy. An autonomous agent has no graph -- it
- * runs the ReAct loop, which reads none of settings.execution or the
- * agent's roles -- so for one the tab says so in a line instead of
- * offering choices that would save and do nothing. The server refuses
- * them too (STRATEGY_WORKFLOW_ONLY).
+ * Strategies, roles and the orchestrator on this tab act on a pipeline
+ * graph: a strategy compiles to one, a role fills its role-named nodes,
+ * and the orchestrator picks a strategy. An autonomous agent has no graph;
+ * its multi-model shape is its own `models` (roles and a strategy applied
+ * per step of its loop), set on its edit page. For one, the tab shows that
+ * shape read-only with a link to change it.
  */
-export function ExecutionTab({ agentId, mode }: { agentId: string; mode?: 'workflow' | 'autonomous' }) {
+export function ExecutionTab({
+  agentId,
+  mode,
+  models,
+  modelConfig,
+}: {
+  agentId: string
+  mode?: 'workflow' | 'autonomous'
+  models?: AgentModels | null
+  modelConfig?: Record<string, any> | null
+}) {
   if (mode === 'autonomous') {
-    return (
-      <p data-testid="execution-workflow-only" className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-        Strategies, roles and the orchestrator apply to workflow agents. This agent is autonomous: it runs its own loop on
-        the model set in its configuration.
-      </p>
-    )
+    return <AutonomousModelsSummary agentId={agentId} models={models} modelConfig={modelConfig} />
   }
   return <WorkflowExecutionTab agentId={agentId} />
 }

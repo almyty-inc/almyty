@@ -9,6 +9,7 @@ import { CheckCircle2, XCircle, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatDuration } from './constants'
 import type { AgentRun, AgentRunStep } from '@/types'
+import { StepRoleLine } from './run-roles'
 
 interface VerifyFailure {
   rule?: string
@@ -42,7 +43,8 @@ export function VerifyStepCard({ step, index }: { step: AgentRunStep; index: num
           <Badge variant="outline" className="text-[10px]">revision {out.revision}</Badge>
         )}
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <StepRoleLine step={step} />
         <div className="text-xs font-medium">
           {passed
             ? 'Passed verification'
