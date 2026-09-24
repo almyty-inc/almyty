@@ -31,7 +31,7 @@ describe('ToolsService - Custom Tool Creation', () => {
         {
           provide: getRepositoryToken(Tool),
           useValue: {
-            manager: unlimitedToolQuotaManager(),
+            get manager() { return unlimitedToolQuotaManager(this); },
             create: jest.fn((data) => ({ ...data, id: 'tool-123' })),
             save: jest.fn((tool) => Promise.resolve(tool)),
             find: jest.fn(),

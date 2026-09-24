@@ -4,7 +4,7 @@ import {
   validateUrl,
   validateUrlAllowingPrivate,
 } from '../../../common/security/url-validator';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
+import { agentsExempting, ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 
 import {
   ActualState,
@@ -106,6 +106,23 @@ export class OllamaAdapter implements ModelProviderAdapter {
     return raw;
   }
 
+  /**
+   * Per-request options for a call to `base`.
+   *
+   * The instance's defaults pin DNS and refuse redirects. That pin also
+   * refuses `localhost`, which is the one name the OLLAMA_ALLOW_PRIVATE_URLS
+   * hatch exists for, so when the hatch is on the exemption is made for
+   * this server's host alone -- every other name stays pinned, and
+   * redirects stay refused. The URL is re-gated here too: `ref.baseUrl` on
+   * the read/scale/teardown paths is a stored value, not the one `deploy`
+   * checked.
+   */
+  private request(base: string, credentials: AdapterCredentials): Record<string, any> {
+    this.base({ baseUrl: base });
+    const exempt = ollamaPrivateUrlsAllowed() ? agentsExempting(new URL(base).hostname) : {};
+    return { headers: this.headers(credentials), ...exempt };
+  }
+
   /** How the server gets the weights: a pull target or a create-from path. */
   static source(request: DeployRequest): { model: string; pull?: string; from?: string } {
     const uri = request.version.registryUri;
@@ -132,7 +149,7 @@ export class OllamaAdapter implements ModelProviderAdapter {
   }
 
   private async load(base: string, model: string, keepAlive: string | number, credentials: AdapterCredentials): Promise<void> {
-    await this.http.post(`${base}/api/generate`, { model, keep_alive: keepAlive, stream: false }, { headers: this.headers(credentials) });
+    await this.http.post(`${base}/api/generate`, { model, keep_alive: keepAlive, stream: false }, this.request(base, credentials));
   }
 
   async deploy(request: DeployRequest, credentials: AdapterCredentials): Promise<EndpointRef> {
@@ -141,12 +158,12 @@ export class OllamaAdapter implements ModelProviderAdapter {
     const src = OllamaAdapter.source(request);
     try {
       if (src.pull) {
-        await this.http.post(`${base}/api/pull`, { model: src.pull, stream: false }, { headers: this.headers(credentials) });
+        await this.http.post(`${base}/api/pull`, { model: src.pull, stream: false }, this.request(base, credentials));
         if (src.model !== src.pull) {
-          await this.http.post(`${base}/api/copy`, { source: src.pull, destination: src.model }, { headers: this.headers(credentials) });
+          await this.http.post(`${base}/api/copy`, { source: src.pull, destination: src.model }, this.request(base, credentials));
         }
       } else {
-        await this.http.post(`${base}/api/create`, { model: src.model, from: src.from, stream: false }, { headers: this.headers(credentials) });
+        await this.http.post(`${base}/api/create`, { model: src.model, from: src.from, stream: false }, this.request(base, credentials));
       }
       if ((request.desired.replicas ?? 1) > 0) await this.load(base, src.model, cfg.keepAlive ?? '-1', credentials);
     } catch (err) {
@@ -158,10 +175,10 @@ export class OllamaAdapter implements ModelProviderAdapter {
   async readEndpoint(ref: EndpointRef, credentials: AdapterCredentials): Promise<ActualState> {
     const base = ref.baseUrl;
     try {
-      const tags = await this.http.get(`${base}/api/tags`, { headers: this.headers(credentials) });
+      const tags = await this.http.get(`${base}/api/tags`, this.request(base, credentials));
       const present = (tags.data?.models ?? []).find((m: any) => m.name === ref.model || m.model === ref.model);
       if (!present) return { state: 'missing', message: `model ${ref.model} is not on the server` };
-      const ps = await this.http.get(`${base}/api/ps`, { headers: this.headers(credentials) });
+      const ps = await this.http.get(`${base}/api/ps`, this.request(base, credentials));
       const loaded = (ps.data?.models ?? []).find((m: any) => m.name === ref.model || m.model === ref.model);
       return {
         state: loaded ? 'ready' : 'stopped',
@@ -185,7 +202,7 @@ export class OllamaAdapter implements ModelProviderAdapter {
 
   async teardown(ref: EndpointRef, credentials: AdapterCredentials): Promise<void> {
     try {
-      await this.http.delete(`${ref.baseUrl}/api/delete`, { headers: this.headers(credentials), data: { model: ref.model } });
+      await this.http.delete(`${ref.baseUrl}/api/delete`, { ...this.request(ref.baseUrl, credentials), data: { model: ref.model } });
     } catch (err: any) {
       if (err?.response?.status === 404) return;
       this.classify(err, 'teardown failed');

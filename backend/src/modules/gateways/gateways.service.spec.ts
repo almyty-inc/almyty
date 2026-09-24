@@ -1,3 +1,4 @@
+import { unlimitedQuotaManager } from '../../test/tool-quota.fake';
 import { Not } from 'typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
@@ -31,6 +32,7 @@ describe('GatewaysService', () => {
         {
           provide: getRepositoryToken(Gateway),
           useValue: {
+            get manager() { return unlimitedQuotaManager(this); },
             findOne: jest.fn(),
             find: jest.fn(),
             create: jest.fn(),
@@ -239,10 +241,13 @@ describe('GatewaysService', () => {
         },
       };
 
+      // Loaded the way production loads it: no `gateways` relation. The
+      // limit is read from settings and compared against a COUNT taken
+      // under the organization's quota lock, in the insert's transaction.
       const mockOrganization = {
         id: 'org-1',
         name: 'Test Org',
-        canAddMoreGateways: jest.fn().mockReturnValue(false),
+        settings: { maxGateways: 1 },
       } as any;
 
       const mockUser = {
@@ -252,10 +257,21 @@ describe('GatewaysService', () => {
 
       organizationRepository.findOne.mockResolvedValue(mockOrganization);
       userRepository.findOne.mockResolvedValue(mockUser);
+      gatewayRepository.findOne.mockResolvedValue(null);
+      const count = jest.fn().mockResolvedValue(1);
+      const txRepo = { findOne: jest.fn().mockResolvedValue(mockOrganization), count, save: jest.fn() };
+      const tx = { queryRunner: { isTransactionActive: true }, query: jest.fn(), getRepository: () => txRepo };
+      Object.defineProperty(gatewayRepository, 'manager', {
+        configurable: true,
+        value: { findOne: jest.fn(), transaction: (work: any) => work(tx) },
+      });
 
       await expect(
         service.createGateway(createDto, 'org-1', 'user-1')
-      ).rejects.toThrow();
+      ).rejects.toThrow('Organization has reached gateway limit');
+      expect(count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', isSystem: false } });
+      expect(txRepo.save).not.toHaveBeenCalled();
+      expect(gatewayRepository.save).not.toHaveBeenCalled();
     });
 
     it('should create gateway successfully', async () => {

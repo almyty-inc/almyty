@@ -70,7 +70,7 @@ describe('ToolGeneratorService - generated tools carry their organization', () =
         {
           provide: getRepositoryToken(Tool),
           useValue: {
-            manager: unlimitedToolQuotaManager(),
+            get manager() { return unlimitedToolQuotaManager(this); },
             count: jest.fn().mockResolvedValue(0),
             create: jest.fn((dto: any) => {
               created.push(dto);

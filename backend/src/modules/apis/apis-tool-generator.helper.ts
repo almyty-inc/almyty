@@ -17,7 +17,12 @@ import { Operation } from '../../entities/operation.entity';
 import { Tool } from '../../entities/tool.entity';
 
 import { ToolsService } from '../tools/tools.service';
-import { assertToolQuota, assertWithinPerSchemaCap, capGeneratedDescription } from '../tools/tool-quota';
+import {
+  ToolQuotaExceededException,
+  assertWithinPerSchemaCap,
+  capGeneratedDescription,
+  precheckToolQuota,
+} from '../tools/tool-quota';
 import { ApisService } from './apis.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 
@@ -90,7 +95,8 @@ export class ApisToolGeneratorHelper {
     // Quota, checked for the whole batch before any row is written (see
     // tools/tool-quota.ts for the reject-not-truncate policy). Only
     // operations whose tool name is not already taken add a row; the
-    // rest update in place.
+    // rest update in place. This batch check is unlocked; each insert
+    // re-checks under the organization's lock in createFromOperation.
     assertWithinPerSchemaCap(activeOperations.length, `API '${api.name}'`);
     const plannedNames = [
       ...new Set(activeOperations.map((op) => this.generateSemanticToolName(api.name, op))),
@@ -100,7 +106,7 @@ export class ApisToolGeneratorHelper {
           .getRepository(Tool)
           .count({ where: { organizationId: api.organizationId, name: In(plannedNames) } })
       : 0;
-    await assertToolQuota(
+    await precheckToolQuota(
       this.apiRepository.manager,
       api.organizationId,
       plannedNames.length - alreadyThere,
@@ -160,6 +166,10 @@ export class ApisToolGeneratorHelper {
               });
             }
           } catch (error) {
+            // The batch precheck passed but a concurrent writer took the
+            // slots: createFromOperation's locked per-row check refused.
+            // Surface it rather than reporting a quietly short import.
+            if (error instanceof ToolQuotaExceededException) throw error;
             errorCount++;
             this.logger.error(`[TOOL-GEN] Failed: ${operation.name}: ${error.message}`);
             return null;

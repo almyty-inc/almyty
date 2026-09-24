@@ -16,6 +16,7 @@ import {
   callLlmProviderHttpStream,
   llmCallOptionsFor,
 } from '../providers/safe-request';
+import { agentsExempting, ssrfSafeHttpAgent } from '../../../common/security/ssrf-safe-agent';
 import { LlmProvider, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { LlmChatRunnerHelper } from '../llm-chat-runner.helper';
 import { DefaultModelResolver } from '../default-model.resolver';
@@ -103,10 +104,15 @@ describe('ollama SSRF gate', () => {
       expect(axios).toHaveBeenCalledTimes(1);
       const cfg = (axios as jest.Mock).mock.calls[0][0];
       expect(cfg.url).toBe('http://localhost:11434/v1/chat/completions');
-      // The DNS-pinning agents must be bypassed (they would refuse the
-      // loopback resolution at connect time), but redirects stay off.
-      expect(cfg.httpAgent).toBeUndefined();
-      expect(cfg.httpsAgent).toBeUndefined();
+      // The strict DNS-pinning agents would refuse the loopback resolution
+      // at connect time, so the hatch swaps in agents that exempt THIS
+      // host only -- not no agents at all, which would unpin every name
+      // the request could reach. Redirects stay off.
+      const exempt = agentsExempting('localhost');
+      expect(cfg.httpAgent).toBe(exempt.httpAgent);
+      expect(cfg.httpsAgent).toBe(exempt.httpsAgent);
+      expect(cfg.httpAgent).not.toBe(ssrfSafeHttpAgent);
+      expect(cfg.httpAgent).toBeDefined();
       expect(cfg.maxRedirects).toBe(0);
     });
 

@@ -29,7 +29,7 @@ describe('ToolGeneratorService', () => {
         {
           provide: getRepositoryToken(Tool),
           useValue: {
-            manager: unlimitedToolQuotaManager(),
+            get manager() { return unlimitedToolQuotaManager(this); },
             count: jest.fn().mockResolvedValue(0),
             create: jest.fn(),
             save: jest.fn(),

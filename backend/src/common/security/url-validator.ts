@@ -1,50 +1,22 @@
 /**
  * URL validation and SSRF protection.
  *
- * Blocks requests to:
- * - Private IP ranges (10.x, 172.16-31.x, 192.168.x)
- * - Loopback (127.x, localhost, ::1)
- * - Link-local (169.254.x)
- * - Cloud metadata endpoints (169.254.169.254)
- * - Internal services (redis, postgres ports on localhost)
+ * Blocks requests to private, loopback, link-local, metadata and other
+ * reserved addresses, in every spelling (see `ip-classification.ts`, which
+ * this shares with the sandbox net guard), to known metadata/cluster
+ * hostnames, and to common internal-only service ports on internal-looking
+ * names.
+ *
+ * This is the string half of the gate. A hostname is not known to be
+ * private until it resolves: the connect-time half is the DNS-pinning
+ * lookup in `ssrf-safe-agent.ts` / `safe-fetch.ts`, which classifies every
+ * resolved address with the same function.
  */
 
 import { URL } from 'url';
 import * as net from 'net';
 
-// Private and reserved IP ranges (CIDR notation conceptual)
-const BLOCKED_IP_PATTERNS = [
-  /^127\./,                    // Loopback
-  /^10\./,                     // Class A private
-  /^172\.(1[6-9]|2\d|3[01])\./, // Class B private
-  /^192\.168\./,               // Class C private
-  /^169\.254\./,               // Link-local / cloud metadata
-  /^0\./,                      // Current network
-  /^100\.(6[4-9]|[7-9]\d|1[0-2][0-7])\./, // Shared address space
-  /^198\.1[89]\./,             // Benchmark testing
-  /^::1$/,                     // IPv6 loopback
-  /^f[cd][0-9a-f]{2}:/i,       // IPv6 unique local (fc00::/7)
-  /^fe80:/i,                   // IPv6 link-local
-];
-
-const BLOCKED_HOSTNAMES = [
-  'localhost',
-  'metadata.google.internal',
-  'metadata.google.com',
-  'metadata.aws.internal',
-  'instance-data',
-  'instance-data.ec2.internal',
-  'metadata.azure.com',
-  'metadata.azure.net',
-  'kubernetes.default',
-  'kubernetes.default.svc',
-];
-
-// Cloud metadata IPs
-const CLOUD_METADATA_IPS = [
-  '169.254.169.254',  // AWS, GCP, Azure
-  'fd00:ec2::254',    // AWS IPv6
-];
+import { classifyAddress, isBlockedHostname, stripBrackets } from './ip-classification';
 
 export interface UrlValidationResult {
   valid: boolean;
@@ -74,62 +46,42 @@ export function validateUrl(urlString: string): UrlValidationResult {
     return { valid: false, error: 'URLs with embedded credentials are not allowed.' };
   }
 
-  // Node's URL parser preserves the surrounding brackets for IPv6 hosts
-  // (e.g. `http://[::1]/`.hostname === '[::1]'). Strip them so the IP
-  // checks below see the bare address — otherwise [::1] sails past the
-  // /^::1$/ loopback pattern and we'd silently allow IPv6 SSRF.
-  const rawHostname = parsed.hostname.toLowerCase();
-  const hostname = rawHostname.startsWith('[') && rawHostname.endsWith(']')
-    ? rawHostname.slice(1, -1)
-    : rawHostname;
+  // Node's URL parser keeps the brackets on an IPv6 host and rewrites the
+  // address into compressed hex (`[::ffff:169.254.169.254]` arrives here
+  // as `[::ffff:a9fe:a9fe]`), so nothing below may match on spelling.
+  const hostname = stripBrackets(parsed.hostname.toLowerCase());
+  // The root-label form `localhost.` is the same host as `localhost`.
+  const bareName = hostname.replace(/\.+$/, '');
 
-  // Block known dangerous hostnames
-  for (const blocked of BLOCKED_HOSTNAMES) {
-    if (hostname === blocked || hostname.endsWith(`.${blocked}`)) {
-      return { valid: false, error: `Blocked hostname: ${hostname}` };
-    }
-  }
-
-  // Normalise IPv4-mapped IPv6 (::ffff:127.0.0.1) to its embedded v4
-  // so the v4 ban patterns below catch it. net.isIP returns 6 for the
-  // mapped form, so without this it skips the v4 checks entirely.
-  let ipForCheck = hostname;
-  const mapped = hostname.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i);
-  if (mapped) {
-    ipForCheck = mapped[1];
+  if (isBlockedHostname(hostname)) {
+    return { valid: false, error: `Blocked hostname: ${hostname}` };
   }
 
   // Reject ambiguous / non-canonical numeric host forms — decimal
   // (2130706433), hex (0x7f000001), or short-dotted (127.1) integers.
-  // net.isIP returns 0 for these, so they'd otherwise sail past the
-  // IP-range checks as "hostnames", yet the OS resolver expands them
-  // to real (often loopback/internal) addresses. Canonical dotted
-  // quads already match net.isIP === 4.
+  // The WHATWG parser already canonicalises these for http(s), so this is
+  // the backstop for a caller that hands us something it did not parse.
   if (
-    net.isIP(ipForCheck) === 0 &&
-    /^(?:0x[0-9a-f]+|\d+|\d{1,3}(?:\.\d{1,3}){1,3})$/i.test(ipForCheck)
+    net.isIP(bareName) === 0 &&
+    /^(?:0x[0-9a-f]+|\d+|\d{1,3}(?:\.\d{1,3}){1,3})$/i.test(bareName)
   ) {
     return { valid: false, error: `Blocked ambiguous numeric host: ${hostname}` };
   }
-  // Check if hostname is an IP address
-  if (net.isIP(ipForCheck)) {
-    // Check cloud metadata endpoints first (more specific match)
-    if (CLOUD_METADATA_IPS.includes(ipForCheck)) {
-      return { valid: false, error: `Blocked cloud metadata endpoint: ${hostname}` };
-    }
 
-    // Check against blocked IP patterns
-    for (const pattern of BLOCKED_IP_PATTERNS) {
-      if (pattern.test(ipForCheck)) {
-        return { valid: false, error: `Blocked private/reserved IP: ${hostname}` };
-      }
-    }
+  const verdict = classifyAddress(hostname);
+  if (verdict.kind === 'blocked') {
+    return {
+      valid: false,
+      error: verdict.metadata
+        ? `Blocked cloud metadata endpoint: ${hostname}`
+        : `Blocked private/reserved IP: ${hostname}`,
+    };
   }
 
   // Block common internal ports on any host
   const port = parsed.port ? parseInt(parsed.port, 10) : (parsed.protocol === 'https:' ? 443 : 80);
   const INTERNAL_ONLY_PORTS = [6379, 5432, 3306, 27017, 9200, 2379, 8500]; // redis, postgres, mysql, mongo, elasticsearch, etcd, consul
-  if (INTERNAL_ONLY_PORTS.includes(port) && isLikelyInternal(hostname)) {
+  if (INTERNAL_ONLY_PORTS.includes(port) && isLikelyInternal(bareName)) {
     return { valid: false, error: `Blocked internal service port ${port} on ${hostname}` };
   }
 

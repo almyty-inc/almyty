@@ -92,7 +92,7 @@ export function llmCallOptionsFor(provider: LlmProvider): LlmCallOptions {
 }
 
 /** Resolve baseURL+url the way axios does and run the SSRF gate. */
-function assertLlmUrlAllowed(config: AxiosRequestConfig, opts?: LlmCallOptions): void {
+function assertLlmUrlAllowed(config: AxiosRequestConfig, opts?: LlmCallOptions): string {
   if (!config.url) {
     throw new BadRequestException('The provider URL is missing');
   }
@@ -125,18 +125,23 @@ function assertLlmUrlAllowed(config: AxiosRequestConfig, opts?: LlmCallOptions):
       `Refused to reach the provider URL: ${validation.error}`,
     );
   }
+  return target;
 }
 
 /**
+ * The transport half of the gate, for the URL `assertLlmUrlAllowed` passed.
+ *
  * The DNS-pinning agents refuse connections that resolve to private
- * addresses, so when private URLs are explicitly allowed (Ollama escape
- * hatch) the request must fall back to the default agents — otherwise
- * localhost:11434 would pass the string check and then be refused at
- * connect time.
+ * addresses, so when private URLs are explicitly allowed (the Ollama /
+ * custom-provider escape hatches) localhost:11434 would pass the string
+ * check and then be refused at connect time. The relaxation is scoped to
+ * the one host this request is for -- `agentsExempting(host)` -- rather
+ * than dropping pinning altogether, so it cannot reach any other name.
+ * Redirects stay refused either way.
  */
-function defaultsFor(opts?: LlmCallOptions): AxiosRequestConfig {
+function transportFor(target: string, opts?: LlmCallOptions): AxiosRequestConfig {
   if (opts?.allowPrivateUrls) {
-    return { ...LLM_HTTP_DEFAULTS, httpAgent: undefined, httpsAgent: undefined };
+    return { ...LLM_HTTP_DEFAULTS, ...agentsExempting(new URL(target).hostname) };
   }
   // One allowlisted host gets an exception; every other name resolved
   // through these agents is pinned as strictly as before.
@@ -146,12 +151,27 @@ function defaultsFor(opts?: LlmCallOptions): AxiosRequestConfig {
   return LLM_HTTP_DEFAULTS;
 }
 
+/**
+ * Merge a call's config over the defaults without letting it switch the
+ * gate off: a caller-supplied `maxRedirects` or agent would silently undo
+ * the redirect refusal or the DNS pin.
+ */
+function gatedConfig(config: AxiosRequestConfig, opts?: LlmCallOptions): AxiosRequestConfig {
+  const transport = transportFor(assertLlmUrlAllowed(config, opts), opts);
+  return {
+    ...transport,
+    ...config,
+    maxRedirects: transport.maxRedirects,
+    httpAgent: transport.httpAgent,
+    httpsAgent: transport.httpsAgent,
+  };
+}
+
 export async function callLlmProviderHttp<T = any>(
   config: AxiosRequestConfig,
   opts?: LlmCallOptions,
 ): Promise<AxiosResponse<T>> {
-  assertLlmUrlAllowed(config, opts);
-  return axios({ ...defaultsFor(opts), ...config });
+  return axios(gatedConfig(config, opts));
 }
 
 /**
@@ -165,10 +185,8 @@ export async function callLlmProviderHttpStream<T = any>(
   config: AxiosRequestConfig,
   opts?: LlmCallOptions,
 ): Promise<AxiosResponse<T>> {
-  assertLlmUrlAllowed(config, opts);
   return axios({
-    ...defaultsFor(opts),
-    ...config,
+    ...gatedConfig(config, opts),
     responseType: 'stream',
   });
 }

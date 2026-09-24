@@ -7,7 +7,7 @@ import { Tool, ToolType } from '../../entities/tool.entity';
 import { Operation } from '../../entities/operation.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
 import { ToolsService } from './tools.service';
-import { assertToolQuota, capGeneratedDescription } from './tool-quota';
+import { capGeneratedDescription, precheckToolQuota, withToolQuota } from './tool-quota';
 
 @Injectable()
 export class ToolsOperationHelper {
@@ -32,10 +32,9 @@ export class ToolsOperationHelper {
       organizationId: string;
     }
   ): Promise<Tool> {
-    // Per-row check. The bulk caller (ApisToolGeneratorHelper) has
-    // already rejected a batch that would not fit; this covers every
-    // other caller of ToolsService.createFromOperation.
-    await assertToolQuota(this.toolRepository.manager, options.organizationId);
+    // Fail fast before loading and translating the operation; the
+    // enforcing check runs with the insert below.
+    await precheckToolQuota(this.toolRepository.manager, options.organizationId);
 
     // Load the operation with its API
     const operationWithApi = await this.operationRepository.findOne({
@@ -95,7 +94,15 @@ export class ToolsOperationHelper {
       },
     });
 
-    const savedTool = await this.toolRepository.save(tool);
+    // Per-row enforcement, under the organization's tool-quota lock. The
+    // bulk caller (ApisToolGeneratorHelper) has already refused a batch
+    // that would not fit; this is what holds when two batches race.
+    const savedTool = await withToolQuota(
+      this.toolRepository.manager,
+      options.organizationId,
+      1,
+      (tx) => tx.getRepository(Tool).save(tool),
+    );
 
     // Create initial version
     await this.tools.createToolVersion(savedTool, 'Auto-generated from API operation', 'system');

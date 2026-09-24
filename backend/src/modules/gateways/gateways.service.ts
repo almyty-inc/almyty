@@ -33,6 +33,7 @@ import { DiscordGatewayTransport } from './channels/discord-gateway.transport';
 import { ChannelWebhookRegistrar } from './channels/channel-webhook-registrar.service';
 import { EmailProvisioningService } from './channels/email-provisioning.service';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
+import { withGatewayQuota } from './gateway-quota';
 
 /**
  * The partial unique index that actually reserves a hosted-chat slug.
@@ -523,10 +524,8 @@ export class GatewaysService {
         throw new ForbiddenException('User does not have permission to create gateways');
       }
 
-      // Check organization limits
-      if (!organization.canAddMoreGateways()) {
-        throw new BadRequestException('Organization has reached gateway limit');
-      }
+      // Organization limits (settings.maxGateways) are enforced with the
+      // insert below, by withGatewayQuota.
 
       // Ensure endpoint starts with /
       const endpoint = createGatewayDto.endpoint.startsWith('/')
@@ -620,7 +619,16 @@ export class GatewaysService {
       // failure path has to compensate for that write regardless.
       // Compensating for all of it keeps one recovery path instead of
       // two that have to agree.
-      let savedGateway = await this.gatewayRepository.save(gateway);
+      //
+      // The quota check and this first insert share one transaction under
+      // the organization's gateway-quota lock (see gateway-quota.ts), so
+      // two concurrent creates cannot both take the last slot.
+      let savedGateway = await withGatewayQuota(
+        this.gatewayRepository.manager,
+        organizationId,
+        1,
+        (tx) => tx.getRepository(Gateway).save(gateway),
+      );
       try {
         if (deferSecrets) {
           savedGateway.configuration = inlineConfiguration;

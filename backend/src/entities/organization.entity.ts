@@ -149,21 +149,8 @@ export class Organization {
     return (this.apis?.length || 0) < maxApis;
   }
 
-  canAddMoreGateways(): boolean {
-    const maxGateways = this.settings?.maxGateways;
-    if (!maxGateways) return true;
-    return (this.gateways?.length || 0) < maxGateways;
-  }
-
-  /**
-   * Reads the `tools` relation, so it is only meaningful when that
-   * relation was loaded -- and no production path loads it. Not an
-   * enforcement point: every tool insert goes through
-   * `assertToolQuota` in modules/tools/tool-quota.ts, which COUNTs.
-   */
-  canAddMoreTools(): boolean {
-    const maxTools = this.settings?.maxTools;
-    if (!maxTools) return true;
-    return (this.tools?.length || 0) < maxTools;
-  }
+  // No canAddMoreGateways() / canAddMoreTools(): both read a relation no
+  // production path loads, so they always answered "yes". The limits are
+  // enforced by COUNT under a per-organization lock in
+  // modules/gateways/gateway-quota.ts and modules/tools/tool-quota.ts.
 }

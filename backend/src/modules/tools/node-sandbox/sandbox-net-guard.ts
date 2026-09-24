@@ -59,141 +59,33 @@ const dns = require('dns');
 const dgram = require('dgram');
 import type * as netTypes from 'net';
 import type * as dgramTypes from 'dgram';
+import {
+  classifyAddress,
+  isBlockedAddress,
+  isBlockedHostname,
+  stripBrackets,
+} from '../../../common/security/ip-classification';
+import { domainMatches } from '../../../common/security/gateway-tool-policy';
 
 // ── Ban list ────────────────────────────────────────────────────
 
 /**
- * IPv4 CIDRs refused by the guard. Sourced from IANA's IPv4
- * special-purpose registry (RFC 6890).
+ * The ranges and hostnames live in `common/security/ip-classification.ts`,
+ * shared with the host-side URL validator and DNS-pinning agents, so the
+ * sandbox and the server cannot disagree about what is private.
  *
- * Each entry is `[network, prefixLength]`. The check is a mask-and-
- * compare against the 32-bit big-endian representation of the
- * target address.
+ * This file used to carry its own copy. Its IPv6 half was first a
+ * lowercase string-prefix match, which missed the expanded and hex
+ * spellings of IPv4-mapped loopback and metadata; then a `net.BlockList`,
+ * which fixed the mapped form (BlockList normalises `::ffff:0:0/96` back
+ * to IPv4) but still passed the IPv4-compatible `::a.b.c.d`, SIIT, 6to4
+ * and Teredo forms, none of which BlockList unwraps. The shared classifier
+ * parses the address and unwraps or bans every one of them.
+ *
+ * The sandbox worker loads this module under Node's permission model; the
+ * compiled classifier is granted a file-scoped read in
+ * `NodeSandboxService.buildWorkerExecArgv` for exactly that reason.
  */
-const BANNED_IPV4: ReadonlyArray<readonly [string, number]> = [
-  ['0.0.0.0', 8], // "this network"
-  ['10.0.0.0', 8], // RFC1918 private
-  ['100.64.0.0', 10], // CGNAT (RFC 6598)
-  ['127.0.0.0', 8], // loopback
-  ['169.254.0.0', 16], // link-local — includes EC2/GCP/Azure IMDS
-  ['172.16.0.0', 12], // RFC1918 private
-  ['192.0.0.0', 24], // IETF protocol assignments
-  ['192.0.2.0', 24], // TEST-NET-1 (documentation)
-  ['192.168.0.0', 16], // RFC1918 private
-  ['198.18.0.0', 15], // benchmark
-  ['198.51.100.0', 24], // TEST-NET-2
-  ['203.0.113.0', 24], // TEST-NET-3
-  ['224.0.0.0', 4], // multicast
-  ['240.0.0.0', 4], // reserved (class E)
-  ['255.255.255.255', 32], // limited broadcast
-];
-
-/**
- * IPv6 ranges refused by the guard, as real CIDRs.
- *
- * This used to be a lowercase string-prefix match on the assumption —
- * stated in the comment that stood here — that "Node gives us canonical
- * form". It does not. The host arrives as whatever the tool code typed
- * into a URL, and `fetch('http://[0:0:0:0:0:ffff:127.0.0.1]/')` is
- * passed through verbatim. So the mapped-IPv4 unwrap, which only
- * recognised the dotted `::ffff:a.b.c.d` spelling, missed both of the
- * other two legal spellings of the same address:
- *
- *     ::ffff:7f00:1              // hex form of 127.0.0.1
- *     0:0:0:0:0:ffff:127.0.0.1   // expanded form, no '::ffff:' prefix
- *
- * and `BANNED_IPV6_PREFIXES` then fell through because none of
- * `fe80:`/`fc`/`fd`/`ff` match a string starting `::ffff:` or `0:`.
- * That was live SSRF to loopback and to 169.254.169.254 using nothing
- * but the plain `fetch` global.
- *
- * `net.BlockList` is Node's own range matcher: it parses the address
- * rather than comparing its spelling, and it normalises every
- * IPv4-mapped form back to IPv4 before testing it against an IPv4
- * rule. Seeding one list with both families means the v4 table above
- * stays the single source of truth for v4 ranges, however they are
- * spelled.
- */
-const BANNED_IPV6: ReadonlyArray<readonly [string, number]> = [
-  ['::', 128], // unspecified
-  ['::1', 128], // loopback
-  ['64:ff9b::', 96], // NAT64 well-known prefix (RFC 6052)
-  ['64:ff9b:1::', 48], // NAT64 local-use (RFC 8215)
-  ['100::', 64], // discard-only
-  ['2001:db8::', 32], // documentation
-  ['fc00::', 7], // unique local (fc00::/7 covers fc* and fd*)
-  ['fe80::', 10], // link-local
-  ['ff00::', 8], // multicast
-];
-
-let banList: netTypes.BlockList | null = null;
-
-function bannedRanges(): netTypes.BlockList {
-  if (banList) return banList;
-  const list = new net.BlockList();
-  for (const [addr, bits] of BANNED_IPV4) {
-    if (bits === 32) list.addAddress(addr, 'ipv4');
-    else list.addSubnet(addr, bits, 'ipv4');
-  }
-  for (const [addr, bits] of BANNED_IPV6) {
-    if (bits === 128) list.addAddress(addr, 'ipv6');
-    else list.addSubnet(addr, bits, 'ipv6');
-  }
-  banList = list;
-  return list;
-}
-
-/**
- * Hostnames refused BEFORE DNS lookup runs. A DNS rebinding attack
- * can't help if we never ask DNS at all. These are the three most
- * common cloud metadata hostnames.
- */
-const BANNED_HOSTNAMES: ReadonlySet<string> = new Set<string>([
-  'metadata.google.internal',
-  'metadata.aws.internal',
-  'instance-data',
-  'instance-data.ec2.internal',
-  'metadata.azure.com',
-  'metadata.azure.net',
-  'localhost',
-]);
-
-// ── IP classification helpers ───────────────────────────────────
-
-function ipv4ToLong(ip: string): number {
-  const parts = ip.split('.');
-  if (parts.length !== 4) return -1;
-  let out = 0;
-  for (const p of parts) {
-    const n = Number(p);
-    if (!Number.isInteger(n) || n < 0 || n > 255) return -1;
-    out = (out << 8) | n;
-  }
-  // Force unsigned 32-bit
-  return out >>> 0;
-}
-
-function isBannedIPv4(ip: string): boolean {
-  const long = ipv4ToLong(ip);
-  if (long < 0) return true; // unparseable → refuse
-  for (const [net, bits] of BANNED_IPV4) {
-    const netLong = ipv4ToLong(net);
-    if (netLong < 0) continue;
-    const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
-    if ((long & mask) === (netLong & mask)) return true;
-  }
-  return false;
-}
-
-function isBannedIPv6(ip: string): boolean {
-  // Strip any zone index (`fe80::1%eth0`) — BlockList rejects it.
-  const pct = ip.indexOf('%');
-  const bare = pct === -1 ? ip : ip.slice(0, pct);
-  // A zone index only ever appears on a link-local address, which is
-  // banned anyway; refuse rather than guess if it no longer parses.
-  if (net.isIPv6(bare) === false) return true;
-  return bannedRanges().check(bare, 'ipv6');
-}
 
 /**
  * Classify a literal IP address. Returns `true` if the address is
@@ -201,10 +93,15 @@ function isBannedIPv6(ip: string): boolean {
  * decide) — this is intended to be composed with `net.isIP`.
  */
 export function isBannedAddress(ip: string): boolean {
-  const fam = net.isIP(ip);
-  if (fam === 4) return isBannedIPv4(ip);
-  if (fam === 6) return isBannedIPv6(ip);
-  return false;
+  return isBlockedAddress(ip);
+}
+
+/**
+ * A resolver answer. Anything but a public IP literal is refused: an
+ * answer that does not parse as an address is not something to connect to.
+ */
+function isBannedAnswer(ip: string): boolean {
+  return classifyAddress(ip).kind !== 'public';
 }
 
 // ── Refusal error ───────────────────────────────────────────────
@@ -227,6 +124,11 @@ interface NetGuardOptions {
    * Production code never sets this.
    */
   testAllow?: string;
+  /**
+   * The host restrictions of the gateway tool this execution runs for
+   * (`gateway_tools.securityPolicy`). See `policyRefusal`.
+   */
+  hostPolicy?: SandboxHostPolicy | null;
 }
 
 let allowedTestTargets: Set<string> = new Set();
@@ -238,6 +140,56 @@ function isAllowedTestTarget(host: string, port: number): boolean {
     allowedTestTargets.has(`${host}:*`) ||
     allowedTestTargets.has(`*:${port}`)
   );
+}
+
+// ── Gateway host policy ─────────────────────────────────────────
+
+/**
+ * A JavaScript or SDK tool run through a gateway used to be held only to
+ * the SSRF floor. The gateway tool's `securityPolicy` -- allowed and
+ * blocked domains -- was enforced on HTTP/GraphQL/SOAP/gRPC tools by the
+ * host-side executors, but a sandboxed tool's own `fetch` (or any npm
+ * client it loaded) never met it, so an allow-list of `api.example.com`
+ * did not stop the tool calling anything else on the internet.
+ *
+ * The policy is enforced here, at the same choke points as the ban list,
+ * with the same `domainMatches` the executors use. Hostnames are checked
+ * where they are visible (lookup, resolver queries, connect). A literal
+ * address passes an allow-list only if it is itself listed or a name the
+ * policy allowed resolved to it -- the latter so a client that resolves
+ * first and connects by address still works.
+ *
+ * Scheme (`requireHttps`) and method rules are HTTP-level and are not
+ * visible to a socket; they are not enforced here.
+ */
+export interface SandboxHostPolicy {
+  allowedDomains?: string[];
+  blockedDomains?: string[];
+}
+
+let hostPolicy: SandboxHostPolicy | null = null;
+const policyVettedAddresses = new Set<string>();
+
+function policyRefusal(host: string): string | null {
+  if (!hostPolicy) return null;
+  const h = stripBrackets(String(host).toLowerCase());
+  if (net.isIP(h) && policyVettedAddresses.has(h)) return null;
+  const blocked = (hostPolicy.blockedDomains ?? []).filter(Boolean);
+  if (blocked.some((pattern) => domainMatches(h, pattern))) {
+    return "on this gateway tool's blocked-domain list";
+  }
+  const allowed = (hostPolicy.allowedDomains ?? []).filter(Boolean);
+  if (allowed.length > 0 && !allowed.some((pattern) => domainMatches(h, pattern))) {
+    return "not on this gateway tool's allowed-domain list";
+  }
+  return null;
+}
+
+function rememberPolicyAddresses(addrs: Array<{ address: string }>): void {
+  if (!hostPolicy) return;
+  for (const { address } of addrs) {
+    if (typeof address === 'string') policyVettedAddresses.add(address.toLowerCase());
+  }
 }
 
 // ── Patches ─────────────────────────────────────────────────────
@@ -275,6 +227,13 @@ export function installSandboxNetGuard(options: NetGuardOptions = {}): void {
         .filter(Boolean),
     );
   }
+
+  const allowed = (options.hostPolicy?.allowedDomains ?? []).filter(Boolean);
+  const blocked = (options.hostPolicy?.blockedDomains ?? []).filter(Boolean);
+  hostPolicy =
+    allowed.length > 0 || blocked.length > 0
+      ? { allowedDomains: [...allowed], blockedDomains: [...blocked] }
+      : null;
 
   patchDnsLookup();
   patchDnsResolvers();
@@ -327,6 +286,8 @@ export function resetSandboxNetGuardForTesting(): void {
   }
   installed = false;
   allowedTestTargets = new Set();
+  hostPolicy = null;
+  policyVettedAddresses.clear();
 }
 
 // ── dns.lookup patch ────────────────────────────────────────────
@@ -334,7 +295,7 @@ export function resetSandboxNetGuardForTesting(): void {
 /**
  * Wrap `dns.lookup` and `dns.promises.lookup`. The patch:
  *
- *   1. Refuses hostnames in BANNED_HOSTNAMES before calling the
+ *   1. Refuses blocked hostnames (isBlockedHostname) before calling the
  *      real resolver (prevents DNS rebinding from even getting
  *      a chance).
  *   2. Runs the original resolver.
@@ -361,19 +322,24 @@ function patchDnsLookup(): void {
     }
 
     const lowered = String(hostname).toLowerCase();
-    if (BANNED_HOSTNAMES.has(lowered) && !allowedTestTargets.has(`${lowered}:*`)) {
+    const policyReason = policyRefusal(lowered);
+    if (policyReason) {
+      return process.nextTick(callback, refusal(hostname, policyReason));
+    }
+    if (isBlockedHostname(lowered) && !allowedTestTargets.has(`${lowered}:*`)) {
       return process.nextTick(callback, refusal(hostname, 'banned hostname'));
     }
 
     (origCallback as any)(hostname, options, (err: any, address: any, family: any) => {
       if (err) return callback(err);
       const addrs = Array.isArray(address) ? address : [{ address, family }];
-      for (const { address: a, family: f } of addrs) {
-        const banned = f === 4 ? isBannedIPv4(a) : isBannedIPv6(a);
+      for (const { address: a } of addrs) {
+        const banned = isBannedAnswer(a);
         if (banned && !isAllowedTestTarget(hostname, 0) && !isAllowedTestTarget(hostname, -1)) {
           return callback(refusal(`${hostname} (resolved ${a})`, 'banned IP'));
         }
       }
+      rememberPolicyAddresses(addrs);
       callback(null, address, family);
     });
   };
@@ -385,17 +351,20 @@ function patchDnsLookup(): void {
     options?: any,
   ): Promise<any> {
     const lowered = String(hostname).toLowerCase();
-    if (BANNED_HOSTNAMES.has(lowered) && !allowedTestTargets.has(`${lowered}:*`)) {
+    const policyReason = policyRefusal(lowered);
+    if (policyReason) throw refusal(hostname, policyReason);
+    if (isBlockedHostname(lowered) && !allowedTestTargets.has(`${lowered}:*`)) {
       throw refusal(hostname, 'banned hostname');
     }
     const result = await (origPromise as any)(hostname, options);
     const addrs = Array.isArray(result) ? result : [result];
-    for (const { address: a, family: f } of addrs) {
-      const banned = f === 4 ? isBannedIPv4(a) : isBannedIPv6(a);
+    for (const { address: a } of addrs) {
+      const banned = isBannedAnswer(a);
       if (banned && !isAllowedTestTarget(hostname, 0) && !isAllowedTestTarget(hostname, -1)) {
         throw refusal(`${hostname} (resolved ${a})`, 'banned IP');
       }
     }
+    rememberPolicyAddresses(addrs);
     return result;
   };
 }
@@ -481,7 +450,17 @@ function wrapResolverQuery(orig: (...a: any[]) => any): (...a: any[]) => any {
     const cb = last >= 0 && typeof args[last] === 'function' ? args[last] : null;
     const answerExempt = isAllowedTestTarget(name, 0) || isAllowedTestTarget(name, -1);
 
-    if (BANNED_HOSTNAMES.has(lowered) && !allowedTestTargets.has(`${lowered}:*`)) {
+    const policyReason = policyRefusal(lowered);
+    if (policyReason) {
+      const err = refusal(name, policyReason);
+      if (cb) {
+        process.nextTick(() => cb(err));
+        return undefined;
+      }
+      return Promise.reject(err);
+    }
+
+    if (isBlockedHostname(lowered) && !allowedTestTargets.has(`${lowered}:*`)) {
       const err = refusal(name, 'banned hostname');
       if (cb) {
         process.nextTick(() => cb(err));
@@ -640,6 +619,16 @@ function patchSocketConnect(): void {
     }
 
     if (host && port !== undefined) {
+      // The gateway's host policy comes first and has no test bypass:
+      // it narrows what the tool may reach, it never widens it.
+      const policyReason = policyRefusal(host);
+      if (policyReason) {
+        const sock = this;
+        process.nextTick(() =>
+          sock.emit('error', refusal(`${host}:${port}`, policyReason)),
+        );
+        return sock;
+      }
       // Test allow-list bypass: exact host:port match.
       if (isAllowedTestTarget(host, port)) {
         return orig.apply(this, args as any);
@@ -659,7 +648,7 @@ function patchSocketConnect(): void {
         }
       } else {
         // Hostname. Pre-DNS ban-list check.
-        if (BANNED_HOSTNAMES.has(host.toLowerCase())) {
+        if (isBlockedHostname(host.toLowerCase())) {
           const sock = this;
           process.nextTick(() =>
             sock.emit(
@@ -711,6 +700,14 @@ function patchDgram(): void {
       }
     }
     if (port !== undefined && address) {
+      const policyReason = policyRefusal(address);
+      if (policyReason) {
+        const err = refusal(`${address}:${port}`, policyReason);
+        const cb = args[args.length - 1];
+        if (typeof cb === 'function') process.nextTick(cb, err);
+        else process.nextTick(() => this.emit('error', err));
+        return;
+      }
       if (isAllowedTestTarget(address, port)) {
         return origSend.apply(this, args as any);
       }
@@ -723,7 +720,7 @@ function patchDgram(): void {
           else process.nextTick(() => this.emit('error', err));
           return;
         }
-      } else if (BANNED_HOSTNAMES.has(address.toLowerCase())) {
+      } else if (isBlockedHostname(address.toLowerCase())) {
         const err = refusal(`${address}:${port}`, 'banned hostname');
         const cb = args[args.length - 1];
         if (typeof cb === 'function') process.nextTick(cb, err);

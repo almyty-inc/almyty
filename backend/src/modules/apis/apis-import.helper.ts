@@ -3,7 +3,7 @@ import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
 import { ImportSchemaOptions } from './dto/apis.dto';
 import { assertOutboundUrlAllowed } from '../../common/security/safe-fetch';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
+import { pinnedRedirects } from '../../common/security/pinned-redirects';
 import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -388,8 +388,11 @@ export class ApisImportHelper {
    *     whose A record answers 169.254.169.254 passes any string check.
    *     Pinning at connect leaves no window between the check and the
    *     socket for the answer to change;
-   *   - `maxRedirects: 0`, because a public URL that 302s to an internal
-   *     host walks straight around a string-only gate.
+   *   - every redirect hop re-validated, a few at most (`pinnedRedirects`),
+   *     because a public URL that 302s to an internal host walks straight
+   *     around a string-only gate -- and because refusing redirects
+   *     outright broke the ordinary case of a spec URL that 301s from
+   *     http to https or to a moved path.
    *
    * These are http.Agents, which is right for axios and useless for
    * `fetch` -- undici ignores them and wants `ssrfSafeDispatcher`. See
@@ -411,9 +414,7 @@ export class ApisImportHelper {
         // overhead and lets that error surface a clearer message.
         maxContentLength: 15 * 1024 * 1024,
         maxBodyLength: 15 * 1024 * 1024,
-        maxRedirects: 0,
-        httpAgent: ssrfSafeHttpAgent,
-        httpsAgent: ssrfSafeHttpsAgent,
+        ...pinnedRedirects(),
         headers: {
           'Accept': 'application/json, application/yaml, text/yaml, text/plain, application/xml, text/xml',
         },

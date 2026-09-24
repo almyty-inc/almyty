@@ -16,7 +16,10 @@ import {
   ToolQuotaExceededException,
   assertToolQuota,
   capGeneratedDescription,
+  precheckToolQuota,
+  withToolQuota,
 } from '../tool-quota';
+import { QuotaLockRequiresTransactionError } from '../../../common/quota/org-quota-lock';
 
 /**
  * Exploit-shaped: an organization sitting exactly at `settings.maxTools`
@@ -46,37 +49,91 @@ function quotaManager(opts: { maxTools?: number; current: number; existing?: num
     const where = o?.where ?? {};
     return where.name !== undefined || where.operationId !== undefined ? opts.existing ?? 0 : opts.current;
   });
-  const manager: any = {
-    getRepository: jest.fn((entity: unknown) => (entity === Organization ? orgRepo : { count })),
+  // The mocked Tool repository a service under test writes through; the
+  // transaction's Tool repository forwards its writes there.
+  let tools: Record<string, unknown> = {};
+  const toolRepo = () => ({ ...tools, count });
+  const lock = jest.fn(async (_sql: string, _params?: unknown[]) => []);
+  const getRepository = jest.fn((entity: unknown) => (entity === Organization ? orgRepo : toolRepo()));
+  const tx: any = { queryRunner: { isTransactionActive: true }, query: lock, getRepository };
+  const manager: any = { getRepository, transaction: jest.fn(async (cb: any) => cb(tx)) };
+  const bindTools = (repo: Record<string, unknown>) => {
+    tools = repo;
+    return manager;
   };
-  return { manager, org, count };
+  return { manager, tx, org, count, lock, bindTools };
 }
 
 const atLimit = () => quotaManager({ maxTools: 5, current: 5 });
 
 describe('assertToolQuota', () => {
   it('counts with a real query, not the organization.tools relation', async () => {
-    const { manager, org, count } = atLimit();
+    const { tx, org, count } = atLimit();
     expect(org.tools).toBeUndefined();
-    expect(org.canAddMoreTools()).toBe(true); // the old, relation-reading check
-    await expect(assertToolQuota(manager, ORG)).rejects.toBeInstanceOf(ToolQuotaExceededException);
+    await expect(assertToolQuota(tx, ORG)).rejects.toBeInstanceOf(ToolQuotaExceededException);
     expect(count).toHaveBeenCalledWith({ where: { organizationId: ORG } });
   });
 
   it('is a 400 like the API limit', async () => {
-    const { manager } = atLimit();
-    await expect(assertToolQuota(manager, ORG)).rejects.toBeInstanceOf(BadRequestException);
+    const { tx } = atLimit();
+    await expect(assertToolQuota(tx, ORG)).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects a batch larger than what remains, naming the numbers', async () => {
-    const { manager } = quotaManager({ maxTools: 10, current: 8 });
-    await expect(assertToolQuota(manager, ORG, 2)).resolves.toBeUndefined();
-    await expect(assertToolQuota(manager, ORG, 3)).rejects.toThrow('this would add 3 tools and only 2 remain');
+    const { tx } = quotaManager({ maxTools: 10, current: 8 });
+    await expect(assertToolQuota(tx, ORG, 2)).resolves.toBeUndefined();
+    await expect(assertToolQuota(tx, ORG, 3)).rejects.toThrow('this would add 3 tools and only 2 remain');
   });
 
-  it('lets an organization without a limit through', async () => {
-    const { manager } = quotaManager({ current: 10_000 });
-    await expect(assertToolQuota(manager, ORG, 500)).resolves.toBeUndefined();
+  it('lets an organization without a limit through, without locking', async () => {
+    const { tx, lock } = quotaManager({ current: 10_000 });
+    await expect(assertToolQuota(tx, ORG, 500)).resolves.toBeUndefined();
+    expect(lock).not.toHaveBeenCalled();
+  });
+
+  it('takes the per-organization lock before it counts', async () => {
+    const { tx, lock, count } = quotaManager({ maxTools: 10, current: 1 });
+    await assertToolQuota(tx, ORG, 1);
+    expect(lock).toHaveBeenCalledWith('SELECT pg_advisory_xact_lock(hashtext($1))', [`quota:tools:${ORG}`]);
+    expect(lock.mock.invocationCallOrder[0]).toBeLessThan(count.mock.invocationCallOrder[0]);
+  });
+
+  it('refuses to run outside a transaction, where the lock would serialise nothing', async () => {
+    const { manager } = quotaManager({ maxTools: 10, current: 1 });
+    await expect(assertToolQuota(manager, ORG)).rejects.toBeInstanceOf(QuotaLockRequiresTransactionError);
+  });
+});
+
+describe('withToolQuota', () => {
+  it('runs the check and the insert in one transaction, check first', async () => {
+    const { manager, tx, lock } = quotaManager({ maxTools: 10, current: 1 });
+    const insert = jest.fn(async (t: unknown) => t);
+    await expect(withToolQuota(manager, ORG, 1, insert)).resolves.toBe(tx);
+    expect(manager.transaction).toHaveBeenCalledTimes(1);
+    expect(lock.mock.invocationCallOrder[0]).toBeLessThan(insert.mock.invocationCallOrder[0]);
+  });
+
+  it('joins a transaction the caller already owns', async () => {
+    const { tx } = quotaManager({ maxTools: 10, current: 1 });
+    tx.transaction = jest.fn();
+    await withToolQuota(tx, ORG, 1, async () => undefined);
+    expect(tx.transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not run the insert when the quota refuses', async () => {
+    const { manager } = atLimit();
+    const insert = jest.fn();
+    await expect(withToolQuota(manager, ORG, 1, insert)).rejects.toBeInstanceOf(ToolQuotaExceededException);
+    expect(insert).not.toHaveBeenCalled();
+  });
+});
+
+describe('precheckToolQuota', () => {
+  it('checks without a transaction or a lock', async () => {
+    const { manager, lock } = atLimit();
+    await expect(precheckToolQuota(manager, ORG)).rejects.toBeInstanceOf(ToolQuotaExceededException);
+    expect(lock).not.toHaveBeenCalled();
+    expect(manager.transaction).not.toHaveBeenCalled();
   });
 });
 
@@ -97,7 +154,7 @@ describe('capGeneratedDescription', () => {
 describe('manual create (ToolsService.createTool)', () => {
   function build(quota: ReturnType<typeof quotaManager>) {
     const toolRepo: any = {
-      manager: quota.manager,
+      get manager() { return quota.bindTools(this); },
       create: jest.fn((x: any) => ({ id: 't-new', ...x })),
       save: jest.fn(async (x: any) => x),
     };
@@ -182,7 +239,11 @@ describe('schema import (ApisToolGeneratorHelper.generateToolsFromApi)', () => {
 describe('ToolsService.createFromOperation (ToolsOperationHelper)', () => {
   it('refuses a row when the organization is at its limit', async () => {
     const quota = atLimit();
-    const toolRepo: any = { manager: quota.manager, create: jest.fn((x: any) => x), save: jest.fn(async (x: any) => x) };
+    const toolRepo: any = {
+      get manager() { return quota.bindTools(this); },
+      create: jest.fn((x: any) => x),
+      save: jest.fn(async (x: any) => x),
+    };
     const opRepo: any = {
       findOne: jest.fn().mockResolvedValue({ id: 'op-1', name: 'op', parameters: [], api: { id: 'api-1', name: 'A' } }),
     };
@@ -202,7 +263,7 @@ describe('generate-from-api (ToolGeneratorService.generateToolsFromApi)', () => 
 
   function build(quota: ReturnType<typeof quotaManager>, ops: any[]) {
     const toolRepo: any = {
-      manager: quota.manager,
+      get manager() { return quota.bindTools(this); },
       count: jest.fn(async () => quota.count({ where: { operationId: 'x' } })),
       findOne: jest.fn().mockResolvedValue(null),
       create: jest.fn((x: any) => ({ id: 't-new', ...x })),
@@ -251,7 +312,7 @@ describe('MCP source sync (McpSourcesService.sync)', () => {
 
   function build(quota: ReturnType<typeof quotaManager>, remote: Array<{ name: string; description?: string }>) {
     const toolRepo: any = {
-      manager: quota.manager,
+      get manager() { return quota.bindTools(this); },
       find: jest.fn().mockResolvedValue([]),
       create: jest.fn((x: any) => x),
       save: jest.fn(async (x: any) => x),
@@ -290,7 +351,7 @@ describe('MCP source sync (McpSourcesService.sync)', () => {
 describe('Tool Hub install (ToolHubService.installTemplate)', () => {
   function build(quota: ReturnType<typeof quotaManager>, template: Record<string, unknown>) {
     const toolRepo: any = {
-      manager: quota.manager,
+      get manager() { return quota.bindTools(this); },
       create: jest.fn((x: any) => x),
       save: jest.fn(async (x: any) => ({ id: 't-new', ...x })),
     };
@@ -332,6 +393,8 @@ function transactionalTools(quota: ReturnType<typeof quotaManager>) {
     count: jest.fn(async () => quota.count({ where: { organizationId: ORG } })),
   };
   const mgr: any = {
+    queryRunner: { isTransactionActive: true },
+    query: quota.lock,
     getRepository: jest.fn((entity: unknown) => (entity === Tool ? toolRepoInTx : quota.manager.getRepository(entity))),
   };
   const tools: any = { manager: { transaction: jest.fn(async (cb: any) => cb(mgr)) } };

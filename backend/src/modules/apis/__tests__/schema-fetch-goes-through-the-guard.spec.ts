@@ -70,12 +70,13 @@ describe('every schema fetch goes through the guarded helper', () => {
     // the uniform refusal that does not leak whether a host or port exists.
     expect(body).toContain('assertOutboundUrlAllowed(url)');
     expect(body).toContain('maxContentLength');
-    expect(body).toContain('maxRedirects: 0');
     // The string gate is not enough on its own. A public name whose A
     // record answers 169.254.169.254 passes it, so the connection is
     // pinned too -- this is the half #696 found and the REST door lacked.
-    expect(body).toContain('httpAgent: ssrfSafeHttpAgent');
-    expect(body).toContain('httpsAgent: ssrfSafeHttpsAgent');
+    // pinnedRedirects() carries the pinned agents onto every hop and runs
+    // each hop's Location back through validateUrl; a schema URL that 301s
+    // to https is followed, one that 302s to an internal host is refused.
+    expect(body).toContain('...pinnedRedirects()');
     // The refusal must come before the request, not after it.
     expect(body.indexOf('assertOutboundUrlAllowed(url)')).toBeLessThan(body.indexOf('axios.get('));
   });

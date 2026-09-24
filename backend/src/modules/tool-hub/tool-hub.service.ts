@@ -21,7 +21,7 @@ import {
   scrubStringMap,
 } from './template-sanitizer';
 import { PublishToolTemplateDto, UpdateToolTemplateDto } from './dto/tool-hub.dto';
-import { assertToolQuota, capGeneratedDescription } from '../tools/tool-quota';
+import { capGeneratedDescription, precheckToolQuota, withToolQuota } from '../tools/tool-quota';
 
 export interface ListTemplatesFilters {
   category?: string;
@@ -181,8 +181,9 @@ export class ToolHubService {
     // Pass orgId so cross-org templates are rejected up front.
     const template = await this.getTemplate(templateId, orgId);
     // Before any Api is created for the template: a refused install
-    // must not leave an orphan API behind.
-    await assertToolQuota(this.toolRepository.manager, orgId);
+    // must not leave an orphan API behind. Unlocked precheck; the
+    // insert below re-checks under the organization's lock.
+    await precheckToolQuota(this.toolRepository.manager, orgId);
     let api: Api | undefined;
 
     // If template has apiConfig, resolve or create an Api
@@ -256,7 +257,13 @@ export class ToolHubService {
       },
     });
 
-    const savedTool = await this.toolRepository.save(tool);
+    // Enforced with the insert, under the organization's tool-quota lock.
+    const savedTool = await withToolQuota(
+      this.toolRepository.manager,
+      orgId,
+      1,
+      (tx) => tx.getRepository(Tool).save(tool),
+    );
 
     // Increment install count
     await this.templateRepository.increment({ id: templateId }, 'installCount', 1);

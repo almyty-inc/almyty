@@ -2,7 +2,12 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createSign } from 'crypto';
 
+import type { Dispatcher } from 'undici';
+
 import { validateUrl, validateUrlAllowingPrivate } from '../../common/security/url-validator';
+import { ssrfSafeDispatcher } from '../../common/security/safe-fetch';
+import { dispatcherExempting } from '../../common/security/exempt-dispatcher';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { signAwsRequest } from '../model-deployments/aws-request';
 import { interpolate, readPath } from './connector-schema';
 import { ConnectorDefinition, HttpProbe, ValidationResult, ValidationSpec } from './connector.types';
@@ -21,8 +26,25 @@ export const CONNECTIONS_S3_FACTORY = Symbol('CONNECTIONS_S3_FACTORY');
 
 const PROBE_TIMEOUT_MS = 10_000;
 
+/**
+ * Every probe goes out pinned and never follows a redirect.
+ *
+ * `guardUrl` checks the string; the dispatcher checks what the name
+ * resolves to at connect time, which the string cannot tell. A probe run
+ * under a private-URL hatch passes a host-scoped `dispatcherExempting`
+ * in `init`; nothing else can switch the pin off, because an absent or
+ * undefined dispatcher falls back to the pinned one.
+ */
 export function defaultConnectionsHttp(): ConnectionsHttp {
-  return (url, init) => fetch(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+  return (url, init) => {
+    const requested = (init as { dispatcher?: Dispatcher }).dispatcher;
+    return fetch(url, {
+      ...init,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      dispatcher: requested ?? ssrfSafeDispatcher,
+    } as RequestInit);
+  };
 }
 
 export function defaultS3ProbeClientFactory(): S3ProbeClientFactory {
@@ -39,6 +61,9 @@ export function defaultS3ProbeClientFactory(): S3ProbeClientFactory {
       region: cfg.region,
       credentials: { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey },
       forcePathStyle: true,
+      // The endpoint passed guardUrl as a string; pin what it resolves to.
+      // The SDK accepts NodeHttpHandler options here and owns no redirects.
+      requestHandler: { httpAgent: ssrfSafeHttpAgent, httpsAgent: ssrfSafeHttpsAgent },
     });
     return {
       async headBucket(bucket) { await client.send(new sdk.HeadBucketCommand({ Bucket: bucket })); },
@@ -123,10 +148,24 @@ export class ConnectionValidationService {
     }
   }
 
+  private hatchOpen(privateUrlsEnv?: string): boolean {
+    return !!privateUrlsEnv && String(this.configService.get(privateUrlsEnv) ?? process.env[privateUrlsEnv] ?? '').toLowerCase() === 'true';
+  }
+
   private guardUrl(url: string, privateUrlsEnv?: string): string | null {
-    const allowPrivate = !!privateUrlsEnv && String(this.configService.get(privateUrlsEnv) ?? process.env[privateUrlsEnv] ?? '').toLowerCase() === 'true';
-    const check = allowPrivate ? validateUrlAllowingPrivate(url) : validateUrl(url);
+    const check = this.hatchOpen(privateUrlsEnv) ? validateUrlAllowingPrivate(url) : validateUrl(url);
     return check.valid ? null : (check.error ?? 'URL refused');
+  }
+
+  /**
+   * The request init for a probe of `url`. With the private-URL hatch open,
+   * the DNS pin is relaxed for this URL's host alone (it would otherwise
+   * refuse the in-cluster name the hatch exists for); closed, the default
+   * pinned dispatcher applies.
+   */
+  private probeInit(url: string, init: RequestInit, privateUrlsEnv?: string): RequestInit {
+    if (!this.hatchOpen(privateUrlsEnv)) return init;
+    return { ...init, dispatcher: dispatcherExempting(new URL(url).hostname) } as RequestInit;
   }
 
   private async httpProbe(spec: HttpProbe, config: Record<string, any>): Promise<ValidationResult> {
@@ -158,7 +197,7 @@ export class ConnectionValidationService {
     }
     let res: Response;
     try {
-      res = await this.http(target, init);
+      res = await this.http(target, this.probeInit(url, init, spec.privateUrlsEnv));
     } catch (e: any) {
       return fail(`could not reach ${new URL(url).host}: ${e?.message ?? e}`);
     }
@@ -364,7 +403,7 @@ export class ConnectionValidationService {
     const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'almyty', version: '1' } } });
     let res: Response;
     try {
-      res = await this.http(url, { method: 'POST', headers, body });
+      res = await this.http(url, this.probeInit(url, { method: 'POST', headers, body }, 'MCP_ALLOW_PRIVATE_URLS'));
     } catch (e: any) {
       return fail(`could not reach ${new URL(url).host}: ${e?.message ?? e}`);
     }
