@@ -92,6 +92,7 @@ describe('SpendService', () => {
     const summary = await service.getSummary('org-1', {
       from: new Date('2026-06-01T00:00:00Z'),
       granularity: 'day',
+      viewerId: 'user-1',
     });
 
     expect(summary.totalCents).toBe(500);
@@ -116,6 +117,7 @@ describe('SpendService', () => {
     const summary = await service.getSummary('org-1', {
       from: new Date('2026-06-01T00:00:00Z'),
       granularity: 'day',
+      viewerId: 'user-1',
     });
 
     expect(summary.totalCents).toBe(500);
@@ -208,7 +210,7 @@ describe('SpendService', () => {
       const from = new Date('2026-06-01T00:00:00Z');
 
       await service.periodToDateCents({ organizationId: 'org-1', from });
-      await service.getSummary('org-1', { from }); // period-to-date + timeseries + byAgent
+      await service.getSummary('org-1', { from, viewerId: 'user-1' }); // period-to-date + timeseries + byAgent
       await service.byTeam('org-1', from);
 
       for (const { queries } of [runs, execs]) {
@@ -216,6 +218,33 @@ describe('SpendService', () => {
         for (const q of queries) {
           expect(q.ran).toBe(true);
           expect(q.clauses).toContainEqual(['run.organizationId = :orgId', { orgId: 'org-1' }]);
+        }
+      }
+    });
+
+    /**
+     * The per-agent breakdown names an agent and its spend, so it drops
+     * another member's private agents (the SQL itself is exercised against
+     * Postgres in private-alerts.integration.spec.ts). Only that query
+     * filters: the total and the timeseries are the org's sums.
+     */
+    it("drops other members' private agents from the per-agent breakdown only", async () => {
+      for (const viewerId of ['user-1', null]) {
+        const runs = recordingRepo();
+        const execs = recordingRepo();
+        const service = new SpendService(runs.repo, execs.repo);
+        await service.getSummary('org-1', { from: new Date(), viewerId });
+
+        for (const { queries } of [runs, execs]) {
+          const privateClauses = queries.map((q) =>
+            q.clauses.filter(([sql]) => sql.includes('FROM agents pa')),
+          );
+          // periodToDate, timeseries, byAgent -- in that order.
+          expect(privateClauses[0]).toEqual([]);
+          expect(privateClauses[1]).toEqual([]);
+          expect(privateClauses[2]).toEqual([
+            [expect.stringContaining('run."agentId"'), { privateViewerId: viewerId }],
+          ]);
         }
       }
     });
