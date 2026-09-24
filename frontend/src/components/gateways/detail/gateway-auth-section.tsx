@@ -11,16 +11,6 @@ import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Key, Lock, Plus, Shield, Trash2 } from 'lucide-react'
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -80,7 +70,6 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
   const [authTypeError, setAuthTypeError] = useState<string | undefined>()
   const [newAuthType, setNewAuthType] = useState('')
   const [newAuthConfig, setNewAuthConfig] = useState<Record<string, string>>({})
-  const [deleteAuthId, setDeleteAuthId] = useState<string | null>(null)
 
   // Fetch auth configs
   const { data: authConfigsData, isLoading: authLoading } = useQuery({
@@ -118,7 +107,6 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
       queryClient.invalidateQueries({ queryKey: ['gateway-auth-configs', gatewayId] })
       queryClient.invalidateQueries({ queryKey: ['gateway', gatewayId] })
       success('Authentication method removed', 'Clients can no longer use it.')
-      setDeleteAuthId(null)
     },
     onError: (err: any) => {
       errorNotif('Failed to remove auth config', getApiErrorMessage(err, 'Please try again'))
@@ -468,7 +456,16 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
                   size="sm"
                   aria-label="Delete auth configuration"
                   className="text-destructive hover:text-destructive"
-                  onClick={() => setDeleteAuthId(config.id)}
+                  disabled={deleteAuthConfigMutation.isPending && deleteAuthConfigMutation.variables === config.id}
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: 'Remove this authentication method?',
+                      description: 'Clients using this authentication method will no longer be able to access the gateway. This cannot be undone.',
+                      confirmLabel: 'Remove method',
+                      destructive: true,
+                    })
+                    if (ok) deleteAuthConfigMutation.mutate(config.id)
+                  }}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -523,26 +520,6 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
         )}
       </CardContent>
 
-      {/* Delete Auth Config Confirmation */}
-      <AlertDialog open={!!deleteAuthId} onOpenChange={(open) => !open && setDeleteAuthId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove this authentication method?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Clients using this authentication method will no longer be able to access the gateway. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteAuthId && deleteAuthConfigMutation.mutate(deleteAuthId)}
-              variant="destructive"
-            >
-              {deleteAuthConfigMutation.isPending ? 'Removing...' : 'Remove method'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       {confirmDialog}
     </Card>
   )

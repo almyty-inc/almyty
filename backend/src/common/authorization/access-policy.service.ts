@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Brackets, SelectQueryBuilder, ObjectLiteral } from 'typeorm';
+import { Repository, Brackets, SelectQueryBuilder, ObjectLiteral, FindOptionsWhere, In, Not } from 'typeorm';
 
 import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
@@ -345,6 +345,42 @@ export class AccessPolicyService {
       if (ownPrivate) sub.orWhere(ownPrivate, { _privateOwnerId: user.id });
     }));
     return { bypass: false, teamIds };
+  }
+
+  /**
+   * Find-options twin of applyListFilter, for repository `count` / `find`
+   * calls: `base` repeated once per tier the caller may see, which TypeORM
+   * ORs together. Same rules as the list filter -- an org owner/admin gets
+   * every non-private row, a member gets org rows plus their teams' rows,
+   * and everyone gets their own private rows and nobody else's. A
+   * non-member is refused rather than handed the org-wide rows.
+   *
+   * Use it wherever a count or a "first X" reaches a user: a total that
+   * includes another member's private rows tells the caller those rows
+   * exist.
+   */
+  async visibleWhere<T extends ObjectLiteral>(
+    user: { id: string },
+    organizationId: string,
+    base: FindOptionsWhere<T>,
+    options: ListFilterOptions = {},
+  ): Promise<FindOptionsWhere<T>[]> {
+    const orgRole = await this.getOrgRole(user.id, organizationId);
+    if (!orgRole) {
+      throw new ForbiddenException('You are not a member of this organization');
+    }
+    const scoped: Record<string, unknown> = { ...base, organizationId };
+    const tiers: Record<string, unknown>[] = [];
+    if (orgRole === OrganizationRole.OWNER || orgRole === OrganizationRole.ADMIN) {
+      tiers.push({ ...scoped, visibility: Not('private') });
+    } else {
+      tiers.push({ ...scoped, visibility: 'org' });
+      const teamIds = Array.from((await this.getTeamMemberships(user.id, organizationId)).keys());
+      if (teamIds.length > 0) tiers.push({ ...scoped, visibility: 'team', teamId: In(teamIds) });
+    }
+    const ownerColumn = options.ownerColumn ?? null;
+    if (ownerColumn) tiers.push({ ...scoped, visibility: 'private', [ownerColumn]: user.id });
+    return tiers as FindOptionsWhere<T>[];
   }
 }
 

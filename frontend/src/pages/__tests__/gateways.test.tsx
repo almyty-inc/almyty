@@ -296,27 +296,44 @@ describe('GatewaysPage', () => {
       })
     })
 
-    it('should show delete confirmation dialog with gateway name when Delete is clicked', async () => {
+    const openDelete = async () => {
       const user = userEvent.setup()
       renderGatewaysPage()
-
       await waitFor(() => {
         expect(screen.getByText('My MCP Gateway')).toBeInTheDocument()
       })
-
-      // Find the actions button (the "..." button rendered by createActionsColumn)
-      const actionsButton = screen.getByRole('button', { name: /actions/i })
-      await user.click(actionsButton)
-
-      // Click Delete in the dropdown menu
+      // The "..." button rendered by createActionsColumn, then Delete.
+      await user.click(screen.getByRole('button', { name: /actions/i }))
       await user.click(screen.getByText('Delete'))
+      return { user, dialog: await screen.findByRole('alertdialog') }
+    }
 
-      // The confirmation dialog should appear with the gateway name
-      expect(screen.getByText('Delete gateway?')).toBeInTheDocument()
-      // The dialog description includes the gateway name in the delete warning
-      expect(screen.getByText(/permanently delete "My MCP Gateway"/)).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Delete Gateway/i })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument()
+    it('asks before deleting, naming the gateway', async () => {
+      const { dialog } = await openDelete()
+
+      expect(within(dialog).getByText('Delete this gateway?')).toBeInTheDocument()
+      expect(within(dialog).getByText(/permanently delete "My MCP Gateway"/)).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Delete gateway' })).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+      expect(gatewaysApi.delete).not.toHaveBeenCalled()
+    })
+
+    it('cancelling leaves the gateway alone', async () => {
+      const { user, dialog } = await openDelete()
+
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+      expect(gatewaysApi.delete).not.toHaveBeenCalled()
+    })
+
+    it('deletes the gateway once confirmed', async () => {
+      vi.mocked(gatewaysApi.delete).mockResolvedValue({} as any)
+      const { user, dialog } = await openDelete()
+
+      await user.click(within(dialog).getByRole('button', { name: 'Delete gateway' }))
+
+      await waitFor(() => expect(gatewaysApi.delete).toHaveBeenCalledWith('gateway-1'))
     })
   })
 

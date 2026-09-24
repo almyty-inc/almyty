@@ -14,7 +14,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { PageIntro } from '@/components/onboarding/page-intro'
 import { QueryError } from '@/components/ui/query-error'
 import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { DataTable, createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -45,8 +45,7 @@ export function GatewaysPage() {
   const navigate = useNavigate()
   // Old ?new=1 links (the command palette, bookmarks) land on the create page.
   useNewParamRedirect('/gateways/new')
-  const [deleteGatewayDialogOpen, setDeleteGatewayDialogOpen] = useState(false)
-  const [gatewayToDelete, setGatewayToDelete] = useState<Gateway | null>(null)
+  const { confirm, dialog: confirmDialog } = useConfirm()
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -97,8 +96,6 @@ export function GatewaysPage() {
     onSuccess: async () => {
       success('Gateway deleted', 'Gateway has been deleted successfully.')
       await queryClient.invalidateQueries({ queryKey: ['gateways'] })
-      setDeleteGatewayDialogOpen(false)
-      setGatewayToDelete(null)
     },
     onError: (err: unknown) => {
       errorNotif('Failed to delete gateway', getApiErrorMessage(err, 'Please try again.'))
@@ -212,10 +209,15 @@ export function GatewaysPage() {
     createActionsColumn<Gateway>(
       // Editing happens on the gateway's own page, inline.
       (gateway) => navigate(`/gateways/${gateway.id}/edit`),
-      (gateway) => {
+      async (gateway) => {
         if (gateway.isSystem) return
-        setGatewayToDelete(gateway)
-        setDeleteGatewayDialogOpen(true)
+        const ok = await confirm({
+          title: 'Delete this gateway?',
+          description: <>This will permanently delete "{gateway.name}". This action cannot be undone.</>,
+          confirmLabel: 'Delete gateway',
+          destructive: true,
+        })
+        if (ok) deleteGatewayMutation.mutate(gateway.id)
       },
       [
         {
@@ -357,30 +359,7 @@ export function GatewaysPage() {
       </>
       )}
 
-      {/* Delete Gateway Confirmation Dialog */}
-      <AlertDialog open={deleteGatewayDialogOpen} onOpenChange={setDeleteGatewayDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete gateway?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete "{gatewayToDelete?.name}". This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (gatewayToDelete) {
-                  deleteGatewayMutation.mutate(gatewayToDelete.id)
-                }
-              }}
-              variant="destructive"
-            >
-              Delete gateway
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
 
     </div>
   )

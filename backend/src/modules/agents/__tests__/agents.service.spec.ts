@@ -109,6 +109,16 @@ describe('AgentsService', () => {
       remove: jest.fn(),
       update: jest.fn(),
       createQueryBuilder: jest.fn(),
+      // Lookups the save path makes through the manager (tools, providers):
+      // every id asked about exists and is org-wide.
+      manager: {
+        getRepository: jest.fn(() => ({
+          find: jest.fn(async (opts: any) => {
+            const ids = opts?.where?.id?.value ?? [];
+            return ids.map((id: string) => ({ id, organizationId: 'org-1', visibility: 'org', ownerUserId: null, createdBy: null }));
+          }),
+        })),
+      },
     };
 
     agentExecutionRepo = {

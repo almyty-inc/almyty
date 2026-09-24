@@ -107,11 +107,24 @@ describe('model selection goes through ModelPicker', () => {
       'components/agents/detail/verify-config-editor.tsx',
       'components/tools/tool-form.tsx',
       'pages/chat.tsx',
+      // A provider's default model, on /llm-providers/:id/edit.
+      'components/llm-providers/edit-provider-form.tsx',
     ]
     for (const rel of sites) {
       const source = readFileSync(join(SRC, rel), 'utf8')
       expect(source, rel).toMatch(/from '@\/components\/model-picker'/)
       expect(source, rel).toMatch(/<ModelPicker\b/)
     }
+  })
+
+  it("a provider's edit page picks among that provider's models only", () => {
+    // Its own select of the live list used to be here: an empty list read
+    // "No models available" whatever the reason. The picker is locked to
+    // the provider being edited, so no other provider can be chosen.
+    const source = readFileSync(join(SRC, 'components/llm-providers/edit-provider-form.tsx'), 'utf8')
+    const picker = source.slice(source.indexOf('<ModelPicker'), source.indexOf('/>', source.indexOf('<ModelPicker')))
+    expect(picker).toMatch(/\bproviderLocked\b/)
+    expect(picker).toMatch(/providerId: providerToEdit\.id/)
+    expect(source).not.toMatch(/from '@\/components\/ui\/select'/)
   })
 })

@@ -16,6 +16,8 @@ import { TeamMembershipHelper } from './team-membership.helper';
 import { OrganizationsController } from './organizations.controller';
 import { InvitesController } from './invites.controller';
 import { GatewaysModule } from '../gateways/gateways.module';
+import { RunnerModule } from '../runner/runner.module';
+import { ResourceHandoverHelper } from './resource-handover.helper';
 
 @Module({
   imports: [
@@ -32,8 +34,11 @@ import { GatewaysModule } from '../gateways/gateways.module';
       CanonicalMemorySoftcapWarning,
     ]),
     forwardRef(() => GatewaysModule),
+    // A departing member's private runners are deleted through the runner
+    // service's own delete path (ResourceHandoverHelper).
+    forwardRef(() => RunnerModule),
   ],
-  providers: [OrganizationsService, OrganizationsInvitesHelper, TeamMembershipHelper],
+  providers: [OrganizationsService, OrganizationsInvitesHelper, TeamMembershipHelper, ResourceHandoverHelper],
   controllers: [OrganizationsController, InvitesController],
   exports: [OrganizationsService],
 })

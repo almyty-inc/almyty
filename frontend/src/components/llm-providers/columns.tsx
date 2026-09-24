@@ -23,13 +23,14 @@ import { currentProviderFailure } from '@/lib/provider-health'
 
 interface ProviderColumnDeps {
   navigate: (path: string) => void
-  setProviderToDelete: (provider: LlmProvider | null) => void
+  /** Asks for confirmation, then deletes. */
+  onDeleteProvider: (provider: LlmProvider) => void
   toggleProviderStatusMutation: UseMutationResult<any, any, { providerId: string; status: string }, any>
   teamLookup?: Record<string, Team>
 }
 
 export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmProvider, any>[] {
-  const { navigate, setProviderToDelete, toggleProviderStatusMutation, teamLookup } = deps
+  const { navigate, onDeleteProvider, toggleProviderStatusMutation, teamLookup } = deps
 
   return [
     createSortableColumn<LlmProvider>({
@@ -129,7 +130,7 @@ export function buildProviderColumns(deps: ProviderColumnDeps): ColumnDef<LlmPro
     createActionsColumn<LlmProvider>(
       // Edit: a page of its own, where the visibility picker lives too.
       (provider) => navigate(`/llm-providers/${provider.id}/edit`),
-      (provider) => setProviderToDelete(provider),
+      (provider) => onDeleteProvider(provider),
       [
         {
           label: 'View details',

@@ -146,3 +146,38 @@ describe('GatewayAuthSection inline forms', () => {
     )
   })
 })
+describe('GatewayAuthSection remove auth method', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(gatewaysApi.getAuthConfigs).mockResolvedValue([apiKeyAuthConfig])
+    vi.mocked(gatewaysApi.listApiKeys).mockResolvedValue([])
+  })
+
+  const openRemove = async () => {
+    const user = userEvent.setup()
+    render(<GatewayAuthSection gatewayId="gw-1" gatewayName="Petstore" />)
+    await user.click(await screen.findByRole('button', { name: 'Delete auth configuration' }))
+    return { user, dialog: await screen.findByRole('alertdialog') }
+  }
+
+  it('asks before removing the method', async () => {
+    const { dialog } = await openRemove()
+    expect(within(dialog).getByText('Remove this authentication method?')).toBeInTheDocument()
+    expect(within(dialog).getByText(/will no longer be able to access the gateway/)).toBeInTheDocument()
+    expect(gatewaysApi.deleteAuthConfig).not.toHaveBeenCalled()
+  })
+
+  it('cancelling keeps the method', async () => {
+    const { user, dialog } = await openRemove()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(gatewaysApi.deleteAuthConfig).not.toHaveBeenCalled()
+  })
+
+  it('removes the method once confirmed', async () => {
+    vi.mocked(gatewaysApi.deleteAuthConfig).mockResolvedValue({} as any)
+    const { user, dialog } = await openRemove()
+    await user.click(within(dialog).getByRole('button', { name: 'Remove method' }))
+    await waitFor(() => expect(gatewaysApi.deleteAuthConfig).toHaveBeenCalledWith('gw-1', 'auth-1'))
+  })
+})

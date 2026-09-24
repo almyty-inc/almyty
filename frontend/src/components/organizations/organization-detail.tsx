@@ -188,7 +188,7 @@ function MembersTab({ org }: { org: Organization }) {
     const name = member.user?.name || member.email || 'This member'
     const ok = await confirm({
       title: 'Remove this member?',
-      description: `${name} will lose access to ${org.name}.`,
+      description: `${name} will lose access to ${org.name}. Their private resources move to you.`,
       confirmLabel: 'Remove member',
       destructive: true,
     })

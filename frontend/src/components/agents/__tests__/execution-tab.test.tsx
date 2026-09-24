@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
 import { render } from '../../../test/setup'
 import { ExecutionTab } from '../execution-tab'
@@ -100,14 +102,16 @@ describe('the Execution tab saves what you choose', () => {
     wire({ roles: [] })
     render(<ExecutionTab agentId="a1" />)
 
+    // Inline in the Roles card, not a dialog over it.
+    expect(screen.queryByTestId('add-role-form')).not.toBeInTheDocument()
     fireEvent.click(await screen.findByTestId('add-role'))
-    const dialog = await screen.findByTestId('add-role-dialog')
-    expect(dialog).toBeInTheDocument()
+    const form = await screen.findByTestId('add-role-form')
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
 
     // Offered from the slots the shapes actually ask for, rather than
     // left as free text nobody can guess right.
-    fireEvent.click(screen.getByTestId('suggest-principal'))
-    fireEvent.click(screen.getByTestId('create-role'))
+    fireEvent.click(within(form).getByTestId('suggest-principal'))
+    fireEvent.click(within(form).getByRole('button', { name: 'Add role' }))
 
     await waitFor(() =>
       expect(api.post).toHaveBeenCalledWith('/agents/a1/roles', {
@@ -118,15 +122,53 @@ describe('the Execution tab saves what you choose', () => {
     )
   })
 
+  it('closes the inline form on cancel without posting', async () => {
+    wire({ roles: [] })
+    render(<ExecutionTab agentId="a1" />)
+
+    fireEvent.click(await screen.findByTestId('add-role'))
+    const form = await screen.findByTestId('add-role-form')
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByTestId('add-role-form')).not.toBeInTheDocument()
+    expect(api.post).not.toHaveBeenCalledWith('/agents/a1/roles', expect.anything())
+  })
+
   it('refuses a duplicate key before it reaches the server', async () => {
     wire({ roles: [role('principal')] })
     render(<ExecutionTab agentId="a1" />)
 
     fireEvent.click(await screen.findByTestId('add-role'))
-    fireEvent.change(screen.getByLabelText('Key'), { target: { value: 'principal' } })
+    const form = await screen.findByTestId('add-role-form')
+    fireEvent.change(within(form).getByLabelText(/^Key/), { target: { value: 'principal' } })
 
     expect(screen.getByTestId('role-key-duplicate')).toBeInTheDocument()
-    expect(screen.getByTestId('create-role')).toBeDisabled()
+    expect(within(form).getByRole('button', { name: 'Add role' })).toBeDisabled()
+  })
+
+  /**
+   * An autonomous agent runs the ReAct loop, which reads none of this, so
+   * the tab says so instead of offering a strategy that would do nothing.
+   */
+  it('offers no strategy, orchestrator or roles for an autonomous agent, and says why', async () => {
+    wire({ roles: [role('principal')] })
+    render(<ExecutionTab agentId="a1" mode="autonomous" />)
+
+    expect(screen.getByTestId('execution-workflow-only')).toHaveTextContent(
+      'Strategies, roles and the orchestrator apply to workflow agents.',
+    )
+    expect(screen.queryByTestId('strategy-single')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Let a model choose the strategy')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('add-role')).not.toBeInTheDocument()
+    // Nothing is even fetched: there is nothing here that applies.
+    expect(api.get).not.toHaveBeenCalled()
+  })
+
+  it('still offers the strategy for a workflow agent', async () => {
+    wire({ roles: [role('principal')] })
+    render(<ExecutionTab agentId="a1" mode="workflow" />)
+    expect(await screen.findByTestId('strategy-single')).toBeInTheDocument()
+    expect(screen.queryByTestId('execution-workflow-only')).not.toBeInTheDocument()
   })
 
   it('says why a save failed rather than looking as though it worked', async () => {
@@ -240,5 +282,17 @@ describe('the controls that were rendered behind props nobody passed', () => {
 
     expect(await screen.findByTestId('eject-error')).toHaveTextContent('already has a graph')
     expect(navigate).not.toHaveBeenCalled()
+  })
+})
+
+describe('the agent page tells the tab which kind of agent it is', () => {
+  // The autonomous branch above is only reached if the page passes the
+  // mode. Without it the tab defaults to the workflow controls, which is
+  // exactly the silent no-op this guards against.
+  it('passes the agent mode into ExecutionTab', () => {
+    const page = readFileSync(join(__dirname, '../../../pages/agent-detail.tsx'), 'utf8')
+    const uses = page.match(/<ExecutionTab\b[^>]*>/g) ?? []
+    expect(uses.length).toBeGreaterThan(0)
+    for (const use of uses) expect(use).toMatch(/\bmode=\{/)
   })
 })

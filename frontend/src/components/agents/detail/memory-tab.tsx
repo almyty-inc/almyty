@@ -1,14 +1,13 @@
 /**
  * Memory tab for the agent detail page. Displays a table of agent
- * memories and provides an "Add Memory" dialog for creating new entries.
+ * memories; "Add memory" opens an inline form at the top of the card.
  */
-import React, { useState } from 'react'
+import React, { useState, type FormEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
   Tag,
   Brain,
-  Loader2,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -24,13 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
+import { Field, InlineFormActions } from '@/components/layout/form-page'
 import {
   Table,
   TableBody,
@@ -65,6 +58,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
   const { success, error: errorNotif } = useNotifications()
 
   const [addMemoryOpen, setAddMemoryOpen] = useState(false)
+  const [contentError, setContentError] = useState<string | null>(null)
   const [newMemoryContent, setNewMemoryContent] = useState('')
   const [newMemoryType, setNewMemoryType] = useState<string>('fact')
   const [newMemoryTags, setNewMemoryTags] = useState('')
@@ -74,7 +68,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
   //   'context' → 'short' (within-session)
   //   'episode' → 'project' (work-product)
   // The agent-runtime helper does the same mapping; we duplicate it
-  // here so the dialog can talk directly to the canonical API
+  // here so the form can talk directly to the canonical API
   // without an intermediary service.
   const tierForLegacyType = (t: string) =>
     t === 'context' ? 'short'
@@ -106,15 +100,30 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
       // The Memory page lists the same rows under its own key, and a
       // memory added here is the org's memory too.
       queryClient.invalidateQueries({ queryKey: ['memories', 'list'] })
-      setAddMemoryOpen(false)
-      setNewMemoryContent('')
-      setNewMemoryType('fact')
-      setNewMemoryTags('')
+      closeForm()
     },
     onError: (err: any) => {
       errorNotif('Failed', getApiErrorMessage(err, 'Failed to add memory'))
     },
   })
+
+  function closeForm() {
+    setAddMemoryOpen(false)
+    setNewMemoryContent('')
+    setNewMemoryType('fact')
+    setNewMemoryTags('')
+    setContentError(null)
+  }
+
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!newMemoryContent.trim()) {
+      setContentError('Write what the agent should remember.')
+      return
+    }
+    setContentError(null)
+    addMemoryMutation.mutate()
+  }
 
   return (
     <>
@@ -127,16 +136,74 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
                 Knowledge and context accessible to this agent
               </CardDescription>
             </div>
-            <Button size="sm" onClick={() => setAddMemoryOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add memory
-            </Button>
+            {!addMemoryOpen && (
+              <Button size="sm" onClick={() => setAddMemoryOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add memory
+              </Button>
+            )}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {addMemoryOpen && (
+            <form
+              onSubmit={submit}
+              noValidate
+              aria-label="Add memory"
+              data-testid="add-memory-form"
+              className="space-y-4 rounded-md border bg-muted/20 p-4"
+            >
+              <div>
+                <h4 className="text-sm font-semibold">Add memory</h4>
+                <p className="text-xs text-muted-foreground">A memory entry this agent can recall on later runs.</p>
+              </div>
+              <Field id="memory-content" label="Content" required error={contentError}>
+                <Textarea
+                  placeholder="Enter memory content..."
+                  value={newMemoryContent}
+                  onChange={(e) => {
+                    setNewMemoryContent(e.target.value)
+                    if (contentError) setContentError(null)
+                  }}
+                  rows={4}
+                  autoFocus
+                />
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="memory-type">Type</Label>
+                  <Select value={newMemoryType} onValueChange={setNewMemoryType}>
+                    <SelectTrigger id="memory-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="fact">Fact</SelectItem>
+                      <SelectItem value="preference">Preference</SelectItem>
+                      <SelectItem value="context">Context</SelectItem>
+                      <SelectItem value="episode">Episode</SelectItem>
+                      <SelectItem value="instruction">Instruction</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Field id="memory-tags" label="Tags" hint="Comma-separated.">
+                  <Input
+                    placeholder="tag1, tag2, tag3"
+                    value={newMemoryTags}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewMemoryTags(e.target.value)}
+                  />
+                </Field>
+              </div>
+              <InlineFormActions
+                onCancel={closeForm}
+                submitLabel="Add memory"
+                submitting={addMemoryMutation.isPending}
+              />
+            </form>
+          )}
           {error ? (
             <QueryError error={error} onRetry={onRetry} title="Couldn't load memories" />
           ) : memories.length === 0 ? (
+            addMemoryOpen ? null : (
             <EmptyState
               icon={Brain}
               title="No memories yet"
@@ -148,6 +215,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
                 </Button>
               }
             />
+            )
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -195,72 +263,6 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
         </CardContent>
       </Card>
 
-      {/* Add Memory Dialog */}
-      <Dialog open={addMemoryOpen} onOpenChange={setAddMemoryOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add memory</DialogTitle>
-            <DialogDescription>
-              Create a new memory entry scoped to this agent.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="memory-content">Content</Label>
-              <Textarea
-                id="memory-content"
-                placeholder="Enter memory content..."
-                value={newMemoryContent}
-                onChange={(e) => setNewMemoryContent(e.target.value)}
-                className="mt-1"
-                rows={4}
-              />
-            </div>
-            <div>
-              <Label htmlFor="memory-type">Type</Label>
-              <Select value={newMemoryType} onValueChange={setNewMemoryType}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fact">Fact</SelectItem>
-                  <SelectItem value="preference">Preference</SelectItem>
-                  <SelectItem value="context">Context</SelectItem>
-                  <SelectItem value="episode">Episode</SelectItem>
-                  <SelectItem value="instruction">Instruction</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="memory-tags">Tags (comma-separated)</Label>
-              <Input
-                id="memory-tags"
-                placeholder="tag1, tag2, tag3"
-                value={newMemoryTags}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewMemoryTags(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <Button
-              className="w-full"
-              disabled={!newMemoryContent.trim() || addMemoryMutation.isPending}
-              onClick={() => addMemoryMutation.mutate()}
-            >
-              {addMemoryMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Brain className="h-4 w-4 mr-2" />
-                  Add Memory
-                </>
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

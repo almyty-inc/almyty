@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThanOrEqual, MoreThanOrEqual, In } from 'typeorm';
+import { Repository, Between, LessThanOrEqual, MoreThanOrEqual, In, EntityManager } from 'typeorm';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { User } from '../../entities/user.entity';
 import { AUDIT_STREAM_HOOK, AuditStreamHook } from '../../common/ee-hooks/ee-hooks';
@@ -95,6 +95,32 @@ export class AuditLogService {
       this.logger.error(`Audit log failed: ${error.message}`, error.stack);
       return null;
     }
+  }
+
+  /**
+   * Write an audit row inside the caller's transaction, so the row and
+   * the change it records commit or roll back together. Unlike log(),
+   * this throws: a failed insert has already aborted the transaction.
+   *
+   * The SIEM hook is not called here -- a rolled-back row must not be
+   * streamed. Hand the returned rows to publishCommitted() after commit.
+   */
+  async logInTransaction(manager: EntityManager, options: AuditLogOptions): Promise<AuditLog> {
+    let userEmail = options.userEmail;
+    if (options.userId && !userEmail) {
+      const user = await manager.getRepository(User).findOne({
+        where: { id: options.userId },
+        select: { id: true, email: true },
+      });
+      userEmail = user?.email;
+    }
+    const repository = manager.getRepository(AuditLog);
+    return repository.save(repository.create({ ...options, userEmail }));
+  }
+
+  /** Stream rows written by logInTransaction once their transaction committed. */
+  publishCommitted(entries: AuditLog[]): void {
+    for (const entry of entries) this.forwardToStreamHook(entry);
   }
 
   /**

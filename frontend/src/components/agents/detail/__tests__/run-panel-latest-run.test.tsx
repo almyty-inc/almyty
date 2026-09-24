@@ -3,11 +3,11 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { QueryClient } from '@tanstack/react-query'
 
 import { render } from '../../../../test/setup'
-import { InvokeDialog } from '../invoke-dialog'
+import { RunPanel } from '../run-panel'
 import { agentsApi } from '@/lib/api'
 
 // The run-failure banner at the top of the agent page reads
-// ['agent-latest-run', agent.id] with a 15s staleTime. The invoke dialog
+// ['agent-latest-run', agent.id] with a 15s staleTime. The run panel
 // invalidated four other keys but not that one, so a run that had just
 // failed here did not raise the banner until the stale window passed.
 
@@ -38,7 +38,7 @@ describe('invoking an agent refreshes the run-failure banner', () => {
     // assertion.
     queryClient.setQueryData(['agent-latest-run', 'a1'], [{ id: 'run-0', status: 'completed' }])
 
-    render(<InvokeDialog agent={agent} open onOpenChange={() => {}} />, { queryClient })
+    render(<RunPanel agent={agent} onClose={() => {}} />, { queryClient })
     fireEvent.click(screen.getByRole('button', { name: /run agent/i }))
 
     await waitFor(() => expect(agentsApi.invoke).toHaveBeenCalled())

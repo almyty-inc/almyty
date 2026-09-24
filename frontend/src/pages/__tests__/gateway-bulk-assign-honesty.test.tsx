@@ -143,3 +143,49 @@ describe('gateway bulk assign says what actually happened', () => {
     expect(within(row).getAllByText('Draft').length).toBeGreaterThan(0)
   })
 })
+
+// Same page, the other end of the preset row: "Remove all" empties the
+// gateway, so it asks first.
+describe('gateway remove all tools asks first', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(gatewaysApi.getById).mockResolvedValue({
+      id: 'gw-1',
+      name: 'Petstore Gateway',
+      type: 'mcp',
+      status: 'active',
+      endpoint: '/petstore',
+      configuration: {},
+    } as any)
+    vi.mocked(gatewaysApi.getTools).mockResolvedValue([] as any)
+    vi.mocked(toolsApi.getAll).mockResolvedValue({ tools: TOOLS } as any)
+  })
+
+  const openRemoveAll = async () => {
+    const user = userEvent.setup()
+    render(<GatewayDetailPage />)
+    await user.click(await screen.findByRole('button', { name: 'Remove all' }))
+    return { user, dialog: await screen.findByRole('alertdialog') }
+  }
+
+  it('shows the question and removes nothing yet', async () => {
+    const { dialog } = await openRemoveAll()
+    expect(within(dialog).getByText('Remove all tools from this gateway?')).toBeInTheDocument()
+    expect(within(dialog).getByText(/will not be able to serve any requests/)).toBeInTheDocument()
+    expect(gatewaysApi.removeAllTools).not.toHaveBeenCalled()
+  })
+
+  it('cancelling keeps the tools', async () => {
+    const { user, dialog } = await openRemoveAll()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(gatewaysApi.removeAllTools).not.toHaveBeenCalled()
+  })
+
+  it('removes every tool once confirmed', async () => {
+    vi.mocked(gatewaysApi.removeAllTools).mockResolvedValue({} as any)
+    const { user, dialog } = await openRemoveAll()
+    await user.click(within(dialog).getByRole('button', { name: 'Remove all tools' }))
+    await waitFor(() => expect(gatewaysApi.removeAllTools).toHaveBeenCalledWith('gw-1'))
+  })
+})

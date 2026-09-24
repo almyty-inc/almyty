@@ -43,6 +43,8 @@ describe('removing an organization member', () => {
 
     const dialog = await screen.findByRole('alertdialog')
     expect(dialog).toHaveTextContent('Remove Ada Lovelace?')
+    // Their private resources are handed to the remover: say so up front.
+    expect(dialog).toHaveTextContent('their private resources move to you')
     expect(organizationsApi.removeMember).not.toHaveBeenCalled()
   })
 
@@ -127,6 +129,8 @@ describe('other destructive member and team actions', () => {
     await user.click(await screen.findByRole('button', { name: 'Delete team Platform' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(dialog).toHaveTextContent('Delete this team?')
+    // Its resources are widened, not deleted: say so before it happens.
+    expect(dialog).toHaveTextContent('its resources become visible to the whole organization')
     expect(organizationsApi.deleteTeam).not.toHaveBeenCalled()
 
     await user.click(within(dialog).getByRole('button', { name: 'Delete team' }))

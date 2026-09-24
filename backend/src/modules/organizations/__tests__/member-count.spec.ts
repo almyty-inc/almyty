@@ -8,6 +8,8 @@ import { Team } from '../../../entities/team.entity';
 import { UserTeam } from '../../../entities/user-team.entity';
 import { MailService } from '../../mail/mail.service';
 import { GatewaysService } from '../../gateways/gateways.service';
+import { AuditLogService } from '../../audit-log/audit-log.service';
+import { ResourceHandoverHelper } from '../resource-handover.helper';
 import { OrganizationsService } from '../organizations.service';
 import { OrganizationsInvitesHelper } from '../organizations-invites.helper';
 import { TeamMembershipHelper } from '../team-membership.helper';
@@ -56,6 +58,8 @@ describe('OrganizationsService.findAll — member counts', () => {
         { provide: GatewaysService, useValue: {} },
         { provide: OrganizationsInvitesHelper, useValue: {} },
         { provide: TeamMembershipHelper, useValue: {} },
+        { provide: ResourceHandoverHelper, useValue: {} },
+        { provide: AuditLogService, useValue: {} },
       ],
     }).compile();
 

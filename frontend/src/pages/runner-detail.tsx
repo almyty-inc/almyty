@@ -9,15 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { runnersApi, workspacesApi, toolsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
@@ -86,7 +78,7 @@ export function RunnerDetailPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error: errNotif } = useNotifications()
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
   const runnerQuery = useQuery<Runner>({
     queryKey: ['runner', id],
@@ -210,7 +202,16 @@ export function RunnerDetailPage() {
         {(runner.state === 'offline' || isPendingRunner(runner)) && (
           <Button
             variant="destructive"
-            onClick={() => setConfirmDelete(true)}
+            disabled={unregisterMutation.isPending}
+            onClick={async () => {
+              const ok = await confirm({
+                title: <>Delete runner {runner.name}?</>,
+                confirmLabel: 'Delete runner',
+                cancelLabel: 'Keep it',
+                destructive: true,
+              })
+              if (ok) unregisterMutation.mutate()
+            }}
           >
             <Trash2 className="mr-2 h-4 w-4" />
             Delete runner
@@ -381,20 +382,7 @@ export function RunnerDetailPage() {
         </CardContent>
       </Card>
 
-
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete runner {runner.name}?</AlertDialogTitle>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep it</AlertDialogCancel>
-            <AlertDialogAction onClick={() => unregisterMutation.mutate()}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
     </div>
   )
 }

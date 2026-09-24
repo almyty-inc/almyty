@@ -1,10 +1,12 @@
 /* /agents/import -- create an agent from an exported agent JSON.
+ * /agents/import?source=a2a -- add an external A2A agent from its card.
  *
- * Was a dialog on the Agents list. As a page it has a URL the Import menu
- * links to, and a pasted export survives an accidental click elsewhere.
+ * Both were dialogs on the Agents list. As a page they have a URL the Import
+ * menu links to, and a pasted export survives an accidental click elsewhere.
  */
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { FileUp } from 'lucide-react'
 
 import { Field, FormPage } from '@/components/layout/form-page'
@@ -13,6 +15,17 @@ import { Textarea } from '@/components/ui/textarea'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { agentsApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
+import { ExternalA2AImport } from './agent-import-a2a'
+
+/** The Import menu's sources. Anything else falls back to the JSON import. */
+export type AgentImportSource = 'json' | 'a2a'
+
+export function AgentImportPage() {
+  const [params] = useSearchParams()
+  const source: AgentImportSource = params.get('source') === 'a2a' ? 'a2a' : 'json'
+  // Keyed so switching source never carries one form's state into the other.
+  return source === 'a2a' ? <ExternalA2AImport key="a2a" /> : <JsonAgentImport key="json" />
+}
 
 /** Parse an export, or say in one line why it is not one. */
 export function parseAgentExport(text: string): { data?: unknown; error?: string } {
@@ -28,7 +41,7 @@ export function parseAgentExport(text: string): { data?: unknown; error?: string
   }
 }
 
-export function AgentImportPage() {
+function JsonAgentImport() {
   useEffect(() => {
     document.title = 'Import agent | almyty'
     return () => {

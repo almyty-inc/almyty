@@ -1070,15 +1070,15 @@ export class AlmytyMcpService {
         const timeframe = String(args.timeframe ?? '7d');
         switch (args.report) {
           case 'overview':
-            return get(AnalyticsService).getOverview(orgId);
+            return get(AnalyticsService).getOverview(orgId, userId);
           case 'tools':
-            return get(AnalyticsService).getToolUsage(orgId, timeframe);
+            return get(AnalyticsService).getToolUsage(orgId, timeframe, userId);
           case 'gateways':
             return get(AnalyticsService).getGatewayUsage(orgId, timeframe, userId);
           case 'models':
             return get(AnalyticsService).getLlmUsage(orgId, timeframe, userId);
           case 'agent_runs':
-            return get(AnalyticsService).getAgentRunsSummary(orgId);
+            return get(AnalyticsService).getAgentRunsSummary(orgId, userId);
           case 'alerts': {
             const alerts = await get(MonitoringService).getActiveAlerts(orgId);
             return { total: alerts.length, alerts };
