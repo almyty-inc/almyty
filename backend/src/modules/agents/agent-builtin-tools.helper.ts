@@ -147,7 +147,11 @@ export class AgentBuiltInToolsHelper {
             isTemporary: true,
             parentRunId: run.id,
             pipeline: { nodes: [], edges: [] },
-            createdBy: 'system',
+            // Owned by whoever the parent run works for -- the user
+            // invoke_agent runs the child as -- and by nobody for a run
+            // without one (a visitor's). Never a sentinel string in an
+            // owner column.
+            createdBy: run.userId ?? null,
           });
           const savedAgent = await this.agentRepository.save(tempAgent);
           return { result: { agentId: savedAgent.id, name: savedAgent.name, status: 'created' } };
