@@ -964,6 +964,8 @@ export const agentsApi = {
   schedule: (id: string, intervalMinutes: number, input?: any) =>
     apiPost(`/agents/${id}/schedule`, { intervalMinutes, input }),
   unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
+  setHeartbeat: (id: string, body: { enabled: boolean; intervalMinutes?: number; prompt?: string }) =>
+    apiPatch(`/agents/${id}/heartbeat`, body),
   // Runs (autonomous mode)
   startRun: (id: string, input: any, options?: any) => apiPost(`/agents/${id}/runs`, { input, ...options }),
   listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),
