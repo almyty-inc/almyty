@@ -68,6 +68,17 @@ export interface ToolExecutionOptions {
    */
   scopes?: string[];
   /**
+   * Set only on a call made by `tools.invoke` from inside a sandboxed
+   * tool: the security policy that governed the tool that made it.
+   *
+   * A nested call re-resolves its own gateway_tools row from `gatewayId`
+   * (so the nested tool's own access list and policy apply on that
+   * gateway). When the nested tool has no row there, or its row carries
+   * no policy, this is the policy it is held to instead -- otherwise an
+   * allowed-domains restriction would stop applying one hop in.
+   */
+  inheritedSecurityPolicy?: GatewayToolSecurityPolicy | null;
+  /**
    * Set only on a call made by `tools.invoke`: how deep in the nested
    * call tree it sits (1 = called by the root tool) and the budget the
    * whole tree shares. See `executors/tool-invocation-budget.ts`. Absent

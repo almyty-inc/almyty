@@ -237,8 +237,11 @@ export class ToolScriptExecutor {
    * user code inside the worker calls `tools.invoke(id, params)`,
    * the worker posts a message to the host, node-sandbox.service
    * routes it here, and we run the nested tool via the orchestrator
-   * in the SAME tenant context (organization + user) as the outer
-   * call.
+   * in the SAME context as the outer call: organization and user, and
+   * -- when the outer call came through a gateway -- the gateway, the
+   * caller's scopes and the policy that governed the outer tool, so the
+   * nested tool's gateway access list and security policy apply to it
+   * exactly as they would to a direct call.
    *
    * Every nested call draws on one ToolInvocationBudget shared by the
    * whole tree under the root execution (depth, total calls, calls in
@@ -279,6 +282,10 @@ export class ToolScriptExecutor {
           userId: options.userId,
           organizationId: options.organizationId,
           signal: signal ?? options.signal,
+          gatewayId: options.gatewayId ?? undefined,
+          scopes: options.scopes,
+          runId: options.runId ?? undefined,
+          inheritedSecurityPolicy: options.securityPolicy ?? undefined,
           invocation: { depth, budget },
         });
         if (!result.success) {
