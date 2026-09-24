@@ -1,8 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 import { ApprovalsService } from '../approvals.service';
-import { ApprovalRequest } from '../../../entities/approval-request.entity';
 import { ApprovalPolicyApproval } from '../../../common/ee-hooks/ee-hooks';
 import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
+import { fakeApprovalsRepo } from './approvals-repo.fixture';
 
 /**
  * EE (approval_policy): a quorum has to be able to count.
@@ -17,75 +17,15 @@ import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
  * approved request expires denied, or the erased approver drops out of
  * the repeat-approver guard and one human satisfies a 3-of-3 twice over.
  *
- * The repo fakes here model the two writes honestly — findOne hands out
- * a detached copy the way a real read does, and the approvals table
- * enforces its unique (requestId, approverId) index — because a fake
- * that shared one object between reviewers, or that accepted every
- * insert, would show neither failure however the service was written.
+ * The repo fakes here model the two writes honestly. The request table
+ * is the shared truthful fixture: every read hands out a detached copy
+ * the way a real read does, a save stores a copy rather than the
+ * caller's object, and the status flip is a real compare-and-set. The
+ * approvals table enforces its unique (requestId, approverId) index. A
+ * fake that shared one object between reviewers, or between the service
+ * and the table, or that accepted every insert, would show none of these
+ * failures however the service was written.
  */
-class FakeApprovalsRepo {
-  rows: ApprovalRequest[] = [];
-  private idc = 0;
-
-  /** A detached copy, which is what a real read gives a reviewer. */
-  async findOne({ where }: any) {
-    const row = this.rows.find((r) =>
-      Object.entries(where).every(([k, v]) => (r as any)[k] === v),
-    );
-    return row ? ({ ...row, payload: structuredClone(row.payload) } as ApprovalRequest) : null;
-  }
-
-  create(partial: Partial<ApprovalRequest>) {
-    return {
-      id: `a_${++this.idc}`,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      ...partial,
-    } as ApprovalRequest;
-  }
-
-  /** TypeORM's save of a loaded entity: every column, not just the changed ones. */
-  async save(r: ApprovalRequest) {
-    const at = this.rows.findIndex((x) => x.id === r.id);
-    if (at >= 0) this.rows[at] = { ...this.rows[at], ...r };
-    else this.rows.push(r);
-    return r;
-  }
-
-  /** A scoped UPDATE: only the columns in the patch. */
-  async update(criteria: any, patch: Partial<ApprovalRequest>) {
-    const row = this.rows.find((r) => r.id === criteria.id);
-    if (!row) return { affected: 0 };
-    Object.assign(row, patch);
-    return { affected: 1 };
-  }
-
-  /** The CAS'd status flip: WHERE id = ? AND status = 'pending'. */
-  createQueryBuilder() {
-    const self = this;
-    let patch: Partial<ApprovalRequest> = {};
-    let targetId: string | undefined;
-    let requiredStatus: string | undefined;
-    const qb: any = {
-      update: () => qb,
-      set: (values: Partial<ApprovalRequest>) => { patch = values; return qb; },
-      where: (_clause: string, params: any) => { targetId = params.id; return qb; },
-      andWhere: (_clause: string, params?: any) => {
-        if (params?.pending) requiredStatus = params.pending;
-        return qb;
-      },
-      execute: async () => {
-        const row = self.rows.find((r) => r.id === targetId);
-        if (!row) return { affected: 0 };
-        if (requiredStatus && row.status !== requiredStatus) return { affected: 0 };
-        Object.assign(row, patch);
-        return { affected: 1 };
-      },
-    };
-    return qb;
-  }
-}
-
 class FakeRunsRepo {
   async update() { return { affected: 1 }; }
 }
@@ -128,7 +68,7 @@ function makeQuorumHook(required: number) {
 }
 
 function makeService(required: number) {
-  const approvals = new FakeApprovalsRepo();
+  const approvals = fakeApprovalsRepo();
   const policyApprovals = new FakePolicyApprovalsRepo();
   const hook = makeQuorumHook(required);
   const svc = new ApprovalsService(
@@ -179,7 +119,7 @@ describe('a quorum does not lose an approver', () => {
     );
     expect(new Set(lastScored(hook).map((a) => a.approverId))).toEqual(new Set(['A', 'B', 'C']));
     // A properly approved 3-of-N must not sit pending until it expires.
-    expect(approvals.rows[0].status).toBe('approved');
+    expect(approvals.row(row.id)!.status).toBe('approved');
   });
 
   it('a 3-of-N gate approved one reviewer at a time still completes', async () => {
@@ -187,12 +127,12 @@ describe('a quorum does not lose an approver', () => {
     const row = await svc.create(createInput);
 
     await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' }, row.organizationId);
-    expect(approvals.rows[0].status).toBe('pending');
+    expect(approvals.row(row.id)!.status).toBe('pending');
     await svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }, row.organizationId);
-    expect(approvals.rows[0].status).toBe('pending');
+    expect(approvals.row(row.id)!.status).toBe('pending');
     await svc.approve(row.id, { decidedBy: 'C' }, { id: 'C' }, row.organizationId);
 
-    expect(approvals.rows[0].status).toBe('approved');
+    expect(approvals.row(row.id)!.status).toBe('approved');
   });
 
   it('one human cannot be counted twice, even racing themselves', async () => {
@@ -224,10 +164,11 @@ describe('a quorum does not lose an approver', () => {
     // Wipe the payload accumulator, i.e. exactly the state a lost
     // update produced. The guard must still hold, because it is the
     // index and not this list.
-    approvals.rows[0].payload = { ...(approvals.rows[0].payload as any), _policy: {
-      ...(approvals.rows[0].payload as any)._policy,
-      approvals: [],
-    } };
+    const stored = approvals.row(row.id)!;
+    approvals.seed({
+      ...stored,
+      payload: { ...(stored.payload as any), _policy: { ...(stored.payload as any)._policy, approvals: [] } },
+    });
 
     await expect(svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' }, row.organizationId)).rejects.toBeInstanceOf(
       BadRequestException,
@@ -239,19 +180,22 @@ describe('a quorum does not lose an approver', () => {
     const row = await svc.create(createInput);
 
     // A request carrying its approvals the old way.
-    approvals.rows[0].payload = {
-      amount: 25000,
-      _policy: {
-        policyId: 'pol-1',
-        policyName: '2-approver quorum',
-        approvals: [{ approverId: 'A', roles: ['admin'] }],
+    approvals.seed({
+      ...approvals.row(row.id)!,
+      payload: {
+        amount: 25000,
+        _policy: {
+          policyId: 'pol-1',
+          policyName: '2-approver quorum',
+          approvals: [{ approverId: 'A', roles: ['admin'] }],
+        },
       },
-    };
+    });
 
     await svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }, row.organizationId);
 
     expect(new Set(lastScored(hook).map((a) => a.approverId))).toEqual(new Set(['A', 'B']));
-    expect(approvals.rows[0].status).toBe('approved');
+    expect(approvals.row(row.id)!.status).toBe('approved');
   });
 
   it('the progress write does not carry a reviewer stale status back over the flip', async () => {
@@ -259,10 +203,10 @@ describe('a quorum does not lose an approver', () => {
     const row = await svc.create(createInput);
 
     await svc.approve(row.id, { decidedBy: 'A' }, { id: 'A' }, row.organizationId);
-    expect(approvals.rows[0].status).toBe('pending');
+    expect(approvals.row(row.id)!.status).toBe('pending');
 
     await svc.approve(row.id, { decidedBy: 'B' }, { id: 'B' }, row.organizationId);
-    expect(approvals.rows[0].status).toBe('approved');
-    expect(approvals.rows[0].decidedBy).toBe('B');
+    expect(approvals.row(row.id)!.status).toBe('approved');
+    expect(approvals.row(row.id)!.decidedBy).toBe('B');
   });
 });

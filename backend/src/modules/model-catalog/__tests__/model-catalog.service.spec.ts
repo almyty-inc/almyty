@@ -280,4 +280,95 @@ describe('ModelCatalogService', () => {
       expect(models.row(card.id)).toMatchObject({ name: 'renamed', region: 'eu' });
     });
   });
+
+  /**
+   * Every test above runs against one organization with one provider, so
+   * the organization and provider halves of the predicates below could be
+   * dropped with the suite green. These put a neighbour next to each row.
+   */
+  describe('provider and organization scoping of sync, retire and private providers', () => {
+    const fetch = () => (svc as any).modelsHelper.fetchModelsFromProvider as jest.Mock;
+    const provider = (over: Partial<LlmProvider>) =>
+      Object.assign(new LlmProvider(), { type: LlmProviderType.OPENAI, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {}, ...over });
+    const card = (over: Partial<Model>) =>
+      models.seed(Object.assign(new Model(), { status: 'active', validationStatus: 'passed', capabilities: {}, ...over }));
+
+    it('retireProviderCards retires only the cards of that provider in that organization', async () => {
+      providers.seed(provider({ id: 'p2', organizationId: 'org', name: 'Second' }));
+      providers.seed(provider({ id: 'p-theirs', organizationId: 'org2', name: 'Theirs' }));
+      const mine = card({ id: 'c-mine', organizationId: 'org', providerId: 'p1', vendorModelId: 'x', name: 'x' });
+      const sibling = card({ id: 'c-sibling', organizationId: 'org', providerId: 'p2', vendorModelId: 'x', name: 'x2' });
+      const theirs = card({ id: 'c-theirs', organizationId: 'org2', providerId: 'p-theirs', vendorModelId: 'x', name: 'x3' });
+
+      // Another organization's provider id, asked for from this one: nothing.
+      expect(await svc.retireProviderCards('org', 'p-theirs')).toBe(0);
+      expect(models.row(theirs.id)).toMatchObject({ status: 'active' });
+      expect(models.row(theirs.id)?.metadata?.retiredAt).toBeUndefined();
+
+      expect(await svc.retireProviderCards('org', 'p1')).toBe(1);
+      expect(models.row(mine.id)).toMatchObject({ status: 'inactive', metadata: { retiredReason: 'provider deleted' } });
+      expect(models.row(sibling.id)).toMatchObject({ status: 'active' });
+      expect(models.row(theirs.id)).toMatchObject({ status: 'active' });
+    });
+
+    it("syncFromProvider refuses another organization's provider and writes nothing", async () => {
+      providers.seed(provider({ id: 'p-theirs', organizationId: 'org2', name: 'Theirs' }));
+      fetch().mockResolvedValue([{ id: 'gpt-x' }]);
+
+      await expect(svc.syncFromProvider('org', 'p-theirs')).rejects.toMatchObject({ status: 404 });
+      expect(fetch()).not.toHaveBeenCalled();
+      expect(models.rows).toHaveLength(0);
+    });
+
+    it("syncFromProvider reconciles against its own provider's cards only", async () => {
+      providers.seed(provider({ id: 'p2', organizationId: 'org', name: 'Second' }));
+      const sibling = card({ id: 'c-sibling', organizationId: 'org', providerId: 'p2', vendorModelId: 'shared-id', name: 'on p2' });
+      const unlisted = card({ id: 'c-sibling-2', organizationId: 'org', providerId: 'p2', vendorModelId: 'only-on-p2', name: 'only p2' });
+      // A row whose organization disagrees with the provider's is not this sync's either.
+      const stray = card({ id: 'c-stray', organizationId: 'org2', providerId: 'p1', vendorModelId: 'stray', name: 'stray' });
+      fetch().mockResolvedValue([{ id: 'shared-id' }]);
+
+      const result = await svc.syncFromProvider('org', 'p1');
+
+      // p2 listing the same vendor id does not make p1's card exist already...
+      expect(result.created.map((c) => c.vendorModelId)).toEqual(['shared-id']);
+      expect(models.rows.filter((m) => m.providerId === 'p1' && m.organizationId === 'org').map((m) => m.vendorModelId)).toEqual(['shared-id']);
+      // ...and p2's cards, absent from p1's list, are not retired by it.
+      expect(result.retired).toEqual([]);
+      expect(models.row(sibling.id)).toMatchObject({ status: 'active' });
+      expect(models.row(unlisted.id)).toMatchObject({ status: 'active' });
+      expect(models.row(stray.id)).toMatchObject({ status: 'active' });
+    });
+
+    it("syncFromProvider treats another member's private provider as missing, but not its owner's or a lifecycle sync", async () => {
+      providers.seed(provider({ id: 'p-private', organizationId: 'org', name: 'Mine', visibility: 'private', ownerUserId: 'owner' }));
+      fetch().mockResolvedValue([{ id: 'gpt-x' }]);
+
+      await expect(svc.syncFromProvider('org', 'p-private', 'someone-else')).rejects.toMatchObject({ status: 404 });
+      expect(fetch()).not.toHaveBeenCalled();
+      expect(models.rows).toHaveLength(0);
+
+      expect((await svc.syncFromProvider('org', 'p-private', 'owner')).created).toHaveLength(1);
+      expect((await svc.syncFromProvider('org', 'p-private')).skipped).toBe(1);
+    });
+
+    it("list and get hide cards served by another member's private provider", async () => {
+      providers.seed(provider({ id: 'p-private', organizationId: 'org', name: 'Mine', visibility: 'private', ownerUserId: 'owner' }));
+      const shared = card({ id: 'c-shared', organizationId: 'org', providerId: 'p1', vendorModelId: 'a', name: 'a' });
+      const privateCard = card({ id: 'c-private', organizationId: 'org', providerId: 'p-private', vendorModelId: 'b', name: 'b' });
+      const ids = async (viewer?: string | null) => (await svc.list('org', {}, viewer)).map((m) => m.id).sort();
+
+      expect(await ids('owner')).toEqual([shared.id, privateCard.id].sort());
+      expect(await ids('someone-else')).toEqual([shared.id]);
+      // No known person: fail closed.
+      expect(await ids(null)).toEqual([shared.id]);
+      // No viewer argument at all is an internal caller, which sees the org's cards.
+      expect(await ids(undefined)).toEqual([shared.id, privateCard.id].sort());
+
+      expect((await svc.get('org', privateCard.id, 'owner')).id).toBe(privateCard.id);
+      await expect(svc.get('org', privateCard.id, 'someone-else')).rejects.toMatchObject({ status: 404 });
+      await expect(svc.get('org', privateCard.id, null)).rejects.toMatchObject({ status: 404 });
+      expect((await svc.get('org', shared.id, 'someone-else')).id).toBe(shared.id);
+    });
+  });
 });
