@@ -11,6 +11,8 @@ import * as crypto from 'crypto';
 import { OAuthAuthorizationCode } from '../../../entities/oauth-authorization-code.entity';
 import { OAuthAccessToken } from '../../../entities/oauth-access-token.entity';
 import { OAuthClient } from '../../../entities/oauth-client.entity';
+import { User } from '../../../entities/user.entity';
+import { hasEffectiveMembership } from '../../../common/authorization/membership';
 import { hashValue, verifyClientAuth } from './mcp-oauth-helpers.helper';
 
 const ACCESS_TOKEN_LIFETIME_SECONDS = 3600;
@@ -56,7 +58,26 @@ export class McpOAuthTokensHelper {
     private readonly oauthCodeRepository: Repository<OAuthAuthorizationCode>,
     @InjectRepository(OAuthAccessToken)
     private readonly oauthTokenRepository: Repository<OAuthAccessToken>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
+
+  /**
+   * Is the user a token would be issued to still an active member of the
+   * organization it would be issued in?
+   *
+   * A token is a member's delegation. Removing a member used to leave
+   * their refresh tokens rotating into fresh pairs indefinitely, and a
+   * code approved moments before the removal still redeemed.
+   */
+  private async holderIsMember(userId: string | null | undefined, organizationId: string): Promise<boolean> {
+    if (!userId) return false;
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: { organizationMemberships: true },
+    });
+    return !!user && user.isActive && hasEffectiveMembership(user.organizationMemberships, organizationId);
+  }
 
   async exchangeCode(
     codeValue: string,
@@ -130,6 +151,11 @@ export class McpOAuthTokensHelper {
       throw new UnauthorizedException('Authorization code has already been used');
     }
 
+    if (!(await this.holderIsMember(authCode.userId, authCode.organizationId))) {
+      this.logger.warn(`Code exchange refused for client ${clientId}: holder is no longer a member of the organization`);
+      throw new UnauthorizedException('Invalid authorization code');
+    }
+
     const tokens = await this.generateTokenPair(
       authCode.clientId,
       authCode.gatewayId,
@@ -197,6 +223,13 @@ export class McpOAuthTokensHelper {
     );
     if (claim.affected !== 1) {
       this.logger.warn(`Lost race on refresh token rotation for client ${clientId}`);
+      throw new UnauthorizedException('Refresh token has been revoked');
+    }
+
+    // Checked after the claim, so a departed member's refresh token is
+    // spent (revoked) by this attempt rather than left to be retried.
+    if (!(await this.holderIsMember(existingToken.userId, existingToken.organizationId))) {
+      this.logger.warn(`Refresh refused for client ${clientId}: holder is no longer a member of the organization`);
       throw new UnauthorizedException('Refresh token has been revoked');
     }
 
