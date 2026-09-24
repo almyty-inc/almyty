@@ -20,7 +20,7 @@ export interface GatewayRateLimitResult {
   message?: string;
   retryAfterSeconds?: number;
   /** Stable code the page can branch on: surface ceiling vs. this visitor. */
-  code?: 'SURFACE_RATE_LIMITED' | 'VISITOR_RATE_LIMITED';
+  code?: 'SURFACE_RATE_LIMITED' | 'VISITOR_RATE_LIMITED' | 'RATE_LIMIT_UNAVAILABLE';
   /**
    * Which bucket tripped: its window label, the ceiling, and the scope
    * it was counted against. The code says which *kind* of limit; this
@@ -179,6 +179,48 @@ export class GatewayRateLimitService {
       return { limited: false };
     }
   }
+
+  /**
+   * Fixed-window ceilings for one sensitive action, such as sending a
+   * sign-in code. Each bucket is its own counter (per visitor, per
+   * address, per recipient -- never one bucket for the whole surface, or
+   * one visitor could lock everybody else out).
+   *
+   * Unlike the message limits above this fails CLOSED: a code that is
+   * sent while the counter cannot be read is a code nobody counted, and
+   * the limits here are what stand between an address and a mail bomb,
+   * or a code and a brute force.
+   */
+  async checkAction(
+    buckets: Array<{ key: string; limit: number; seconds: number; what: string }>,
+  ): Promise<GatewayRateLimitResult> {
+    try {
+      for (const { key, limit, seconds, what } of buckets) {
+        const bucket = Math.floor(Date.now() / (seconds * 1000));
+        const count = await this.bumpWindow(`gw_action:${key}:${bucket}`, seconds);
+        if (count > limit) {
+          const windowEnd = (bucket + 1) * seconds * 1000;
+          const retryAfterSeconds = Math.max(1, Math.ceil((windowEnd - Date.now()) / 1000));
+          return {
+            limited: true,
+            code: 'VISITOR_RATE_LIMITED',
+            message: `Too many attempts from ${what}. Please wait ${retryAfterSeconds} seconds.`,
+            retryAfterSeconds,
+          };
+        }
+      }
+      return { limited: false };
+    } catch (error: any) {
+      this.logger.warn(`Action rate limit check failed, refusing: ${error.message}`);
+      return {
+        limited: true,
+        code: 'RATE_LIMIT_UNAVAILABLE',
+        message: 'This is unavailable for a moment. Please try again shortly.',
+        retryAfterSeconds: 30,
+      };
+    }
+  }
+
   /**
    * Bump one fixed window's counter and make sure it expires.
    *
@@ -190,16 +232,14 @@ export class GatewayRateLimitService {
    * counter already stranded that way heals on its next request.
    */
   private async bumpWindow(key: string, seconds: number): Promise<number> {
-    const count = await this.redis.eval(
-      `local n = redis.call('incr', KEYS[1])
-       if redis.call('ttl', KEYS[1]) < 0 then
-         redis.call('expire', KEYS[1], ARGV[1])
-       end
-       return n`,
-      1,
-      key,
-      String(seconds),
-    );
+    const count = await this.redis.eval(BUMP_WINDOW_SCRIPT, 1, key, String(seconds));
     return Number(count);
   }
 }
+
+/** INCR a window counter and arm its TTL, in one atomic step. */
+export const BUMP_WINDOW_SCRIPT = `local n = redis.call('incr', KEYS[1])
+       if redis.call('ttl', KEYS[1]) < 0 then
+         redis.call('expire', KEYS[1], ARGV[1])
+       end
+       return n`;

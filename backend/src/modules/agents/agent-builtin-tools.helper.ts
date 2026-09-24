@@ -13,6 +13,7 @@ import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.ser
 import { Provenance, Tier } from '../memory/canonical/canonical.types';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { runMayWriteSharedMemory } from './memory-autosave.policy';
 
 @Injectable()
 export class AgentBuiltInToolsHelper {
@@ -68,6 +69,11 @@ export class AgentBuiltInToolsHelper {
       }
 
       case 'store_memory': {
+        // A visitor's run does not write shared memory unless the product
+        // opted its visitors in -- the rule auto-save follows too.
+        if (!runMayWriteSharedMemory(run)) {
+          return { result: null, error: 'memory is not kept for visitor conversations' };
+        }
         try {
           // Map the legacy `type` hint into the canonical tier:
           //   'fact'/'preference'/'instruction' → 'long' (durable)
@@ -152,12 +158,17 @@ export class AgentBuiltInToolsHelper {
 
       case 'invoke_agent': {
         try {
+          // The child works for whoever the parent works for. A visitor
+          // run has no user (userId is null and the visitor is its
+          // endUserId); substituting the string 'system' put a non-uuid
+          // into the conversation's userId column and the child never
+          // started.
           const childRun = await this.runtime.startRun(
             parameters.agentId,
             run.organizationId,
-            run.userId || 'system',
+            run.userId ?? null,
             parameters.input,
-            { parentRunId: run.id, maxSteps: 20 },
+            { parentRunId: run.id, maxSteps: 20, endUserId: run.endUserId ?? null },
           );
           const result = await this.runtime.waitForRun(childRun.id, 60000);
           if (result?.status === AgentRunStatus.COMPLETED) {

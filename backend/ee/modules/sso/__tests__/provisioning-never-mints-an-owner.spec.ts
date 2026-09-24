@@ -2,6 +2,8 @@ import { BadRequestException } from '@nestjs/common';
 
 import { SsoConfigService } from '../sso-config.service';
 import { SsoService } from '../sso.service';
+import { SamlReplayCache } from '../saml-replay-cache';
+import { FakeRedis } from '../../../../src/test/fake-redis';
 import { ScimService } from '../scim.service';
 import { OrganizationRole } from '../../../../src/entities/user-organization.entity';
 
@@ -50,6 +52,7 @@ describe('SSO/SCIM provisioning never mints an owner', () => {
         save: jest.fn(async (row: any) => saved.push(row)),
       } as any,
       {} as any,
+      new SamlReplayCache(new FakeRedis()),
     );
     await service.resolveUser(
       'org-1',

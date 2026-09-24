@@ -13,6 +13,8 @@ import { OAuthClient } from '../../../entities/oauth-client.entity';
 import { OAuthAuthorizationCode } from '../../../entities/oauth-authorization-code.entity';
 import { OAuthAccessToken } from '../../../entities/oauth-access-token.entity';
 import { Gateway } from '../../../entities/gateway.entity';
+import { User } from '../../../entities/user.entity';
+import { fakeRepository } from '../../../test/fake-repository';
 
 describe('McpOAuthService', () => {
   let service: McpOAuthService;
@@ -87,6 +89,15 @@ describe('McpOAuthService', () => {
           useValue: {
             findOne: jest.fn(),
           },
+        },
+        {
+          // The token holder is a current member of org-1, so the flows
+          // below exercise the grants rather than the membership check
+          // (oauth-token-holder-membership.spec.ts covers that).
+          provide: getRepositoryToken(User),
+          useValue: fakeRepository<any>([
+            { id: 'user-1', isActive: true, organizationMemberships: [{ organizationId: 'org-1', isActive: true }] },
+          ]),
         },
       ],
     }).compile();

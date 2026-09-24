@@ -222,14 +222,27 @@ export function safeExecutableName(slug: string): string {
 }
 
 /**
- * The Electron release the shell is packaged against.
+ * The Electron release the shell is packaged against: the exact version
+ * the shell's own package.json pins, or null when it pins none.
  *
  * Passed explicitly because electron-builder resolves the runtime from
  * an installed node_modules or a fixed version in package.json, and a
  * build directory has neither: it is a copy of the shell with no
  * install step. A range fails outright rather than picking a release.
+ *
+ * Read from the shell rather than written down here. This was a
+ * constant, 33.2.0, while the shell pinned 39.8.10: every desktop build
+ * shipped a runtime six majors older than the one the shell is developed
+ * and tested on. The shell's pin is now the one place the version lives.
  */
-export const ELECTRON_VERSION = '33.2.0';
+export function electronVersionOf(shellPackageJson: unknown): string | null {
+  const pkg = (shellPackageJson ?? {}) as {
+    dependencies?: Record<string, unknown>;
+    devDependencies?: Record<string, unknown>;
+  };
+  const pinned = pkg.devDependencies?.electron ?? pkg.dependencies?.electron;
+  return typeof pinned === 'string' && /^\d+\.\d+\.\d+$/.test(pinned) ? pinned : null;
+}
 
 /**
  * The electron-builder release every desktop build is packaged with.
@@ -283,6 +296,8 @@ export function electronBuilderArgs(options: {
   version: string;
   /** Filesystem-safe name for the executable inside the package. */
   executableName: string;
+  /** The exact Electron release to package: electronVersionOf(the shell's package.json). */
+  electronVersion: string;
 }): string[] | null {
   const target = ELECTRON_TARGETS[options.platformId];
   if (!target) return null;
@@ -301,7 +316,7 @@ export function electronBuilderArgs(options: {
     `--config.productName=${options.productName}`,
     `--config.appId=${options.appId}`,
     `--config.directories.output=${options.outputDir}`,
-    `--config.electronVersion=${ELECTRON_VERSION}`,
+    `--config.electronVersion=${options.electronVersion}`,
     // The build's version, not the shell's. Without this every artifact
     // carries the shell's package.json version, so an update looks
     // identical to what it replaces.

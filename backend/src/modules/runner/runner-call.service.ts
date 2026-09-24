@@ -15,6 +15,8 @@ export interface RunnerRequestPayload {
   method: string;
   params: unknown;
   workspaceId?: string;
+  /** The workspace's root directory; sent with workspaceId once it is verified. */
+  workspaceCwd?: string;
 }
 
 export interface RunnerResponsePayload {
@@ -28,6 +30,7 @@ export const RUNNER_CALL_ERRORS = {
   RUNNER_OFFLINE: 'runner_offline',
   RUNNER_UNAVAILABLE: 'runner_unavailable',
   WORKSPACE_REQUIRED: 'workspace_required',
+  WORKSPACE_NOT_FOUND: 'workspace_not_found',
   TIMEOUT: 'timeout',
   TRANSPORT: 'transport',
   RUNNER_ERROR: 'runner_error',
@@ -168,6 +171,21 @@ export class RunnerCallService implements OnModuleDestroy {
       throw new RunnerCallError(RUNNER_CALL_ERRORS.RUNNER_UNAVAILABLE, err?.message ?? String(err));
     });
 
+    // A named workspace must be a live one of the caller's on this runner.
+    // The id used to ride into the envelope unchecked -- the daemon only
+    // tests that it is a non-empty string -- so a released or expired
+    // workspace kept taking work and any id at all was accepted.
+    let workspace: { id: string; cwd: string } | null = null;
+    if (workspaceId !== undefined) {
+      workspace = await this.workspaces.findForDispatch(workspaceId, runner.id, options.callerUserId);
+      if (!workspace) {
+        throw new RunnerCallError(
+          RUNNER_CALL_ERRORS.WORKSPACE_NOT_FOUND,
+          'workspace not found or no longer active on this runner',
+        );
+      }
+    }
+
     const session = await this.runners.getActiveSession(runner.id);
     if (!session) {
       throw new RunnerCallError(
@@ -183,8 +201,10 @@ export class RunnerCallService implements OnModuleDestroy {
     }
 
     const correlationId = uuidv7();
-    const payload: RunnerRequestPayload = workspaceId
-      ? { method, params, workspaceId }
+    // The workspace's root travels with its id so the runner can run a
+    // shell.exec there (and resolve a relative cwd against it).
+    const payload: RunnerRequestPayload = workspace
+      ? { method, params, workspaceId: workspace.id, workspaceCwd: workspace.cwd }
       : { method, params };
 
     const env = this.transport.push(

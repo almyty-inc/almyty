@@ -19,6 +19,7 @@ import { Throttle } from '@nestjs/throttler';
 
 import { McpOAuthService } from '../services/mcp-oauth.service';
 import { McpOAuthResolveHelper } from './mcp-oauth-resolve.helper';
+import { validateRedirectUri } from '../services/mcp-oauth-helpers.helper';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 /**
@@ -519,31 +520,19 @@ export class McpOAuthController {
       );
     }
 
-    // Validate redirect URIs
+    // Validate redirect URIs with the one policy the service applies too
+    // (validateRedirectUri): https, or http on a loopback host, nothing
+    // else. This controller kept a second copy of the rule that only
+    // looked at the host, so it could not be the thing that caught a
+    // `javascript://localhost/...` URI either.
     for (const uri of body.redirect_uris) {
       try {
-        const parsed = new URL(uri);
-        // OAuth 2.1: redirect_uri MUST use https except for localhost
-        if (
-          parsed.protocol !== 'https:' &&
-          parsed.hostname !== 'localhost' &&
-          parsed.hostname !== '127.0.0.1' &&
-          parsed.hostname !== '[::1]'
-        ) {
-          throw new HttpException(
-            {
-              error: 'invalid_client_metadata',
-              error_description: `redirect_uri must use HTTPS (except for localhost): ${uri}`,
-            },
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-      } catch (e) {
-        if (e instanceof HttpException) throw e;
+        validateRedirectUri(uri);
+      } catch (e: any) {
         throw new HttpException(
           {
             error: 'invalid_client_metadata',
-            error_description: `Invalid redirect_uri: ${uri}`,
+            error_description: `${e?.message ?? 'Invalid redirect_uri'}: ${uri}`,
           },
           HttpStatus.BAD_REQUEST,
         );
