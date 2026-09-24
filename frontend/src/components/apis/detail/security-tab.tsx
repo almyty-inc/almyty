@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { SecretInput } from '@/components/ui/secret-input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 import { apisApi } from '@/lib/api'
 import { useNotifications } from '@/store/app'
@@ -46,16 +47,31 @@ export function SecurityTab({ api, editing, onEditingChange }: SecurityTabProps)
   const [authConfig, setAuthConfig] = useState<Record<string, string>>({})
   const sectionRef = useRef<HTMLDivElement>(null)
 
+  // What the form was seeded with, so only a real change asks before a
+  // navigation throws it away. Null while not editing.
+  const [seeded, setSeeded] = useState<string | null>(null)
+  const [wasEditing, setWasEditing] = useState(false)
+
   // Seed the form from the saved settings each time editing starts. Only
   // on that edge: the parent rebuilds `api` every render, and re-seeding
-  // on it would wipe what the user is typing.
-  useEffect(() => {
+  // on it would wipe what the user is typing. Seeded while rendering, not
+  // in an effect, so the type picker mounts with the saved type instead of
+  // first showing the previous one and then switching.
+  if (editing !== wasEditing) {
+    setWasEditing(editing)
     if (editing) {
-      setAuthType(api.authentication?.type || ApiAuthType.NONE)
-      setAuthConfig(api.authentication?.config || {})
-      sectionRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+      const type = api.authentication?.type || ApiAuthType.NONE
+      const config = api.authentication?.config || {}
+      setAuthType(type)
+      setAuthConfig(config)
+      setSeeded(JSON.stringify({ type, config }))
+    } else {
+      setSeeded(null)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }
+
+  useEffect(() => {
+    if (editing) sectionRef.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
   }, [editing])
 
   const saveMutation = useMutation({
@@ -73,6 +89,11 @@ export function SecurityTab({ api, editing, onEditingChange }: SecurityTabProps)
       error('Failed to update', getApiErrorMessage(err, 'Please try again.'))
     },
   })
+
+  // Cancel and a successful save both end editing, so neither asks.
+  const guard = useLeaveGuard(
+    editing && seeded !== null && JSON.stringify({ type: authType, config: authConfig }) !== seeded,
+  )
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -172,6 +193,7 @@ export function SecurityTab({ api, editing, onEditingChange }: SecurityTabProps)
           </form>
         )}
       </CardContent>
+      {guard.element}
     </Card>
   )
 }

@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { SecretInput } from '@/components/ui/secret-input'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import {
@@ -58,6 +59,12 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
   const [newCredType, setNewCredType] = useState('')
   const [newCredName, setNewCredName] = useState('')
   const [newCredConfig, setNewCredConfig] = useState<Record<string, string>>({})
+  // A credential with anything chosen or typed in asks before a navigation
+  // throws it away. Cancel closes the form and a successful add resets it,
+  // so neither asks.
+  const guard = useLeaveGuard(
+    adding && (newCredType !== '' || newCredName !== '' || Object.values(newCredConfig).some((v) => v !== '')),
+  )
 
   const { data: credsData, isLoading } = useQuery({
     queryKey: ['api-credentials', apiId],
@@ -335,6 +342,7 @@ export function CredentialsTab({ apiId, apiName }: CredentialsTabProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {guard.element}
     </Card>
   )
 }

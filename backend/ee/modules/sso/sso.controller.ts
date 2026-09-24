@@ -49,8 +49,14 @@ export class SsoController {
     private readonly configService: SsoConfigService,
   ) {}
 
-  private async issueSession(res: Response, user: any): Promise<void> {
-    const tokens = await this.authService.generateTokens(user);
+  /**
+   * The session names the organization whose IdP vouched for the person
+   * and reaches only that one: an org owner controls its IdP, and must not
+   * be able to sign their way into the person's other organizations or
+   * account settings. See src/modules/auth/sso-session.ts.
+   */
+  private async issueSession(res: Response, user: any, orgId: string): Promise<void> {
+    const tokens = await this.authService.generateTokens(user, { ssoOrganizationId: orgId });
     res.cookie('access_token', tokens.accessToken, SSO_ACCESS_TOKEN_COOKIE_OPTIONS);
   }
 
@@ -80,7 +86,7 @@ export class SsoController {
       samlResponse,
       publicBaseUrl(req),
     );
-    await this.issueSession(res, user);
+    await this.issueSession(res, user, orgId);
     return res.redirect(ssoSuccessRedirect());
   }
 
@@ -131,7 +137,7 @@ export class SsoController {
       expectedState,
     );
     res.clearCookie(SSO_STATE_COOKIE, { path: '/' });
-    await this.issueSession(res, user);
+    await this.issueSession(res, user, orgId);
     return res.redirect(ssoSuccessRedirect());
   }
 }

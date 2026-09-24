@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import {
   Table,
   TableBody,
@@ -62,6 +63,11 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
   const [newMemoryContent, setNewMemoryContent] = useState('')
   const [newMemoryType, setNewMemoryType] = useState<string>('fact')
   const [newMemoryTags, setNewMemoryTags] = useState('')
+  // A half-written memory asks before a navigation throws it away. Cancel
+  // and a successful add both reset the fields, so neither asks.
+  const guard = useLeaveGuard(
+    addMemoryOpen && (newMemoryContent !== '' || newMemoryTags !== '' || newMemoryType !== 'fact'),
+  )
 
   // Map the legacy `type` hint into the canonical tier:
   //   'fact'/'preference'/'instruction' → 'long' (durable)
@@ -262,7 +268,7 @@ export function MemoryTab({ agentId, memories, error, onRetry }: MemoryTabProps)
           )}
         </CardContent>
       </Card>
-
+      {guard.element}
     </>
   )
 }

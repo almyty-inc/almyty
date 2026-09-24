@@ -10,16 +10,23 @@
  *
  * Each binds `:privateViewerId`. A null column (a row with no gateway or
  * no provider) is kept: it belongs to no private resource. A null viewer
- * (no known caller) keeps no private resource's rows.
+ * (no known caller) keeps no private resource's rows, and a private row
+ * with no recorded owner is nobody's, so it is kept from everyone.
  *
  * The owner comparison is made as text on both sides. Owner columns are
  * uuid on gateways/providers but varchar on tools/agents (`createdBy`), and
  * one query often binds `:privateViewerId` in several of these fragments:
  * Postgres gives a reused parameter one type, so an uncast mix fails with
  * "operator does not exist: character varying = uuid".
+ *
+ * "Not the viewer's" is `(owner = viewer) IS NOT TRUE`, not
+ * `owner IS DISTINCT FROM viewer`: IS DISTINCT FROM treats two nulls as
+ * equal, so an ownerless private row read by a caller with no id matched
+ * as that caller's own and was shown. `=` is only true when both sides are
+ * present and equal; null on either side leaves the row someone else's.
  */
 const OWNER_IS_NOT_VIEWER = (ownerColumn: string) =>
-  `${ownerColumn}::text IS DISTINCT FROM CAST(:privateViewerId AS text)`;
+  `(${ownerColumn}::text = CAST(:privateViewerId AS text)) IS NOT TRUE`;
 
 export function notOthersPrivateGateway(column: string): string {
   return `NOT EXISTS (SELECT 1 FROM gateways pg WHERE pg.id = ${column} ` +
