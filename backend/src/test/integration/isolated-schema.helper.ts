@@ -16,6 +16,8 @@
  */
 import { DataSource } from 'typeorm';
 
+import { provisionExtensionsInPublic } from './test-db-extensions';
+
 /**
  * Point TestAppModule's DataSource at a dedicated schema for this spec.
  * Must be invoked before the testing module compiles.
@@ -26,7 +28,8 @@ export function useIsolatedSchema(schema: string): void {
 
 /**
  * Pre-create the isolated schema via a throwaway connection so the
- * TestAppModule DataSource can dropSchema + run migrations into it.
+ * TestAppModule DataSource can dropSchema + run migrations into it, and
+ * make sure the extensions those migrations need are in public.
  */
 export async function ensureSchema(schema: string): Promise<void> {
   const bootstrap = new DataSource({
@@ -40,6 +43,10 @@ export async function ensureSchema(schema: string): Promise<void> {
   await bootstrap.initialize();
   try {
     await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+    // The spec's migrations run with this schema first on the search_path,
+    // so an extension they create would land here. Have them in public
+    // first, whatever config this spec was started with.
+    await provisionExtensionsInPublic((sql, params) => bootstrap.query(sql, params as any[]));
   } finally {
     await bootstrap.destroy();
   }

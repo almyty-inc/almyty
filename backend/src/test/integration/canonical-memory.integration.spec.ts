@@ -43,9 +43,12 @@ import { LlmProvider } from '../../entities/llm-provider.entity';
 import { AuditLogService } from '../../modules/audit-log/audit-log.service';
 import { Provenance, MemoryError, Tier } from '../../modules/memory/canonical/canonical.types';
 import { LIMITS } from '../../modules/memory/canonical/canonical.constants';
+import { ensureSchema } from './isolated-schema.helper';
+import { testDbConnection } from './test-db-extensions';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
+const SCHEMA = 'canonical_memory_test';
 
 jest.setTimeout(120_000);
 
@@ -87,26 +90,20 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
   let enqueued: Array<{ name: string; data: any }> = [];
 
   beforeAll(async () => {
-    const bootstrap = new DataSource({
-      type: 'postgres',
-      host: process.env.DATABASE_HOST || '127.0.0.1',
-      port: Number(process.env.DATABASE_PORT || 5432),
-      username: process.env.DATABASE_USERNAME || 'postgres',
-      password: process.env.DATABASE_PASSWORD || '',
-      database: process.env.DATABASE_NAME || 'almyty_test',
-    });
-    await bootstrap.initialize();
-    await bootstrap.query('CREATE SCHEMA IF NOT EXISTS canonical_memory_test');
-    await bootstrap.destroy();
+    // The shared integration setup: the schema pre-created and the
+    // extensions provisioned in public (ensureSchema), and the same
+    // connection defaults as every other DB spec.
+    await ensureSchema(SCHEMA);
+    const conn = testDbConnection();
 
     ds = new DataSource({
       type: 'postgres',
-      host: process.env.DATABASE_HOST || '127.0.0.1',
-      port: Number(process.env.DATABASE_PORT || 5432),
-      username: process.env.DATABASE_USERNAME || 'postgres',
-      password: process.env.DATABASE_PASSWORD || '',
-      database: process.env.DATABASE_NAME || 'almyty_test',
-      schema: 'canonical_memory_test',
+      host: conn.host,
+      port: conn.port,
+      username: conn.user,
+      password: conn.password,
+      database: conn.database,
+      schema: SCHEMA,
       // Build the schema by RUNNING THE MIGRATIONS (not `synchronize`)
       // so the suite validates the real migration path — including the
       // MemoryCanonicalInit migration that creates the pgvector-backed
@@ -117,12 +114,12 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
       dropSchema: true,
       logging: false,
       // Pin search_path on every connection (pool) so the migrations'
-      // unqualified CREATE TABLE lands in canonical_memory_test AND so
-      // raw SQL through DataSource.query — used by hybridSearch / asOf
-      // / etc. for pgvector operators — finds those tables while the
-      // `vector` type resolves from public.
+      // unqualified CREATE TABLE lands in the spec's schema AND so raw
+      // SQL through DataSource.query — used by hybridSearch / asOf / etc.
+      // for pgvector operators — finds those tables while the `vector`
+      // type and uuid_generate_v4() resolve from public.
       extra: {
-        options: '-c search_path=canonical_memory_test,public',
+        options: `-c search_path=${SCHEMA},public`,
       },
       entities: [CanonicalMemory, CanonicalMemoryWorkspaceConfig, CanonicalMemorySoftcapWarning],
     });

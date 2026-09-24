@@ -99,7 +99,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
     const bootstrap = new DataSource(connection);
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
-    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public`);
     await bootstrap.destroy();
 
     ds = new DataSource({
