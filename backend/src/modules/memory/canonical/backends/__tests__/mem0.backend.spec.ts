@@ -1,8 +1,7 @@
 /**
- * Mem0 backend adapter tests. Mocks the official `mem0ai`
- * MemoryClient and asserts our toCanonical / fromCanonical /
- * dispatch shapes are correct. Trusting the SDK to be tested
- * means we only test our translation glue.
+ * Mem0 backend adapter tests. Mocks Mem0Client and asserts our
+ * toCanonical / fromCanonical / dispatch shapes are correct. The wire
+ * format itself is covered by mem0.client.spec.ts.
  */
 import { v7 as uuidv7 } from 'uuid';
 
@@ -18,10 +17,10 @@ const mockClient = {
 
 class FakeMemoryNotFoundError extends Error {}
 
-jest.mock('mem0ai', () => ({
+jest.mock('../mem0.client', () => ({
   __esModule: true,
-  MemoryClient: jest.fn().mockImplementation(() => mockClient),
-  MemoryNotFoundError: FakeMemoryNotFoundError,
+  Mem0Client: jest.fn().mockImplementation(() => mockClient),
+  Mem0NotFoundError: FakeMemoryNotFoundError,
 }));
 
 import { Mem0Backend } from '../mem0.backend';
@@ -57,7 +56,7 @@ function makeItem(overrides: Partial<MemoryItem> = {}): MemoryItem {
   };
 }
 
-describe('Mem0Backend (SDK-mocked)', () => {
+describe('Mem0Backend (client-mocked)', () => {
   let backend: Mem0Backend;
   const creds = { apiKey: 'test-key' };
 
