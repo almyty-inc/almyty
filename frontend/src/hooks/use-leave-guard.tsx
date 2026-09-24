@@ -23,6 +23,9 @@
  * navigating) just pass their dirty state and render `guard.element`; a
  * cancelled or saved form is clean again, so leaving never asks.
  *
+ * A delete that leaves the page navigates with `LEAVE_WITHOUT_ASKING`:
+ * its confirm already asked, and the edits died with the item.
+ *
  * `allowPrefix` lets a multi-step flow move between its own step routes
  * (`/apis/new/schema` -> `/apis/new/review`) without asking.
  */
@@ -54,6 +57,21 @@ export interface LeaveGuardOptions {
 }
 
 export const LEAVE_TITLE = 'Discard unsaved changes?'
+
+/**
+ * Navigation state for a move the user has already confirmed, such as
+ * leaving a page whose item they just deleted. Every leave guard on the
+ * page lets it through: the delete confirm was the one question, and
+ * asking "Discard unsaved changes?" about edits to an item that no longer
+ * exists would be a second prompt for the same decision.
+ *
+ *   navigate('/models', { state: LEAVE_WITHOUT_ASKING })
+ */
+export const LEAVE_WITHOUT_ASKING = { leaveGuard: 'skip' } as const
+
+function confirmedElsewhere(state: unknown): boolean {
+  return !!state && typeof state === 'object' && (state as { leaveGuard?: unknown }).leaveGuard === 'skip'
+}
 const LEAVE_OPTIONS = {
   title: LEAVE_TITLE,
   description: 'You have changes on this page that have not been saved.',
@@ -71,7 +89,9 @@ function Blocker({
 }) {
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
-      currentLocation.pathname !== nextLocation.pathname && shouldBlock(nextLocation.pathname),
+      currentLocation.pathname !== nextLocation.pathname &&
+      !confirmedElsewhere(nextLocation.state) &&
+      shouldBlock(nextLocation.pathname),
   )
   useEffect(() => {
     if (blocker.state === 'blocked') {
@@ -138,7 +158,7 @@ export function useLeaveGuard(dirty: boolean, options: LeaveGuardOptions = {}): 
   const guardedNavigate = useCallback(
     async (to: To, navOptions?: NavigateOptions) => {
       // Under a data router the blocker asks; without one, ask here.
-      if (!inDataRouter && dirtyRef.current && !bypass.current) {
+      if (!inDataRouter && dirtyRef.current && !bypass.current && !confirmedElsewhere(navOptions?.state)) {
         if (!(await confirm(LEAVE_OPTIONS))) return
         bypass.current = true
       }

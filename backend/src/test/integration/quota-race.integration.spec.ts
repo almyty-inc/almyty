@@ -39,6 +39,7 @@ import { ApiQuotaExceededException, withApiQuota } from '../../modules/apis/api-
 import { RunnerCapabilityPublisher } from '../../modules/runner/runner-capability.publisher';
 import { ToolsOperationHelper } from '../../modules/tools/tools-operation.helper';
 import { ApisToolGeneratorHelper } from '../../modules/apis/apis-tool-generator.helper';
+import { ToolsService } from '../../modules/tools/tools.service';
 
 const SHOULD_RUN = process.env.RUN_DB_INTEGRATION === '1';
 const describeIfDb = SHOULD_RUN ? describe : describe.skip;
@@ -276,8 +277,8 @@ describeIfDb('quota enforcement under concurrency (real Postgres)', () => {
       const toolsService = new Proxy(
         {
           ...noVersions,
-          findByName: (name: string, organizationId: string) =>
-            ds.getRepository(Tool).findOne({ where: { name, organizationId } }),
+          // The service's own lookup, so the live-row rule is the real one.
+          findByName: ToolsService.prototype.findByName.bind({ toolRepository: ds.getRepository(Tool) }),
         } as Record<string, any>,
         proxyTo(ops),
       );
