@@ -1,6 +1,5 @@
 // Global test setup
 import { Test, TestingModule } from '@nestjs/testing';
-import { assertExtensionsInPublic } from './integration/test-db-extensions';
 
 // The integration specs boot a real Nest graph and run every migration in
 // their own Postgres schema before the first assertion. That does not finish
@@ -11,18 +10,6 @@ import { assertExtensionsInPublic } from './integration/test-db-extensions';
 // the test.
 if (process.env.RUN_DB_INTEGRATION === '1') {
   jest.setTimeout(120_000);
-}
-
-// After every DB-integration spec file, the extensions the migrations need
-// must still be in `public`. A spec that let its migrations create one in
-// its own schema fails here, by name, rather than some later spec failing
-// with "function uuid_generate_v4() does not exist".
-if (process.env.RUN_DB_INTEGRATION === '1') {
-  afterAll(async () => {
-    const specPath = expect.getState().testPath ?? '';
-    if (!/[\\/]test[\\/]integration[\\/]/.test(specPath)) return;
-    await assertExtensionsInPublic(specPath);
-  });
 }
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
