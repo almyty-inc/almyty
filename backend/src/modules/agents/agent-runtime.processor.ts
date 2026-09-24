@@ -20,6 +20,13 @@ const TERMINAL_RUN_STATUSES: AgentRunStatus[] = [
   AgentRunStatus.TIMEOUT,
 ];
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** An agent's recorded owner, if it is a user id; otherwise nobody. */
+function ownerUserId(createdBy: string | null | undefined): string | null {
+  return typeof createdBy === 'string' && UUID_RE.test(createdBy) ? createdBy : null;
+}
+
 @Processor('agent-runtime')
 export class AgentRuntimeProcessor {
   private readonly logger = new Logger(AgentRuntimeProcessor.name);
@@ -102,10 +109,18 @@ export class AgentRuntimeProcessor {
         return;
       }
 
+      // The run is the agent's owner's: startRun writes the user onto the
+      // run's conversation, whose userId is a uuid referencing users. This
+      // passed the string 'system', which Postgres refuses in that column,
+      // so every heartbeat failed before its run existed. An agent with no
+      // recorded owner runs as nobody -- and a private one is then refused
+      // by startRun, the same as any caller who is not its owner. So does
+      // one whose createdBy is not a user id at all (a temporary agent's
+      // 'system').
       await this.runtimeService.startRun(
         agentId,
         organizationId,
-        'system',
+        ownerUserId(agent.createdBy),
         agent.heartbeat.prompt,
         { maxSteps: 10 },
       );

@@ -152,12 +152,17 @@ export class AgentBuiltInToolsHelper {
 
       case 'invoke_agent': {
         try {
+          // The child works for whoever the parent works for. A visitor
+          // run has no user (userId is null and the visitor is its
+          // endUserId); substituting the string 'system' put a non-uuid
+          // into the conversation's userId column and the child never
+          // started.
           const childRun = await this.runtime.startRun(
             parameters.agentId,
             run.organizationId,
-            run.userId || 'system',
+            run.userId ?? null,
             parameters.input,
-            { parentRunId: run.id, maxSteps: 20 },
+            { parentRunId: run.id, maxSteps: 20, endUserId: run.endUserId ?? null },
           );
           const result = await this.runtime.waitForRun(childRun.id, 60000);
           if (result?.status === AgentRunStatus.COMPLETED) {
