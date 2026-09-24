@@ -16,6 +16,7 @@ import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-catalog/routing/verify-escalation';
 import { shouldAutoSaveMemory } from './memory-autosave.policy';
 import { emitStreamChunk } from './llm-stream-events';
+import { answerCallMessages, composesFinalAnswer } from './final-answer';
 
 
 /**
@@ -107,6 +108,20 @@ export const AGENT_STEP_COLUMNS_OMITTED = ['pipeline', 'metadata'] as const;
 const TOOL_CACHE_TTL_MS = 60_000;
 /** Cap on distinct (org, toolIds) keys held at once. */
 const TOOL_CACHE_MAX_ENTRIES = 200;
+
+/** The call a run's recorded final step describes. */
+type FinalCall = {
+  cost: number;
+  inputTokens: number;
+  outputTokens: number;
+  routing?: ChatResponse['routing'];
+  messageCount: number;
+  toolCount: number;
+  startedAt: number;
+  /** Set when the answer call did not produce the answer and the draft stood in. */
+  fallback?: 'error' | 'empty';
+  error?: string;
+};
 @Injectable()
 export class AgentStepProcessor {
   constructor(
@@ -352,7 +367,15 @@ export class AgentStepProcessor {
       // Call the LLM
       this.s.logger.debug(`Run ${runId} step ${run.currentStep}: calling LLM with ${messages.length} messages, ${allToolDefs.length} tools`);
 
-      this.s.emitEvent(runId, 'llm.started', { step: run.currentStep });
+      // A composing run (final-answer.ts) says up front which calls are the
+      // visitor's answer: only one that offers no tools. Every other call
+      // is working, and a visitor surface shows none of it.
+      const composing = composesFinalAnswer(run, agent);
+      const offersTools = !!chatRequest.tools;
+      this.s.emitEvent(runId, 'llm.started', {
+        step: run.currentStep,
+        ...(composing ? { answer: !offersTools } : {}),
+      });
 
       const llmResponse: ChatResponse = await this.s.llmProvidersService.chatStream(
         providerId,
@@ -376,6 +399,27 @@ export class AgentStepProcessor {
       if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
 
       const responseMessage = llmResponse.message;
+      const calledTools = !!responseMessage.toolCalls?.length;
+
+      // The tool work is done. In a composing run this reply is a draft,
+      // and a no-tools call writes the answer as the next step -- unless
+      // that step would take the run past a ceiling, in which case this
+      // reply is the answer, as it would be on any other run. Tool calls
+      // and nesting are not what the answer call spends, so those two
+      // ledgers do not decide it.
+      const composeAnswer =
+        composing &&
+        offersTools &&
+        !calledTools &&
+        !checkRunLimits(
+          {
+            currentStep: run.currentStep + 1,
+            totalCost: run.totalCost,
+            totalTokens: run.totalTokens,
+            createdAt: run.createdAt,
+          },
+          resolvedLimits,
+        );
 
       this.s.emitEvent(runId, 'llm.response', {
         step: run.currentStep,
@@ -388,6 +432,8 @@ export class AgentStepProcessor {
         // it accrued but not the model it was accruing on, which is the
         // half that makes multi-model routing legible.
         ...(llmResponse.routing ? { routing: llmResponse.routing } : {}),
+        // In a composing run, whether this reply is the visitor's answer.
+        ...(composing ? { answer: !offersTools || (!calledTools && !composeAnswer) } : {}),
       });
 
       // Check if the LLM returned tool calls
@@ -712,7 +758,26 @@ export class AgentStepProcessor {
 
       } else {
         // No tool calls — the agent has a final response
-        const finalContent = responseMessage.content || '';
+        let finalContent = responseMessage.content || '';
+        // What the recorded final step says about the call that wrote it.
+        let finalCall: FinalCall = {
+          cost: stepCost,
+          inputTokens: stepInputTokens,
+          outputTokens: stepOutputTokens,
+          routing: llmResponse.routing,
+          messageCount: messages.length,
+          toolCount: allToolDefs.length,
+          startedAt: stepStart,
+        };
+
+        // A composing run sets this reply aside as a draft and has the
+        // answer written by a call that offers no tools (final-answer.ts).
+        if (composeAnswer) {
+          const composed = await this.composeAnswer(run, runId, providerId, chatRequest, finalContent, finalCall);
+          finalCall = composed;
+          finalContent = composed.content;
+          if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
+        }
 
         // Prepare the candidate, but do not expose it until verification ends.
         let finalMsg: Message | null = null;
@@ -817,10 +882,10 @@ export class AgentStepProcessor {
         run.status = AgentRunStatus.COMPLETED;
         run.output = finalContent;
 
-        const stepDuration = Date.now() - stepStart;
+        const stepDuration = Date.now() - finalCall.startedAt;
         run.steps.push({
           type: 'llm_call',
-          input: { messageCount: messages.length, toolCount: allToolDefs.length },
+          input: { messageCount: finalCall.messageCount, toolCount: finalCall.toolCount },
           // Routing attribution belongs on this step too. The
           // tool-calling branch stamps it; this one did not, so the
           // commonest shape of all — a one-step answer with no tool
@@ -831,12 +896,14 @@ export class AgentStepProcessor {
           output: {
             status: 'completed',
             content: finalContent.substring(0, 200),
-            ...(llmResponse.routing ? { routing: llmResponse.routing } : {}),
+            ...(finalCall.routing ? { routing: finalCall.routing } : {}),
+            ...(finalCall.fallback ? { answerFallback: finalCall.fallback } : {}),
           },
-          cost: stepCost,
-          tokens: { input: stepInputTokens, output: stepOutputTokens },
+          cost: finalCall.cost,
+          tokens: { input: finalCall.inputTokens, output: finalCall.outputTokens },
           duration: stepDuration,
           timestamp: new Date().toISOString(),
+          ...(finalCall.error ? { error: finalCall.error } : {}),
         });
 
         run.currentStep++;
@@ -1036,6 +1103,107 @@ export class AgentStepProcessor {
     );
     this.s.logger.log(`Run ${run.id} is ${live.status}; abandoning step ${expectedStep} instead of finishing it`);
     return live.status;
+  }
+
+  /**
+   * The answer call of a composing run (final-answer.ts).
+   *
+   * The draft is recorded as a step of its own, with its cost, and the
+   * same model is asked again with the same request minus its tools: same
+   * provider or routing policy, model, sampling, system prompt, memory and
+   * conversation, the tool turns written out as text. That reply streams
+   * as the next step, marked as the answer, and is what the run returns.
+   * Its cost and tokens go on the run like any step's, and it counts as a
+   * step against maxSteps. Should the call fail or come back empty, the
+   * draft is the answer after all, sent whole.
+   */
+  private async composeAnswer(
+    run: AgentRun,
+    runId: string,
+    providerId: string | undefined,
+    chatRequest: ChatRequest,
+    draft: string,
+    draftCall: FinalCall,
+  ): Promise<FinalCall & { content: string }> {
+    const draftDuration = Date.now() - draftCall.startedAt;
+    run.steps.push({
+      type: 'llm_call',
+      input: { messageCount: draftCall.messageCount, toolCount: draftCall.toolCount },
+      output: {
+        status: 'drafted',
+        content: draft.substring(0, 200),
+        ...(draftCall.routing ? { routing: draftCall.routing } : {}),
+      },
+      cost: draftCall.cost,
+      tokens: { input: draftCall.inputTokens, output: draftCall.outputTokens },
+      duration: draftDuration,
+      timestamp: new Date().toISOString(),
+    });
+    run.currentStep++;
+    run.executionTime += draftDuration;
+
+    const step = run.currentStep;
+    const startedAt = Date.now();
+    const answerRequest: ChatRequest = {
+      ...chatRequest,
+      messages: answerCallMessages(chatRequest.messages as any[]) as ChatRequest['messages'],
+      tools: undefined,
+    };
+    const answered = {
+      messageCount: answerRequest.messages.length,
+      toolCount: 0,
+      startedAt,
+    };
+    const standIn = (fallback: 'error' | 'empty', error?: string, spent?: Partial<FinalCall>) => {
+      this.s.emitEvent(runId, 'llm.response', { step, content: draft, answer: true, fallback });
+      return {
+        cost: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        ...spent,
+        ...answered,
+        fallback,
+        ...(error ? { error } : {}),
+        content: draft,
+      };
+    };
+
+    this.s.emitEvent(runId, 'llm.started', { step, answer: true });
+    let response: ChatResponse;
+    try {
+      response = await this.s.llmProvidersService.chatStream(
+        providerId,
+        answerRequest,
+        run.organizationId,
+        run.userId,
+        (chunk) => emitStreamChunk((type, data) => this.s.emitEvent(runId, type, data), step, chunk),
+      );
+    } catch (err: any) {
+      this.s.logger.warn(`Run ${runId}: the answer call failed, answering with the draft: ${err?.message}`);
+      return standIn('error', `Answer call failed: ${err?.message}`);
+    }
+
+    const spent = {
+      cost: response.cost || 0,
+      inputTokens: response.usage?.inputTokens || 0,
+      outputTokens: response.usage?.outputTokens || 0,
+      routing: response.routing,
+    };
+    run.totalCost += spent.cost;
+    run.totalTokens += response.usage?.totalTokens || spent.inputTokens + spent.outputTokens;
+
+    const content = response.message?.content || '';
+    if (!content.trim() && draft.trim()) return standIn('empty', undefined, spent);
+
+    this.s.emitEvent(runId, 'llm.response', {
+      step,
+      content,
+      usage: { inputTokens: spent.inputTokens, outputTokens: spent.outputTokens },
+      cost: spent.cost,
+      ...(spent.routing ? { routing: spent.routing } : {}),
+      answer: true,
+    });
+    return { ...spent, ...answered, content };
   }
 
   private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {
