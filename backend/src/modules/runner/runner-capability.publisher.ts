@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 
 import { Runner } from '../../entities/runner.entity';
 import {
@@ -177,11 +177,12 @@ export class RunnerCapabilityPublisher {
   /**
    * Drop every Tool row that points at this runner. Called on
    * unregister and on runner deletion. Uses the partial index from
-   * the migration (tools_runner_id_idx) for the lookup.
+   * the migration (tools_runner_id_idx) for the lookup. Pass the
+   * caller's EntityManager to delete inside its transaction.
    */
-  async unpublish(runnerId: string): Promise<number> {
-    const result = await this.tools
-      .createQueryBuilder()
+  async unpublish(runnerId: string, manager?: EntityManager): Promise<number> {
+    const qb = manager ? manager.createQueryBuilder() : this.tools.createQueryBuilder();
+    const result = await qb
       .delete()
       .from(Tool)
       .where(`"runnerConfig"->>'runnerId' = :runnerId`, { runnerId })

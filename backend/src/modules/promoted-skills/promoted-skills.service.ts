@@ -1,9 +1,11 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger, forwardRef } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, ConflictException, Logger, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Raw, Repository } from 'typeorm';
 
 import { PromotedSkill } from '../../entities/promoted-skill.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { isOthersPrivate } from '../../common/authorization/private-visibility';
+import { notOthersPrivateAgent } from '../monitoring/private-rows';
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
 import { PromotedSkillRenderer } from './promoted-skill-renderer';
 
@@ -46,7 +48,8 @@ export class PromotedSkillsService {
       where: { id: runId, organizationId },
       relations: { agent: true },
     });
-    if (!run) {
+    // A run of another member's private agent answers like a missing run.
+    if (!run || (run.agent && isOthersPrivate(run.agent, userId ?? null))) {
       throw new NotFoundException('Run not found');
     }
     if (run.status !== AgentRunStatus.COMPLETED) {
@@ -66,6 +69,18 @@ export class PromotedSkillsService {
       : this.renderer.deterministicProcedure(run, agent);
 
     const existing = await this.skillRepository.findOne({ where: { organizationId, slug } });
+    // (org, slug) is unique, so a name another member's private-derived
+    // skill already holds cannot be taken -- and must not be re-promoted
+    // in place, which would overwrite their skill and hand back its id.
+    if (existing) {
+      const visible = await this.skillRepository.findOne({
+        where: { id: existing.id, organizationId, agentId: this.notOthersPrivateSource(userId) },
+        select: { id: true },
+      });
+      if (!visible) {
+        throw new ConflictException('A promoted skill with this name already exists; choose another name');
+      }
+    }
     const version = existing ? existing.version + 1 : 1;
 
     const content = this.renderer.renderSkillMd({
@@ -99,35 +114,65 @@ export class PromotedSkillsService {
     return this.skillRepository.save(skill);
   }
 
-  list(organizationId: string): Promise<PromotedSkill[]> {
+  list(organizationId: string, viewerId: string | null | undefined): Promise<PromotedSkill[]> {
     return this.skillRepository.find({
-      where: { organizationId },
+      where: { organizationId, agentId: this.notOthersPrivateSource(viewerId) },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async get(id: string, organizationId: string): Promise<PromotedSkill> {
-    const skill = await this.skillRepository.findOne({ where: { id, organizationId } });
+  async get(id: string, organizationId: string, viewerId: string | null | undefined): Promise<PromotedSkill> {
+    const skill = await this.skillRepository.findOne({
+      where: { id, organizationId, agentId: this.notOthersPrivateSource(viewerId) },
+    });
     if (!skill) {
       throw new NotFoundException('Promoted skill not found');
     }
     return skill;
   }
 
-  async remove(id: string, organizationId: string): Promise<void> {
+  async remove(id: string, organizationId: string, viewerId: string | null | undefined): Promise<void> {
+    // Resolve through get() so another member's private-derived skill is
+    // "not found" here too, rather than deletable by id.
+    await this.get(id, organizationId, viewerId);
     const res = await this.skillRepository.delete({ id, organizationId });
     if (!res.affected) {
       throw new NotFoundException('Promoted skill not found');
     }
   }
 
-  /** Skill list for protocol serving (MCP/REST) — name + rendered content. */
-  async listForServing(organizationId: string): Promise<Array<{ name: string; content: string }>> {
+  /**
+   * Skill list for protocol serving (MCP/REST) — name + rendered content.
+   * A protocol call with no known user passes null, which leaves out every
+   * skill promoted from a private agent.
+   */
+  async listForServing(
+    organizationId: string,
+    viewerId: string | null | undefined,
+  ): Promise<Array<{ name: string; content: string }>> {
     const skills = await this.skillRepository.find({
-      where: { organizationId },
+      where: { organizationId, agentId: this.notOthersPrivateSource(viewerId) },
       select: { slug: true, content: true },
     });
     return skills.map((s) => ({ name: s.slug, content: s.content }));
+  }
+
+  /**
+   * A promoted skill is derived from its source agent's run: its content
+   * carries that agent's instructions, the tools it called and the run's
+   * input and output. A skill promoted from another member's private agent
+   * is therefore theirs alone -- not listed, readable, replayable or
+   * deletable by anybody else, an org admin included. Checked against the
+   * agent's current visibility, so making an agent private also withdraws
+   * the skills promoted from it. A private tool or sub-agent can only be
+   * wired into its owner's own private agent, so the agent's tier covers
+   * them. No viewer (null) drops every private-derived skill.
+   */
+  private notOthersPrivateSource(viewerId: string | null | undefined) {
+    return Raw(
+      (column) => `(${column} IS NULL OR ${notOthersPrivateAgent(column)})`,
+      { privateViewerId: viewerId ?? null },
+    );
   }
 
   /**

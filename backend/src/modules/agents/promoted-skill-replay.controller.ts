@@ -44,7 +44,8 @@ export class PromotedSkillReplayController {
     }
     const userId = req.user.sub || req.user.id;
 
-    const skill = await this.skills.get(id, organizationId);
+    // Another member's private-derived skill answers as not found.
+    const skill = await this.skills.get(id, organizationId, userId);
     if (!skill.agentId) {
       throw new BadRequestException('The source agent no longer exists; cannot replay');
     }

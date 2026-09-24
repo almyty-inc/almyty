@@ -258,6 +258,7 @@ export function AuditTab() {
             <option value="organization">Organization</option>
             <option value="llm_provider">Provider</option>
             <option value="llm_session">Model call</option>
+            <option value="runner">Runner</option>
           </select>
         </div>
         <div className="flex items-center gap-1.5">
@@ -284,6 +285,8 @@ export function AuditTab() {
             <option value="run_complete">Run Complete</option>
             <option value="run_fail">Run Fail</option>
             <option value="login">Login</option>
+            <option value="ownership_transfer">Ownership transfer</option>
+            <option value="visibility_change">Visibility change</option>
           </select>
         </div>
         {(auditResourceFilter || auditActionFilter) && (

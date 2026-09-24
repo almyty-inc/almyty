@@ -10,7 +10,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 
 import { Organization } from '../../entities/organization.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
@@ -29,6 +29,8 @@ import { TeamMembershipHelper } from './team-membership.helper';
 import { CreateTeamDto } from './dto/create-team.dto';
 import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { ResourceHandoverHelper } from './resource-handover.helper';
 import * as crypto from 'crypto';
 
 import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
@@ -90,6 +92,10 @@ export class OrganizationsService {
     @Optional()
     @InjectRepository(CanonicalMemorySoftcapWarning)
     private readonly memorySoftcapWarningRepository?: Repository<CanonicalMemorySoftcapWarning>,
+    // Not @Optional(): Nest must inject these. Typed optional only so the
+    // specs that build this service positionally still compile.
+    private readonly handover?: ResourceHandoverHelper,
+    private readonly auditLogService?: AuditLogService,
   ) {}
 
   async create(createOrganizationDto: CreateOrganizationDto, ownerId: string): Promise<Organization> {
@@ -429,7 +435,60 @@ export class OrganizationsService {
       }
     }
 
-    await this.userOrganizationRepository.remove(membership);
+    // The departed member's private resources would otherwise be nobody's:
+    // visible to no one, deletable by no one. They move to whoever removed
+    // them -- or, when the member leaves on their own, to the organization's
+    // longest-standing remaining owner -- and stay private. Same
+    // transaction as the membership removal, so neither happens alone.
+    const reason = userId === actorUserId ? 'member_left' : 'member_removed';
+    const audit = await this.userOrganizationRepository.manager.transaction(async (manager) => {
+      const toUserId =
+        reason === 'member_removed'
+          ? actorUserId
+          : await this.longestStandingOtherOwner(manager, organizationId, userId);
+      const entries = await this.requireHandover().handOverPrivateResources(manager, {
+        organizationId,
+        fromUserId: userId,
+        toUserId,
+        actorUserId,
+        reason,
+      });
+      await manager.getRepository(UserOrganization).remove(membership);
+      return entries;
+    });
+    this.auditLogService?.publishCommitted(audit);
+  }
+
+  /**
+   * The owner who has been in the organization longest, other than
+   * `excludeUserId`. There always is one: the last owner cannot leave.
+   */
+  private async longestStandingOtherOwner(
+    manager: EntityManager,
+    organizationId: string,
+    excludeUserId: string,
+  ): Promise<string> {
+    const owner = await manager
+      .getRepository(UserOrganization)
+      .createQueryBuilder('m')
+      .where('m.organizationId = :organizationId', { organizationId })
+      .andWhere('m.role = :role', { role: OrganizationRole.OWNER })
+      .andWhere('m.isActive = true')
+      .andWhere('m.userId <> :excludeUserId', { excludeUserId })
+      .orderBy('m.joinedAt', 'ASC', 'NULLS LAST')
+      .addOrderBy('m.id', 'ASC')
+      .getOne();
+    if (!owner) {
+      throw new ForbiddenException('Cannot remove the last owner of the organization');
+    }
+    return owner.userId;
+  }
+
+  private requireHandover(): ResourceHandoverHelper {
+    // Nest always injects it; only a hand-built instance can lack it, and
+    // silently skipping the handover would strand private resources.
+    if (!this.handover) throw new Error('ResourceHandoverHelper is not wired into OrganizationsService');
+    return this.handover;
   }
 
   async updateMemberRole(
@@ -743,7 +802,22 @@ export class OrganizationsService {
       throw new BadRequestException('Cannot delete the default team');
     }
 
-    await this.teamRepository.remove(team);
+    // The team's resources become org-wide before the team goes: the
+    // teamId FK would set them to NULL and the CHECK ('team' needs a
+    // teamId) refuses that. The deleter is an org owner/admin who could
+    // already see them all. The BEFORE DELETE trigger on teams does the
+    // same for any other path; this one is audited.
+    const audit = await this.teamRepository.manager.transaction(async (manager) => {
+      const entries = await this.requireHandover().demoteTeamResources(manager, {
+        organizationId,
+        teamId: team.id,
+        teamName: team.name,
+        actorUserId: actingUserId ?? null,
+      });
+      await manager.getRepository(Team).remove(team);
+      return entries;
+    });
+    this.auditLogService?.publishCommitted(audit);
   }
 
   async getTeamMembers(

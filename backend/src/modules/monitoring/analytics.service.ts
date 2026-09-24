@@ -10,7 +10,12 @@ import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AnalyticsExportHelper } from './analytics-export.helper';
 import { AnalyticsSummariesHelper } from './analytics-summaries.helper';
-import { notOthersPrivateGateway, notOthersPrivateProvider } from './private-rows';
+import {
+  notOthersPrivateAgent,
+  notOthersPrivateGateway,
+  notOthersPrivateProvider,
+  notOthersPrivateTool,
+} from './private-rows';
 
 export interface RequestLogQuery {
   organizationId: string;
@@ -59,7 +64,14 @@ export class AnalyticsService {
     private readonly summaries: AnalyticsSummariesHelper,
   ) {}
 
-  async getOverview(organizationId: string) {
+  /**
+   * Every tile counts the caller's visible set: traffic, executions and
+   * sessions tied to another member's private gateway, tool, agent or
+   * provider are left out, for org admins too. A total that includes them
+   * tells another member the "just me" resource exists and how busy it is.
+   * No caller id means no private row is anyone's, so all are left out.
+   */
+  async getOverview(organizationId: string, callerId: string | null | undefined) {
     if (!organizationId) {
       throw new Error('getOverview requires organizationId');
     }
@@ -67,6 +79,7 @@ export class AnalyticsService {
     const now = new Date();
     const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const viewer = { privateViewerId: callerId ?? null };
 
     // RequestLog carries its own `organizationId` (added by
     // 1750796000000-RequestLogOrganization, backfilled from the gateway and
@@ -90,6 +103,28 @@ export class AnalyticsService {
     // logged with no protocol, so the guard silently zeroed real traffic that
     // the Request Log surface (getRequestLogs, which has no such guard) still
     // showed. Scope on org only — the same reliable gate getRequestLogs uses.
+    const logs = (since: Date) =>
+      this.requestLogRepository
+        .createQueryBuilder('log')
+        .where('log.organizationId = :orgId', { orgId: organizationId })
+        .andWhere('log.timestamp >= :since', { since })
+        .andWhere(visibleRequestLog('log'), viewer);
+    const executions = (since: Date) =>
+      this.toolExecutionRepository
+        .createQueryBuilder('exec')
+        .where('exec.organizationId = :orgId', { orgId: organizationId })
+        .andWhere('exec.createdAt >= :since', { since })
+        .andWhere(
+          `${notOthersPrivateTool('exec."toolId"')} AND ${notOthersPrivateGateway('exec."gatewayId"')}`,
+          viewer,
+        );
+    const sessions = (since: Date) =>
+      this.conversationRepository
+        .createQueryBuilder('session')
+        .where('session.organizationId = :orgId', { orgId: organizationId })
+        .andWhere('session.createdAt >= :since', { since })
+        .andWhere(visibleConversation('session'), viewer);
+
     const [
       totalRequests24h,
       totalRequests7d,
@@ -100,47 +135,22 @@ export class AnalyticsService {
       llmSessions24h,
       llmCost7d,
     ] = await Promise.all([
-      this.requestLogRepository
-        .createQueryBuilder('log')
-        .where('log.organizationId = :orgId', { orgId: organizationId })
-        .andWhere('log.timestamp >= :since', { since: last24h })
-        .getCount()
-        .catch(() => 0),
-      this.requestLogRepository
-        .createQueryBuilder('log')
-        .where('log.organizationId = :orgId', { orgId: organizationId })
-        .andWhere('log.timestamp >= :since', { since: last7d })
-        .getCount()
-        .catch(() => 0),
-      this.toolExecutionRepository.count({
-        where: { organizationId, createdAt: MoreThanOrEqual(last24h) },
-      }).catch(() => 0),
-      this.toolExecutionRepository.count({
-        where: { organizationId, createdAt: MoreThanOrEqual(last7d) },
-      }).catch(() => 0),
-      this.requestLogRepository
-        .createQueryBuilder('log')
+      logs(last24h).getCount().catch(() => 0),
+      logs(last7d).getCount().catch(() => 0),
+      executions(last24h).getCount().catch(() => 0),
+      executions(last7d).getCount().catch(() => 0),
+      logs(last24h)
         .select('AVG(log.responseTime)', 'avg')
-        .where('log.organizationId = :orgId', { orgId: organizationId })
-        .andWhere('log.timestamp >= :since', { since: last24h })
         .getRawOne()
         .then(r => Math.round(r?.avg || 0))
         .catch(() => 0),
-      this.requestLogRepository
-        .createQueryBuilder('log')
-        .where('log.organizationId = :orgId', { orgId: organizationId })
-        .andWhere('log.timestamp >= :since', { since: last24h })
+      logs(last24h)
         .andWhere('log.statusCode >= 500')
         .getCount()
         .catch(() => 0),
-      this.conversationRepository.count({
-        where: { organizationId, createdAt: MoreThanOrEqual(last24h) },
-      }).catch(() => 0),
-      this.conversationRepository
-        .createQueryBuilder('session')
+      sessions(last24h).getCount().catch(() => 0),
+      sessions(last7d)
         .select('SUM(session.totalCost)', 'total')
-        .where('session.organizationId = :orgId', { orgId: organizationId })
-        .andWhere('session.createdAt >= :since', { since: last7d })
         .getRawOne()
         .then(r => parseFloat(r?.total || '0'))
         .catch(() => 0),
@@ -204,8 +214,13 @@ export class AnalyticsService {
       .skip((query.page - 1) * query.limit)
       .take(query.limit);
 
-    // Another member's private gateway: its traffic is not listed.
-    qb.andWhere(`(log.gatewayId IS NULL OR ${notOthersPrivateGateway('log."gatewayId"')})`, { privateViewerId: query.callerId });
+    // Another member's private gateway or private tool: its traffic is not
+    // listed, an org admin asking included. `?toolId=` naming one comes
+    // back empty, the same as a tool that does not exist. No known caller
+    // binds null, which leaves every private resource's rows out.
+    const privateViewerId = query.callerId ?? null;
+    qb.andWhere(`(log.gatewayId IS NULL OR ${notOthersPrivateGateway('log."gatewayId"')})`, { privateViewerId });
+    qb.andWhere(`(log.toolId IS NULL OR ${notOthersPrivateTool('log."toolId"')})`, { privateViewerId });
     if (query.gatewayId) {
       qb.andWhere('log.gatewayId = :gatewayId', { gatewayId: query.gatewayId });
     }
@@ -361,7 +376,7 @@ export class AnalyticsService {
     }));
   }
 
-  async getTimeline(organizationId: string, timeframe: string, granularity: string) {
+  async getTimeline(organizationId: string, timeframe: string, granularity: string, callerId: string | null | undefined) {
     if (!organizationId) {
       throw new Error('getTimeline requires organizationId');
     }
@@ -378,6 +393,9 @@ export class AnalyticsService {
       .addSelect('AVG(log.responseTime)', 'avgResponseTime')
       .where('log.organizationId = :orgId', { orgId: organizationId })
       .andWhere('log.timestamp >= :since', { since })
+      // The same visible set as the overview tiles: another member's
+      // private gateway or tool does not add to the buckets.
+      .andWhere(visibleRequestLog('log'), { privateViewerId: callerId ?? null })
       .groupBy('bucket')
       .orderBy('bucket', 'ASC')
       .getRawMany();
@@ -419,4 +437,18 @@ export class AnalyticsService {
       default: return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     }
   }
+}
+
+/** A request log the viewer may count: not another member's private gateway or tool. */
+function visibleRequestLog(alias: string): string {
+  return `${notOthersPrivateGateway(`${alias}."gatewayId"`)} AND ${notOthersPrivateTool(`${alias}."toolId"`)}`;
+}
+
+/** A session the viewer may count: not on another member's private provider, agent or gateway. */
+function visibleConversation(alias: string): string {
+  return (
+    `${notOthersPrivateProvider(`${alias}."providerId"`)} AND ` +
+    `${notOthersPrivateAgent(`${alias}."agentId"`)} AND ` +
+    `${notOthersPrivateGateway(`${alias}."gatewayId"`)}`
+  );
 }

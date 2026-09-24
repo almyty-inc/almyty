@@ -15,6 +15,7 @@ import { Runner } from '../../entities/runner.entity';
 import { ApisModule } from '../apis/apis.module';
 import { GatewaysModule } from '../gateways/gateways.module';
 import { AgentsModule } from '../agents/agents.module';
+import { AuthorizationModule } from '../../common/authorization/authorization.module';
 
 import { OnboardingService } from './onboarding.service';
 import { OnboardingController } from './onboarding.controller';
@@ -35,6 +36,7 @@ import { OnboardingController } from './onboarding.controller';
     ]),
     GatewaysModule,
     AgentsModule,
+    AuthorizationModule,
   ],
   providers: [OnboardingService],
   controllers: [OnboardingController],

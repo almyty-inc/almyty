@@ -104,6 +104,7 @@ describe('AnalyticsController passes only clamped windows to the service', () =>
       'org-1',
       `${MAX_ANALYTICS_WINDOW_DAYS}d`,
       'day',
+      'user-1',
     );
   });
 
@@ -112,6 +113,6 @@ describe('AnalyticsController passes only clamped windows to the service', () =>
 
     await controller.getTimeline(req, '24h', 'hour');
 
-    expect(analyticsService.getTimeline).toHaveBeenCalledWith('org-1', '24h', 'hour');
+    expect(analyticsService.getTimeline).toHaveBeenCalledWith('org-1', '24h', 'hour', 'user-1');
   });
 });

@@ -57,7 +57,7 @@ export class AnalyticsController {
   @Roles('viewer', 'member', 'admin', 'owner')
   async getOverview(@Request() req) {
     const orgId = this.requireOrg(req);
-    const data = await this.analyticsService.getOverview(orgId);
+    const data = await this.analyticsService.getOverview(orgId, req.user?.sub || req.user?.id);
     return { success: true, data, message: 'Analytics overview retrieved successfully' };
   }
 
@@ -137,7 +137,7 @@ export class AnalyticsController {
     // one JSON array.
     const window = clampTimeframe(timeframe);
     const bucket = clampGranularity(window, granularity);
-    const data = await this.analyticsService.getTimeline(orgId, window, bucket);
+    const data = await this.analyticsService.getTimeline(orgId, window, bucket, req.user?.sub || req.user?.id);
     return { success: true, data, message: 'Timeline data retrieved successfully' };
   }
 

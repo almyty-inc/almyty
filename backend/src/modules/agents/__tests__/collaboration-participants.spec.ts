@@ -4,6 +4,7 @@ import { AgentStepProcessor } from '../agent-step-processor';
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
 import { AgentsService } from '../agents.service';
 import { buildCollaborationContext, collaborationProblems } from '../collaboration-participants';
+import { LlmProvider } from '../../../entities/llm-provider.entity';
 
 describe('collaborationProblems', () => {
   it('accepts no collaboration, agent participants, and model participants by provider or routing', () => {
@@ -99,7 +100,20 @@ describe('AgentsService refuses an invalid collaboration at save time', () => {
       findOne: jest.fn(async () => ({ id: 'ag-1', organizationId: 'org-1', mode: 'autonomous', metadata: {} })),
       save: jest.fn(async (a: any) => a),
       create: jest.fn((a: any) => a),
-      manager: { getRepository: () => ({ find: async () => [] }) },
+      // Providers: p1 is org-wide, p-mine is user-1's private one,
+      // p-theirs is another member's private one; anything else is missing.
+      manager: {
+        getRepository: (entity: unknown) => ({
+          find: async () =>
+            entity === LlmProvider
+              ? [
+                  { id: 'p1', visibility: 'org', ownerUserId: null },
+                  { id: 'p-mine', visibility: 'private', ownerUserId: 'user-1' },
+                  { id: 'p-theirs', visibility: 'private', ownerUserId: 'user-2' },
+                ]
+              : [],
+        }),
+      },
     };
     const organizationRepository = { findOne: jest.fn(async () => ({ id: 'org-1' })) };
     const svc = new AgentsService(
@@ -145,6 +159,28 @@ describe('AgentsService refuses an invalid collaboration at save time', () => {
     const { svc, agentRepository } = service();
     const collaboration = { strategy: 'race' as const, participants: [{ kind: 'model' as const, providerId: 'p1' }] };
     await svc.createAgent({ name: 'x', mode: 'autonomous', collaboration }, 'org-1', 'user-1').catch(() => undefined);
+    expect(agentRepository.save).toHaveBeenCalledWith(expect.objectContaining({ collaboration }));
+  });
+
+  // A model participant is refused at save time when it names a provider
+  // the saving user cannot use: another member's private one reads exactly
+  // like one that does not exist (the run would refuse it either way).
+  it('create: a model participant naming another member\'s private provider is refused like a missing one', async () => {
+    const { svc, agentRepository } = service();
+    const refusal = async (providerId: string) => {
+      const collaboration = { strategy: 'race' as const, participants: [{ kind: 'model' as const, providerId }] };
+      const err = await svc.createAgent({ name: 'x', mode: 'autonomous', collaboration }, 'org-1', 'user-1').catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      return String(err.message).replace(providerId, 'ID');
+    };
+    expect(await refusal('p-theirs')).toBe(await refusal('p-missing'));
+    expect(agentRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('create: the owner may name their own private provider', async () => {
+    const { svc, agentRepository } = service();
+    const collaboration = { strategy: 'race' as const, participants: [{ kind: 'model' as const, providerId: 'p-mine' }] };
+    await svc.createAgent({ name: 'x', mode: 'autonomous', collaboration }, 'org-1', 'user-1');
     expect(agentRepository.save).toHaveBeenCalledWith(expect.objectContaining({ collaboration }));
   });
 });
