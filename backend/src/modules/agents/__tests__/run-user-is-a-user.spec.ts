@@ -1,3 +1,4 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { AgentRuntimeProcessor } from '../agent-runtime.processor';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
@@ -23,7 +24,11 @@ describe('heartbeat runs', () => {
   function build(agent: Record<string, any>) {
     const startRun = jest.fn(async () => ({ id: 'run-1' }));
     const agents = fakeRepository<any>([agent]);
-    const processor = new AgentRuntimeProcessor({ startRun } as any, {} as any, agents as any, fakeRepository() as any);
+    // The real execution gate, with the owner a member of the agent's org.
+    const m = membershipFixture();
+    m.member('org-1', OWNER);
+    const runtime = { startRun, executionAccess: m.executionAccess, disableHeartbeat: jest.fn() };
+    const processor = new AgentRuntimeProcessor(runtime as any, {} as any, agents as any, fakeRepository() as any);
     const job: any = { data: { agentId: agent.id, organizationId: 'org-1' } };
     return { processor, startRun, job };
   }

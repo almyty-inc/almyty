@@ -234,6 +234,60 @@ envelope over Streamable HTTP; the runner executes locally and streams results
 back. The backend never spawns a process itself and the runner never calls an
 LLM vendor. `docs/runner.md`.
 
+## Visibility: who may see a resource, and who may run it
+
+Agents, tools, APIs, gateways, runners, LLM providers and credentials carry
+one of three tiers (`AccessPolicyService`):
+
+| Tier | Who sees it and who may run it |
+|---|---|
+| `org` | every active member of the organization |
+| `team` | active members of its team, plus org owners and admins |
+| `private` | its owner only; org owners and admins included in "nobody else" |
+
+**Seeing and running are one rule.** Lists filter with
+`AccessPolicyService.applyListFilter`, and every execution asks
+`ExecutionAccessService`, whose user rule *is*
+`AccessPolicyService.canAccess(user, resource, 'use')` — so a member can never
+run something a list hides from them, and never be refused something it shows.
+A refusal is the same 404 a missing resource gets, so it does not confirm that
+a team or private resource exists.
+
+**A run carries the scope of whoever started it** (`agent_runs.principal`;
+`ExecuteAgentOptions.principal` for a workflow run; `ToolExecutionOptions.principal`
+for a tool call). Everything the run does — `tool_call` and `sub_agent` nodes,
+an autonomous run's tool calls, `invoke_agent`, the tool ids `create_agent`
+hands a temporary agent, collaboration participants, a sandboxed
+`tools.invoke` — is authorized against that inherited principal, never against
+the child resource or the `userId` stamped on the row. An org agent anyone may
+run therefore reaches a team tool only when the person who started it could.
+An autonomous run re-checks its principal against its agent on every step, so
+a run resumed after input or approval stops if the scope is gone. Who the
+principal is, per surface:
+
+| Started by | Principal |
+|---|---|
+| dashboard session, API key, CLI JWT, `/v1` compat, the org's own (system) MCP endpoint | that user |
+| a schedule tick or heartbeat | the agent's owner **at fire time**; an owner who has left the team (or the org) stops it with a FAILED run that says why, and the schedule or heartbeat is paused |
+| a published gateway (MCP, A2A, UTCP, Skills, ACP, a chat channel, the Webhook channel, hosted chat) | the gateway |
+
+**The gateway rule.** A gateway is a publication: whoever its own auth admits
+gets what it serves, so what it may serve is bounded by the gateway's scope.
+An `org` resource: any gateway of the organization. A `team` resource: only a
+gateway scoped to that same team, or a gateway private to someone who may run
+the resource right now. A `private` resource: only a gateway private to its
+owner. It is checked when a resource is put on a gateway (the person doing it
+must also be able to run it; an app distribution for a team agent is created
+scoped to that team) and again on every call, so a resource moved to another
+team, or a private gateway whose owner left the team, stops being served.
+
+**One gate, three executors.** `AgentExecutionEngine.execute`,
+`AgentRuntimeService.startRun` and `ToolExecutorService.executeTool` ask
+`ExecutionAccessService` before doing any work and refuse to run at all when it
+is not wired. `common/authorization/__tests__/execution-access-guard.spec.ts`
+reads the source and fails if an executor stops asking, if a call into one
+does not name a principal, or if anything else reaches the layer below them.
+
 ## Background work
 
 BullMQ on Redis, with the queues registered in `modules/jobs`. The pattern is
@@ -270,6 +324,9 @@ The things that quietly break if you do not know them:
   enforce it.
 - **Secrets live in `credentials` only**, reached through grants, and every
   resolve is audited. `docs/connections.md`.
+- **Team and private are execution boundaries, not list filters.** A run
+  carries the scope of whoever started it and everything it does is
+  authorized against that; see "Visibility" above.
 - **Model support is registry data, never a list in code.** A card is usable
   only through `Model.isSelectable()` — active, callable, and with at least one
   passed validation run. Pricing comes from a live feed; the table in

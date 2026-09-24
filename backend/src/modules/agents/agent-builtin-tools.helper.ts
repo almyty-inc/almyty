@@ -1,10 +1,12 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 
 import { Agent } from '../../entities/agent.entity';
+import { Tool } from '../../entities/tool.entity';
+import { principalOfRun } from '../../common/authorization/execution-access.service';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
 import { MemoryError } from '../memory/canonical/canonical.types';
@@ -154,6 +156,27 @@ export class AgentBuiltInToolsHelper {
           };
         }
         try {
+          // The temporary agent's tools are checked against the run's
+          // scope now, not only when the child calls them: a model must not
+          // be able to hand a team or private tool id it was never offered
+          // to an agent it builds. Any id outside the scope (or the org) is
+          // refused as not found, and nothing is created.
+          const requestedToolIds: string[] = Array.isArray(parameters.toolIds)
+            ? [...new Set(parameters.toolIds.filter((id: unknown): id is string => typeof id === 'string'))]
+            : [];
+          if (requestedToolIds.length > 0) {
+            const found = await this.agentRepository.manager.getRepository(Tool).find({
+              where: { id: In(requestedToolIds), organizationId: run.organizationId },
+              select: { id: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
+            });
+            const usable = new Set(
+              (await this.runtime.executionAccess.filterExecutable(principalOfRun(run), found)).map((t) => t.id),
+            );
+            const missing = requestedToolIds.filter((id) => !usable.has(id));
+            if (missing.length > 0) {
+              return { result: null, error: `Failed to create temporary agent: tool not found: ${missing.join(', ')}` };
+            }
+          }
           const tempAgent = this.agentRepository.create({
             name: parameters.name,
             description: `Temporary agent created by ${agent.name}`,
@@ -213,7 +236,15 @@ export class AgentBuiltInToolsHelper {
             run.organizationId,
             run.userId ?? null,
             parameters.input,
-            { parentRunId: run.id, maxSteps: 20, endUserId: run.endUserId ?? null },
+            {
+              parentRunId: run.id,
+              maxSteps: 20,
+              endUserId: run.endUserId ?? null,
+              // The child runs in the parent's scope, unchanged: the model
+              // cannot start a team or private agent the run's starter
+              // could not have started directly.
+              principal: principalOfRun(run),
+            },
           );
           const result = await this.runtime.waitForRun(childRun.id, 60000);
           if (result?.status === AgentRunStatus.COMPLETED) {

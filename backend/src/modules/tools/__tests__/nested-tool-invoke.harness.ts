@@ -1,4 +1,5 @@
 import { ToolExecutorService } from '../tool-executor.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { ToolHttpExecutor } from '../executors/tool-http.executor';
 import { ToolScriptExecutor } from '../executors/tool-script.executor';
 import { NodeSandboxService } from '../node-sandbox/node-sandbox.service';
@@ -102,6 +103,10 @@ export function buildHarness(
         return gatewayTools[`${where.gatewayId}/${where.toolId}`] ?? null;
       }),
     } as any,
+    undefined,
+    // The real execution gate. 'u1' is not a user id, so only org tools run
+    // -- every tool the harness serves.
+    membershipFixture().executionAccess,
   );
   moduleRef.get.mockReturnValue(service);
 

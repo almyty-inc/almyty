@@ -52,6 +52,7 @@ import { AnalyticsService } from '../monitoring/analytics.service';
 import { MonitoringService } from '../monitoring/monitoring.service';
 import { ToolHubService } from '../tool-hub/tool-hub.service';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 interface AssignmentSummary {
   toolsAssigned: number;
@@ -578,6 +579,11 @@ export class AlmytyMcpService {
         // agent through the pipeline engine returns an empty "completed"
         // run with zero node results.
         const agent = await get(AgentsService).getAgent(String(args.agentId), orgId);
+        // The org's own MCP endpoint acts as its caller: a team agent runs
+        // only for its team (and org owners/admins), a private one only for
+        // its owner -- refused as not found before its status is told.
+        const principal = userPrincipal(userId, 'system_gateway');
+        await get(AgentRuntimeService).executionAccess.assertCanExecute(principal, agent, 'Agent');
         if (!agentIsInvokable(agent)) {
           // The shared refusal already says to activate it; over MCP,
           // name the tool that does it rather than repeating the advice.
@@ -592,6 +598,7 @@ export class AlmytyMcpService {
             orgId,
             userId,
             args.input,
+            { principal },
           );
           return {
             mode: 'autonomous',
@@ -605,7 +612,7 @@ export class AlmytyMcpService {
           agent,
           orgId,
           userId,
-          { input: args.input, variables: args.variables, metadata: args.metadata },
+          { input: args.input, variables: args.variables, metadata: args.metadata, principal },
         );
         return {
           mode: 'workflow',

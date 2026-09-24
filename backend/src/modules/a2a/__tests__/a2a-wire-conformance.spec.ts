@@ -172,6 +172,8 @@ describe('A2A wire conformance (v1.0 JSON-RPC binding)', () => {
       'org-1',
       null,
       'what is the capital of France',
+      // Runs in the gateway's scope (ExecutionAccessService's gateway rule).
+      { principal: expect.objectContaining({ kind: 'gateway', gatewayId: 'gw-1', visibility: 'org' }) },
     );
   });
 
@@ -193,7 +195,8 @@ describe('A2A wire conformance (v1.0 JSON-RPC binding)', () => {
       res as any,
     );
 
-    expect(startRun).toHaveBeenCalledWith('agent-1', 'org-1', null, 'ping');
+    // Runs in the gateway's scope (ExecutionAccessService's gateway rule).
+    expect(startRun).toHaveBeenCalledWith('agent-1', 'org-1', null, 'ping', { principal: expect.objectContaining({ kind: 'gateway', gatewayId: 'gw-1', visibility: 'org' }) });
   });
 
   // -----------------------------------------------------------------------

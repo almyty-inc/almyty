@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -9,7 +9,7 @@ import { A2AClientService } from '../a2a/a2a-client.service';
 import { ExternalAgentsService } from '../a2a/external-agents.service';
 import { partsToText } from '../a2a/a2a-part.mapper';
 import { NodeExecutionOptions, NodeExecutionResult } from './agent-node-executor';
-import { isOthersPrivate } from '../../common/authorization/private-visibility';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
  * Sub-agent execution branches extracted from AgentNodeExecutor:
@@ -121,30 +121,40 @@ export class AgentSubAgentExecutors {
     const subAgent = await this.agentRepository.findOne({
       where: { id: agentId, organizationId: options.organizationId },
     });
-    // Another member's private agent is not runnable as a sub-agent (and is
-    // reported as missing, not as forbidden). The run's user is the caller.
-    if (!subAgent || isOthersPrivate(subAgent, options.userId ?? null)) {
+    if (!subAgent) {
       throw new Error(`Sub-agent '${agentId}' not found`);
     }
 
-    const result = await this.executionEngine.execute(
-      subAgent,
-      options.organizationId,
-      options.userId,
-      {
-        input: subInput,
-        metadata: {
-          parentNodeId: node.id,
-          nestingDepth: currentDepth + 1,
+    // The sub-agent runs in the parent run's scope, handed down unchanged.
+    // The engine checks it against the sub-agent before anything runs: a
+    // team agent the run's starter is not a member for, or somebody else's
+    // private agent, is refused as not found.
+    const principal = options.principal ?? userPrincipal(options.userId);
+    let result;
+    try {
+      result = await this.executionEngine.execute(
+        subAgent,
+        options.organizationId,
+        options.userId,
+        {
+          input: subInput,
+          metadata: {
+            parentNodeId: node.id,
+            nestingDepth: currentDepth + 1,
+          },
+          signal: options.signal,
+          principal,
         },
-        signal: options.signal,
-      },
-      undefined,
-      {
-        nestingDepth: currentDepth + 1,
-        maxNestingDepth: maxDepth,
-      },
-    );
+        undefined,
+        {
+          nestingDepth: currentDepth + 1,
+          maxNestingDepth: maxDepth,
+        },
+      );
+    } catch (err: any) {
+      if (err instanceof NotFoundException) throw new Error(`Sub-agent '${agentId}' not found`);
+      throw err;
+    }
 
     const executionTime = Date.now() - startTime;
 

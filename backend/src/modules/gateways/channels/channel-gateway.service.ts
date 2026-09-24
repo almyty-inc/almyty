@@ -37,6 +37,7 @@ import { ChannelCredentialService, ChannelUsePurpose } from './channel-credentia
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { outboundFailureDetail, safeFetch } from '../../../common/security/safe-fetch';
 import { isPrivateGateway } from '../private-gateway';
+import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -345,8 +346,26 @@ export class ChannelGatewayService {
             gatewayType: gateway.type,
             source: normalized.metadata?.source || gateway.type,
           },
+          // Runs in the gateway's scope: a channel serves its agent only
+          // while the gateway's own visibility covers it, checked on every
+          // message.
+          principal: gatewayPrincipal(gateway),
         },
-      );
+      ).catch(async (err: any) => {
+        // Refused before it started: the agent is outside this gateway's
+        // scope (a team agent behind a gateway not scoped to its team, or
+        // one moved to another team since). Recorded on the delivery with
+        // a reason an operator can act on, not dropped silently.
+        if (err instanceof NotFoundException) {
+          await this.markInboundOutcome(claim, {
+            status: 'failed',
+            errorMessage: 'run refused: this gateway does not serve its agent (not found, or outside the gateway scope)',
+          });
+          return null;
+        }
+        throw err;
+      });
+      if (!newRun) return;
 
       await this.markInboundOutcome(claim, { runId: newRun.id });
       this.listenForCompletionAndRespond(newRun.id, gateway, adapter, normalized, effectiveConfig, claim);
@@ -640,7 +659,9 @@ export class ChannelGatewayService {
         // gateway-scoped thread lookup above can see the run at once.
         null,
         normalized.text,
-        { maxSteps: 25, metadata: channelMetadata },
+        // Runs in the gateway's scope: a channel serves its agent only while
+        // the gateway's own visibility covers it, checked on every message.
+        { maxSteps: 25, metadata: channelMetadata, principal: gatewayPrincipal(gateway) },
       );
 
       run.metadata = {

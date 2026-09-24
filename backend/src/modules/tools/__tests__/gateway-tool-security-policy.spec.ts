@@ -1,3 +1,4 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import axios from 'axios';
 
 import { ToolExecutorService } from '../tool-executor.service';
@@ -74,6 +75,8 @@ function buildExecutor(opts: { tool?: any; gatewayTool?: any } = {}) {
     {} as any, // memoryService
     {} as any, // mcpSources
     gatewayToolRepository as any,
+    undefined, // pluginManager
+    membershipFixture().executionAccess, // the real execution gate
   );
 
   return { service, gatewayToolRepository, stats, httpExecutor };

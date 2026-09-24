@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 /**
  * Cancelling a workflow run across replicas.
  *
@@ -122,6 +124,7 @@ describe('a terminal write cannot overwrite a terminal status already recorded',
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         AgentExecutionEngine,
         AgentExecutionCancellationService,
         AgentExecutionStateHelper,
