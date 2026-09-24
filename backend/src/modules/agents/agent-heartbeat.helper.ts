@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 
-import { Agent } from '../../entities/agent.entity';
+import { Agent, AgentPauseReason } from '../../entities/agent.entity';
 
 @Injectable()
 export class AgentHeartbeatHelper {
@@ -46,17 +46,24 @@ export class AgentHeartbeatHelper {
 
   /**
    * Disable heartbeat: removes the repeating BullMQ job and updates the agent.
+   *
+   * `pausedReason` is set when the system turned the heartbeat off on its
+   * own (its owner can no longer run the agent), so the agent page can say
+   * why instead of leaving only a failed run behind. A heartbeat someone
+   * switched off by hand carries none, and turning it back on (which
+   * rewrites the heartbeat) clears it.
    */
-  async disableHeartbeat(agentId: string, organizationId: string): Promise<Agent> {
+  async disableHeartbeat(agentId: string, organizationId: string, pausedReason?: AgentPauseReason): Promise<Agent> {
     const agent = await this.agentRepository.findOne({ where: { id: agentId, organizationId } });
     if (!agent) throw new NotFoundException('Agent not found');
 
-    agent.heartbeat = { ...agent.heartbeat, enabled: false } as any;
+    const { pausedReason: _previous, ...heartbeat } = (agent.heartbeat ?? {}) as Agent['heartbeat'];
+    agent.heartbeat = { ...heartbeat, enabled: false, ...(pausedReason ? { pausedReason } : {}) } as Agent['heartbeat'];
     await this.agentRepository.save(agent);
 
     await this.disableHeartbeatJob(agentId);
 
-    this.logger.log(`Heartbeat disabled for agent ${agentId}`);
+    this.logger.log(`Heartbeat disabled for agent ${agentId}${pausedReason ? `: ${pausedReason.code}` : ''}`);
     return agent;
   }
 
