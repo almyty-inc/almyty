@@ -243,7 +243,8 @@ describe('AcpServerService', () => {
     });
 
     it('should handle session/get', async () => {
-      runRepository.findOne.mockResolvedValue(mockRun);
+      const runId = '10000000-0000-4000-8000-000000000001';
+      runRepository.findOne.mockResolvedValue({ ...mockRun, id: runId });
 
       await service.handleJsonRpc(
         mockGateway as Gateway,
@@ -252,7 +253,7 @@ describe('AcpServerService', () => {
           jsonrpc: '2.0',
           method: 'session/get',
           id: 4,
-          params: { sessionId: 'run-1' },
+          params: { sessionId: runId },
         },
         mockRes,
       );
@@ -262,7 +263,7 @@ describe('AcpServerService', () => {
           jsonrpc: '2.0',
           id: 4,
           result: expect.objectContaining({
-            sessionId: 'run-1',
+            sessionId: runId,
           }),
         }),
       );
@@ -294,8 +295,13 @@ describe('AcpServerService', () => {
     });
 
     it('should handle session/cancel', async () => {
+      // A run of the gateway's own agent, under a real (uuid) id: anything
+      // else is refused as not found before the runtime is asked.
+      const runId = '10000000-0000-4000-8000-000000000001';
+      runRepository.findOne.mockResolvedValue({ ...mockRun, id: runId });
       const cancelledRun = {
         ...mockRun,
+        id: runId,
         status: AgentRunStatus.CANCELLED,
         isDone: () => true,
       };
@@ -308,18 +314,18 @@ describe('AcpServerService', () => {
           jsonrpc: '2.0',
           method: 'session/cancel',
           id: 6,
-          params: { sessionId: 'run-1' },
+          params: { sessionId: runId },
         },
         mockRes,
       );
 
-      expect(agentRuntimeService.cancelRun).toHaveBeenCalledWith('run-1', 'org-1');
+      expect(agentRuntimeService.cancelRun).toHaveBeenCalledWith(runId, 'org-1');
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           jsonrpc: '2.0',
           id: 6,
           result: expect.objectContaining({
-            sessionId: 'run-1',
+            sessionId: runId,
             status: expect.objectContaining({
               status: 'canceled',
             }),

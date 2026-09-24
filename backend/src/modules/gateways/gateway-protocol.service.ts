@@ -6,6 +6,7 @@ import { WebSocket } from 'ws';
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { isPrivateGateway } from './private-gateway';
+import { isServableGatewayTool, servableGatewayTools } from './gateway-servable';
 import { ToolExecutorService, ToolExecutionOptions } from '../tools/tool-executor.service';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 
@@ -305,25 +306,27 @@ export class GatewayProtocolService {
    * `getEffectiveName()` is `overrides.name` falling back to the tool's
    * own name, which is the same COALESCE below -- so the whole set no
    * longer has to be in memory for a linear scan to find one row.
-   * `IDX(gatewayId, isActive)` covers the scope.
+   * `IDX(gatewayId, isActive)` covers the scope. The row is then held to
+   * the same servable predicate the listing uses, so a name the listing
+   * does not carry is not found here either.
    */
   private async resolveGatewayToolByName(gatewayId: string, name: string): Promise<GatewayTool | null> {
-    return this.gatewayToolRepository
+    const row = await this.gatewayToolRepository
       .createQueryBuilder('gatewayTool')
       .innerJoinAndSelect('gatewayTool.tool', 'tool')
+      .innerJoinAndSelect('gatewayTool.gateway', 'gateway')
       .where('gatewayTool.gatewayId = :gatewayId', { gatewayId })
       .andWhere('gatewayTool.isActive = true')
       .andWhere("COALESCE(gatewayTool.overrides ->> 'name', tool.name) = :name", { name })
       .getOne();
+    return isServableGatewayTool(row) ? row : null;
   }
 
   private async handleMCPToolsList(gateway: Gateway, mcpRequest: MCPRequest): Promise<ProtocolResponse> {
     // tools/list is the one method that genuinely wants every tool, so it
-    // asks for them here rather than every request paying for them.
-    const gatewayTools = await this.gatewayToolRepository.find({
-      where: { gatewayId: gateway.id, isActive: true },
-      relations: { tool: true },
-    });
+    // asks for them here rather than every request paying for them. The
+    // gateway's servable set -- the one tools/call resolves against.
+    const gatewayTools = await servableGatewayTools(this.gatewayToolRepository, gateway.id);
 
     const tools: MCPToolDefinition[] = gatewayTools.map(gatewayTool => ({
       name: gatewayTool.getEffectiveName(),

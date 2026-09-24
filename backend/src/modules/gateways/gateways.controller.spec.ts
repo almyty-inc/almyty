@@ -640,7 +640,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', sub: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = {
         id: 'gw-1',
-        tools: [{ toolId: 'tool-1', isActive: true }],
+        tools: [{ toolId: 'tool-1', isActive: true, tool: { id: 'tool-1', status: 'active', visibility: 'org' } }],
       };
       const mockExecutionResult = {
         success: true,
@@ -679,7 +679,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', sub: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = {
         id: 'gw-1',
-        tools: [{ toolId: 'tool-1', isActive: true }],
+        tools: [{ toolId: 'tool-1', isActive: true, tool: { id: 'tool-1', status: 'active', visibility: 'org' } }],
       };
       const mockExecutionResult = {
         success: false,
@@ -740,7 +740,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', sub: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = {
         id: 'gw-1',
-        tools: [{ toolId: 'tool-1', isActive: true }],
+        tools: [{ toolId: 'tool-1', isActive: true, tool: { id: 'tool-1', status: 'active', visibility: 'org' } }],
       };
       const mockExecutionResult = { success: true, output: {} };
 
@@ -974,7 +974,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', sub: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = {
         id: 'gw-1',
-        tools: [{ toolId: 'tool-1', isActive: true }],
+        tools: [{ toolId: 'tool-1', isActive: true, tool: { id: 'tool-1', status: 'active', visibility: 'org' } }],
       };
 
       gatewaysService.getGateway.mockResolvedValue(mockGateway as any);

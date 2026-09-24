@@ -5,6 +5,7 @@ import { NotFoundException } from '@nestjs/common';
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
 import { AgentRuntimeProcessor } from '../agent-runtime.processor';
+import { AgentHeartbeatHelper } from '../agent-heartbeat.helper';
 import { AgentStepProcessor } from '../agent-step-processor';
 import { ChannelGatewayService } from '../../gateways/channels/channel-gateway.service';
 import { ChatWidgetAdapter } from '../../gateways/channels/adapters/chat-widget.adapter';
@@ -100,6 +101,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
   let agents: ReturnType<typeof fakeRepository<Agent>>;
   let runs: ReturnType<typeof fakeRepository<AgentRun>>;
   let tools: ReturnType<typeof fakeRepository<Tool>>;
+  let gatewayTools: ReturnType<typeof fakeRepository<GatewayTool>>;
   let runtime: AgentRuntimeService;
   let toolExecutor: ToolExecutorService;
   let queue: { add: jest.Mock; getRepeatableJobs: jest.Mock; removeRepeatableByKey: jest.Mock };
@@ -118,6 +120,8 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
     });
     fakeManager([[Agent, agents], [Tool, tools]]);
     runs = fakeRepository<AgentRun>({ make: () => new AgentRun(), idPrefix: 'run' });
+    // One gateway_tools table, read by the MCP handler and the executor alike.
+    gatewayTools = fakeRepository<GatewayTool>({ make: () => new GatewayTool() });
     queue = { add: jest.fn(), getRepeatableJobs: jest.fn().mockResolvedValue([]), removeRepeatableByKey: jest.fn() };
 
     toolExecutor = new ToolExecutorService(
@@ -138,7 +142,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       {} as any,
       {} as any,
       {} as any,
-      fakeRepository<any>([]) as any,
+      gatewayTools as any,
       undefined,
       m.executionAccess,
     );
@@ -162,7 +166,8 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       {} as any,
       {} as any,
       {} as any,
-      { disableHeartbeat: jest.fn() } as any,
+      // The real helper over the same agents table, so what it writes is read back.
+      new AgentHeartbeatHelper(agents as any, queue as any),
       {} as any,
       {} as any,
       events as any,
@@ -366,8 +371,23 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       const [refused] = runs.rows();
       expect(refused.status).toBe(AgentRunStatus.FAILED);
       expect(refused.error).toContain(`the agent's owner (${CAST.member}) can no longer run this agent`);
-      expect((runtime.heartbeat as any).disableHeartbeat).toHaveBeenCalledWith('team-agent', CAST.org);
+      // Off, on the agent row, with the reason its page shows.
+      const { heartbeat } = agents.row('team-agent')!;
+      expect(heartbeat).toMatchObject({
+        enabled: false,
+        intervalMinutes: 5,
+        prompt: 'check in',
+        pausedReason: { code: 'OWNER_CANNOT_RUN', message: refused.error },
+      });
       expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it('turning the heartbeat back on clears the reason', async () => {
+      withHeartbeat('team-agent', CAST.member);
+      m.leaveTeam(CAST.team, CAST.member);
+      await beat('team-agent');
+      await runtime.enableHeartbeat('team-agent', CAST.org, 5, 'check in');
+      expect(agents.row('team-agent')!.heartbeat).toEqual({ enabled: true, intervalMinutes: 5, prompt: 'check in' });
     });
   });
 
@@ -446,7 +466,16 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
         ] as any,
         make: () => new Gateway(),
       });
-      const gatewayTools = fakeRepository<GatewayTool>([]);
+      // Every tool attached to every gateway: what is under test here is the
+      // scope rule, which has to hold even for a row that is attached (a row
+      // from before the attach-time check, or a gateway re-scoped since).
+      // Serving what is not attached at all is gateway-executes-only-
+      // published-tools.spec.ts.
+      for (const gateway of gateways.rows()) {
+        for (const tool of tools.rows()) {
+          gatewayTools.seed({ id: `${gateway.id}:${tool.id}`, gatewayId: gateway.id, toolId: tool.id, isActive: true, tool, gateway } as any);
+        }
+      }
       fakeManager([[Gateway, gateways], [GatewayTool, gatewayTools]]);
       const toolsService = {
         findByName: async (name: string, organizationId: string) =>
