@@ -176,8 +176,13 @@ export class ChannelCredentialService {
     }
   }
 
-  /** Delete the managed row when the gateway goes; a shared connection is left alone. */
-  async release(gateway: ChannelGatewayRef): Promise<void> {
+  /** Delete the managed rows when the gateway goes; a shared connection is left alone. */
+  async release(gateway: ChannelGatewayRef & { visitorOAuth?: { credentialId: string | null } | null }): Promise<void> {
+    // The hosted chat visitor sign-in secret is a managed row of the surface too.
+    await this.credentialRefs.releaseManaged(gateway.organizationId, gateway.visitorOAuth?.credentialId, {
+      kind: 'hosted_chat_oauth',
+      id: gateway.id,
+    });
     const credentialId = gateway.configuration?.credentialId;
     if (typeof credentialId !== 'string' || !credentialId) return;
     await this.credentialRefs.releaseManaged(gateway.organizationId, credentialId, channelManagedBy(gateway.id, gateway.type));
