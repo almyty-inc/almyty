@@ -34,13 +34,14 @@ describe('ApisService - tool generation', () => {
 
     toolsService = {
       findByName: jest.fn().mockResolvedValue(null), // no existing tools
-      createFromOperation: jest.fn().mockImplementation(async (op, opts) => {
+      buildFromOperation: jest.fn().mockImplementation(async (op, opts) => {
         createCallTimestamps.push(Date.now());
         // Simulate a small DB delay
         await new Promise(r => setTimeout(r, 10));
         return { id: `tool-${op.name}`, name: opts.name, status: 'active' };
       }),
-      updateFromOperation: jest.fn(),
+      prepareUpdateFromOperation: jest.fn(),
+      createToolVersion: jest.fn(async () => undefined),
     };
 
     // 60 operations: with BATCH_SIZE=20 that's 3 batches, so we can
@@ -69,7 +70,15 @@ describe('ApisService - tool generation', () => {
         ApisService,
         ApisImportHelper,
         ApisToolGeneratorHelper,
-        { provide: getRepositoryToken(Api), useValue: { findOne: jest.fn().mockResolvedValue(mockApi), manager: unlimitedToolQuotaManager() } },
+        {
+          provide: getRepositoryToken(Api),
+          useValue: {
+            findOne: jest.fn().mockResolvedValue(mockApi),
+            // The batch is written through the quota transaction: no name
+            // is taken yet, and a save hands the rows back.
+            manager: unlimitedToolQuotaManager({ find: jest.fn(async () => []), save: jest.fn(async (rows: any) => rows) }),
+          },
+        },
         { provide: getRepositoryToken(ApiSchema), useValue: {} },
         { provide: getRepositoryToken(Operation), useValue: {} },
         { provide: getRepositoryToken(Resource), useValue: {} },
@@ -89,7 +98,7 @@ describe('ApisService - tool generation', () => {
   it('generates tools for all active operations', async () => {
     const { tools } = await service.generateToolsFromApi('api-1', 'org-1');
     expect(tools).toHaveLength(60);
-    expect(toolsService.createFromOperation).toHaveBeenCalledTimes(60);
+    expect(toolsService.buildFromOperation).toHaveBeenCalledTimes(60);
   });
 
   it('processes in batches, not all at once', async () => {
@@ -136,7 +145,7 @@ describe('ApisService - tool generation', () => {
 
     await service.generateToolsFromApi('api-1', 'org-1', ops);
 
-    const names = (toolsService.createFromOperation as jest.Mock).mock.calls.map((c) => c[1].name);
+    const names = (toolsService.buildFromOperation as jest.Mock).mock.calls.map((c) => c[1].name);
     expect(names).toHaveLength(6);
     expect(new Set(names).size).toBe(6); // all distinct
     for (const n of names) {
@@ -198,18 +207,18 @@ describe('ApisService - tool generation', () => {
 
     const { tools } = await service.generateToolsFromApi('api-1', 'org-1', preloaded);
     expect(tools).toHaveLength(3);
-    expect(toolsService.createFromOperation).toHaveBeenCalledTimes(3);
+    expect(toolsService.buildFromOperation).toHaveBeenCalledTimes(3);
   });
 
   it('continues generating even if one tool fails', async () => {
-    toolsService.createFromOperation
-      .mockResolvedValue({ id: 'tool-ok', name: 'ok' })
+    toolsService.buildFromOperation
+      .mockImplementation(async (_op: any, opts: any) => ({ name: opts.name }))
       .mockRejectedValueOnce(new Error('DB error'));
 
     const result = await service.generateToolsFromApi('api-1', 'org-1');
     // 59 succeed, 1 fails (60 ops in fixture)
     expect(result.tools.length).toBe(59);
-    expect(toolsService.createFromOperation).toHaveBeenCalledTimes(60);
+    expect(toolsService.buildFromOperation).toHaveBeenCalledTimes(60);
     // And it says so, rather than reporting 59 as the whole story. The
     // count was logged and dropped, so the UI congratulated the user on
     // 59 tools without mentioning the one that failed.
