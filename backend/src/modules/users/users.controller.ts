@@ -286,7 +286,7 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Cannot delete user - they are sole owner of organization(s)' })
   async remove(@Param('id') id: string, @Req() req: any) {
     const organizationId = this.requireOrg(req);
-    await this.usersService.deleteInOrg(id, organizationId);
+    await this.usersService.deleteInOrg(id, organizationId, req.user?.id);
 
     return {
       message: 'User deleted successfully',

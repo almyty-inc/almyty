@@ -3,10 +3,12 @@ import {
   BadRequestException,
   UnauthorizedException,
   Logger,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { SAML, Profile, ValidateInResponseTo } from '@node-saml/passport-saml';
 import * as oidc from 'openid-client';
@@ -16,6 +18,15 @@ import { UserOrganization } from '../../../src/entities/user-organization.entity
 import { isEffectiveMembership } from '../../../src/common/authorization/membership';
 import { DecryptedSsoConfig, SsoConfigService, provisioningRole } from './sso-config.service';
 import { SamlReplayCache, assertionReplayFacts } from './saml-replay-cache';
+import {
+  MemoryOidcLoginStateStore,
+  OIDC_LOGIN_TTL_SECONDS,
+  OidcLoginStateStore,
+  OidcLoginStateStoreFactory,
+} from './oidc-login-state.store';
+
+/** Inject a specific store (specs); otherwise the factory picks Redis or memory. */
+export const OIDC_LOGIN_STATE_STORE = Symbol('OIDC_LOGIN_STATE_STORE');
 
 export interface SsoUserProfile {
   email: string;
@@ -35,6 +46,7 @@ export interface SsoUserProfile {
 @Injectable()
 export class SsoService {
   private readonly logger = new Logger(SsoService.name);
+  private readonly loginStates: OidcLoginStateStore;
 
   constructor(
     @InjectRepository(User)
@@ -43,7 +55,13 @@ export class SsoService {
     private readonly membershipRepo: Repository<UserOrganization>,
     private readonly configService: SsoConfigService,
     private readonly samlReplay: SamlReplayCache,
-  ) {}
+    // Optional so specs that never start an OIDC sign-in can construct
+    // the service bare; they get a per-instance memory store.
+    @Optional() loginStateFactory?: OidcLoginStateStoreFactory,
+    @Optional() @Inject(OIDC_LOGIN_STATE_STORE) loginStates?: OidcLoginStateStore,
+  ) {
+    this.loginStates = loginStates ?? loginStateFactory?.create() ?? new MemoryOidcLoginStateStore();
+  }
 
   // ── SAML ────────────────────────────────────────────────────────────
 
@@ -288,7 +306,7 @@ export class SsoService {
       async callback(
         _redirectUri: string,
         params: Record<string, any>,
-        checks: { state?: string } = {},
+        checks: OidcCallbackChecks,
       ): Promise<{ claims: () => Record<string, any> }> {
         const currentUrl = new URL(redirectUri);
         for (const [key, value] of Object.entries(params)) {
@@ -296,16 +314,27 @@ export class SsoService {
             currentUrl.searchParams.set(key, String(value));
           }
         }
-        const tokens = await oidc.authorizationCodeGrant(
-          configuration,
-          currentUrl,
-          { expectedState: checks.state },
-        );
+        // openid-client sends the verifier with the code and checks the
+        // ID token's nonce itself; resolveOidcClaims checks the nonce
+        // again so the rule does not rest on this adapter alone.
+        const tokens = await oidc.authorizationCodeGrant(configuration, currentUrl, {
+          expectedState: checks.state,
+          pkceCodeVerifier: checks.codeVerifier,
+          expectedNonce: checks.nonce,
+        });
         return { claims: () => tokens.claims() ?? {} };
       },
     };
   }
 
+  /**
+   * Start an OIDC sign-in. Besides `state` (login CSRF), every request
+   * carries an S256 PKCE challenge, so a code intercepted on its way back
+   * cannot be redeemed without the verifier this server keeps, and a
+   * `nonce` the ID token must echo, so an ID token minted for another
+   * sign-in cannot be replayed into this one. The verifier and nonce are
+   * stored server-side under the state, for one callback only.
+   */
   async getOidcLoginUrl(
     orgId: string,
     options: { redirectUri?: string } = {},
@@ -314,9 +343,25 @@ export class SsoService {
     const client = await this.buildOidcClient(config, options.redirectUri);
 
     const state = randomBytes(16).toString('hex');
+    const codeVerifier = randomBytes(32).toString('base64url');
+    const nonce = randomBytes(16).toString('base64url');
+    await this.loginStates.put(
+      state,
+      {
+        organizationId: orgId,
+        codeVerifier,
+        nonce,
+        redirectUri: options.redirectUri ?? null,
+        createdAt: Date.now(),
+      },
+      OIDC_LOGIN_TTL_SECONDS,
+    );
     const url = client.authorizationUrl({
       scope: 'openid email profile',
       state,
+      nonce,
+      code_challenge: pkceChallenge(codeVerifier),
+      code_challenge_method: 'S256',
     });
     return { url, state };
   }
@@ -358,6 +403,19 @@ export class SsoService {
       throw new UnauthorizedException('Sign-in session expired or did not match. Start again.');
     }
 
+    // The verifier and nonce this sign-in started with. Taken, not read:
+    // a second callback with the same state finds nothing. A state this
+    // server never issued, one that expired, or one issued for another
+    // organization or redirect is the same refusal.
+    const pending = await this.loginStates.take(expectedState);
+    if (
+      !pending ||
+      pending.organizationId !== orgId ||
+      pending.redirectUri !== (redirectUri ?? null)
+    ) {
+      throw new UnauthorizedException('Sign-in session expired or did not match. Start again.');
+    }
+
     const config = await this.loadEnabledConfig(orgId, 'oidc');
     const client = await this.buildOidcClient(config, redirectUri);
 
@@ -366,11 +424,18 @@ export class SsoService {
       const tokenSet = await client.callback(
         redirectUri ?? config.oidcRedirectUri,
         params,
-        { state: expectedState },
+        { state: expectedState, codeVerifier: pending.codeVerifier, nonce: pending.nonce },
       );
       claims = tokenSet.claims();
     } catch (err) {
       this.logger.warn(`OIDC callback rejected for org ${orgId}: ${err}`);
+      throw new UnauthorizedException('OIDC token exchange failed');
+    }
+
+    // The ID token must answer this sign-in: a missing nonce is refused
+    // as firmly as a wrong one.
+    if (typeof claims.nonce !== 'string' || !timingSafeEqualText(claims.nonce, pending.nonce)) {
+      this.logger.warn(`OIDC ID token nonce missing or mismatched for org ${orgId}`);
       throw new UnauthorizedException('OIDC token exchange failed');
     }
 
@@ -514,4 +579,22 @@ export class SsoService {
 
 function isEmail(value: unknown): value is string {
   return typeof value === 'string' && /.+@.+\..+/.test(value);
+}
+
+/** What the OIDC client adapter checks on the callback. */
+export interface OidcCallbackChecks {
+  state: string;
+  codeVerifier: string;
+  nonce: string;
+}
+
+/** RFC 7636 S256: BASE64URL(SHA256(ASCII(code_verifier))). */
+export function pkceChallenge(codeVerifier: string): string {
+  return createHash('sha256').update(codeVerifier, 'ascii').digest('base64url');
+}
+
+function timingSafeEqualText(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  return left.length === right.length && timingSafeEqual(left, right);
 }

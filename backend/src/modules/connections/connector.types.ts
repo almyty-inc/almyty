@@ -128,6 +128,13 @@ export interface OAuth2Config {
   /** Field of the token response holding the secret (default `access_token`). */
   tokenField?: string;
   refreshField?: string;
+  /**
+   * RFC 7009 token revocation endpoint. When set, disconnecting the
+   * connection and offboarding its owner revoke the tokens here, with the
+   * same client authentication as the token exchange. May reference
+   * non-secret config values as `{{field}}`.
+   */
+  revocationUrl?: string;
   /** Provider prints the code on-screen when no callback URL is sent (headless / CLI mode). */
   headlessCode?: boolean;
   /** Extra static query params for the authorize URL. */

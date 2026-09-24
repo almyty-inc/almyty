@@ -16,6 +16,7 @@ import { CustomConnector } from './connector.entity';
 import { GrantsModule } from './grants/grants.module';
 import { RotationModule } from './rotation/rotation.module';
 import { ConnectionsRotatorBridge } from './connections-rotator.bridge';
+import { ConnectionOffboardingService } from './connection-offboarding.service';
 
 /**
  * Connections, gate 1: connector catalog, connect / validate / rotate /
@@ -39,7 +40,8 @@ import { ConnectionsRotatorBridge } from './connections-rotator.bridge';
     ConnectionsService,
     ConnectionsResolverService,
     ConnectionsRotatorBridge,
+    ConnectionOffboardingService,
   ],
-  exports: [ConnectionsService, ConnectionsResolverService, ConnectorCatalogService, ConnectionValidationService, ConnectionsRotatorBridge, GrantsModule, RotationModule],
+  exports: [ConnectionsService, ConnectionOffboardingService, ConnectionsResolverService, ConnectorCatalogService, ConnectionValidationService, ConnectionsRotatorBridge, GrantsModule, RotationModule],
 })
 export class ConnectionsModule {}

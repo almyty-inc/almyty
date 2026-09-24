@@ -412,25 +412,107 @@ export class HostedChatController {
     // autonomous run streams its model output as `llm.chunk`, and a step
     // that goes on to call tools streams its narration too: what it is
     // about to look up, what the last tool returned, instructions echoed
-    // from the system prompt. Whether a step is the answer is only known
-    // when its `llm.response` arrives (no tool calls = final answer), so
-    // chunks are never forwarded; the final step's text is sent as one
-    // token event when its response lands. With a verify panel on the
-    // final output even that waits for the transcript, as before.
+    // from the system prompt. So a step's chunks are held until the
+    // provider's stream has said, with certainty, what the step is
+    // (`llm.step_kind`, see StreamChunk.stepKind):
+    //
+    //   text -> the held chunks go out, and the rest stream live
+    //   tool -> the held chunks are dropped, and nothing more is sent
+    //
+    // A step whose provider never says (Gemini, custom endpoints, any
+    // type on the non-streaming fallback) streams nothing, and its answer
+    // goes out as one token event when its `llm.response` lands with no
+    // tool calls. That is also where anything the stream did not carry
+    // is made up. The response is the last word: if it contradicts what
+    // was streamed, the page is told to `reset` the reply. With a verify
+    // panel on the final output nothing is sent before the verdict; the
+    // page reconciles from the transcript on `done`.
+    type StepStream = { kind: 'text' | 'tool' | null; held: string[]; sent: string };
+    const steps = new Map<number, StepStream>();
+    const stepOf = (data: any): number | null => (typeof data?.step === 'number' ? data.step : null);
+    const stateOf = (step: number): StepStream => {
+      let state = steps.get(step);
+      if (!state) {
+        state = { kind: null, held: [], sent: '' };
+        steps.set(step, state);
+      }
+      return state;
+    };
+    const sendToken = (state: StepStream | null, content: string) => {
+      res.write(`event: token\ndata: ${JSON.stringify({ content })}\n\n`);
+      if (state) state.sent += content;
+    };
+    const retract = (state: StepStream | undefined) => {
+      if (!state?.sent) return;
+      res.write(`event: reset\ndata: {}\n\n`);
+      state.sent = '';
+    };
+
     const onEvent = (event: any) => {
       if (closed) return;
-      if (event?.type === 'llm.chunk' || event?.type === 'token') return;
-      if (event?.type === 'llm.response') {
-        const calledTools = Array.isArray(event.data?.toolCalls) && event.data.toolCalls.length > 0;
-        const content = event.data?.content;
-        if (!withholdCandidateChunks && !calledTools && typeof content === 'string' && content) {
-          res.write(`event: token\ndata: ${JSON.stringify({ content })}\n\n`);
+      const type = event?.type;
+      const data = event?.data;
+      if (['run.completed', 'run.failed', 'run.cancelled'].includes(type)) {
+        res.write(`event: done\ndata: ${JSON.stringify({ reason: type })}\n\n`);
+        close();
+        return;
+      }
+      if (withholdCandidateChunks) return;
+      const step = stepOf(data);
+
+      if (type === 'llm.started') {
+        // A fresh attempt at this step. Whatever an earlier attempt held
+        // or showed is not this attempt's answer.
+        if (step === null) return;
+        retract(steps.get(step));
+        steps.delete(step);
+        return;
+      }
+
+      if (type === 'llm.chunk') {
+        const content = data?.content;
+        if (step === null || typeof content !== 'string' || !content) return;
+        const state = stateOf(step);
+        if (state.kind === 'tool') return;
+        if (state.kind === 'text') sendToken(state, content);
+        else state.held.push(content);
+        return;
+      }
+
+      if (type === 'llm.step_kind') {
+        if (step === null) return;
+        const state = stateOf(step);
+        if (state.kind) return; // the first verdict is the one the provider was certain of
+        if (data?.kind === 'tool') {
+          state.kind = 'tool';
+          state.held = [];
+          retract(state);
+        } else if (data?.kind === 'text') {
+          state.kind = 'text';
+          for (const content of state.held) sendToken(state, content);
+          state.held = [];
         }
         return;
       }
-      if (['run.completed', 'run.failed', 'run.cancelled'].includes(event?.type)) {
-        res.write(`event: done\ndata: ${JSON.stringify({ reason: event.type })}\n\n`);
-        close();
+
+      if (type === 'llm.response') {
+        const state = step === null ? undefined : steps.get(step);
+        if (step !== null) steps.delete(step);
+        const calledTools = Array.isArray(data?.toolCalls) && data.toolCalls.length > 0;
+        if (calledTools) {
+          retract(state);
+          return;
+        }
+        const content = data?.content;
+        if (typeof content !== 'string' || !content) return;
+        const sent = state?.sent ?? '';
+        if (content.startsWith(sent)) {
+          const rest = content.slice(sent.length);
+          if (rest) sendToken(null, rest);
+        } else {
+          retract(state);
+          sendToken(null, content);
+        }
       }
     };
 
