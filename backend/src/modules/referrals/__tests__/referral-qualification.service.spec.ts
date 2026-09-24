@@ -15,8 +15,10 @@ describe('ReferralQualificationService', () => {
   let referralsService: ReferralsService;
   let sweeper: ReferralQualificationService;
 
-  const referrerOrg = () => orgRepo.store.find((o) => o.id === 'org-referrer');
-  const referredOrg = () => orgRepo.store.find((o) => o.id === 'org-referred');
+  // Reads of the table as it stands, never of an object the service held.
+  const referrerOrg = () => orgRepo.row('org-referrer');
+  const referredOrg = () => orgRepo.row('org-referred');
+  const stored = (id: string) => referralRepo.row(id);
 
   beforeEach(async () => {
     referralRepo = makeRepo('ref');
@@ -71,8 +73,8 @@ describe('ReferralQualificationService', () => {
   }
 
   function activateReferredOrg() {
-    gatewayRepo.store.push({ id: 'gw-1', organizationId: 'org-referred' });
-    agentRunRepo.store.push({ id: 'run-1', organizationId: 'org-referred' });
+    gatewayRepo.seed({ id: 'gw-1', organizationId: 'org-referred' });
+    agentRunRepo.seed({ id: 'run-1', organizationId: 'org-referred' });
   }
 
   describe('pending -> qualified (activation)', () => {
@@ -83,27 +85,27 @@ describe('ReferralQualificationService', () => {
       const result = await sweeper.sweep();
 
       expect(result.qualified).toBe(1);
-      expect(referral.status).toBe(ReferralStatus.QUALIFIED);
-      expect(referral.qualifiedAt).toBeInstanceOf(Date);
-      expect(referral.rewardDays).toBe(14); // tier 1 default
+      expect(stored(referral.id)!.status).toBe(ReferralStatus.QUALIFIED);
+      expect(stored(referral.id)!.qualifiedAt).toBeInstanceOf(Date);
+      expect(stored(referral.id)!.rewardDays).toBe(14); // tier 1 default
     });
 
     it('does not qualify with a gateway but no agent run', async () => {
       const referral = await seedReferral();
-      gatewayRepo.store.push({ id: 'gw-1', organizationId: 'org-referred' });
+      gatewayRepo.seed({ id: 'gw-1', organizationId: 'org-referred' });
 
       const result = await sweeper.sweep();
 
       expect(result.qualified).toBe(0);
-      expect(referral.status).toBe(ReferralStatus.PENDING);
+      expect(stored(referral.id)!.status).toBe(ReferralStatus.PENDING);
     });
 
     it('does not qualify with a run but no gateway', async () => {
       const referral = await seedReferral();
-      agentRunRepo.store.push({ id: 'run-1', organizationId: 'org-referred' });
+      agentRunRepo.seed({ id: 'run-1', organizationId: 'org-referred' });
 
       await sweeper.sweep();
-      expect(referral.status).toBe(ReferralStatus.PENDING);
+      expect(stored(referral.id)!.status).toBe(ReferralStatus.PENDING);
     });
 
     it('skips abuse-flagged referrals entirely', async () => {
@@ -113,8 +115,8 @@ describe('ReferralQualificationService', () => {
       const result = await sweeper.sweep();
 
       expect(result.qualified).toBe(0);
-      expect(referral.status).toBe(ReferralStatus.PENDING);
-      expect(referral.rewardDays).toBe(0);
+      expect(stored(referral.id)!.status).toBe(ReferralStatus.PENDING);
+      expect(stored(referral.id)!.rewardDays).toBe(0);
     });
 
     it('tier-1 extends a pro referrer planExpiresAt by 14 days', async () => {
@@ -128,14 +130,13 @@ describe('ReferralQualificationService', () => {
     });
 
     it('tier-1 accrues instead of applying when the referrer is on free', async () => {
-      referrerOrg().plan = 'free';
-      referrerOrg().planExpiresAt = null;
+      orgRepo.patch('org-referrer', { plan: 'free', planExpiresAt: null });
       await seedReferral();
       activateReferredOrg();
 
       await sweeper.sweep();
 
-      expect(codeRepo.store[0].accruedRewardDays).toBe(14);
+      expect(codeRepo.rows()[0].accruedRewardDays).toBe(14);
       expect(referrerOrg().plan).toBe('free');
       expect(referrerOrg().planExpiresAt).toBeNull();
     });
@@ -148,16 +149,15 @@ describe('ReferralQualificationService', () => {
         qualifiedAt: new Date(),
         rewardDays: 14,
       });
-      referredOrg().plan = 'pro';
-      referredOrg().billingInfo = { stripeSubscriptionId: 'sub_123' };
+      orgRepo.patch('org-referred', { plan: 'pro', billingInfo: { stripeSubscriptionId: 'sub_123' } });
       const expiry = referrerOrg().planExpiresAt.getTime();
 
       const result = await sweeper.sweep();
 
       expect(result.rewarded).toBe(1);
-      expect(referral.status).toBe(ReferralStatus.REWARDED);
-      expect(referral.rewardedAt).toBeInstanceOf(Date);
-      expect(referral.rewardDays).toBe(44); // 14 + 30
+      expect(stored(referral.id)!.status).toBe(ReferralStatus.REWARDED);
+      expect(stored(referral.id)!.rewardedAt).toBeInstanceOf(Date);
+      expect(stored(referral.id)!.rewardDays).toBe(44); // 14 + 30
       expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(expiry + 30 * DAY_MS);
     });
 
@@ -167,13 +167,13 @@ describe('ReferralQualificationService', () => {
         qualifiedAt: new Date(),
         rewardDays: 14,
       });
-      referredOrg().plan = 'pro'; // signup bonus flipped the plan...
-      referredOrg().billingInfo = null; // ...but there is no Stripe sub
+      // The signup bonus flipped the plan, but there is no Stripe sub.
+      orgRepo.patch('org-referred', { plan: 'pro', billingInfo: null });
 
       const result = await sweeper.sweep();
 
       expect(result.rewarded).toBe(0);
-      expect(referral.status).toBe(ReferralStatus.QUALIFIED);
+      expect(stored(referral.id)!.status).toBe(ReferralStatus.QUALIFIED);
     });
 
     it('skips flagged referrals for tier 2 as well', async () => {
@@ -182,12 +182,11 @@ describe('ReferralQualificationService', () => {
         qualifiedAt: new Date(),
         abuseFlag: ReferralAbuseFlag.DISPOSABLE_EMAIL,
       });
-      referredOrg().plan = 'pro';
-      referredOrg().billingInfo = { stripeSubscriptionId: 'sub_123' };
+      orgRepo.patch('org-referred', { plan: 'pro', billingInfo: { stripeSubscriptionId: 'sub_123' } });
 
       await sweeper.sweep();
-      expect(referral.status).toBe(ReferralStatus.QUALIFIED);
-      expect(referral.rewardDays).toBe(0);
+      expect(stored(referral.id)!.status).toBe(ReferralStatus.QUALIFIED);
+      expect(stored(referral.id)!.rewardDays).toBe(0);
     });
   });
 
@@ -205,12 +204,12 @@ describe('ReferralQualificationService', () => {
       const result = await sweeper.sweep();
 
       expect(result.accrualsApplied).toBe(1);
-      expect(codeRepo.store[0].accruedRewardDays).toBe(0);
+      expect(codeRepo.rows()[0].accruedRewardDays).toBe(0);
       expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(expiry + 28 * DAY_MS);
     });
 
     it('keeps banking while the referrer org stays on free', async () => {
-      referrerOrg().plan = 'free';
+      orgRepo.patch('org-referrer', { plan: 'free' });
       await codeRepo.save({
         userId: 'user-referrer',
         organizationId: 'org-referrer',
@@ -222,7 +221,7 @@ describe('ReferralQualificationService', () => {
       const result = await sweeper.sweep();
 
       expect(result.accrualsApplied).toBe(0);
-      expect(codeRepo.store[0].accruedRewardDays).toBe(28);
+      expect(codeRepo.rows()[0].accruedRewardDays).toBe(28);
     });
   });
 
@@ -269,7 +268,22 @@ describe('ReferralQualificationService', () => {
 
       expect(second.qualified).toBe(0);
       expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(afterOne);
-      expect(referralRepo.store.find((r) => r.id === referral.id).rewardDays).toBe(14);
+      expect(stored(referral.id)!.rewardDays).toBe(14);
+    });
+
+    // A row flagged for abuse after the batch was read must not pay out:
+    // the claim carries `abuseFlag IS NULL` for exactly this.
+    it('does not qualify a referral flagged after the batch was read', async () => {
+      const referral = await seedReferral();
+      activateReferredOrg();
+      const unflagged = stored(referral.id)!;
+      referralRepo.patch(referral.id, { abuseFlag: ReferralAbuseFlag.SAME_IP });
+      referralRepo.find.mockResolvedValueOnce([unflagged]);
+      const before = referrerOrg().planExpiresAt.getTime();
+
+      expect((await sweeper.sweep()).qualified).toBe(0);
+      expect(stored(referral.id)).toMatchObject({ status: ReferralStatus.PENDING, rewardDays: 0 });
+      expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(before);
     });
 
     it('cannot award tier 2 twice for one referral', async () => {
@@ -278,8 +292,7 @@ describe('ReferralQualificationService', () => {
         qualifiedAt: new Date(),
         rewardDays: 14,
       });
-      referredOrg().plan = 'pro';
-      referredOrg().billingInfo = { stripeSubscriptionId: 'sub_123' };
+      orgRepo.patch('org-referred', { plan: 'pro', billingInfo: { stripeSubscriptionId: 'sub_123' } });
 
       expect((await sweeper.sweep()).rewarded).toBe(1);
       const afterOne = new Date(referrerOrg().planExpiresAt).getTime();
@@ -358,6 +371,7 @@ describe('ReferralQualificationService verified-referee gating', () => {
   let agentRunRepo: ReturnType<typeof makeRepo>;
   let userRepo: ReturnType<typeof makeRepo>;
   let sweeper: ReferralQualificationService;
+  const stored = (id: string) => referralRepo.row(id);
 
   beforeEach(() => {
     referralRepo = makeRepo('ref');
@@ -408,8 +422,8 @@ describe('ReferralQualificationService verified-referee gating', () => {
       rewardDays: 0,
       abuseFlag: null,
     });
-    gatewayRepo.store.push({ id: 'gw-1', organizationId: 'org-referred' });
-    agentRunRepo.store.push({ id: 'run-1', organizationId: 'org-referred' });
+    gatewayRepo.seed({ id: 'gw-1', organizationId: 'org-referred' });
+    agentRunRepo.seed({ id: 'run-1', organizationId: 'org-referred' });
     return referral;
   }
 
@@ -419,40 +433,34 @@ describe('ReferralQualificationService verified-referee gating', () => {
     const result = await sweeper.sweep();
 
     expect(result.qualified).toBe(0);
-    expect(referral.status).toBe(ReferralStatus.PENDING);
-    expect(referral.rewardDays).toBe(0);
+    expect(stored(referral.id)!.status).toBe(ReferralStatus.PENDING);
+    expect(stored(referral.id)!.rewardDays).toBe(0);
   });
 
   it('qualifies (and rewards tier 1) on a later sweep after the referee verifies', async () => {
     const referral = await seedActivatedReferral();
 
     await sweeper.sweep(); // held
-    userRepo.store[0].verifiedAt = new Date(); // referee verifies
+    userRepo.patch('user-new', { verifiedAt: new Date() }); // referee verifies
     const result = await sweeper.sweep();
 
     expect(result.qualified).toBe(1);
-    expect(referral.status).toBe(ReferralStatus.QUALIFIED);
-    expect(referral.rewardDays).toBeGreaterThan(0);
+    expect(stored(referral.id)!.status).toBe(ReferralStatus.QUALIFIED);
+    expect(stored(referral.id)!.rewardDays).toBeGreaterThan(0);
   });
 
   it('holds the qualified -> rewarded (tier 2) transition for unverified referees too', async () => {
     const referral = await seedActivatedReferral();
-    referral.status = ReferralStatus.QUALIFIED;
-    referral.qualifiedAt = new Date();
-    referredOrgRow().plan = 'pro';
-    referredOrgRow().billingInfo = { stripeSubscriptionId: 'sub_1' };
+    referralRepo.patch(referral.id, { status: ReferralStatus.QUALIFIED, qualifiedAt: new Date() });
+    orgRepo.patch('org-referred', { plan: 'pro', billingInfo: { stripeSubscriptionId: 'sub_1' } });
 
     const held = await sweeper.sweep();
     expect(held.rewarded).toBe(0);
-    expect(referral.status).toBe(ReferralStatus.QUALIFIED);
+    expect(stored(referral.id)!.status).toBe(ReferralStatus.QUALIFIED);
 
-    userRepo.store[0].verifiedAt = new Date();
+    userRepo.patch('user-new', { verifiedAt: new Date() });
     const after = await sweeper.sweep();
     expect(after.rewarded).toBe(1);
-    expect(referral.status).toBe(ReferralStatus.REWARDED);
+    expect(stored(referral.id)!.status).toBe(ReferralStatus.REWARDED);
   });
-
-  function referredOrgRow() {
-    return orgRepo.store.find((o) => o.id === 'org-referred');
-  }
 });
