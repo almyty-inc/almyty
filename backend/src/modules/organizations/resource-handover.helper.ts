@@ -177,6 +177,15 @@ export class ResourceHandoverHelper {
       }
     }
 
+    // Approvals their private agents asked for go with the agents: still
+    // private, now the new owner's to see and decide. Not audited apart:
+    // each follows an agent whose transfer is audited above.
+    await manager.query(
+      `UPDATE approval_requests SET "ownerUserId" = $1
+        WHERE "organizationId" = $2 AND visibility = 'private' AND "ownerUserId" = $3`,
+      [toUserId, organizationId, fromUserId],
+    );
+
     return audit;
   }
 
