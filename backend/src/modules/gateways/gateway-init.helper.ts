@@ -9,6 +9,7 @@ import {
   GatewayType,
 } from '../../entities/gateway.entity';
 import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
+import { ALLOWED_ORIGINS_KEY, normalizeAllowedOrigins } from './channels/surface-origins';
 
 /**
  * Gateway init / configuration helpers extracted from GatewaysService:
@@ -55,7 +56,19 @@ export class GatewayInitHelper {
         // Agent-kind protocol types — no special config required
         break;
 
-      // Channel types and SKILLS don't require specific configuration validation
+      case GatewayType.CHAT_WIDGET:
+      case GatewayType.HOSTED_CHAT: {
+        // The sites allowed to call this surface cross-origin. Stored in
+        // canonical form, since the CORS check compares exactly.
+        // Absent means none: the CORS check reads a missing list as empty.
+        if (!configuration || configuration[ALLOWED_ORIGINS_KEY] === undefined) break;
+        const result = normalizeAllowedOrigins(configuration[ALLOWED_ORIGINS_KEY]);
+        if ('error' in result) throw new BadRequestException(result.error);
+        configuration[ALLOWED_ORIGINS_KEY] = result.origins;
+        break;
+      }
+
+      // Other channel types and SKILLS don't require specific configuration validation
     }
   }
 

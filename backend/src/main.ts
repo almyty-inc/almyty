@@ -11,6 +11,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 import { CorrelatedConsoleLogger } from './common/logging/correlated-console.logger';
 import { requestContextMiddleware } from './common/middleware/request-context.middleware';
+import { SurfaceCorsService } from './modules/gateways/channels/surface-cors';
 // No global response interceptor — each controller is responsible for consistent {success, data} format
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { RequestLog } from './entities/request-log.entity';
@@ -131,21 +132,21 @@ async function bootstrap() {
     allowedOrigins.add('http://127.0.0.1:3002');
   }
 
-  app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // No Origin header (server-to-server, curl, same-origin) is fine —
-      // CORS only governs browser cross-origin requests. Otherwise the
-      // origin must be on the allowlist; fail closed for everything else.
-      if (!origin || allowedOrigins.has(origin)) {
-        return callback(null, true);
-      }
-      return callback(null, false);
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Retry-Count', 'X-Organization-Id', 'Mcp-Protocol-Version', 'Mcp-Session-Id'],
-    exposedHeaders: ['Mcp-Session-Id'],
-  });
+  // Every route but the public chat surfaces keeps exactly this policy: no
+  // Origin header (server-to-server, curl, same-origin) is fine, otherwise
+  // the origin must be on the allowlist; fail closed for everything else.
+  //
+  // The widget and hosted-chat public routes are answered per gateway from
+  // that surface's own allowed-origins list, exact match, never with
+  // credentials -- see SurfaceCorsService.
+  app.enableCors(
+    app.get(SurfaceCorsService).delegate(allowedOrigins, {
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-Retry-Count', 'X-Organization-Id', 'Mcp-Protocol-Version', 'Mcp-Session-Id'],
+      exposedHeaders: ['Mcp-Session-Id'],
+    }),
+  );
 
   // No API prefix - this is a pure API backend
 
