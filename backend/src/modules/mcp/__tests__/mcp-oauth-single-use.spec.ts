@@ -87,7 +87,12 @@ describe('OAuth single-use semantics (table-backed)', () => {
     });
     codes = fakeRepository<any>({ seed: codeRows, idPrefix: 'code' });
     tokens = fakeRepository<any>({ seed: tokenRows, idPrefix: 'token' });
-    helper = new McpOAuthTokensHelper(clients as any, codes as any, tokens as any);
+    // The holder is a current member: this suite is about single use, not
+    // about membership (oauth-token-holder-membership.spec.ts).
+    const users = fakeRepository<any>([
+      { id: USER, isActive: true, organizationMemberships: [{ organizationId: ORG, isActive: true }] },
+    ]);
+    helper = new McpOAuthTokensHelper(clients as any, codes as any, tokens as any, users as any);
   }
 
   const exchange = () => helper.exchangeCode(RAW_CODE, CLIENT, CODE_VERIFIER, REDIRECT_URI, GATEWAY);

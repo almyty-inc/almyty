@@ -560,16 +560,14 @@ export class RunnerService {
    * Lookup for the coding bridge: a member of the runner's organization
    * whom the access policy lets USE the runner may drive coding sessions
    * on it (the chat REPL dispatches on behalf of the user, not just the
-   * runner's owner). 404 when the runner doesn't exist or the caller may
-   * not use it (a private runner of someone else, a team runner of a
-   * team they're not on), 403 when it belongs to another org.
+   * runner's owner). 404 when the runner doesn't exist, belongs to another
+   * organization, or the caller may not use it (a private runner of
+   * someone else, a team runner of a team they're not on) -- one answer
+   * for all of them, so the response never says which runner ids exist.
    */
   async getUsable(runnerId: string, userId: string, organizationId: string): Promise<Runner> {
-    const runner = await this.runners.findOne({ where: { id: runnerId } });
+    const runner = await this.runners.findOne({ where: { id: runnerId, organizationId } });
     if (!runner) throw new NotFoundException('runner not found');
-    if (runner.organizationId !== organizationId) {
-      throw new ForbiddenException('runner belongs to a different organization');
-    }
     const decision = await this.accessPolicy.canAccess({ id: userId }, runner, 'use');
     if (!decision.allowed) throw new NotFoundException('runner not found');
     return runner;

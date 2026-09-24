@@ -153,8 +153,8 @@ export class SseTransport extends EventEmitter {
 
   // Handle incoming JSON-RPC requests via POST to SSE endpoint
   /**
-   * `callerOrganizationId` is required: the connection is not proof of
-   * who is posting to it.
+   * `callerOrganizationId` and `callerUserId` are who the bearer token on
+   * the POST proved: the connection is not proof of who is posting to it.
    *
    * This ran the JSON-RPC under `connection.organizationId` and
    * `connection.userId` and returned the result in the poster's own HTTP
@@ -163,6 +163,12 @@ export class SseTransport extends EventEmitter {
    * `Date.now()` plus `Math.random()`, which is not a CSPRNG and can be
    * sampled by opening your own connection.
    *
+   * Comparing the organization alone still let another member of the same
+   * organization act as the user who opened the stream -- that user's
+   * private gateways and tools included. A connection answers the user
+   * who opened it and nobody else, and a call that names no caller is
+   * refused rather than trusted.
+   *
    * A foreign id answers exactly as an unknown one, so this does not
    * confirm which ids exist.
    */
@@ -170,16 +176,15 @@ export class SseTransport extends EventEmitter {
     connectionId: string,
     message: JsonRpcRequest,
     callerOrganizationId?: string,
+    callerUserId?: string,
   ): Promise<JsonRpcResponse> {
     const connection = this.connections.get(connectionId);
-    if (connection && callerOrganizationId && connection.organizationId !== callerOrganizationId) {
-      return {
-        jsonrpc: '2.0',
-        id: message.id,
-        error: { code: -32001, message: 'Connection not found' },
-      };
-    }
-    if (!connection) {
+    const callerOwnsIt =
+      !!connection &&
+      !!callerOrganizationId &&
+      connection.organizationId === callerOrganizationId &&
+      (connection.userId ?? null) === (callerUserId ?? null);
+    if (!connection || !callerOwnsIt) {
       return {
         jsonrpc: '2.0',
         id: message.id,
