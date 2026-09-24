@@ -179,13 +179,12 @@ export class UsersService {
       user.lastName = updateUserDto.lastName;
     }
 
-    if (updateUserDto.email) {
-      // Check if email is already taken
-      const existingUser = await this.findByEmail(updateUserDto.email);
-      if (existingUser && existingUser.id !== id) {
-        throw new BadRequestException('Email is already in use');
-      }
-      user.email = updateUserDto.email;
+    // The login address never changes here. This used to assign it
+    // directly: no password, verification left set on an address nobody
+    // had proved, and no word to the old mailbox. AuthService.changeEmail
+    // is the one path that may move it; the controllers route there first.
+    if (updateUserDto.email !== undefined && updateUserDto.email !== user.email) {
+      throw new BadRequestException('Change the email address through the email change flow.');
     }
 
     if (updateUserDto.preferences) {
