@@ -1,4 +1,5 @@
 import { membershipFixture } from '../../../test/execution-access.fixture';
+import { fakeRepository } from '../../../test/fake-repository';
 import axios from 'axios';
 
 import { ToolExecutorService } from '../tool-executor.service';
@@ -47,9 +48,13 @@ function buildExecutor(opts: { tool?: any; gatewayTool?: any } = {}) {
   } as any;
   const httpExecutor = new ToolHttpExecutor(authService);
 
-  const gatewayToolRepository = {
-    findOne: jest.fn().mockResolvedValue(opts.gatewayTool ?? null),
-  };
+  // The tool attached, switched on, to an org-wide gw-1: the gateway serves
+  // it (gateway-servable), so what is under test is only the row's policy.
+  const gatewayToolRepository = fakeRepository<any>(
+    opts.gatewayTool
+      ? [{ gatewayId: 'gw-1', toolId: tool.id, isActive: true, gateway: { id: 'gw-1', visibility: 'org' }, ...opts.gatewayTool }]
+      : [],
+  );
   const stats = {
     validateParameters: jest.fn().mockResolvedValue({ isValid: true, errors: [] }),
     recordExecution: jest.fn().mockResolvedValue(undefined),

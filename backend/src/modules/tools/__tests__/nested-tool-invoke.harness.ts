@@ -100,7 +100,10 @@ export function buildHarness(
     {} as any,
     {
       findOne: jest.fn(async ({ where }: any) => {
-        return gatewayTools[`${where.gatewayId}/${where.toolId}`] ?? null;
+        // A listed row is an attachment: switched on, on an org-wide
+        // gateway, unless the row says otherwise.
+        const row = gatewayTools[`${where.gatewayId}/${where.toolId}`];
+        return row ? { isActive: true, gateway: { id: where.gatewayId, visibility: 'org' }, ...row } : null;
       }),
     } as any,
     undefined,

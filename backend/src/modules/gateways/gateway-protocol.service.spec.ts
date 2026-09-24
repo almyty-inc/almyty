@@ -18,9 +18,13 @@ describe('GatewayProtocolService', () => {
   let recordedToolWheres: string[] = [];
   let recordedToolParams: Record<string, any> = {};
 
+  // An attached, switched-on row of an active org tool on an org gateway:
+  // one the gateway serves (gateway-servable).
   const fakeGatewayTool = (name: string) => ({
     toolId: 'tool-1',
     isActive: true,
+    tool: { id: 'tool-1', status: 'active', visibility: 'org' },
+    gateway: { id: 'gateway-1', visibility: 'org' },
     getEffectiveName: jest.fn().mockReturnValue(name),
     getEffectiveDescription: jest.fn().mockReturnValue('Test tool description'),
     getEffectiveParameters: jest.fn().mockReturnValue({ param1: { type: 'string' } }),
@@ -939,7 +943,7 @@ describe('GatewayProtocolService', () => {
       expect(response.data?.result.tools).toHaveLength(2);
       expect(gatewayToolRepository.find).toHaveBeenCalledWith({
         where: { gatewayId: 'gateway-1', isActive: true },
-        relations: { tool: true },
+        relations: { tool: true, gateway: true },
       });
       expect(gatewayToolRepository.createQueryBuilder).not.toHaveBeenCalled();
     });

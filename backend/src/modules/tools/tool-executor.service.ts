@@ -57,6 +57,7 @@ import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.ser
 import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';
 import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
+import { isServableGatewayTool } from '../gateways/gateway-servable';
 // Re-export shared types so existing callers keep working with
 // `import { ToolExecutionResult, ToolExecutionOptions } from '…/tool-executor.service'`.
 export {
@@ -168,12 +169,18 @@ export class ToolExecutorService {
         throw new Error('Tool not found');
       }
 
-      if (tool.status !== ToolStatus.ACTIVE) {
-        throw new Error(`Tool is ${tool.status}, cannot execute`);
-      }
-
-      // Resolve the gateway tool's security policy and access list before
-      // dispatch.
+      // Resolve the gateway tool -- whether the gateway serves it at all, its
+      // security policy and its access list -- before dispatch.
+      //
+      // A call that arrived through a gateway runs only a tool that gateway
+      // serves: attached, switched on, active and within the gateway's scope,
+      // decided by `isServableGatewayTool`, the predicate every protocol
+      // builds its listing from. The protocol handlers resolve against that
+      // set before they get here; this is the backstop for one that forgets,
+      // answered exactly as a missing tool. A nested tools.invoke carries its
+      // caller's gatewayId for the policy and access list below but is not
+      // itself a gateway call: the published tool composing other tools is
+      // what the gateway serves.
       //
       // `gateway_tools.securityPolicy` had a column, a PATCH endpoint and a
       // dashboard form, and no reader anywhere in backend/src: a user could
@@ -205,8 +212,13 @@ export class ToolExecutorService {
       if (options.gatewayId) {
         gatewayTool = await this.gatewayToolRepository.findOne({
           where: { gatewayId: options.gatewayId, toolId: tool.id },
-          select: { id: true, securityPolicy: true, permissions: true, transformations: true },
+          select: { id: true, isActive: true, securityPolicy: true, permissions: true, transformations: true, gateway: { id: true, visibility: true, teamId: true, ownerUserId: true } },
+          relations: { gateway: true },
         });
+        if (!options.invocation && !isServableGatewayTool(gatewayTool && Object.assign(gatewayTool, { tool }))) {
+          notFound = true;
+          throw new Error('Tool not found');
+        }
         if (options.securityPolicy === undefined) {
           options = {
             ...options,
@@ -215,6 +227,10 @@ export class ToolExecutorService {
         }
       } else if (options.securityPolicy === undefined && options.inheritedSecurityPolicy) {
         options = { ...options, securityPolicy: options.inheritedSecurityPolicy };
+      }
+
+      if (tool.status !== ToolStatus.ACTIVE) {
+        throw new Error(`Tool is ${tool.status}, cannot execute`);
       }
 
       // User permission check (skipped for MCP unauthenticated sessions,
