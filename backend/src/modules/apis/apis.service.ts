@@ -15,6 +15,7 @@ import { ToolsService } from '../tools/tools.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ApisImportHelper } from './apis-import.helper';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
+import { withApiQuota } from './api-quota';
 import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
 import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
@@ -137,15 +138,8 @@ export class ApisService {
       throw new NotFoundException('Organization not found');
     }
 
-    // Check API limit using COUNT instead of loading all relations
-    const apiCount = await this.apiRepository.count({
-      where: { organizationId: createApiData.organizationId },
-    });
-
-    const maxApis = organization.settings?.maxApis;
-    if (maxApis && apiCount >= maxApis) {
-      throw new BadRequestException('API limit exceeded for organization');
-    }
+    // Organization limits (settings.maxApis) are enforced with the insert
+    // below, by withApiQuota.
 
     // Check for duplicate API name in organization
     const existingApi = await this.apiRepository.findOne({
@@ -175,7 +169,10 @@ export class ApisService {
       status: ApiStatus.DRAFT,
     });
 
-    const saved = await this.apiRepository.save(api);
+    // Enforced with the insert, under the organization API-quota lock.
+    const saved = await withApiQuota(this.apiRepository.manager, createApiData.organizationId, 1, (tx) =>
+      tx.getRepository(Api).save(api),
+    );
 
     // Audit log (fire-and-forget)
     this.auditLogService.logCreate(createApiData.organizationId, undefined, AuditResource.API, saved.id, saved.name, { type: saved.type });
@@ -290,15 +287,8 @@ export class ApisService {
       throw new NotFoundException('Organization not found');
     }
 
-    // Check API limit
-    const apiCount = await this.apiRepository.count({
-      where: { organizationId },
-    });
-
-    const maxApis = organization.settings?.maxApis;
-    if (maxApis && apiCount >= maxApis) {
-      throw new BadRequestException('API limit exceeded for organization');
-    }
+    // Organization limits (settings.maxApis) are enforced with the insert
+    // below, by withApiQuota.
 
     // Check for duplicate name
     const existingApi = await this.apiRepository.findOne({
@@ -329,7 +319,8 @@ export class ApisService {
       ownerUserId: userId ?? null,
     });
 
-    let saved = await this.apiRepository.save(api);
+    // Enforced with the insert, under the organization API-quota lock.
+    let saved = await withApiQuota(this.apiRepository.manager, organizationId, 1, (tx) => tx.getRepository(Api).save(api));
     if (hasInlineApiSecret(data.authentication)) {
       saved.authentication = data.authentication;
       await this.moveInlineAuth(saved);
@@ -376,7 +367,8 @@ export class ApisService {
       ownerUserId: userId ?? null,
     });
 
-    const saved = await this.apiRepository.save(api);
+    // Enforced with the insert, under the organization API-quota lock.
+    const saved = await withApiQuota(this.apiRepository.manager, organizationId, 1, (tx) => tx.getRepository(Api).save(api));
     this.auditLogService.logCreate(organizationId, undefined, AuditResource.API, saved.id, saved.name, { type: 'sdk', packages: Object.keys(data.dependencies) });
 
     return saved;
