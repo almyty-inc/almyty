@@ -24,6 +24,7 @@ import { GatewayRateLimitService } from '../gateway-rate-limit.service';
 import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
 import { trustedClientIp } from '../../../common/security/client-ip';
+import { verifiesFinalOutput } from '../../agents/final-answer';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -336,9 +337,15 @@ export class HostedChatController {
       {
         conversationId: conversation.id,
         endUserId: endUser.id,
-        // Whether this product lets visitor conversations feed shared
-        // memory; the runtime's auto-save policy reads it off the run.
-        metadata: { visitorMemory: hostedChatConfigFrom(gateway.configuration).visitorMemory },
+        metadata: {
+          // Whether this product lets visitor conversations feed shared
+          // memory; the runtime's auto-save policy reads it off the run.
+          visitorMemory: hostedChatConfigFrom(gateway.configuration).visitorMemory,
+          // The visitor watches the reply arrive, so the answer is written
+          // by a call without tools and streams word by word; see
+          // agents/final-answer.ts and stream() below.
+          composeFinalAnswer: true,
+        },
       },
 
     );
@@ -380,13 +387,7 @@ export class HostedChatController {
       gateway.organizationId,
       gateway.agentId,
     );
-    const verify = run.agent?.agentConfig?.verify;
-    const withholdCandidateChunks = !!(
-      verify?.enabled &&
-      Array.isArray(verify.checkers) &&
-      verify.checkers.length > 0 &&
-      (verify.triggers ?? ['on_final_output']).includes('on_final_output')
-    );
+    const withholdCandidateChunks = verifiesFinalOutput(run.agent?.agentConfig);
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -412,9 +413,18 @@ export class HostedChatController {
     // autonomous run streams its model output as `llm.chunk`, and a step
     // that goes on to call tools streams its narration too: what it is
     // about to look up, what the last tool returned, instructions echoed
-    // from the system prompt. So a step's chunks are held until the
-    // provider's stream has said, with certainty, what the step is
-    // (`llm.step_kind`, see StreamChunk.stepKind):
+    // from the system prompt.
+    //
+    // Runs started here compose their answer (agents/final-answer.ts):
+    // every call that offers tools is announced as working (`llm.started`
+    // with `answer: false`) and nothing of it is sent, and the answer is
+    // written by a call that offers none (`answer: true`), which streams
+    // token by token as it arrives. Should that call fail, its
+    // `llm.response` carries the draft, which then goes out whole.
+    //
+    // A step not announced either way is held until the provider's stream
+    // has said, with certainty, what the step is (`llm.step_kind`, see
+    // StreamChunk.stepKind):
     //
     //   text -> the held chunks go out, and the rest stream live
     //   tool -> the held chunks are dropped, and nothing more is sent
@@ -427,7 +437,7 @@ export class HostedChatController {
     // was streamed, the page is told to `reset` the reply. With a verify
     // panel on the final output nothing is sent before the verdict; the
     // page reconciles from the transcript on `done`.
-    type StepStream = { kind: 'text' | 'tool' | null; held: string[]; sent: string };
+    type StepStream = { kind: 'text' | 'tool' | null; held: string[]; sent: string; working?: boolean };
     const steps = new Map<number, StepStream>();
     const stepOf = (data: any): number | null => (typeof data?.step === 'number' ? data.step : null);
     const stateOf = (step: number): StepStream => {
@@ -466,6 +476,10 @@ export class HostedChatController {
         if (step === null) return;
         retract(steps.get(step));
         steps.delete(step);
+        // Announced: a working call is never shown, and the answer call
+        // offers no tools, so it cannot turn out to be anything but text.
+        if (data?.answer === false) steps.set(step, { kind: 'tool', held: [], sent: '', working: true });
+        else if (data?.answer === true) steps.set(step, { kind: 'text', held: [], sent: '' });
         return;
       }
 
@@ -498,6 +512,9 @@ export class HostedChatController {
       if (type === 'llm.response') {
         const state = step === null ? undefined : steps.get(step);
         if (step !== null) steps.delete(step);
+        // A working step's reply is never the visitor's, unless the runtime
+        // says it now is: the answer call failed and its draft stands in.
+        if (state?.working && data?.answer !== true) return;
         const calledTools = Array.isArray(data?.toolCalls) && data.toolCalls.length > 0;
         if (calledTools) {
           retract(state);
