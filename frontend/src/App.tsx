@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo } from 'react'
-import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
+import { useEffect, useMemo } from 'react'
+import { Routes, Route, Navigate, Outlet, createRoutesFromElements, useLocation } from 'react-router-dom'
+
+import { RouteErrorView } from '@/components/layout/route-error'
 
 import { lazyWithRetry as lazy } from '@/lib/lazy-with-retry'
 
@@ -123,7 +125,8 @@ import { AppsPage } from '@/pages/apps'
 import { AppDetailPage } from '@/pages/app-detail'
 import { currentTenantSlug } from '@/lib/tenant-host'
 
-function App() {
+// The root route's element: app-wide bootstrap, then whichever route matched.
+export function AppRoot() {
   const { checkAuth } = useAuthStore()
 
   // Resolved once: the host cannot change without a page load.
@@ -131,7 +134,7 @@ function App() {
 
   // Emit a PostHog $pageview on each SPA navigation (capture_pageview is
   // disabled at init, so this is what records client-side route changes).
-  // Mounted here because App renders under <BrowserRouter> (main.tsx).
+  // Mounted here because AppRoot is the root route of the data router.
   usePageviews()
 
   // Tenant hosts are public chat, not the dashboard. checkAuth hits
@@ -151,12 +154,31 @@ function App() {
 
   return (
     <>
-      <Routes>
-        {/* Dashboard routes - protected. Single parent route with
-            <DashboardLayoutOutlet /> means the layout mounts ONCE
-            and the child route swaps via <Outlet />. useLocation()
-            inside the layout reliably reflects the active child. */}
-        <Route element={<DashboardLayoutOutlet />}>
+      <Outlet />
+      <Toaster />
+    </>
+  )
+}
+
+// The route tree, as data routes for createBrowserRouter (main.tsx) so that
+// errorElement works: react-router only honours it on data routes, never on
+// a descendant <Routes>. Without it any render error left a white page.
+//
+// Two error boundaries:
+// - the pathless route just inside the dashboard layout catches a page that
+//   throws and shows RouteErrorView in the content area, so the sidebar and
+//   header survive and navigating away clears it;
+// - the root route catches everything else (the layout itself, auth, invite,
+//   CLI login) with a full-page RouteErrorView.
+export function createAppRoutes() {
+  return createRoutesFromElements(
+    <Route element={<AppRoot />} errorElement={<RouteErrorView fullPage />}>
+      {/* Dashboard routes - protected. Single parent route with
+          <DashboardLayoutOutlet /> means the layout mounts ONCE
+          and the child route swaps via <Outlet />. useLocation()
+          inside the layout reliably reflects the active child. */}
+      <Route element={<DashboardLayoutOutlet />}>
+        <Route errorElement={<RouteErrorView />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/guide" element={<GuidePage />} />
           <Route path="/gateways" element={<GatewaysPage />} />
@@ -232,39 +254,36 @@ function App() {
               still bounced to /auth/login by the layout. */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
+      </Route>
 
-        {/* Invite accept */}
-        <Route path="/invite/accept" element={<AcceptInvitePage />} />
+      {/* Invite accept */}
+      <Route path="/invite/accept" element={<AcceptInvitePage />} />
 
-        {/* CLI login (browser-based auth flow for @almyty/auth) */}
-        <Route path="/cli-login" element={<CliLoginPage />} />
+      {/* CLI login (browser-based auth flow for @almyty/auth) */}
+      <Route path="/cli-login" element={<CliLoginPage />} />
 
-        {/* Referral share links — public, sets the attribution cookie then lands on register */}
-        <Route path="/r/:code" element={<ReferralRedirectPage />} />
+      {/* Referral share links — public, sets the attribution cookie then lands on register */}
+      <Route path="/r/:code" element={<ReferralRedirectPage />} />
 
-        {/* Auth routes */}
-        <Route path="/auth/*" element={
-          <AuthLayout>
-            <Routes>
-              <Route path="login" element={<LoginPage />} />
-              <Route path="register" element={<RegisterPage />} />
-              <Route path="verify-email" element={<VerifyEmailPage />} />
-              <Route path="forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="reset-password" element={<ResetPasswordPage />} />
-              <Route path="*" element={<Navigate to="/auth/login" replace />} />
-            </Routes>
-          </AuthLayout>
-        } />
+      {/* Auth routes */}
+      <Route path="/auth/*" element={
+        <AuthLayout>
+          <Routes>
+            <Route path="login" element={<LoginPage />} />
+            <Route path="register" element={<RegisterPage />} />
+            <Route path="verify-email" element={<VerifyEmailPage />} />
+            <Route path="forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="reset-password" element={<ResetPasswordPage />} />
+            <Route path="*" element={<Navigate to="/auth/login" replace />} />
+          </Routes>
+        </AuthLayout>
+      } />
 
-        {/* OAuth consent screen — standalone, self-contained auth handling */}
-        <Route path="/oauth/consent" element={<OAuthConsentPage />} />
-        
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-      <Toaster />
-    </>
+      {/* OAuth consent screen — standalone, self-contained auth handling */}
+      <Route path="/oauth/consent" element={<OAuthConsentPage />} />
+
+      {/* Default redirect */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+    </Route>,
   )
 }
-
-export default App
