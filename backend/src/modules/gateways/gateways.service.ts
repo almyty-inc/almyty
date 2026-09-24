@@ -15,6 +15,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { canPublishHostedChat } from './channels/hosted-chat.config';
+import { keepServerOwnedCustomDomain } from './channels/custom-domain';
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { AccessPolicyService, normaliseVisibility, resourceOwnerId, type ResourceVisibility } from '../../common/authorization/access-policy.service';
@@ -552,6 +553,8 @@ export class GatewaysService {
         throw new BadRequestException('Tool-kind gateways cannot have an agentId');
       }
 
+      // Never taken from the body: a domain is active only once verified.
+      keepServerOwnedCustomDomain(createGatewayDto.configuration, null);
       // Validate configuration based on gateway type
       this.init.validateGatewayConfiguration(createGatewayDto.type, createGatewayDto.configuration);
 
@@ -703,6 +706,9 @@ export class GatewaysService {
       // untouched fields. Swap masked placeholders for the stored
       // values so they survive the update.
       restoreMaskedChannelSecrets(updateGatewayDto.configuration, gateway.configuration);
+      // The custom domain block is written only by its verification
+      // path; see keepServerOwnedCustomDomain.
+      keepServerOwnedCustomDomain(updateGatewayDto.configuration, gateway.configuration);
 
       // Update fields
       Object.assign(gateway, updateGatewayDto);
@@ -858,6 +864,18 @@ export class GatewaysService {
    * private gateway is a 404, not a 403, so a caller probing ids learns
    * nothing about it.
    */
+  /**
+   * A gateway of this organization that the caller may manage, by the
+   * same rule updateGateway applies. For write paths that live outside
+   * this service (the custom-domain verification flow).
+   */
+  async findManageable(gatewayId: string, organizationId: string, userId: string): Promise<Gateway> {
+    const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId, organizationId } });
+    if (!gateway) throw new NotFoundException('Gateway not found');
+    await this.assertCanManage(gateway, userId);
+    return gateway;
+  }
+
   private async assertCanManage(gateway: Gateway, userId: string): Promise<void> {
     if (!gatewayServableTo(gateway, userId)) {
       throw new NotFoundException('Gateway not found');

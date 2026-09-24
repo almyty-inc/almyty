@@ -45,19 +45,73 @@ describe('connect state store', () => {
     expect(store.size()).toBe(0);
   });
 
-  it('the Redis store uses GETDEL with the TTL, falling back to GET+DEL', async () => {
-    const redis = { set: jest.fn(async () => 'OK'), getdel: jest.fn(async () => JSON.stringify(payload())), get: jest.fn(), del: jest.fn() };
-    const store = new RedisConnectStateStore(redis as any);
+  it('the Redis store writes with the TTL and consumes with GETDEL', async () => {
+    const redis = fakeRedis();
+    const store = new RedisConnectStateStore(redis);
     await store.put('s1', payload(), 600);
     expect(redis.set).toHaveBeenCalledWith('connections:state:s1', expect.any(String), 'EX', 600);
     expect(await store.take('s1')).toMatchObject({ connectorKey: 'openrouter' });
     expect(redis.getdel).toHaveBeenCalledWith('connections:state:s1');
+    expect(await store.take('s1')).toBeNull();
+    expect(await store.take('never-issued')).toBeNull();
+  });
+});
 
-    const legacy = { set: jest.fn(), get: jest.fn(async () => JSON.stringify(payload())), del: jest.fn(async () => 1) };
-    const fallback = new RedisConnectStateStore(legacy as any);
-    expect(await fallback.take('s2')).toMatchObject({ connectorKey: 'openrouter' });
-    expect(legacy.del).toHaveBeenCalledWith('connections:state:s2');
-    legacy.get.mockResolvedValueOnce(null as any);
-    expect(await fallback.take('s3')).toBeNull();
+/**
+ * A connect state is single use: of any number of callbacks carrying the
+ * same state, exactly one gets the pending connect (and with it the PKCE
+ * verifier).
+ *
+ * The double behaves like Redis across a network: a command takes effect
+ * on the server when sent and its reply arrives a round trip later. It
+ * offers only SET and an atomic GETDEL -- no GET or DEL the store could
+ * fall back to, since GET-then-DEL lets concurrent callbacks both read the
+ * state inside the round trip between them.
+ */
+const roundTrip = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+function fakeRedis() {
+  const data = new Map<string, string>();
+  return {
+    data,
+    set: jest.fn(async (key: string, value: string, _mode: 'EX', _ttl: number) => {
+      data.set(key, value);
+      await roundTrip();
+      return 'OK';
+    }),
+    getdel: jest.fn(async (key: string) => {
+      const value = data.get(key) ?? null;
+      data.delete(key);
+      await roundTrip();
+      return value;
+    }),
+  };
+}
+
+describe('connect state is consumed once under concurrency', () => {
+  const N = 8;
+
+  it('Redis store: exactly one of N parallel takes of one state wins', async () => {
+    const redis = fakeRedis();
+    const store = new RedisConnectStateStore(redis);
+    const state = newState();
+    await store.put(state, payload(), CONNECT_STATE_TTL_SECONDS);
+
+    const taken = await Promise.all(Array.from({ length: N }, () => store.take(state)));
+
+    expect(taken.filter((p) => p !== null)).toHaveLength(1);
+    expect(taken.find((p) => p !== null)).toMatchObject({ codeVerifier: 'v' });
+    expect(redis.data.size).toBe(0);
+  });
+
+  it('memory store: exactly one of N parallel takes of one state wins', async () => {
+    const store = new MemoryConnectStateStore();
+    const state = newState();
+    await store.put(state, payload(), CONNECT_STATE_TTL_SECONDS);
+
+    const taken = await Promise.all(Array.from({ length: N }, () => store.take(state)));
+
+    expect(taken.filter((p) => p !== null)).toHaveLength(1);
+    expect(store.size()).toBe(0);
   });
 });

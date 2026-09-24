@@ -3,7 +3,7 @@ import { ForbiddenException, Inject, Injectable, NotFoundException, Optional } f
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ConnectorCatalogService } from './connector-catalog.service';
-import { ConnectionView, ConnectorDefinition } from './connector.types';
+import { ConnectionView, ConnectorDefinition, connectionOwnerOf, isOthersPrivateConnection } from './connector.types';
 import { ConnectionsService } from './connections.service';
 import { CONNECTIONS_READ, ConnectionPrincipal, membershipOf, principalHasPermission } from './connections.permissions';
 import { GrantsService } from './grants/grants.service';
@@ -44,6 +44,9 @@ export class ConnectionsResolverService {
   async resolveForUse(principal: ConnectionPrincipal, connectionId: string, context: ResolveContext = { purpose: 'use' }): Promise<ResolvedConnection> {
     const row = await this.connections.loadForResolve(connectionId);
     if (!row) throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+    // Someone else's private connection: the same answer as a missing id,
+    // before any check whose wording would confirm the row exists.
+    if (isOthersPrivateConnection(row, principal.id)) throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
     if (!membershipOf(principal, row.organizationId)) {
       throw new ForbiddenException({ code: 'CONNECTION_FORBIDDEN', message: 'not a member of the connection owner organization' });
     }
@@ -78,6 +81,7 @@ export class ConnectionsResolverService {
   async resolveForOrg(organizationId: string, connectionId: string, context: ResolveContext & { actorUserId?: string }): Promise<ResolvedConnection> {
     const row = await this.connections.loadForResolve(connectionId);
     if (!row || row.organizationId !== organizationId) throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+    if (isOthersPrivateConnection(row, context.actorUserId)) throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
     if (row.ownerUserId && row.ownerUserId !== context.actorUserId) {
       throw new ForbiddenException({ code: 'CONNECTION_FORBIDDEN', message: 'a user-owned connection cannot be used by the organization' });
     }
@@ -93,7 +97,7 @@ export class ConnectionsResolverService {
     if (!audited) this.auditLog.log({
       organizationId, userId, action: AuditAction.CONNECTION_RESOLVE, resourceType: AuditResource.CONNECTION,
       resourceId: row.id, resourceName: row.name,
-      details: { connectorKey: row.connectorKey, owner: row.ownerUserId ? 'user' : 'org', purpose: context.purpose, resourceType: context.resourceType ?? null, resourceId: context.resourceId ?? null, health: row.healthStatus },
+      details: { connectorKey: row.connectorKey, owner: connectionOwnerOf(row), purpose: context.purpose, resourceType: context.resourceType ?? null, resourceId: context.resourceId ?? null, health: row.healthStatus },
     });
     return { connection: this.connections.view(row, connector), connector, config };
   }

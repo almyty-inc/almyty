@@ -60,6 +60,10 @@ export class BudgetsController {
     const data = await this.spend.getSummary(organizationId, {
       from,
       granularity: granularity ?? 'day',
+      viewerId: req.user?.id ?? null,
+      // Same visibility as the budget list: a team agent's spend is its
+      // team's and the admins' to read.
+      hiddenAgentIds: await this.budgets.hiddenAgentIds(organizationId, req.user?.id),
     });
     return { success: true, data: { period: periodType, from, ...data } };
   }
@@ -69,7 +73,11 @@ export class BudgetsController {
   @ApiOperation({ summary: 'List recent spend-budget breach alerts' })
   async listAlerts(@Query('limit') limit: string | undefined, @Request() req: any) {
     const organizationId = this.orgId(req);
-    const data = await this.budgets.listAlerts(organizationId, limit ? parseInt(limit, 10) : 100);
+    const data = await this.budgets.listAlerts(
+      organizationId,
+      req.user?.id,
+      limit ? parseInt(limit, 10) : 100,
+    );
     return { success: true, data };
   }
 
@@ -79,7 +87,7 @@ export class BudgetsController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'List spend budgets' })
   async list(@Request() req: any) {
-    const data = await this.budgets.list(this.orgId(req));
+    const data = await this.budgets.list(this.orgId(req), req.user?.id);
     return { success: true, data };
   }
 
@@ -88,7 +96,7 @@ export class BudgetsController {
   @ApiParam({ name: 'id', description: 'Budget ID' })
   @ApiOperation({ summary: 'Get a spend budget' })
   async get(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    const data = await this.budgets.get(id, this.orgId(req));
+    const data = await this.budgets.get(id, this.orgId(req), req.user?.id);
     return { success: true, data };
   }
 
@@ -96,7 +104,7 @@ export class BudgetsController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Create a spend budget' })
   async create(@Body() body: CreateBudgetBodyDto, @Request() req: any) {
-    const data = await this.budgets.create(this.orgId(req), body as CreateBudgetDto);
+    const data = await this.budgets.create(this.orgId(req), body as CreateBudgetDto, req.user?.id);
     return { success: true, data };
   }
 
@@ -109,7 +117,7 @@ export class BudgetsController {
     @Body() body: UpdateBudgetBodyDto,
     @Request() req: any,
   ) {
-    const data = await this.budgets.update(id, this.orgId(req), body as UpdateBudgetDto);
+    const data = await this.budgets.update(id, this.orgId(req), body as UpdateBudgetDto, req.user?.id);
     return { success: true, data };
   }
 
@@ -118,7 +126,7 @@ export class BudgetsController {
   @ApiParam({ name: 'id', description: 'Budget ID' })
   @ApiOperation({ summary: 'Delete a spend budget' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    await this.budgets.remove(id, this.orgId(req));
+    await this.budgets.remove(id, this.orgId(req), req.user?.id);
     return { success: true };
   }
 }

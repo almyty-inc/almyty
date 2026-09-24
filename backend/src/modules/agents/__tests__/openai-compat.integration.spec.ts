@@ -63,6 +63,7 @@ function makeApiKey(overrides: any = {}): any {
     keyHash: TEST_KEY_HASH,
     organizationId: 'org-1',
     userId: 'user-1',
+    user: { id: 'user-1', isActive: true, organizationMemberships: [{ organizationId: 'org-1', isActive: true }] },
     isActive: true,
     lastUsedAt: null,
     isExpired: jest.fn().mockReturnValue(false),
@@ -72,7 +73,7 @@ function makeApiKey(overrides: any = {}): any {
 
 function makeAgent(overrides: any = {}): any {
   return {
-    id: 'agent-abc-123',
+    id: '0a9e2b7c-0000-4000-8000-000000000123',
     name: 'My Test Agent',
     status: 'active',
     createdAt: new Date('2026-01-15T00:00:00Z'),
@@ -144,7 +145,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'Hello' }],
         },
         `Bearer ${TEST_API_KEY}`,
@@ -159,7 +160,7 @@ describe('OpenAI Compatibility', () => {
       expect(body.id).toBe('chatcmpl-exec-42');
       expect(body.object).toBe('chat.completion');
       expect(typeof body.created).toBe('number');
-      expect(body.model).toBe('agent:agent-abc-123');
+      expect(body.model).toBe('agent:0a9e2b7c-0000-4000-8000-000000000123');
 
       // choices array
       expect(Array.isArray(body.choices)).toBe(true);
@@ -196,7 +197,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'Hello' }],
         },
         `Bearer ${TEST_API_KEY}`,
@@ -231,7 +232,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'Hello' }],
         },
         `Bearer ${TEST_API_KEY}`,
@@ -278,7 +279,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'Hello' }],
           stream: true,
         },
@@ -343,7 +344,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'Hello' }],
           stream: true,
         },
@@ -435,7 +436,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'Hello' }],
           stream: true,
         },
@@ -649,7 +650,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'hi' }],
         },
         `Bearer ${TEST_API_KEY}`,
@@ -701,7 +702,7 @@ describe('OpenAI Compatibility', () => {
 
         await controller.chatCompletions(
           {
-            model: 'agent:agent-abc-123',
+            model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
             messages: [{ role: 'user', content: 'hi' }],
           },
           `Bearer ${TEST_API_KEY}`,
@@ -718,7 +719,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'hi' }],
         },
         `Bearer ${TEST_API_KEY}`,
@@ -762,7 +763,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [
             { role: 'system', content: 'You are helpful.' },
             { role: 'user', content: 'First question' },
@@ -791,7 +792,7 @@ describe('OpenAI Compatibility', () => {
 
       // Should pass all messages
       expect(capturedInput.messages).toHaveLength(4);
-      expect(capturedInput.model).toBe('agent:agent-abc-123');
+      expect(capturedInput.model).toBe('agent:0a9e2b7c-0000-4000-8000-000000000123');
 
       // Sampling is honoured where the engine actually reads it, rather than
       // parked on an input field nothing consumes.
@@ -818,7 +819,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'hi' }],
         },
         `Bearer ${TEST_API_KEY}`,
@@ -828,7 +829,7 @@ describe('OpenAI Compatibility', () => {
 
       // Should strip the "agent:" prefix and look up by ID
       // The API key's user is the caller: a private agent answers only to its owner's key.
-      expect(agentsService.getAgent).toHaveBeenCalledWith('agent-abc-123', 'org-1', { id: 'user-1' });
+      expect(agentsService.getAgent).toHaveBeenCalledWith('0a9e2b7c-0000-4000-8000-000000000123', 'org-1', { id: 'user-1' });
     });
 
     it('should fall back to name-based lookup when ID lookup fails', async () => {
@@ -867,7 +868,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'hi' }],
         },
         `Bearer ${TEST_API_KEY}`,
@@ -900,7 +901,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'hi' }],
         },
         `Bearer ${TEST_API_KEY}`,
@@ -947,7 +948,7 @@ describe('OpenAI Compatibility', () => {
 
       await controller.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'hi' }],
         },
         `Bearer ${TEST_API_KEY}`,

@@ -125,3 +125,11 @@ export const DUNNING_SUBSCRIPTION_STATUSES = ['past_due', 'unpaid'];
 
 /** Terminal statuses → downgrade to free + revoke token. */
 export const TERMINAL_SUBSCRIPTION_STATUSES = ['canceled', 'incomplete_expired'];
+
+/** A subscription in one of these states is the org's current one: it carries
+ *  entitlements, and a new checkout or another subscription's events must not
+ *  replace it. */
+export const LIVE_SUBSCRIPTION_STATUSES = [
+  ...ACTIVE_SUBSCRIPTION_STATUSES,
+  ...DUNNING_SUBSCRIPTION_STATUSES,
+];

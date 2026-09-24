@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { isUUID } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsSelect, Repository } from 'typeorm';
 import { AgentFile } from '../../entities/file.entity';
 import { StorageService } from './storage.service';
 import { TextExtractorService } from './text-extractor.service';
@@ -8,6 +9,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { Readable } from 'stream';
+
+/** Every file column a list returns: all of them but `extractedText`. */
+const FILE_LIST_COLUMNS: FindOptionsSelect<AgentFile> = {
+  id: true,
+  organizationId: true,
+  agentId: true,
+  runId: true,
+  name: true,
+  mimeType: true,
+  size: true,
+  storageKey: true,
+  storageUrl: true,
+  memoryId: true,
+  uploadedBy: true,
+  metadata: true,
+  createdAt: true,
+};
 
 @Injectable()
 export class FilesService {
@@ -26,6 +44,15 @@ export class FilesService {
     file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
     options?: { agentId?: string; runId?: string; uploadedBy?: string; extractText?: boolean },
   ): Promise<AgentFile> {
+    // agentId becomes a storage-key segment. Unchecked, `../<other org>/x`
+    // normalizes to a key under another org's prefix, which the key guard
+    // in StorageService accepts because it no longer starts with `..`.
+    // Both ids come from the query string, so hold them to the id shape.
+    for (const [field, value] of [['agentId', options?.agentId], ['runId', options?.runId]] as const) {
+      if (value && !isUUID(value)) {
+        throw new BadRequestException(`${field} must be a UUID`);
+      }
+    }
     const fileId = uuidv4();
     // Sanitize the user-supplied filename before embedding it in the
     // storage key. The key is used as a filesystem path by the local
@@ -58,7 +85,16 @@ export class FilesService {
       uploadedBy: options?.uploadedBy || null,
     });
 
-    const saved = await this.fileRepository.save(agentFile);
+    let saved: AgentFile;
+    try {
+      saved = await this.fileRepository.save(agentFile);
+    } catch (error) {
+      // No row points at the object, so nothing would ever delete it.
+      await this.storageService.delete(storageKey).catch((cleanupError) =>
+        this.logger.warn(`Could not remove orphaned upload ${storageKey}: ${cleanupError.message}`),
+      );
+      throw error;
+    }
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId: options?.uploadedBy, action: AuditAction.FILE_UPLOAD, resourceType: AuditResource.FILE, resourceId: saved.id, resourceName: saved.name, details: { mimeType: file.mimetype, size: file.size } });
@@ -77,19 +113,28 @@ export class FilesService {
     const limit = Math.min(filters?.limit || 50, 100);
     const skip = (page - 1) * limit;
 
-    const qb = this.fileRepository.createQueryBuilder('file')
-      .where('file.organizationId = :organizationId', { organizationId });
+    const where: Record<string, string> = { organizationId };
+    if (filters?.agentId) where.agentId = filters.agentId;
+    if (filters?.runId) where.runId = filters.runId;
+    if (filters?.mimeType) where.mimeType = filters.mimeType;
 
-    if (filters?.agentId) qb.andWhere('file.agentId = :agentId', { agentId: filters.agentId });
-    if (filters?.runId) qb.andWhere('file.runId = :runId', { runId: filters.runId });
-    if (filters?.mimeType) qb.andWhere('file.mimeType = :mimeType', { mimeType: filters.mimeType });
-
+    // A list carries no extracted text. It is the full text of every
+    // document in the page (up to 100 of them), readable by any viewer of
+    // the org whether or not they could open the file; GET /files/:id is
+    // the one place it is served. Not selected, and dropped from the rows
+    // regardless, so a later change to the select cannot bring it back.
+    //
     // Tied `createdAt` values order arbitrarily; with skip/take that
     // duplicates one row across pages and drops another. See
     // ApisService.findAllByOrganization for the same pairing.
-    qb.orderBy('file.createdAt', 'DESC').addOrderBy('file.id', 'DESC').skip(skip).take(limit);
-
-    const [data, total] = await qb.getManyAndCount();
+    const [rows, total] = await this.fileRepository.findAndCount({
+      where,
+      select: FILE_LIST_COLUMNS,
+      order: { createdAt: 'DESC', id: 'DESC' },
+      skip,
+      take: limit,
+    });
+    const data = rows.map(({ extractedText: _omitted, ...file }) => file);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 

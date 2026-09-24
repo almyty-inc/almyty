@@ -6,7 +6,7 @@ import { RunnerCallError, RUNNER_CALL_ERRORS } from './runner-call.service';
 
 /**
  * Chat-to-runner coding bridge endpoints. Authz scope is the ORGANIZATION
- * (getUsable: 404 unknown, 403 cross-org), dispatch rides the same
+ * (getUsable: 404 for unknown, cross-org or unusable), dispatch rides the same
  * RunnerCallService envelope as agent.*, and the per-session SSE endpoint
  * relays coding.output / coding.exit events from CodingRelayService.
  */
@@ -87,14 +87,12 @@ describe('RunnerController coding.* endpoints', () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it('cross-org access is refused with 403 and never dispatched', async () => {
-    const getUsable = jest.fn().mockRejectedValue(
-      new ForbiddenException('runner belongs to a different organization'),
-    );
+  it('cross-org access is refused with the not-found answer and never dispatched', async () => {
+    const getUsable = jest.fn().mockRejectedValue(new NotFoundException('runner not found'));
     const dispatch = jest.fn();
     const { ctrl } = make({ getUsable, dispatch });
     await expect(ctrl.codingStart(req, 'r1', { agent: 'claude', task: 'x' } as any))
-      .rejects.toBeInstanceOf(ForbiddenException);
+      .rejects.toBeInstanceOf(NotFoundException);
     expect(dispatch).not.toHaveBeenCalled();
   });
 

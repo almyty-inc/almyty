@@ -42,6 +42,8 @@ export interface JwtPayload {
   }>;
   /** Token version — see User.tokenVersion. Absent on legacy tokens (=> 0). */
   tv?: number;
+  /** Set on an SSO session: the one organization it may act in. See sso-session.ts. */
+  sso?: string;
   iat?: number;
   exp?: number;
 }
@@ -405,24 +407,36 @@ export class AuthService {
     return apiKey;
   }
 
-  async generateTokens(user: User): Promise<AuthTokens> {
+  /**
+   * `ssoOrganizationId` marks a session minted from that organization's
+   * SSO assertion: the token lists that organization only and carries the
+   * `sso` claim JwtStrategy confines the session with (see sso-session.ts).
+   */
+  async generateTokens(
+    user: User,
+    options: { ssoOrganizationId?: string } = {},
+  ): Promise<AuthTokens> {
     // Load user organizations for JWT payload
     const userWithOrgs = await this.userRepository.findOne({
       where: { id: user.id },
       relations: { organizationMemberships: { organization: true } },
     });
 
+    const sso = options.ssoOrganizationId;
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      organizations: effectiveMemberships(userWithOrgs.organizationMemberships).map(membership => ({
-        id: membership.organization.id,
-        name: membership.organization.name,
-        role: membership.role,
-      })),
+      organizations: effectiveMemberships(userWithOrgs.organizationMemberships)
+        .filter(membership => !sso || membership.organization?.id === sso)
+        .map(membership => ({
+          id: membership.organization.id,
+          name: membership.organization.name,
+          role: membership.role,
+        })),
       tv: userWithOrgs.tokenVersion ?? 0,
+      ...(sso ? { sso } : {}),
     };
 
     const accessToken = this.jwtService.sign(payload);
@@ -802,46 +816,86 @@ export class AuthService {
       }
     }
 
-    // Update email if provided.
-    //
-    // Three things have to happen together here, and only the first
-    // used to. `normalizedEmail` is the identity key register() dedupes
-    // on and the unique index is built on; leaving it pointing at the
-    // old address meant an account could move its address without ever
-    // moving its identity, so the alias dedupe stopped describing the
-    // row. And a changed address is an UNPROVEN address: keeping
-    // `isVerified` set let anyone repoint their account at a mailbox
-    // they do not control and stay verified on it, which is exactly
-    // what acceptInvite's caller-email check and the referral payout
-    // gate read to decide who somebody is.
+    // A new login address goes through changeEmail, never a plain field
+    // write: it needs the current password, resets verification, and
+    // tells both mailboxes. Done first, so a refused change leaves the
+    // name untouched too.
     if (updateProfileDto.email && updateProfileDto.email !== user.email) {
-      const normalized = normalizeEmail(updateProfileDto.email);
+      const moved = await this.changeEmail(userId, updateProfileDto.email, updateProfileDto.currentPassword);
+      user.email = moved.email;
+      user.normalizedEmail = moved.normalizedEmail;
+      user.isVerified = moved.isVerified;
+      user.verifiedAt = moved.verifiedAt;
+      user.verificationToken = moved.verificationToken;
+    }
 
-      // Taken on either spelling - the raw address or its canonical form.
-      const existingUser = await this.userRepository.findOne({
-        where: [{ email: updateProfileDto.email }, { normalizedEmail: normalized }],
+    return this.userRepository.save(user);
+  }
+
+  /**
+   * Move an account to a new login address.
+   *
+   * The login address is the account: it is where password resets go.
+   * So changing it takes the current password (a stolen session alone is
+   * not enough to repoint the account and then reset the password at the
+   * new mailbox), and the result is an UNPROVEN address until the new
+   * mailbox answers -- `isVerified`/`verifiedAt` are what acceptInvite's
+   * caller-email check and the referral payout gate read. `normalizedEmail`
+   * moves with it, since register() dedupes on it and the unique index is
+   * built on it. The old address is told, so a change its owner did not
+   * make does not go unnoticed.
+   *
+   * Every route that can change a user's own email calls this; see
+   * email-change-requires-reauth.spec.ts.
+   */
+  async changeEmail(userId: string, newEmail: string, currentPassword: string | undefined): Promise<User> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+
+    const next = (newEmail ?? '').trim();
+    if (!next || next === user.email) return user;
+
+    if (!currentPassword) {
+      throw new BadRequestException({
+        code: 'CURRENT_PASSWORD_REQUIRED',
+        message: 'Enter your current password to change your email address.',
       });
-
-      if (existingUser && existingUser.id !== userId) {
-        throw new BadRequestException('Email is already in use');
-      }
-
-      user.email = updateProfileDto.email;
-      user.normalizedEmail = normalized;
-      // Back to unproven until the new address answers.
-      user.isVerified = false;
-      user.verifiedAt = null;
-      user.verificationToken = null;
+    }
+    const passwordOk = !!user.passwordHash && (await bcrypt.compare(currentPassword, user.passwordHash));
+    if (!passwordOk) {
+      throw new BadRequestException({ code: 'CURRENT_PASSWORD_INCORRECT', message: 'Current password is incorrect.' });
     }
 
-    // Save and return updated user
-    const saved = await this.userRepository.save(user);
-
-    // Send the new address its verification link. Best-effort: the
-    // profile change is already committed and mail must not fail it.
-    if (!saved.verifiedAt && !saved.isVerified) {
-      this.requestEmailVerification(saved.id).catch(() => {});
+    const normalized = normalizeEmail(next);
+    // Taken on either spelling - the raw address or its canonical form.
+    const existingUser = await this.userRepository.findOne({
+      where: [{ email: next }, { normalizedEmail: normalized }],
+    });
+    if (existingUser && existingUser.id !== userId) {
+      throw new BadRequestException('Email is already in use');
     }
+
+    const previous = user.email;
+    // Only these columns, and only while the address is still the one the
+    // password was checked against.
+    const moved = await this.userRepository.update(
+      { id: userId, email: previous },
+      { email: next, normalizedEmail: normalized, isVerified: false, verifiedAt: null, verificationToken: null },
+    );
+    if (!moved.affected) {
+      throw new BadRequestException('Your account changed while saving. Reload and try again.');
+    }
+
+    const saved = await this.userRepository.findOne({ where: { id: userId } });
+    if (!saved) throw new BadRequestException('User not found');
+
+    // Best-effort mail: the change is committed and must not be undone by a
+    // mail outage. The new address gets its verification link; the old one
+    // gets a notice with only a hint of where the account went.
+    await Promise.allSettled([
+      this.requestEmailVerification(saved.id),
+      this.mailService.sendTemplate(previous, 'account.email_changed', { newEmailHint: maskEmail(next) }),
+    ]);
 
     return saved;
   }
@@ -853,4 +907,11 @@ export class AuthService {
     });
     return !existingOrg;
   }
+}
+
+/** `ada@example.com` -> `a**@example.com`: enough to recognise, not to harvest. */
+export function maskEmail(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!domain) return '***';
+  return `${local.slice(0, 1)}${'*'.repeat(Math.max(2, local.length - 1))}@${domain}`;
 }

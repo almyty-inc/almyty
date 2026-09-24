@@ -49,15 +49,17 @@ describe('ToolGeneratorService - generated tools carry their organization', () =
   let service: ToolGeneratorService;
   let created: any[];
 
-  /** Stands in for the `organizationId uuid NOT NULL` column. */
+  /** Stands in for the `organizationId uuid NOT NULL` column; a batch saves an array. */
   const saveRejectingNullOrg = jest.fn(async (entity: any) => {
-    if (!entity.organizationId) {
-      throw new Error(
-        'null value in column "organizationId" of relation "tools" ' +
-          'violates not-null constraint',
-      );
+    for (const row of Array.isArray(entity) ? entity : [entity]) {
+      if (!row.organizationId) {
+        throw new Error(
+          'null value in column "organizationId" of relation "tools" ' +
+            'violates not-null constraint',
+        );
+      }
     }
-    return { ...entity, id: entity.id ?? 'tool-1' };
+    return Array.isArray(entity) ? entity : { ...entity, id: entity.id ?? 'tool-1' };
   });
 
   beforeEach(async () => {
@@ -78,6 +80,8 @@ describe('ToolGeneratorService - generated tools carry their organization', () =
             }),
             save: saveRejectingNullOrg,
             findOne: jest.fn().mockResolvedValue(null),
+            // No generated name is taken by another tool at write time.
+            find: jest.fn().mockResolvedValue([]),
           },
         },
         {

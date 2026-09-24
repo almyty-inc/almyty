@@ -5,6 +5,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -44,6 +45,11 @@ import {
 import { GatewaysService } from '../gateways/gateways.service';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
+import { CredentialType } from '../../entities/credential.entity';
+import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
+import { channelConnectorKey } from '../gateways/channels/channel-credential.service';
+import { channelSecretKeysIn } from '../gateways/channels/channel-config.helper';
+import { distributionManagedBy, splitDistributionSecrets } from './distribution-secrets';
 
 
 export interface CreateAppDto {
@@ -93,7 +99,10 @@ export class AgentAppsService {
     private readonly gateways: GatewaysService,
     @Optional()
     private readonly orgLicense?: OrgLicenseResolver,
-
+    // Where a distribution's platform secrets are kept. Not @Optional():
+    // Nest must inject it; typed optional only for positional unit specs,
+    // and without it a secret is refused rather than written to the row.
+    private readonly credentialRefs?: CredentialRefResolver,
   ) {}
 
   async list(organizationId: string): Promise<Array<AgentApp & { health: AppHealth }>> {
@@ -412,6 +421,10 @@ export class AgentAppsService {
     gatewayId: string | null = null,
   ): Promise<AppDistribution> {
     const app = await this.findOne(organizationId, slug);
+    // Platform secrets never reach the row: they go to the credential
+    // store below and the configuration keeps a reference. Responses
+    // mask them, so a placeholder sent back is dropped here, not stored.
+    const incoming = splitDistributionSecrets(configuration);
 
     // One distribution per target, full stop. Naming the platform
     // rather than lumping them under "channel" is what makes that
@@ -424,25 +437,97 @@ export class AgentAppsService {
     const existing = await this.distributionRepository.findOne({
       where: { appId: app.id, target },
     });
+
     if (existing) {
       // Merged rather than replaced, so a caller that sends one field
       // does not silently drop the others. Clearing a field is done by
-      // sending it empty, which every reader treats as unset.
-      existing.configuration = { ...(existing.configuration ?? {}), ...configuration };
+      // sending it empty, which every reader treats as unset. A secret
+      // still inline on an older row moves to the store with this write.
+      const stored = splitDistributionSecrets(existing.configuration);
+      existing.configuration = {
+        ...stored.publicConfig,
+        ...this.credentialReference(existing.configuration),
+        ...incoming.publicConfig,
+      };
       if (gatewayId !== null) existing.gatewayId = gatewayId;
+      await this.storeDistributionSecrets(app, existing, { ...stored.secrets, ...incoming.secrets }, incoming.cleared);
       return this.distributionRepository.save(existing);
     }
 
-    return this.distributionRepository.save(
+    // The managed credential names the distribution, so the row is saved
+    // first with only its public part, then pointed at the credential.
+    const created = await this.distributionRepository.save(
       this.distributionRepository.create({
         organizationId,
         appId: app.id,
         target,
         status: DistributionStatus.DRAFT,
         gatewayId,
-        configuration,
+        configuration: incoming.publicConfig,
       }),
     );
+    if (Object.keys(incoming.secrets).length === 0) return created;
+    await this.storeDistributionSecrets(app, created, incoming.secrets, []);
+    return this.distributionRepository.save(created);
+  }
+
+  /** `credentialId` / `credentialKeys` of a stored configuration, the only server-owned keys it keeps. */
+  private credentialReference(configuration: Record<string, any> | null | undefined): Record<string, any> {
+    const id = configuration?.credentialId;
+    if (typeof id !== 'string' || !id) return {};
+    return { credentialId: id, credentialKeys: Array.isArray(configuration?.credentialKeys) ? configuration!.credentialKeys : [] };
+  }
+
+  /**
+   * Put a distribution's platform secrets in its managed credential:
+   * rotated in place when it has one, created when not. Mutates the
+   * distribution's configuration to reference it. `cleared` keys are
+   * emptied on the credential, which every reader treats as unset.
+   */
+  private async storeDistributionSecrets(
+    app: AgentApp,
+    distribution: AppDistribution,
+    secrets: Record<string, string>,
+    cleared: string[],
+  ): Promise<void> {
+    const secretKeys = Object.keys(secrets);
+    if (secretKeys.length === 0 && cleared.length === 0) return;
+    if (!this.credentialRefs) {
+      // Failing closed: the alternative is writing the secret onto the row.
+      throw new ServiceUnavailableException('The credential store is not available, so platform credentials cannot be saved.');
+    }
+    const organizationId = distribution.organizationId;
+    const managedBy = distributionManagedBy(distribution.id);
+    const currentId = distribution.configuration?.credentialId;
+    const current =
+      typeof currentId === 'string' && currentId
+        ? await this.credentialRefs.load(organizationId, currentId).catch(() => null)
+        : null;
+
+    let row;
+    if (current && CredentialRefResolver.isManagedBy(current, managedBy)) {
+      const patch: Record<string, string> = { ...secrets };
+      for (const key of cleared) if (!(key in patch)) patch[key] = '';
+      row = await this.credentialRefs.rotateManaged(organizationId, current.id, { config: patch, secretKeys, managedBy });
+    } else if (secretKeys.length > 0) {
+      const gatewayType = GATEWAY_TYPE_FOR_TARGET[distribution.target];
+      row = await this.credentialRefs.createManaged(organizationId, {
+        name: `${app.name} ${distribution.target} distribution`,
+        description: `Platform credentials of the ${distribution.target} distribution of app ${app.slug}`,
+        type: CredentialType.CUSTOM,
+        config: secrets,
+        secretKeys,
+        connectorKey: gatewayType ? channelConnectorKey(gatewayType) : null,
+        managedBy,
+      });
+    } else {
+      return;
+    }
+    distribution.configuration = {
+      ...(distribution.configuration ?? {}),
+      credentialId: row.id,
+      credentialKeys: channelSecretKeysIn(row.config),
+    };
   }
 
   /**
@@ -581,6 +666,13 @@ export class AgentAppsService {
     });
     if (!distribution) throw new NotFoundException('This app does not ship to that target');
     await this.distributionRepository.remove(distribution);
+    // Its platform credentials go with it. A shared connection it was
+    // pointed at is not its to delete, and releaseManaged leaves that alone.
+    await this.credentialRefs?.releaseManaged(
+      organizationId,
+      distribution.configuration?.credentialId,
+      distributionManagedBy(distribution.id),
+    );
   }
 
   /**

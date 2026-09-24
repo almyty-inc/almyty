@@ -199,6 +199,7 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
+    "globalSetup": "<rootDir>/test/integration-global-setup.ts",
     "setupFilesAfterEnv": [
       "<rootDir>/test/setup.ts"
     ],

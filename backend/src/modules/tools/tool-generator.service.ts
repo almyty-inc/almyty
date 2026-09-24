@@ -16,6 +16,7 @@ import {
   capGeneratedDescription,
   precheckToolQuota,
   withToolQuota,
+  writeToolBatch,
 } from './tool-quota';
 
 export interface ToolGenerationOptions {
@@ -111,9 +112,12 @@ export class ToolGeneratorService {
         api.organizationId,
         operations.length - alreadyGenerated,
       );
-
-      // Process operations in parallel (batches of 10 to avoid overwhelming DB)
+      // Build every row first (schemas are the slow part and need no lock),
+      // 10 operations at a time; nothing is written to tools in this loop.
       const BATCH_SIZE = 10;
+      const creates: Tool[] = [];
+      const updates: Tool[] = [];
+      const operationOf = new Map<Tool, Operation>();
       for (let i = 0; i < operations.length; i += BATCH_SIZE) {
         const batch = operations.slice(i, i + BATCH_SIZE);
         const batchResults = await Promise.allSettled(
@@ -146,10 +150,12 @@ export class ToolGeneratorService {
               const { hash } = computeToolHash(existingTool);
               existingTool.definitionHash = hash;
 
-              return this.toolRepository.save(existingTool);
-            } else {
-              return this.generateToolFromOperation(operation, api, options);
+              updates.push(existingTool);
+              return existingTool;
             }
+            const built = await this.buildToolFromOperation(operation, api, options);
+            if (built) creates.push(built);
+            return built;
           }),
         );
 
@@ -157,8 +163,7 @@ export class ToolGeneratorService {
           const br = batchResults[j];
           const operation = batch[j];
           if (br.status === 'fulfilled' && br.value) {
-            result.generatedTools.push(br.value);
-            result.summary.generated++;
+            operationOf.set(br.value, operation);
           } else if (br.status === 'fulfilled') {
             result.skippedOperations.push({
               operationId: operation.id,
@@ -175,6 +180,30 @@ export class ToolGeneratorService {
           }
         }
       }
+
+      // Write the batch whole, under the organization's tool-quota lock:
+      // it fits, or it is refused before any row lands. Written row by
+      // row, a batch that lost a race for the last slots stopped partway.
+      // A generated name another tool has taken meanwhile is skipped, as
+      // the unique violation it would raise used to be.
+      const written = await writeToolBatch(
+        this.toolRepository.manager,
+        api.organizationId,
+        { creates, updates },
+        () => null,
+      );
+      for (const tool of written.skipped) {
+        result.skippedOperations.push({
+          operationId: operationOf.get(tool)?.id ?? tool.operationId,
+          reason: `A tool named '${tool.name}' already exists`,
+        });
+        result.summary.skipped++;
+      }
+      for (const tool of written.created) {
+        await this.createToolVersion(tool, 'Initial tool generation');
+      }
+      result.generatedTools.push(...written.updated, ...written.created);
+      result.summary.generated += written.updated.length + written.created.length;
 
       this.logger.log(
         `Tool generation completed for API ${api.id}: ` +
@@ -194,12 +223,41 @@ export class ToolGeneratorService {
     api: Api,
     options: ToolGenerationOptions = {}
   ): Promise<Tool | null> {
-    // Outside the try: a quota refusal is not a "skipped" operation, it
-    // must surface. generateToolsFromApi has already checked the batch;
-    // this fails fast before schema generation, and the insert below
-    // is the enforcing check.
+    // A quota refusal is not a "skipped" operation, it must surface. This
+    // fails fast before schema generation; the insert is the enforcing check.
     await precheckToolQuota(this.toolRepository.manager, api.organizationId);
 
+    const tool = await this.buildToolFromOperation(operation, api, options);
+    if (!tool) return null;
+
+    let savedTool: Tool;
+    try {
+      // Enforced with the insert, under the organization's tool-quota lock.
+      savedTool = await withToolQuota(this.toolRepository.manager, api.organizationId, 1, (tx) =>
+        tx.getRepository(Tool).save(tool),
+      );
+    } catch (error) {
+      if (error instanceof ToolQuotaExceededException) throw error;
+      this.logger.error(`Failed to generate tool from operation: ${error.message}`);
+      return null;
+    }
+
+    await this.createToolVersion(savedTool, 'Initial tool generation');
+    this.logger.log(`Generated tool '${savedTool.name}' from operation '${operation.name}'`);
+    return savedTool;
+  }
+
+  /**
+   * The Tool row generateToolFromOperation would insert, schemas and hash
+   * included, not yet saved and not counted against the quota: whoever
+   * saves it enforces that. Null when the operation cannot be turned into
+   * a tool.
+   */
+  async buildToolFromOperation(
+    operation: Operation,
+    api: Api,
+    options: ToolGenerationOptions = {}
+  ): Promise<Tool | null> {
     try {
       // Generate input schema
       const inputSchema = await this.generateInputSchemaForOperation(operation, api.type);
@@ -263,30 +321,11 @@ export class ToolGeneratorService {
         },
       });
 
-      // Enforced with the insert, under the organization's tool-quota lock.
-      const savedTool = await withToolQuota(
-        this.toolRepository.manager,
-        api.organizationId,
-        1,
-        (tx) => tx.getRepository(Tool).save(tool),
-      );
-
-      // Compute and store integrity hash
-      const { hash } = computeToolHash(savedTool);
-      savedTool.definitionHash = hash;
-      await this.toolRepository.save(savedTool);
-
-      // Create initial version
-      await this.createToolVersion(savedTool, 'Initial tool generation');
-
-      this.logger.log(`Generated tool '${toolName}' from operation '${operation.name}'`);
-
-      return savedTool;
-
+      // Integrity hash over the definition; none of its fields is filled
+      // in by the insert, so it can be stored with the row.
+      tool.definitionHash = computeToolHash(tool).hash;
+      return tool;
     } catch (error) {
-      // A quota refusal (a concurrent writer took the last slot after
-      // the precheck) is not a "skipped" operation: it must surface.
-      if (error instanceof ToolQuotaExceededException) throw error;
       this.logger.error(`Failed to generate tool from operation: ${error.message}`);
       return null;
     }

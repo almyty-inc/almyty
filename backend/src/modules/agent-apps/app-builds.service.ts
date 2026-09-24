@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
@@ -43,6 +50,14 @@ export const DOWNLOAD_URL_TTL_SECONDS = 15 * 60;
  * failing a build that was about to succeed.
  */
 export const BUILD_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * How many builds one organization may have queued or running at once.
+ *
+ * Enough for a release across every platform and packaged target, and
+ * low enough that one tenant cannot fill the shared queue.
+ */
+export const MAX_ACTIVE_BUILDS_PER_ORG = 10;
 
 export interface RequestBuildDto {
   target: DistributionTarget;
@@ -99,6 +114,19 @@ export class AppBuildsService {
     requestedBy: string | null,
   ): Promise<AppBuild> {
     const app = await this.findApp(organizationId, slug);
+
+    // One organization's backlog must not become everyone's. The queue is
+    // shared by every tenant and runs a job at a time, so without a
+    // ceiling a loop of requests held every other build behind it.
+    const inFlight = await this.buildRepository.count({
+      where: { organizationId, status: In([BuildStatus.QUEUED, BuildStatus.RUNNING]) },
+    });
+    if (inFlight >= MAX_ACTIVE_BUILDS_PER_ORG) {
+      throw new HttpException(
+        `This organization already has ${inFlight} builds queued or running. Wait for one to finish before starting another.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
     if (!BUILD_PLATFORMS[dto.platform]) {
       throw new BadRequestException(`Unknown platform: ${dto.platform}`);

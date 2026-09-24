@@ -12,6 +12,8 @@ import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { effectiveMemberships, isEffectiveMembership } from '../../common/authorization/membership';
+import { ORGANIZATION_ROLE_RANK } from '../organizations/organization-role-rank';
 
 export interface PaginatedUsers {
   users: User[];
@@ -34,6 +36,17 @@ export function stripUserSecrets<T extends Record<string, any>>(user: T): T {
   for (const field of USER_SECRET_FIELDS) delete (user as any)[field];
   for (const membership of (user as any).organizationMemberships ?? []) {
     delete membership?.inviteToken;
+  }
+  return user;
+}
+
+/**
+ * Keep only a user's membership in `organizationId`. A user row read on
+ * behalf of an organization says nothing about the person's other ones.
+ */
+export function scopeMemberships<T extends { organizationMemberships?: any[] }>(user: T, organizationId: string): T {
+  if (Array.isArray(user.organizationMemberships)) {
+    user.organizationMemberships = user.organizationMemberships.filter((m) => m?.organizationId === organizationId);
   }
   return user;
 }
@@ -65,11 +78,14 @@ export class UsersService {
 
     const skip = (page - 1) * limit;
 
+    // Only the membership in this organization is selected. The list used
+    // to join every membership each user holds, with its organization, so
+    // an admin here read which other organizations their people belong to
+    // and in what role.
     let queryBuilder = this.userRepository
       .createQueryBuilder('user')
-      .innerJoin('user.organizationMemberships', 'membership', 'membership.organizationId = :organizationId', { organizationId })
-      .leftJoinAndSelect('user.organizationMemberships', 'allMemberships')
-      .leftJoinAndSelect('allMemberships.organization', 'allOrganization');
+      .innerJoinAndSelect('user.organizationMemberships', 'membership', 'membership.organizationId = :organizationId', { organizationId })
+      .leftJoinAndSelect('membership.organization', 'organization');
 
     // Apply search filter
     if (search) {
@@ -111,17 +127,33 @@ export class UsersService {
     }
 
     await this.assertUserInOrg(id, organizationId);
-    return this.findOne(id);
+    return scopeMemberships(await this.findOne(id), organizationId);
+  }
+
+  /**
+   * The membership that makes `userId` one of this organization's people.
+   * A pending invite is not one -- an admin can invite any address on the
+   * platform, so accepting its row here let them reach anyone -- and
+   * neither is a revoked or deactivated row.
+   */
+  private async effectiveMembershipIn(userId: string, organizationId: string): Promise<UserOrganization> {
+    const membership = await this.userOrganizationRepository.findOne({
+      where: { userId, organizationId },
+    });
+    if (!membership || !isEffectiveMembership(membership)) {
+      throw new NotFoundException('User not found');
+    }
+    return membership;
   }
 
   private async assertUserInOrg(userId: string, organizationId: string): Promise<void> {
-    const exists = await this.userOrganizationRepository.findOne({
-      where: { userId, organizationId },
-      select: { id: true },
-    });
-    if (!exists) {
-      throw new NotFoundException('User not found');
-    }
+    await this.effectiveMembershipIn(userId, organizationId);
+  }
+
+  /** Does this person belong to any organization other than this one? */
+  private async belongsElsewhere(userId: string, organizationId: string): Promise<boolean> {
+    const rows = await this.userOrganizationRepository.find({ where: { userId } });
+    return effectiveMemberships(rows).some((m) => m.organizationId !== organizationId);
   }
 
   async findOne(id: string): Promise<User> {
@@ -161,13 +193,12 @@ export class UsersService {
       user.lastName = updateUserDto.lastName;
     }
 
-    if (updateUserDto.email) {
-      // Check if email is already taken
-      const existingUser = await this.findByEmail(updateUserDto.email);
-      if (existingUser && existingUser.id !== id) {
-        throw new BadRequestException('Email is already in use');
-      }
-      user.email = updateUserDto.email;
+    // The login address never changes here. This used to assign it
+    // directly: no password, verification left set on an address nobody
+    // had proved, and no word to the old mailbox. AuthService.changeEmail
+    // is the one path that may move it; the controllers route there first.
+    if (updateUserDto.email !== undefined && updateUserDto.email !== user.email) {
+      throw new BadRequestException('Change the email address through the email change flow.');
     }
 
     if (updateUserDto.preferences) {
@@ -178,9 +209,40 @@ export class UsersService {
   }
 
   /** Org-scoped variant for admin endpoints. */
-  async updateInOrg(id: string, organizationId: string, updateUserDto: UpdateUserDto): Promise<User> {
+  /**
+   * Org-scoped variant for admin endpoints.
+   *
+   * The row is platform-wide, so an admin of this organization edits it
+   * only as far as it is this organization's to edit. The login address
+   * never is: repointing another person's email and then asking for a
+   * password reset at the new mailbox is a takeover of every organization
+   * they belong to. Their name is, only while this is their one
+   * organization -- the rule SCIM follows for the same row. Preferences
+   * are the person's own. Editing yourself is the self-service update.
+   */
+  async updateInOrg(
+    id: string,
+    organizationId: string,
+    updateUserDto: UpdateUserDto,
+    actorUserId?: string,
+  ): Promise<User> {
     await this.assertUserInOrg(id, organizationId);
-    return this.update(id, updateUserDto);
+    if (actorUserId && actorUserId === id) {
+      return this.update(id, updateUserDto);
+    }
+    if (updateUserDto.email !== undefined) {
+      const current = await this.findOne(id);
+      if (updateUserDto.email !== current.email) {
+        throw new ForbiddenException("An organization admin cannot change a member's email address");
+      }
+    }
+    if (await this.belongsElsewhere(id, organizationId)) {
+      return this.findOne(id);
+    }
+    return this.update(id, {
+      firstName: updateUserDto.firstName,
+      lastName: updateUserDto.lastName,
+    });
   }
 
   async updatePassword(id: string, currentPassword: string, newPassword: string): Promise<void> {
@@ -216,9 +278,38 @@ export class UsersService {
     );
   }
 
-  async deactivateInOrg(id: string, organizationId: string): Promise<void> {
-    await this.assertUserInOrg(id, organizationId);
-    return this.deactivate(id);
+  /**
+   * Take someone out of ONE organization: their membership here goes
+   * inactive and so do the API keys minted in it. The account itself --
+   * the row that signs them into every other organization they belong
+   * to -- is not this org's to switch off. This used to set
+   * `users.isActive = false` and kill every key the person held, so an
+   * admin could lock anyone they had merely invited out of the whole
+   * platform.
+   */
+  async deactivateInOrg(id: string, organizationId: string, actorUserId?: string): Promise<void> {
+    const membership = await this.effectiveMembershipIn(id, organizationId);
+    if (actorUserId) {
+      const actor = await this.effectiveMembershipIn(actorUserId, organizationId);
+      if (ORGANIZATION_ROLE_RANK[membership.role] < ORGANIZATION_ROLE_RANK[actor.role]) {
+        throw new ForbiddenException('Cannot deactivate a member who outranks you');
+      }
+    }
+    if (membership.role === OrganizationRole.OWNER) {
+      const owners = await this.userOrganizationRepository.count({
+        where: { organizationId, role: OrganizationRole.OWNER, isActive: true },
+      });
+      if (owners <= 1) {
+        throw new ForbiddenException('Cannot deactivate the last owner of the organization');
+      }
+    }
+
+    membership.isActive = false;
+    await this.userOrganizationRepository.save(membership);
+    await this.apiKeyRepository.update(
+      { userId: id, organizationId },
+      { isActive: false },
+    );
   }
 
   async reactivate(id: string): Promise<void> {
@@ -228,13 +319,34 @@ export class UsersService {
     await this.userRepository.save(user);
   }
 
+  /**
+   * Undo `deactivateInOrg`: the membership here comes back. Only a
+   * membership that was accepted -- a revoked invite (inactive, still
+   * holding its token) is not one to bring back.
+   */
   async reactivateInOrg(id: string, organizationId: string): Promise<void> {
-    await this.assertUserInOrg(id, organizationId);
-    return this.reactivate(id);
+    const membership = await this.userOrganizationRepository.findOne({
+      where: { userId: id, organizationId },
+    });
+    if (!membership || !isEffectiveMembership({ ...membership, isActive: true })) {
+      throw new NotFoundException('User not found');
+    }
+    membership.isActive = true;
+    await this.userOrganizationRepository.save(membership);
   }
 
+  /**
+   * Delete the account of someone whose only organization is this one.
+   * Anyone who also belongs elsewhere is not this organization's to
+   * erase: removing them from here is the member-removal route.
+   */
   async deleteInOrg(id: string, organizationId: string): Promise<void> {
     await this.assertUserInOrg(id, organizationId);
+    if (await this.belongsElsewhere(id, organizationId)) {
+      throw new ForbiddenException(
+        'This person belongs to other organizations. Remove them from this organization instead of deleting their account.',
+      );
+    }
     return this.delete(id);
   }
 
@@ -289,7 +401,10 @@ export class UsersService {
     lastLoginAt: Date | null;
   }> {
     await this.assertUserInOrg(id, organizationId);
-    return this.getUserStats(id);
+    const stats = await this.getUserStats(id);
+    // Counted inside this organization only: the number of other
+    // organizations a person belongs to is not this org's to read.
+    return { ...stats, organizationsCount: 1 };
   }
 
   async getUserActivity(id: string, _days: number = 30): Promise<any[]> {

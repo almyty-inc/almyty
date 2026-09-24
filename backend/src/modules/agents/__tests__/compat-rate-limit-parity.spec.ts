@@ -24,11 +24,12 @@ describe('compat-route rate limit parity', () => {
   const apiKeyRow = {
     id: 'k1',
     organizationId: 'org-1',
+    user: { id: 'user-1', isActive: true, organizationMemberships: [{ organizationId: 'org-1', isActive: true }] },
     userId: 'u1',
     isActive: true,
     isExpired: () => false,
   };
-  const agent = { id: 'a1', name: 'Test', status: 'active', organizationId: 'org-1' };
+  const agent = { id: '0a9e2b7c-0000-4000-8000-0000000000a1', name: 'Test', status: 'active', organizationId: 'org-1' };
   const execution = { id: 'e1', output: 'hi', status: 'completed', totalTokens: 1 };
 
   const buildApp = async (): Promise<INestApplication> => {

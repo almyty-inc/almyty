@@ -32,52 +32,66 @@ describe('tool generation - tools_org_name_uq', () => {
     { id: 'op-1', name: 'getPet', method: 'GET', endpoint: '/pets/{id}', isActive: true, apiId: 'api-1' },
   ] as any[];
 
-  it('updates the row the other writer inserted instead of dropping the tool', async () => {
-    const racedTool = { id: 'tool-raced', name: 'pet_store_get_pet' };
-    const toolsService = {
-      // The pre-insert read misses: the other writer has not committed
-      // yet. The post-violation read sees the row it wrote.
-      findByName: jest
-        .fn()
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(racedTool),
-      createFromOperation: jest.fn().mockRejectedValue(uniqueViolation('tools_org_name_uq')),
-      updateFromOperation: jest.fn().mockImplementation(async (id) => ({ id, name: 'pet_store_get_pet' })),
+  // The tools table as the batch write sees it. The first read misses:
+  // the other writer has not committed yet. Its row lands as this
+  // writer inserts, so that insert hits tools_org_name_uq, and the
+  // retry reads the name again and finds the row.
+  const racingTable = (insertError: Error) => {
+    const rows: any[] = [];
+    const saves: any[][] = [];
+    let raced = false;
+    const owner = {
+      find: jest.fn(async ({ where }: any) =>
+        rows.filter((r) => r.organizationId === where.organizationId && where.name.value.includes(r.name)),
+      ),
+      save: jest.fn(async (batch: any[]) => {
+        if (!raced && batch.some((t) => !t.id)) {
+          raced = true;
+          if (insertError.message.includes('duplicate')) {
+            rows.push({ id: 'tool-raced', name: batch[0].name, organizationId: 'org-1', metadata: {} });
+          }
+          throw insertError;
+        }
+        saves.push(batch);
+        return batch;
+      }),
     };
+    return { owner, rows, saves };
+  };
+
+  const toolsService = () => ({
+    findByName: jest.fn().mockResolvedValue(null),
+    buildFromOperation: jest.fn(async (op: any, options: any) => ({ ...options, operationId: op.id })),
+    prepareUpdateFromOperation: jest.fn(),
+    createToolVersion: jest.fn(),
+  });
+
+  it('updates the row the other writer inserted instead of dropping the tool', async () => {
+    const table = racingTable(uniqueViolation('tools_org_name_uq'));
     const helper = new ApisToolGeneratorHelper(
-      { findOne: jest.fn().mockResolvedValue(api), manager: unlimitedToolQuotaManager() } as any,
-      toolsService as any,
+      { findOne: jest.fn().mockResolvedValue(api), manager: unlimitedToolQuotaManager(table.owner) } as any,
+      toolsService() as any,
       { findOne: jest.fn().mockResolvedValue(api) } as any,
     );
 
     const result = await helper.generateToolsFromApi('api-1', 'org-1', operations);
 
-    expect(toolsService.updateFromOperation).toHaveBeenCalledWith(
-      'tool-raced',
-      operations[0],
-      expect.objectContaining({ organizationId: 'org-1' }),
-    );
+    expect(table.saves).toHaveLength(1);
+    expect(table.saves[0]).toEqual([expect.objectContaining({ id: 'tool-raced', organizationId: 'org-1' })]);
     expect(result.tools).toHaveLength(1);
     expect(result.failed).toBe(0);
   });
 
-  it('still fails the operation when the insert error is not a unique violation', async () => {
-    const toolsService = {
-      findByName: jest.fn().mockResolvedValue(null),
-      createFromOperation: jest.fn().mockRejectedValue(new Error('connection terminated')),
-      updateFromOperation: jest.fn(),
-    };
+  it('still fails the import when the insert error is not a unique violation', async () => {
+    const table = racingTable(new Error('connection terminated'));
     const helper = new ApisToolGeneratorHelper(
-      { findOne: jest.fn().mockResolvedValue(api), manager: unlimitedToolQuotaManager() } as any,
-      toolsService as any,
+      { findOne: jest.fn().mockResolvedValue(api), manager: unlimitedToolQuotaManager(table.owner) } as any,
+      toolsService() as any,
       { findOne: jest.fn().mockResolvedValue(api) } as any,
     );
 
-    const result = await helper.generateToolsFromApi('api-1', 'org-1', operations);
-
-    expect(result.tools).toHaveLength(0);
-    expect(result.failed).toBe(1);
-    expect(toolsService.updateFromOperation).not.toHaveBeenCalled();
+    await expect(helper.generateToolsFromApi('api-1', 'org-1', operations)).rejects.toThrow('connection terminated');
+    expect(table.saves).toHaveLength(0);
   });
 });
 

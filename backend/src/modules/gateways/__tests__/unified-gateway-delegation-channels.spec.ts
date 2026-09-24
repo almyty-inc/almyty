@@ -5,6 +5,7 @@ import { UnifiedGatewayDelegation } from '../unified-gateway-delegation.helper';
 import { SlackAdapter } from '../channels/adapters/slack.adapter';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
+import { BY_ID, tableUpdates } from './recording-query-builder';
 
 /**
  * Channel-webhook delegation through the unified endpoint
@@ -25,6 +26,7 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
   let gatewayResolver: { resolveAndAuthenticate: jest.Mock };
   let mcpService: { handleJsonRpc: jest.Mock; handleJsonRpcMessage: jest.Mock };
   let gatewayRepository: any;
+  let counters: any[];
 
   const organization = { id: 'org-1', slug: 'acme' } as Organization;
 
@@ -81,14 +83,14 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
   };
 
   beforeEach(() => {
-    gatewayRepository = {
-      createQueryBuilder: jest.fn().mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue(undefined),
-      }),
-    };
+    // The gateways table the counter bump writes to. The chain that
+    // stood here ignored its WHERE, so a bump that lost `id = :id` --
+    // and landed on every gateway -- passed unseen.
+    counters = [
+      { id: 'gw-slack-1', totalRequests: 0, successfulRequests: 0, lastRequestAt: null },
+      { id: 'gw-neighbour', totalRequests: 0, successfulRequests: 0, lastRequestAt: null },
+    ];
+    gatewayRepository = tableUpdates(counters, BY_ID);
     channelGatewayService = {
       getAdapter: jest.fn().mockReturnValue(new SlackAdapter()),
       handleInboundMessage: jest.fn().mockResolvedValue(undefined),
@@ -188,6 +190,12 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
       status: 401,
     });
     expect(channelGatewayService.handleInboundMessage).not.toHaveBeenCalled();
+    // The refusal counts as a failed request on this gateway, and on no other.
+    expect(counters).toEqual([
+      expect.objectContaining({ id: 'gw-slack-1', totalRequests: 1, successfulRequests: 0 }),
+      { id: 'gw-neighbour', totalRequests: 0, successfulRequests: 0, lastRequestAt: null },
+    ]);
+    expect(counters[0].lastRequestAt).toBeInstanceOf(Date);
   });
 
   it('rejects a request missing signature headers', async () => {
@@ -236,5 +244,7 @@ describe('UnifiedGatewayDelegation — channel webhooks', () => {
     expect(mcpService.handleJsonRpcMessage).toHaveBeenCalledWith(body, 'org-1', 'u-1', 'gw-mcp-1');
     expect(channelGatewayService.getAdapter).not.toHaveBeenCalled();
     expect(channelGatewayService.handleInboundMessage).not.toHaveBeenCalled();
+    // MCP bumps its counters inside McpService, not here.
+    expect(gatewayRepository.createQueryBuilder).not.toHaveBeenCalled();
   });
 });

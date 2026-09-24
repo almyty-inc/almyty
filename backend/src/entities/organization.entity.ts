@@ -143,14 +143,9 @@ export class Organization {
     return this.members?.filter(m => ['owner', 'admin'].includes(m.role)) || [];
   }
 
-  canAddMoreApis(): boolean {
-    const maxApis = this.settings?.maxApis;
-    if (!maxApis) return true;
-    return (this.apis?.length || 0) < maxApis;
-  }
-
-  // No canAddMoreGateways() / canAddMoreTools(): both read a relation no
-  // production path loads, so they always answered "yes". The limits are
-  // enforced by COUNT under a per-organization lock in
-  // modules/gateways/gateway-quota.ts and modules/tools/tool-quota.ts.
+  // No canAddMoreApis() / canAddMoreGateways() / canAddMoreTools(): each
+  // read a relation no production path loads, so they always answered
+  // "yes". The limits are enforced by COUNT under a per-organization lock
+  // in modules/apis/api-quota.ts, modules/gateways/gateway-quota.ts and
+  // modules/tools/tool-quota.ts.
 }

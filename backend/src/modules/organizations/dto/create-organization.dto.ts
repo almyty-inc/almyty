@@ -56,11 +56,10 @@ export class CreateOrganizationDto {
   logo?: string;
 
   @ApiPropertyOptional({
-    description: 'Organization settings',
+    description: 'Organization settings an admin may set: defaultRouting, egressAllowlist, allowUserScopedConnections. Plan limits are not writable.',
     example: {
-      maxApis: 10,
-      maxTools: 100,
-      defaultRateLimit: { ttl: 60, limit: 100 }
+      egressAllowlist: ['models.internal.example'],
+      allowUserScopedConnections: true,
     },
   })
   @IsOptional()

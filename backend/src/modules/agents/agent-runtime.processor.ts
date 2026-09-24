@@ -8,6 +8,7 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { Agent } from '../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { runWithRequestContext } from '../../common/request-context';
+import { agentOwnerUserId } from './agent-owner';
 
 /**
  * A run in one of these is finished; a late queue failure must not
@@ -102,10 +103,18 @@ export class AgentRuntimeProcessor {
         return;
       }
 
+      // The run is the agent's owner's: startRun writes the user onto the
+      // run's conversation, whose userId is a uuid referencing users. This
+      // passed the string 'system', which Postgres refuses in that column,
+      // so every heartbeat failed before its run existed. An agent with no
+      // recorded owner runs as nobody -- and a private one is then refused
+      // by startRun, the same as any caller who is not its owner. So does
+      // one whose createdBy is not a user id at all (a temporary agent's
+      // 'system').
       await this.runtimeService.startRun(
         agentId,
         organizationId,
-        'system',
+        agentOwnerUserId(agent),
         agent.heartbeat.prompt,
         { maxSteps: 10 },
       );

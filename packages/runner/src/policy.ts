@@ -153,13 +153,22 @@ export function enforceSpawnPolicy(
   return { env: sanitizeEnv(opts.env) };
 }
 
-/** Enforce policy for a shell.exec; returns the sanitized env to use. */
+/**
+ * Enforce policy for a shell.exec; returns the sanitized env to use.
+ *
+ * `cwd` is where the command will run. It is held to `allowedCwdRoots`
+ * exactly as a spawn's is: this used to check the command and env only,
+ * so shell.exec ran wherever the daemon happened to be started, whatever
+ * roots the config listed.
+ */
 export function enforceShellPolicy(
   config: RunnerConfig,
   cmd: string,
   env?: Record<string, string>,
+  cwd?: string,
 ): { env?: Record<string, string> } {
   assertIsolationSupported(config);
+  assertCwdAllowed(config, cwd);
   assertCommandAllowed(config, cmd);
   return { env: sanitizeEnv(env) };
 }

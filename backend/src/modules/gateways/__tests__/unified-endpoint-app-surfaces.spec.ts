@@ -2,6 +2,8 @@ import { HttpException } from '@nestjs/common';
 
 import { UnifiedEndpointController, appSurfaceSlug } from '../unified-endpoint.controller';
 import { GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
+import { fakeRepository } from '../../../test/fake-repository';
+import { ClauseModel, ExecutedQuery, RecordingQueryBuilder, matchingRows } from './recording-query-builder';
 
 /**
  * A published app surface answers on the URL the dashboard shows for it.
@@ -23,21 +25,36 @@ describe('unified endpoint -- app surfaces', () => {
     organizationId: 'org-1',
   };
 
+  /**
+   * Another organization's agents, one per lookup `resolveAgent` makes:
+   * `apps` for the exact-name findOne, `APPS` for the case-insensitive
+   * query. With any of their organization predicates gone, the 404 below
+   * turns into this tenant being served org-2's agent. The chain that
+   * stood here answered null whatever it was asked, so it could not tell.
+   */
+  const foreignAgents = [
+    { id: 'agent-foreign-exact', organizationId: 'org-2', name: 'apps' },
+    { id: 'agent-foreign-upper', organizationId: 'org-2', name: 'APPS' },
+  ];
+  const AGENT_CLAUSES: ClauseModel = {
+    'agent.organizationId = :organizationId': (row, p) => row.organizationId === p.organizationId,
+    'LOWER(agent.name) = LOWER(:name)': (row, p) => row.name.toLowerCase() === p.name.toLowerCase(),
+  };
+
   const build = (gateways: any[]) => {
-    const gatewayRepository = {
-      findOne: jest.fn(async ({ where }: any) =>
-        gateways.find((g) => g.endpoint === where.endpoint && g.organizationId === where.organizationId) ?? null,
+    const gatewayRepository = fakeRepository<any>(gateways);
+    const agents = fakeRepository<any>(foreignAgents);
+    const agentRepository = {
+      findOne: agents.findOne,
+      find: agents.find,
+      createQueryBuilder: jest.fn(
+        (alias: string) =>
+          new RecordingQueryBuilder(alias, {
+            getOne: (query: ExecutedQuery) => matchingRows(query, agents.rows(), AGENT_CLAUSES)[0] ?? null,
+          }),
       ),
     };
-    const agentRepository = {
-      findOne: jest.fn().mockResolvedValue(null),
-      find: jest.fn().mockResolvedValue([]),
-      createQueryBuilder: jest.fn().mockReturnValue({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue(null),
-      }),
-    };
+    const agentHelper = { handleAgentRequest: jest.fn().mockResolvedValue('agent') };
     const delegation = { handleGatewayRequest: jest.fn().mockResolvedValue('delegated') };
     const resolver = { resolveOrganization: jest.fn().mockResolvedValue(organization) };
     const controller = new UnifiedEndpointController(
@@ -49,10 +66,10 @@ describe('unified endpoint -- app surfaces', () => {
       {} as any,
       {} as any,
       {} as any,
-      { handleAgentRequest: jest.fn() } as any,
+      agentHelper as any,
       delegation as any,
     );
-    return { controller, gatewayRepository, delegation };
+    return { controller, gatewayRepository, delegation, agentHelper };
   };
 
   const req = (path: string) => ({ method: 'GET', path, headers: {}, query: {} }) as any;
@@ -72,8 +89,17 @@ describe('unified endpoint -- app surfaces', () => {
     );
   });
 
-  it('does not resolve another organization\'s app surface', async () => {
-    const { controller, delegation } = build([{ ...appGateway, organizationId: 'org-2' }]);
+  it('does not resolve another organization\'s app surface, nor its agent', async () => {
+    const { controller, delegation, agentHelper } = build([{ ...appGateway, organizationId: 'org-2' }]);
+    await expect(
+      controller.handleSubPathRequest('acme', 'apps', req('/acme/apps/support/whatsapp_cloud'), {} as any, {}),
+    ).rejects.toBeInstanceOf(HttpException);
+    expect(delegation.handleGatewayRequest).not.toHaveBeenCalled();
+    expect(agentHelper.handleAgentRequest).not.toHaveBeenCalled();
+  });
+
+  it('does not route to an app surface that is not active', async () => {
+    const { controller, delegation } = build([{ ...appGateway, status: GatewayStatus.INACTIVE }]);
     await expect(
       controller.handleSubPathRequest('acme', 'apps', req('/acme/apps/support/whatsapp_cloud'), {} as any, {}),
     ).rejects.toBeInstanceOf(HttpException);

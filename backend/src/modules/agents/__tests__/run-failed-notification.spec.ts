@@ -41,9 +41,14 @@ describe('AgentExecutionEngine run.failed notification', () => {
 
   const brokenAgent = { id: 'agent-1', name: 'Nightly Sync', pipeline: null } as any;
 
-  async function runFailing(engine: AgentExecutionEngine, metadata: any, userId: any = 'user-1') {
+  async function runFailing(
+    engine: AgentExecutionEngine,
+    metadata: any,
+    userId: any = 'user-1',
+    agent: any = brokenAgent,
+  ) {
     const execution = await engine.execute(
-      brokenAgent,
+      agent,
       'org-1',
       userId,
       { input: {}, metadata },
@@ -101,5 +106,32 @@ describe('AgentExecutionEngine run.failed notification', () => {
     notifications.emit.mockRejectedValue(new Error('pipeline down'));
     const execution = await runFailing(engine, { triggerType: 'scheduled' });
     expect(execution.status).toBe(AgentExecutionStatus.FAILED);
+  });
+
+  // A private agent's failure (its name and error text) is its owner's
+  // alone. The run's userId is what the scheduler or webhook stamped,
+  // which can predate the agent going private or being handed over.
+  describe('on a private agent', () => {
+    const privateAgent = (createdBy: string | null) =>
+      ({ ...brokenAgent, visibility: 'private', createdBy }) as any;
+
+    it('notifies the owner, not the member the run was stamped with', async () => {
+      const engine = makeEngine();
+      await runFailing(engine, { triggerType: 'scheduled' }, 'user-1', privateAgent('owner-9'));
+      expect(notifications.emit).toHaveBeenCalledTimes(1);
+      expect(notifications.emit.mock.calls[0][0].userIds).toEqual(['owner-9']);
+    });
+
+    it('notifies the owner when the owner started it', async () => {
+      const engine = makeEngine();
+      await runFailing(engine, { triggerType: 'webhook' }, 'owner-9', privateAgent('owner-9'));
+      expect(notifications.emit.mock.calls[0][0].userIds).toEqual(['owner-9']);
+    });
+
+    it('notifies nobody when the private agent has no recorded owner', async () => {
+      const engine = makeEngine();
+      await runFailing(engine, { triggerType: 'scheduled' }, 'user-1', privateAgent(null));
+      expect(notifications.emit).not.toHaveBeenCalled();
+    });
   });
 });

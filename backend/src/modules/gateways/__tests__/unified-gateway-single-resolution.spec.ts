@@ -5,6 +5,8 @@ import { GatewayResolverService } from '../../mcp/services/gateway-resolver.serv
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { Organization } from '../../../entities/organization.entity';
+import { fakeRepository } from '../../../test/fake-repository';
+import { refusingQueryBuilder } from './recording-query-builder';
 
 /**
  * One gateway request, one lookup of each thing it needs.
@@ -75,18 +77,25 @@ describe('unified gateway request — single resolution', () => {
   };
 
   const build = (authConfigs: GatewayAuth[]) => {
-    organizationRepository = {
-      findOne: jest.fn().mockResolvedValue(organization),
-    };
+    // Tables, not canned answers: the lookups below have to find acme's
+    // gateway by what their WHERE says. Another tenant's gateway on the
+    // same endpoint and an inactive one of acme's sit first, so a lookup
+    // that lost its organization or status predicate returns the wrong row.
+    const organizations = fakeRepository<any>([
+      { id: 'org-2', slug: 'globex', name: 'Globex' },
+      organization,
+    ]);
+    organizationRepository = { findOne: organizations.findOne };
+    const gateways = fakeRepository<any>([
+      { ...gatewayRow(authConfigs), id: 'gw-foreign', organizationId: 'org-2' },
+      { ...gatewayRow(authConfigs), id: 'gw-retired', status: GatewayStatus.INACTIVE },
+      gatewayRow(authConfigs),
+    ]);
     gatewayRepository = {
-      findOne: jest.fn().mockResolvedValue(gatewayRow(authConfigs)),
-      createQueryBuilder: jest.fn().mockReturnValue({
-        update: jest.fn().mockReturnThis(),
-        set: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        execute: jest.fn().mockResolvedValue(undefined),
-        getOne: jest.fn().mockResolvedValue(organization),
-      }),
+      findOne: gateways.findOne,
+      // An MCP request bumps its counters inside McpService: nothing on
+      // this path builds a query against the gateways table.
+      createQueryBuilder: refusingQueryBuilder('MCP counters belong to McpService'),
     };
     gatewayAuthRepository = {
       find: jest.fn().mockResolvedValue(authConfigs),
