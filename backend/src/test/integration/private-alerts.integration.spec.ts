@@ -5,6 +5,7 @@ import { versionsConfig } from 'typeorm-versions';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
+import { UserTeam } from '../../entities/user-team.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
@@ -114,7 +115,7 @@ describeIfDb('Private visibility: spend budgets, alerts and spend by agent (real
 
     budgets = new BudgetsService(
       repo(SpendBudget), repo(SpendAlert), repo(UserOrganization), repo(User),
-      {} as any, mail as any, undefined, repo(Agent),
+      {} as any, mail as any, undefined, repo(Agent), repo(UserTeam),
     );
     spend = new SpendService(repo(AgentRun), repo(AgentExecution));
   });

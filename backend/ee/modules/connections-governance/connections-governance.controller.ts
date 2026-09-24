@@ -198,7 +198,7 @@ export class ConnectionsGovernanceController {
       from: from ? new Date(from) : undefined,
       to: to ? new Date(to) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
-    });
+    }, req.user?.id ?? null);
     res.setHeader('Content-Type', result.contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
     res.setHeader('X-Audit-Export-Count', String(result.count));
