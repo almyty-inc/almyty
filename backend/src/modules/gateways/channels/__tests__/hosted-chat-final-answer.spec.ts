@@ -14,6 +14,8 @@ import { BUILT_IN_TOOLS } from '../../../agents/agent-runtime.service';
 import { resolveRunLimits } from '../../../agents/run-limits';
 import { LlmChatHelper } from '../../../llm-providers/llm-chat.helper';
 import { fakeRepository, UnmodelledQueryError } from '../../../../test/fake-repository';
+import { membershipFixture } from '../../../../test/execution-access.fixture';
+import { gatewayPrincipal } from '../../../../common/authorization/execution-access.service';
 
 // Only the socket is faked. The provider parsers, LlmChatHelper.chatStream,
 // the step processor, the message builder and the controller are the real
@@ -132,7 +134,7 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
       id: 'agent-1',
       name: 'Acme support',
       organizationId: 'org-1',
-      visibility: 'organization',
+      visibility: 'org',
       createdBy: 'u-owner',
       mode: 'autonomous',
       status: 'active',
@@ -168,7 +170,9 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
           createdAt: new Date(),
           metadata: opts.compose === false ? { visitorMemory: false } : { visitorMemory: false, composeFinalAnswer: true },
           agent: agent as any,
-        },
+          // What the controller stamps on a hosted-chat run: the gateway's scope.
+          principal: gatewayPrincipal({ id: 'gw-1', organizationId: 'org-1', visibility: 'org' } as any),
+        } as any,
       ],
     });
 
@@ -217,6 +221,9 @@ describe('hosted chat: the answer is a no-tools call that streams', () => {
       organizationRepository: fakeRepository([{ id: 'org-1', settings: {} }]),
       toolRepository: fakeRepository([{ id: 'tool-crm', organizationId: 'org-1', name: 'crm_lookup', description: 'Look up an account', parameters: { type: 'object', properties: { account: { type: 'string' } } } }]),
       agentRepository: fakeRepository([agent]),
+      // The real execution gate: an org-wide agent and tool, served by an
+      // org gateway, are in scope for the run on every step.
+      executionAccess: membershipFixture().executionAccess,
       misc: {
         resolveLimits: async (run: AgentRun, organization: any) => resolveRunLimits({ organization, agent: run.agent, run }),
         bumpAgentStats: async () => undefined,

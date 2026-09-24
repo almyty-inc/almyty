@@ -30,7 +30,8 @@ import {
 } from './protocols/anthropic-messages';
 import { CompatRateLimiter } from './compat-rate-limit.helper';
 import { renderConversation, withSamplingOverrides } from './compat-conversation.helper';
-import { authenticateCompatKey, resolveCompatAgent } from './compat-auth.helper';
+import { authenticateCompatKey, compatPrincipal, resolveCompatAgent } from './compat-auth.helper';
+import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
 import { USAGE_SPLIT_HEADER, usageSplitState } from './agent-openai-stream.helper';
 
 /**
@@ -67,6 +68,9 @@ export class AgentAnthropicCompatController {
     // Optional so unit tests (and any Redis-less boot) construct cleanly and
     // fall back to the per-pod in-memory counter.
     @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
+    // The team/private execution gate. @Optional() only to keep the
+    // positional spec harnesses' order; a request refuses to run without it.
+    @Optional() private readonly executionAccess?: ExecutionAccessService,
   ) {
     this.rateLimiter = new CompatRateLimiter('anthropic_rl', this.logger, this.redis);
   }
@@ -146,7 +150,8 @@ export class AgentAnthropicCompatController {
           );
       }
 
-      const resolved = await resolveCompatAgent(this.agentsService, internal.model, apiKey);
+      if (!this.executionAccess) throw new Error('Agent execution access check is not configured');
+      const resolved = await resolveCompatAgent(this.agentsService, internal.model, apiKey, this.executionAccess);
 
       // The caller's sampling, on a throwaway copy of the agent. `temperature`
       // and `max_tokens` were carried out of the request correctly and then
@@ -161,6 +166,7 @@ export class AgentAnthropicCompatController {
       const execution = await this.executionEngine.execute(agent, apiKey.organizationId, apiKey.userId || null, {
         input: this.toAgentInput(internal),
         metadata: { triggerType: 'api', protocol: 'anthropic_messages' },
+        principal: compatPrincipal(apiKey),
       });
 
       // Set after the run, not before it: whether the split was measured is

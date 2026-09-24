@@ -39,6 +39,7 @@ import { answerCallMessages, composesFinalAnswer } from './final-answer';
  */
 import { capPersistedPayload } from './persist-cap';
 import { canReference } from '../../common/authorization/private-visibility';
+import { describePrincipal, principalOfRun } from '../../common/authorization/execution-access.service';
 /**
  * A run in one of these is finished and no worker may write it back to
  * running — the same list `AgentRun.isDone()` answers with.
@@ -206,6 +207,21 @@ export class AgentStepProcessor {
     const stepStart = Date.now();
     const agent = run.agent;
 
+    // The run's scope, re-checked against its agent on every step, not only
+    // when the run started: a run resumed after input, an approval or a
+    // wait -- or one whose starter left the agent's team mid-run, or whose
+    // agent moved to another team -- stops here with a reason instead of
+    // carrying on in a scope it no longer has.
+    const principal = principalOfRun(run);
+    const agentAccess = await this.s.executionAccess.canExecute(principal, agent);
+    if (!agentAccess.allowed) {
+      run.status = AgentRunStatus.FAILED;
+      run.error = `Run stopped: ${describePrincipal(principal)} can no longer run this agent (${agentAccess.reason}).`;
+      if (!(await this.commitStep(run, expectedStep))) return 'done';
+      this.s.emitEvent(runId, 'run.failed', { error: run.error, reasonCode: 'SCOPE_REVOKED' });
+      return 'done';
+    }
+
     // Enforce collaboration rules.maxTotalCost across sibling runs
     if (run.parentRunId && agent.collaboration?.rules?.maxTotalCost) {
       const siblingRuns = await this.s.runRepository.find({ where: { parentRunId: run.parentRunId } });
@@ -233,7 +249,11 @@ export class AgentStepProcessor {
       // parameter schemas go straight into the model's prompt. Execution
       // fails closed in ToolExecutorService, so the scoping here is what
       // keeps the disclosure from happening in the first place.
-      const tools = await this.resolveTools(agent);
+      // The same goes for team and private tools outside the run's scope:
+      // they are neither described to the model nor, in ToolExecutorService,
+      // run for it.
+      // (principal: the run's, resolved above)
+      const tools = await this.s.executionAccess.filterExecutable(principal, await this.resolveTools(agent));
 
       // Recall memories if memory is enabled
       let memoryContext = '';
@@ -293,12 +313,16 @@ export class AgentStepProcessor {
       if (agent.agentConfig?.canCallAgents) {
         const otherAgents = await this.s.agentRepository.find({
           where: { organizationId: run.organizationId, status: 'active' as any, isTemporary: false },
-          select: { id: true, name: true, description: true, organizationId: true, visibility: true, createdBy: true },
+          select: { id: true, name: true, description: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
         });
         // Another member's private agents are not callable (nor named) here,
         // and an agent that is not private cannot call even its owner's.
-        const callable = otherAgents.filter(
-          a => canReference({ visibility: agent.visibility, ownerId: agent.createdBy }, a),
+        // Nor is a team agent the run's principal is not a member for: the
+        // model is only offered what this run could start (startRun checks
+        // again, so a name it was never offered still refuses).
+        const callable = await this.s.executionAccess.filterExecutable(
+          principal,
+          otherAgents.filter(a => canReference({ visibility: agent.visibility, ownerId: agent.createdBy }, a)),
         );
         subAgentDefs = callable
           .filter(a => a.id !== agent.id)
@@ -536,7 +560,13 @@ export class AgentStepProcessor {
                 run.organizationId,
                 run.userId,
                 toolCall.parameters?.input || '',
-                { parentRunId: run.id, maxSteps: 20, maxCostCents: 50 },
+                {
+                  parentRunId: run.id,
+                  maxSteps: 20,
+                  maxCostCents: 50,
+                  // The child runs in this run's scope, unchanged.
+                  principal: principalOfRun(run),
+                },
               );
               // Wait for the sub-run to complete (poll with timeout)
               const subResult = await this.s.misc.waitForRun(subRun.id, 120000);
@@ -617,6 +647,9 @@ export class AgentStepProcessor {
               // which Postgres refuses -- every tool call of a userless
               // run (heartbeat, A2A) failed on that error.
               userId: run.userId ?? undefined,
+              // The run's principal, inherited: the model cannot reach a
+              // team or private tool its run's starter could not run.
+              principal: principalOfRun(run),
               organizationId: run.organizationId,
               // Retries are an agent-level budget decision, not a
               // per-tool default: a run with a tight wall clock cannot

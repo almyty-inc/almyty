@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
@@ -197,6 +199,7 @@ describe('a cascade checks with its verifier role and only escalates when the ch
     beforeEach(async () => {
       const module: TestingModule = await Test.createTestingModule({
         providers: [
+          { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
           AgentNodeExecutor,
           AgentTemplateResolver,
           AgentSubAgentExecutors,
@@ -307,6 +310,7 @@ describe('a cascade checks with its verifier role and only escalates when the ch
 
       const module: TestingModule = await Test.createTestingModule({
         providers: [
+          { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
           AgentExecutionEngine,
           AgentExecutionStateHelper,
           {

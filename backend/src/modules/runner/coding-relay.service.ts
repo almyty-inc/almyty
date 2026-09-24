@@ -156,7 +156,7 @@ export class CodingRelayService implements OnModuleDestroy {
       return;
     }
     if (!payload.kind.startsWith('coding.')) return;
-    if (!session) return; // cross-pod re-emits carry no session; see class doc
+    if (!session) return; // an envelope with no session cannot be attributed to a runner
     if (typeof payload.sessionId !== 'string' || payload.sessionId.length === 0) return;
 
     const runnerId =

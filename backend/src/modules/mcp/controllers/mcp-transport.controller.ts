@@ -16,7 +16,6 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { SseTransport } from '../transports/sse.transport';
-import { WebSocketTransport } from '../transports/websocket.transport';
 import { StreamableHttpTransport } from '../transports/streamable-http.transport';
 import { McpService } from '../mcp.service';
 import { JsonRpcRequest } from '../types/mcp.types';
@@ -28,7 +27,6 @@ export class McpTransportController {
   constructor(
     private readonly mcpService: McpService,
     private readonly sseTransport: SseTransport,
-    private readonly wsTransport: WebSocketTransport,
     private readonly streamable: StreamableHttpTransport,
   ) {}
 
@@ -114,53 +112,35 @@ export class McpTransportController {
     await this.sseTransport.handleSseConnection(res, organizationId, userId, serverId);
   }
 
-  // WebSocket endpoint (handled separately in gateway configuration)
-  @Get('/ws/info')
-  async getWebSocketInfo(): Promise<any> {
-    return {
-      // BASE_URL is the api host (https://api.almyty.com), whose ingress
-      // routes '/' straight through with no rewrite -- only the *.almyty.app
-      // and localhost dev hosts strip an '/api' prefix. So '/api/mcp/ws' on
-      // BASE_URL was a 404 for every client that read this document.
-      endpoint: `${process.env.BASE_URL || 'ws://localhost:4000'}/mcp/ws`,
-      protocol: 'mcp-websocket',
-      version: '1.0.0',
-      features: {
-        bidirectional: true,
-        streaming: true,
-        subscriptions: true,
-        heartbeat: true,
-      },
-    };
-  }
-
-  // Transport statistics
+  // Transport statistics for the caller's organization.
+  //
+  // This returned the platform-wide connection totals of every transport
+  // next to the organization's own counts, to any member: how busy every
+  // other tenant was, on a route guarded as tenant-scoped. Only the
+  // caller's organization is counted now.
   @Get('/transport/stats')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('member', 'admin', 'owner')
   async getTransportStats(@Request() req): Promise<any> {
     const organizationId = req.user?.currentOrganizationId;
+    if (!organizationId) {
+      throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
+    }
 
     const sseStats = this.sseTransport.getConnectionStats();
-    const wsStats = this.wsTransport.getConnectionStats();
     const sessionStats = await this.mcpService.getActiveSessions(organizationId);
 
     return {
       totalSessions: sessionStats.length,
       transports: {
         sse: {
-          connections: sseStats.total,
           organizationConnections: sseStats.byOrganization[organizationId] || 0,
-        },
-        websocket: {
-          connections: wsStats.total,
-          organizationConnections: wsStats.byOrganization[organizationId] || 0,
         },
       },
       serverInfo: {
         name: 'almyty',
         version: '1.0.0',
-        supportedTransports: ['http', 'sse', 'websocket'],
+        supportedTransports: ['http', 'sse', 'streamable-http'],
       },
     };
   }
@@ -175,7 +155,7 @@ export class McpTransportController {
   @Roles('admin', 'owner')
   async broadcast(
     @Request() req,
-    @Body() broadcastData: { message: any; transport?: 'sse' | 'websocket' | 'all' },
+    @Body() broadcastData: { message: any },
   ): Promise<any> {
     const organizationId = req.user?.currentOrganizationId;
 
@@ -183,43 +163,29 @@ export class McpTransportController {
       throw new HttpException('Organization context required', HttpStatus.BAD_REQUEST);
     }
 
-    const { message, transport = 'all' } = broadcastData;
-    let sseSent = 0;
-    let wsSent = 0;
-
-    if (transport === 'sse' || transport === 'all') {
-      sseSent = await this.sseTransport.broadcast(organizationId, message);
-    }
-
-    if (transport === 'websocket' || transport === 'all') {
-      wsSent = await this.wsTransport.broadcastToOrganization(organizationId, message);
-    }
+    const sseSent = await this.sseTransport.broadcast(organizationId, broadcastData.message);
 
     return {
       message: 'Broadcast sent',
       recipients: {
         sse: sseSent,
-        websocket: wsSent,
-        total: sseSent + wsSent,
+        total: sseSent,
       },
     };
   }
 
   // Health check for transports. Previously this was a public
   // endpoint that dumped global connection counts (`sseStats.total`,
-  // `wsStats.total`, averageAge, process.uptime). Those are
-  // platform-wide reconnaissance data that regular tenants have
-  // no business reading. Strip the response to a minimal liveness
-  // shape so it can still answer a K8s probe without leaking
-  // operational metrics. The full stats live behind /transport/stats
-  // which is JWT-gated.
+  // averageAge, process.uptime). Those are platform-wide
+  // reconnaissance data that regular tenants have no business
+  // reading. Strip the response to a minimal liveness shape so it
+  // can still answer a K8s probe without leaking operational metrics.
   @Get('/transport/health')
   async getTransportHealth(): Promise<any> {
     return {
       status: 'healthy',
       transports: {
         sse: { status: 'active' },
-        websocket: { status: 'active' },
       },
     };
   }

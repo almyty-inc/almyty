@@ -39,6 +39,7 @@ import {
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { LlmProviderSecretsHelper } from './llm-provider-secrets.helper';
 import { preferredBinding, providerProfile } from './provider-profile';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
  * Provider-call mechanics extracted from LlmChatHelper:
@@ -412,6 +413,10 @@ export class LlmChatRunnerHelper {
         // follow-up both, not just one.
         const executionOptions: ToolExecutionOptions = {
           userId: session.userId ?? undefined,
+          // A chat's tool loop runs as the chat's user: a team tool only for
+          // its team, a private one only for its owner, nothing but org
+          // tools for a chat with no user.
+          principal: userPrincipal(session.userId ?? null),
           organizationId,
           signal,
         };

@@ -108,7 +108,7 @@ A private runner is visible to and usable by its owner only, org owners/admins i
 - `GET /runners` (`listVisible`, via `applyListFilter` with the owner column) and `GET /runners/:id` (`getOne`, 404) hide it.
 - `RunnerService.resolveForDispatch(runnerId, callerUserId)` — the one function every dispatch goes through (runner REST endpoints, runner-backed tools) — refuses anyone but the owner, and refuses a dispatch with no known caller (an API-key gateway call). Team runners need a team member; org runners accept any member, and a dispatch with no caller as before.
 - The coding bridge (`/runners/:id/coding/*`) uses `getUsable` (visibility-aware) instead of "any org member".
-- Published capability tools inherit the runner's visibility, team and owner (`createdBy`), so they are hidden from tool lists and MCP surfaces the same way, and `ToolExecutorService` refuses to execute a private tool for anyone but its owner.
+- Published capability tools inherit the runner's visibility, team and owner (`createdBy`), so they are hidden from tool lists and MCP surfaces the same way, and `ToolExecutorService` runs them only in scope: a team runner's tools for its team (and org owners/admins), a private runner's for its owner — authorized against the principal of the run or gateway making the call (`docs/architecture.md`, "Visibility").
 - Update and delete of a private runner answer 404 to everyone but the owner.
 
 ### Stranding fan-out

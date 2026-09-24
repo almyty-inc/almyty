@@ -12,8 +12,6 @@
  * Requires: RUN_DB_INTEGRATION=1 and a running PostgreSQL.
  */
 
-jest.unmock('jsonwebtoken');
-
 const SKIP = !process.env.RUN_DB_INTEGRATION;
 
 import * as crypto from 'crypto';
@@ -32,6 +30,7 @@ import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Tool, ToolType } from '../../entities/tool.entity';
 import { AuthService } from '../../modules/auth/auth.service';
 import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
+import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
 import { useIsolatedSchema, ensureSchema } from './isolated-schema.helper';
 
 // Isolate this spec into its own Postgres schema so its migration
@@ -55,6 +54,7 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
     sendInput: jest.Mock;
     getRunEmitter: jest.Mock;
     subscribeRunEvents: jest.Mock;
+    executionAccess?: ExecutionAccessService;
   };
 
   // Suffix mixes Date.now() with random bytes — Date.now() alone
@@ -100,6 +100,9 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
       .overrideProvider(AgentRuntimeService)
       .useValue(runtimeMock)
       .compile();
+    // The runtime is mocked, but who may run the agent is not: the unified
+    // endpoint asks the runtime's execution gate, so hand the mock the real one.
+    runtimeMock.executionAccess = module.get(ExecutionAccessService);
 
     app = module.createNestApplication();
     app.use(cookieParser());
@@ -225,7 +228,8 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
       org.id,
       expect.any(String), // userId
       'Hello agent',
-      { conversationId: undefined },
+      // The run carries the API key owner as its principal (team scope).
+      { conversationId: undefined, principal: expect.objectContaining({ kind: 'user', source: 'api_key' }) },
     );
   });
 
@@ -249,7 +253,7 @@ if (!SKIP) useIsolatedSchema(SCHEMA);
       org.id,
       expect.any(String),
       'Follow-up',
-      { conversationId: 'conv-existing' },
+      { conversationId: 'conv-existing', principal: expect.objectContaining({ kind: 'user', source: 'api_key' }) },
     );
   });
 

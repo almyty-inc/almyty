@@ -8,6 +8,7 @@ import { GatewayAuthService } from '../gateway-auth.service';
 import { GatewayAuthValidators } from '../gateway-auth-validators.helper';
 import { hashKey } from '../gateway-auth-utils';
 import { fakeRepository } from '../../../test/fake-repository';
+import { realJwtService, signTestJwt } from '../../../test/jwt';
 import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { Gateway } from '../../../entities/gateway.entity';
 import { User } from '../../../entities/user.entity';
@@ -20,7 +21,6 @@ describe('GatewayAuthService', () => {
   let gatewayRepository: Repository<Gateway>;
   let userRepository: Repository<User>;
   let apiKeyRepository: Repository<ApiKey>;
-  let jwtService: JwtService;
 
   const mockGateway = {
     id: 'gateway-1',
@@ -103,12 +103,7 @@ describe('GatewayAuthService', () => {
             findOne: jest.fn(),
           },
         },
-        {
-          provide: JwtService,
-          useValue: {
-            verify: jest.fn(),
-          },
-        },
+        { provide: JwtService, useValue: realJwtService() },
       ],
     }).compile();
 
@@ -117,7 +112,6 @@ describe('GatewayAuthService', () => {
     gatewayRepository = module.get(getRepositoryToken(Gateway));
     userRepository = module.get(getRepositoryToken(User));
     apiKeyRepository = module.get(getRepositoryToken(ApiKey));
-    jwtService = module.get<JwtService>(JwtService);
 
     // The validateApiKey / validateBearerToken / validateBasicAuth /
     // validateJWT paths all do a `gatewayRepository.findOne(...)` to
@@ -747,17 +741,15 @@ describe('GatewayAuthService', () => {
 
     it('should validate JWT successfully', async () => {
       jest.spyOn(gatewayAuthRepository, 'find').mockResolvedValue([jwtAuth] as any);
-      jest.spyOn(jwtService, 'verify').mockReturnValue({
-        sub: 'user-1',
-        scopes: ['read'],
-        roles: ['admin'],
-        org: 'org-1',
-      });
       jest.spyOn(userRepository, 'findOne').mockResolvedValue(mockUser as any);
+      const token = signTestJwt(
+        { sub: 'user-1', scopes: ['read'], roles: ['admin'], org: 'org-1' },
+        { secret: 'test-secret' },
+      );
 
       const result = await service.authenticateRequest(
         'gateway-1',
-        { authorization: 'Bearer jwt-token' },
+        { authorization: `Bearer ${token}` },
         {}
       );
 
@@ -776,9 +768,6 @@ describe('GatewayAuthService', () => {
 
     it('should return error when JWT invalid', async () => {
       jest.spyOn(gatewayAuthRepository, 'find').mockResolvedValue([jwtAuth] as any);
-      jest.spyOn(jwtService, 'verify').mockImplementation(() => {
-        throw new Error('Invalid token');
-      });
 
       const result = await service.authenticateRequest(
         'gateway-1',
@@ -790,17 +779,29 @@ describe('GatewayAuthService', () => {
       expect(result.errorCode).toBe('JWT_INVALID');
     });
 
-    it('should handle JWT with userId instead of sub', async () => {
+    it('rejects a well-formed JWT signed with another secret', async () => {
       jest.spyOn(gatewayAuthRepository, 'find').mockResolvedValue([jwtAuth] as any);
-      jest.spyOn(jwtService, 'verify').mockReturnValue({
-        userId: 'user-1',
-        scopes: ['read'],
-      });
       jest.spyOn(userRepository, 'findOne').mockResolvedValue(mockUser as any);
+      const forged = signTestJwt({ sub: 'user-1', scopes: ['admin'] }, { secret: 'not-the-gateway-secret' });
 
       const result = await service.authenticateRequest(
         'gateway-1',
-        { authorization: 'Bearer jwt-token' },
+        { authorization: `Bearer ${forged}` },
+        {}
+      );
+
+      expect(result.isValid).toBe(false);
+      expect(result.errorCode).toBe('JWT_INVALID');
+    });
+
+    it('should handle JWT with userId instead of sub', async () => {
+      jest.spyOn(gatewayAuthRepository, 'find').mockResolvedValue([jwtAuth] as any);
+      jest.spyOn(userRepository, 'findOne').mockResolvedValue(mockUser as any);
+      const token = signTestJwt({ userId: 'user-1', scopes: ['read'] }, { secret: 'test-secret' });
+
+      const result = await service.authenticateRequest(
+        'gateway-1',
+        { authorization: `Bearer ${token}` },
         {}
       );
 
@@ -810,14 +811,11 @@ describe('GatewayAuthService', () => {
 
     it('should handle JWT with space-separated scopes', async () => {
       jest.spyOn(gatewayAuthRepository, 'find').mockResolvedValue([jwtAuth] as any);
-      jest.spyOn(jwtService, 'verify').mockReturnValue({
-        sub: 'user-1',
-        scope: 'read write admin',
-      });
+      const token = signTestJwt({ sub: 'user-1', scope: 'read write admin' }, { secret: 'test-secret' });
 
       const result = await service.authenticateRequest(
         'gateway-1',
-        { authorization: 'Bearer jwt-token' },
+        { authorization: `Bearer ${token}` },
         {}
       );
 

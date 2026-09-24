@@ -26,6 +26,7 @@ import {
   slugError,
   type HostedChatConfig,
 } from './hosted-chat-config'
+import { HostedChatSsoUrls } from './hosted-chat-sso-urls'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
@@ -285,6 +286,12 @@ export function HostedChatBuilder({ gateway, entitlements = {} }: HostedChatBuil
                 <p className="text-xs text-muted-foreground">
                   Visitors sign in through your organization's SSO, OIDC or SAML, as configured under Settings.
                 </p>
+              )}
+              {form.authMode === 'sso' && entitlements.enterpriseAuth && (
+                <HostedChatSsoUrls
+                  gatewayId={gateway.id}
+                  savedSlug={hostedChatConfigFrom(gateway.configuration).slug}
+                />
               )}
             </div>
 

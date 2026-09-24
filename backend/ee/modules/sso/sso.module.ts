@@ -18,6 +18,7 @@ import { SsoController } from './sso.controller';
 import { SsoConfigController } from './sso-config.controller';
 import { ScimController } from './scim.controller';
 import { HostedChatSsoController } from './hosted-chat-sso.controller';
+import { HostedChatSsoSettingsController } from './hosted-chat-sso-settings.controller';
 import { GatewaysModule } from '../../../src/modules/gateways/gateways.module';
 import { ConnectionsModule } from '../../../src/modules/connections/connections.module';
 
@@ -38,7 +39,7 @@ import { ConnectionsModule } from '../../../src/modules/connections/connections.
   ],
 
   providers: [SsoConfigService, SsoService, SamlReplayCache, OidcLoginStateStoreFactory, ScimService, ScimAuthGuard],
-  controllers: [SsoConfigController, SsoController, ScimController, HostedChatSsoController],
+  controllers: [SsoConfigController, SsoController, ScimController, HostedChatSsoController, HostedChatSsoSettingsController],
   exports: [SsoConfigService, ScimService],
 })
 export class SsoModule {}

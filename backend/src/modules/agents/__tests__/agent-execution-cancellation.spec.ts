@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 /**
  * A cancelled workflow run kept spending (issue #653).
  *
@@ -176,6 +178,7 @@ describe('cancelling reaches the running engine', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         AgentExecutionEngine,
         AgentExecutionCancellationService,
         AgentExecutionStateHelper,

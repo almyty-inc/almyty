@@ -6,6 +6,11 @@ import { ApiKey } from '../../entities/api-key.entity';
 import { Agent } from '../../entities/agent.entity';
 import { hasEffectiveMembership } from '../../common/authorization/membership';
 import type { AgentsService } from './agents.service';
+import {
+  ExecutionAccessService,
+  ExecutionPrincipal,
+  userPrincipal,
+} from '../../common/authorization/execution-access.service';
 
 /**
  * Authentication and agent resolution for the OpenAI- and
@@ -63,12 +68,16 @@ export async function authenticateCompatKey(apiKeys: Repository<ApiKey>, token: 
  * a non-uuid there with a query error rather than no rows, which made
  * every by-name request a 500. A key minted for one agent (`agentId`)
  * resolves that agent and nothing else, with the same 404 as an agent
- * that does not exist. Private agents answer only to their owner's key.
+ * that does not exist. Private agents answer only to their owner's key,
+ * and team agents only to a key whose user may run them (a member of the
+ * team, or an org owner/admin) -- the same 404 again, decided by the
+ * shared execution check so the compat surface cannot drift from the rest.
  */
 export async function resolveCompatAgent(
   agentsService: Pick<AgentsService, 'getAgent' | 'findByName'>,
   model: string,
   apiKey: ApiKey,
+  executionAccess: Pick<ExecutionAccessService, 'canExecute'>,
 ): Promise<Agent> {
   const ref = model.replace(/^agent:/, '');
   const callerId = apiKey.userId || null;
@@ -88,10 +97,18 @@ export async function resolveCompatAgent(
   if (!agent || (apiKey.agentId && agent.id !== apiKey.agentId)) {
     throw new NotFoundException(`Agent not found: ${model}`);
   }
+  if (!(await executionAccess.canExecute(compatPrincipal(apiKey), agent)).allowed) {
+    throw new NotFoundException(`Agent not found: ${model}`);
+  }
   if (agent.status !== 'active') {
     throw new BadRequestException(`Agent is not active: ${agent.name} (status: ${agent.status})`);
   }
   return agent;
+}
+
+/** Whose scope a compat request runs in: the key's user. */
+export function compatPrincipal(apiKey: ApiKey): ExecutionPrincipal {
+  return userPrincipal(apiKey.userId || null, 'api_key');
 }
 
 /** The agents a key may list: all visible ones, or the one it was minted for. */

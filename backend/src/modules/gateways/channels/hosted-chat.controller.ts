@@ -25,6 +25,7 @@ import { AgentRuntimeService } from '../../agents/agent-runtime.service';
 import { hostedChatConfigFrom, slugFromHost } from './hosted-chat.config';
 import { trustedClientIp } from '../../../common/security/client-ip';
 import { verifiesFinalOutput } from '../../agents/final-answer';
+import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 
 /**
  * The public API behind {slug}.almyty.app.
@@ -346,6 +347,9 @@ export class HostedChatController {
           // agents/final-answer.ts and stream() below.
           composeFinalAnswer: true,
         },
+        // Runs in the gateway's scope: the surface serves its agent only
+        // while the gateway's own visibility covers it, on every message.
+        principal: gatewayPrincipal(gateway),
       },
 
     );

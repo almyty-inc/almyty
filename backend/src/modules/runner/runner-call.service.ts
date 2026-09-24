@@ -67,6 +67,8 @@ interface PendingCall {
   timer: NodeJS.Timeout;
   abortHandler?: () => void;
   signal?: AbortSignal;
+  /** The runner the request went to; only it may answer. */
+  runnerId: string;
 }
 
 /**
@@ -236,7 +238,7 @@ export class RunnerCallService implements OnModuleDestroy {
       }, timeoutMs);
       timer.unref?.();
 
-      const entry: PendingCall = { resolve, reject, timer, signal: options.signal };
+      const entry: PendingCall = { resolve, reject, timer, signal: options.signal, runnerId: runner.id };
       if (options.signal) {
         if (options.signal.aborted) {
           clearTimeout(timer);
@@ -382,17 +384,52 @@ export class RunnerCallService implements OnModuleDestroy {
     }
 
     if (env.type !== 'response' && env.type !== 'error') return;
+    void this.settle(env, session).catch((err) =>
+      this.logger.warn(`response envelope handling failed: ${err?.message ?? err}`),
+    );
+  }
+
+  /**
+   * Settle a pending dispatch with a response/error envelope -- but only
+   * one that came from the runner the request was sent to.
+   *
+   * This matched on the correlation id alone. Every authenticated
+   * streamable session, of any organization, posts envelopes into the
+   * same transport, and responses are fanned out to every pod; so any
+   * client holding a correlation id could answer another tenant's runner
+   * dispatch with a result of its choosing (agent.spawn output, shell
+   * output) and the tool call would take it as the runner's. The session
+   * the envelope arrived on now has to be one runner.hello bound to the
+   * dispatched runner -- the same session, or the one it reconnected on.
+   * An envelope that arrives with no session cannot be attributed and is
+   * dropped: the transport carries the origin session across pods.
+   */
+  private async settle(env: WorkerEnvelope, session?: EnvelopeSession): Promise<void> {
     const call = this.pending.get(env.id);
     if (!call) {
       this.logger.debug(`unmatched ${env.type} envelope id=${env.id}`);
       return;
     }
+    if (!session) {
+      this.logger.warn(`${env.type} envelope id=${env.id} arrived with no session; not settling`);
+      return;
+    }
+    const sender =
+      this.sessionRunners.get(session.id) ?? (await this.runners.runnerIdForSession(session.id));
+    if (sender !== call.runnerId) {
+      this.logger.warn(
+        `${env.type} envelope id=${env.id} from session ${session.id} is not from runner ${call.runnerId}; ignored`,
+      );
+      return;
+    }
+    // The lookup above yielded; another delivery of the same envelope (the
+    // local emit and its cross-pod echo) may have settled it meanwhile.
+    if (this.pending.get(env.id) !== call) return;
     this.pending.delete(env.id);
     clearTimeout(call.timer);
     if (call.abortHandler && call.signal) {
       call.signal.removeEventListener('abort', call.abortHandler);
     }
-
     if (env.type === 'error') {
       const payload = env.payload as WorkerErrorPayload;
       call.reject(new RunnerCallError(

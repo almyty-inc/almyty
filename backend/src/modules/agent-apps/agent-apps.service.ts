@@ -612,6 +612,12 @@ export class AgentAppsService {
         // nothing could find.
         configuration: gatewayConfigurationFor(target, app, distribution.configuration),
         rateLimitConfig: rateLimitFor(app, target),
+        // A surface serves only what its own scope covers, so a team agent
+        // is published through a gateway scoped to that team; the gateway
+        // write checks the publisher may do that (member or org admin).
+        ...(agent?.visibility === 'team' && agent.teamId
+          ? { visibility: 'team' as const, teamId: agent.teamId }
+          : { visibility: 'org' as const }),
       },
       organizationId,
       userId,

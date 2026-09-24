@@ -1,5 +1,6 @@
 import { AgentSchedulerService } from '../agent-scheduler.service';
 import { AgentStatus } from '../../../entities/agent.entity';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { fakeRepository } from '../../../test/fake-repository';
 
 /**
@@ -21,11 +22,22 @@ function build(agent: Record<string, any>) {
   const execute = jest.fn(async () => ({ nodeResults: [] }));
   const agents = fakeRepository<any>([agent]);
   // The owner a tick runs as has to be a current member (see the owner
-  // membership checks in agent-scheduler.service.spec.ts).
+  // membership checks in agent-scheduler.service.spec.ts), and then allowed
+  // by the real execution gate.
   const users = fakeRepository<any>([
     { id: NEW_OWNER, isActive: true, organizationMemberships: [{ organizationId: 'org-1', role: 'member', isActive: true }] },
   ]);
-  const scheduler = new AgentSchedulerService({} as any, { execute } as any, agents as any, {} as any, users as any);
+  const m = membershipFixture();
+  m.member('org-1', NEW_OWNER);
+  const scheduler = new AgentSchedulerService(
+    {} as any,
+    { execute } as any,
+    agents as any,
+    {} as any,
+    m.executionAccess,
+    fakeRepository<any>([]) as any,
+    users as any,
+  );
   return { scheduler, execute };
 }
 

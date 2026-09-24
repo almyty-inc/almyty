@@ -1,3 +1,4 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -77,6 +78,9 @@ describe('gateway tool transformations reach execution', () => {
       {} as any,
       {} as any,
       { findOne: jest.fn().mockResolvedValue(gatewayTool) } as any,
+      undefined,
+      // The real execution gate; these calls carry no user, so org tools pass.
+      membershipFixture().executionAccess,
     );
   }
 

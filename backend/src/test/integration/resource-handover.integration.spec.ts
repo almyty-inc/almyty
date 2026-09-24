@@ -142,7 +142,7 @@ describeIfDb('Resource handover on member removal and team deletion (real Postgr
     const bootstrap = new DataSource(connection);
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
-    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public`);
     await bootstrap.destroy();
 
     ds = new DataSource({

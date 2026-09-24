@@ -16,6 +16,7 @@ import type {
   SessionUpdate,
 } from './types/acp.types';
 import { ACP_ERROR_CODES } from './types/acp.types';
+import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 
 /** Default poll timeout for session/prompt (ms). */
 const PROMPT_POLL_TIMEOUT_MS = 30_000;
@@ -156,6 +157,9 @@ export class AcpServerService {
       gateway.organizationId,
       null, // no user context in ACP calls
       text,
+      // Runs in the gateway's scope: an ACP gateway serves its agent only
+      // when its own visibility covers it, re-checked on every session.
+      { principal: gatewayPrincipal(gateway) },
     );
 
     return this.pollForCompletion(run.id, gateway.organizationId);
@@ -210,6 +214,7 @@ export class AcpServerService {
       gateway.organizationId,
       null,
       text,
+      { principal: gatewayPrincipal(gateway) },
     );
 
     return this.pollForCompletion(run.id, gateway.organizationId);
@@ -259,6 +264,7 @@ export class AcpServerService {
           gateway.organizationId,
           null,
           text,
+          { principal: gatewayPrincipal(gateway) },
         );
       }
     } else {
@@ -267,6 +273,7 @@ export class AcpServerService {
         gateway.organizationId,
         null,
         text,
+        { principal: gatewayPrincipal(gateway) },
       );
     }
 

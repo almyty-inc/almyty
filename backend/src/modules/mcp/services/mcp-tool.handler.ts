@@ -17,6 +17,11 @@ import { ToolCategory } from '../../../entities/tool-category.entity';
 import { ToolsService } from '../../tools/tools.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
 import { isOthersPrivate, servableOnGateway, withoutOthersPrivate } from '../../../common/authorization/private-visibility';
+import {
+  ExecutionPrincipal,
+  gatewayPrincipal,
+  userPrincipal,
+} from '../../../common/authorization/execution-access.service';
 import { Gateway } from '../../../entities/gateway.entity';
 import { MetricsRecorderService } from '../../../common/metrics/metrics-recorder.service';
 import { MetricType, MetricStatus } from '../../../entities/usage-metric.entity';
@@ -366,6 +371,21 @@ export class McpToolHandler {
       }
     }
 
+    // Whose scope the call runs in. Through a gateway it is the gateway's --
+    // a gateway serves only what its own visibility covers, re-checked on
+    // every call -- and on the gateway-less path it is the caller's own.
+    let principal: ExecutionPrincipal = userPrincipal(userId ?? null);
+    if (gatewayId) {
+      const gateway = await this.gatewayToolRepository.manager.getRepository(Gateway).findOne({
+        where: { id: gatewayId, organizationId },
+        select: { id: true, organizationId: true, visibility: true, teamId: true, ownerUserId: true, isSystem: true },
+      });
+      if (!gateway) {
+        throw this.createError(JsonRpcErrorCode.TOOL_NOT_FOUND, `Tool not found: ${params.name}`);
+      }
+      principal = gatewayPrincipal(gateway, userId ?? null);
+    }
+
     try {
       const result = await this.toolExecutorService.executeTool(
         tool.id,
@@ -377,8 +397,14 @@ export class McpToolHandler {
           // load `gateway_tools.securityPolicy` for this tool and enforce it
           // on the outbound request; without it the policy is invisible here.
           gatewayId: gatewayId ?? null,
+          principal,
         },
       );
+      // A tool outside the call's scope is the same "not found" as a tool
+      // that does not exist.
+      if (result.notFound) {
+        throw this.createError(JsonRpcErrorCode.TOOL_NOT_FOUND, `Tool not found: ${params.name}`);
+      }
 
       this.metrics?.record(MetricType.MCP_TOOL_CALL, {
         organizationId,
@@ -398,6 +424,7 @@ export class McpToolHandler {
         isError: !result.success,
       };
     } catch (error) {
+      if (error?.code === JsonRpcErrorCode.TOOL_NOT_FOUND) throw error;
       this.metrics?.record(MetricType.MCP_TOOL_CALL, {
         organizationId,
         userId: userId || null,
@@ -509,10 +536,10 @@ export class McpToolHandler {
    * there is a private tool to decide about.
    */
   private async servableThroughGateway<T extends Tool>(tools: T[], gatewayId: string): Promise<T[]> {
-    if (!tools.some((t) => t.visibility === 'private')) return tools;
+    if (!tools.some((t) => t.visibility === 'private' || t.visibility === 'team')) return tools;
     const gateway = await this.gatewayToolRepository.manager.getRepository(Gateway).findOne({
       where: { id: gatewayId },
-      select: { id: true, visibility: true, ownerUserId: true },
+      select: { id: true, visibility: true, ownerUserId: true, teamId: true },
     });
     return servableOnGateway(tools, gateway);
   }

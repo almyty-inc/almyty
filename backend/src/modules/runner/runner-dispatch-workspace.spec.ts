@@ -37,7 +37,9 @@ class AnsweringTransport extends EventEmitter {
         id: correlationId,
         ts: Date.now(),
         payload: { ok: true, result: 'ran' },
-      }),
+      // Posted on the session the request went to: only the dispatched
+      // runner's session may answer.
+      }, { id: sessionId, organizationId: 'org-1', userId: OWNER }),
     );
     return { v: WORKER_PROTOCOL_VERSION, type, id: correlationId, ts: Date.now(), payload };
   }
@@ -51,6 +53,9 @@ function build() {
     },
     async getActiveSession() {
       return { runnerId: RUNNER, streamableSessionId: 'sh_1' };
+    },
+    async runnerIdForSession(sessionId: string) {
+      return sessionId === 'sh_1' ? RUNNER : null;
     },
   };
   const base = { organizationId: 'org-1', ownerUserId: OWNER, runnerId: RUNNER, cwd: '/w', ttlAt: null };

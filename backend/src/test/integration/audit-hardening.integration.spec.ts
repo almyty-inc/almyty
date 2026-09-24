@@ -1,3 +1,4 @@
+import { membershipFixture } from '../execution-access.fixture';
 /**
  * Regression spec for the final audit-hardening pass.
  *
@@ -27,8 +28,6 @@
  * These are unit-level tests that exercise the real code paths
  * with minimal stubs. They don't need real Postgres.
  */
-jest.unmock('jsonwebtoken');
-
 import * as crypto from 'crypto';
 import { UnauthorizedException, HttpException } from '@nestjs/common';
 import { MonitoringController } from '../../modules/monitoring/monitoring.controller';
@@ -351,6 +350,8 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       subscribeRunEvents: jest.fn(),
       sendInput: jest.fn(),
       cancelRun: jest.fn(),
+      // The real execution gate ('u-1' is not a user id: org agents only).
+      executionAccess: membershipFixture().executionAccess,
     };
 
     const agentHelper = new UnifiedAgentHelper(

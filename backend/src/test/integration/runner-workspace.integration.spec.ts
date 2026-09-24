@@ -49,7 +49,7 @@ describeIfDb('Runner + Workspace (real Postgres)', () => {
     // entities use TypeORM's @PrimaryGeneratedColumn('uuid') which
     // emits gen_random_uuid()-equivalent SQL, but the migrations our
     // entity tables descend from reference uuid_generate_v4 directly.
-    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public`);
     await bootstrap.destroy();
 
     ds = new DataSource({

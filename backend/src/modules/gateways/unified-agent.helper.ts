@@ -20,6 +20,12 @@ import { AgentExecutionCancellationService } from '../agents/agent-execution-can
  * Lives in its own class so the controller stays a thin dispatcher.
  */
 import { AgentNotActive, agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invocation';
+import { ExecutionPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
+
+/** Whose scope a unified-endpoint agent request runs in: the key's or JWT's user. */
+export function unifiedPrincipal(apiKey: Pick<ApiKey, 'userId'>): ExecutionPrincipal {
+  return userPrincipal(apiKey.userId ?? null, 'api_key');
+}
 @Injectable()
 export class UnifiedAgentHelper {
   private readonly logger = new Logger(UnifiedAgentHelper.name);
@@ -47,6 +53,16 @@ export class UnifiedAgentHelper {
     body: any,
   ) {
     const apiKey = await this.authenticate(req, agent);
+
+    // The key's (or JWT's) user is who this request runs as, for every
+    // action below -- invoke, stream, runs, executions. A team agent the
+    // user is not a member for, or somebody else's private agent, answers
+    // as the controller answers a slug that matches nothing.
+    const allowed = await this.runtimeService.executionAccess.canExecute(unifiedPrincipal(apiKey), agent);
+    if (!allowed.allowed) {
+      const [orgSlug, resourceSlug] = req.path.split('/').filter(Boolean);
+      throw new HttpException(`Resource not found: ${orgSlug}/${resourceSlug}`, HttpStatus.NOT_FOUND);
+    }
 
     const pathParts = req.path.split('/').filter(Boolean);
     const action = pathParts.slice(2).join('/') || '';
@@ -211,6 +227,7 @@ export class UnifiedAgentHelper {
         organization.id,
         apiKey.userId ?? null,
         body.input || body,
+        { principal: unifiedPrincipal(apiKey) },
       );
       return res.json({ success: true, data: run, message: 'Autonomous agent run started' });
     }
@@ -223,6 +240,7 @@ export class UnifiedAgentHelper {
         input: body.input || body,
         variables: body.variables,
         metadata: body.metadata,
+        principal: unifiedPrincipal(apiKey),
       },
     );
 
@@ -300,6 +318,7 @@ export class UnifiedAgentHelper {
         variables: body.variables,
         metadata: body.metadata,
         signal: abort.signal,
+        principal: unifiedPrincipal(apiKey),
       },
       onEvent,
     );
@@ -335,7 +354,7 @@ export class UnifiedAgentHelper {
         organization.id,
         userId,
         body.input,
-        { conversationId: body.conversationId },
+        { conversationId: body.conversationId, principal: unifiedPrincipal(apiKey) },
       );
       return res.status(201).json({ success: true, data: run });
     }

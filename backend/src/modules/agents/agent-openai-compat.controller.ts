@@ -33,6 +33,7 @@ import {
   withSamplingOverrides,
 } from './compat-conversation.helper';
 import { agentsForKey, authenticateCompatKey, resolveCompatAgent } from './compat-auth.helper';
+import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
 
 /** Maximum request body size in bytes (1 MB). */
 const MAX_BODY_SIZE_BYTES = 1 * 1024 * 1024;
@@ -68,6 +69,9 @@ export class AgentOpenAICompatController {
     // fall back to the per-pod in-memory counter. In production Redis is
     // wired by RedisModule, giving a window shared across replicas.
     @Optional() @InjectRedis() private readonly redis?: Redis.Redis,
+    // The team/private execution gate. @Optional() only to keep the
+    // positional spec harnesses' order; a request refuses to run without it.
+    @Optional() private readonly executionAccess?: ExecutionAccessService,
   ) {
     this.rateLimiter = new CompatRateLimiter('openai_rl', this.logger, this.redis);
   }
@@ -135,7 +139,8 @@ export class AgentOpenAICompatController {
         );
       }
 
-      const resolved = await resolveCompatAgent(this.agentsService, body.model, apiKey);
+      if (!this.executionAccess) throw new Error('Agent execution access check is not configured');
+      const resolved = await resolveCompatAgent(this.agentsService, body.model, apiKey, this.executionAccess);
       agentId = resolved.id;
 
       // 4. Map OpenAI messages to agent input

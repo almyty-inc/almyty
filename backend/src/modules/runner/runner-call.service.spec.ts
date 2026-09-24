@@ -30,6 +30,10 @@ class FakeTransport extends EventEmitter {
   emitEnvelope(env: WorkerEnvelope, session?: { id: string; organizationId: string; userId?: string }): void {
     this.emit('envelope', env, session);
   }
+  /** A response/error posted on the dispatched runner's own session. */
+  respond(env: WorkerEnvelope): void {
+    this.emit('envelope', env, { id: 'sh_session_1', organizationId: 'org-1', userId: 'owner-1' });
+  }
 }
 
 class FakeRunnerService {
@@ -73,7 +77,8 @@ class FakeRunnerService {
   // Liveness wiring spies.
   sessionConnects: Array<{ runnerId: string; sessionId: string }> = [];
   heartbeats: string[] = [];
-  sessionToRunner: Record<string, string> = {};
+  // The dispatched runner's session is bound to it (runner.hello ran).
+  sessionToRunner: Record<string, string> = { sh_session_1: 'runner-1' };
   async onSessionConnect(runnerId: string, streamableSessionId: string): Promise<any> {
     this.sessionConnects.push({ runnerId, sessionId: streamableSessionId });
     this.sessionToRunner[streamableSessionId] = runnerId;
@@ -125,7 +130,7 @@ describe('RunnerCallService', () => {
     const sent = transport.pushed[0];
     expect(sent.type).toBe('request');
     expect(sent.payload).toEqual({ method: 'runner.info', params: {} });
-    transport.emitEnvelope({
+    transport.respond({
       v: WORKER_PROTOCOL_VERSION,
       type: 'response',
       id: sent.correlationId!,
@@ -148,7 +153,7 @@ describe('RunnerCallService', () => {
       workspaceId: 'ws-1',
     });
     // Resolve to clean up
-    transport.emitEnvelope({
+    transport.respond({
       v: WORKER_PROTOCOL_VERSION,
       type: 'response',
       id: transport.pushed[0].correlationId!,
@@ -198,7 +203,7 @@ describe('RunnerCallService', () => {
     const { svc, transport } = makeService();
     const p = svc.dispatch('runner-1', 'runner.info', {}, undefined, { timeoutMs: 1000 });
     await transport.waitForPush();
-    transport.emitEnvelope({
+    transport.respond({
       v: WORKER_PROTOCOL_VERSION,
       type: 'error',
       id: transport.pushed[0].correlationId!,
@@ -232,10 +237,10 @@ describe('RunnerCallService', () => {
     const p = svc.dispatch('runner-1', 'runner.info', {}, undefined, { timeoutMs: 200 });
     await transport.waitForPush();
     const id = transport.pushed[0].correlationId!;
-    transport.emitEnvelope({ v: WORKER_PROTOCOL_VERSION, type: 'response', id, ts: Date.now(), payload: { ok: true } });
+    transport.respond({ v: WORKER_PROTOCOL_VERSION, type: 'response', id, ts: Date.now(), payload: { ok: true } });
     await p;
     // Late duplicate must not throw or affect pending count
-    expect(() => transport.emitEnvelope({
+    expect(() => transport.respond({
       v: WORKER_PROTOCOL_VERSION,
       type: 'response',
       id,

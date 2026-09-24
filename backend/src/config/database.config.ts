@@ -1,7 +1,9 @@
-import { AdvancedConsoleLogger, DataSource, LoggerOptions } from 'typeorm';
+import { DataSource, LoggerOptions } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { config } from 'dotenv';
 import { versionsConfig } from 'typeorm-versions';
+
+import { RedactedParametersQueryLogger } from './query-logger';
 
 // Load environment variables
 config();
@@ -14,7 +16,8 @@ const configService = new ConfigService();
 // statement with its bound parameters -- whole rows for data migrations --
 // into the job's pod log. A logger instance is used as-is by typeorm and
 // ignores that override, so it pins the levels: migration names and progress
-// (schema), migration failures (migration), and errors and warnings.
+// (schema), migration failures (migration), and errors and warnings -- a
+// failing statement with its SQL and error but never its parameters.
 export const MIGRATION_LOG_LEVELS: LoggerOptions = ['error', 'warn', 'migration', 'schema'];
 
 export const AppDataSource = new DataSource(versionsConfig({
@@ -28,7 +31,7 @@ export const AppDataSource = new DataSource(versionsConfig({
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   synchronize: false,
   logging: MIGRATION_LOG_LEVELS,
-  logger: new AdvancedConsoleLogger(MIGRATION_LOG_LEVELS),
+  logger: new RedactedParametersQueryLogger(MIGRATION_LOG_LEVELS),
   ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
 }) as any);
 

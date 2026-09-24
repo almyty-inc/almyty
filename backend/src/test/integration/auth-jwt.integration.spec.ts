@@ -20,13 +20,6 @@
  * behaviour is covered by src/test/integration/cross-tenant-isolation
  * and the bump-stats spec.
  */
-// src/test/setup.ts installs a global `jest.mock('jsonwebtoken', ...)`
-// that short-circuits sign/verify with a stub. That stub is fine for
-// most specs in the repo but it's the entire point of this file to
-// prove the REAL signing/verifying behaviour, so undo it here. Must
-// run BEFORE the imports below since `@nestjs/jwt` pulls jsonwebtoken
-// transitively and will otherwise capture the mocked version.
-jest.unmock('jsonwebtoken');
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 

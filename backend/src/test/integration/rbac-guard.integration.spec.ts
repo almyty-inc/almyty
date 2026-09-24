@@ -17,8 +17,6 @@
  * response. If any piece of the real pipeline breaks, at least one
  * of these tests will fail with a meaningful HTTP status.
  */
-jest.unmock('jsonwebtoken');
-
 import {
   Controller,
   Get,
