@@ -27,6 +27,7 @@ import {
   type HostedChatConfig,
 } from './hosted-chat-config'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 /**
  * The visual builder for a tenant's hosted chat app.
@@ -85,6 +86,14 @@ export function HostedChatBuilder({ gateway, entitlements = {} }: HostedChatBuil
     onError: (err: any) =>
       errorNotif('Save failed', getApiErrorMessage(err, 'Could not save the chat app.')),
   })
+
+  // Changes not yet saved, or a suggested prompt typed and not added, ask
+  // before a navigation throws them away. A save refetches the gateway,
+  // which brings the saved config in line with the form.
+  const guard = useLeaveGuard(
+    !save.isPending &&
+      (promptDraft !== '' || JSON.stringify(form) !== JSON.stringify(hostedChatConfigFrom(gateway.configuration))),
+  )
 
   const addPrompt = () => {
     const prompt = promptDraft.trim()
@@ -345,6 +354,7 @@ export function HostedChatBuilder({ gateway, entitlements = {} }: HostedChatBuil
           Reset
         </Button>
       </div>
+      {guard.element}
     </div>
   )
 }

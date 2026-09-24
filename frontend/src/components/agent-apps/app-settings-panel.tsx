@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select'
 import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import {
   AUTH_MODE_LABELS,
   appPrivacyFrom,
@@ -76,6 +77,14 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
     retentionDays.trim().length > 0 &&
     (!Number.isInteger(retentionValue) || retentionValue < 1)
 
+  // Settings changed since the panel opened (or since the last save) ask
+  // before a navigation throws them away.
+  const snapshot = JSON.stringify([
+    appName, primaryColor, greeting, aiDisclosure, authMode, costCap, perUser, perIp,
+    retentionDays, visitorCanDelete, visitorCanExport, visitorMemory, shell, fsRead,
+  ])
+  const [savedSnapshot, setSavedSnapshot] = useState(snapshot)
+
   const save = useMutation({
     mutationFn: () =>
       agentAppsApi.update(app.slug, {
@@ -113,11 +122,14 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
       }),
     onSuccess: () => {
       success('App updated', 'Your changes are saved.')
+      setSavedSnapshot(snapshot)
       onSaved()
     },
     onError: (err: any) =>
       errorNotif('Could not save app settings', getApiErrorMessage(err, 'Please try again.')),
   })
+
+  const guard = useLeaveGuard(snapshot !== savedSnapshot && !save.isPending)
 
   return (
     <div className="mt-6 space-y-6">
@@ -369,6 +381,7 @@ export function AppSettingsPanel({ app, onSaved }: AppSettingsPanelProps) {
           {save.isPending ? 'Saving...' : 'Save'}
         </Button>
       </div>
+      {guard.element}
     </div>
   )
 }
