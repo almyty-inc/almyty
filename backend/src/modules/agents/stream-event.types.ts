@@ -81,6 +81,17 @@ export interface RuntimeLlmChunk {
   timestamp: number;
 }
 
+/**
+ * The provider's certain verdict on a step: a plain answer (`text`) or a
+ * reply that calls tools (`tool`). At most once per step, and only when
+ * the stream made it certain; see StreamChunk.stepKind.
+ */
+export interface RuntimeLlmStepKind {
+  type: 'llm.step_kind';
+  data?: { step: number; kind: 'text' | 'tool' };
+  timestamp: number;
+}
+
 export interface RuntimeLlmResponse {
   type: 'llm.response';
   data?: {
@@ -151,6 +162,7 @@ export type PipelineStreamEvent =
 export type RuntimeStreamEvent =
   | RuntimeLlmStarted
   | RuntimeLlmChunk
+  | RuntimeLlmStepKind
   | RuntimeLlmResponse
   | RuntimeToolStarted
   | RuntimeToolResult

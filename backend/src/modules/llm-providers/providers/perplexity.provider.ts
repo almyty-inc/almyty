@@ -3,7 +3,7 @@ import { LlmProvider } from '../../../entities/llm-provider.entity';
 import { Conversation } from '../../../entities/conversation.entity';
 import { MessageRole, ToolCall } from '../../../entities/message.entity';
 import { Tool } from '../../../entities/tool.entity';
-import { ChatRequest, ChatResponse, StreamChunk } from '../dto/llm-providers.dto';
+import { ChatRequest, ChatResponse, StreamChunk, stepKindSignal } from '../dto/llm-providers.dto';
 import { callLlmProviderHttp, callLlmProviderHttpStream, llmCallOptionsFor } from './safe-request';
 import { requireModel } from '../model-errors';
 
@@ -258,6 +258,13 @@ export async function callPerplexityStream(
   let outputTokens = 0;
   let totalTokens = 0;
 
+  // Whether this reply is an answer or a tool step, reported once that
+  // is certain. Only text deltas are streamed; function_call items are
+  // read off response.completed, so that is where the verdict comes
+  // from. A request that offered no tools cannot get a call back.
+  const stepKind = stepKindSignal(onChunk);
+  if (tools.length === 0) stepKind.decide('text');
+
   return new Promise<ChatResponse>((resolve, reject) => {
     let buffer = '';
     const stream = response.data as NodeJS.ReadableStream;
@@ -296,6 +303,10 @@ export async function callPerplexityStream(
             // deltas.
             const parsed = readPerplexityOutput(done.output);
             if (parsed.toolCalls.length > 0) toolCalls = parsed.toolCalls;
+            // The completed output is the whole reply: the first point a
+            // text step is certain, since a function_call item may follow
+            // streamed text in the same response.
+            stepKind.decide(toolCalls.length > 0 ? 'tool' : 'text');
             if (!content && parsed.content) content = parsed.content;
           }
         } catch {
@@ -305,6 +316,7 @@ export async function callPerplexityStream(
     });
 
     stream.on('end', () => {
+      stepKind.decide(toolCalls.length > 0 ? 'tool' : 'text');
       resolve({
         message: {
           role: MessageRole.ASSISTANT,

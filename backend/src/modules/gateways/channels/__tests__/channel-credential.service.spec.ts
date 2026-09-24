@@ -207,6 +207,17 @@ describe('ChannelCredentialService', () => {
 
       expect(store.rows.map((r) => r.id)).toEqual([shared.id]);
     });
+
+    it("deletes the hosted chat surface's visitor sign-in secret with it, and nobody else's", async () => {
+      const { store, service } = build();
+      const own = store.seed({ organizationId: 'org-1', type: CredentialType.CUSTOM, config: { client_secret: encryptField('s') }, metadata: { managedBy: { kind: 'hosted_chat_oauth', id: 'gw-1' } } });
+      const other = store.seed({ organizationId: 'org-1', type: CredentialType.CUSTOM, config: { client_secret: encryptField('t') }, metadata: { managedBy: { kind: 'hosted_chat_oauth', id: 'gw-2' } } });
+
+      await service.release(gateway({}, { type: GatewayType.HOSTED_CHAT, visitorOAuth: { credentialId: other.id } }));
+      await service.release(gateway({}, { type: GatewayType.HOSTED_CHAT, visitorOAuth: { credentialId: own.id } }));
+
+      expect(store.rows.map((r) => r.id)).toEqual([other.id]);
+    });
   });
 
   describe('resolveWith', () => {
