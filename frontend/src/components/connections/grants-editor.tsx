@@ -25,6 +25,7 @@ import { agentsApi, organizationsApi, workspacesApi } from '@/lib/api'
 import { connectionsApi, errorMessage } from '@/lib/connections-api'
 import { useNotifications } from '@/store/app'
 import { useOrganizationStore } from '@/store/organization'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import type { ConnectionGrant, GrantPermission, GrantPrincipalType } from '@/types/connections'
 
 export const grantsQueryKey = (connectionId: string) => ['connections', connectionId, 'grants'] as const
@@ -100,6 +101,9 @@ export function GrantsEditor({ connectionId, canManage = true }: GrantsEditorPro
   const [expiresAt, setExpiresAt] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const [toRevoke, setToRevoke] = useState<ConnectionGrant | null>(null)
+  // A grant picked or given an expiry but not added asks before a
+  // navigation throws it away; adding it clears both, so a saved one does not.
+  const guard = useLeaveGuard(principalId !== '' || expiresAt !== '')
 
   const grantsQuery = useQuery({
     queryKey: grantsQueryKey(connectionId),
@@ -275,6 +279,7 @@ export function GrantsEditor({ connectionId, canManage = true }: GrantsEditorPro
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {guard.element}
     </section>
   )
 }

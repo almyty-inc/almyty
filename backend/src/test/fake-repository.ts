@@ -110,9 +110,10 @@ export interface MatchContext {
  *    agents:
  *      NOT EXISTS (SELECT 1 FROM <table> <a> WHERE <a>.id = <col>
  *        AND <a>.visibility = 'private'
- *        AND <a>."<owner>"::text IS DISTINCT FROM CAST(:<param> AS text))
+ *        AND (<a>."<owner>"::text = CAST(:<param> AS text)) IS NOT TRUE)
  *    evaluated against `tables[<table>]` with Postgres null semantics
- *    (`IS DISTINCT FROM` treats two nulls as equal, one null as distinct).
+ *    (`=` is null when either side is null, and null IS NOT TRUE: a null
+ *    owner or a null viewer never counts as the viewer's own row).
  */
 const RAW_COLUMN = '"__fake_raw_column__"';
 const RAW_COLUMN_RE = RAW_COLUMN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -121,7 +122,7 @@ const RAW_IS_NULL = new RegExp(`^${RAW_COLUMN_RE} IS NULL$`);
 const RAW_NOT_OTHERS_PRIVATE = new RegExp(
   `^NOT EXISTS \\(SELECT 1 FROM ([a-z_]+) ([a-z_]+) WHERE \\2\\.id = ${RAW_COLUMN_RE} ` +
     `AND \\2\\.visibility = 'private' ` +
-    `AND \\2\\."([A-Za-z_]+)"::text IS DISTINCT FROM CAST\\(:([A-Za-z_]+) AS text\\)\\)$`,
+    `AND \\(\\2\\."([A-Za-z_]+)"::text = CAST\\(:([A-Za-z_]+) AS text\\)\\) IS NOT TRUE\\)$`,
 );
 
 const asText = (v: any): string | null => (v === null || v === undefined ? null : String(v));
@@ -145,13 +146,14 @@ function rawExpressionMatches(sql: string, cell: any, params: Record<string, any
     if (cell === null || cell === undefined) return true;
     const exists = table
       .rows()
-      .some(
-        (r) =>
-          scalarEquals(r.id, cell) &&
-          r.visibility === 'private' &&
-          // IS DISTINCT FROM: null vs null is not distinct; null vs a value is.
-          asText(r[ownerColumn]) !== viewer,
-      );
+      .some((r) => {
+        if (!scalarEquals(r.id, cell) || r.visibility !== 'private') return false;
+        const owner = asText(r[ownerColumn]);
+        // (owner = viewer) IS NOT TRUE: only a present owner equal to a
+        // present viewer is the viewer's own; a null on either side is not.
+        const ownersOwn = owner !== null && viewer !== null && owner === viewer;
+        return !ownersOwn;
+      });
     return !exists;
   }
   throw new UnmodelledQueryError(`the Raw SQL "${sql}" is not modelled`);

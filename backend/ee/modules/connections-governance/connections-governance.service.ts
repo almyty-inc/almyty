@@ -328,10 +328,12 @@ export class ConnectionsGovernanceService {
    */
   async review(organizationId: string, environment: string = 'any'): Promise<ReviewRow[]> {
     const env = (environment || 'any').trim().toLowerCase();
-    const connections = await this.credentials.find({
+    // Personal connections only: a private one is its owner's alone and
+    // cannot carry grants, so it has nothing here to review.
+    const connections = withoutPrivate(await this.credentials.find({
       where: { organizationId, connectorKey: Not(IsNull()), ownerUserId: Not(IsNull()) },
       order: { createdAt: 'ASC' },
-    });
+    }));
     if (!connections.length) return [];
     const ids = connections.map((c) => c.id);
     const grants = await this.grants.find({
@@ -413,7 +415,8 @@ export class ConnectionsGovernanceService {
    */
   async revokeGrants(organizationId: string, connectionId: string, actor: { id: string }, principalTypes: GrantPrincipalType[] = ['agent', 'workspace']): Promise<{ revoked: number; grantIds: string[] }> {
     const connection = await this.credentials.findOne({ where: { id: connectionId, organizationId } });
-    if (!connection || !connection.connectorKey) throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+    // A member's private connection does not exist for the reviewer.
+    if (!connection || !connection.connectorKey || connection.visibility === 'private') throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
     const rows = await this.grants.find({ where: { organizationId, connectionId, principalType: In(principalTypes) } });
     const grantIds: string[] = [];
     for (const row of rows) {
@@ -439,7 +442,7 @@ export class ConnectionsGovernanceService {
       resourceName: connection.name,
       details: {
         grantId: row.id, principalType: row.principalType, principalId: row.principalId, permission: row.permission,
-        owner: connection.ownerUserId ? 'user' : 'org', via: `governance.${source}`,
+        owner: connection.visibility === 'private' ? 'private' : connection.ownerUserId ? 'user' : 'org', via: `governance.${source}`,
       },
     });
   }
@@ -453,9 +456,10 @@ export class ConnectionsGovernanceService {
     return this.credentials.find({ where: { organizationId, connectorKey: Not(IsNull()) }, order: { createdAt: 'ASC' } });
   }
 
+  /** The expiry worklist an admin sees; members' private connections are not on it (enforceExpiry still applies to them). */
   async expiring(organizationId: string): Promise<ExpiryActions> {
     const policies = await this.enabledPolicies(organizationId);
-    return expiryActions(policies, await this.governedConnections(organizationId), this.now());
+    return expiryActions(policies, withoutPrivate(await this.governedConnections(organizationId)), this.now());
   }
 
   /**
@@ -526,9 +530,17 @@ export class ConnectionsGovernanceService {
     return out;
   }
 
+  /**
+   * The rotation worklist an admin sees. A member's private connection is
+   * left out: it does not exist for anyone but its owner. The schedule
+   * still rotates it (rotateDue) and tells only the owner.
+   */
   async rotationCandidates(organizationId: string): Promise<{ due: RotationCandidate[]; manual: RotationCandidate[] }> {
+    return this.rotationWorklist(organizationId, withoutPrivate(await this.governedConnections(organizationId)));
+  }
+
+  private async rotationWorklist(organizationId: string, connections: Credential[]): Promise<{ due: RotationCandidate[]; manual: RotationCandidate[] }> {
     const policies = await this.enabledPolicies(organizationId);
-    const connections = await this.governedConnections(organizationId);
     return rotationDue(policies, connections, await this.rotationCapabilities(organizationId), this.now());
   }
 
@@ -537,7 +549,7 @@ export class ConnectionsGovernanceService {
    * about the ones that need a manual rotation.
    */
   async rotateDue(organizationId: string): Promise<RotationRunResult> {
-    const { due, manual } = await this.rotationCandidates(organizationId);
+    const { due, manual } = await this.rotationWorklist(organizationId, await this.governedConnections(organizationId));
     const result: RotationRunResult = { organizationId, rotated: 0, failed: 0, manual: 0 };
     const manualToo: RotationCandidate[] = [...manual];
     for (const candidate of due) {
@@ -657,6 +669,9 @@ export class ConnectionsGovernanceService {
 
   private async notifyOwners(connection: Credential, type: NotificationEventType, title: string, body: string, params: Record<string, unknown>): Promise<void> {
     if (!this.notifications) return;
+    // A private connection is news for its owner only; with no owner on
+    // record there is nobody to tell (never fall back to the admins).
+    if (connection.visibility === 'private' && !connection.ownerUserId) return;
     try {
       await this.notifications.emit({
         type,
@@ -674,6 +689,14 @@ export class ConnectionsGovernanceService {
   }
 }
 
+/**
+ * Drop members' private connections from a list an admin will see. Private
+ * means not even org admins see it; governance still acts on the row (expiry,
+ * rotation) and notifies its owner alone.
+ */
+export function withoutPrivate<T extends { visibility?: string | null }>(rows: T[]): T[] {
+  return rows.filter((row) => row.visibility !== 'private');
+}
 /** `metadata.environment`, `settings.environment`, or `production` when the agent is tagged so. */
 export function agentEnvironment(agent: Pick<Agent, 'metadata' | 'settings'>): string | null {
   const meta = (agent.metadata ?? {}) as Record<string, any>;
