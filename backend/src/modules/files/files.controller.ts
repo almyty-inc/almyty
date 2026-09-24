@@ -144,8 +144,8 @@ export class FilesController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } })) // 50MB limit
   async upload(
     @UploadedFile() file: any,
-    @Query('agentId') agentId: string,
-    @Query('runId') runId: string,
+    @Query('agentId', new ParseUUIDPipe({ optional: true })) agentId: string,
+    @Query('runId', new ParseUUIDPipe({ optional: true })) runId: string,
     @Request() req: any,
   ) {
     try {
