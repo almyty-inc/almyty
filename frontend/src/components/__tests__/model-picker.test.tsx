@@ -119,6 +119,29 @@ describe('ModelPicker', () => {
     expect(llmProvidersApi.getModels).toHaveBeenCalledWith(OPENAI.id)
   })
 
+  it('locked to a provider (its own edit page), lists only its models and offers no provider field', async () => {
+    vi.mocked(llmProvidersApi.getModels).mockResolvedValue([{ id: 'gpt-4o', name: 'gpt-4o' }, { id: 'o3', name: 'o3' }] as any)
+    const { onChange } = renderPicker({ providerId: OPENAI.id, model: 'gpt-4o' }, { providerLocked: true })
+
+    const select = await screen.findByTestId('t-model-select')
+    expect(screen.queryByLabelText('Provider', { selector: 'select' })).not.toBeInTheDocument()
+    expect(llmProvidersApi.getModels).toHaveBeenCalledWith(OPENAI.id)
+    expect(select).toHaveValue('gpt-4o')
+    fireEvent.change(select, { target: { value: 'o3' } })
+    expect(onChange).toHaveBeenCalledWith({ providerId: OPENAI.id, model: 'o3' }, OPENAI)
+  })
+
+  it('locked to a provider, points at the key on the same page rather than linking away', async () => {
+    vi.mocked(llmProvidersApi.getModels).mockRejectedValue({
+      response: { status: 502, data: { message: 'Request failed with status code 401' } },
+    })
+    renderPicker({ providerId: OPENAI.id }, { providerLocked: true })
+    const error = await screen.findByTestId('t-model-error')
+    expect(error).toHaveTextContent("This provider's key was rejected — check the key on this page")
+    expect(within(error).queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByTestId('t-model-error-detail')).toHaveTextContent('Request failed with status code 401')
+  })
+
   it('shows a loading state while the list is on its way', async () => {
     vi.mocked(modelsApi.list).mockReturnValue(new Promise(() => {}))
     renderPicker({ providerId: OPENAI.id })

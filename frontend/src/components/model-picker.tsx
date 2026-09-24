@@ -74,6 +74,12 @@ export interface ModelPickerProps {
   layout?: 'grid' | 'stack'
   /** Smaller type, for rows inside a list (checkers, participants). */
   compact?: boolean
+  /**
+   * The screen already fixes the provider (a provider's own edit page):
+   * no provider field, only that provider's models. `value.providerId`
+   * must be set.
+   */
+  providerLocked?: boolean
   providerLabel?: string
   modelLabel?: string
   className?: string
@@ -141,6 +147,7 @@ export function ModelPicker({
   excludeProvider,
   layout = 'grid',
   compact = false,
+  providerLocked = false,
   providerLabel = 'Provider',
   modelLabel = 'Model',
   className,
@@ -371,7 +378,10 @@ export function ModelPicker({
       )}
       {listError && (
         <div className={cn('text-amber-700 dark:text-amber-400', hint)} data-testid={`${idPrefix}-model-error`}>
-          {keyRejected(listError) ? (
+          {keyRejected(listError) && providerLocked ? (
+            // On the provider's own edit page the key is right here.
+            <>This provider&apos;s key was rejected — check the key on this page. Type the model id, or </>
+          ) : keyRejected(listError) ? (
             // The vendor's own words ("Request failed with status code
             // 401") say what happened on the wire, not what to do. The
             // fix is always the same place, so say that and link to it.
@@ -460,6 +470,8 @@ export function ModelPicker({
       )}
       {routed ? (
         <RoutingPolicyField value={value.routing || {}} onChange={(routing) => onChange({ routing })} />
+      ) : providerLocked ? (
+        modelField
       ) : (
         <div className={cn(layout === 'grid' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'space-y-3')}>
           {providerField}
