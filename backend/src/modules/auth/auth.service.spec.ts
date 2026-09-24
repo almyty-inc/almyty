@@ -18,9 +18,6 @@ import { MailService } from '../mail/mail.service';
 import { ReferralsService } from '../referrals/referrals.service';
 import { CaptchaService } from './captcha.service';
 
-// Unmock bcrypt from global setup to test actual hashing
-jest.unmock('bcryptjs');
-
 describe('AuthService', () => {
   let service: AuthService;
   let mailService: any;
