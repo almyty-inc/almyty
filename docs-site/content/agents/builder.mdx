@@ -45,7 +45,7 @@ required fields (they vary by node type). Changes save to the draft automaticall
 1. Click **Save** in the top bar to persist the pipeline
 2. Validation runs automatically: nodes with errors show a red border (see [Pipeline Validation](/agents/pipeline-validation))
 3. Fix any issues listed in the error panel at the bottom
-4. Click **Test** to open the test drawer, provide sample input, and run the pipeline
+4. Click **Test** to open the inline test panel, provide sample input, and run the pipeline
 5. Review the output and per-node execution details in the test results
 
 Once the agent is active, run it from your terminal:
@@ -92,7 +92,7 @@ Switching to the **Autonomous** tab replaces the canvas with a form:
 - **System Instructions**: free-text prompt describing the agent's behavior
 - **Tools**: select which tools the agent can call
 - **Memory**: toggle persistent memory across conversations
-- **Collaboration**: optionally connect other agents for delegation
+- **Collaboration**: add agents or models as participants, choose sequential, parallel, race or debate, and optionally choose an agent or model as judge
 
 The LLM decides at runtime which tools to call and in what order. Best for
 open-ended tasks where rigid sequencing is unnecessary. See

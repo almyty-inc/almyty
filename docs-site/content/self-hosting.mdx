@@ -129,7 +129,7 @@ Both Dockerfiles are multi-stage. The backend builds on `node:26-alpine` and pro
 
 ## Kubernetes
 
-This repository ships a single Kustomize base, `k8s/base`. There are no overlays in it. The environment overlays almyty uses for its own hosted deployment live in a separate, private repository, so you will be writing your own on top of this base.
+This repository ships a single Kustomize base, `k8s/base`. Create an environment-specific overlay on top of this base for your deployment.
 
 ### What is in the base
 
@@ -246,7 +246,9 @@ OLLAMA_ALLOW_PRIVATE_URLS=true
 
 Set it on the backend API process, then add an Ollama inference provider (Models → Inference providers → add a provider → Ollama). The URL defaults to `http://localhost:11434`; chat and tool calling use Ollama's OpenAI-compatible `/v1` endpoint, the model list comes from `/api/tags`, and memory embeddings use `/api/embed`. No API key is needed.
 
-Networking note for Docker Compose: inside the backend container, `localhost` is the container itself, not your machine. Point the provider at the host instead, `http://host.docker.internal:11434` (on Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the backend service). The escape hatch only relaxes the private-range ban: URLs must still be http(s) with no embedded credentials, and every other provider type keeps the full SSRF gate.
+Networking note for Docker Compose: inside the backend container, `localhost` is the container itself, not your machine. Point the provider at the host instead, `http://host.docker.internal:11434` (on Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]` to the backend service).
+
+The private-network exception applies only to the configured provider host. Other hosts remain subject to DNS-pinned address checks; the exception does not authorize redirects to arbitrary internal services. URLs must still use HTTP(S) without embedded credentials. Leave private-network overrides disabled unless the deployment needs them.
 
 ## Health check endpoints
 
@@ -326,7 +328,7 @@ Either way, back up the database before upgrading.
 
 ## Rate limiting
 
-Every API request counts against a limit of `RATE_LIMIT_MAX` requests per `RATE_LIMIT_TTL` seconds, kept separately for each client address. Sensitive routes such as login, registration and password reset have their own, tighter limits on top, also per client address.
+Every API request counts against a limit of `RATE_LIMIT_MAX` requests per `RATE_LIMIT_TTL` seconds, kept separately for each client address. The defaults are 100 requests per 60 seconds. Sensitive routes such as login, registration and password reset have their own, tighter limits on top, also per client address.
 
 Limits are backed by Redis, so a client's count is shared across every API replica rather than kept per process. Point all replicas at the same Redis and the limit holds for the cluster as a whole.
 
