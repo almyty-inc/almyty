@@ -165,6 +165,7 @@ describe('no dialogs', () => {
  * codebase keeps producing: it compiles, its tests pass, nothing opens it.
  */
 const CONVERTED_DIALOGS: string[] = [
+  'components/agents/add-role-dialog.tsx',
   'components/SchemaImportDialog.tsx',
   'components/apis/create-api-dialog.tsx',
   'components/llm-providers/edit-provider-dialog.tsx',

@@ -98,6 +98,23 @@ export class AgentExecutionSettingsController {
   ) {
     const agent = await this.load(req, agentId);
 
+    // A strategy compiles to a pipeline graph, and only the pipeline engine
+    // runs one. An autonomous agent runs the ReAct loop, which never reads
+    // settings.execution (docs/strategies.md: strategies are not a second
+    // execution model), so the choice would save and then do nothing.
+    // Clearing is still allowed, so an agent switched from workflow can
+    // shed a leftover choice.
+    if (agent.mode === 'autonomous' && (body.strategyKey || body.orchestrator?.enabled)) {
+      throw new HttpException(
+        {
+          success: false,
+          message: 'Strategies apply to workflow agents. An autonomous agent runs its own loop and would ignore this choice.',
+          error: 'STRATEGY_WORKFLOW_ONLY',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     // A strategy key that names nothing would save cleanly and then fail
     // at run time, long after the person who chose it has moved on.
     if (body.strategyKey) {
