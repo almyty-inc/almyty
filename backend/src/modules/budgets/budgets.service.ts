@@ -11,6 +11,8 @@ import {
 } from '../../entities/spend-budget.entity';
 import { SpendAlert, SpendAlertLevel } from '../../entities/spend-alert.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
+import { UserTeam } from '../../entities/user-team.entity';
+import { isEffectiveMembership } from '../../common/authorization/membership';
 import { User } from '../../entities/user.entity';
 import { MailService } from '../mail/mail.service';
 import { renderEmailTemplate } from '../mail/email-templates';
@@ -62,19 +64,24 @@ export class BudgetsService {
     // agent is hidden from the caller, and notifies only that agent's owner.
     @InjectRepository(Agent)
     private readonly agentRepo: Repository<Agent>,
+    // Team agents: a budget on one is visible to that team and the org's
+    // owners/admins only.
+    @InjectRepository(UserTeam)
+    private readonly userTeamRepo: Repository<UserTeam>,
   ) {}
 
   // ── CRUD (T2.4) ──────────────────────────────────────────────────
   //
-  // `viewerId` is the calling user. A budget scoped to another member's
-  // private agent answers exactly like a missing budget: it is not
-  // listed, and get/update/delete are 404. The breach alerts below follow
-  // the same rule. Such a budget is still enforced (enforceForRun): the
-  // ceiling was set on the org's spend, and hiding it must not turn into
-  // a way to shed it by making the agent private.
+  // `viewerId` is the calling user. A budget scoped to an agent the caller
+  // may not see (another member's private agent, or a team agent outside
+  // the caller's teams -- see hiddenAgentIds) answers exactly like a
+  // missing budget: it is not listed, and get/update/delete are 404. The
+  // breach alerts below follow the same rule. Such a budget is still
+  // enforced (enforceForRun): the ceiling was set on the org's spend, and
+  // hiding it must not turn into a way to shed it.
 
   async list(organizationId: string, viewerId: string | null | undefined): Promise<SpendBudget[]> {
-    const hidden = await this.othersPrivateAgentIds(organizationId, viewerId);
+    const hidden = await this.hiddenAgentIds(organizationId, viewerId);
     return this.budgetRepo.find({
       where: this.visibleScope(organizationId, hidden) as any,
       order: { createdAt: 'DESC' },
@@ -89,7 +96,7 @@ export class BudgetsService {
     const budget = await this.budgetRepo.findOne({ where: { id, organizationId } });
     if (!budget) throw new NotFoundException('Budget not found');
     if (budget.agentId) {
-      const hidden = await this.othersPrivateAgentIds(organizationId, viewerId);
+      const hidden = await this.hiddenAgentIds(organizationId, viewerId);
       if (hidden.includes(budget.agentId)) throw new NotFoundException('Budget not found');
     }
     return budget;
@@ -182,7 +189,7 @@ export class BudgetsService {
     viewerId: string | null | undefined,
     limit = 100,
   ): Promise<SpendAlert[]> {
-    const hidden = await this.othersPrivateAgentIds(organizationId, viewerId);
+    const hidden = await this.hiddenAgentIds(organizationId, viewerId);
     return this.alertRepo.find({
       where: this.visibleScope(organizationId, hidden) as any,
       order: { at: 'DESC' },
@@ -190,22 +197,58 @@ export class BudgetsService {
     });
   }
 
-  // ── Private agents ───────────────────────────────────────────────
+  // ── Agent visibility ─────────────────────────────────────────────
 
   /**
-   * The org's agents that are private to someone other than `viewerId`.
-   * A private agent with no recorded owner is nobody's, so it is in the
-   * list for every viewer; with no known viewer every private agent is.
+   * The org's agents `viewerId` may not see, by the same rule as the agent
+   * itself (AccessPolicyService.canAccess, 'read'):
+   *  - a private agent is hidden from everyone but its owner, org
+   *    owners/admins included; one with no recorded owner is nobody's;
+   *  - a team agent is hidden from members outside its team; org
+   *    owners/admins see it; one with no team is hidden from non-admins.
+   * With no known viewer, or a viewer who is not an effective member of
+   * the org, every private and team agent is hidden.
+   *
+   * A budget or breach row names its agent and that agent's spend, so it
+   * is visible exactly when the agent is.
    */
-  private async othersPrivateAgentIds(
+  async hiddenAgentIds(
     organizationId: string,
     viewerId: string | null | undefined,
   ): Promise<string[]> {
     const agents = await this.agentRepo.find({
-      where: { organizationId, visibility: 'private' },
-      select: { id: true, visibility: true, createdBy: true },
+      where: [
+        { organizationId, visibility: 'private' },
+        { organizationId, visibility: 'team' },
+      ],
+      select: { id: true, visibility: true, teamId: true, createdBy: true },
     });
-    return agents.filter((a) => isOthersPrivate(a, viewerId)).map((a) => a.id);
+    if (agents.length === 0) return [];
+
+    const membership = viewerId
+      ? await this.userOrgRepo.findOne({ where: { userId: viewerId, organizationId, isActive: true } })
+      : null;
+    const role = isEffectiveMembership(membership) ? membership!.role : null;
+    const isAdmin = role === OrganizationRole.OWNER || role === OrganizationRole.ADMIN;
+
+    const teamIds = [...new Set(agents.map((a) => a.teamId).filter((t): t is string => !!t))];
+    const myTeams = new Set<string>();
+    if (role && !isAdmin && teamIds.length > 0) {
+      const rows = await this.userTeamRepo.find({
+        where: { userId: viewerId!, teamId: In(teamIds), isActive: true },
+        select: { teamId: true },
+      });
+      for (const row of rows) myTeams.add(row.teamId);
+    }
+
+    return agents
+      .filter((a) => {
+        if (a.visibility === 'private') return isOthersPrivate(a, viewerId);
+        if (!role) return true;
+        if (isAdmin) return false;
+        return !a.teamId || !myTeams.has(a.teamId);
+      })
+      .map((a) => a.id);
   }
 
   /**
@@ -222,10 +265,10 @@ export class BudgetsService {
   }
 
   /**
-   * 404 when `agentId` is not an agent of this org, or is another
-   * member's private agent. Used before a budget is pointed at an agent:
-   * a budget on a private agent may only be set by its owner, and the
-   * answer for someone else's is the same as for a missing agent.
+   * 404 when `agentId` is not an agent of this org, or is an agent the
+   * caller may not see (another member's private agent, or a team agent
+   * outside the caller's teams). Used before a budget is pointed at an
+   * agent; the answer for a hidden agent is the same as for a missing one.
    */
   private async assertTargetableAgent(
     organizationId: string,
@@ -236,7 +279,7 @@ export class BudgetsService {
       where: { id: agentId, organizationId },
       select: { id: true, visibility: true, createdBy: true },
     });
-    if (!agent || isOthersPrivate(agent, viewerId)) {
+    if (!agent || (await this.hiddenAgentIds(organizationId, viewerId)).includes(agent.id)) {
       throw new NotFoundException('Agent not found');
     }
   }

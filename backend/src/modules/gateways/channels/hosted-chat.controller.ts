@@ -408,13 +408,24 @@ export class HostedChatController {
       }
     };
 
+    // A visitor sees the answer, never the working. Every step of an
+    // autonomous run streams its model output as `llm.chunk`, and a step
+    // that goes on to call tools streams its narration too: what it is
+    // about to look up, what the last tool returned, instructions echoed
+    // from the system prompt. Whether a step is the answer is only known
+    // when its `llm.response` arrives (no tool calls = final answer), so
+    // chunks are never forwarded; the final step's text is sent as one
+    // token event when its response lands. With a verify panel on the
+    // final output even that waits for the transcript, as before.
     const onEvent = (event: any) => {
       if (closed) return;
-      if (
-        !withholdCandidateChunks &&
-        (event?.type === 'llm.chunk' || event?.type === 'token')
-      ) {
-        res.write(`event: token\ndata: ${JSON.stringify(event.data ?? {})}\n\n`);
+      if (event?.type === 'llm.chunk' || event?.type === 'token') return;
+      if (event?.type === 'llm.response') {
+        const calledTools = Array.isArray(event.data?.toolCalls) && event.data.toolCalls.length > 0;
+        const content = event.data?.content;
+        if (!withholdCandidateChunks && !calledTools && typeof content === 'string' && content) {
+          res.write(`event: token\ndata: ${JSON.stringify({ content })}\n\n`);
+        }
         return;
       }
       if (['run.completed', 'run.failed', 'run.cancelled'].includes(event?.type)) {

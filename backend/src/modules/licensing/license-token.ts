@@ -27,6 +27,12 @@ export interface LicensePayload {
   issuedTo?: string;
   /** Optional: ISO-8601 issue time. */
   issuedAt?: string;
+  /**
+   * The organization the token was minted for. Every per-org token carries
+   * it and is refused anywhere else; only an install-wide token from the
+   * environment may leave it out.
+   */
+  organizationId?: string;
 }
 
 /**
@@ -37,7 +43,7 @@ export interface LicensePayload {
  */
 export interface VerifyResult {
   valid: boolean;
-  reason?: 'malformed' | 'signature' | 'expired';
+  reason?: 'malformed' | 'signature' | 'expired' | 'organization';
   payload?: LicensePayload;
 }
 
@@ -80,8 +86,17 @@ export function signLicense(payload: LicensePayload, privateKey: string | KeyObj
  * Verify a token offline against an Ed25519 public key. Returns a discriminated
  * result; a tampered signature or an expired token is rejected. Never throws on
  * malformed input — callers fall back to the community entitlement set.
+ *
+ * `organizationId`, when given, is the organization the token is being
+ * installed in or checked for: the token must carry that same org claim, and
+ * a token with no org claim is refused. Leave it out only for the
+ * install-wide token from the environment.
  */
-export function verifyLicense(token: string, publicKey: string | KeyObject): VerifyResult {
+export function verifyLicense(
+  token: string,
+  publicKey: string | KeyObject,
+  options: { organizationId?: string } = {},
+): VerifyResult {
   if (!token || typeof token !== 'string') return { valid: false, reason: 'malformed' };
 
   const parts = token.split('.');
@@ -126,6 +141,15 @@ export function verifyLicense(token: string, publicKey: string | KeyObject): Ver
     const expMs = Date.parse(payload.expiresAt);
     if (Number.isNaN(expMs) || expMs <= Date.now()) {
       return { valid: false, reason: 'expired', payload };
+    }
+  }
+
+  // A token minted for one organization is that organization's alone.
+  // Without this claim a paying org's token, copied into another org's
+  // billing record, carried its entitlements there too.
+  if (options.organizationId !== undefined) {
+    if (typeof payload.organizationId !== 'string' || payload.organizationId !== options.organizationId) {
+      return { valid: false, reason: 'organization', payload };
     }
   }
 

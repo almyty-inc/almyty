@@ -47,18 +47,17 @@ function recorder() {
 
 describe('paginated list queries order by a unique key', () => {
   it('FilesService.findAll breaks createdAt ties on the file id', async () => {
-    const qb = recorder();
-    const service = new FilesService(
-      { createQueryBuilder: () => qb } as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const findAndCount = jest.fn(async () => [[], 0]);
+    const service = new FilesService({ findAndCount } as any, {} as any, {} as any, {} as any);
 
     await service.findAll('org-1', { page: 2, limit: 10 });
 
-    expect(qb.orderByCalls[0]).toEqual(['file.createdAt', 'DESC']);
-    expect(qb.orderByCalls).toContainEqual(['file.id', 'DESC']);
+    const [{ order, skip, take }] = findAndCount.mock.calls[0] as any;
+    expect(Object.entries(order)).toEqual([
+      ['createdAt', 'DESC'],
+      ['id', 'DESC'],
+    ]);
+    expect({ skip, take }).toEqual({ skip: 10, take: 10 });
   });
 
   it('ApisService.findAllByOrganization breaks createdAt ties on the api id', async () => {

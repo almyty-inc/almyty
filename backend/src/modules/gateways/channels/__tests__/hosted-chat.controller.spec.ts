@@ -411,9 +411,14 @@ describe('HostedChatController', () => {
       expect(agentRuntimeService.getRun).toHaveBeenCalledWith('run-1', 'org-1', 'agent-1');
     });
 
-    it('streams chunks and completion from the cross-pod event channel', async () => {
+    const written = () => res.write.mock.calls.map(([frame]: [string]) => frame).join('');
+
+    it('sends the final answer and completion from the cross-pod event channel', async () => {
       agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
-        handler({ type: 'llm.chunk', data: { content: 'hello' } });
+        handler({ type: 'llm.started', data: { step: 0 } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'hel' } });
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'lo' } });
+        handler({ type: 'llm.response', data: { step: 0, content: 'hello' } });
         handler({ type: 'run.completed', data: { output: 'hello' } });
       });
 
@@ -424,10 +429,44 @@ describe('HostedChatController', () => {
         expect.any(Function),
         expect.any(AbortSignal),
       );
-      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('event: token'));
-      expect(res.write).toHaveBeenCalledWith(expect.stringContaining('"content":"hello"'));
+      const tokenFrames = res.write.mock.calls.map(([f]: [string]) => f).filter((f: string) => f.startsWith('event: token'));
+      expect(tokenFrames).toEqual([`event: token\ndata: ${JSON.stringify({ content: 'hello' })}\n\n`]);
       expect(res.write).toHaveBeenCalledWith(expect.stringContaining('run.completed'));
       expect(res.end).toHaveBeenCalled();
+    });
+
+    /**
+     * Every step of an autonomous run streams its model output. A step
+     * that goes on to call tools narrates what it is about to look up and
+     * what the last tool returned; that is the agent's working, not its
+     * answer, and a public visitor used to receive it token by token.
+     */
+    it('does not send a visitor the output of a step that called tools', async () => {
+      agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
+        handler({ type: 'llm.chunk', data: { step: 0, content: 'Looking up account 4411 for jane@corp.test' } });
+        handler({
+          type: 'llm.response',
+          data: { step: 0, content: 'Looking up account 4411 for jane@corp.test', toolCalls: [{ id: 't1', name: 'crm_lookup' }] },
+        });
+        handler({ type: 'tool.started', data: { step: 0, toolCallId: 't1', tool: 'crm_lookup' } });
+        handler({ type: 'tool.result', data: { step: 0, toolCallId: 't1', tool: 'crm_lookup', success: true } });
+        handler({ type: 'llm.chunk', data: { step: 1, content: 'Internal: tier=gold, margin 41%. ' } });
+        handler({
+          type: 'llm.response',
+          data: { step: 1, content: 'Internal: tier=gold, margin 41%. ', toolCalls: [{ id: 't2', name: 'notes' }] },
+        });
+        handler({ type: 'llm.chunk', data: { step: 2, content: 'Your order ships Monday.' } });
+        handler({ type: 'llm.response', data: { step: 2, content: 'Your order ships Monday.' } });
+        handler({ type: 'run.completed', data: { output: 'Your order ships Monday.' } });
+      });
+
+      await controller.stream('acme', 'run-1', req(), res);
+
+      expect(written()).not.toContain('4411');
+      expect(written()).not.toContain('margin');
+      expect(written()).not.toContain('crm_lookup');
+      expect(written()).toContain(JSON.stringify({ content: 'Your order ships Monday.' }));
+      expect(written()).toContain('run.completed');
     });
 
     it('does not stream an unverified candidate answer to a public visitor', async () => {
@@ -442,6 +481,7 @@ describe('HostedChatController', () => {
       });
       agentRuntimeService.subscribeRunEvents.mockImplementationOnce(async (_runId, handler) => {
         handler({ type: 'llm.chunk', data: { content: 'rejected draft' } });
+        handler({ type: 'llm.response', data: { content: 'rejected draft' } });
         handler({ type: 'run.completed', data: { output: 'verified answer' } });
       });
 

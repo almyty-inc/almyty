@@ -30,7 +30,7 @@ describe('billing -> per-org entitlement resolution (e2e regression)', () => {
   // A signed token exactly like the billing webhook's mintToken() produces for
   // a pro subscription.
   const proToken = signLicense(
-    { entitlements: [EE_ENTITLEMENTS.ADVANCED_RBAC, EE_ENTITLEMENTS.AUDIT_EXPORT], limits: { seats: 3 }, expiresAt: null },
+    { entitlements: [EE_ENTITLEMENTS.ADVANCED_RBAC, EE_ENTITLEMENTS.AUDIT_EXPORT], limits: { seats: 3 }, expiresAt: null, organizationId: 'org-paid' },
     privatePem,
   );
 
