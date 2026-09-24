@@ -25,6 +25,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateAgentGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
  * Agent invoke / stream endpoints. Split out of the main
@@ -68,7 +69,11 @@ export class AgentExecutionController {
       }
 
       const userId = req.user.sub || req.user.id;
+      const principal = userPrincipal(userId);
       const agent = await this.agentsService.getAgent(id, organizationId);
+      // A team agent the caller is not a member for is not found -- before
+      // its status, or anything else about it, is answered.
+      await this.runtimeService.executionAccess.assertCanExecute(principal, agent, 'Agent');
 
       if (!agentIsInvokable(agent)) {
         const refusal = new AgentNotActive(String(agent.status));
@@ -83,12 +88,13 @@ export class AgentExecutionController {
       // run (zero nodeResults, null output). Dispatch to the autonomous
       // runtime (the ReAct loop) instead so the agent actually runs and can
       // reach its built-in tools (wait, ask_user, request_approval, memory).
-            if (runsOnAutonomousRuntime(agent)) {
+      if (runsOnAutonomousRuntime(agent)) {
         const run = await this.runtimeService.startRun(
           id,
           organizationId,
           userId,
           invokeDto.input,
+          { principal },
         );
         return {
           success: true,
@@ -105,6 +111,7 @@ export class AgentExecutionController {
           input: invokeDto.input,
           variables: invokeDto.variables,
           metadata: invokeDto.metadata,
+          principal,
         },
       );
 
@@ -155,7 +162,11 @@ export class AgentExecutionController {
       }
 
       const userId = req.user.sub || req.user.id;
+      const principal = userPrincipal(userId);
       const agent = await this.agentsService.getAgent(id, organizationId);
+      // Before the stream opens, so a team agent the caller is not a member
+      // for answers 404 like a missing one rather than an SSE error event.
+      await this.runtimeService.executionAccess.assertCanExecute(principal, agent, 'Agent');
 
       if (!agentIsInvokable(agent)) {
         res.status(HttpStatus.BAD_REQUEST).json({
@@ -210,6 +221,7 @@ export class AgentExecutionController {
           variables: invokeDto.variables,
           metadata: invokeDto.metadata,
           signal: abortController.signal,
+          principal,
         },
         onEvent,
       );

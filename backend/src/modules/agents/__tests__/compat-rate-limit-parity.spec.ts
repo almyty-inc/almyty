@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -36,6 +38,7 @@ describe('compat-route rate limit parity', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AgentAnthropicCompatController, AgentOpenAICompatController],
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         {
           provide: AgentsService,
           useValue: {

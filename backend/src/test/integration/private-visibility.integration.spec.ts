@@ -99,7 +99,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
     const bootstrap = new DataSource(connection);
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
-    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public`);
     await bootstrap.destroy();
 
     ds = new DataSource({
@@ -372,7 +372,7 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
     });
 
     it('MCP OAuth discovery, registration and consent treat it as absent; the owner can authorize', async () => {
-      const helper = new McpOAuthResolveHelper(repo(Gateway), repo(Organization), { get: () => undefined } as any, new JwtService({}));
+      const helper = new McpOAuthResolveHelper(repo(Gateway), repo(Organization), { get: () => undefined } as any);
       for (const viewer of [null, users.peer, users.admin, users.orgOwner]) {
         await expect(helper.resolveOrgAndGateway(orgSlug, 'owner-private', viewer)).rejects.toMatchObject({ status: 404 });
       }

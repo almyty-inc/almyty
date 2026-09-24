@@ -11,9 +11,9 @@ import {
 
 /**
  * `AppAuthMode` declares four modes and the settings panel offers four.
- * Only SSO keeps a stranger out. `oauth` has no route that ever binds an
- * identity, and `email_otp` binds one anybody with an inbox can get --
- * but isOpenToAnyone() once asked "is this public_link?", so picking
+ * Only SSO keeps a stranger out. `oauth` and `email_otp` both bind an
+ * identity, but one anybody with an inbox or an account at a public
+ * provider can get -- and isOpenToAnyone() once asked "is this public_link?", so picking
  * either made an app count as GATED:
  *
  *   - PUBLIC_NEEDS_COST_CAP and PUBLIC_NEEDS_RATE_LIMIT stopped firing;
@@ -72,8 +72,6 @@ describe('an auth mode only counts as a gate when something can satisfy it', () 
   it('modes with no such route are treated as open', () => {
     const implemented = modesWithASignInRoute();
     const unimplemented = Object.values(AppAuthMode).filter((m) => !implemented.has(m));
-    // public_link is open by definition; the point is the others.
-    expect(unimplemented).toContain(AppAuthMode.OAUTH);
     for (const mode of unimplemented) {
       expect(isOpenToAnyone(mode)).toBe(true);
     }
@@ -83,6 +81,12 @@ describe('an auth mode only counts as a gate when something can satisfy it', () 
     expect(modesWithASignInRoute().has(AppAuthMode.EMAIL_OTP)).toBe(true);
     expect(GATED_AUTH_MODES).not.toContain(AppAuthMode.EMAIL_OTP);
     expect(isOpenToAnyone(AppAuthMode.EMAIL_OTP)).toBe(true);
+  });
+
+  it('OAuth has a sign-in route but stays open: anyone with an account at a public provider passes', () => {
+    expect(modesWithASignInRoute().has(AppAuthMode.OAUTH)).toBe(true);
+    expect(GATED_AUTH_MODES).not.toContain(AppAuthMode.OAUTH);
+    expect(isOpenToAnyone(AppAuthMode.OAUTH)).toBe(true);
   });
 });
 

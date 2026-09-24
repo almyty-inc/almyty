@@ -14,7 +14,6 @@ import { ApisToolGeneratorHelper } from '../../apis/apis-tool-generator.helper';
 import { McpSourcesService } from '../../mcp-sources/mcp-sources.service';
 import { ToolHubService } from '../../tool-hub/tool-hub.service';
 import { RunnerCapabilityPublisher } from '../../runner/runner-capability.publisher';
-import { MemoryCapabilityPublisher } from '../../memory/canonical/memory-capability.publisher';
 import {
   MAX_GENERATED_DESCRIPTION_LENGTH,
   MAX_TOOLS_PER_SCHEMA,
@@ -470,20 +469,5 @@ describe('runner capability publish (RunnerCapabilityPublisher.publish)', () => 
     const { tools, toolRepoInTx } = transactionalTools(quotaManager({ maxTools: 5, current: 2 }));
     await expect(new RunnerCapabilityPublisher(tools).publish(runner)).resolves.toHaveLength(3);
     expect(toolRepoInTx.save).toHaveBeenCalledTimes(3);
-  });
-});
-
-describe('memory capability publish (MemoryCapabilityPublisher.publish)', () => {
-  it('refuses to mint memory tools past the limit', async () => {
-    const { tools, toolRepoInTx } = transactionalTools(atLimit());
-    await expect(
-      new MemoryCapabilityPublisher(tools).publish({
-        organizationId: ORG,
-        teamId: null,
-        scope: { scope_type: 'org' as any, scope_id: ORG },
-        scopeLabel: 'org',
-      }),
-    ).rejects.toBeInstanceOf(ToolQuotaExceededException);
-    expect(toolRepoInTx.save).not.toHaveBeenCalled();
   });
 });

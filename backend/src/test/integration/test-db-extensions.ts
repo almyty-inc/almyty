@@ -45,3 +45,66 @@ export async function provisionExtensionsInPublic(query: Query): Promise<void> {
     }
   }
 }
+
+/** Every test extension that exists somewhere other than `public`. */
+export async function extensionsOutsidePublic(
+  query: Query,
+): Promise<Array<{ extension: string; schema: string }>> {
+  const rows = rowsOf(
+    await query(
+      `SELECT e.extname AS extension, n.nspname AS schema FROM pg_extension e
+         JOIN pg_namespace n ON n.oid = e.extnamespace
+        WHERE e.extname = ANY($1) AND n.nspname <> 'public'
+        ORDER BY e.extname`,
+      [[...TEST_DB_EXTENSIONS]],
+    ),
+  );
+  return rows.map((r) => ({ extension: String(r.extension), schema: String(r.schema) }));
+}
+
+/**
+ * The shared test database's connection settings, the same defaults the
+ * globalSetup and scripts/ensure-test-db.js use.
+ */
+export function testDbConnection(): {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+} {
+  return {
+    host: process.env.DATABASE_HOST || 'localhost',
+    port: Number(process.env.DATABASE_PORT || 5432),
+    user: process.env.DATABASE_USERNAME || 'postgres',
+    password: process.env.DATABASE_PASSWORD || 'password',
+    database: process.env.DATABASE_NAME || 'almyty_test',
+  };
+}
+
+/**
+ * Throws when a test extension has left `public`. Run after every
+ * DB-integration spec file (src/test/setup.ts): a spec whose migrations
+ * or DDL put an extension in its own schema fails right there, instead of
+ * a later spec failing with "function uuid_generate_v4() does not exist".
+ */
+export async function assertExtensionsInPublic(specPath: string): Promise<void> {
+  // Required here, not imported: the setup file loads this module for every
+  // unit spec too, and a unit run needs no Postgres driver.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Client } = require('pg');
+  const client = new Client(testDbConnection());
+  await client.connect();
+  try {
+    const misplaced = await extensionsOutsidePublic((sql, params) => client.query(sql, params));
+    if (misplaced.length > 0) {
+      throw new Error(
+        `${specPath} left Postgres extensions outside public: ` +
+          misplaced.map((m) => `${m.extension} in ${m.schema}`).join(', ') +
+          '. Integration specs create extensions only WITH SCHEMA public (see test-db-extensions.ts).',
+      );
+    }
+  } finally {
+    await client.end();
+  }
+}

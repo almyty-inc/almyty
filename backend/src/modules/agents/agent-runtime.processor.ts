@@ -6,9 +6,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { Agent } from '../../entities/agent.entity';
-import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
+import { AgentMode, AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { runWithRequestContext } from '../../common/request-context';
 import { agentOwnerUserId } from './agent-owner';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
  * A run in one of these is finished; a late queue failure must not
@@ -107,16 +108,51 @@ export class AgentRuntimeProcessor {
       // run's conversation, whose userId is a uuid referencing users. This
       // passed the string 'system', which Postgres refuses in that column,
       // so every heartbeat failed before its run existed. An agent with no
-      // recorded owner runs as nobody -- and a private one is then refused
-      // by startRun, the same as any caller who is not its owner. So does
-      // one whose createdBy is not a user id at all (a temporary agent's
+      // recorded owner runs as nobody -- and a private or team one is then
+      // refused, the same as any caller outside its scope. So does one
+      // whose createdBy is not a user id at all (a temporary agent's
       // 'system').
+      //
+      // Authorized at fire time, as the owner now: an owner who has left the
+      // agent's team (or the organization) stops the heartbeat with a
+      // failed run that says why, instead of a job that fails and retries
+      // every interval with "Agent not found".
+      const principal = userPrincipal(agentOwnerUserId(agent), 'heartbeat');
+      const access = await this.runtimeService.executionAccess.canExecute(principal, agent);
+      if (!access.allowed) {
+        const message = principal.userId
+          ? `Heartbeat refused: the agent's owner (${principal.userId}) can no longer run this agent (${access.reason}). The heartbeat has been disabled.`
+          : `Heartbeat refused: this agent has no owner who can run it (${access.reason}). The heartbeat has been disabled.`;
+        await this.runRepository.save(
+          this.runRepository.create({
+            agentId,
+            organizationId,
+            userId: principal.userId,
+            mode: AgentMode.AUTONOMOUS,
+            status: AgentRunStatus.FAILED,
+            // What the heartbeat would have sent, as startRun records it.
+            input: agent.heartbeat.prompt as any,
+            steps: [],
+            error: message,
+            principal,
+            metadata: { triggerType: 'heartbeat', refusedBy: 'execution_access' },
+          }),
+        );
+        // Recorded on the agent too, so its page says why the heartbeat is off.
+        await this.runtimeService.disableHeartbeat(agentId, organizationId, {
+          code: 'OWNER_CANNOT_RUN',
+          message,
+          detectedAt: new Date().toISOString(),
+        });
+        this.logger.warn(`Heartbeat for agent ${agentId} stopped: ${message}`);
+        return;
+      }
       await this.runtimeService.startRun(
         agentId,
         organizationId,
-        agentOwnerUserId(agent),
+        principal.userId,
         agent.heartbeat.prompt,
-        { maxSteps: 10 },
+        { maxSteps: 10, principal },
       );
 
       this.logger.log(`Heartbeat run started for agent ${agentId}`);

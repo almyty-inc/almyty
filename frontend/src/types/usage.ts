@@ -188,6 +188,18 @@ export interface AgentModelIssue {
   detectedAt: string
 }
 
+/**
+ * Why the backend switched a schedule or heartbeat off on its own, for
+ * every reason other than a retired model (that one is AgentModelIssue).
+ * The codes are those of AgentPauseReason in
+ * backend/src/entities/agent.entity.ts.
+ */
+export interface AgentPauseReason {
+  code: 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED'
+  message: string
+  detectedAt: string
+}
+
 export interface Agent {
 
   id: string
@@ -204,6 +216,8 @@ export interface Agent {
     enabled: boolean
     intervalMinutes: number
     prompt: string
+    /** Set by the backend when it switched the heartbeat off on its own. */
+    pausedReason?: AgentPauseReason
   }
   toolIds?: string[]
   /** 'private' = only its owner (createdBy) can see or use it. */
@@ -265,7 +279,7 @@ export interface Agent {
       intervalMinutes: number
       input: Record<string, any>
       /** Set by the backend when it paused the schedule on its own. */
-      pausedReason?: AgentModelIssue
+      pausedReason?: AgentModelIssue | AgentPauseReason
     }
     /** Set by the backend when the vendor reported the agent's model no longer exists. */
     modelIssue?: AgentModelIssue

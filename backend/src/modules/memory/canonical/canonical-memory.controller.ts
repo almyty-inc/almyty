@@ -22,7 +22,8 @@ import {
   SearchMemoryDto,
   SupersedeMemoryDto,
 } from './canonical-memory.dto';
-import { MemoryError, Mode, ScopeType, SCOPE_TYPE_VALUES } from './canonical.types';
+import { MemoryError, Mode, Provenance, ScopeType, SCOPE_TYPE_VALUES } from './canonical.types';
+import { userScopeId } from './canonical-memory.helpers';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
@@ -79,7 +80,11 @@ export class CanonicalMemoryController {
   /** Refuse a scope that is not the caller's own. */
   private assertScope(req: any, scope: { scope_type?: string; scope_id?: string } | undefined): void {
     const organizationId = this.orgId(req);
-    if (scope?.scope_id && scope.scope_id !== organizationId) {
+    // The org id (what clients send for every scope) or the caller's own
+    // user scope id (what this API hands back on a user memory).
+    const userId = this.userId(req);
+    const own = userId ? [organizationId, userScopeId(organizationId, userId)] : [organizationId];
+    if (scope?.scope_id && !own.includes(scope.scope_id)) {
       throw new HttpException(
         {
           success: false,
@@ -130,7 +135,39 @@ export class CanonicalMemoryController {
         HttpStatus.BAD_REQUEST,
       );
     }
+    // `user` is one member's scope, not the organization's. Keyed by the
+    // org id like the others, every member listed, searched and
+    // superseded every other member's "user" memories.
+    if (scopeType === 'user') {
+      const userId = this.userId(req);
+      if (!userId) {
+        throw new HttpException(
+          { success: false, error: 'BAD_REQUEST', message: 'A user scope needs a signed-in user' },
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      return { scope_type: scopeType, scope_id: userScopeId(this.orgId(req), userId) };
+    }
     return { scope_type: scopeType, scope_id: this.orgId(req) };
+  }
+
+  /** The signed-in user's id, or undefined. */
+  private userId(req: any): string | undefined {
+    return req.user?.id ?? req.user?.sub ?? undefined;
+  }
+
+  /** What the server knows about a write made through this API. */
+  private callerProvenance(toolChain: string[]): Provenance {
+    return {
+      agent_id: null,
+      session_id: null,
+      collab_id: null,
+      model: null,
+      provider: null,
+      tool_chain: toolChain,
+      created_by: 'user',
+      source_backend: 'almyty-native',
+    };
   }
 
   constructor(
@@ -397,7 +434,11 @@ export class CanonicalMemoryController {
           chunk_total: body.chunk_total,
           chunk_of: body.chunk_of,
           confidence: body.confidence,
-          provenance: body.provenance,
+          // Provenance is recorded by the server. It was taken from the body,
+          // so a member could file a memory as written by an agent (agent_id,
+          // model, created_by: 'agent') that agents then read back as their
+          // own grounding. A write through this API is a user's write.
+          provenance: this.callerProvenance(['api']),
         },
         { user_id: req.user?.sub ?? req.user?.id },
       );
@@ -413,7 +454,7 @@ export class CanonicalMemoryController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get a memory item by id' })
   async get(@Param('id') id: string, @Request() req: any) {
-    const item = await this.service.get(id, this.orgId(req));
+    const item = await this.service.get(id, this.orgId(req), this.userId(req));
     if (!item) {
       throw new HttpException(
         { success: false, error: 'NOT_FOUND', message: `memory ${id} not found` },
@@ -514,13 +555,13 @@ export class CanonicalMemoryController {
     @Request() req: any,
   ) {
     try {
-      this.assertScope(req, body.new_item.scope);
+      this.assertScope(req, body.new_item?.scope);
       const result = await this.service.supersede(
         id,
         this.orgId(req),
         {
           mode: body.new_item.mode,
-          scope: body.new_item.scope,
+          scope: this.ownScope(req, body.new_item.scope),
           content: body.new_item.content,
           content_format: body.new_item.content_format,
           tags: body.new_item.tags,
@@ -529,7 +570,7 @@ export class CanonicalMemoryController {
           tier: body.new_item.tier,
           ttl_seconds: body.new_item.ttl_seconds,
           confidence: body.new_item.confidence,
-          provenance: body.new_item.provenance,
+          provenance: this.callerProvenance(['supersede']),
         },
         { user_id: req.user?.sub ?? req.user?.id },
       );

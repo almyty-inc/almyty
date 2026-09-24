@@ -115,7 +115,22 @@ export function parseScheme(uri: string): string | null {
  * either way — the service swallows write failures.
  */
 export function scopeToOrganizationId(scopeType: ScopeType, scopeId: string): string {
+  if (scopeType === 'user') return scopeId.split(USER_SCOPE_SEPARATOR)[0];
   return scopeId;
+}
+
+const USER_SCOPE_SEPARATOR = ':user:';
+
+/**
+ * The scope_id of one member's `user` memories inside one organization.
+ *
+ * Every other scope's id is the organization id, so a `user` scope keyed
+ * the same way was one folder shared by the whole organization. It keeps
+ * the organization id as its prefix, so scopeToOrganizationId still finds
+ * the tenant, and adds the user so no other member's scope equals it.
+ */
+export function userScopeId(organizationId: string, userId: string): string {
+  return `${organizationId}${USER_SCOPE_SEPARATOR}${userId}`;
 }
 
 export function itemToEntity(item: MemoryItem): CanonicalMemory {

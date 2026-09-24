@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -14,6 +14,7 @@ import { GatewayToolTransferHelper } from './gateway-tool-transfer.helper';
 import { GatewayToolStatsHelper } from './gateway-tool-stats.helper';
 import { GatewayToolQueriesHelper } from './gateway-tool-queries.helper';
 import { assertToolAttachable, gatewayServableTo } from './private-gateway';
+import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
 
 export interface CreateGatewayToolDto {
   toolId: string;
@@ -146,6 +147,10 @@ export class GatewayToolService {
     private readonly transfer: GatewayToolTransferHelper,
     private readonly stats: GatewayToolStatsHelper,
     private readonly queries: GatewayToolQueriesHelper,
+    // The publish-time half of the gateway rule for team tools. @Optional()
+    // only to keep the positional spec harnesses' order; attaching a team
+    // tool refuses without it.
+    @Optional() private readonly executionAccess?: ExecutionAccessService,
   ) {}
 
   /**
@@ -199,6 +204,14 @@ export class GatewayToolService {
         throw new NotFoundException('Tool not found');
       }
       assertToolAttachable(gateway, tool, userId);
+      // A team tool also needs the person attaching it to be able to run it
+      // (a member of its team, or an org owner/admin) -- a membership
+      // lookup the pure check above cannot make. Same shared rule the call
+      // path applies. Fails closed when the check is not wired.
+      if (tool.visibility === 'team') {
+        if (!this.executionAccess) throw new ForbiddenException('Gateway publishing check is not configured');
+        await this.executionAccess.assertGatewayMayServe(gateway, tool, userId, 'Tool');
+      }
 
       // Name the actual problem. 'Can only associate active tools' did not
       // say which state the tool was in, that every tool generated from a

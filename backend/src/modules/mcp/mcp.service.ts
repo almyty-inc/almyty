@@ -143,7 +143,7 @@ export class McpService {
           break;
 
         case 'tools/get':
-          result = await this.toolHandler.handleToolGet(request.params, organizationId, userId);
+          result = await this.toolHandler.handleToolGet(request.params, organizationId, userId, gatewayId);
           break;
 
         case 'tools/call':

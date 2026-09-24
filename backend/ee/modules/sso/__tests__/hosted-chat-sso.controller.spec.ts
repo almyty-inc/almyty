@@ -2,6 +2,7 @@ import { HttpException } from '@nestjs/common';
 
 import { HostedChatSsoController } from '../hosted-chat-sso.controller';
 import { HostedChatService } from '../../../../src/modules/gateways/channels/hosted-chat.service';
+import { FakeRedis } from '../../../../src/test/fake-redis';
 
 describe('HostedChatSsoController', () => {
   let hostedChat: any;
@@ -24,9 +25,10 @@ describe('HostedChatSsoController', () => {
     sso = {
       getOidcLoginUrl: jest.fn(async () => ({ url: 'https://idp.example/authorize?x=1', state: 'st4te' })),
       resolveOidcClaims: jest.fn(async () => ({ sub: 'okta|123', email: 'ava@northwind.example', name: 'Ava Chen' })),
+      protocolFor: jest.fn(async () => 'oidc'),
     };
     orgLicense = { hasForOrg: jest.fn(async () => true) };
-    controller = new HostedChatSsoController(hostedChat, sso, orgLicense);
+    controller = new HostedChatSsoController(hostedChat, sso, orgLicense, new FakeRedis() as any);
   });
 
   afterEach(() => {

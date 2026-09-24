@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import * as crypto from 'crypto';
@@ -117,6 +119,7 @@ describe('compat request fidelity', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AgentOpenAICompatController, AgentAnthropicCompatController],
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         {
           provide: AgentsService,
           useValue: { getAgent: jest.fn().mockResolvedValue(makeAgent()), findByName: jest.fn(), findAllActive: jest.fn() },
