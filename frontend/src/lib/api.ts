@@ -310,7 +310,8 @@ export const authApi = {
   
   getProfile: () => apiGet('/auth/profile'),
   
-  updateProfile: (data: Partial<{ name: string; email: string }>) =>
+  /** A changed email needs `currentPassword`; the server refuses without it. */
+  updateProfile: (data: Partial<{ name: string; email: string; currentPassword: string }>) =>
     apiPatch('/auth/profile', data),
   
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
@@ -463,6 +464,13 @@ export const gatewaysApi = {
   update: (id: string, data: any) => apiPatch(`/gateways/${id}`, data),
 
   delete: (id: string) => apiDel(`/gateways/${id}`),
+
+  // Hosted chat custom domain: claim, publish the TXT record, verify.
+  // Served only once verified; see CustomDomainService on the backend.
+  getCustomDomain: (id: string) => apiGet(`/gateways/${id}/custom-domain`),
+  setCustomDomain: (id: string, hostname: string) => apiPut(`/gateways/${id}/custom-domain`, { hostname }),
+  verifyCustomDomain: (id: string) => apiPost(`/gateways/${id}/custom-domain/verify`),
+  removeCustomDomain: (id: string) => apiDel(`/gateways/${id}/custom-domain`),
 
   // Tool association endpoints
   getTools: (id: string) => apiGet(`/gateways/${id}/tools`),
