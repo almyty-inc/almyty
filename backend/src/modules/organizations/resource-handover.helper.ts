@@ -5,6 +5,8 @@ import { AuditAction, AuditLog, AuditResource } from '../../entities/audit-log.e
 import { Runner } from '../../entities/runner.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { RunnerService } from '../runner/runner.service';
+import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
+import { memberConnectionSql, WipedConnection } from '../connections/member-connection-offboarding';
 
 /**
  * The resource tables that carry the visibility tiers, with the column
@@ -28,14 +30,11 @@ export const OWNED_RESOURCE_TABLES: ReadonlyArray<{
 ];
 
 /**
- * A connection a member made for themselves (Personal or Private): a
- * credentials row with a connectorKey and an owner, that no consumer
- * manages. A row an LLM provider or MCP source manages for itself
- * (metadata.managedBy) follows its consumer, so it is not one.
+ * A connection a member made for themselves; see
+ * connections/member-connection-offboarding.ts. Re-exported because the
+ * credentials handover above excludes exactly these rows.
  */
-export function memberConnectionSql(): string {
-  return `("connectorKey" IS NOT NULL AND NOT COALESCE((metadata::jsonb) ? 'managedBy', false))`;
-}
+export { memberConnectionSql };
 
 /** Every table with a teamId the team FK sets to NULL (1745340000000). */
 export const TEAM_SCOPED_TABLES: ReadonlyArray<{ table: string; resourceType: AuditResource }> = [
@@ -66,6 +65,8 @@ export class ResourceHandoverHelper {
     private readonly auditLog: AuditLogService,
     @Inject(forwardRef(() => RunnerService))
     private readonly runners: RunnerService,
+    @Inject(forwardRef(() => ConnectionOffboardingService))
+    private readonly offboarding: ConnectionOffboardingService,
   ) {}
 
   /**
@@ -88,7 +89,10 @@ export class ResourceHandoverHelper {
    *   them act as the departed person there, and leaving it working (a
    *   Personal connection shared by grant still resolves) would keep the
    *   organization using a former member's account. The row stays so
-   *   whatever referenced it fails visibly and can be reconnected.
+   *   whatever referenced it fails visibly and can be reconnected. The
+   *   wiped secrets go to `wipedConnections` so the caller can also
+   *   revoke the grants at the providers once this commits
+   *   (revokeWipedConnectionsAtProviders).
    * - Grants that name them as a user are removed.
    *
    * Org- and team-visible rows other than runners are untouched:
@@ -102,9 +106,14 @@ export class ResourceHandoverHelper {
       toUserId: string;
       actorUserId: string;
       reason: 'member_removed' | 'member_left';
+      /**
+       * Receives the connections wiped here, secrets as they were, for
+       * ConnectionOffboardingService.revokeAtProviders after commit.
+       */
+      wipedConnections?: WipedConnection[];
     },
   ): Promise<AuditLog[]> {
-    const { organizationId, fromUserId, toUserId, actorUserId, reason } = args;
+    const { organizationId, fromUserId, toUserId, actorUserId, reason, wipedConnections } = args;
     const audit: AuditLog[] = [];
 
     // Runners first: a runner publishes its methods as tools with the
@@ -130,7 +139,17 @@ export class ResourceHandoverHelper {
       );
     }
 
-    audit.push(...(await this.revokeMemberConnections(manager, { organizationId, fromUserId, actorUserId, reason })));
+    // Their own connections: wiped here, in the removal transaction, and
+    // revoked at the provider by the caller once it commits
+    // (ConnectionOffboardingService says why both).
+    const { audit: connectionAudit, wiped } = await this.offboarding.wipeInTransaction(manager, {
+      organizationId,
+      userId: fromUserId,
+      actorUserId,
+      reason,
+    });
+    audit.push(...connectionAudit);
+    wipedConnections?.push(...wiped);
     audit.push(...(await this.removeUserGrants(manager, { organizationId, fromUserId, actorUserId, reason })));
 
     for (const { table, ownerColumn, resourceType, except } of OWNED_RESOURCE_TABLES) {
@@ -158,61 +177,6 @@ export class ResourceHandoverHelper {
       }
     }
 
-    return audit;
-  }
-
-  /**
-   * Revoke the departed member's own connections (see
-   * handOverPrivateResources). Nothing is sent to the provider -- this
-   * runs inside the removal transaction -- but the secret is gone from
-   * our store, so nothing here can use it again. The audit row says so.
-   */
-  private async revokeMemberConnections(
-    manager: EntityManager,
-    args: { organizationId: string; fromUserId: string; actorUserId: string; reason: string },
-  ): Promise<AuditLog[]> {
-    const { organizationId, fromUserId, actorUserId, reason } = args;
-    const rows = returnedRows(
-      await manager.query(
-        `UPDATE credentials
-            SET config = '{}'::json, "isActive" = false, "healthStatus" = 'revoked',
-                "healthError" = 'the owner left the organization', "healthCheckedAt" = now()
-          WHERE "organizationId" = $1 AND "ownerUserId" = $2 AND ${memberConnectionSql()}
-          RETURNING id, name, visibility, "connectorKey"`,
-        [organizationId, fromUserId],
-      ),
-    ) as Array<ReturnedRow & { visibility?: string; connectorKey?: string }>;
-    if (rows.length === 0) return [];
-
-    const removed = returnedRows(
-      await manager.query(
-        `DELETE FROM connection_grants WHERE "connectionId" = ANY($1::uuid[]) RETURNING id, "connectionId"`,
-        [rows.map((r) => r.id)],
-      ),
-    ) as unknown as Array<{ id: string; connectionId: string }>;
-
-    const audit: AuditLog[] = [];
-    for (const row of rows) {
-      audit.push(
-        await this.auditLog.logInTransaction(manager, {
-          organizationId,
-          userId: actorUserId,
-          action: AuditAction.CONNECTION_DISCONNECT,
-          resourceType: AuditResource.CONNECTION,
-          resourceId: row.id,
-          resourceName: row.name ?? undefined,
-          details: {
-            reason,
-            ownerUserId: fromUserId,
-            connectorKey: row.connectorKey ?? null,
-            owner: row.visibility === 'private' ? 'private' : 'user',
-            secretWiped: true,
-            providerRevoked: false,
-            grantsRemoved: removed.filter((g) => g.connectionId === row.id).length,
-          },
-        }),
-      );
-    }
     return audit;
   }
 
@@ -244,6 +208,18 @@ export class ResourceHandoverHelper {
       );
     }
     return audit;
+  }
+
+  /**
+   * After the removal committed: revoke the connections
+   * handOverPrivateResources wiped at their providers. Best-effort and
+   * audited per connection; never throws.
+   */
+  revokeWipedConnectionsAtProviders(
+    wiped: WipedConnection[],
+    ctx: { userId: string; actorUserId: string; reason: 'member_removed' | 'member_left' },
+  ): Promise<void> {
+    return this.offboarding.revokeAtProviders(wiped, ctx);
   }
 
   /**
