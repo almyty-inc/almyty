@@ -506,8 +506,8 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
           type: 'model.deployment.budget_stop',
           organizationId: d.organizationId,
           userIds: d.createdBy ? [d.createdBy] : [],
-          title: 'Deployment scaled to zero: budget reached',
-          body: `${d.providerType} deployment spent ${(snapshot.spentCents / 100).toFixed(2)} of its ${(budget.limitCents / 100).toFixed(2)} budget.`,
+          title: 'Hosted model scaled to zero: budget reached',
+          body: `${d.modelRef ?? d.modelBase ?? 'Hosted model'} on ${d.providerType} spent ${(snapshot.spentCents / 100).toFixed(2)} of its ${(budget.limitCents / 100).toFixed(2)} budget.`,
         } as any)
         .catch(() => undefined);
     }

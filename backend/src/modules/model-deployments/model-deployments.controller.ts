@@ -59,7 +59,7 @@ export class ModelDeploymentsController {
   @ApiOperation({ summary: 'Create a deployment (desired state); reconcile does the rest' })
   async create(@Request() req: any, @Body(ValidationPipe) body: CreateModelDeploymentBodyDto) {
     const d = await this.deployments.create(this.orgId(req), req.user?.id ?? null, body);
-    return { success: true, data: d.toPublicView(), message: 'Deployment queued' };
+    return { success: true, data: d.toPublicView(), message: 'Hosted model queued' };
   }
 
   @Post('model-deployments/:id/scale')
