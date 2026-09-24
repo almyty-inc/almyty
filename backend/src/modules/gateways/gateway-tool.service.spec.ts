@@ -10,6 +10,15 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { User } from '../../entities/user.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { fakeRepository } from '../../test/fake-repository';
+import {
+  ClauseModel,
+  ExecutedQuery,
+  RecordingQueryBuilder,
+  clause,
+  matchingRows,
+  organizationScope,
+} from './__tests__/recording-query-builder';
 
 describe('GatewayToolService', () => {
   let service: GatewayToolService;
@@ -650,160 +659,151 @@ describe('GatewayToolService', () => {
       sortOrder: 'ASC' as const,
     };
 
+    /**
+     * The listing query, evaluated against a gateway_tools table. The
+     * chains that stood here answered a fixed page whatever the WHERE
+     * said, so the `gatewayId` predicate -- the only thing keeping one
+     * gateway's (and one tenant's) tools off another's listing -- could
+     * be deleted with the suite green. The gateway lookup is a table too.
+     */
+    const ilike = (value: string | undefined, pattern: string) =>
+      new RegExp(`^${pattern.split('%').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i').test(
+        value ?? '',
+      );
+    const GATEWAY_TOOL_CLAUSES: ClauseModel = {
+      'gatewayTool.gatewayId = :gatewayId': (row, p) => row.gatewayId === p.gatewayId,
+      'gatewayTool.isActive = :isActive': (row, p) => row.isActive === p.isActive,
+      'gatewayTool.toolId IN (:...toolIds)': (row, p) => p.toolIds.includes(row.toolId),
+      '(tool.name ILIKE :search OR tool.description ILIKE :search)': (row, p) =>
+        ilike(row.tool?.name, p.search) || ilike(row.tool?.description, p.search),
+    };
+    const gatewayTool = (id: string, over: Record<string, any> = {}) => ({
+      id,
+      gatewayId: 'gateway-1',
+      toolId: `tool-of-${id}`,
+      isActive: true,
+      tool: { name: `Test tool ${id}`, description: '' },
+      ...over,
+    });
+    let qb: RecordingQueryBuilder | undefined;
+
+    const useTables = (rows: any[]) => {
+      const gateways = fakeRepository<any>([
+        { id: 'gateway-1', organizationId: 'org-1' },
+        { id: 'gateway-foreign', organizationId: 'org-2' },
+      ]);
+      gatewayRepository.findOne.mockImplementation(gateways.findOne);
+      qb = undefined;
+      gatewayToolRepository.createQueryBuilder.mockImplementation((alias: string) => {
+        const builder = new RecordingQueryBuilder(alias, {
+          getCount: (query: ExecutedQuery) => matchingRows(query, rows, GATEWAY_TOOL_CLAUSES).length,
+          getMany: (query: ExecutedQuery) => {
+            const skip = builder.argsOf('skip').slice(-1)[0]?.[0] ?? 0;
+            const take = builder.argsOf('take').slice(-1)[0]?.[0] ?? Infinity;
+            return matchingRows(query, rows, GATEWAY_TOOL_CLAUSES).slice(skip, skip + take);
+          },
+        });
+        return (qb = builder);
+      });
+    };
+
     it('should return paginated gateway tools', async () => {
-      const mockGateway = { id: 'gateway-1', organizationId: 'org-1' };
-      const mockGatewayTools = [
-        { id: 'gt-1', toolId: 'tool-1', isActive: true },
-        { id: 'gt-2', toolId: 'tool-2', isActive: true },
-      ];
-
-      const mockQueryBuilder = {
-        createQueryBuilder: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getCount: jest.fn().mockResolvedValue(2),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(mockGatewayTools),
-      };
-
-      gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      useTables([
+        gatewayTool('gt-1'),
+        gatewayTool('gt-2'),
+        gatewayTool('gt-inactive', { isActive: false }),
+        gatewayTool('gt-unrelated', { tool: { name: 'Weather', description: 'forecast' } }),
+        // Another gateway's association, same name: not on this listing.
+        gatewayTool('gt-other-gateway', { gatewayId: 'gateway-foreign' }),
+      ]);
 
       const result = await service.getGatewayTools(filters);
 
-      expect(result.gatewayTools).toBe(mockGatewayTools);
+      expect(result.gatewayTools.map((gt) => gt.id)).toEqual(['gt-1', 'gt-2']);
       expect(result.total).toBe(2);
       expect(result.page).toBe(1);
       expect(result.limit).toBe(10);
       expect(result.totalPages).toBe(1);
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('gatewayTool.isActive = :isActive', { isActive: true });
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        '(tool.name ILIKE :search OR tool.description ILIKE :search)',
-        { search: '%test%' }
-      );
+      expect(qb!.alias).toBe('gatewayTool');
+      expect(qb!.executed.map((q) => q.terminal)).toEqual(['getCount', 'getMany']);
+      for (const query of qb!.executed) {
+        expect(clause(query, 'gatewayTool.gatewayId = :gatewayId')?.params).toEqual({ gatewayId: 'gateway-1' });
+        expect(clause(query, 'gatewayTool.isActive = :isActive')?.params).toEqual({ isActive: true });
+        expect(clause(query, '(tool.name ILIKE :search OR tool.description ILIKE :search)')?.params).toEqual({
+          search: '%test%',
+        });
+      }
     });
 
     it('should handle default pagination values', async () => {
-      const mockGateway = { id: 'gateway-1', organizationId: 'org-1' };
-      const filtersWithoutPagination = {
-        gatewayId: 'gateway-1',
-        organizationId: 'org-1',
-      };
+      useTables(Array.from({ length: 25 }, (_, i) => gatewayTool(`gt-${i}`)));
 
-      const mockQueryBuilder = {
-        createQueryBuilder: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getCount: jest.fn().mockResolvedValue(5),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
-
-      gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
-      const result = await service.getGatewayTools(filtersWithoutPagination);
+      const result = await service.getGatewayTools({ gatewayId: 'gateway-1', organizationId: 'org-1' });
 
       expect(result.page).toBe(1);
       expect(result.limit).toBe(20);
-      expect(mockQueryBuilder.skip).toHaveBeenCalledWith(0);
-      expect(mockQueryBuilder.take).toHaveBeenCalledWith(20);
+      expect(result.total).toBe(25);
+      expect(result.gatewayTools).toHaveLength(20);
+      expect(qb!.argsOf('skip')).toEqual([[0]]);
+      expect(qb!.argsOf('take')).toEqual([[20]]);
     });
 
     it('should limit maximum page size to 100', async () => {
-      const mockGateway = { id: 'gateway-1', organizationId: 'org-1' };
-      const filtersWithLargeLimit = {
+      useTables([]);
+
+      const result = await service.getGatewayTools({
         gatewayId: 'gateway-1',
         organizationId: 'org-1',
         limit: 200,
-      };
-
-      const mockQueryBuilder = {
-        createQueryBuilder: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getCount: jest.fn().mockResolvedValue(0),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
-
-      gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
-      const result = await service.getGatewayTools(filtersWithLargeLimit);
+      });
 
       expect(result.limit).toBe(100);
-      expect(mockQueryBuilder.take).toHaveBeenCalledWith(100);
+      expect(qb!.argsOf('take')).toEqual([[100]]);
     });
 
     it('should throw NotFoundException when gateway not found', async () => {
-      gatewayRepository.findOne.mockResolvedValue(null);
+      useTables([gatewayTool('gt-1')]);
 
-      await expect(service.getGatewayTools(filters)).rejects.toThrow(NotFoundException);
+      await expect(service.getGatewayTools({ ...filters, gatewayId: 'gateway-missing' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(qb).toBeUndefined();
+    });
+
+    it('does not list the tools of another organization gateway', async () => {
+      useTables([gatewayTool('gt-foreign', { gatewayId: 'gateway-foreign' })]);
+
+      await expect(service.getGatewayTools({ ...filters, gatewayId: 'gateway-foreign' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(qb).toBeUndefined();
     });
 
     it('should handle toolIds filter', async () => {
-      const mockGateway = { id: 'gateway-1', organizationId: 'org-1' };
-      const filtersWithToolIds = {
-        ...filters,
+      useTables([
+        gatewayTool('gt-1', { toolId: 'tool-1' }),
+        gatewayTool('gt-2', { toolId: 'tool-2' }),
+        gatewayTool('gt-3', { toolId: 'tool-3' }),
+      ]);
+
+      const result = await service.getGatewayTools({ ...filters, toolIds: ['tool-1', 'tool-2'] });
+
+      expect(result.gatewayTools.map((gt) => gt.id)).toEqual(['gt-1', 'gt-2']);
+      expect(clause(qb!.executed[1], 'gatewayTool.toolId IN (:...toolIds)')?.params).toEqual({
         toolIds: ['tool-1', 'tool-2'],
-      };
-
-      const mockQueryBuilder = {
-        createQueryBuilder: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getCount: jest.fn().mockResolvedValue(0),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
-
-      gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
-      await service.getGatewayTools(filtersWithToolIds);
-
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'gatewayTool.toolId IN (:...toolIds)',
-        { toolIds: ['tool-1', 'tool-2'] }
-      );
+      });
     });
 
     it('should handle different sort columns', async () => {
-      const mockGateway = { id: 'gateway-1', organizationId: 'org-1' };
-      const filtersWithAssociatedAtSort = {
+      useTables([]);
+
+      await service.getGatewayTools({
         gatewayId: 'gateway-1',
         organizationId: 'org-1',
         sortBy: 'associatedAt' as const,
-      };
+      });
 
-      const mockQueryBuilder = {
-        createQueryBuilder: jest.fn().mockReturnThis(),
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getCount: jest.fn().mockResolvedValue(0),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      };
-
-      gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
-      await service.getGatewayTools(filtersWithAssociatedAtSort);
-
-      expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('gatewayTool.associatedAt', 'DESC');
+      expect(qb!.argsOf('orderBy')).toEqual([['gatewayTool.associatedAt', 'DESC']]);
     });
   });
 
@@ -845,69 +845,106 @@ describe('GatewayToolService', () => {
   });
 
   describe('getAvailableTools', () => {
+    /**
+     * The picker's candidate query, evaluated against a tools table
+     * rather than answered with a canned list: the chain that stood here
+     * returned its fixed tools whatever was asked, so the organization,
+     * status or visibility clause could go with the suite green. The
+     * gateway lookup and the association list are tables too.
+     */
+    const TOOL_CLAUSES: ClauseModel = {
+      'tool.organizationId = :organizationId': (row, p) => row.organizationId === p.organizationId,
+      'tool.status = :status': (row, p) => row.status === p.status,
+      "tool.visibility <> 'private'": (row) => row.visibility !== 'private',
+      '(tool.visibility <> \'private\' OR tool."createdBy" = :gatewayOwner)': (row, p) =>
+        row.visibility !== 'private' || row.createdBy === p.gatewayOwner,
+      'tool.id NOT IN (:...associatedIds)': (row, p) => !p.associatedIds.includes(row.id),
+    };
+    const tool = (id: string, over: Record<string, any> = {}) => ({
+      id,
+      name: `Tool ${id}`,
+      organizationId: 'org-1',
+      status: ToolStatus.ACTIVE,
+      visibility: 'org',
+      createdBy: 'user-2',
+      ...over,
+    });
+    const TOOLS = [
+      tool('tool-1'),
+      tool('tool-3'),
+      tool('tool-5'),
+      tool('tool-foreign', { organizationId: 'org-2' }),
+      tool('tool-draft', { status: ToolStatus.DRAFT }),
+      tool('tool-private-mine', { visibility: 'private', createdBy: 'user-1' }),
+      tool('tool-private-theirs', { visibility: 'private', createdBy: 'user-2' }),
+    ];
+    let qb: RecordingQueryBuilder | undefined;
+
+    const useTables = (associations: Array<{ gatewayId: string; toolId: string }>) => {
+      const gateways = fakeRepository<any>([
+        { id: 'gateway-1', organizationId: 'org-1', visibility: 'org', ownerUserId: 'user-1' },
+        { id: 'gateway-private', organizationId: 'org-1', visibility: 'private', ownerUserId: 'user-1' },
+        { id: 'gateway-foreign', organizationId: 'org-2', visibility: 'org', ownerUserId: 'user-9' },
+      ]);
+      const gatewayTools = fakeRepository<any>(associations.map((a, i) => ({ id: `gt-${i}`, ...a })));
+      gatewayRepository.findOne.mockImplementation(gateways.findOne);
+      gatewayToolRepository.find.mockImplementation(gatewayTools.find);
+      qb = undefined;
+      toolRepository.createQueryBuilder.mockImplementation(
+        (alias: string) =>
+          (qb = new RecordingQueryBuilder(alias, {
+            getMany: (query: ExecutedQuery) =>
+              matchingRows(query, TOOLS, TOOL_CLAUSES).sort((a, b) => a.name.localeCompare(b.name)),
+          })),
+      );
+    };
+
     it('should return available tools not associated with gateway', async () => {
-      const mockGateway = { id: 'gateway-1', organizationId: 'org-1' };
-      const mockAssociatedTools = [{ toolId: 'tool-1' }, { toolId: 'tool-2' }];
-      const mockAvailableTools = [
-        { id: 'tool-3', name: 'Available Tool 1' },
-        { id: 'tool-4', name: 'Available Tool 2' },
-      ];
-
-      const mockQueryBuilder = {
-        createQueryBuilder: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(mockAvailableTools),
-      };
-
-      gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue(mockAssociatedTools);
-      toolRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      useTables([
+        { gatewayId: 'gateway-1', toolId: 'tool-1' },
+        // Another gateway's association does not take tool-5 off this picker.
+        { gatewayId: 'gateway-other', toolId: 'tool-5' },
+      ]);
 
       const result = await service.getAvailableTools('gateway-1', 'org-1');
 
-      expect(result).toBe(mockAvailableTools);
-      // Org first, then status: the candidate set is this org's tools.
-      expect(mockQueryBuilder.where).toHaveBeenCalledWith('tool.organizationId = :organizationId', { organizationId: 'org-1' });
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('tool.status = :status', { status: ToolStatus.ACTIVE });
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        'tool.id NOT IN (:...associatedIds)',
-        { associatedIds: ['tool-1', 'tool-2'] }
-      );
+      // Not org-2's tool, not a draft, not anyone's private tool.
+      expect(result.map((t) => t.id)).toEqual(['tool-3', 'tool-5']);
+      expect(qb!.alias).toBe('tool');
+      expect(organizationScope(qb!.executed[0], 'tool')).toBe('org-1');
+      expect(qb!.argsOf('orderBy')).toEqual([['tool.name', 'ASC']]);
+    });
+
+    it('offers the owner private tools only for a gateway private to them', async () => {
+      useTables([]);
+
+      const result = await service.getAvailableTools('gateway-private', 'org-1');
+
+      expect(result.map((t) => t.id)).toEqual(['tool-1', 'tool-3', 'tool-5', 'tool-private-mine']);
     });
 
     it('should handle gateway with no associated tools', async () => {
-      const mockGateway = { id: 'gateway-1', organizationId: 'org-1' };
-      const mockAvailableTools = [{ id: 'tool-1', name: 'Tool 1' }];
-
-      const mockQueryBuilder = {
-        createQueryBuilder: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(mockAvailableTools),
-      };
-
-      gatewayRepository.findOne.mockResolvedValue(mockGateway);
-      gatewayToolRepository.find.mockResolvedValue([]);
-      toolRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      useTables([]);
 
       const result = await service.getAvailableTools('gateway-1', 'org-1');
 
-      expect(result).toBe(mockAvailableTools);
-      // No associations to exclude, so no NOT IN clause. The status
-      // filter still rides on andWhere behind the org predicate.
-      expect(mockQueryBuilder.andWhere).not.toHaveBeenCalledWith(
-        'tool.id NOT IN (:...associatedIds)',
-        expect.anything(),
-      );
+      expect(result.map((t) => t.id)).toEqual(['tool-1', 'tool-3', 'tool-5']);
+      // No associations to exclude, so no NOT IN clause.
+      expect(clause(qb!.executed[0], 'tool.id NOT IN (:...associatedIds)')).toBeUndefined();
     });
 
     it('should throw NotFoundException when gateway not found', async () => {
-      gatewayRepository.findOne.mockResolvedValue(null);
+      useTables([]);
 
-      await expect(service.getAvailableTools('gateway-1', 'org-1')).rejects.toThrow(NotFoundException);
+      await expect(service.getAvailableTools('gateway-missing', 'org-1')).rejects.toThrow(NotFoundException);
+      expect(qb).toBeUndefined();
+    });
+
+    it('does not offer tools for another organization gateway', async () => {
+      useTables([]);
+
+      await expect(service.getAvailableTools('gateway-foreign', 'org-1')).rejects.toThrow(NotFoundException);
+      expect(qb).toBeUndefined();
     });
   });
 

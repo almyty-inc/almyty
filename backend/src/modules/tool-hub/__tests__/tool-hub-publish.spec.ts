@@ -70,6 +70,7 @@ function makeService() {
   const toolRepository = new FakeRepo<any>('tool');
   (toolRepository as any).manager = unlimitedToolQuotaManager(toolRepository);
   const apiRepository = new FakeRepo<any>('api');
+  (apiRepository as any).manager = unlimitedToolQuotaManager(apiRepository);
   const auditLogService = { logCreate: jest.fn(), logUpdate: jest.fn(), logDelete: jest.fn() };
 
   const service = new ToolHubService(
