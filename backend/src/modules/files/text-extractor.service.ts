@@ -38,7 +38,7 @@ export class TextExtractorService {
       }
 
       if (buffer.length <= EXTRACT_MAX_BYTES) {
-        return buffer.toString('utf-8');
+        return this.decode(buffer);
       }
 
       // File exceeds the cap — slice at the byte boundary, convert
@@ -47,11 +47,31 @@ export class TextExtractorService {
       this.logger.debug(
         `Truncating extracted text for ${fileName}: ${buffer.length} > ${EXTRACT_MAX_BYTES} bytes`,
       );
-      return buffer.slice(0, EXTRACT_MAX_BYTES).toString('utf-8') + EXTRACT_TRUNCATED_SUFFIX;
+      return this.decode(buffer.subarray(0, EXTRACT_MAX_BYTES)) + EXTRACT_TRUNCATED_SUFFIX;
     } catch (error) {
       this.logger.warn(`Text extraction failed for ${fileName}: ${error.message}`);
       return null;
     }
+  }
+
+  /**
+   * Bytes to a string Postgres will store. A text column refuses U+0000,
+   * so a NUL anywhere failed the whole upload: every UTF-16 file (what
+   * Windows editors write for .txt) and any binary named .log or .env.
+   * Honour a UTF-16 byte-order mark, then drop whatever NULs remain.
+   */
+  private decode(buffer: Buffer): string {
+    let text: string;
+    if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+      text = buffer.subarray(2, buffer.length - (buffer.length % 2)).toString('utf16le');
+    } else if (buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff) {
+      const body = Buffer.from(buffer.subarray(2, buffer.length - (buffer.length % 2)));
+      text = body.swap16().toString('utf16le');
+    } else {
+      text = buffer.toString('utf-8');
+      if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+    }
+    return text.split('\u0000').join('');
   }
 
   private isTextFile(mimeType: string, fileName: string): boolean {
