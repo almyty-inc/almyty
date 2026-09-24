@@ -1,7 +1,7 @@
 import { unlimitedQuotaManager } from '../../test/tool-quota.fake';
 import { Not } from 'typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { GatewaysService } from './gateways.service';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
@@ -12,8 +12,16 @@ import { GatewayAuth } from '../../entities/gateway-auth.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
+import { OrganizationRole } from '../../entities/user-organization.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { fakeRepository } from '../../test/fake-repository';
+import {
+  ExecutedQuery,
+  RecordingQueryBuilder,
+  clause,
+  organizationScope,
+} from './__tests__/recording-query-builder';
 
 describe('GatewaysService', () => {
   let service: GatewaysService;
@@ -112,15 +120,51 @@ describe('GatewaysService', () => {
     accessPolicy = module.get(AccessPolicyService);
   });
 
+  /**
+   * The list filter as it runs in production, over a membership table in
+   * which user-1 owns org-1 and belongs to nothing else. The module mock
+   * answers `{ bypass: true }` without touching the builder, which is the
+   * shape that let the org predicate go missing unnoticed.
+   */
+  const useRealListFilter = () => {
+    const memberships = fakeRepository<any>([
+      { userId: 'user-1', organizationId: 'org-1', role: OrganizationRole.OWNER, isActive: true },
+    ]);
+    const policy = new AccessPolicyService(memberships as any, {} as any);
+    accessPolicy.applyListFilter.mockImplementation((...args: any[]) =>
+      (policy.applyListFilter as any)(...args),
+    );
+  };
+
   describe('hosted-chat slug isolation', () => {
-    const queryBuilder = (claims: Array<{ id: string }>) => ({
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getMany: jest.fn().mockResolvedValue(claims),
+    /**
+     * A builder that evaluates the two clauses the claim check is made of
+     * against in-memory gateways, and throws on any clause it does not
+     * model. The canned chain that was here answered its fixed claims
+     * whatever it was asked, so the `type = hosted_chat` restriction could
+     * go unnoticed, and a claim from any gateway of any type counted.
+     */
+    const SLUG_CLAUSE = "gateway.configuration -> 'hostedChat' ->> 'slug' = :slug";
+    const claimsQueryBuilder = (rows: any[]) =>
+      new RecordingQueryBuilder('gateway', {
+        getMany: (query: ExecutedQuery) =>
+          rows.filter((row) =>
+            query.clauses.every((c) => {
+              if (!('sql' in c)) throw new Error('bracketed clause not modelled');
+              if (c.sql === 'gateway.type = :type') return row.type === query.parameters.type;
+              if (c.sql === SLUG_CLAUSE) return row.configuration?.hostedChat?.slug === query.parameters.slug;
+              throw new Error(`clause not modelled: ${c.sql}`);
+            }),
+          ),
+      });
+    const hostedChat = (id: string, slug: string, type = GatewayType.HOSTED_CHAT) => ({
+      id,
+      type,
+      configuration: { hostedChat: { slug } },
     });
 
     it('refuses a public subdomain already claimed by another gateway', async () => {
-      const qb = queryBuilder([{ id: 'gw-other-tenant' }]);
+      const qb = claimsQueryBuilder([hostedChat('gw-other-tenant', 'customer-care')]);
       gatewayRepository.createQueryBuilder.mockReturnValue(qb);
 
       await expect(
@@ -130,13 +174,19 @@ describe('GatewaysService', () => {
         ),
       ).rejects.toThrow(ConflictException);
 
-      expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), {
-        slug: 'customer-care',
-      });
+      expect(clause(qb.executed[0], SLUG_CLAUSE)?.params).toEqual({ slug: 'customer-care' });
     });
 
     it('allows an existing gateway to keep its own subdomain on republish', async () => {
-      gatewayRepository.createQueryBuilder.mockReturnValue(queryBuilder([{ id: 'gw-self' }]));
+      gatewayRepository.createQueryBuilder.mockReturnValue(
+        claimsQueryBuilder([
+          hostedChat('gw-self', 'customer-care'),
+          hostedChat('gw-other-app', 'another-app'),
+          // Not a hosted chat, so not a claim on the address, whatever
+          // its configuration happens to carry.
+          hostedChat('gw-mcp', 'customer-care', GatewayType.MCP),
+        ]),
+      );
 
       await expect(
         (service as any).assertHostedChatSlugAvailable(
@@ -484,22 +534,26 @@ describe('GatewaysService', () => {
      * authConfigs join row-multiplying on top. Same fix as
      * `ApisService.getApis`: a correlated COUNT read back through
      * getRawAndEntities.
+     *
+     * The builder records the query that ran and the list filter is the
+     * real AccessPolicyService over a membership table: the canned chain
+     * that was here passed with the org predicate -- or the whole
+     * applyListFilter call -- gone. `getMany` is left unanswered, so
+     * reading the list through it throws.
      */
-    const listQueryBuilder = (entities: any[], raw: any[]) => ({
-      leftJoinAndSelect: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      addOrderBy: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getCount: jest.fn().mockResolvedValue(entities.length),
-      getRawAndEntities: jest.fn().mockResolvedValue({ entities, raw }),
-      getMany: jest.fn(() => {
-        throw new Error('the list must read the count back through getRawAndEntities');
-      }),
-    });
+    let qb: RecordingQueryBuilder;
+
+    const useList = (entities: any[], raw: any[]) => {
+      gatewayRepository.createQueryBuilder.mockImplementation(
+        (alias: string) =>
+          (qb = new RecordingQueryBuilder(alias, {
+            getCount: entities.length,
+            getRawAndEntities: { entities, raw },
+          })),
+      );
+    };
+
+    beforeEach(() => useRealListFilter());
 
     it('should return paginated gateways', async () => {
       const mockGateways = [
@@ -507,12 +561,10 @@ describe('GatewaysService', () => {
         { id: 'gateway-2', name: 'Gateway 2' },
       ];
 
-      const mockQueryBuilder = listQueryBuilder(mockGateways, [
+      useList(mockGateways, [
         { gateway_id: 'gateway-1', gateway_toolCount: '7' },
         { gateway_id: 'gateway-2', gateway_toolCount: '0' },
       ]);
-
-      gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
       const result = await service.getGateways({
         organizationId: 'org-1',
@@ -527,12 +579,30 @@ describe('GatewaysService', () => {
       expect(result.totalPages).toBe(1);
     });
 
+    it('scopes both the count and the page to the caller organization', async () => {
+      useList([], []);
+
+      await service.getGateways({ organizationId: 'org-1', caller: { id: 'user-1' } });
+
+      expect(qb.alias).toBe('gateway');
+      expect(qb.executed.map((q) => q.terminal)).toEqual(['getCount', 'getRawAndEntities']);
+      for (const query of qb.executed) {
+        expect(organizationScope(query, 'gateway')).toBe('org-1');
+      }
+    });
+
+    it('refuses an organization the caller is not a member of, before any query runs', async () => {
+      useList([{ id: 'gw-foreign' }], [{ gateway_id: 'gw-foreign', gateway_toolCount: '1' }]);
+
+      await expect(
+        service.getGateways({ organizationId: 'org-2', caller: { id: 'user-1' } }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(qb.executed).toEqual([]);
+    });
+
     it('counts the tools instead of joining them, and never joins gatewayTool.tool', async () => {
       const mockGateways: any[] = [{ id: 'gateway-1', name: 'Gateway 1' }];
-      const mockQueryBuilder = listQueryBuilder(mockGateways, [
-        { gateway_id: 'gateway-1', gateway_toolCount: '137' },
-      ]);
-      gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+      useList(mockGateways, [{ gateway_id: 'gateway-1', gateway_toolCount: '137' }]);
 
       const result = await service.getGateways({
         organizationId: 'org-1',
@@ -546,10 +616,10 @@ describe('GatewaysService', () => {
       expect(result.gateways[0].tools).toBeUndefined();
 
       // The correlated subquery is attached as a raw alias.
-      expect(mockQueryBuilder.addSelect).toHaveBeenCalledTimes(1);
-      expect(mockQueryBuilder.addSelect.mock.calls[0][1]).toBe('gateway_toolCount');
+      expect(qb.argsOf('addSelect')).toHaveLength(1);
+      expect(qb.argsOf('addSelect')[0][1]).toBe('gateway_toolCount');
 
-      const joined = mockQueryBuilder.leftJoinAndSelect.mock.calls.map((c: any[]) => c[0]);
+      const joined = qb.argsOf('leftJoinAndSelect').map((args) => args[0]);
       expect(joined).not.toContain('gateway.tools');
       expect(joined).not.toContain('gatewayTool.tool');
     });
@@ -564,12 +634,11 @@ describe('GatewaysService', () => {
         { id: 'gateway-1', name: 'Gateway 1' },
         { id: 'gateway-2', name: 'Gateway 2' },
       ];
-      const mockQueryBuilder = listQueryBuilder(mockGateways, [
+      useList(mockGateways, [
         { gateway_id: 'gateway-1', gateway_toolCount: '11' },
         { gateway_id: 'gateway-1', gateway_toolCount: '11' },
         { gateway_id: 'gateway-2', gateway_toolCount: '4' },
       ]);
-      gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
       const result = await service.getGateways({
         organizationId: 'org-1',
@@ -792,65 +861,79 @@ describe('GatewaysService', () => {
   });
 
   describe('getOrganizationGatewayStats', () => {
-    it('should return organization-wide gateway statistics', async () => {
-      const mockGateways = [
-        {
-          id: 'gateway-1',
-          organizationId: 'org-1',
-          status: 'active',
-          totalRequests: 100,
-          successfulRequests: 90,
-          tools: [{ id: 'tool-1' }],
-          getActiveTools: jest.fn().mockReturnValue([{ id: 'tool-1' }]),
-        },
-        {
-          id: 'gateway-2',
-          organizationId: 'org-1',
-          status: 'active',
-          totalRequests: 50,
-          successfulRequests: 45,
-          tools: [{ id: 'tool-2' }],
-          getActiveTools: jest.fn().mockReturnValue([{ id: 'tool-2' }]),
-        },
-      ];
+    /**
+     * Both aggregates run in SQL. The chains that stood in for them here
+     * were `mockReturnThis()` with a canned answer, so the organization
+     * predicate on the status count or on the response-time average could
+     * be deleted -- handing one tenant another's numbers -- with this suite
+     * green. The builders now record the query that ran, and the gateway
+     * list behind the totals is a table that evaluates its `where`.
+     */
+    const PRIVATE_GATEWAY_CLAUSE = `(gateway.visibility <> 'private' OR gateway."ownerUserId" = :callerId)`;
+    let builders: RecordingQueryBuilder[];
 
-      const mockQueryBuilder = {
-        select: jest.fn().mockReturnThis(),
-        addSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        groupBy: jest.fn().mockReturnThis(),
-        getRawMany: jest.fn().mockResolvedValue([
-          { gateway_status: 'active', count: '2' },
-        ]),
-      };
+    const executed = (alias: string) => {
+      const matching = builders.filter((b) => b.alias === alias);
+      expect(matching).toHaveLength(1);
+      expect(matching[0].executed).toHaveLength(1);
+      return matching[0].executed[0];
+    };
 
-      gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-      gatewayRepository.find.mockResolvedValue(mockGateways);
+    beforeEach(() => {
+      builders = [];
+      gatewayRepository.createQueryBuilder.mockImplementation((alias: string) => {
+        const qb = new RecordingQueryBuilder(alias, {
+          getRawMany: [
+            { gateway_status: 'active', count: '2' },
+            { gateway_status: 'inactive', count: '1' },
+          ],
+        });
+        builders.push(qb);
+        return qb;
+      });
+      usageMetricRepository.createQueryBuilder.mockImplementation((alias: string) => {
+        const qb = new RecordingQueryBuilder(alias, { getRawOne: { avg: '120' } });
+        builders.push(qb);
+        return qb;
+      });
+      const gateways = fakeRepository<any>([
+        { id: 'gw-shared', organizationId: 'org-1', visibility: 'org', ownerUserId: 'user-2', totalRequests: 100, successfulRequests: 90 },
+        { id: 'gw-mine', organizationId: 'org-1', visibility: 'private', ownerUserId: 'user-1', totalRequests: 50, successfulRequests: 45 },
+        { id: 'gw-theirs', organizationId: 'org-1', visibility: 'private', ownerUserId: 'user-2', totalRequests: 7000, successfulRequests: 0 },
+        { id: 'gw-foreign', organizationId: 'org-2', visibility: 'org', ownerUserId: 'user-9', totalRequests: 9000, successfulRequests: 0 },
+      ]);
+      gatewayRepository.find.mockImplementation(gateways.find);
+    });
+
+    it('counts gateways by status in the caller organization, without others\' private ones', async () => {
+      const result = await service.getOrganizationGatewayStats('org-1', 'user-1');
+
+      const counts = executed('gateway');
+      expect(organizationScope(counts, 'gateway')).toBe('org-1');
+      expect(clause(counts, PRIVATE_GATEWAY_CLAUSE)?.params).toEqual({ callerId: 'user-1' });
+      expect(result).toMatchObject({ totalGateways: 3, activeGateways: 2, inactiveGateways: 1 });
+    });
+
+    it('averages response time over the caller organization metrics, in the database', async () => {
       // One average, computed by the database. This used to load every
       // usage_metrics row the org had ever written -- the interceptor
       // writes two per request, so ~1.7M rows/day at 10 req/s -- into
       // heap to produce a single mean.
-      usageMetricRepository.createQueryBuilder.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        getRawOne: jest.fn().mockResolvedValue({ avg: '120' }),
-      });
-
       const result = await service.getOrganizationGatewayStats('org-1', 'user-1');
+
+      const average = executed('metric');
+      expect(organizationScope(average, 'metric')).toBe('org-1');
+      expect(clause(average, 'metric.type = :type')?.params).toEqual({ type: 'response_time' });
       expect(result.averageResponseTime).toBe(120);
       expect(usageMetricRepository.find).not.toHaveBeenCalled();
+    });
 
-      expect(result).toEqual({
-        totalGateways: expect.any(Number),
-        activeGateways: expect.any(Number),
-        inactiveGateways: expect.any(Number),
-        totalRequests: expect.any(Number),
-        averageResponseTime: expect.any(Number),
-        successRate: expect.any(Number),
-        topGateways: expect.any(Array),
-      });
+    it('totals requests over the gateways the caller may see and no others', async () => {
+      const result = await service.getOrganizationGatewayStats('org-1', 'user-1');
+
+      expect(result.totalRequests).toBe(150);
+      expect(result.successRate).toBe(90);
+      expect(result.topGateways.map((t) => t.gateway.id)).toEqual(['gw-shared', 'gw-mine']);
     });
   });
 
@@ -918,62 +1001,55 @@ describe('GatewaysService', () => {
   });
 
   describe('getGateways - filter branches', () => {
-    const filterQueryBuilder = () => ({
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      leftJoinAndSelect: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      orderBy: jest.fn().mockReturnThis(),
-      addOrderBy: jest.fn().mockReturnThis(),
-      skip: jest.fn().mockReturnThis(),
-      take: jest.fn().mockReturnThis(),
-      getCount: jest.fn().mockResolvedValue(1),
-      getRawAndEntities: jest.fn().mockResolvedValue({ entities: [], raw: [] }),
+    let qb: RecordingQueryBuilder;
+
+    beforeEach(() => {
+      useRealListFilter();
+      gatewayRepository.createQueryBuilder.mockImplementation(
+        (alias: string) =>
+          (qb = new RecordingQueryBuilder(alias, {
+            getCount: 1,
+            getRawAndEntities: { entities: [], raw: [] },
+          })),
+      );
     });
 
+    /** The page query as it ran, which is what the filter has to be on. */
+    const pageQuery = () => qb.executed.find((q) => q.terminal === 'getRawAndEntities')!;
+
     it('should filter by search term', async () => {
-      const mockQueryBuilder = filterQueryBuilder();
-
-      gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
       await service.getGateways({
         organizationId: 'org-1',
         search: 'test gateway',
         caller: { id: 'user-1' },
       });
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
-        '(gateway.name ILIKE :search OR gateway.description ILIKE :search)',
-        { search: '%test gateway%' }
-      );
+      expect(
+        clause(pageQuery(), '(gateway.name ILIKE :search OR gateway.description ILIKE :search)')?.params,
+      ).toEqual({ search: '%test gateway%' });
+      expect(organizationScope(pageQuery(), 'gateway')).toBe('org-1');
     });
 
     it('should filter by type', async () => {
-      const mockQueryBuilder = filterQueryBuilder();
-
-      gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
       await service.getGateways({
         organizationId: 'org-1',
         type: 'mcp' as any,
         caller: { id: 'user-1' },
       });
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('gateway.type = :type', { type: 'mcp' });
+      expect(clause(pageQuery(), 'gateway.type = :type')?.params).toEqual({ type: 'mcp' });
+      expect(organizationScope(pageQuery(), 'gateway')).toBe('org-1');
     });
 
     it('should filter by status', async () => {
-      const mockQueryBuilder = filterQueryBuilder();
-
-      gatewayRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
-
       await service.getGateways({
         organizationId: 'org-1',
         status: 'active' as any,
         caller: { id: 'user-1' },
       });
 
-      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('gateway.status = :status', { status: 'active' });
+      expect(clause(pageQuery(), 'gateway.status = :status')?.params).toEqual({ status: 'active' });
+      expect(organizationScope(pageQuery(), 'gateway')).toBe('org-1');
     });
   });
 
