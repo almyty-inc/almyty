@@ -470,6 +470,12 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
       keyHash,
       isActive: true,
       expiresAt: null,
+      // Loaded with the key: its user, active and still a member of org-1.
+      user: {
+        id: 'u-1',
+        isActive: true,
+        organizationMemberships: [{ userId: 'u-1', organizationId: 'org-1', isActive: true, inviteAccepted: true }],
+      },
     };
     const controller = buildController(apiKeyRow);
     const r = res();
