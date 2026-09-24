@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
@@ -153,12 +153,11 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roles.length])
 
-  const neededSlots = useMemo(() => {
-    const selected = strategies.find((s) => s.key === selectedStrategy)
-    const wanted = selected ? selected.roleSlots : strategies.flatMap((s) => s.roleSlots)
-    return [...new Set(wanted)].filter((slot) => !roleKeys.includes(slot))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strategies, selectedStrategy, roleKeys.join(',')])
+  // Cheap enough to derive on every render; memoising it on a joined key
+  // string only hid the dependency from the linter.
+  const selected = strategies.find((s) => s.key === selectedStrategy)
+  const wanted = selected ? selected.roleSlots : strategies.flatMap((s) => s.roleSlots)
+  const neededSlots = [...new Set(wanted)].filter((slot) => !roleKeys.includes(slot))
 
   return (
     <div className="space-y-6">
