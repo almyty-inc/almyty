@@ -13,6 +13,7 @@ import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.ser
 import { Provenance, Tier } from '../memory/canonical/canonical.types';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { runMayWriteSharedMemory } from './memory-autosave.policy';
 
 @Injectable()
 export class AgentBuiltInToolsHelper {
@@ -68,6 +69,11 @@ export class AgentBuiltInToolsHelper {
       }
 
       case 'store_memory': {
+        // A visitor's run does not write shared memory unless the product
+        // opted its visitors in -- the rule auto-save follows too.
+        if (!runMayWriteSharedMemory(run)) {
+          return { result: null, error: 'memory is not kept for visitor conversations' };
+        }
         try {
           // Map the legacy `type` hint into the canonical tier:
           //   'fact'/'preference'/'instruction' → 'long' (durable)
