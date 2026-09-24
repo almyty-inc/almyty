@@ -58,7 +58,10 @@ function withoutAuthorization(headers: Record<string, string>): Record<string, s
 export async function hfFetch(
   url: string,
   init: HfFetchInit = {},
-  transport: HfFetchTransport = (target, options) => fetch(target, options as RequestInit),
+  // The pin and the redirect refusal are spelled out on the fetch itself
+  // as well as on every hop below, so the transport cannot lose them.
+  transport: HfFetchTransport = (target, options) =>
+    fetch(target, { ...options, redirect: 'manual', dispatcher: ssrfSafeDispatcher } as RequestInit),
 ): Promise<Response> {
   let current = url;
   for (let hop = 0; ; hop++) {
