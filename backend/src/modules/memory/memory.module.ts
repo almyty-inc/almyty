@@ -45,7 +45,6 @@ import { ZepBackend } from './canonical/backends/zep.backend';
 import { SupermemoryBackend } from './canonical/backends/supermemory.backend';
 import { VertexMemoryBankBackend } from './canonical/backends/vertex-memory-bank.backend';
 import { MemoryRouter } from './canonical/memory-router.service';
-import { MemoryCapabilityPublisher } from './canonical/memory-capability.publisher';
 import { BackendCredentialsResolver } from './canonical/backend-credentials.resolver';
 import { DocumentChunkerService } from './canonical/document-chunker.service';
 
@@ -104,10 +103,9 @@ import { DocumentChunkerService } from './canonical/document-chunker.service';
     BackendCredentialsResolver,
     DocumentChunkerService,
     DocumentChunkerService,
-    MemoryCapabilityPublisher,
   ],
   controllers: [CanonicalMemoryController],
-  exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter, DocumentChunkerService, MemoryCapabilityPublisher],
+  exports: [CanonicalMemoryService, EmbeddingService, MemoryRouter, DocumentChunkerService],
 })
 export class MemoryModule implements OnApplicationBootstrap {
   constructor(
