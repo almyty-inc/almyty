@@ -1,19 +1,14 @@
 import * as ts from 'typescript';
-import * as path from 'path';
-import { Logger } from '@nestjs/common';
-
-import { SdkMap, SdkMethod, SdkParam } from './types';
 
 /**
- * Pure helpers extracted from SdkIntrospectorService:
- * — runtime introspection fallback
- * — small TS-AST predicates and JSDoc reader
+ * Pure TS-AST predicates and the JSDoc reader, extracted from
+ * SdkIntrospectorService. Plain functions; no DI.
  *
- * Plain functions; no DI. The runtime fallback owns its own Logger
- * because it can fail in ways the caller wants to see.
+ * There is deliberately no runtime fallback here. One used to exist: for
+ * a package without type declarations it did `require()` on the package
+ * inside the backend process, which runs the package's entry file with
+ * the API server's privileges. Introspection reads declarations only.
  */
-
-const runtimeLogger = new Logger('SdkIntrospectorRuntime');
 
 /** Check whether a type is a Promise<T>. */
 export function isPromiseType(type: ts.Type, checker: ts.TypeChecker): boolean {
@@ -56,91 +51,4 @@ export function getJsDocDescription(symbol: ts.Symbol): string | undefined {
     return docs.map((d) => d.text).join('\n');
   }
   return undefined;
-}
-
-/**
- * Fallback for packages without .d.ts and no @types: require the
- * module and inspect exported values at runtime.
- */
-export function runtimeIntrospect(packageName: string, basePath: string): SdkMap {
-  try {
-    const modulePath = path.join(basePath, 'node_modules', packageName);
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require(modulePath);
-    const sdkMap: SdkMap = {};
-
-    for (const key of Object.keys(mod)) {
-      const value = mod[key];
-      if (typeof value === 'function') {
-        const protoMethods = Object.getOwnPropertyNames(value.prototype || {}).filter(
-          (m) => m !== 'constructor' && typeof value.prototype[m] === 'function',
-        );
-
-        if (protoMethods.length > 0) {
-          const methods: SdkMethod[] = protoMethods.map((m) => ({
-            name: m,
-            params: inferParamsFromFunction(value.prototype[m]),
-            returnType: { raw: 'unknown', kind: 'unknown' as const },
-            isAsync: value.prototype[m].constructor.name === 'AsyncFunction',
-            isStatic: false,
-          }));
-
-          sdkMap[key] = {
-            name: key,
-            constructorParams: inferParamsFromFunction(value),
-            methods,
-            properties: [],
-            isClass: true,
-            isFunction: false,
-          };
-        } else {
-          sdkMap[key] = {
-            name: key,
-            constructorParams: [],
-            methods: [
-              {
-                name: key,
-                params: inferParamsFromFunction(value),
-                returnType: { raw: 'unknown', kind: 'unknown' },
-                isAsync: value.constructor.name === 'AsyncFunction',
-                isStatic: false,
-              },
-            ],
-            properties: [],
-            isClass: false,
-            isFunction: true,
-          };
-        }
-      }
-    }
-
-    return sdkMap;
-  } catch (err: any) {
-    runtimeLogger.error(`Runtime introspection failed for "${packageName}": ${err.message}`);
-    return {};
-  }
-}
-
-/**
- * Best-effort parameter inference from a runtime function.
- * Parses the function's .toString() to extract parameter names.
- */
-export function inferParamsFromFunction(fn: Function): SdkParam[] {
-  try {
-    const src = fn.toString();
-    const match = src.match(/\(([^)]*)\)/);
-    if (!match || !match[1].trim()) return [];
-
-    return match[1].split(',').map((p) => {
-      const trimmed = p.trim().replace(/=.*$/, '').replace(/\.\.\./, '');
-      const optional = p.includes('=') || p.includes('...');
-      return {
-        name: trimmed || 'arg',
-        type: { raw: 'unknown', kind: 'unknown' as const },
-        optional,
-      };
-    });
-  } catch {
-    return [];
-  }
 }

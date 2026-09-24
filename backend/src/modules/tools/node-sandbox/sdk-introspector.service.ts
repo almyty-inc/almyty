@@ -3,43 +3,53 @@ import * as ts from 'typescript';
 import * as path from 'path';
 import * as fs from 'fs';
 
-import {
-  SdkMap,
-  SdkExport,
-  SdkMethod,
-  SdkParam,
-  SdkProperty,
-  SdkType,
-} from './types';
-import {
-  getJsDocDescription,
-  hasNonMethodProperties,
-  isPromiseType,
-  runtimeIntrospect,
-} from './sdk-introspector-helpers.helper';
+import { SdkMap } from './types';
 import {
   extractExport,
   resolveAlias,
 } from './sdk-introspector-extractors.helper';
+
+// npm package-name grammar, the same one DependencyManagerService applies
+// before installing. The name is joined onto a filesystem path below, so
+// anything else (`..`, absolute paths) is refused rather than resolved.
+const NPM_NAME_RE =
+  /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
 
 @Injectable()
 export class SdkIntrospectorService {
   private readonly logger = new Logger(SdkIntrospectorService.name);
 
   /**
-   * Introspect an installed npm package and return a structured SdkMap.
+   * Introspect an installed npm package's TYPE DECLARATIONS and return a
+   * structured SdkMap.
+   *
+   * Declarations only. A package with no .d.ts and no @types package
+   * yields an empty map; its JavaScript is never loaded. There used to be
+   * a fallback that `require()`d the package to inspect its exports at
+   * runtime -- in the backend process, with the backend's privileges, on
+   * a package the tool author chose. That is code execution on the host,
+   * so it is gone, and `sdk-introspector-no-host-require.guard.spec.ts`
+   * keeps it gone.
    *
    * @param packageName  npm package name (e.g. "stripe", "@aws-sdk/client-s3")
    * @param basePath     Absolute path to the directory containing node_modules
    */
   introspect(packageName: string, basePath: string): SdkMap {
+    if (
+      typeof packageName !== 'string' ||
+      packageName.length > 214 ||
+      !NPM_NAME_RE.test(packageName)
+    ) {
+      throw new Error(`Invalid npm package name: ${JSON.stringify(packageName)}`);
+    }
+
     const entryFile = this.findTypeEntryPoint(packageName, basePath);
 
     if (!entryFile) {
       this.logger.warn(
-        `No .d.ts entry point found for "${packageName}", falling back to runtime introspection`,
+        `No .d.ts entry point found for "${packageName}"; not loading its code to introspect it`,
       );
-      return runtimeIntrospect(packageName, basePath);
+      return {};
     }
 
     this.logger.debug(`Introspecting "${packageName}" via ${entryFile}`);
