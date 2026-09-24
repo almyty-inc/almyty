@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -22,8 +22,6 @@ export function LlmProviderEditPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const notifications = useNotifications()
-  const [availableModels, setAvailableModels] = useState<Array<{ id: string; name: string }>>([])
-  const [modelsLoading, setModelsLoading] = useState(false)
 
   const { data: provider, isLoading, isError, error, refetch } = useQuery<any>({
     queryKey: ['llm-provider', id],
@@ -61,14 +59,7 @@ export function LlmProviderEditPage() {
       credentialId: undefined,
       usageCredentialId: undefined,
     })
-    let cancelled = false
-    setModelsLoading(true)
-    setAvailableModels([])
-    llmProvidersApi.getModels(provider.id)
-      .then((res: any) => { if (!cancelled) setAvailableModels(res || []) })
-      .catch(() => { if (!cancelled) setAvailableModels([]) })
-      .finally(() => { if (!cancelled) setModelsLoading(false) })
-    return () => { cancelled = true }
+    // The model list is the ModelPicker's to fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider?.id])
 
@@ -104,8 +95,6 @@ export function LlmProviderEditPage() {
             editForm={editForm}
             providerToEdit={provider}
             updateProviderMutation={updateProviderMutation}
-            availableModels={availableModels}
-            modelsLoading={modelsLoading}
             onCancel={() => navigate(`/llm-providers/${id}`)}
           />
         </FormSection>

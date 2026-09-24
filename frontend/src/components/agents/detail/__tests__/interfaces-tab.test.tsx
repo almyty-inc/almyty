@@ -133,7 +133,9 @@ describe('InterfacesTab channel connections', () => {
     renderWithProviders(<InterfacesTab agentId="agent-1" />)
     await user.click(await screen.findByRole('button', { name: /Deploy channel/ }))
     await user.click(screen.getByRole('combobox'))
-    await user.click(await screen.findByText('Slack'))
+    // Inside a <form> Radix also renders a hidden native <select>, so pick
+    // the listbox option by role rather than by text.
+    await user.click(await screen.findByRole('option', { name: 'Slack' }))
     return user
   }
 
@@ -227,5 +229,87 @@ describe('InterfacesTab channel list states', () => {
     expect(await screen.findByText('No channels deployed yet')).toBeInTheDocument()
     // The header and the empty state offer it under the same label.
     expect(screen.getAllByRole('button', { name: /Deploy channel/ })).toHaveLength(2)
+  })
+})
+
+// Deploying a channel and reading its setup used to happen in two modal
+// dialogs. Both are inline sections of the tab now: no dialog role, the
+// rest of the tab stays in view, and Cancel/close put the tab back.
+describe('InterfacesTab inline sections', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    connectionsListMock.mockResolvedValue([])
+  })
+
+  it('opens the deploy form inline, not in a dialog, and Cancel closes it without deploying', async () => {
+    const user = userEvent.setup()
+    ;(gatewaysApi.getAll as any).mockResolvedValue({ gateways: [] })
+    renderWithProviders(<InterfacesTab agentId="agent-1" />)
+
+    await user.click(await screen.findByRole('button', { name: /Deploy channel/ }))
+    const form = await screen.findByTestId('deploy-channel-form')
+    expect(form.tagName).toBe('FORM')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // The header action hides while its form is open; the view toggle stays.
+    expect(screen.queryByRole('button', { name: /Deploy channel/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^List$/ })).toBeInTheDocument()
+
+    await user.type(within(form).getByLabelText('Name'), 'Half typed')
+    await user.click(within(form).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByTestId('deploy-channel-form')).not.toBeInTheDocument()
+    expect(gatewaysApi.create).not.toHaveBeenCalled()
+    // Reopening starts clean.
+    await user.click(screen.getByRole('button', { name: /Deploy channel/ }))
+    expect(within(await screen.findByTestId('deploy-channel-form')).getByLabelText('Name')).toHaveValue('')
+  })
+
+  it('submits the deploy form with Enter in the name field', async () => {
+    const user = userEvent.setup()
+    ;(gatewaysApi.getAll as any).mockResolvedValue({ gateways: [] })
+    ;(gatewaysApi.create as any).mockResolvedValue({ id: 'gw-3', name: 'Ops', type: 'a2a', endpoint: '/ops' })
+    renderWithProviders(<InterfacesTab agentId="agent-1" />)
+
+    await user.click(await screen.findByRole('button', { name: /Deploy channel/ }))
+    await user.type(screen.getByLabelText('Name'), 'Ops{Enter}')
+
+    await waitFor(() => expect(gatewaysApi.create).toHaveBeenCalledTimes(1))
+    expect((gatewaysApi.create as any).mock.calls[0][0]).toMatchObject({ name: 'Ops', endpoint: '/ops', type: 'a2a' })
+    expect(await screen.findByTestId('channel-setup-section')).toBeInTheDocument()
+    expect(screen.queryByTestId('deploy-channel-form')).not.toBeInTheDocument()
+  })
+
+  it('keeps the Slack OAuth client secret out of password managers', async () => {
+    const user = userEvent.setup()
+    ;(gatewaysApi.getAll as any).mockResolvedValue({ gateways: [] })
+    renderWithProviders(<InterfacesTab agentId="agent-1" />)
+
+    await user.click(await screen.findByRole('button', { name: /Deploy channel/ }))
+    await user.click(screen.getByRole('combobox'))
+    await user.click(await screen.findByRole('option', { name: 'Slack' }))
+
+    const secret = await screen.findByLabelText('OAuth client secret')
+    expect(secret).toHaveAttribute('type', 'password')
+    expect(secret).toHaveAttribute('data-1p-ignore', 'true')
+    expect(secret).toHaveAttribute('autocomplete', 'off')
+  })
+
+  it('shows channel setup inline and closes it', async () => {
+    const user = userEvent.setup()
+    ;(gatewaysApi.getAll as any).mockResolvedValue({ gateways: [slackGateway] })
+    renderWithProviders(<InterfacesTab agentId="agent-1" />)
+
+    await user.click(await screen.findByRole('button', { name: /^List$/ }))
+    await user.click(await screen.findByRole('button', { name: /Setup/ }))
+
+    const section = await screen.findByTestId('channel-setup-section')
+    expect(section.tagName).toBe('SECTION')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(section).toHaveTextContent('Finish connecting Support Bot')
+    // The channel cards stay on screen next to it.
+    expect(screen.getByText('Support Bot')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Close channel setup' }))
+    expect(screen.queryByTestId('channel-setup-section')).not.toBeInTheDocument()
   })
 })

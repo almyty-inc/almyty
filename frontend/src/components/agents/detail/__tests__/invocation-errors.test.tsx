@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { renderWithProviders } from '@/test/setup'
 import { agentsApi } from '@/lib/api'
-import { InvokeDialog } from '../invoke-dialog'
+import { RunPanel } from '../run-panel'
 import { OverviewTab } from '../overview-tab'
 import { TestPanel } from '../../builder/test-panel'
 import type { Agent } from '@/types'
@@ -36,12 +36,12 @@ describe('agent invocation errors', () => {
     vi.mocked(agentsApi.invoke).mockRejectedValue(wrappedError)
   })
 
-  it('shows the wrapped backend reason inline and in the run dialog notification', async () => {
-    renderWithProviders(<InvokeDialog agent={agent} open onOpenChange={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Run Agent' }))
+  it('shows the wrapped backend reason inline and in the run panel notification', async () => {
+    renderWithProviders(<RunPanel agent={agent} onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Run agent' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Agent must be active to invoke')
     expect(notifications.error).toHaveBeenCalledWith('Run failed', 'Agent must be active to invoke')
-    expect(screen.getByRole('button', { name: 'Run Agent' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Run agent' })).toBeEnabled()
   })
 
   it('shows the wrapped backend reason in the builder Test panel and clears it on retry', async () => {
@@ -65,19 +65,19 @@ describe('agent invocation errors', () => {
   })
 
   it('preserves useful local invalid-JSON errors without invoking the API', async () => {
-    renderWithProviders(<InvokeDialog agent={agent} open onOpenChange={vi.fn()} />)
+    renderWithProviders(<RunPanel agent={agent} onClose={() => {}} />)
     fireEvent.change(screen.getByLabelText('JSON input'), { target: { value: '{' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Run Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run agent' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid JSON input')
     expect(agentsApi.invoke).not.toHaveBeenCalled()
   })
 
   it('removes a stale successful result when a later invocation fails', async () => {
     vi.mocked(agentsApi.invoke).mockResolvedValueOnce({ output: 'Old result' } as any)
-    renderWithProviders(<InvokeDialog agent={agent} open onOpenChange={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Run Agent' }))
+    renderWithProviders(<RunPanel agent={agent} onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Run agent' }))
     expect(await screen.findByText(/Old result/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Run Agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run agent' }))
     await waitFor(() => expect(screen.queryByText(/Old result/)).not.toBeInTheDocument())
     expect(await screen.findByRole('alert')).toHaveTextContent('Agent must be active to invoke')
   })

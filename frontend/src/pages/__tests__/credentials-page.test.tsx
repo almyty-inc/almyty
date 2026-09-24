@@ -99,7 +99,7 @@ describe('CredentialsPage vault delete', () => {
     // The confirm has to name the secret -- "Are you sure?" over a vault row
     // tells you nothing about which one you are about to destroy.
     const dialog = await screen.findByRole('alertdialog')
-    expect(dialog).toHaveTextContent('Delete credential?')
+    expect(dialog).toHaveTextContent('Delete this credential?')
     expect(dialog).toHaveTextContent('Stripe API Key')
 
     // Nothing has been deleted yet.

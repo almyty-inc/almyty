@@ -1,13 +1,15 @@
 /**
  * Interfaces tab for the agent detail page. Shows gateway-based channel
- * deployments for this agent, plus a deploy dialog with type-specific
- * configuration forms.
+ * deployments for this agent. "Deploy channel" opens an inline form with
+ * type-specific configuration at the top of the tab, and a channel's
+ * setup instructions open inline the same way (after a deploy, from a
+ * card's Setup button, or from a canvas tile).
  *
  * Post-A2A-refactor: channels are now agent-kind gateways, not the
  * legacy interfaces entity. We fetch gateways with kind=agent and
  * agentId=<this agent>.
  */
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
@@ -17,10 +19,12 @@ import {
   Plug,
   Loader2,
   Wrench,
+  X,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SecretInput } from '@/components/ui/secret-input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -33,13 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
+import { InlineFormActions } from '@/components/layout/form-page'
 
 import { gatewaysApi } from '@/lib/api'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -113,6 +111,35 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
   // The canvas is the default view: one agent, its surfaces around it.
   // The list stays for scanning many gateways at once.
   const [view, setView] = useState<'canvas' | 'list'>('canvas')
+  const deployRef = useRef<HTMLFormElement>(null)
+  const setupRef = useRef<HTMLElement>(null)
+
+  // Both sections open at the top of the tab; a click on a card or tile
+  // further down would otherwise change something off-screen.
+  useEffect(() => {
+    if (deployInterfaceOpen) deployRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [deployInterfaceOpen])
+  useEffect(() => {
+    if (setupGateway) setupRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [setupGateway?.id])
+
+  const resetDeployForm = () => {
+    setDeployInterfaceOpen(false)
+    setNewInterfaceName('')
+    setNewInterfaceType('a2a')
+    setInterfaceConfig({})
+    setChannelConnection(null)
+  }
+
+  const openDeployForm = (type?: string) => {
+    if (type) {
+      setNewInterfaceType(type)
+      setInterfaceConfig(getDefaultInterfaceConfig(type))
+      setChannelConnection(null)
+    }
+    setSetupGateway(null)
+    setDeployInterfaceOpen(true)
+  }
 
   // Which surfaces exist and which are usable is the backend's answer,
   // not a hardcoded list here, so a gated or retired surface shows up
@@ -165,16 +192,11 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
     onSuccess: (created: any) => {
       captureEvent('channel_deployed', { channelType: newInterfaceType })
       success('Channel Deployed', 'Gateway has been created for this agent.')
-      setInterfaceConfig({})
-      setChannelConnection(null)
-      setDeployInterfaceOpen(false)
-      setNewInterfaceName('')
-      setNewInterfaceType('a2a')
-      setInterfaceConfig({})
+      resetDeployForm()
       // Walk the user straight into platform-side setup for the new channel.
       // Without this the canvas still shows the channel as un-deployed,
       // and clicking that tile looks it up by id in this same query,
-      // misses, and reopens the deploy dialog -- a second gateway for
+      // misses, and reopens the deploy form -- a second gateway for
       // the same channel.
       queryClient.invalidateQueries({ queryKey: ['agent-gateways', agentId] })
       const gateway = created?.gateway || created
@@ -238,12 +260,171 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
               List
             </Button>
           </div>
-          <Button size="sm" onClick={() => setDeployInterfaceOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Deploy channel
-          </Button>
+          {!deployInterfaceOpen && (
+            <Button size="sm" onClick={() => openDeployForm()}>
+              <Plus className="h-4 w-4 mr-2" />
+              Deploy channel
+            </Button>
+          )}
         </div>
       </div>
+
+      {deployInterfaceOpen && (
+        <form
+          ref={deployRef}
+          onSubmit={(e: FormEvent<HTMLFormElement>) => {
+            e.preventDefault()
+            if (!deployGatewayMutation.isPending) deployGatewayMutation.mutate()
+          }}
+          noValidate
+          aria-labelledby="deploy-channel-title"
+          data-testid="deploy-channel-form"
+          className="space-y-4 rounded-xl border bg-card p-4 text-card-foreground sm:p-6"
+        >
+          <div className="space-y-1">
+            <h4 id="deploy-channel-title" className="text-base font-semibold">Deploy channel</h4>
+            <p className="text-sm text-muted-foreground">
+              Deploy this agent to a new channel via a gateway.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="channel-type">Type</Label>
+              <Select value={newInterfaceType} onValueChange={(val) => { setNewInterfaceType(val); setInterfaceConfig(getDefaultInterfaceConfig(val)); setChannelConnection(null) }}>
+                <SelectTrigger id="channel-type" className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CHANNEL_TYPES.map((ct) => (
+                    <SelectItem key={ct.value} value={ct.value}>{ct.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="channel-name">Name</Label>
+              <Input
+                id="channel-name"
+                placeholder={`${newInterfaceType.replace('_', ' ')} gateway`}
+                value={newInterfaceName}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewInterfaceName(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          {/* Type-specific configuration (Slack, Discord, etc.) */}
+          {newInterfaceType === 'chat_widget' && (
+            <div className="space-y-3 rounded-md border p-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Widget settings</p>
+              <div>
+                <Label htmlFor="cfg-welcome">Welcome message</Label>
+                <Input
+                  id="cfg-welcome"
+                  placeholder="Hi! How can I help you?"
+                  value={interfaceConfig.welcomeMessage || ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, welcomeMessage: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="cfg-color">Primary color</Label>
+                <Input
+                  id="cfg-color"
+                  placeholder="#8b5cf6"
+                  value={interfaceConfig.primaryColor || ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, primaryColor: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          )}
+
+          <ChannelCredentialsSection
+            type={newInterfaceType}
+            config={interfaceConfig}
+            onConfigChange={setInterfaceConfig}
+            connection={channelConnection}
+            onConnectionChange={setChannelConnection}
+          />
+
+          {/* Slack app-level OAuth. Separate from the bot credentials a
+              connection supplies: this pair is what makes the channel
+              installable in other workspaces. */}
+          {newInterfaceType === 'slack' && (
+            <div className="space-y-3 rounded-md border p-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Multi-workspace installs (optional)</p>
+              <div>
+                <Label htmlFor="cfg-slack-client-id">OAuth client ID</Label>
+                <Input id="cfg-slack-client-id" placeholder="Slack app client ID" value={interfaceConfig.client_id || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, client_id: e.target.value }))} className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="cfg-slack-client-secret">OAuth client secret</Label>
+                <SecretInput id="cfg-slack-client-secret" placeholder="Slack app client secret" value={interfaceConfig.client_secret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, client_secret: e.target.value }))} className="mt-1" />
+              </div>
+              <p className="text-xs text-muted-foreground">With OAuth credentials set, this channel gets an "Add to Slack" install link so any workspace can install it.</p>
+            </div>
+          )}
+
+          {AI_DISCLOSURE_CHANNEL_TYPES.has(newInterfaceType) && (
+            <div className="flex items-start gap-2 rounded-md border p-3">
+              <Checkbox
+                id="cfg-ai-disclosure"
+                checked={!!interfaceConfig.aiDisclosure}
+                onCheckedChange={(checked) => setInterfaceConfig(prev => ({ ...prev, aiDisclosure: checked === true }))}
+                className="mt-0.5"
+              />
+              <div>
+                <Label htmlFor="cfg-ai-disclosure" className="text-sm font-normal cursor-pointer">
+                  Disclose AI identity on first message (EU AI Act Art. 50)
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Prepends a disclosure line to the first reply of each conversation.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <InlineFormActions
+            onCancel={resetDeployForm}
+            submitLabel="Deploy"
+            submitting={deployGatewayMutation.isPending}
+          />
+        </form>
+      )}
+
+      {/* Channel setup -- opened after a deploy, from each card's Setup
+          button and from a deployed tile on the canvas. */}
+      {setupGateway && (
+        <section
+          ref={setupRef}
+          aria-labelledby="channel-setup-title"
+          data-testid="channel-setup-section"
+          className="space-y-4 rounded-xl border bg-card p-4 text-card-foreground sm:p-6"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 space-y-1">
+              <h4 id="channel-setup-title" className="text-base font-semibold">Channel setup</h4>
+              <p className="text-sm text-muted-foreground">
+                Finish connecting {setupGateway.name || 'this channel'} on the platform's side.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              aria-label="Close channel setup"
+              onClick={() => setSetupGateway(null)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <ChannelSetupPanel gateway={setupGateway} />
+          {/* Multi-workspace OAuth installs (Slack channels with a configured client_id) */}
+          <ChannelInstallationsPanel gateway={setupGateway} />
+        </section>
+      )}
 
       {view === 'canvas' && !isLoading && (
         <SurfacesCanvas
@@ -260,11 +441,9 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
             if (gateway) setSetupGateway(gateway)
           }}
           onAddSurface={(surface) => {
-            // Drop straight into the deploy dialog with the surface the
+            // Drop straight into the deploy form with the surface the
             // operator clicked already chosen.
-            setNewInterfaceType(surface.type)
-            setInterfaceConfig(getDefaultInterfaceConfig(surface.type))
-            setDeployInterfaceOpen(true)
+            openDeployForm(surface.type)
           }}
         />
       )}
@@ -290,7 +469,7 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
               title="No channels deployed yet"
               description="Deploy a channel to make this agent reachable over A2A, Slack, Discord, email and more."
               action={
-                <Button onClick={() => setDeployInterfaceOpen(true)}>
+                <Button onClick={() => openDeployForm()}>
                   <Plus className="h-4 w-4 mr-2" />
                   Deploy channel
                 </Button>
@@ -392,152 +571,6 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
           })}
         </div>
       )}
-
-      {/* Deploy Channel Dialog */}
-      <Dialog open={deployInterfaceOpen} onOpenChange={setDeployInterfaceOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Deploy channel</DialogTitle>
-            <DialogDescription>
-              Deploy this agent to a new channel via a gateway.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="channel-type">Type</Label>
-              <Select value={newInterfaceType} onValueChange={(val) => { setNewInterfaceType(val); setInterfaceConfig(getDefaultInterfaceConfig(val)); setChannelConnection(null) }}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CHANNEL_TYPES.map((ct) => (
-                    <SelectItem key={ct.value} value={ct.value}>{ct.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="channel-name">Name</Label>
-              <Input
-                id="channel-name"
-                placeholder={`${newInterfaceType.replace('_', ' ')} gateway`}
-                value={newInterfaceName}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewInterfaceName(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-
-            {/* Type-specific configuration (Slack, Discord, etc.) */}
-            {newInterfaceType === 'chat_widget' && (
-              <div className="space-y-3 rounded-md border p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Widget Settings</p>
-                <div>
-                  <Label htmlFor="cfg-welcome">Welcome Message</Label>
-                  <Input
-                    id="cfg-welcome"
-                    placeholder="Hi! How can I help you?"
-                    value={interfaceConfig.welcomeMessage || ''}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, welcomeMessage: e.target.value }))}
-                    className="mt-1"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="cfg-color">Primary Color</Label>
-                  <Input
-                    id="cfg-color"
-                    placeholder="#8b5cf6"
-                    value={interfaceConfig.primaryColor || ''}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, primaryColor: e.target.value }))}
-                    className="mt-1"
-                  />
-                </div>
-              </div>
-            )}
-
-            <ChannelCredentialsSection
-              type={newInterfaceType}
-              config={interfaceConfig}
-              onConfigChange={setInterfaceConfig}
-              connection={channelConnection}
-              onConnectionChange={setChannelConnection}
-            />
-
-            {/* Slack app-level OAuth. Separate from the bot credentials a
-                connection supplies: this pair is what makes the channel
-                installable in other workspaces. */}
-            {newInterfaceType === 'slack' && (
-              <div className="space-y-3 rounded-md border p-3">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Multi-workspace installs (optional)</p>
-                <div>
-                  <Label htmlFor="cfg-slack-client-id">OAuth Client ID</Label>
-                  <Input id="cfg-slack-client-id" placeholder="Slack app client ID" value={interfaceConfig.client_id || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, client_id: e.target.value }))} className="mt-1" />
-                </div>
-                <div>
-                  <Label htmlFor="cfg-slack-client-secret">OAuth Client Secret</Label>
-                  <Input id="cfg-slack-client-secret" type="password" placeholder="Slack app client secret" value={interfaceConfig.client_secret || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setInterfaceConfig(prev => ({ ...prev, client_secret: e.target.value }))} className="mt-1" />
-                </div>
-                <p className="text-xs text-muted-foreground">With OAuth credentials set, this channel gets an "Add to Slack" install link so any workspace can install it.</p>
-              </div>
-            )}
-
-            {AI_DISCLOSURE_CHANNEL_TYPES.has(newInterfaceType) && (
-              <div className="flex items-start gap-2 rounded-md border p-3">
-                <Checkbox
-                  id="cfg-ai-disclosure"
-                  checked={!!interfaceConfig.aiDisclosure}
-                  onCheckedChange={(checked) => setInterfaceConfig(prev => ({ ...prev, aiDisclosure: checked === true }))}
-                  className="mt-0.5"
-                />
-                <div>
-                  <Label htmlFor="cfg-ai-disclosure" className="text-sm font-normal cursor-pointer">
-                    Disclose AI identity on first message (EU AI Act Art. 50)
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Prepends a disclosure line to the first reply of each conversation.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <Button
-              className="w-full"
-              disabled={deployGatewayMutation.isPending}
-              onClick={() => deployGatewayMutation.mutate()}
-            >
-              {deployGatewayMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deploying...
-                </>
-              ) : (
-                <>
-                  <Plug className="h-4 w-4 mr-2" />
-                  Deploy
-                </>
-              )}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Channel Setup Dialog — opened after a deploy and from each card's Setup button */}
-      <Dialog open={!!setupGateway} onOpenChange={(open) => { if (!open) setSetupGateway(null) }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Channel setup</DialogTitle>
-            <DialogDescription>
-              Finish connecting {setupGateway?.name || 'this channel'} on the platform's side.
-            </DialogDescription>
-          </DialogHeader>
-          {setupGateway && (
-            <>
-              <ChannelSetupPanel gateway={setupGateway} />
-              {/* Multi-workspace OAuth installs (Slack channels with a configured client_id) */}
-              <ChannelInstallationsPanel gateway={setupGateway} />
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

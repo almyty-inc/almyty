@@ -50,7 +50,6 @@ import { agentsApi, externalAgentsApi } from '@/lib/api'
 import { pluralized } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
 import { useNotifications } from '@/store/app'
-import { ImportExternalA2ADialog } from '@/components/agents/import-external-a2a-dialog'
 import { TeamFilter, useTeamLookup, VisibilityBadge, filterByTeamVisibility, type TeamFilterValue } from '@/components/ui/team-filter'
 import type { Agent, ExternalAgent } from '@/types'
 import { getApiErrorMessage } from '@/lib/api-error'
@@ -85,7 +84,6 @@ export function AgentsPage() {
   const { success, error: errorNotif } = useNotifications()
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [importExternalOpen, setImportExternalOpen] = useState(false)
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -234,7 +232,7 @@ export function AgentsPage() {
                   <FileUp className="h-4 w-4 mr-2" />
                   Import from JSON
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setImportExternalOpen(true)}>
+                <DropdownMenuItem onClick={() => navigate('/agents/import?source=a2a')}>
                   <Globe className="h-4 w-4 mr-2" />
                   Import external A2A agent
                 </DropdownMenuItem>
@@ -532,13 +530,6 @@ export function AgentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Import External A2A Dialog */}
-      <ImportExternalA2ADialog
-        open={importExternalOpen}
-        onOpenChange={setImportExternalOpen}
-      />
-
     </div>
   )
 }
