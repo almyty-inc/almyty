@@ -1,3 +1,4 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { AgentExecutionEngine } from '../agent-execution.engine';
 import { AgentExecutionStatus } from '../../../entities/agent-execution.entity';
 
@@ -61,6 +62,10 @@ describe('AgentExecutionEngine and a chosen strategy', () => {
       undefined,
       resolver,
       roles,
+      undefined, // organizationRepository
+      undefined, // budgets
+      undefined, // cancellations
+      membershipFixture().executionAccess, // the real execution gate
     );
     return { engine, nodeExecutor, executionRepo };
   }

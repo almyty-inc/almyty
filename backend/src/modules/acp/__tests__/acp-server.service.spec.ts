@@ -203,6 +203,8 @@ describe('AcpServerService', () => {
         'org-1',
         null,
         'Hello',
+        // Runs in the gateway's scope (ExecutionAccessService's gateway rule).
+        { principal: expect.objectContaining({ kind: 'gateway', gatewayId: 'gw-1', visibility: 'org' }) },
       );
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({

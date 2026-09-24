@@ -1,5 +1,6 @@
 import { AgentSchedulerService } from '../agent-scheduler.service';
 import { AgentStatus } from '../../../entities/agent.entity';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { fakeRepository } from '../../../test/fake-repository';
 
 /**
@@ -20,7 +21,17 @@ const NEW_OWNER = '22222222-2222-4222-8222-222222222222';
 function build(agent: Record<string, any>) {
   const execute = jest.fn(async () => ({ nodeResults: [] }));
   const agents = fakeRepository<any>([agent]);
-  const scheduler = new AgentSchedulerService({} as any, { execute } as any, agents as any, {} as any);
+  // The real execution gate: the new owner is a member of the agent's org.
+  const m = membershipFixture();
+  m.member('org-1', NEW_OWNER);
+  const scheduler = new AgentSchedulerService(
+    {} as any,
+    { execute } as any,
+    agents as any,
+    {} as any,
+    m.executionAccess,
+    fakeRepository<any>([]) as any,
+  );
   return { scheduler, execute };
 }
 

@@ -1,3 +1,4 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { BadRequestException } from '@nestjs/common';
 
 import { AgentStepProcessor } from '../agent-step-processor';
@@ -208,6 +209,7 @@ describe('step processor delegates a collaboration orchestrator', () => {
         })),
       },
       collaboration: { processCollaborationStep },
+      executionAccess: membershipFixture().executionAccess,
       logger: { log: jest.fn(), warn: jest.fn(), debug: jest.fn(), error: jest.fn() },
     };
     const processor = new AgentStepProcessor(s, {} as any, {} as any, {} as any);

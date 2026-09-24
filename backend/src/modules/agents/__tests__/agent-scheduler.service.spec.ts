@@ -1,3 +1,7 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
+import { AgentExecution } from '../../../entities/agent-execution.entity';
+import { fakeRepository } from '../../../test/fake-repository';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
@@ -37,11 +41,13 @@ describe('AgentSchedulerService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         AgentSchedulerService,
         { provide: AgentsService, useValue: agentsService },
         { provide: AgentExecutionEngine, useValue: executionEngine },
         { provide: getRepositoryToken(Agent), useValue: agentRepo },
         { provide: getQueueToken('agent-scheduler'), useValue: queue },
+        { provide: getRepositoryToken(AgentExecution), useValue: fakeRepository<any>([]) },
       ],
     }).compile();
 

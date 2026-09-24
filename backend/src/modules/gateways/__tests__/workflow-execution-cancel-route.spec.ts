@@ -1,3 +1,4 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
 /**
  * POST /:orgSlug/:agentSlug/executions/:executionId/cancel — the workflow
  * counterpart of /runs/:id/cancel (issue #653).
@@ -101,7 +102,7 @@ function build(rows: AgentExecution[]) {
     { manager: { getRepository: () => ({ find: async () => [] }) } } as any,
     apiKeyRepo as any,
     { execute: jest.fn() } as any,
-    { cancelRun: jest.fn() } as any,
+    { cancelRun: jest.fn(), executionAccess: membershipFixture().executionAccess } as any,
     { verify: jest.fn(() => { throw new Error('not a jwt'); }) } as any,
     cancellations,
   );

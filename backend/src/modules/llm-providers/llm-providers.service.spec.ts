@@ -2817,7 +2817,7 @@ describe('LlmProvidersService', () => {
       expect(toolExecutorService.executeTool).toHaveBeenCalledWith(
         'tool-1',
         { location: 'NYC' },
-        { userId: 'system', organizationId: 'org-1' }
+        { userId: 'system', organizationId: 'org-1', principal: { kind: 'user', userId: null, source: 'session' } }
       );
     });
   });
