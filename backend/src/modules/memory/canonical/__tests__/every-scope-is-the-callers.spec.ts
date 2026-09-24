@@ -46,7 +46,7 @@ describe('canonical memory never trusts a caller-supplied scope', () => {
     // it, whatever else it does.
     const handlers = [...body.matchAll(/async (\w+)\(([\s\S]*?)\n  \) \{/g)];
     const scoped = handlers.filter(([, , params]) => /scope/i.test(params));
-    const unchecked = scoped.filter(([, name, params]) => !params.includes('@Request()')).map(([, name]) => name);
+    const unchecked = scoped.filter(([, , params]) => !params.includes('@Request()')).map(([, name]) => name);
 
     expect(unchecked).toEqual([]);
   });

@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WebSocket } from 'ws';
@@ -6,7 +6,7 @@ import { WebSocket } from 'ws';
 import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { isPrivateGateway } from './private-gateway';
-import { ToolExecutorService, ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
+import { ToolExecutorService, ToolExecutionOptions } from '../tools/tool-executor.service';
 
 export interface ProtocolRequest {
   gatewayId: string;

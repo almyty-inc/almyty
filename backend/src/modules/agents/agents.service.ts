@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Tool } from '../../entities/tool.entity';
 
-import { Agent, AgentStatus, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
+import { Agent, AgentStatus, AgentPipeline } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { Organization } from '../../entities/organization.entity';
 import { User } from '../../entities/user.entity';

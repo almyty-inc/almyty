@@ -1,7 +1,7 @@
-import { LIMITS, softCapForTier, SoftCapBehavior, EMBEDDING_QUEUE_NAME } from './canonical.constants';
+import { LIMITS, SoftCapBehavior, EMBEDDING_QUEUE_NAME } from './canonical.constants';
 import { EmbeddingStatus } from './canonical.types';
 import { scopeToOrganizationId } from './canonical-memory.service';
-import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';

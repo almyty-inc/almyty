@@ -9,7 +9,7 @@ import {
   HttpStatus,
   HttpException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 
 import { SkillGeneratorService } from './skill-generator.service';
 import { CliGeneratorService } from './cli-generator.service';
@@ -67,7 +67,7 @@ export class ToolsExportController {
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('toolId', ParseUUIDPipe) toolId: string,
     @Query('format') format: 'bash' | 'node' = 'bash',
-    @Request() req: any,
+    @Request() _req: any,
   ) {
     try {
       const cli = await this.cliGeneratorService.generateToolCli(toolId, format, organizationId);
@@ -96,7 +96,7 @@ export class ToolsExportController {
   async getToolSdk(
     @Param('organizationId', ParseUUIDPipe) organizationId: string,
     @Param('toolId', ParseUUIDPipe) toolId: string,
-    @Request() req: any,
+    @Request() _req: any,
   ) {
     try {
       const sdk = await this.codegenService.generateToolSdk(toolId, organizationId);

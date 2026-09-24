@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { HttpException } from '@nestjs/common';
-import { Gateway, GatewayType, GatewayKind, GatewayStatus } from '../../../entities/gateway.entity';
+import { Gateway, GatewayType, GatewayKind } from '../../../entities/gateway.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { GatewayAuth } from '../../../entities/gateway-auth.entity';
 import { User } from '../../../entities/user.entity';
@@ -20,10 +19,6 @@ import { AccessPolicyService } from '../../../common/authorization/access-policy
  */
 describe('ACP Gateway Integration', () => {
   let gatewaysService: GatewaysService;
-  let gatewayRepository: any;
-  let gatewayAuthRepository: any;
-  let userRepository: any;
-  let organizationRepository: any;
 
   const mockOrg = {
     id: 'org-1',
@@ -103,10 +98,6 @@ describe('ACP Gateway Integration', () => {
     }).compile();
 
     gatewaysService = module.get<GatewaysService>(GatewaysService);
-    gatewayRepository = module.get(getRepositoryToken(Gateway));
-    gatewayAuthRepository = module.get(getRepositoryToken(GatewayAuth));
-    userRepository = module.get(getRepositoryToken(User));
-    organizationRepository = module.get(getRepositoryToken(Organization));
   });
 
   it('should create an ACP gateway with agent kind', async () => {

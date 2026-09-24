@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Tool, ToolExecutionMethod } from '../../entities/tool.entity';
+import { Tool } from '../../entities/tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { servableOnGateway } from '../../common/authorization/private-visibility';

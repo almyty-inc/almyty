@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject, IsEnum, IsArray, IsUrl, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsEnum, IsArray, MaxLength } from 'class-validator';
 import { RESOURCE_VISIBILITIES, ResourceVisibility } from '../../../common/authorization/access-policy.service';
 import { Transform } from 'class-transformer';
 import { AgentStatus } from '../../../entities/agent.entity';

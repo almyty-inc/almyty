@@ -29,9 +29,7 @@ jest.mock('child_process', () => {
   };
 });
 
-// eslint-disable-next-line import/first
 import { spawn } from 'child_process';
-// eslint-disable-next-line import/first
 import { DependencyManagerService } from '../dependency-manager.service';
 
 const spawnMock = spawn as unknown as jest.Mock;

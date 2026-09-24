@@ -14,7 +14,6 @@ import {
   Request,
   BadRequestException,
   NotFoundException,
-  ForbiddenException,
   HttpException,
   HttpStatus,
   UploadedFile,
@@ -29,9 +28,9 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { PrivateApiGuard } from '../../common/authorization/private-resource.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ApisService } from './apis.service';
-import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
+import { CredentialService } from './credential.service';
 import { CreateApiDto, UpdateApiDto, ImportSchemaDto, CreateHttpApiDto, CreateSdkApiDto } from './dto/api.dto';
-import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
+import { ApiType, ApiStatus } from '../../entities/api.entity';
 
 @Controller('apis')
 @UseGuards(JwtAuthGuard, RolesGuard, PrivateApiGuard)
@@ -423,7 +422,7 @@ export class ApisController {
       try {
         const cont = await emit();
         if (!cont) clearInterval(interval);
-      } catch (err) {
+      } catch {
         clearInterval(interval);
         stop();
       }

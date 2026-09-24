@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException } from '@nestjs/common';
 import { CliGeneratorService } from '../cli-generator.service';
-import { Tool, ToolType, ToolStatus, ToolExecutionMethod } from '../../../entities/tool.entity';
+import { Tool, ToolType, ToolStatus } from '../../../entities/tool.entity';
 import { Gateway, GatewayType, GatewayStatus } from '../../../entities/gateway.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
 

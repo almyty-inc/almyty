@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Put,
   Patch,
   Delete,
   Body,
@@ -16,24 +15,19 @@ import {
   HttpException,
   Logger,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsObject, IsBoolean, IsNumber, Min, Max, IsArray } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 
 import { GatewaysService, CreateGatewayDto, UpdateGatewayDto, GatewaySearchFilters } from './gateways.service';
-import { GatewayAuthService, CreateGatewayAuthDto, UpdateGatewayAuthDto } from './gateway-auth.service';
-import { GatewayToolService, CreateGatewayToolDto, UpdateGatewayToolDto, BulkAssociateToolsDto, GatewayToolSearchFilters } from './gateway-tool.service';
+import { GatewayAuthService } from './gateway-auth.service';
+import { GatewayToolService } from './gateway-tool.service';
 import { SkillGeneratorService } from '../tools/skill-generator.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
 import { CliGeneratorService } from '../tools/cli-generator.service';
 import { CodegenService } from '../tools/codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrivateGatewayGuard } from './private-gateway.guard';
-import { batchAsync } from '../../common/utils/batch-async';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { GatewayKind, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
-import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { maskChannelConfigSecrets } from './channels/channel-config.helper';
 import { SURFACE_CATALOG } from './surface-catalog';
 

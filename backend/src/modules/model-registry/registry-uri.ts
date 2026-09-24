@@ -49,8 +49,6 @@ export class InvalidRegistryUriError extends Error {
   }
 }
 
-const SCHEME_LIST = [...ARTIFACT_SCHEMES, ...PROVIDER_SCHEMES].join('|');
-
 export function parseRegistryUri(raw: string): ParsedRegistryUri {
   const value = (raw ?? '').trim();
   const scheme = value.slice(0, Math.max(value.indexOf('://'), 0)) as RegistryScheme;

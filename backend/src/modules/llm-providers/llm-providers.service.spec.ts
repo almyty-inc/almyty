@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
-import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, extractUpstreamErrorMessage, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
+import { LlmProvidersService, CreateLlmProviderDto, UpdateLlmProviderDto, ChatRequest, LLM_HEALTH_GATE_MESSAGE } from './llm-providers.service';
 import { callOpenAI, callAnthropic, callGoogle, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus } from '../../entities/llm-provider.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { makeEnvelopeCryptoMock } from '../../test/envelope-crypto.mock';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
-import { Message, MessageRole, MessageStatus } from '../../entities/message.entity';
+import { Message, MessageRole } from '../../entities/message.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
@@ -44,7 +44,6 @@ jest.mock('axios', () => {
 
 describe('LlmProvidersService', () => {
   let service: LlmProvidersService;
-  let chatHelperInstance: LlmChatHelper;
   let modelsHelperInstance: LlmModelsHelper;
   let accessPolicy: any;
   let runnerInstance: LlmChatRunnerHelper;
@@ -53,7 +52,6 @@ describe('LlmProvidersService', () => {
   let messageRepository: any;
   let userRepository: any;
   let organizationRepository: any;
-  let gatewayRepository: any;
   let toolRepository: any;
   let toolExecutorService: any;
   let catalog: any;
@@ -181,7 +179,6 @@ describe('LlmProvidersService', () => {
     }).compile();
 
     service = module.get<LlmProvidersService>(LlmProvidersService);
-    chatHelperInstance = module.get(LlmChatHelper);
     modelsHelperInstance = module.get(LlmModelsHelper);
     // Save-time model validation asks the vendor for its list; never let a
     // unit test reach the network. Tests that care override this spy.
@@ -194,7 +191,6 @@ describe('LlmProvidersService', () => {
     messageRepository = module.get(getRepositoryToken(Message));
     userRepository = module.get(getRepositoryToken(User));
     organizationRepository = module.get(getRepositoryToken(Organization));
-    gatewayRepository = module.get(getRepositoryToken(Gateway));
     toolRepository = module.get(getRepositoryToken(Tool));
     toolExecutorService = module.get(ToolExecutorService);
   });
@@ -540,7 +536,7 @@ describe('LlmProvidersService', () => {
 
       jest.spyOn(runnerInstance as any, 'validateProviderConfiguration').mockImplementation();
 
-      const result = await service.updateProvider('provider-1', updateDto, 'org-1', 'user-1');
+      await service.updateProvider('provider-1', updateDto, 'org-1', 'user-1');
 
       expect(mockProvider.name).toBe(updateDto.name);
       expect(mockProvider.configuration.temperature).toBe(0.8);

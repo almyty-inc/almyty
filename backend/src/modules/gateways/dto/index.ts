@@ -1,5 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsObject, IsNumber, IsUrl, IsBoolean, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsEnum, IsObject } from 'class-validator';
 import { GatewayType } from '../../../entities/gateway.entity';
 
 export class CreateGatewayDto {

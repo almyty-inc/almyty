@@ -301,11 +301,9 @@ export class ApisImportHelper {
       this.toolGen.logMemoryPhase('after-commit');
 
       let generatedTools: Tool[] = [];
-      let toolFailures = 0;
-      let toolTotal = 0;
       if (options.generateTools) {
         try {
-          ({ tools: generatedTools, failed: toolFailures, total: toolTotal } =
+          ({ tools: generatedTools } =
             await this.toolGen.generateToolsFromApi(
             apiId,
             organizationId,

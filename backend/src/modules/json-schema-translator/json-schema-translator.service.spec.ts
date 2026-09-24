@@ -3,14 +3,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { JsonSchemaTranslatorService } from './json-schema-translator.service';
 import {
   normalizePropertyToJsonSchema,
-  translateOpenAPIOperationInput,
-  translateOpenAPIOperationOutput,
-  translateGraphQLOperationInput,
-  translateGraphQLOperationOutput,
-  translateSOAPOperationInput,
-  translateSOAPOperationOutput,
-  translateProtobufOperationInput,
-  translateProtobufOperationOutput,
 } from './protocol-translators.helper';
 import { JsonSchema, JsonSchemaType } from '../../entities/json-schema.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
@@ -651,12 +643,10 @@ describe('JsonSchemaTranslatorService', () => {
   describe('Additional Branch Coverage Tests', () => {
     let operationRepository: any;
     let resourceRepository: any;
-    let apiSchemaRepository: any;
 
     beforeEach(() => {
       operationRepository = service['operationRepository'];
       resourceRepository = service['resourceRepository'];
-      apiSchemaRepository = service['apiSchemaRepository'];
     });
 
     describe('translateApiSchemaToJsonSchemas - full pipeline', () => {
@@ -1655,7 +1645,7 @@ describe('JsonSchemaTranslatorService', () => {
       it('should handle validation error (line 495)', async () => {
         // Mock the method to throw an error
         const originalValidate = service.validateJsonSchema.bind(service);
-        service.validateJsonSchema = jest.fn().mockImplementation(async (schema) => {
+        service.validateJsonSchema = jest.fn().mockImplementation(async (_schema) => {
           try {
             throw new Error('Validation error occurred');
           } catch (error) {

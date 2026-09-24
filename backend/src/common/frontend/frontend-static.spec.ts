@@ -7,7 +7,6 @@ import * as http from 'http';
 
 import { All, Controller, Get, Module, Req } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { ServeStaticModule } from '@nestjs/serve-static';
 
 import {
   API_ROUTE_ROOTS,

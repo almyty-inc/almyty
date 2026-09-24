@@ -26,12 +26,12 @@ import { Injectable, Logger, BadRequestException, Optional, ForbiddenException, 
 import { PluginManagerService } from '../plugins/plugin-manager.service';
 import { PluginHookType } from '../plugins/types/plugin.types';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 import * as Redis from 'ioredis';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 
 import { Tool, ToolStatus } from '../../entities/tool.entity';
-import { Api, ApiType } from '../../entities/api.entity';
+import { ApiType } from '../../entities/api.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { User } from '../../entities/user.entity';
@@ -46,13 +46,13 @@ import {
   GraphQLRequest,
   SOAPRequest,
 } from './tool-execution.types';
-import { hashCacheObject, sleep } from './tool-execution-utils';
+import { sleep } from './tool-execution-utils';
 import { ToolHttpExecutor } from './executors/tool-http.executor';
 import { ToolProtocolExecutor } from './executors/tool-protocol.executor';
 import { ToolScriptExecutor } from './executors/tool-script.executor';
 import { ToolCacheRateLimitHelper } from './tool-cache-rate-limit.helper';
 import { ToolStatsHelper } from './tool-stats.helper';
-import { RunnerCallService, RUNNER_CALL_ERRORS, RunnerCallError } from '../runner/runner-call.service';
+import { RunnerCallService, RunnerCallError } from '../runner/runner-call.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
 import { McpSourcesService } from '../mcp-sources/mcp-sources.service';
 import { McpClientError } from '../mcp-sources/mcp-client.service';

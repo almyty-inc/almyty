@@ -8,7 +8,7 @@
  * insecure port might fail (CI sandbox quirks); set
  * RUN_GRPC_INTEGRATION=1 to exercise.
  */
-import { Server, ServerCredentials, loadPackageDefinition, credentials } from '@grpc/grpc-js';
+import { Server, ServerCredentials, loadPackageDefinition } from '@grpc/grpc-js';
 import { loadSync } from '@grpc/proto-loader';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
 import { tmpdir } from 'os';

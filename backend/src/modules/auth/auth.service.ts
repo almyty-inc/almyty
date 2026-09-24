@@ -238,7 +238,7 @@ export class AuthService {
           referralCode: context.referralCode,
           ipAddress: context.ipAddress,
         });
-      } catch (err) {
+      } catch {
         // swallow — registration already succeeded
       }
     }
@@ -462,7 +462,7 @@ export class AuthService {
       }
 
       return this.generateTokens(user);
-    } catch (error) {
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
   }

@@ -2,7 +2,6 @@ import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Brackets, SelectQueryBuilder, ObjectLiteral, FindOptionsWhere, In, Not } from 'typeorm';
 
-import { User } from '../../entities/user.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
 import { UserTeam, TeamRole } from '../../entities/user-team.entity';
 import { isEffectiveMembership } from './membership';

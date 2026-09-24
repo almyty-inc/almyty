@@ -11,7 +11,7 @@ import { Tool } from '../../entities/tool.entity';
 import { withoutOthersPrivate } from '../../common/authorization/private-visibility';
 import { Organization } from '../../entities/organization.entity';
 
-import { McpTool, McpCapabilities, McpSession } from './types/mcp.types';
+import { McpTool, McpCapabilities } from './types/mcp.types';
 import { McpSessionService } from './mcp-session.service';
 
 export interface VirtualServer {
@@ -454,7 +454,7 @@ export class McpGatewayService {
         // Update peer status
         peer.isActive = true;
         peer.lastSeen = new Date();
-      } catch (error) {
+      } catch {
         isHealthy = false;
         peer.isActive = false;
       }

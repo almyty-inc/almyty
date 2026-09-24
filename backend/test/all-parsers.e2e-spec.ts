@@ -550,7 +550,7 @@ describe('All Parser Types — Full Pipeline E2E (Live Backend)', () => {
         organizationId = jwtOrgs[0].id;
         orgSlug = jwtOrgs[0].name?.toLowerCase().replace(/\s+/g, '-') || 'unknown';
       }
-    } catch (e) {
+    } catch {
       // Fallback to profile
     }
 

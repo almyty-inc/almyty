@@ -940,7 +940,7 @@ export class ChannelGatewayService {
    * (RBAC) before invoking.
    */
   async testConnection(gateway: Gateway): Promise<{ ok: boolean; detail: string }> {
-    const adapter = this.getAdapter(gateway.type);
+    this.getAdapter(gateway.type); // throws for an unsupported channel type
     // Decrypted + key-normalized view — testConnection exercises the
     // same credentials the adapters would use, resolved through the
     // credential store when the channel points at a connection.

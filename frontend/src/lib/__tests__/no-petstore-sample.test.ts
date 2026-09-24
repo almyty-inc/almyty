@@ -16,7 +16,9 @@ function sources(dir: string): string[] {
   })
 }
 
-describe('no canned sample workspace in the product', () => {
+// Reads every source file synchronously: well under a second alone, but a
+// busy CI runner can push it past vitest's 5s default.
+describe('no canned sample workspace in the product', { timeout: 30_000 }, () => {
   const root = join(__dirname, '..', '..')
   const files = sources(root)
 

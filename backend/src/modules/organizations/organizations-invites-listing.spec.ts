@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import * as crypto from 'crypto';
 
 import { Organization } from '../../entities/organization.entity';

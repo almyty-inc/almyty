@@ -1,9 +1,9 @@
-import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { findModelNotFound } from '../llm-providers/model-errors';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
 
-import { Agent, AgentPipeline, AgentPipelineNode, AgentPipelineEdge } from '../../entities/agent.entity';
+import { Agent, AgentPipelineNode } from '../../entities/agent.entity';
 import { AgentExecution, AgentExecutionStatus, TERMINAL_EXECUTION_STATUSES } from '../../entities/agent-execution.entity';
 import { AgentNodeExecutor, NodeExecutionResult } from './agent-node-executor';
 import { AgentWebhookService } from './agent-webhook.service';
@@ -291,7 +291,7 @@ export class AgentExecutionEngine {
       validatePipelineSize(pipeline);
 
       // 2. Build graph
-      const { adjacencyList, inDegree, reverseAdjacencyList } = buildGraph(pipeline);
+      const { adjacencyList, inDegree } = buildGraph(pipeline);
 
       // 3. Compute execution layers (topological levels)
       const layers = computeLayers(pipeline.nodes, adjacencyList, inDegree);
@@ -603,7 +603,7 @@ export class AgentExecutionEngine {
             // after the execution row says TIMEOUT.
             () => layerAbort.abort(),
           );
-        } catch (timeoutErr: any) {
+        } catch {
           runSignal?.removeEventListener('abort', forwardCallerAbort);
 
           // Give the aborted nodes a bounded moment to come back, so the
@@ -659,9 +659,6 @@ export class AgentExecutionEngine {
         // Done with this layer's abort; the next layer installs its own.
         runSignal?.removeEventListener('abort', forwardCallerAbort);
 
-        // Track whether any node in this layer failed
-        let layerHasFailure = false;
-
         // Process layer results
         let layerCost = 0;
         for (const item of layerResults) {
@@ -670,7 +667,6 @@ export class AgentExecutionEngine {
 
           if (error || !result) {
             // Node failed — record error but continue with other branches
-            layerHasFailure = true;
             nodeResults[nodeId] = {
               error,
               errorType,

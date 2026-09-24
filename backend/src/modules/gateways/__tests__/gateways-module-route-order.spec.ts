@@ -1,5 +1,3 @@
-import { Module } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
 
 import { GatewaysModule } from '../gateways.module';
 import { GatewayInfoController } from '../gateway-info.controller';
