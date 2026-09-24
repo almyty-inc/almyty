@@ -12,6 +12,7 @@ import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssr
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { ModelManifest, manifestSha, totalSizeBytes, validateManifest } from './manifest';
 import { ParsedRegistryUri, parseRegistryUri } from './registry-uri';
+import { hfFetch } from './hf-fetch';
 
 /** The registry connection's credential type. */
 export const REGISTRY_CREDENTIAL_TYPE = CredentialType.S3_COMPATIBLE;
@@ -319,7 +320,10 @@ export class ModelRegistryService implements OnModuleInit {
       case 'hf': {
         // Read-only, optional: the hub serves raw files over HTTPS.
         const url = `https://huggingface.co/${parsed.location}/resolve/${parsed.pin}/${file}`;
-        const res = await fetch(url, { headers: process.env.HF_TOKEN ? { Authorization: `Bearer ${process.env.HF_TOKEN}` } : {} });
+        // The Hub redirects file reads to its CDN; hfFetch follows those
+        // hops only onto Hugging Face hosts, through the SSRF gate, and
+        // keeps the token off the CDN.
+        const res = await hfFetch(url, { headers: process.env.HF_TOKEN ? { Authorization: `Bearer ${process.env.HF_TOKEN}` } : {} });
         if (!res.ok) throw Object.assign(new Error(`hub returned ${res.status} for ${url}`), { code: 'REGISTRY_SOURCE_UNAVAILABLE' });
         return res.text();
       }
