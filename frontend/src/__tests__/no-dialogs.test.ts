@@ -51,12 +51,10 @@ const PRIMITIVES = new Set([
  * Areas another workstream is converting at the same time. Each entry is
  * temporary: REMOVE IT when that area lands without dialogs. The
  * "exemptions are still needed" test fails once an entry no longer
- * covers any dialog, so a stale entry cannot linger.
+ * covers any dialog, so a stale entry cannot linger. Empty: every area,
+ * components/agents/ included, is covered.
  */
-const OTHER_WORKSTREAMS = [
-  // Agent configuration (model picker + collaboration).
-  'components/agents/',
-]
+const OTHER_WORKSTREAMS: string[] = []
 
 const exempt = (p: string) =>
   PRIMITIVES.has(p) || OTHER_WORKSTREAMS.some((prefix) => p === prefix || p.startsWith(prefix))
