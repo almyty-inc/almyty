@@ -7,6 +7,7 @@ import { Gateway, GatewayStatus } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
 import { getBaseUrl } from '../../../common/config/base-url';
 import { isPrivateGateway } from '../../gateways/private-gateway';
+import { MCP_OAUTH_SCOPES } from '../services/mcp-oauth.service';
 
 /**
  * Root-level OAuth discovery routes per RFC 8414 Section 3 and RFC 9728.
@@ -52,7 +53,7 @@ export class McpOAuthDiscoveryController {
       grant_types_supported: ['authorization_code', 'refresh_token'],
       token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
       code_challenge_methods_supported: ['S256'],
-      scopes_supported: ['mcp:tools', 'mcp:resources', 'mcp:prompts', 'mcp:*'],
+      scopes_supported: MCP_OAUTH_SCOPES,
       service_documentation: `${base}/docs`,
     };
   }
@@ -71,7 +72,7 @@ export class McpOAuthDiscoveryController {
     return {
       resource: prefix,
       authorization_servers: [prefix],
-      scopes_supported: ['mcp:tools', 'mcp:resources', 'mcp:prompts', 'mcp:*'],
+      scopes_supported: MCP_OAUTH_SCOPES,
       bearer_methods_supported: ['header'],
       resource_name: gatewaySlug,
       resource_documentation: `${base}/docs`,

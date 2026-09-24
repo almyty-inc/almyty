@@ -48,6 +48,9 @@ export function OAuthConsentPage() {
   const responseType = params.get('response_type') || 'code'
   const codeChallenge = params.get('code_challenge') || ''
   const codeChallengeMethod = params.get('code_challenge_method') || ''
+  // RFC 8707 resource indicator: the gateway the token is for. It has to
+  // reach the code, or the token carries no audience the client asked for.
+  const resource = params.get('resource') || ''
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -138,6 +141,7 @@ export function OAuthConsentPage() {
           code_challenge_method: codeChallengeMethod,
           scope,
           state,
+          ...(resource ? { resource } : {}),
         },
       )
       redirectToClient({ code: res.code })
