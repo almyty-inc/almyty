@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 import { AgentRuntimeEventsHelper } from '../agent-runtime-events.helper';
+import { answeredBy } from '../autonomous-strategy.runner';
 
 /**
  * A routed call stamps attribution everywhere, and a stream that stops
@@ -39,8 +40,22 @@ describe('routing attribution reaches every record of a step', () => {
     // answer. Either missing is a cost with no model behind it.
     const steps = [...source.matchAll(/type:\s*'llm_call',[\s\S]{0,700}?timestamp:/g)];
     expect(steps.length).toBeGreaterThanOrEqual(1);
-    const unstamped = steps.filter((m) => !m[0].includes('routing'));
+    // answeredBy() is the stamp (routing, and the model and provider that
+    // answered); its own spec below proves it carries routing.
+    const unstamped = steps.filter((m) => !m[0].includes('routing') && !m[0].includes('answeredBy('));
     expect(unstamped.map((m) => m[0].slice(0, 120))).toEqual([]);
+  });
+  it('answeredBy carries a routed call\'s attribution and the model that answered', () => {
+    const routing = { providerId: 'p-routed', vendorModelId: 'gpt-4o-mini', attempt: 1 } as any;
+    expect(answeredBy({ model: 'gpt-4o-mini-2024', routing }, { providerId: undefined, model: undefined })).toEqual({
+      model: 'gpt-4o-mini-2024',
+      providerId: 'p-routed',
+      routing,
+    });
+    expect(answeredBy(null, { providerId: 'p-pinned', model: 'claude-sonnet-5' })).toEqual({
+      model: 'claude-sonnet-5',
+      providerId: 'p-pinned',
+    });
   });
 });
 

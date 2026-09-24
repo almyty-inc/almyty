@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { LlmProvidersService } from '../llm-providers/llm-providers.service';
+import type { RoutingPolicy } from '../model-catalog/routing/model-router';
 
 /** Verdict-merge policy for a verify node's checker panel. */
 export type VerifyPolicy = 'all_pass' | 'majority' | 'any_fail_blocks';
@@ -11,11 +12,15 @@ export interface VerifyFailure {
   checker: string;
 }
 
-/** A single refute-only checker. Vendor is chosen per-checker via providerId. */
+/**
+ * A single refute-only checker. Vendor is chosen per-checker via providerId,
+ * or by the catalog from a routing policy.
+ */
 export interface CheckerConfig {
   name?: string;
-  providerId: string;
+  providerId?: string;
   model?: string;
+  routing?: RoutingPolicy;
   instructions?: string;
   temperature?: number;
   maxTokens?: number;
@@ -146,7 +151,7 @@ export class AgentVerifierHelper {
     signal?: AbortSignal,
   ): Promise<CheckerResult> {
     const name = checker?.name || `checker_${index + 1}`;
-    if (!checker?.providerId) {
+    if (!checker?.providerId && !checker?.routing) {
       return {
         checker: name,
         verdict: 'error',
@@ -171,13 +176,15 @@ export class AgentVerifierHelper {
 
     try {
       const response = await this.llmProvidersService.chat(
-        checker.providerId,
+        checker.providerId ?? null,
         {
           messages: [
             { role: 'system' as any, content: systemPrompt },
             { role: 'user' as any, content: userPrompt },
           ],
-          model: checker.model,
+          // A routed checker lets the catalog pick its model per call.
+          model: checker.routing ? undefined : checker.model,
+          ...(checker.routing ? { routing: checker.routing } : {}),
           temperature: checker.temperature ?? 0,
           maxTokens: checker.maxTokens,
           signal,

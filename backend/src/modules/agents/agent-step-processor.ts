@@ -17,6 +17,9 @@ import { decideEscalation, nextRoutingPolicy, planPosition } from '../model-cata
 import { shouldAutoSaveMemory } from './memory-autosave.policy';
 import { emitStreamChunk } from './llm-stream-events';
 import { answerCallMessages, composesFinalAnswer } from './final-answer';
+import { AgentRoleCall, ModelRoleCall, Team, TeamRole, stampOf, teamOf, teammateToolName } from './autonomous-team';
+import { AutonomousStrategyRunner, answeredBy, chargeRole } from './autonomous-strategy.runner';
+import type { ResolvedRunLimits } from './run-limits';
 
 
 /**
@@ -116,6 +119,8 @@ type FinalCall = {
   inputTokens: number;
   outputTokens: number;
   routing?: ChatResponse['routing'];
+  /** The model that answered, as the provider named it. */
+  model?: string;
   messageCount: number;
   toolCount: number;
   startedAt: number;
@@ -256,6 +261,17 @@ export class AgentStepProcessor {
       // (principal: the run's, resolved above)
       const tools = await this.s.executionAccess.filterExecutable(principal, await this.resolveTools(agent));
 
+      // The roles this step works with (autonomous-team.ts), read from the
+      // agent on every step like its instructions are.
+      const team = teamOf(agent, run);
+      const runner = new AutonomousStrategyRunner(this.s, this.verifier);
+
+      // Explore, extract, patch opens with its explorers and the brief, as
+      // a step of its own, before the main role's first call.
+      if (team.strategy === 'explore_extract_patch' && !run.workingMemory?.brief) {
+        return await this.explorePhase(run, agent, team, runner, resolvedLimits, expectedStep, stepStart);
+      }
+
       // Recall memories if memory is enabled
       let memoryContext = '';
       if (agent.memoryConfig?.enabled) {
@@ -284,6 +300,23 @@ export class AgentStepProcessor {
         } catch (err) {
           this.s.logger.warn(`Failed to recall memories for run ${runId}: ${err.message}`);
         }
+      }
+
+      // Explore, extract, patch: the main role works from the brief the
+      // explorers and the summariser prepared (explorePhase).
+      if (run.workingMemory?.brief) {
+        memoryContext +=
+          '\n\n## Brief from exploration\n' +
+          'Other models explored this task with the tools, and a summariser condensed what they found. ' +
+          'Work from it; check anything you rely on.\n' +
+          JSON.stringify(run.workingMemory.brief, null, 2);
+      }
+      // An explorer's own run: gather, do not solve.
+      if (team.main.purpose === 'explorer') {
+        memoryContext +=
+          '\n\n## Your job on this run\n' +
+          'You are exploring for another model. Use the tools to find what matters for the task: facts, ' +
+          'records, files, results, dead ends. Report what you found, with specifics, rather than a finished answer.';
       }
 
       // Build messages for the LLM, reusing the organization loaded above.
@@ -343,30 +376,81 @@ export class AgentStepProcessor {
         }
       }
 
-      const allToolDefs = [...llmTools, ...subAgentDefs];
+      // Teammates: every role of the agent's models whose purpose is
+      // `teammate` is offered to the loop's model as a tool it can hand work
+      // to. An agent teammate is offered only when this run's scope could
+      // start it, the same rule sub-agents follow.
+      const teammateMap = new Map<string, TeamRole>();
+      const teammateDefs: Array<{ name: string; description: string; parameters: Record<string, any> }> = [];
+      if (team.teammates.length > 0) {
+        const agentIds = team.teammates.filter((t): t is AgentRoleCall => t.kind === 'agent').map((t) => t.agentId);
+        const runnable = new Set<string>();
+        if (agentIds.length > 0) {
+          const rows = await this.s.agentRepository.find({
+            where: { id: In(agentIds), organizationId: run.organizationId },
+            select: { id: true, name: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
+          });
+          const callable = await this.s.executionAccess.filterExecutable(
+            principal,
+            rows.filter((a) => canReference({ visibility: agent.visibility, ownerId: agent.createdBy }, a)),
+          );
+          for (const a of callable) runnable.add(a.id);
+        }
+        for (const t of team.teammates) {
+          if (t.kind === 'agent' && !runnable.has(t.agentId)) continue;
+          const name = teammateToolName(t);
+          teammateMap.set(name, t);
+          teammateDefs.push({
+            name,
+            description:
+              `Hand a piece of work to ${t.name}, a teammate (${t.kind === 'agent' ? 'another agent' : 'another model'}), and get its answer back.` +
+              (t.instructions ? ` ${t.name}: ${t.instructions}` : ''),
+            parameters: {
+              type: 'object',
+              properties: { input: { type: 'string', description: `What to ask ${t.name}` } },
+              required: ['input'],
+            },
+          });
+        }
+      }
+
+      const allToolDefs = [...llmTools, ...subAgentDefs, ...teammateDefs];
+
+      // Which role makes this step's call. Cascade: the drafter, unless the
+      // checker failed its last answer, in which case the main role redoes
+      // the step. Every other strategy: the main role runs the loop.
+      const escalated = team.strategy === 'cascade' && run.workingMemory?.cascadeEscalated === true;
+      const acting: ModelRoleCall = team.strategy === 'cascade' && !escalated ? team.drafter! : team.main;
 
       // Determine the LLM provider, or the routing policy that picks one
       // per step. A revision after a verifier rejection may carry a policy
-      // in working memory that skips the candidates already tried.
-      const providerId = agent.modelConfig?.providerId;
-      const routing: RoutingPolicy | undefined = run.workingMemory?.routing ?? agent.modelConfig?.routing;
+      // in working memory that skips the candidates already tried; that
+      // policy is the main role's.
+      const providerId = acting.providerId;
+      const routing: RoutingPolicy | undefined =
+        acting === team.main ? (run.workingMemory?.routing ?? acting.routing) : acting.routing;
       if (!providerId && !routing) {
-        throw new Error('Agent has no LLM provider configured (modelConfig.providerId or modelConfig.routing is missing)');
+        throw new Error(
+          acting === team.main
+            ? 'Agent has no LLM provider configured (modelConfig.providerId or modelConfig.routing is missing)'
+            : `The ${acting.purpose} role "${acting.name}" has no provider or routing policy`,
+        );
       }
+      if (run.metadata?.strategy !== team.strategy) run.metadata = { ...(run.metadata || {}), strategy: team.strategy };
 
       // Build the chat request
       const chatRequest: ChatRequest = {
         messages: messages as any[],
-        model: routing ? undefined : agent.modelConfig?.model,
-        temperature: agent.modelConfig?.temperature,
-        maxTokens: agent.modelConfig?.maxTokens,
+        model: routing ? undefined : acting.model,
+        temperature: acting.temperature,
+        maxTokens: acting.maxTokens,
         tools: allToolDefs.length > 0 ? allToolDefs : undefined,
         skipToolExecution: true, // We handle tool execution ourselves
         ...(routing ? { routing } : {}),
       };
 
       // Call the LLM
-      this.s.logger.debug(`Run ${runId} step ${run.currentStep}: calling LLM with ${messages.length} messages, ${allToolDefs.length} tools`);
+      this.s.logger.debug(`Run ${runId} step ${run.currentStep}: ${acting.name} calling LLM with ${messages.length} messages, ${allToolDefs.length} tools`);
 
       // A composing run (final-answer.ts) says up front which calls are the
       // visitor's answer: only one that offers no tools. Every other call
@@ -375,6 +459,7 @@ export class AgentStepProcessor {
       const offersTools = !!chatRequest.tools;
       this.s.emitEvent(runId, 'llm.started', {
         step: run.currentStep,
+        role: stampOf(acting),
         ...(composing ? { answer: !offersTools } : {}),
       });
 
@@ -394,6 +479,7 @@ export class AgentStepProcessor {
 
       run.totalCost += stepCost;
       run.totalTokens += stepTotalTokens;
+      chargeRole(run, acting, stepCost, stepTotalTokens);
 
       // The user may have cancelled while the model was answering. Stop
       // here, before a single tool runs, rather than at the next commit.
@@ -433,6 +519,8 @@ export class AgentStepProcessor {
         // it accrued but not the model it was accruing on, which is the
         // half that makes multi-model routing legible.
         ...(llmResponse.routing ? { routing: llmResponse.routing } : {}),
+        // Which of the agent's roles made the call.
+        role: stampOf(acting),
         // In a composing run, whether this reply is the visitor's answer.
         ...(composing ? { answer: !offersTools || (!calledTools && !composeAnswer) } : {}),
       });
@@ -516,8 +604,9 @@ export class AgentStepProcessor {
               const stepDuration = Date.now() - stepStart;
               run.steps.push({
                 type: 'llm_call',
+                role: stampOf(acting),
                 input: { messageCount: messages.length, toolCount: allToolDefs.length },
-                output: { status: 'sleeping', reason: toolCall.parameters?.reason, ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
+                output: { status: 'sleeping', reason: toolCall.parameters?.reason, ...answeredBy(llmResponse, acting) },
                 cost: stepCost,
                 tokens: { input: stepInputTokens, output: stepOutputTokens },
                 duration: stepDuration,
@@ -534,8 +623,9 @@ export class AgentStepProcessor {
               const stepDuration = Date.now() - stepStart;
               run.steps.push({
                 type: 'llm_call',
+                role: stampOf(acting),
                 input: { messageCount: messages.length, toolCount: allToolDefs.length },
-                output: { status: 'waiting_input', question: toolCall.parameters?.question, ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
+                output: { status: 'waiting_input', question: toolCall.parameters?.question, ...answeredBy(llmResponse, acting) },
                 cost: stepCost,
                 tokens: { input: stepInputTokens, output: stepOutputTokens },
                 duration: stepDuration,
@@ -548,6 +638,30 @@ export class AgentStepProcessor {
               return 'waiting';
             }
 
+            continue;
+          }
+
+          // A teammate: another role of this agent's models, handed a
+          // piece of work through its ask_<key> tool.
+          const teammate = teammateMap.get(toolCall.name);
+          if (teammate) {
+            const asked = await runner.askTeammate(run, teammate, String(toolCall.parameters?.input ?? ''), resolvedLimits);
+            toolCall.result = asked.result;
+            toolCall.error = asked.error;
+            toolCall.executionTime = Date.now() - toolExecStart;
+            if (run.conversationId) {
+              const content = asked.error || asked.result || '';
+              const msg = Message.createToolResultMessage(run.conversationId, toolCall.id, content, asked.error);
+              msg.runId = run.id;
+              await this.s.messageRepository.save(msg);
+            }
+            this.s.emitEvent(runId, 'tool.result', {
+              step: run.currentStep,
+              toolCallId: toolCall.id,
+              tool: toolCall.name,
+              success: !asked.error,
+              executionTime: toolCall.executionTime,
+            });
             continue;
           }
 
@@ -733,8 +847,9 @@ export class AgentStepProcessor {
         const stepDuration = Date.now() - stepStart;
         run.steps.push({
           type: 'llm_call',
+          role: stampOf(acting),
           input: { messageCount: messages.length, toolCount: allToolDefs.length },
-          output: { toolCalls: responseMessage.toolCalls.map(tc => ({ name: tc.name, hasResult: !!tc.result })), ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
+          output: { toolCalls: responseMessage.toolCalls.map(tc => ({ name: tc.name, hasResult: !!tc.result })), ...answeredBy(llmResponse, acting) },
           cost: stepCost,
           tokens: { input: stepInputTokens, output: stepOutputTokens },
           duration: stepDuration,
@@ -743,6 +858,9 @@ export class AgentStepProcessor {
 
         run.currentStep++;
         run.executionTime += stepDuration;
+        // A cascade step the main role redid is done: the next step goes
+        // back to the drafter.
+        if (escalated) run.workingMemory = { ...(run.workingMemory || {}), cascadeEscalated: false };
 
         // Advisory mid-run verification (every_n_steps / on_tool_result). May
         // append a course-correction message + verify step before we commit.
@@ -770,11 +888,150 @@ export class AgentStepProcessor {
           toolCount: allToolDefs.length,
           startedAt: stepStart,
         };
+        finalCall.model = llmResponse.model;
+
+        // The strategy's say on this answer (docs/autonomous-models.md).
+        // Single has none: the loop's answer is the answer.
+        if (team.strategy === 'cascade' && !escalated) {
+          // The drafter answered. The checker reviews it, refute-only; only
+          // a failed check sends the step to the main role, which redoes it
+          // as the next step. An unreadable verdict is a fail, so "we could
+          // not tell" escalates rather than passing an unchecked draft.
+          const check = await runner.check(run, team.checker!, finalContent, agent.agentConfig?.verify?.spec);
+          if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
+          const checkDuration = Date.now() - stepStart;
+          if (!check.passed) {
+            run.steps.push({
+              type: 'llm_call',
+              role: stampOf(acting),
+              input: { messageCount: messages.length, toolCount: allToolDefs.length },
+              output: { status: 'escalated', content: finalContent.substring(0, 200), ...answeredBy(llmResponse, acting) },
+              cost: stepCost,
+              tokens: { input: stepInputTokens, output: stepOutputTokens },
+              duration: checkDuration,
+              timestamp: new Date().toISOString(),
+            });
+            run.steps.push({
+              type: 'verify',
+              role: stampOf(team.checker!),
+              input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
+              output: { verdict: 'fail', escalateTo: team.main.key, failures: check.failures },
+              cost: check.cost,
+              duration: checkDuration,
+              timestamp: new Date().toISOString(),
+            });
+            run.workingMemory = { ...(run.workingMemory || {}), cascadeEscalated: true };
+            run.currentStep++;
+            run.executionTime += checkDuration;
+            if (!(await this.commitStep(run, expectedStep))) return 'done';
+            this.s.emitEvent(runId, 'cascade.escalated', {
+              step: run.currentStep,
+              from: acting.key,
+              to: team.main.key,
+              failures: check.failures,
+            });
+            this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'escalated' });
+            return 'continue';
+          }
+          run.steps.push({
+            type: 'verify',
+            role: stampOf(team.checker!),
+            input: { mode: 'cascade', policy: check.policy, checkers: check.checkers.length },
+            output: { verdict: 'pass', failures: [] },
+            cost: check.cost,
+            duration: checkDuration,
+            timestamp: new Date().toISOString(),
+          });
+        } else if (team.strategy === 'best_of_n') {
+          const chosen = await runner.bestOfN({
+            run,
+            main: team.main,
+            judge: team.checker!,
+            loopRequest: chatRequest,
+            first: finalContent,
+            n: team.candidates,
+            limits: resolvedLimits,
+          });
+          finalContent = chosen.content;
+          if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
+        } else if (team.strategy === 'panel') {
+          const agreed = await runner.panel({
+            run,
+            main: team.main,
+            panelists: team.panelists,
+            judge: team.checker ?? team.main,
+            loopRequest: chatRequest,
+            first: finalContent,
+            limits: resolvedLimits,
+          });
+          finalContent = agreed.content;
+          if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
+        } else if (team.strategy === 'explore_extract_patch') {
+          // The main role acted on the brief; the checker verifies. A
+          // failure goes back to the main role to revise, within the same
+          // revision budget the verify gate uses.
+          const check = await runner.check(run, team.checker!, finalContent, agent.agentConfig?.verify?.spec);
+          if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
+          const maxLoops = agent.agentConfig?.verify?.maxReviseLoops ?? 2;
+          const revisions = run.workingMemory?.patchRevisions ?? 0;
+          const checkDuration = Date.now() - stepStart;
+          if (!check.passed && revisions < maxLoops) {
+            run.workingMemory = { ...(run.workingMemory || {}), patchRevisions: revisions + 1 };
+            if (run.conversationId) {
+              const candidate = Message.createAssistantMessage(run.conversationId, finalContent);
+              candidate.runId = run.id;
+              candidate.metadata = { internal: true, internalPurpose: 'verification_candidate' };
+              await this.s.messageRepository.save(candidate);
+              const critique = Message.createUserMessage(
+                run.conversationId,
+                this.verifier.formatFailuresForRevision(check.failures, revisions + 1, maxLoops),
+              );
+              critique.runId = run.id;
+              critique.metadata = { internal: true, internalPurpose: 'verification_revision' };
+              await this.s.messageRepository.save(critique);
+            }
+            run.steps.push({
+              type: 'llm_call',
+              role: stampOf(acting),
+              input: { messageCount: messages.length, toolCount: allToolDefs.length },
+              output: { status: 'revising', content: finalContent.substring(0, 200), ...answeredBy(llmResponse, acting) },
+              cost: stepCost,
+              tokens: { input: stepInputTokens, output: stepOutputTokens },
+              duration: checkDuration,
+              timestamp: new Date().toISOString(),
+            });
+            run.steps.push({
+              type: 'verify',
+              role: stampOf(team.checker!),
+              input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
+              output: { verdict: 'fail', revision: revisions + 1, failures: check.failures },
+              cost: check.cost,
+              duration: checkDuration,
+              timestamp: new Date().toISOString(),
+            });
+            run.currentStep++;
+            run.executionTime += checkDuration;
+            if (!(await this.commitStep(run, expectedStep))) return 'done';
+            this.s.emitEvent(runId, 'verify.failed', { step: run.currentStep, revision: revisions + 1, failures: check.failures });
+            this.s.emitEvent(runId, 'step.completed', { step: run.currentStep, status: 'revising' });
+            return 'continue';
+          }
+          run.steps.push({
+            type: 'verify',
+            role: stampOf(team.checker!),
+            input: { mode: 'patch', policy: check.policy, checkers: check.checkers.length },
+            output: { verdict: check.verdict, exhausted: !check.passed, failures: check.failures },
+            cost: check.cost,
+            duration: checkDuration,
+            timestamp: new Date().toISOString(),
+          });
+        }
+        if (escalated) run.workingMemory = { ...(run.workingMemory || {}), cascadeEscalated: false };
 
         // A composing run sets this reply aside as a draft and has the
         // answer written by a call that offers no tools (final-answer.ts).
         if (composeAnswer) {
-          const composed = await this.composeAnswer(run, runId, providerId, chatRequest, finalContent, finalCall);
+          const composed = await this.composeAnswer(run, runId, acting, chatRequest, finalContent, finalCall);
           finalCall = composed;
           finalContent = composed.content;
           if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
@@ -825,8 +1082,9 @@ export class AgentStepProcessor {
             }
             run.steps.push({
               type: 'llm_call',
+              role: stampOf(acting),
               input: { messageCount: messages.length, toolCount: allToolDefs.length },
-              output: { status: 'revising', content: finalContent.substring(0, 200), ...(llmResponse.routing ? { routing: llmResponse.routing } : {}) },
+              output: { status: 'revising', content: finalContent.substring(0, 200), ...answeredBy(llmResponse, acting) },
               cost: stepCost,
               tokens: { input: stepInputTokens, output: stepOutputTokens },
               duration: verifyStepDuration,
@@ -886,6 +1144,7 @@ export class AgentStepProcessor {
         const stepDuration = Date.now() - finalCall.startedAt;
         run.steps.push({
           type: 'llm_call',
+          role: stampOf(acting),
           input: { messageCount: finalCall.messageCount, toolCount: finalCall.toolCount },
           // Routing attribution belongs on this step too. The
           // tool-calling branch stamps it; this one did not, so the
@@ -897,7 +1156,7 @@ export class AgentStepProcessor {
           output: {
             status: 'completed',
             content: finalContent.substring(0, 200),
-            ...(finalCall.routing ? { routing: finalCall.routing } : {}),
+            ...answeredBy({ model: finalCall.model, routing: finalCall.routing }, acting),
             ...(finalCall.fallback ? { answerFallback: finalCall.fallback } : {}),
           },
           cost: finalCall.cost,
@@ -1121,19 +1380,21 @@ export class AgentStepProcessor {
   private async composeAnswer(
     run: AgentRun,
     runId: string,
-    providerId: string | undefined,
+    acting: ModelRoleCall,
     chatRequest: ChatRequest,
     draft: string,
     draftCall: FinalCall,
   ): Promise<FinalCall & { content: string }> {
+    const providerId = acting.providerId;
     const draftDuration = Date.now() - draftCall.startedAt;
     run.steps.push({
       type: 'llm_call',
+      role: stampOf(acting),
       input: { messageCount: draftCall.messageCount, toolCount: draftCall.toolCount },
       output: {
         status: 'drafted',
         content: draft.substring(0, 200),
-        ...(draftCall.routing ? { routing: draftCall.routing } : {}),
+        ...answeredBy({ model: draftCall.model, routing: draftCall.routing }, acting),
       },
       cost: draftCall.cost,
       tokens: { input: draftCall.inputTokens, output: draftCall.outputTokens },
@@ -1189,9 +1450,12 @@ export class AgentStepProcessor {
       inputTokens: response.usage?.inputTokens || 0,
       outputTokens: response.usage?.outputTokens || 0,
       routing: response.routing,
+      model: response.model,
     };
+    const spentTokens = response.usage?.totalTokens || spent.inputTokens + spent.outputTokens;
     run.totalCost += spent.cost;
-    run.totalTokens += response.usage?.totalTokens || spent.inputTokens + spent.outputTokens;
+    run.totalTokens += spentTokens;
+    chargeRole(run, acting, spent.cost, spentTokens);
 
     const content = response.message?.content || '';
     if (!content.trim() && draft.trim()) return standIn('empty', undefined, spent);
@@ -1205,6 +1469,64 @@ export class AgentStepProcessor {
       answer: true,
     });
     return { ...spent, ...answered, content };
+  }
+
+  /**
+   * The first step of an explore-extract-patch run: every explorer as its
+   * own run of this agent on the explorer's model, in parallel, then the
+   * summariser's brief. The brief goes into working memory, where every
+   * later step of the main role reads it. It counts as one step against
+   * maxSteps; its cost is the explorers' runs and the summariser's call,
+   * each charged to its role. A failure (no explorer found anything, a
+   * brief that does not validate) fails the run from processStep's catch,
+   * with the steps that did happen kept.
+   */
+  private async explorePhase(
+    run: AgentRun,
+    agent: Agent,
+    team: Team,
+    runner: AutonomousStrategyRunner,
+    limits: ResolvedRunLimits,
+    expectedStep: number,
+    stepStart: number,
+  ): Promise<'continue' | 'done'> {
+    const latest = run.conversationId
+      ? await this.s.messageRepository.find({
+          where: { conversationId: run.conversationId, role: MessageRole.USER as any },
+          order: { createdAt: 'DESC' },
+          take: 1,
+        })
+      : [];
+    const said = latest[0]?.content;
+    const task =
+      typeof said === 'string' && said.trim()
+        ? said
+        : said !== undefined && said !== null
+          ? JSON.stringify(said)
+          : typeof run.input === 'string'
+            ? run.input
+            : JSON.stringify(run.input ?? '');
+
+    this.s.emitEvent(run.id, 'explore.started', { step: run.currentStep, explorers: team.explorers.map(stampOf) });
+    const brief = await runner.exploreAndExtract({
+      run,
+      agentId: agent.id,
+      explorers: team.explorers,
+      summariser: team.summariser!,
+      task,
+      limits,
+    });
+    if (await this.abandonIfTerminal(run, expectedStep)) return 'done';
+
+    const duration = Date.now() - stepStart;
+    run.workingMemory = { ...(run.workingMemory || {}), brief };
+    run.metadata = { ...(run.metadata || {}), strategy: team.strategy };
+    run.currentStep++;
+    run.executionTime += duration;
+    if (!(await this.commitStep(run, expectedStep))) return 'done';
+    this.s.emitEvent(run.id, 'explore.completed', { step: run.currentStep, brief });
+    this.s.emitEvent(run.id, 'step.completed', { step: run.currentStep, status: 'explored' });
+    return 'continue';
   }
 
   private async commitStep(run: AgentRun, expectedStep: number): Promise<boolean> {
