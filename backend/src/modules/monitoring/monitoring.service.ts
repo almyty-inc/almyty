@@ -249,8 +249,6 @@ export class MonitoringService extends EventEmitter implements OnModuleInit, OnM
       this.apiRepository.count({ where: { status: ApiStatus.ACTIVE } }),
     ]);
 
-    const totalOrganizations = await this.organizationRepository.count({ where: { isActive: true } });
-
     // Get metrics from Redis
     const requestStats = await this.redisStats.getRequestStats();
     const protocolStats = await this.redisStats.getProtocolStats();

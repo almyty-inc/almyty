@@ -1,16 +1,13 @@
 import { Inject, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import axios from 'axios';
-import { createHash } from 'crypto';
-import * as v8 from 'v8';
 
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
-import { ApiSchema, SchemaFormat } from '../../entities/api-schema.entity';
+import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
-import { Tool } from '../../entities/tool.entity';
 import { Organization } from '../../entities/organization.entity';
 
 import { SchemaParserService } from '../schema-parser/schema-parser.service';
@@ -18,7 +15,7 @@ import { ToolsService } from '../tools/tools.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ApisImportHelper } from './apis-import.helper';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
-import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { assertNotOthersPrivate, nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';

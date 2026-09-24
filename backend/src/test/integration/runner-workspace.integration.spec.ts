@@ -1,4 +1,4 @@
-import { DataSource, Repository } from 'typeorm';
+import { DataSource } from 'typeorm';
 
 import { Runner, RunnerState, RunnerIsolationTier } from '../../entities/runner.entity';
 import { RunnerSession } from '../../entities/runner-session.entity';

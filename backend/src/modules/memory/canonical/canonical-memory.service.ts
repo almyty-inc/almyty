@@ -5,36 +5,24 @@ import { DataSource, Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { v7 as uuidv7 } from 'uuid';
-import { gzipSync } from 'zlib';
-import * as pgvector from 'pgvector';
 
 import { CanonicalMemory } from './canonical-memory.entity';
 import { CanonicalMemoryWorkspaceConfig } from './canonical-memory-config.entity';
 import { CanonicalMemorySoftcapWarning } from './canonical-memory-softcap-warning.entity';
-import { LIMITS, softCapForTier, SoftCapBehavior } from './canonical.constants';
+import { LIMITS } from './canonical.constants';
 import {
   MemoryItem,
   MemoryError,
-  Provenance,
-  Mode,
-  Tier,
-  ScopeType,
-  ScopeRef,
   SearchQuery,
   ListQuery,
   RankedItem,
   Page,
   BatchResult,
-  EmbeddingStatus,
 } from './canonical.types';
 import { validateMemoryItem } from './canonical.validator';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import {
-  detectBlob,
-  overrideOrDefault,
-  uriSchemeAllowList,
-  parseScheme,
   scopeToOrganizationId,
   itemToEntity,
   entityToItem,

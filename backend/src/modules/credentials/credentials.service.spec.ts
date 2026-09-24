@@ -331,7 +331,7 @@ describe('CredentialsService', () => {
       credentialRepository.findOne.mockResolvedValue(existing);
       credentialRepository.save.mockResolvedValue(existing);
 
-      const result = await service.update(
+      await service.update(
         'cred-1',
         { name: 'Updated Name', config: { apiKey: 'new-key-value-here' } },
         'org-1',

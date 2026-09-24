@@ -1,4 +1,4 @@
-import { ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
+import { ExecutionContext, HttpStatus } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
 import { EntitlementGuard } from '../../../../src/modules/licensing/guards/entitlement.guard';

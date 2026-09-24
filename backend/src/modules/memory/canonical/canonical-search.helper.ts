@@ -2,8 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import * as pgvector from 'pgvector';
 
-import { CanonicalMemory } from './canonical-memory.entity';
-import { MemoryItem, RankedItem, SearchQuery } from './canonical.types';
+import { RankedItem, SearchQuery } from './canonical.types';
 import { entityToItem, rowToEntity } from './canonical-memory.service';
 
 @Injectable()

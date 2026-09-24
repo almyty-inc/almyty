@@ -31,7 +31,7 @@
  * `npm run test:db` is the canonical way to run it.
  */
 import { DataSource } from 'typeorm';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { NotFoundException } from '@nestjs/common';
 import { makeEnvelopeCryptoMock } from '../envelope-crypto.mock';
 
 import { Organization } from '../../entities/organization.entity';
@@ -341,7 +341,6 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
 
   describe('ToolsService', () => {
     let service: ToolsService;
-    let toolA: Tool;
     let toolB: Tool;
 
     beforeAll(async () => {
@@ -362,7 +361,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
       );
 
       const toolRepo = fx.ds.getRepository(Tool);
-      toolA = await toolRepo.save(
+      await toolRepo.save(
         toolRepo.create({
           name: 'tool-A',
           description: 'org A tool',
@@ -503,7 +502,6 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
 
   describe('CredentialsService', () => {
     let service: CredentialsService;
-    let credA: Credential;
     let credB: Credential;
 
     beforeAll(async () => {
@@ -527,7 +525,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
       );
 
       const credRepo = fx.ds.getRepository(Credential);
-      credA = await credRepo.save(
+      await credRepo.save(
         credRepo.create({
           name: 'cred-A',
           type: CredentialType.API_KEY,
@@ -574,7 +572,6 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
 
   describe('GatewaysService', () => {
     let service: GatewaysService;
-    let gwA: Gateway;
     let gwB: Gateway;
 
     beforeAll(async () => {
@@ -592,7 +589,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
       );
 
       const gwRepo = fx.ds.getRepository(Gateway);
-      gwA = (await gwRepo.save({
+      await gwRepo.save({
         name: 'gw-A',
         description: 'org A gateway',
         type: GatewayType.MCP,
@@ -600,7 +597,7 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
         organizationId: fx.orgA.id,
         endpoint: '/gateways/gw-a',
         configuration: {},
-      } as any)) as Gateway;
+      } as any);
       gwB = (await gwRepo.save({
         name: 'gw-B',
         description: 'org B gateway',
@@ -645,7 +642,6 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
 
   describe('LlmProvidersService', () => {
     let service: LlmProvidersService;
-    let provA: LlmProvider;
     let provB: LlmProvider;
 
     beforeAll(async () => {
@@ -670,13 +666,13 @@ describeIfDb('Cross-tenant isolation (real Postgres)', () => {
       );
 
       const provRepo = fx.ds.getRepository(LlmProvider);
-      provA = (await provRepo.save({
+      await provRepo.save({
         name: 'provider-A',
         type: LlmProviderType.OPENAI,
         status: LlmProviderStatus.ACTIVE,
         organizationId: fx.orgA.id,
         configuration: { apiKey: 'org-a-key', model: 'gpt-4o-mini' } as any,
-      } as any)) as LlmProvider;
+      } as any);
       provB = (await provRepo.save({
         name: 'provider-B',
         type: LlmProviderType.OPENAI,

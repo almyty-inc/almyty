@@ -513,7 +513,7 @@ describe('GatewayAuthService - Real Business Logic', () => {
       jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
 
       const authConfig = { configuration: {} } as Partial<GatewayAuth> as GatewayAuth;
-      const result = await service['validateBasicAuth'](authConfig, { authorization: `Basic ${credentials}` });
+      await service['validateBasicAuth'](authConfig, { authorization: `Basic ${credentials}` });
 
       expect(userRepository.findOne).toHaveBeenCalledWith({
         where: { email: 'user@example.com' },

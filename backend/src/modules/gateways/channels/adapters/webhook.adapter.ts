@@ -57,7 +57,7 @@ export class WebhookAdapter extends BaseAdapter {
    * disagreeing about the same config key, which is the shape of bug
    * that produced the silently-dropped reply in the first place.
    */
-  async sendResponse(config: Record<string, any>, formattedResponse: any, threadContext?: any): Promise<void> {
+  async sendResponse(config: Record<string, any>, formattedResponse: any, _threadContext?: any): Promise<void> {
     const target = config.callback_url || config.webhook_url;
     if (!target) {
       this.sendFailed('no callback_url or webhook_url is configured, so there is nowhere to send the reply');

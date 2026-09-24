@@ -1,7 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConflictException, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
-import { IsNull } from 'typeorm';
 
 import { Runner, RunnerState, RunnerIsolationTier } from '../../entities/runner.entity';
 import { RunnerSession } from '../../entities/runner-session.entity';

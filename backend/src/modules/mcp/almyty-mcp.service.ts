@@ -10,7 +10,7 @@ import { ApisService } from '../apis/apis.service';
 import { ToolsService } from '../tools/tools.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { AgentStatus } from '../../entities/agent.entity';
-import { AgentNotActive, agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invocation';
+import { agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invocation';
 import { AgentsService } from '../agents/agents.service';
 import { AgentExecutionEngine } from '../agents/agent-execution.engine';
 import { AgentRuntimeService } from '../agents/agent-runtime.service';

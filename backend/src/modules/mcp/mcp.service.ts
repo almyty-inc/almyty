@@ -12,13 +12,11 @@ import {
   McpInitializeResult,
   McpCapabilities,
   McpSession,
-  McpTool,
   McpCallToolRequest,
   McpReadResourceRequest,
   McpGetPromptRequest,
 } from './types/mcp.types';
 
-import { Tool } from '../../entities/tool.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Organization } from '../../entities/organization.entity';
 import { ToolsService } from '../tools/tools.service';
@@ -417,7 +415,7 @@ export class McpService {
   async broadcastNotification(
     organizationId: string,
     method: string,
-    params?: any,
+    _params?: any,
   ): Promise<void> {
     const sessions = await this.getActiveSessions(organizationId);
     for (const session of sessions) {

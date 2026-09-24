@@ -661,17 +661,6 @@ async function main(): Promise<void> {
     return { localRender, resend };
   };
 
-  /** For scenarios that must NOT send: assert the buffer is empty. */
-  const skipSendLayers = (
-    reason: string,
-  ): { localRender: LayerResult; resend: LayerResult } => {
-    mail.drainRecentSends();
-    return {
-      localRender: { status: 'skip', detail: reason },
-      resend: { status: 'skip', detail: reason },
-    };
-  };
-
   try {
     // Clean any leftovers from a previous aborted run before seeding.
     await teardown(r, /*quiet*/ true);

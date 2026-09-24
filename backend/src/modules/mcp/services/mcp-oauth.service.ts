@@ -2,8 +2,6 @@ import {
   Injectable,
   Logger,
   BadRequestException,
-  UnauthorizedException,
-  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,7 +13,6 @@ import { Gateway } from '../../../entities/gateway.entity';
 import {
   hashValue,
   validateRedirectUri,
-  verifyClientAuth,
 } from './mcp-oauth-helpers.helper';
 import { McpOAuthTokensHelper } from './mcp-oauth-tokens.helper';
 // --- Interfaces ---
@@ -79,8 +76,6 @@ export interface TokenValidationResult {
 
 // --- Constants ---
 
-const ACCESS_TOKEN_LIFETIME_SECONDS = 3600; // 1 hour
-const REFRESH_TOKEN_LIFETIME_SECONDS = 30 * 24 * 3600; // 30 days
 const AUTHORIZATION_CODE_LIFETIME_SECONDS = 600; // 10 minutes
 
 const DEFAULT_SCOPES = ['tools:read', 'tools:execute'];

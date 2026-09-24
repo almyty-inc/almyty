@@ -103,7 +103,6 @@ export class CodegenService {
     ];
 
     for (const tool of tools) {
-      const moduleName = this.toCamelCase(tool.name);
       files.push({
         path: `src/${this.slugify(tool.name)}.ts`,
         content: this.renderToolModule(tool),
@@ -115,7 +114,7 @@ export class CodegenService {
 
   // --- Renderers ---
 
-  private renderPackageJson(name: string, tools: Tool[]): string {
+  private renderPackageJson(name: string, _tools: Tool[]): string {
     const pkg = {
       name: `@almyty/${name}`,
       version: '1.0.0',

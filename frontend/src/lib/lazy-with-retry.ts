@@ -25,6 +25,26 @@ import { ComponentType, lazy } from 'react'
 
 const RELOAD_KEY = 'almyty:chunk-reload-attempted'
 
+// When the one automatic reload has already been spent and the chunk still
+// failed, the error reaches the route error view. Its "Reload" button is a
+// deliberate user action, so it clears the breadcrumb first: the next load
+// then gets its own automatic retry again instead of failing straight away.
+export function reloadAfterChunkError(): void {
+  try { sessionStorage.removeItem(RELOAD_KEY) } catch {}
+  window.location.reload()
+}
+
+// Every browser words a failed dynamic import differently; these cover
+// Chrome/Edge ("Failed to fetch dynamically imported module"), Firefox
+// ("error loading dynamically imported module"), Safari ("Importing a
+// module script failed") and webpack-style ChunkLoadError names.
+export function isChunkLoadError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const { name, message } = error as { name?: unknown; message?: unknown }
+  if (name === 'ChunkLoadError') return true
+  return typeof message === 'string' &&
+    /dynamically imported module|importing a module script failed|loading (css )?chunk [\w-]+ failed/i.test(message)
+}
 // Exported so the recovery logic itself can be unit-tested without
 // reaching into React.lazy's internal _payload shape.
 export async function importWithRetry<T>(

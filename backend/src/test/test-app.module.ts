@@ -20,7 +20,6 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { CacheModule } from '@nestjs/cache-manager';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { BullModule } from '@nestjs/bull';
 
 // Entities
 import { User } from '../entities/user.entity';

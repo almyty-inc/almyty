@@ -64,6 +64,9 @@ export async function initSentry(): Promise<void> {
       // session replay unless explicitly turned on later. Keeps the bundle
       // and network footprint minimal for a pure error-tracking rollout.
       tracesSampleRate: 0,
+      // No IP address, cookies or user identity on events. Error reports
+      // carry the error and where it happened, nothing about who hit it.
+      sendDefaultPii: false,
     })
     client = Sentry
   } catch {

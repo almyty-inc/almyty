@@ -146,7 +146,6 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
       } as any));
     }
 
-    const gateways = repo(Gateway);
     privateGateway = await insert(Gateway, {
       name: 'Owner private MCP', type: GatewayType.MCP, kind: GatewayKind.TOOL,
       endpoint: '/owner-private', organizationId, status: GatewayStatus.ACTIVE,
@@ -164,7 +163,6 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
       } as any));
     }
 
-    const providers = repo(LlmProvider);
     privateProvider = await insert(LlmProvider, {
       name: 'Owner private OpenAI', type: LlmProviderType.OPENAI, organizationId,
       configuration: { model: 'gpt-x' }, status: LlmProviderStatus.ACTIVE,
@@ -176,7 +174,6 @@ describeIfDb('Private visibility: gateways, LLM providers, credentials (real Pos
       visibility: 'org', teamId: null, ownerUserId: users.peer,
     });
 
-    const credentials = repo(Credential);
     privateCredential = await insert(Credential, {
       name: 'Owner private key', type: CredentialType.API_KEY, organizationId,
       config: { apiKey: 'sk-private' }, visibility: 'private', teamId: null,

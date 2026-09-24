@@ -91,7 +91,7 @@ export class A2AMessageHandler {
   async handleMessageSend(
     gateway: Gateway,
     params: any,
-    rpcId: string | number,
+    _rpcId: string | number,
   ): Promise<Task> {
     if (!params?.message?.parts || !Array.isArray(params.message.parts)) {
       throw Object.assign(new Error('Invalid params: message.parts must be an array'), {

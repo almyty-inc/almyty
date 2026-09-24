@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThanOrEqual, MoreThanOrEqual, In, EntityManager } from 'typeorm';
+import { Repository, In, EntityManager } from 'typeorm';
 import { AuditLog, AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { User } from '../../entities/user.entity';
 import { AUDIT_STREAM_HOOK, AuditStreamHook } from '../../common/ee-hooks/ee-hooks';
@@ -65,7 +65,7 @@ export class AuditLogService {
           if (user) {
             userEmail = user.email;
           }
-        } catch (e) {
+        } catch {
           // Never block audit logging for a user lookup failure
         }
       }

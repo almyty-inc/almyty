@@ -1,11 +1,11 @@
 import { ConflictException, Inject, Optional, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { Gateway, GatewayKind, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
-import { GatewayAuth, GatewayAuthType } from '../../entities/gateway-auth.entity';
+import { GatewayAuth } from '../../entities/gateway-auth.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';

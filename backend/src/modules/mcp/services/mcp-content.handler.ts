@@ -216,7 +216,7 @@ export class McpContentHandler {
 
       const schema = tool.parameters as any;
       const props = schema?.properties || {};
-      const argsList = Object.entries(props).map(([name, prop]: [string, any]) => {
+      const argsList = Object.entries(props).map(([name]: [string, any]) => {
         const value = params.arguments?.[name] || `<${name}>`;
         return `- ${name}: ${value}`;
       }).join('\n');

@@ -51,7 +51,6 @@ export async function callOpenAI(
   calculateProviderCost: (provider: LlmProvider, inputTokens: number, outputTokens: number) => number,
   auth?: OpenAiAuthOverride,
 ): Promise<ChatResponse> {
-  const apiUrl = provider.getApiUrl();
   const headers = auth?.headers ?? provider.getAuthHeaders();
 
   // Prepare OpenAI request
@@ -248,7 +247,6 @@ export async function callOpenAIStream(
   onChunk: (chunk: StreamChunk) => void,
   auth?: OpenAiAuthOverride,
 ): Promise<ChatResponse> {
-  const apiUrl = provider.getApiUrl();
   const headers = auth?.headers ?? provider.getAuthHeaders();
 
   const openaiRequest = buildOpenAIRequestBody(provider, request, conversation, tools, true);

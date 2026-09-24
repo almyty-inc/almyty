@@ -7,7 +7,7 @@ import { JsonSchema, JsonSchemaType } from '../../entities/json-schema.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
-import { Api, ApiType } from '../../entities/api.entity';
+import { ApiType } from '../../entities/api.entity';
 import {
   normalizePropertyToJsonSchema,
   translateOpenAPIOperationInput,

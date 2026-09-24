@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException } from '@nestjs/common';
 import * as crypto from 'crypto';
 
 import { AgentOpenAICompatController } from '../agent-openai-compat.controller';

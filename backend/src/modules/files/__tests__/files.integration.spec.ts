@@ -23,14 +23,12 @@ describe('FilesService (integration)', () => {
   let textExtractor: TextExtractorService;
   let tmpDir: string;
   let fileStore: AgentFile[];
-  let idCounter: number;
   let mockRepo: any;
 
   beforeEach(async () => {
     // Create a real temp directory for file storage
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'almyty-test-files-'));
     fileStore = [];
-    idCounter = 0;
 
     mockRepo = {
       create: jest.fn().mockImplementation((data: Partial<AgentFile>) => {

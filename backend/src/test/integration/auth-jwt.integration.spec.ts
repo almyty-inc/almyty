@@ -51,7 +51,7 @@ function buildService(opts: {
   });
 
   const userRepo: any = {
-    findOne: jest.fn().mockImplementation(async (args: any) => {
+    findOne: jest.fn().mockImplementation(async (_args: any) => {
       if (!opts.planteduser) return null;
       const active = opts.planteduserActive ?? true;
       if (!active) return null;

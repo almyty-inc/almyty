@@ -26,7 +26,7 @@ import { AuditLogService } from '../../audit-log/audit-log.service';
 // tenant's gateway listing and from there into the victim's agents and MCP
 // clients. These tests assert the unauthorized shapes are *refused*.
 describe('gateway-tool PATCH mass assignment', () => {
-  const metaFor = (dto: any) => ({
+  const metaFor = (_dto: any) => ({
     type: 'body' as const,
     metatype: UpdateGatewayToolBodyDto,
     data: '',
