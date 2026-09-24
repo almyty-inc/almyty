@@ -155,7 +155,8 @@ export class GatewayAuthValidators {
       relations: { user: { organizationMemberships: true } },
     });
 
-    if (!apiKeyRecord) {
+    const ownerMembership = apiKeyRecord ? this.keyOwnerMembership(apiKeyRecord) : undefined;
+    if (!apiKeyRecord || !ownerMembership) {
       return {
         isValid: false,
         error: 'Invalid API key',
@@ -180,7 +181,7 @@ export class GatewayAuthValidators {
       userId: apiKeyRecord.userId,
       user: apiKeyRecord.user,
       scopes: apiKeyRecord.scopes,
-      roles: apiKeyRecord.user?.organizationMemberships?.map(m => m.role) || [],
+      roles: [ownerMembership.role],
       organizationId: apiKeyRecord.organizationId,
       metadata: {
         keyId: apiKeyRecord.id,
@@ -230,7 +231,8 @@ export class GatewayAuthValidators {
       relations: { user: { organizationMemberships: true } },
     });
 
-    if (!apiKeyRecord) {
+    const ownerMembership = apiKeyRecord ? this.keyOwnerMembership(apiKeyRecord) : undefined;
+    if (!apiKeyRecord || !ownerMembership) {
       return {
         isValid: false,
         error: 'Invalid bearer token',
@@ -251,9 +253,25 @@ export class GatewayAuthValidators {
       userId: apiKeyRecord.userId,
       user: apiKeyRecord.user,
       scopes: apiKeyRecord.scopes,
-      roles: apiKeyRecord.user?.organizationMemberships?.map(m => m.role) || [],
+      roles: [ownerMembership.role],
       organizationId: apiKeyRecord.organizationId,
     };
+  }
+
+  /**
+   * The owner's membership that still justifies a key, or undefined.
+   *
+   * A key is minted by a user and acts as that user; the platform
+   * ApiKeyStrategy refuses one whose owner is no longer an effective
+   * member of the key's org. Without the same check here, removing a
+   * member (or deactivating the account) left every gateway key they had
+   * minted working. The role reported is the one in THIS org, not every
+   * role the owner holds anywhere.
+   */
+  private keyOwnerMembership(apiKeyRecord: ApiKey) {
+    const owner = apiKeyRecord.user;
+    if (!owner || owner.isActive === false) return undefined;
+    return findEffectiveMembership(owner.organizationMemberships, apiKeyRecord.organizationId);
   }
 
   async validateBasicAuth(

@@ -16,6 +16,7 @@ import { McpModule } from '../mcp/mcp.module';
 import { AgentsModule } from '../agents/agents.module';
 import { A2AModule } from '../a2a/a2a.module';
 import { AcpModule } from '../acp/acp.module';
+import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
 
 /**
  * Unified endpoint module — MUST be imported LAST in AppModule
@@ -28,7 +29,7 @@ import { AcpModule } from '../acp/acp.module';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET', 'dev-only-jwt-secret-change-me-in-production'),
+        secret: config.get<string>('JWT_SECRET', DEV_ONLY_JWT_SECRET),
         verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
       }),
     }),

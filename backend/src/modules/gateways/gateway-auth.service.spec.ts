@@ -415,7 +415,9 @@ describe('GatewayAuthService - Real Business Logic', () => {
       const expiredKey = {
         id: 'key-1',
         userId: 'user-1',
+        organizationId: 'org-1',
         isExpired: jest.fn().mockReturnValue(true),
+        user: { isActive: true, organizationMemberships: [{ organizationId: 'org-1', role: 'member' }] },
       } as any;
 
       jest.spyOn(apiKeyRepository, 'findOne').mockResolvedValue(expiredKey);
@@ -441,7 +443,8 @@ describe('GatewayAuthService - Real Business Logic', () => {
         name: 'Test Key',
         isExpired: jest.fn().mockReturnValue(false),
         user: {
-          organizationMemberships: [{ role: 'admin' }],
+          isActive: true,
+          organizationMemberships: [{ organizationId: 'org-1', role: 'admin' }],
         },
       } as any;
 
@@ -468,8 +471,9 @@ describe('GatewayAuthService - Real Business Logic', () => {
       const validKey = {
         id: 'key-1',
         userId: 'user-1',
+        organizationId: 'org-1',
         isExpired: jest.fn().mockReturnValue(false),
-        user: {},
+        user: { isActive: true, organizationMemberships: [{ organizationId: 'org-1', role: 'member' }] },
       } as any;
 
       jest.spyOn(apiKeyRepository, 'findOne').mockResolvedValue(validKey);

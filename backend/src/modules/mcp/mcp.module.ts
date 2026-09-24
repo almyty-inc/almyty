@@ -9,10 +9,8 @@ import { McpOAuthController } from './controllers/mcp-oauth.controller';
 import { McpOAuthDiscoveryController } from './controllers/mcp-oauth-discovery.controller';
 import { McpService } from './mcp.service';
 import { AlmytyMcpService } from './almyty-mcp.service';
-import { McpGatewayService } from './mcp-gateway.service';
 import { McpSessionService } from './mcp-session.service';
 import { UtcpService } from './utcp.service';
-import { RealtimeExecutorService } from './realtime-executor.service';
 import { GatewayResolverService } from './services/gateway-resolver.service';
 import { McpOAuthService } from './services/mcp-oauth.service';
 import { McpOAuthTokensHelper } from './services/mcp-oauth-tokens.helper';
@@ -22,7 +20,6 @@ import { McpContentHandler } from './services/mcp-content.handler';
 import { PromotedSkillsModule } from '../promoted-skills/promoted-skills.module';
 import { McpServerRequestService } from './services/mcp-server-request.service';
 import { SseTransport } from './transports/sse.transport';
-import { WebSocketTransport } from './transports/websocket.transport';
 import { StreamableHttpTransport } from './transports/streamable-http.transport';
 
 // Import related entities
@@ -42,6 +39,7 @@ import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 // Import related modules
 import { ToolsModule } from '../tools/tools.module';
 import { GatewaysModule } from '../gateways/gateways.module';
+import { DEV_ONLY_JWT_SECRET } from '../auth/dev-jwt-secret';
 
 @Module({
   imports: [
@@ -74,7 +72,7 @@ import { GatewaysModule } from '../gateways/gateways.module';
           );
         }
         return {
-          secret: secret || 'dev-jwt-secret',
+          secret: secret || DEV_ONLY_JWT_SECRET,
           signOptions: { issuer: 'almyty', audience: 'almyty-api' },
           verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
         };
@@ -88,30 +86,24 @@ import { GatewaysModule } from '../gateways/gateways.module';
     McpServerRequestService,
     AlmytyMcpService,
     McpService,
-    McpGatewayService,
     McpSessionService,
     UtcpService,
-    RealtimeExecutorService,
     GatewayResolverService,
     McpOAuthService,
     McpOAuthTokensHelper,
     McpOAuthResolveHelper,
     SseTransport,
-    WebSocketTransport,
     StreamableHttpTransport,
   ],
   exports: [
     AlmytyMcpService,
     McpService,
-    McpGatewayService,
     McpSessionService,
     McpOAuthService,
     McpServerRequestService,
     UtcpService,
-    RealtimeExecutorService,
     GatewayResolverService,
     SseTransport,
-    WebSocketTransport,
     StreamableHttpTransport,
   ],
 })

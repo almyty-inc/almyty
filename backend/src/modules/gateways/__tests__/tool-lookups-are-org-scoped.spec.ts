@@ -62,15 +62,4 @@ describe('every tool lookup is scoped to an organization', () => {
       expect(clause).toContain(scope);
     });
   }
-
-  it('the MCP gateway paths, which were already scoped, still are', () => {
-    // These two were the counter-example that proved the other four were
-    // an oversight rather than a policy: they carry the filter and a
-    // comment saying why.
-    const source = read('modules/mcp/mcp-gateway.service.ts');
-    const unscoped = [...source.matchAll(/toolRepository\s*\n?\s*\.?(find|findOne)\(\{[\s\S]{0,300}?\}\)/g)].filter(
-      (m) => !m[0].includes('organizationId'),
-    );
-    expect(unscoped.map((m) => m[0])).toEqual([]);
-  });
 });

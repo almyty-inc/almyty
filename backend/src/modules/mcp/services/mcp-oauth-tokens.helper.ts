@@ -86,6 +86,7 @@ export class McpOAuthTokensHelper {
     redirectUri: string,
     gatewayId: string,
     clientSecret?: string,
+    resource?: string,
   ): Promise<TokenResponse> {
     const client = await this.oauthClientRepository.findOne({
       where: { clientId, gatewayId, isActive: true },
@@ -133,6 +134,12 @@ export class McpOAuthTokensHelper {
       throw new BadRequestException('redirect_uri mismatch');
     }
 
+    // RFC 8707 section 2.2: a resource named at the token endpoint has to
+    // be the one the grant was authorized for.
+    if (resource !== undefined && resource !== '' && resource !== authCode.resource) {
+      throw new BadRequestException('invalid_target: resource does not match the authorization');
+    }
+
     const computedChallenge = crypto
       .createHash('sha256')
       .update(codeVerifier)
@@ -156,13 +163,16 @@ export class McpOAuthTokensHelper {
       throw new UnauthorizedException('Invalid authorization code');
     }
 
+    // The token's audience is the resource the user authorized (RFC 8707),
+    // carried on the code. This passed `redirectUri`, so every token's
+    // `resource` column named the client's own callback URL.
     const tokens = await this.generateTokenPair(
       authCode.clientId,
       authCode.gatewayId,
       authCode.organizationId,
       authCode.userId,
       authCode.scope,
-      redirectUri,
+      authCode.resource ?? undefined,
     );
 
     this.logger.log(`Token exchanged for client ${clientId}`);
