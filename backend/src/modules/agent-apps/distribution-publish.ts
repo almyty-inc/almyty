@@ -2,6 +2,7 @@ import { GatewayType } from '../../entities/gateway.entity';
 import { DistributionTarget } from '../../entities/agent-app-distribution.entity';
 import type { AgentApp } from '../../entities/agent-app.entity';
 import { appPrivacyFrom } from '../../entities/agent-app.entity';
+import { credentialKeysOf } from '../gateways/channels/channel-config.helper';
 
 
 /**
@@ -88,7 +89,11 @@ export function missingCredentials(
   configuration: Record<string, any> | null | undefined,
 ): string[] {
   const required = REQUIRED_CREDENTIALS[target] ?? [];
+  // A secret is present when its credential holds it (`credentialKeys`
+  // names it) or, on a row not yet moved, when it is still inline.
+  const held = credentialKeysOf(configuration);
   return required.filter((field) => {
+    if (held.includes(field)) return false;
     const value = configuration?.[field];
     return typeof value !== 'string' ? !value : !value.trim();
   });
