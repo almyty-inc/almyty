@@ -218,6 +218,10 @@ describeIfDb('private visibility on agents, tools and APIs (real Postgres)', () 
       orgId,
       users.owner,
     );
+    // Gateways serve active tools only (a draft cannot be executed), so
+    // publish both the way the owner would.
+    privateTool = await tools.activateTool(privateTool.id, orgId, users.owner);
+    orgTool = await tools.activateTool(orgTool.id, orgId, users.owner);
     privateAgent = await agents.createAgent(
       { name: 'Owner Private Agent', status: AgentStatus.ACTIVE, visibility: 'private', toolIds: [privateTool.id] },
       orgId,
