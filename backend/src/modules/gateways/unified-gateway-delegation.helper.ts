@@ -337,10 +337,17 @@ export class UnifiedGatewayDelegation {
       return res.json(result);
     }
 
+    // The caller the gateway's own auth identified (an API key's or OAuth
+    // token's user), as UTCP does. With no user, tools/call and tools/get
+    // treat the caller as nobody: another member's private tool -- and on
+    // a private gateway, which only its owner reaches, the owner's own --
+    // is refused rather than run on no one's behalf. Passing null here made
+    // a private gateway useless to its owner and ran every call unattributed.
+    const callerId: string | undefined = auth?.userId || (req as any).user?.sub || (req as any).user?.id || undefined;
     const result = await this.mcpService.handleJsonRpcMessage(
       body,
       gateway.organizationId,
-      null,
+      callerId,
       gateway.id,
     );
 

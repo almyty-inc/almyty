@@ -455,15 +455,11 @@ describe('Gateway Authentication (e2e)', () => {
   // --------------------------------------------------------------------------
 
   describe('UTCP gateway auth', () => {
-    let utcpApiKey: string;
-
     beforeAll(async () => {
-      const res = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .post(`/gateways/${gatewayIdUtcp}/auth/api-keys`)
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ name: 'UTCP E2E Key' });
-
-      utcpApiKey = res.body.data?.key;
     });
 
     it('should serve .well-known/utcp WITHOUT auth', async () => {

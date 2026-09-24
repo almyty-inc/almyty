@@ -16,6 +16,11 @@ vi.mock('@/components/ui/visibility-field', () => ({
   VisibilityField: () => <div data-testid="visibility-field" />,
 }))
 
+// The default-model picker has its own tests; not what this file tests.
+vi.mock('@/components/model-picker', () => ({
+  ModelPicker: () => <div data-testid="model-picker" />,
+}))
+
 vi.mock('@/lib/connections-api', () => ({
   connectionsApi: {
     list: vi.fn().mockResolvedValue([
@@ -33,7 +38,7 @@ function EditHarness({ provider, onUpdate }: { provider: any; onUpdate: (payload
     defaultValues: { name: provider.name, model: '', maxTokens: 4096, temperature: 0.7, apiKey: '', usageApiKey: '', credentialId: undefined, usageCredentialId: undefined },
   })
   const mutation = { isPending: false, mutate: (payload: any) => onUpdate(payload) } as any
-  return <EditProviderForm onCancel={() => {}} editForm={form} providerToEdit={provider} updateProviderMutation={mutation} availableModels={[]} modelsLoading={false} />
+  return <EditProviderForm onCancel={() => {}} editForm={form} providerToEdit={provider} updateProviderMutation={mutation} />
 }
 
 const withRef = { id: 'p-1', type: 'openai', name: 'prod', credentialRef, usageCredentialRef: null, configuration: { apiKey: '***masked***', usageApiKey: undefined } }

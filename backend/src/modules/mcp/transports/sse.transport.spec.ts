@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Response } from 'express';
 import { EventEmitter } from 'events';
 
 import { SseTransport } from './sse.transport';

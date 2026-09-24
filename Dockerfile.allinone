@@ -21,7 +21,7 @@ FROM --platform=$BUILDPLATFORM node:26-alpine AS frontend-build
 WORKDIR /app
 
 COPY frontend/package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 COPY frontend/ ./
 
@@ -46,7 +46,7 @@ FROM node:26-alpine AS backend-build
 WORKDIR /app
 
 COPY backend/package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 COPY backend/ ./
 RUN npm run build:ee && node scripts/ee-di-smoke.js
@@ -63,7 +63,7 @@ RUN addgroup --system --gid 1001 nodejs \
 
 # Production dependencies only
 COPY backend/package*.json ./
-RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Built backend (EE layout: dist-ee/src + dist-ee/ee)
 COPY --from=backend-build --chown=nestjs:nodejs /app/dist-ee ./dist-ee

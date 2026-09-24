@@ -51,12 +51,10 @@ const PRIMITIVES = new Set([
  * Areas another workstream is converting at the same time. Each entry is
  * temporary: REMOVE IT when that area lands without dialogs. The
  * "exemptions are still needed" test fails once an entry no longer
- * covers any dialog, so a stale entry cannot linger.
+ * covers any dialog, so a stale entry cannot linger. Empty: every area,
+ * components/agents/ included, is covered.
  */
-const OTHER_WORKSTREAMS = [
-  // Agent configuration (model picker + collaboration).
-  'components/agents/',
-]
+const OTHER_WORKSTREAMS: string[] = []
 
 const exempt = (p: string) =>
   PRIMITIVES.has(p) || OTHER_WORKSTREAMS.some((prefix) => p === prefix || p.startsWith(prefix))
@@ -165,6 +163,7 @@ describe('no dialogs', () => {
  * codebase keeps producing: it compiles, its tests pass, nothing opens it.
  */
 const CONVERTED_DIALOGS: string[] = [
+  'components/agents/add-role-dialog.tsx',
   'components/SchemaImportDialog.tsx',
   'components/apis/create-api-dialog.tsx',
   'components/llm-providers/edit-provider-dialog.tsx',
@@ -185,6 +184,9 @@ const CONVERTED_DIALOGS: string[] = [
   'components/connections/connection-detail-sheet.tsx',
   'components/connections/custom-connector-dialog.tsx',
   'components/settings/approval-policy-dialog.tsx',
+  'components/agents/import-external-a2a-dialog.tsx',
+  'components/agents/detail/promote-run-dialog.tsx',
+  'components/agents/detail/invoke-dialog.tsx',
 ]
 
 describe('converted dialogs are deleted', () => {

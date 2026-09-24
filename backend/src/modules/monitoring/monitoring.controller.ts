@@ -11,12 +11,9 @@ import {
   Logger,
   Header,
   UnauthorizedException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { MonitoringService, SystemMetrics, Alert } from './monitoring.service';
+import { MonitoringService } from './monitoring.service';
 
 /**
  * Gate platform-wide metrics endpoints (`/metrics`, `/metrics/history`,

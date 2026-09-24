@@ -8,6 +8,7 @@ import { join } from 'path';
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { Organization } from '../../entities/organization.entity';
 import { validateUrl } from '../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { ModelManifest, manifestSha, totalSizeBytes, validateManifest } from './manifest';
 import { ParsedRegistryUri, parseRegistryUri } from './registry-uri';
@@ -215,6 +216,10 @@ export class ModelRegistryService implements OnModuleInit {
       region: c.region,
       credentials: { accessKeyId: c.accessKeyId, secretAccessKey: c.secretAccessKey },
       forcePathStyle: true,
+      // The endpoint passed validateUrl as a string; pin what it resolves
+      // to, so a public name answering with a private address is refused
+      // at connect. The SDK takes NodeHttpHandler options here.
+      requestHandler: { httpAgent: ssrfSafeHttpAgent, httpsAgent: ssrfSafeHttpsAgent },
     });
     const toBuffer = async (body: any): Promise<Buffer> => {
       if (typeof body?.transformToByteArray === 'function') return Buffer.from(await body.transformToByteArray());

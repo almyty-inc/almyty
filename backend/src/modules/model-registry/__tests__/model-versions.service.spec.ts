@@ -1,6 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
+import { ModelDeployment } from '../../../entities/model-deployment.entity';
 import { ModelVersion } from '../../../entities/model-version.entity';
+import { FakeRepository, fakeRepository } from '../../../test/fake-repository';
 import { ModelVersionsService } from '../model-versions.service';
 
 const manifest = {
@@ -13,27 +15,27 @@ const manifest = {
   quantizations: ['Q4_K_M'],
 };
 
+/**
+ * Both repositories are the shared truthful table. The doubles they
+ * replace answered every version to `find()` and a canned number to
+ * `deployments.count()`, so the organization predicate on list/get/the
+ * duplicate check, and both halves of what keeps a version alive (a
+ * deployment in this org, not torn down), could each be deleted with the
+ * suite green.
+ */
 describe('ModelVersionsService', () => {
-  let rows: ModelVersion[];
-  let versions: any;
-  let deployments: { count: jest.Mock };
+  let versions: FakeRepository<ModelVersion>;
+  let deployments: FakeRepository<ModelDeployment>;
   let registry: { describeVersion: jest.Mock };
   let audit: { log: jest.Mock };
   let svc: ModelVersionsService;
 
   beforeEach(() => {
-    rows = [];
-    versions = {
-      create: jest.fn((p: any) => Object.assign(new ModelVersion(), p)),
-      save: jest.fn(async (r: any) => { r.id = r.id ?? `v-${rows.length + 1}`; rows.push(r); return r; }),
-      find: jest.fn(async () => rows),
-      findOne: jest.fn(async ({ where }: any) => rows.find((r) => Object.entries(where).every(([k, v]) => (r as any)[k] === v)) ?? null),
-      remove: jest.fn(async (r: any) => { rows.splice(rows.indexOf(r), 1); return r; }),
-    };
-    deployments = { count: jest.fn().mockResolvedValue(0) };
+    versions = fakeRepository<ModelVersion>({ make: () => new ModelVersion(), idPrefix: 'v' });
+    deployments = fakeRepository<ModelDeployment>({ make: () => new ModelDeployment(), idPrefix: 'd' });
     registry = { describeVersion: jest.fn() };
     audit = { log: jest.fn().mockResolvedValue(null) };
-    svc = new ModelVersionsService(versions, deployments as any, registry as any, audit as any);
+    svc = new ModelVersionsService(versions as any, deployments as any, registry as any, audit as any);
   });
 
   it('registers an s3 version from its manifest: base, size, digest, quantizations, summary', async () => {
@@ -49,7 +51,7 @@ describe('ModelVersionsService', () => {
     await expect(svc.register('org', { name: 'x', registryUri: 's3://registry/nothing@1' })).rejects.toMatchObject({ response: { code: 'REGISTRY_NOT_FOUND' } });
     await expect(svc.register('org', { name: 'x', registryUri: 's3://registry/nothing' })).rejects.toMatchObject({ response: { code: 'REGISTRY_URI_INVALID' } });
     await expect(svc.register('org', { name: 'x', registryUri: 'gs://b/x@1' })).rejects.toBeInstanceOf(BadRequestException);
-    expect(rows).toHaveLength(0);
+    expect(versions.rows()).toHaveLength(0);
   });
 
   it('accepts an hf:// version without a manifest when base is given, and rejects it without', async () => {
@@ -87,13 +89,37 @@ describe('ModelVersionsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('remove refuses while a deployment that is not torn down references the version', async () => {
+  it('remove refuses while a live deployment in this org references the version', async () => {
     registry.describeVersion.mockRejectedValue(new Error('404'));
     const v = await svc.register('org', { name: 'a', registryUri: 'hf://x/y@1', base: 'b' });
-    deployments.count.mockResolvedValueOnce(2);
-    await expect(svc.remove('org', v.id)).rejects.toMatchObject({ response: { code: 'VERSION_IN_USE' } });
-    deployments.count.mockResolvedValueOnce(0);
+
+    deployments.seed({ id: 'd-ready', modelVersionId: v.id, organizationId: 'org', state: 'ready' } as any);
+    deployments.seed({ id: 'd-deploying', modelVersionId: v.id, organizationId: 'org', state: 'deploying' } as any);
+    await expect(svc.remove('org', v.id)).rejects.toMatchObject({
+      response: { code: 'VERSION_IN_USE', message: expect.stringContaining('2 deployment') },
+    });
+    expect(versions.rows()).toHaveLength(1);
+
+    // Torn down, it holds nothing; neither does another org's row, in
+    // whatever state.
+    await deployments.update({ modelVersionId: v.id, organizationId: 'org' }, { state: 'torn_down' });
+    deployments.seed({ id: 'd-foreign', modelVersionId: v.id, organizationId: 'other-org', state: 'ready' } as any);
     await svc.remove('org', v.id, 'u');
-    expect(rows).toHaveLength(0);
+    expect(versions.rows()).toHaveLength(0);
+  });
+
+  it('a version is visible to, and removable by, its own organization only', async () => {
+    registry.describeVersion.mockRejectedValue(new Error('404'));
+    const mine = await svc.register('org', { name: 'a', registryUri: 'hf://x/y@1', base: 'b' });
+
+    expect(await svc.list('other-org')).toEqual([]);
+    await expect(svc.get('other-org', mine.id)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.remove('other-org', mine.id)).rejects.toBeInstanceOf(NotFoundException);
+    expect(versions.rows()).toHaveLength(1);
+
+    // The uniqueness is per organization: the same URI is another org's to register.
+    await expect(
+      svc.register('other-org', { name: 'a', registryUri: 'hf://x/y@1', base: 'b' }),
+    ).resolves.toMatchObject({ organizationId: 'other-org' });
   });
 });

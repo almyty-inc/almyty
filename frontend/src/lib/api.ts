@@ -921,7 +921,7 @@ export const complianceApi = {
 export const agentsApi = {
   getAll: () => apiGet('/agents'),
   getById: (id: string) => apiGet(`/agents/${id}`),
-  create: (data: any, organizationId?: string) => apiPost('/agents', data),
+  create: (data: any, _organizationId?: string) => apiPost('/agents', data),
   update: (id: string, data: any) => apiPatch(`/agents/${id}`, data),
   delete: (id: string) => apiDel(`/agents/${id}`),
   activate: (id: string) => apiPost(`/agents/${id}/activate`),
@@ -1347,15 +1347,54 @@ export interface OnboardingState {
   activatedRealAt: string | null
 }
 
+/**
+ * Complete an onboarding response before anything reads it.
+ *
+ * The guide dereferences `state.steps.<key>` and `state.links.<x>` directly,
+ * so a response missing a field threw during render and took the whole
+ * dashboard layout down. That happens whenever the frontend is newer than
+ * the API it talks to -- during a rolling deploy, or a self-hosted API
+ * behind the web app -- because a newer guide asks for steps an older API
+ * never sends. A missing step reads as "not done", a missing link as none.
+ */
+export function normalizeOnboardingState(raw: Partial<OnboardingState> | null | undefined): OnboardingState {
+  const steps = (raw?.steps ?? {}) as Partial<OnboardingState['steps']>
+  const links = (raw?.links ?? {}) as Partial<OnboardingState['links']>
+  const step = (k: keyof OnboardingState['steps']) => steps[k] === true
+  return {
+    steps: {
+      provider: step('provider'),
+      api: step('api'),
+      tools: step('tools'),
+      gateway: step('gateway'),
+      first_call: step('first_call'),
+      external_client: step('external_client'),
+      agent: step('agent'),
+      agent_run: step('agent_run'),
+      app: step('app'),
+      distribution: step('distribution'),
+      runner: step('runner'),
+    },
+    links: {
+      gateway: links.gateway ?? null,
+      agent: links.agent ?? null,
+      app: links.app ?? null,
+    },
+    dismissed: raw?.dismissed === true,
+    dismissedIntros: Array.isArray(raw?.dismissedIntros) ? raw!.dismissedIntros! : [],
+    activatedRealAt: raw?.activatedRealAt ?? null,
+  }
+}
+
 export const onboardingApi = {
-  get: (organizationId: string): Promise<OnboardingState> =>
-    apiGet(`/organizations/${organizationId}/onboarding`),
-  setDismissed: (organizationId: string, dismissed: boolean): Promise<OnboardingState> =>
-    apiPatch(`/organizations/${organizationId}/onboarding`, { dismissed }),
-  dismissIntro: (organizationId: string, topic: string): Promise<OnboardingState> =>
-    apiPatch(`/organizations/${organizationId}/onboarding`, { dismissIntro: topic }),
-  resetIntros: (organizationId: string): Promise<OnboardingState> =>
-    apiPatch(`/organizations/${organizationId}/onboarding`, { resetIntros: true }),
+  get: async (organizationId: string): Promise<OnboardingState> =>
+    normalizeOnboardingState(await apiGet(`/organizations/${organizationId}/onboarding`)),
+  setDismissed: async (organizationId: string, dismissed: boolean): Promise<OnboardingState> =>
+    normalizeOnboardingState(await apiPatch(`/organizations/${organizationId}/onboarding`, { dismissed })),
+  dismissIntro: async (organizationId: string, topic: string): Promise<OnboardingState> =>
+    normalizeOnboardingState(await apiPatch(`/organizations/${organizationId}/onboarding`, { dismissIntro: topic })),
+  resetIntros: async (organizationId: string): Promise<OnboardingState> =>
+    normalizeOnboardingState(await apiPatch(`/organizations/${organizationId}/onboarding`, { resetIntros: true })),
 }
 
 export type ApiResponse<T = any> = AxiosResponse<T>

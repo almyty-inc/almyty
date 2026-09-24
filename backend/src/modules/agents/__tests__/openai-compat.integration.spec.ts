@@ -336,7 +336,7 @@ describe('OpenAI Compatibility', () => {
       agentsService.getAgent.mockResolvedValue(makeAgent());
 
       executionEngine.execute.mockImplementation(
-        async (agent: any, orgId: string, userId: string | null, opts: any, onEvent?: Function) => {
+        async (_agent: any, _orgId: string, _userId: string | null, _opts: any, _onEvent?: Function) => {
           throw new Error('LLM provider crashed');
         },
       );

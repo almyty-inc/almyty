@@ -1,8 +1,6 @@
 import { Organization } from './organization.entity';
 import { UserOrganization, OrganizationRole } from './user-organization.entity';
 import { Api } from './api.entity';
-import { Gateway } from './gateway.entity';
-import { Tool } from './tool.entity';
 
 describe('Organization Entity', () => {
   describe('generateSlug', () => {
@@ -192,138 +190,11 @@ describe('Organization Entity', () => {
     });
   });
 
-  describe('canAddMoreGateways', () => {
-    it('should return true if no limit set', () => {
-      const org = new Organization();
-      org.settings = {};
-      org.gateways = [{} as Gateway];
-
-      expect(org.canAddMoreGateways()).toBe(true);
-    });
-
-    it('should return true if under limit', () => {
-      const org = new Organization();
-      org.settings = { maxGateways: 3 };
-      org.gateways = [{} as Gateway];
-
-      expect(org.canAddMoreGateways()).toBe(true);
-    });
-
-    it('should return false if at or over limit', () => {
-      const org = new Organization();
-      org.settings = { maxGateways: 1 };
-      org.gateways = [{} as Gateway, {} as Gateway];
-
-      expect(org.canAddMoreGateways()).toBe(false);
-    });
-  });
-
-  describe('canAddMoreTools', () => {
-    it('should return true if no limit set', () => {
-      const org = new Organization();
-      org.settings = {};
-      org.tools = [{} as Tool, {} as Tool, {} as Tool];
-
-      expect(org.canAddMoreTools()).toBe(true);
-    });
-
-    it('should return true if under limit', () => {
-      const org = new Organization();
-      org.settings = { maxTools: 10 };
-      org.tools = [{} as Tool, {} as Tool];
-
-      expect(org.canAddMoreTools()).toBe(true);
-    });
-
-    it('should return false if at limit', () => {
-      const org = new Organization();
-      org.settings = { maxTools: 2 };
-      org.tools = [{} as Tool, {} as Tool];
-
-      expect(org.canAddMoreTools()).toBe(false);
-    });
-
-    it('should return false if over limit', () => {
-      const org = new Organization();
-      org.settings = { maxTools: 1 };
-      org.tools = [{} as Tool, {} as Tool, {} as Tool];
-
-      expect(org.canAddMoreTools()).toBe(false);
-    });
-
-    it('should handle null tools array', () => {
-      const org = new Organization();
-      org.settings = { maxTools: 5 };
-      org.tools = null;
-
-      expect(org.canAddMoreTools()).toBe(true);
-    });
-
-    it('should handle undefined tools array', () => {
-      const org = new Organization();
-      org.settings = { maxTools: 5 };
-      org.tools = undefined;
-
-      expect(org.canAddMoreTools()).toBe(true);
-    });
-
-    it('should return true if settings is null', () => {
-      const org = new Organization();
-      org.settings = null;
-      org.tools = [{} as Tool];
-
-      expect(org.canAddMoreTools()).toBe(true);
-    });
-
-    it('should return true if maxTools is undefined', () => {
-      const org = new Organization();
-      org.settings = { maxApis: 5 };
-      org.tools = [{} as Tool];
-
-      expect(org.canAddMoreTools()).toBe(true);
-    });
-
-    it('should handle edge case with zero tools', () => {
-      const org = new Organization();
-      org.settings = { maxTools: 1 };
-      org.tools = [];
-
-      expect(org.canAddMoreTools()).toBe(true);
-    });
-
-    it('should handle edge case with maxTools zero', () => {
-      const org = new Organization();
-      org.settings = { maxTools: 0 };
-      org.tools = [];
-
-      expect(org.canAddMoreTools()).toBe(true); // 0 < 0 is false, so returns true
-    });
-  });
-
-  describe('canAddMoreGateways edge cases', () => {
-    it('should handle null settings', () => {
-      const org = new Organization();
-      org.settings = null;
-      org.gateways = [{} as Gateway];
-
-      expect(org.canAddMoreGateways()).toBe(true);
-    });
-
-    it('should handle undefined gateways array', () => {
-      const org = new Organization();
-      org.settings = { maxGateways: 5 };
-      org.gateways = undefined;
-
-      expect(org.canAddMoreGateways()).toBe(true);
-    });
-
-    it('should handle maxGateways zero', () => {
-      const org = new Organization();
-      org.settings = { maxGateways: 0 };
-      org.gateways = [];
-
-      expect(org.canAddMoreGateways()).toBe(true); // 0 < 0 is false, so returns true
-    });
+  it('has no relation-reading gateway / tool limit checks (they always passed)', () => {
+    // Quotas are enforced by COUNT in gateway-quota.ts / tool-quota.ts.
+    const org = new Organization() as any;
+    expect(org.canAddMoreGateways).toBeUndefined();
+    expect(org.canAddMoreTools).toBeUndefined();
   });
 
   describe('canAddMoreApis edge cases', () => {

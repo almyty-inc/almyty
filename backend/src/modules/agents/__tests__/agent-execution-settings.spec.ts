@@ -135,6 +135,33 @@ describe('agent execution settings', () => {
     agent.organizationId = 'someone-else';
     await get().expect(404);
   });
+
+  /**
+   * An autonomous agent runs the ReAct loop, not a compiled pipeline, and
+   * that loop never reads settings.execution. A strategy saved on one
+   * looked configured and did nothing, so it is refused at the door.
+   */
+  it('refuses a strategy on an autonomous agent, which would ignore it', async () => {
+    agent.mode = 'autonomous' as any;
+    const { body } = await put({ strategyKey: 'cascade' }).expect(400);
+    expect(body.code).toBe('STRATEGY_WORKFLOW_ONLY');
+    expect(agent.settings).toBeUndefined();
+  });
+
+  it('refuses turning the orchestrator on for an autonomous agent', async () => {
+    agent.mode = 'autonomous' as any;
+    const { body } = await put({
+      orchestrator: { enabled: true, roleKey: 'orchestrator', timeoutMs: 2000, fallbackStrategyKey: 'single' },
+    }).expect(400);
+    expect(body.code).toBe('STRATEGY_WORKFLOW_ONLY');
+  });
+
+  it('still lets an autonomous agent shed a leftover strategy', async () => {
+    agent.mode = 'autonomous' as any;
+    agent.settings = { execution: { strategyKey: 'cascade' } } as any;
+    await put({ strategyKey: null }).expect(200);
+    expect((agent.settings as any).execution.strategyKey).toBeNull();
+  });
   /**
    * Ejecting: the strategy becomes the agent's own graph, and stops being
    * a strategy.

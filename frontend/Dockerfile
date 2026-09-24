@@ -9,7 +9,7 @@ FROM --platform=$BUILDPLATFORM node:26-alpine AS base
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 COPY . .
 
@@ -42,7 +42,7 @@ FROM node:26-alpine AS development
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 COPY . .
 

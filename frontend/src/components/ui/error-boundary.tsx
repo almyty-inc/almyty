@@ -4,6 +4,8 @@ import { captureError } from '@/lib/sentry'
 interface ErrorBoundaryProps {
   children: ReactNode
   fallback?: ReactNode
+  /** Like fallback, but gets the caught error. Wins over fallback. */
+  fallbackRender?: (error: Error) => ReactNode
   onError?: (error: Error, errorInfo: React.ErrorInfo) => void
 }
 
@@ -32,6 +34,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   render() {
     if (this.state.hasError) {
+      if (this.props.fallbackRender && this.state.error) {
+        return this.props.fallbackRender(this.state.error)
+      }
       if (this.props.fallback) {
         return this.props.fallback
       }

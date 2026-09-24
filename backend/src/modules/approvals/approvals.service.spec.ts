@@ -1,87 +1,8 @@
 import { ApprovalsService } from './approvals.service';
-import { ApprovalRequest } from '../../entities/approval-request.entity';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
 import { FakePolicyApprovalsRepo } from './__tests__/fake-policy-approvals';
-
-class FakeApprovalsRepo {
-  rows: ApprovalRequest[] = [];
-  private idc = 0;
-  async findOne({ where }: any) {
-    return this.rows.find(r =>
-      Object.entries(where).every(([k, v]) => (r as any)[k] === v),
-    ) ?? null;
-  }
-  async find({ where, order }: any = {}) {
-    let out = this.rows.filter(r =>
-      Object.entries(where ?? {}).every(([k, v]: [string, any]) => {
-        if (v && typeof v === 'object' && '_type' in v) {
-          // crude LessThan stub
-          return new Date((r as any)[k]).getTime() < new Date(v._value).getTime();
-        }
-        return (r as any)[k] === v;
-      }),
-    );
-    if (order?.createdAt === 'DESC') {
-      out = [...out].sort((a, b) => +b.createdAt - +a.createdAt);
-    }
-    return out;
-  }
-  create(partial: Partial<ApprovalRequest>) {
-    return { id: `a_${++this.idc}`, createdAt: new Date(), updatedAt: new Date(), ...partial } as ApprovalRequest;
-  }
-  async save(r: ApprovalRequest) {
-    const existing = this.rows.findIndex(x => x.id === r.id);
-    if (existing >= 0) this.rows[existing] = r;
-    else this.rows.push(r);
-    return r;
-  }
-  createQueryBuilder() {
-    const self = this;
-    let pending: ApprovalRequest[] = self.rows;
-
-    // The update path is modelled honestly, not stubbed: decide() now
-    // flips the row with `WHERE id = ? AND status = 'pending'` and emits
-    // only when that matched, so a fake that always reports affected: 1
-    // would pass while the real race stayed open.
-    let patch: Partial<ApprovalRequest> = {};
-    let targetId: string | undefined;
-    let requiredStatus: string | undefined;
-    let isUpdate = false;
-
-    const qb: any = {
-      update: () => { isUpdate = true; return qb; },
-      set: (values: Partial<ApprovalRequest>) => { patch = values; return qb; },
-      where: (_clause: string, params: any) => {
-        if (isUpdate) targetId = params.id;
-        else pending = pending.filter(r => r.status === params.status);
-        return qb;
-      },
-      andWhere: (_clause: string, params?: any) => {
-        if (isUpdate && params?.pending) requiredStatus = params.pending;
-        return qb;
-      },
-      orderBy: () => qb,
-      take: (n: number) => { pending = pending.slice(0, n); return qb; },
-      getMany: async () => pending,
-      execute: async () => {
-        const row = self.rows.find(r => r.id === targetId);
-        if (!row) return { affected: 0 };
-        if (requiredStatus && row.status !== requiredStatus) return { affected: 0 };
-        Object.assign(row, patch);
-        return { affected: 1 };
-      },
-    };
-    return qb;
-  }
-}
-
-class FakeRunsRepo {
-  updates: any[] = [];
-  async update(criteria: any, patch: any) {
-    this.updates.push({ criteria, patch });
-    return { affected: 1 };
-  }
-}
+import { fakeApprovalsRepo } from './__tests__/approvals-repo.fixture';
+import { fakeRepository } from '../../test/fake-repository';
 
 class FakePolicy {
   decision: { allowed: boolean; reason: string } = { allowed: true, reason: 'ok' };
@@ -90,8 +11,11 @@ class FakePolicy {
 }
 
 function makeService() {
-  const approvals = new FakeApprovalsRepo();
-  const runs = new FakeRunsRepo();
+  const approvals = fakeApprovalsRepo();
+  const runs = fakeRepository<any>([
+    { id: 'r1', agentId: 'a1', status: AgentRunStatus.RUNNING },
+    { id: 'r-sibling', agentId: 'a1', status: AgentRunStatus.RUNNING },
+  ]);
   const policy = new FakePolicy();
   const policyApprovals = new FakePolicyApprovalsRepo();
   const svc = new ApprovalsService(
@@ -119,9 +43,10 @@ describe('ApprovalsService', () => {
       });
       expect(row.status).toBe('pending');
       expect(row.visibility).toBe('org');
-      expect(approvals.rows.length).toBe(1);
-      expect(runs.updates.length).toBe(1);
-      expect(runs.updates[0].patch.status).toBe(AgentRunStatus.WAITING_APPROVAL);
+      expect(approvals.rows()).toHaveLength(1);
+      // The gated run is paused; another run of the same agent is not.
+      expect(runs.row('r1')!.status).toBe(AgentRunStatus.WAITING_APPROVAL);
+      expect(runs.row('r-sibling')!.status).toBe(AgentRunStatus.RUNNING);
       expect(events.length).toBe(1);
     });
 
@@ -204,6 +129,50 @@ describe('ApprovalsService', () => {
     });
   });
 
+  describe('sweepExpired', () => {
+    it('flips a pending row past its expiry and emits once', async () => {
+      const { svc, approvals } = makeService();
+      const events: any[] = [];
+      const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x', ttlSeconds: 1 });
+      svc.on('approval.decided', (a: any) => events.push(a));
+
+      await expect(svc.sweepExpired(new Date(Date.now() + 60_000))).resolves.toBe(1);
+
+      expect(approvals.row(row.id)).toMatchObject({ status: 'expired', decisionReason: 'approval expired' });
+      expect(events.map((e) => e.status)).toEqual(['expired']);
+    });
+
+    it('leaves a request that has not expired yet alone', async () => {
+      const { svc, approvals } = makeService();
+      const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x', ttlSeconds: 3600 });
+
+      await expect(svc.sweepExpired(new Date(Date.now() + 60_000))).resolves.toBe(0);
+      expect(approvals.row(row.id)!.status).toBe('pending');
+    });
+
+    /**
+     * The sweep reads a batch and then walks it. A reviewer approving
+     * during that walk resumes the run and the gated call executes; the
+     * sweep, still holding the copy it loaded, must not stamp 'expired'
+     * over the decision or emit 'approval.decided' a second time, which
+     * would terminate a run whose action already went through.
+     */
+    it('does not expire a request that was decided after the batch was read', async () => {
+      const { svc, approvals } = makeService();
+      const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x', ttlSeconds: 1 });
+      const stale = approvals.row(row.id)!;
+      await svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' }, row.organizationId);
+
+      const events: any[] = [];
+      svc.on('approval.decided', (a: any) => events.push(a));
+      approvals.find.mockResolvedValueOnce([stale]);
+
+      await expect(svc.sweepExpired(new Date(Date.now() + 60_000))).resolves.toBe(0);
+      expect(events).toHaveLength(0);
+      expect(approvals.row(row.id)).toMatchObject({ status: 'approved', decidedBy: 'u' });
+    });
+  });
+
   describe('listPending', () => {
     it('returns only pending rows', async () => {
       const { svc } = makeService();
@@ -225,7 +194,7 @@ describe('ApprovalsService', () => {
  */
 describe('ApprovalsService notifications', () => {
   function makeNotifyingService(runUserId: string | null = 'initiator-1') {
-    const approvals = new FakeApprovalsRepo();
+    const approvals = fakeApprovalsRepo();
     const runs: any = {
       updates: [] as any[],
       async update(criteria: any, patch: any) {

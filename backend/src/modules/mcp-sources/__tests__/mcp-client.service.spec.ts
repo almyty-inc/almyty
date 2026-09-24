@@ -1,4 +1,6 @@
-import { McpClientService, McpClientError, MCP_PROTOCOL_VERSION } from '../mcp-client.service';
+import { McpClientService, MCP_PROTOCOL_VERSION } from '../mcp-client.service';
+import { ssrfSafeDispatcher } from '../../../common/security/safe-fetch';
+import { dispatcherExempting } from '../../../common/security/exempt-dispatcher';
 
 /**
  * All network is mocked: global.fetch is replaced with a jest mock
@@ -261,6 +263,43 @@ describe('McpClientService', () => {
         code: 'MCP_URL_BLOCKED',
       });
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    // The string check cannot see what a name resolves to. A public MCP
+    // server name whose A record answers 169.254.169.254 used to be
+    // dialled; every request now carries the pinned dispatcher.
+    it('pins DNS on every request', async () => {
+      fetchMock
+        .mockImplementationOnce(async (_url, init: any) => initResult(JSON.parse(init.body).id))
+        .mockResolvedValueOnce(accepted())
+        .mockImplementationOnce(async (_url, init: any) =>
+          jsonRes(rpcResult(JSON.parse(init.body).id, { content: [] })),
+        );
+
+      await service.callTool({ url: 'https://mcp.example.com/mcp' }, 't', {});
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(0);
+      for (const [, init] of fetchMock.mock.calls) {
+        expect(init.dispatcher).toBe(ssrfSafeDispatcher);
+        expect(init.redirect).toBe('error');
+      }
+    });
+
+    it('with MCP_ALLOW_PRIVATE_URLS, relaxes the pin for the configured host only', async () => {
+      process.env.MCP_ALLOW_PRIVATE_URLS = 'true';
+      fetchMock
+        .mockImplementationOnce(async (_url, init: any) => initResult(JSON.parse(init.body).id))
+        .mockResolvedValueOnce(accepted())
+        .mockImplementationOnce(async (_url, init: any) =>
+          jsonRes(rpcResult(JSON.parse(init.body).id, { content: [] })),
+        );
+
+      await service.callTool({ url: 'http://mcp.cluster.internal:8080/mcp' }, 't', {});
+      for (const [, init] of fetchMock.mock.calls) {
+        // Not "no dispatcher" -- that would unpin every name the request touches.
+        expect(init.dispatcher).toBe(dispatcherExempting('mcp.cluster.internal'));
+        expect(init.dispatcher).not.toBe(ssrfSafeDispatcher);
+        expect(init.redirect).toBe('error');
+      }
     });
   });
 });

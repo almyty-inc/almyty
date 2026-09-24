@@ -1,5 +1,5 @@
 import { BullModule } from '@nestjs/bull';
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Agent } from '../../../src/entities/agent.entity';
@@ -22,9 +22,7 @@ import { ConnectionsGovernanceService } from './connections-governance.service';
 import { GroupPrincipalSyncService } from './group-principal-sync.service';
 import {
   CONNECTION_GRANT_REVOKER,
-  CONNECTION_PRINCIPAL_SOURCE,
   CONNECTION_ROTATOR,
-  CONNECTIONS_GOVERNANCE_HOOK,
 } from './seams';
 import { ConnectionsRotatorBridge } from '../../../src/modules/connections/connections-rotator.bridge';
 import { GrantsService } from '../../../src/modules/connections/grants/grants.service';

@@ -22,7 +22,6 @@ import { CliGeneratorService } from '../tools/cli-generator.service';
 import { CodegenService } from '../tools/codegen.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrivateGatewayGuard } from './private-gateway.guard';
-import { batchAsync } from '../../common/utils/batch-async';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 

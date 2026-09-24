@@ -23,11 +23,10 @@ import * as crypto from 'crypto';
 import { ApiKey } from '../../entities/api-key.entity';
 import { Agent } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
-import { AgentExecutionEngine, StreamEvent } from './agent-execution.engine';
+import { AgentExecutionEngine } from './agent-execution.engine';
 import { AgentOpenAIStreamHelper } from './agent-openai-stream.helper';
 import {
   CompatRateLimiter,
-  COMPAT_RATE_LIMIT_RPM,
   type CompatRateLimitInfo,
 } from './compat-rate-limit.helper';
 import {

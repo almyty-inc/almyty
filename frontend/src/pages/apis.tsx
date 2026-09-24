@@ -46,7 +46,6 @@ export function ApisPage() {
 
   const allToolsExtracted = allToolsData?.tools || allToolsData || []
   const allTools = Array.isArray(allToolsExtracted) ? allToolsExtracted : []
-  const allToolsTotal = allToolsData?.total ?? allTools.length
   // "X generated" on the APIs page should only count tools that came
   // from an API operation, not custom JS/HTTP/SDK tools created
   // manually. operationId is the entity field that distinguishes them.

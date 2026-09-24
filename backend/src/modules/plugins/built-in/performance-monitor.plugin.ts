@@ -266,7 +266,7 @@ export class PerformanceMonitorPlugin {
     }
   }
 
-  async recordError(context: PluginContext, settings: any): Promise<PluginResult> {
+  async recordError(context: PluginContext, _settings: any): Promise<PluginResult> {
     const startTime = Date.now();
 
     try {

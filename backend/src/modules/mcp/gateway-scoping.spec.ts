@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { McpService } from './mcp.service';
 import { McpToolHandler } from './services/mcp-tool.handler';
 import { McpContentHandler } from './services/mcp-content.handler';
@@ -22,7 +21,6 @@ describe('MCP Gateway Scoping', () => {
   let contentHandler: McpContentHandler;
   let gatewayToolRepository: any;
   let resourceRepository: any;
-  let toolRepository: any;
   let module: TestingModule;
 
   const mockGatewayTools = [
@@ -120,7 +118,6 @@ describe('MCP Gateway Scoping', () => {
     contentHandler = module.get<McpContentHandler>(McpContentHandler);
     gatewayToolRepository = module.get(getRepositoryToken(GatewayTool));
     resourceRepository = module.get(getRepositoryToken(Resource));
-    toolRepository = module.get(getRepositoryToken(Tool));
   });
 
   describe('tools/list scoping', () => {

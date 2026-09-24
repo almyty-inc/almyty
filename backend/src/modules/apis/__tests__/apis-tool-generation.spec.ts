@@ -22,6 +22,7 @@ import { SchemaParserService } from '../../schema-parser/schema-parser.service';
 import { ToolsService } from '../../tools/tools.service';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
+import { unlimitedToolQuotaManager } from '../../../test/tool-quota.fake';
 
 describe('ApisService - tool generation', () => {
   let service: ApisService;
@@ -68,7 +69,7 @@ describe('ApisService - tool generation', () => {
         ApisService,
         ApisImportHelper,
         ApisToolGeneratorHelper,
-        { provide: getRepositoryToken(Api), useValue: { findOne: jest.fn().mockResolvedValue(mockApi) } },
+        { provide: getRepositoryToken(Api), useValue: { findOne: jest.fn().mockResolvedValue(mockApi), manager: unlimitedToolQuotaManager() } },
         { provide: getRepositoryToken(ApiSchema), useValue: {} },
         { provide: getRepositoryToken(Operation), useValue: {} },
         { provide: getRepositoryToken(Resource), useValue: {} },

@@ -31,6 +31,8 @@ import { createHash } from 'crypto';
 import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
+import { isIP } from 'net';
+import { pinnedLookup } from '../../../common/security/ssrf-safe-agent';
 
 const PROTO_CACHE_DIR = join(tmpdir(), 'almyty-proto-cache');
 
@@ -108,6 +110,13 @@ export interface GrpcCallInput {
    * fewer) buffered messages than the default.
    */
   maxStreamMessages?: number;
+  /**
+   * Resolve the host through the SSRF-safe lookup and dial the address it
+   * returned, refusing a private/loopback/metadata answer. The tool
+   * executor always sets this for tenant-written baseUrls; it is opt-in
+   * only so a test can talk to a server it started on 127.0.0.1.
+   */
+  pinDns?: boolean;
 }
 
 export interface GrpcCallResult {
@@ -143,6 +152,21 @@ export class GrpcCallerService {
       ({ target, useTls } = this.resolveTarget(input.baseUrl, input.tls));
     } catch (err: any) {
       return { success: false, error: `Invalid baseUrl: ${err.message}` };
+    }
+
+    // grpc-js resolves the name itself and takes no lookup hook, so the
+    // string check the executor ran on baseUrl said nothing about the
+    // address actually dialled. With pinDns the name is resolved here,
+    // through the same banned-address check the HTTP agents use, and the
+    // channel dials that address -- there is no second resolution for the
+    // answer to change in between.
+    let channelOptions: Record<string, string> = {};
+    if (input.pinDns) {
+      try {
+        ({ target, channelOptions } = await this.pinTarget(target));
+      } catch (err: any) {
+        return { success: false, error: `Refused to connect: ${err.message}` };
+      }
     }
 
     let protoPath: string;
@@ -185,7 +209,7 @@ export class GrpcCallerService {
     const channelCreds = useTls
       ? credentials.createSsl()
       : credentials.createInsecure();
-    const client = new ServiceCtor(target, channelCreds);
+    const client = new ServiceCtor(target, channelCreds, channelOptions);
 
     if (typeof client[input.methodName] !== 'function') {
       return {
@@ -422,6 +446,30 @@ export class GrpcCallerService {
     if (Array.isArray(request)) return request;
     if (request === undefined || request === null) return [];
     return [request];
+  }
+
+  /**
+   * Resolve `host:port` once, refuse a banned answer, and return an
+   * address target plus the channel options that keep the original name
+   * as the :authority and the TLS server name (so certificate checks are
+   * still made against the name, not the address).
+   */
+  private async pinTarget(target: string): Promise<{ target: string; channelOptions: Record<string, string> }> {
+    const sep = target.lastIndexOf(':');
+    const host = target.slice(0, sep).replace(/^\[/, '').replace(/\]$/, '');
+    const port = target.slice(sep + 1);
+    const resolved = await new Promise<{ address: string; family: number }>((resolve, reject) => {
+      pinnedLookup(host, {}, (err, address, family) => {
+        if (err) reject(err);
+        else resolve({ address: String(address), family: family ?? 4 });
+      });
+    });
+    const dialed = resolved.family === 6
+      ? `ipv6:[${resolved.address}]:${port}`
+      : `ipv4:${resolved.address}:${port}`;
+    const channelOptions: Record<string, string> = { 'grpc.default_authority': target };
+    if (!isIP(host)) channelOptions['grpc.ssl_target_name_override'] = host;
+    return { target: dialed, channelOptions };
   }
 
   /**

@@ -17,6 +17,7 @@ import { Eye, EyeOff } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SecretInput } from '@/components/ui/secret-input'
 import { Label } from '@/components/ui/label'
 import { ConnectAccountButton } from '@/components/connections/connect-sheet'
 import { ConnectedChip } from '@/components/connections/connected-chip'
@@ -171,14 +172,25 @@ export function ChannelCredentialsSection({
             {f.required && <span className="text-red-500 ml-1">*</span>}
           </Label>
           <div className="relative">
-            <Input
-              id={`cfg-${type}-${f.key}`}
-              type={f.secret && !reveal[f.key] ? 'password' : 'text'}
-              placeholder={f.placeholder}
-              value={config[f.key] ?? ''}
-              onChange={(e) => onConfigChange({ ...config, [f.key]: e.target.value })}
-              className={f.secret ? 'pr-10' : ''}
-            />
+            {f.secret ? (
+              // Password managers must leave a bot token alone: a lone
+              // masked input reads as a login form to them.
+              <SecretInput
+                id={`cfg-${type}-${f.key}`}
+                masked={!reveal[f.key]}
+                placeholder={f.placeholder}
+                value={config[f.key] ?? ''}
+                onChange={(e) => onConfigChange({ ...config, [f.key]: e.target.value })}
+                className="pr-10"
+              />
+            ) : (
+              <Input
+                id={`cfg-${type}-${f.key}`}
+                placeholder={f.placeholder}
+                value={config[f.key] ?? ''}
+                onChange={(e) => onConfigChange({ ...config, [f.key]: e.target.value })}
+              />
+            )}
             {f.secret && (
               <button
                 type="button"

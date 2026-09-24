@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
@@ -392,7 +391,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                           onClick={async () => {
                             const ok = await confirm({
                               title: `Remove ${[member.firstName, member.lastName].filter(Boolean).join(' ') || 'this member'}?`,
-                              description: 'They lose access to this organization immediately. Anything they created stays, and you can invite them again.',
+                              description: 'They lose access to this organization immediately. Anything they created stays, their private resources move to you, and you can invite them again.',
                               confirmLabel: 'Remove member',
                               destructive: true,
                             })
@@ -572,7 +571,7 @@ export function MembersAndTeamsTab({ organizationId }: MembersAndTeamsTabProps) 
                             if (team.isDefault) return
                             const ok = await confirm({
                               title: 'Delete this team?',
-                              description: `"${team.name}" will be deleted. Its members stay in the organization. This cannot be undone.`,
+                              description: `"${team.name}" will be deleted. Its members stay in the organization, and its resources become visible to the whole organization. This cannot be undone.`,
                               confirmLabel: 'Delete team',
                               destructive: true,
                             })

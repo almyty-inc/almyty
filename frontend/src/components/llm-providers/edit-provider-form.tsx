@@ -7,13 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { VisibilityField, type Visibility, type VisibilityValue } from '@/components/ui/visibility-field'
 import { useOrganizationStore } from '@/store/organization'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { ModelPicker } from '@/components/model-picker'
 import { ExternalLink } from 'lucide-react'
 import { providerKeyUrls, providerUsageApiSupport, usageApiSupported } from './provider-type-config'
 import { CredentialSlot, isMaskedKey } from './credential-slot'
@@ -23,8 +17,6 @@ interface EditProviderFormProps {
   editForm: UseFormReturn<any>
   providerToEdit: any | null
   updateProviderMutation: UseMutationResult<any, any, any, any>
-  availableModels: Array<{ id: string; name: string }>
-  modelsLoading: boolean
   onCancel: () => void
 }
 
@@ -38,8 +30,6 @@ export function EditProviderForm({
   editForm,
   providerToEdit,
   updateProviderMutation,
-  availableModels,
-  modelsLoading,
   onCancel,
 }: EditProviderFormProps) {
   const { currentOrganization } = useOrganizationStore()
@@ -72,34 +62,24 @@ export function EditProviderForm({
             />
           </div>
 
-          {/* Default Model Selection */}
-          <div>
-            <Label htmlFor="editDefaultModel">Default Model</Label>
+          {/* Default model: the shared picker, fixed to this provider, so
+              the list is the catalog's cards or the provider's live list
+              and a failure says why instead of an empty select. */}
+          {providerToEdit?.id && (
             <Controller
               name="model"
               control={editForm.control}
               render={({ field }) => (
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <SelectTrigger id="editDefaultModel" aria-label="Default Model">
-                    <SelectValue placeholder={modelsLoading ? "Loading models..." : "Select default model"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {modelsLoading && (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Fetching models from provider API...</div>
-                    )}
-                    {!modelsLoading && availableModels.length > 0 && availableModels.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.name !== model.id ? `${model.name} (${model.id})` : model.id}
-                      </SelectItem>
-                    ))}
-                    {!modelsLoading && availableModels.length === 0 && (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">No models available — check API key</div>
-                    )}
-                  </SelectContent>
-                </Select>
+                <ModelPicker
+                  idPrefix="editDefault"
+                  providerLocked
+                  value={{ providerId: providerToEdit.id, model: field.value || '' }}
+                  onChange={(next) => field.onChange(next.model ?? '')}
+                  modelLabel="Default model"
+                />
               )}
             />
-          </div>
+          )}
 
           {/* Model Parameters */}
           <div className="grid grid-cols-2 gap-4">

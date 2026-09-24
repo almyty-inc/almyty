@@ -40,3 +40,42 @@ export function collectAgentReferences(agent: {
   if (collab?.judgeAgentId) agentIds.add(collab.judgeAgentId);
   return { toolIds, agentIds };
 }
+/**
+ * Every LLM provider an agent definition names directly: its own model
+ * config and compaction model, the model nodes of its pipeline (`llm_call`,
+ * `extract_context`, and each `verify` checker), the verify checkers in
+ * `agentConfig`, and the model participants (and judge) of its
+ * collaboration. Role- and routing-based references name no provider and
+ * are resolved per caller at run time.
+ */
+export function collectProviderReferences(agent: {
+  modelConfig?: Agent['modelConfig'] | { providerId?: string } | null;
+  pipeline?: AgentPipeline | null;
+  agentConfig?: Agent['agentConfig'] | null;
+  collaboration?: Agent['collaboration'] | LegacyCollaboration | null;
+}): Set<string> {
+  const ids = new Set<string>();
+  const add = (value: unknown) => {
+    if (typeof value === 'string' && value.trim() !== '') ids.add(value);
+  };
+  const modelConfig = agent.modelConfig as { providerId?: string; compaction?: { providerId?: string } } | null | undefined;
+  add(modelConfig?.providerId);
+  add(modelConfig?.compaction?.providerId);
+  for (const node of agent.pipeline?.nodes ?? []) {
+    const data: Record<string, any> = (node as any).data || (node as any).config || {};
+    if (node.type === 'llm_call' || node.type === 'extract_context') add(data.providerId);
+    if (node.type === 'verify' && Array.isArray(data.checkers)) {
+      for (const checker of data.checkers) add(checker?.providerId);
+    }
+  }
+  const verify = (agent.agentConfig as { verify?: { checkers?: Array<{ providerId?: string }> } } | null | undefined)?.verify;
+  for (const checker of verify?.checkers ?? []) add(checker?.providerId);
+  const collab = agent.collaboration as
+    | { participants?: Array<{ kind?: string; providerId?: string } | null>; judge?: { kind?: string; providerId?: string } | null }
+    | null
+    | undefined;
+  for (const p of [...(collab?.participants ?? []), collab?.judge]) {
+    if (p && p.kind === 'model') add(p.providerId);
+  }
+  return ids;
+}

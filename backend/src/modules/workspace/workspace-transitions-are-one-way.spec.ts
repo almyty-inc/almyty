@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Runner, RunnerIsolationTier } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { WorkspaceService } from './workspace.service';
+import { strandingQueryBuilder } from './strand-query.fixtures';
 
 /**
  * A workspace's terminal state is a fact about what happened to it, and
@@ -92,31 +93,7 @@ describe('workspace terminal states are one-way', () => {
         }
         return { affected };
       }),
-      createQueryBuilder: jest.fn(() => {
-        let patch: Record<string, any> = {};
-        let runnerIds: string[] = [];
-        let requiredStatus: string | undefined;
-        const qb: any = {
-          update: () => qb,
-          set: (values: Record<string, any>) => { patch = values; return qb; },
-          where: (_c: string, p: any) => { runnerIds = p?.runnerIds ?? []; return qb; },
-          andWhere: (_c: string, p: any) => { requiredStatus = p?.active; return qb; },
-          execute: async () => {
-            let affected = 0;
-            for (const ws of store.values()) {
-              if (!runnerIds.includes(ws.runnerId)) continue;
-              if (requiredStatus && ws.status !== requiredStatus) continue;
-              for (const [k, v] of Object.entries(patch)) {
-                (ws as any)[k] =
-                  typeof v === 'function' ? { kind: 'stranded', detail: ws.runnerId } : v;
-              }
-              affected += 1;
-            }
-            return { affected };
-          },
-        };
-        return qb;
-      }),
+      createQueryBuilder: jest.fn(() => strandingQueryBuilder(() => store.values())),
     };
 
     const moduleRef = await Test.createTestingModule({

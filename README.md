@@ -156,8 +156,8 @@ Or open `/runners/new` in the UI for a guided setup. See [docs/runner.md](docs/r
 For tests outside the containers, use Node 26+ and install dependencies from the repository root. These commands all run from that same directory:
 
 ```bash
-npm --prefix backend ci --legacy-peer-deps
-npm --prefix frontend ci --legacy-peer-deps
+npm --prefix backend ci
+npm --prefix frontend ci
 npm --prefix backend run test           # default suite; DB-gated tests are skipped
 npm --prefix backend run test:full      # includes DB integration; needs local PostgreSQL + Redis
 npm --prefix frontend run test -- --run # vitest

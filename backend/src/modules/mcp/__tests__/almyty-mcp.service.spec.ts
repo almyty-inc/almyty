@@ -1492,10 +1492,10 @@ describe('AlmytyMcpService', () => {
 
     it('get_analytics routes each report to its own source', async () => {
       await callTool('get_analytics', { report: 'overview' });
-      expect(mockAnalyticsService.getOverview).toHaveBeenCalledWith('org-1');
+      expect(mockAnalyticsService.getOverview).toHaveBeenCalledWith('org-1', 'user-1');
 
       await callTool('get_analytics', { report: 'tools', timeframe: '30d' });
-      expect(mockAnalyticsService.getToolUsage).toHaveBeenCalledWith('org-1', '30d');
+      expect(mockAnalyticsService.getToolUsage).toHaveBeenCalledWith('org-1', '30d', 'user-1');
 
       await callTool('get_analytics', { report: 'gateways' });
       expect(mockAnalyticsService.getGatewayUsage).toHaveBeenCalledWith('org-1', '7d', 'user-1');
@@ -1504,7 +1504,7 @@ describe('AlmytyMcpService', () => {
       expect(mockAnalyticsService.getLlmUsage).toHaveBeenCalledWith('org-1', '7d', 'user-1');
 
       await callTool('get_analytics', { report: 'agent_runs' });
-      expect(mockAnalyticsService.getAgentRunsSummary).toHaveBeenCalledWith('org-1');
+      expect(mockAnalyticsService.getAgentRunsSummary).toHaveBeenCalledWith('org-1', 'user-1');
     });
 
     it('get_analytics alerts returns the org-scoped alert roster', async () => {

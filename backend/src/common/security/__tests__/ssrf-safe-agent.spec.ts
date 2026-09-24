@@ -89,6 +89,14 @@ describe('pinnedLookup refuses a name that resolves somewhere private', () => {
     expect(err?.message).toContain('10.0.0.5');
   });
 
+  it('blocks an AAAA answer that embeds a private IPv4 (mapped, NAT64, 6to4)', async () => {
+    for (const address of ['::ffff:a9fe:a9fe', '64:ff9b::a00:1', '2002:7f00:1::1']) {
+      resolveTo([{ address, family: 6 }]);
+      const { err } = await lookup('aaaa-only.example.com', { all: true });
+      expect(err?.code).toBe('ERR_SSRF_BLOCKED');
+    }
+  });
+
   it('still resolves a name that really is public', async () => {
     resolveTo([{ address: '93.184.216.34', family: 4 }]);
     const { err, address } = await lookup('example.com');

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
@@ -85,9 +85,21 @@ describe('RunnerDetailPage', () => {
     const user = userEvent.setup()
     render(<RunnerDetailPage />)
     await user.click(await screen.findByRole('button', { name: /delete runner/i }))
-    await waitFor(() => screen.getByText(/delete runner r1\?/i))
-    await user.click(screen.getByRole('button', { name: /^delete$/i }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/delete runner r1\?/i)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Delete runner' }))
     await waitFor(() => expect(unregister).toHaveBeenCalledWith('r1'))
+  })
+
+  it('Keep it closes the confirmation without deleting', async () => {
+    getRunner.mockResolvedValue(makeRunner({ state: 'offline' }))
+    const user = userEvent.setup()
+    render(<RunnerDetailPage />)
+    await user.click(await screen.findByRole('button', { name: /delete runner/i }))
+    const dialog = await screen.findByRole('alertdialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Keep it' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(unregister).not.toHaveBeenCalled()
   })
 
   it('lets the owner change visibility in place, without a dialog', async () => {

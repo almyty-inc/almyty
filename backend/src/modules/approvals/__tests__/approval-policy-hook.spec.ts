@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { ApprovalsService } from '../approvals.service';
-import { ApprovalRequest } from '../../../entities/approval-request.entity';
+import { fakeApprovalsRepo } from './approvals-repo.fixture';
 import { ApprovalPolicyApproval } from '../../../common/ee-hooks/ee-hooks';
 import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
 
@@ -10,73 +10,6 @@ import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
  * scores collected approvals and the row only flips to approved once the
  * policy is satisfied. No hook / no policy / null score → OSS single gate.
  */
-class FakeApprovalsRepo {
-  rows: ApprovalRequest[] = [];
-  private idc = 0;
-  async findOne({ where }: any) {
-    return (
-      this.rows.find((r) => Object.entries(where).every(([k, v]) => (r as any)[k] === v)) ?? null
-    );
-  }
-  create(partial: Partial<ApprovalRequest>) {
-    return {
-      id: `a_${++this.idc}`,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      ...partial,
-    } as ApprovalRequest;
-  }
-  async save(r: ApprovalRequest) {
-    const existing = this.rows.findIndex((x) => x.id === r.id);
-    if (existing >= 0) this.rows[existing] = r;
-    else this.rows.push(r);
-    return r;
-  }
-
-  /**
-   * Scoped column update. applyPolicyProgress writes only `payload`
-   * this way, so a reviewer's stale `status`/`decidedBy` can never ride
-   * along over the CAS'd flip.
-   */
-  async update(criteria: any, patch: Partial<ApprovalRequest>) {
-    const row = this.rows.find((r) => r.id === criteria.id);
-    if (!row) return { affected: 0 };
-    Object.assign(row, patch);
-    return { affected: 1 };
-  }
-
-  /**
-   * decide() flips the row with `WHERE id = ? AND status = 'pending'`
-   * and emits only when that matched, so two reviewers acting at once
-   * cannot both decide the same request. Modelled rather than stubbed,
-   * so a fake that always reported a hit could not hide the race.
-   */
-  createQueryBuilder() {
-    const self = this;
-    let patch: Partial<ApprovalRequest> = {};
-    let targetId: string | undefined;
-    let requiredStatus: string | undefined;
-
-    const qb: any = {
-      update: () => qb,
-      set: (values: Partial<ApprovalRequest>) => { patch = values; return qb; },
-      where: (_clause: string, params: any) => { targetId = params.id; return qb; },
-      andWhere: (_clause: string, params?: any) => {
-        if (params?.pending) requiredStatus = params.pending;
-        return qb;
-      },
-      execute: async () => {
-        const row = self.rows.find((r) => r.id === targetId);
-        if (!row) return { affected: 0 };
-        if (requiredStatus && row.status !== requiredStatus) return { affected: 0 };
-        Object.assign(row, patch);
-        return { affected: 1 };
-      },
-    };
-    return qb;
-  }
-}
-
 class FakeRunsRepo {
   updates: any[] = [];
   async update(criteria: any, patch: any) {
@@ -134,7 +67,7 @@ function makeQuorumHook(required = 2) {
 }
 
 function makeService(hook?: any) {
-  const approvals = new FakeApprovalsRepo();
+  const approvals = fakeApprovalsRepo();
   const runs = new FakeRunsRepo();
   const policy = new FakeAccessPolicy();
   const policyApprovals = new FakePolicyApprovalsRepo();
@@ -242,6 +175,24 @@ describe('ApprovalsService — approval policy hook', () => {
       expect(hook.scoreProgress).toHaveBeenCalledWith('org-1', 'pol-1', [
         { approverId: 'u1', roles: ['member'] },
       ]);
+    });
+
+    // The snapshot has to reach the table, not only the object the deciding
+    // reviewer holds: it is what the next reviewer's UI shows as "1 of 2".
+    // Only the payload column moves; the flip is the CAS'd write.
+    it('persists the progress snapshot on the stored row', async () => {
+      const { svc, approvals } = makeService(makeQuorumHook(3));
+
+      const row = await svc.create(createInput);
+      await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId);
+
+      const stored = approvals.row(row.id)!;
+      expect((stored.payload as any)._policy).toMatchObject({
+        approvals: [{ approverId: 'u1', roles: ['member'] }],
+        progress: { satisfied: false, totalCollected: 1 },
+      });
+      expect(stored.status).toBe('pending');
+      expect(stored.decidedBy).toBeUndefined();
     });
 
     it('second approver satisfies the quorum and flips to approved', async () => {

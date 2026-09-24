@@ -1,6 +1,6 @@
 import * as pgvector from 'pgvector';
 import { CanonicalMemory } from './canonical-memory.entity';
-import { MemoryItem, Provenance, ScopeType } from './canonical.types';
+import { MemoryItem, ScopeType } from './canonical.types';
 
 // Helpers
 // ════════════════════════════════════════════════════════════════════════

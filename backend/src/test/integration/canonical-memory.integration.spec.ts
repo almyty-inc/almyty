@@ -314,7 +314,6 @@ describeIfDb('CanonicalMemoryService (real Postgres + pgvector)', () => {
   });
 
   it('asOf: returns the row that was current at the given time', async () => {
-    const t0 = new Date();
     const old = await service.put(
       { mode: 'memory', scope: { scope_type: 'workspace', scope_id: 'wks_asof' },
         content: 'temperature is in Fahrenheit', tier: 'long', provenance: baseProvenance },

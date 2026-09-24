@@ -41,7 +41,6 @@ import { useNotifications } from '@/store/app'
 import {
   approvalPoliciesApi,
   type ApprovalPolicy,
-  type UpsertApprovalPolicy,
 } from '@/lib/api'
 import { APPROVAL_POLICIES_PATH } from './approval-policy-form'
 import { getApiErrorMessage } from '@/lib/api-error'

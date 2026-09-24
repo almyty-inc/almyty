@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { validateUrl } from '../../common/security/url-validator';
+import { ssrfSafeDispatcher } from '../../common/security/safe-fetch';
+import { dispatcherExempting } from '../../common/security/exempt-dispatcher';
 
 /**
  * Minimal MCP client over the Streamable HTTP transport
@@ -247,7 +249,15 @@ export class McpClientService {
         body: JSON.stringify(body),
         signal: controller.signal,
         redirect: 'error', // a redirect could bounce us to a blocked host
-      });
+        // Pin DNS: the string check above does not see what the name
+        // resolves to. undici ignores http.Agents, so this is the
+        // dispatcher. With MCP_ALLOW_PRIVATE_URLS on, the pin is relaxed
+        // for this server's host only -- the hatch lets a self-hoster reach
+        // an in-cluster name without unpinning every other name.
+        dispatcher: process.env.MCP_ALLOW_PRIVATE_URLS === 'true'
+          ? dispatcherExempting(new URL(config.url).hostname)
+          : ssrfSafeDispatcher,
+      } as RequestInit);
     } catch (err: any) {
       if (controller.signal.aborted) {
         throw new McpClientError(

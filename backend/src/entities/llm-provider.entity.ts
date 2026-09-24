@@ -19,7 +19,7 @@ import { UsageMetric } from './usage-metric.entity';
 
 export { LlmProviderType } from './llm-provider-type';
 import { LlmProviderType } from './llm-provider-type';
-import { PROVIDER_PROFILES, profileAuthHeaders, profileBaseUrl, providerProfile } from '../modules/llm-providers/provider-profile';
+import { profileAuthHeaders, profileBaseUrl, providerProfile } from '../modules/llm-providers/provider-profile';
 
 export enum LlmProviderStatus {
   ACTIVE = 'active',

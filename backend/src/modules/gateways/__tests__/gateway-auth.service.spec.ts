@@ -6,6 +6,8 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 
 import { GatewayAuthService } from '../gateway-auth.service';
 import { GatewayAuthValidators } from '../gateway-auth-validators.helper';
+import { hashKey } from '../gateway-auth-utils';
+import { fakeRepository } from '../../../test/fake-repository';
 import { GatewayAuth, GatewayAuthType } from '../../../entities/gateway-auth.entity';
 import { Gateway } from '../../../entities/gateway.entity';
 import { User } from '../../../entities/user.entity';
@@ -1039,5 +1041,137 @@ describe('GatewayAuthService', () => {
 
       expect(result.isValid).toBe(true);
     });
+  });
+});
+
+/**
+ * Whose credential is it?
+ *
+ * The suite above stubs `apiKeyRepository.findOne` per test, so it hands
+ * back the same key row whatever `where` the validator passed, and the
+ * `organizationId` / `gatewayId` predicates that keep one tenant's key off
+ * another tenant's gateway could be deleted with it still green. Here the
+ * repositories evaluate the `where`, so the predicate decides the outcome.
+ */
+describe('GatewayAuthValidators - a credential only works where it was issued', () => {
+  const SECRET = 'gw_secret_key';
+
+  afterEach(() => jest.restoreAllMocks());
+
+  const authConfig = (type: GatewayAuthType): any => ({
+    id: 'auth-1',
+    gatewayId: 'gateway-1',
+    type,
+    isRequired: true,
+    isActive: true,
+    configuration: { keyHeader: 'x-api-key' },
+    validationRules: {},
+  });
+
+  const keyRow = (over: Partial<ApiKey> = {}): Partial<ApiKey> => ({
+    id: 'key-1',
+    name: 'Test Key',
+    keyHash: hashKey(SECRET),
+    isActive: true,
+    // Org-wide: not pinned to a gateway, so only the org predicate stands
+    // between it and every other tenant's gateways.
+    gatewayId: null as any,
+    organizationId: 'org-1',
+    userId: 'user-1',
+    scopes: ['read'],
+    user: { id: 'user-1', organizationMemberships: [{ organizationId: 'org-1', role: 'admin' }] } as any,
+    ...over,
+  });
+
+  const build = (keys: Array<Partial<ApiKey>>, users: any[] = []) => {
+    const apiKeys = fakeRepository<ApiKey>({ seed: keys, make: () => new ApiKey() });
+    const validators = new GatewayAuthValidators(
+      fakeRepository<any>([
+        { id: 'gateway-1', organizationId: 'org-1' },
+        { id: 'gateway-2', organizationId: 'org-1' },
+      ]) as any,
+      fakeRepository<any>(users) as any,
+      apiKeys as any,
+      fakeRepository<any>([]) as any,
+      { verify: jest.fn() } as any,
+    );
+    return { validators, apiKeys };
+  };
+
+  const presentKey = (validators: GatewayAuthValidators) =>
+    validators.validateApiKey(authConfig(GatewayAuthType.API_KEY), { 'x-api-key': SECRET }, {});
+  const presentBearer = (validators: GatewayAuthValidators) =>
+    validators.validateBearerToken(authConfig(GatewayAuthType.BEARER_TOKEN), {
+      authorization: `Bearer ${SECRET}`,
+    });
+
+  it('accepts an org-wide API key in its own organization and records its use', async () => {
+    const { validators, apiKeys } = build([keyRow()]);
+
+    const result = await presentKey(validators);
+
+    expect(result).toMatchObject({ isValid: true, organizationId: 'org-1' });
+    expect(apiKeys.row('key-1')!.lastUsedAt).toBeInstanceOf(Date);
+  });
+
+  it('refuses an API key issued in another organization, as an unknown key', async () => {
+    const { validators } = build([keyRow({ organizationId: 'org-2' })]);
+
+    const result = await presentKey(validators);
+
+    expect(result).toMatchObject({ isValid: false, errorCode: 'API_KEY_INVALID' });
+  });
+
+  it('refuses an API key pinned to another gateway of the same organization', async () => {
+    const { validators } = build([keyRow({ gatewayId: 'gateway-2' })]);
+
+    const result = await presentKey(validators);
+
+    expect(result).toMatchObject({ isValid: false, errorCode: 'API_KEY_INVALID' });
+  });
+
+  it('refuses a deactivated API key', async () => {
+    const { validators } = build([keyRow({ isActive: false })]);
+
+    expect(await presentKey(validators)).toMatchObject({ isValid: false, errorCode: 'API_KEY_INVALID' });
+  });
+
+  it('accepts a bearer token issued in the gateway organization', async () => {
+    const { validators } = build([keyRow()]);
+
+    expect(await presentBearer(validators)).toMatchObject({ isValid: true, organizationId: 'org-1' });
+  });
+
+  it('refuses a bearer token issued in another organization', async () => {
+    const { validators } = build([keyRow({ organizationId: 'org-2' })]);
+
+    expect(await presentBearer(validators)).toMatchObject({
+      isValid: false,
+      errorCode: 'BEARER_TOKEN_INVALID',
+    });
+  });
+
+  it('refuses basic auth from a user who is not a member of the gateway organization', async () => {
+    const bcrypt = require('bcrypt');
+    jest.spyOn(bcrypt, 'compare').mockResolvedValue(true);
+    const { validators } = build(
+      [],
+      [
+        {
+          id: 'user-2',
+          email: 'outsider@example.com',
+          passwordHash: '$2b$10$hashedpassword',
+          isActive: true,
+          organizationMemberships: [{ organizationId: 'org-2', role: 'owner' }],
+        },
+      ],
+    );
+
+    const credentials = Buffer.from('outsider@example.com:password').toString('base64');
+    const result = await validators.validateBasicAuth(authConfig(GatewayAuthType.BASIC_AUTH), {
+      authorization: `Basic ${credentials}`,
+    });
+
+    expect(result).toMatchObject({ isValid: false, errorCode: 'BASIC_AUTH_CROSS_ORG' });
   });
 });

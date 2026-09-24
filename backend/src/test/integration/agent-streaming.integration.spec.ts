@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
-import { EventEmitter } from 'events';
 import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
 import { AgentRuntimeBuilders } from '../../modules/agents/agent-runtime-builders';
 import { AgentCollaborationHelper } from '../../modules/agents/agent-collaboration.helper';
@@ -15,12 +14,12 @@ import { AgentVerifierHelper } from '../../modules/agents/agent-verifier.helper'
 import { AgentContextCompactor } from '../../modules/agents/agent-context-compactor.helper';
 import { AgentConstraintsService } from '../../modules/agent-constraints/agent-constraints.service';
 import { AgentHeartbeatHelper } from '../../modules/agents/agent-heartbeat.helper';
-import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
 import { Conversation } from '../../entities/conversation.entity';
-import { Message, MessageRole } from '../../entities/message.entity';
+import { Message } from '../../entities/message.entity';
 import { LlmProvidersService } from '../../modules/llm-providers/llm-providers.service';
 import { ToolExecutorService } from '../../modules/tools/tool-executor.service';
 import { CanonicalMemoryService } from '../../modules/memory/canonical/canonical-memory.service';
@@ -362,7 +361,7 @@ describe('Agent Streaming (integration)', () => {
   describe('Phase 1: tool events', () => {
     it('should emit tool.started and tool.result for built-in tools', async () => {
       mockLlmService.chatStream
-        .mockImplementationOnce(async (_pid: string, _req: any, _oid: string, _uid?: string, onChunk?: any) => ({
+        .mockImplementationOnce(async (_pid: string, _req: any, _oid: string, _uid?: string, _onChunk?: any) => ({
           message: {
             role: 'assistant',
             content: '',

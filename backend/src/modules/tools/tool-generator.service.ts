@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { Tool, ToolType, ToolStatus } from '../../entities/tool.entity';
 import { ToolVersion } from '../../entities/tool-version.entity';
@@ -10,6 +10,13 @@ import { Api, ApiType } from '../../entities/api.entity';
 
 import { JsonSchemaTranslatorService } from '../json-schema-translator/json-schema-translator.service';
 import { computeToolHash } from '../../common/security/tool-integrity';
+import {
+  ToolQuotaExceededException,
+  assertWithinPerSchemaCap,
+  capGeneratedDescription,
+  precheckToolQuota,
+  withToolQuota,
+} from './tool-quota';
 
 export interface ToolGenerationOptions {
   includeOperations?: string[]; // Specific operation IDs to include
@@ -86,6 +93,24 @@ export class ToolGeneratorService {
       }
 
       result.summary.total = operations.length;
+
+      // Quota, checked for the whole batch before any row is written
+      // (reject, not truncate -- see tool-quota.ts). Operations that
+      // already have a tool are regenerated in place and add no row.
+      assertWithinPerSchemaCap(operations.length, `API '${api.name}'`);
+      const alreadyGenerated = operations.length
+        ? await this.toolRepository.count({
+            where: {
+              organizationId: api.organizationId,
+              operationId: In(operations.map((op) => op.id)),
+            },
+          })
+        : 0;
+      await precheckToolQuota(
+        this.toolRepository.manager,
+        api.organizationId,
+        operations.length - alreadyGenerated,
+      );
 
       // Process operations in parallel (batches of 10 to avoid overwhelming DB)
       const BATCH_SIZE = 10;
@@ -169,6 +194,12 @@ export class ToolGeneratorService {
     api: Api,
     options: ToolGenerationOptions = {}
   ): Promise<Tool | null> {
+    // Outside the try: a quota refusal is not a "skipped" operation, it
+    // must surface. generateToolsFromApi has already checked the batch;
+    // this fails fast before schema generation, and the insert below
+    // is the enforcing check.
+    await precheckToolQuota(this.toolRepository.manager, api.organizationId);
+
     try {
       // Generate input schema
       const inputSchema = await this.generateInputSchemaForOperation(operation, api.type);
@@ -232,7 +263,13 @@ export class ToolGeneratorService {
         },
       });
 
-      const savedTool = await this.toolRepository.save(tool);
+      // Enforced with the insert, under the organization's tool-quota lock.
+      const savedTool = await withToolQuota(
+        this.toolRepository.manager,
+        api.organizationId,
+        1,
+        (tx) => tx.getRepository(Tool).save(tool),
+      );
 
       // Compute and store integrity hash
       const { hash } = computeToolHash(savedTool);
@@ -247,6 +284,9 @@ export class ToolGeneratorService {
       return savedTool;
 
     } catch (error) {
+      // A quota refusal (a concurrent writer took the last slot after
+      // the precheck) is not a "skipped" operation: it must surface.
+      if (error instanceof ToolQuotaExceededException) throw error;
       this.logger.error(`Failed to generate tool from operation: ${error.message}`);
       return null;
     }
@@ -374,10 +414,10 @@ export class ToolGeneratorService {
   }
 
   private generateToolDescription(operation: Operation, api: Api): string {
-    if (operation.description) {
-      return operation.description;
-    }
-    return `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation on ${api.name}`;
+    return capGeneratedDescription(
+      operation.description ||
+        `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation on ${api.name}`,
+    );
   }
 
   private determineToolType(operation: Operation): ToolType {

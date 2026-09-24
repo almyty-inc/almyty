@@ -6,14 +6,14 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, ILike, IsNull, In } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { ToolTemplate } from '../../entities/tool-template.entity';
 import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { isOthersPrivate } from '../../common/authorization/private-visibility';
-import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditResource } from '../../entities/audit-log.entity';
 import {
   sanitizeConfiguration,
   sanitizeExamples,
@@ -21,6 +21,7 @@ import {
   scrubStringMap,
 } from './template-sanitizer';
 import { PublishToolTemplateDto, UpdateToolTemplateDto } from './dto/tool-hub.dto';
+import { capGeneratedDescription, precheckToolQuota, withToolQuota } from '../tools/tool-quota';
 
 export interface ListTemplatesFilters {
   category?: string;
@@ -179,6 +180,10 @@ export class ToolHubService {
   ): Promise<{ tool: Tool; api?: Api }> {
     // Pass orgId so cross-org templates are rejected up front.
     const template = await this.getTemplate(templateId, orgId);
+    // Before any Api is created for the template: a refused install
+    // must not leave an orphan API behind. Unlocked precheck; the
+    // insert below re-checks under the organization's lock.
+    await precheckToolQuota(this.toolRepository.manager, orgId);
     let api: Api | undefined;
 
     // If template has apiConfig, resolve or create an Api
@@ -227,7 +232,7 @@ export class ToolHubService {
     // Create the Tool from the template
     const tool = this.toolRepository.create({
       name: template.name,
-      description: template.description,
+      description: capGeneratedDescription(template.description),
       type: ToolType.FUNCTION,
       executionMethod: template.executionMethod as ToolExecutionMethod || ToolExecutionMethod.HTTP,
       httpConfig: template.httpConfig || null,
@@ -252,7 +257,13 @@ export class ToolHubService {
       },
     });
 
-    const savedTool = await this.toolRepository.save(tool);
+    // Enforced with the insert, under the organization's tool-quota lock.
+    const savedTool = await withToolQuota(
+      this.toolRepository.manager,
+      orgId,
+      1,
+      (tx) => tx.getRepository(Tool).save(tool),
+    );
 
     // Increment install count
     await this.templateRepository.increment({ id: templateId }, 'installCount', 1);

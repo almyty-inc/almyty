@@ -5,6 +5,7 @@ import { ConflictException, NotFoundException, BadRequestException } from '@nest
 import { Runner, RunnerState, RunnerIsolationTier } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { WorkspaceService } from './workspace.service';
+import { strandingQueryBuilder } from './strand-query.fixtures';
 
 /**
  * WorkspaceService tests with mocked repos. Covers create's runner-
@@ -126,36 +127,7 @@ describe('WorkspaceService', () => {
         }
         return { affected };
       }),
-      /** UPDATE ... WHERE "runnerId" IN (...) AND status = 'active'. */
-      createQueryBuilder: jest.fn(() => {
-        let patch: Record<string, any> = {};
-        let runnerIds: string[] = [];
-        let requiredStatus: string | undefined;
-        const qb: any = {
-          update: () => qb,
-          set: (values: Record<string, any>) => { patch = values; return qb; },
-          where: (_clause: string, params: any) => { runnerIds = params?.runnerIds ?? []; return qb; },
-          andWhere: (_clause: string, params: any) => { requiredStatus = params?.active; return qb; },
-          execute: async () => {
-            let affected = 0;
-            for (const ws of workspaces._store.values()) {
-              if (!runnerIds.includes((ws as any).runnerId)) continue;
-              if (requiredStatus && (ws as any).status !== requiredStatus) continue;
-              for (const [k, v] of Object.entries(patch)) {
-                // A raw-SQL value in set() is the json_build_object that
-                // stamps closeReason from the row's own runnerId.
-                (ws as any)[k] =
-                  typeof v === 'function'
-                    ? { kind: 'stranded', detail: (ws as any).runnerId }
-                    : v;
-              }
-              affected += 1;
-            }
-            return { affected };
-          },
-        };
-        return qb;
-      }),
+      createQueryBuilder: jest.fn(() => strandingQueryBuilder(() => workspaces._store.values())),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -337,5 +309,43 @@ describe('WorkspaceService', () => {
       .rejects.toBeInstanceOf(NotFoundException);
     await expect(service.getOne(ws.id, ownerUserId, 'other-org'))
       .rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('markStrandedForRunners leaves other runners’ workspaces active', async () => {
+    const row = (id: string, runnerId: string) => ({
+      id, runnerId, ownerUserId, organizationId, status: WorkspaceStatus.ACTIVE, ttlAt: null, cwd: '/',
+      isolation: RunnerIsolationTier.HOST, createdAt: new Date(), updatedAt: new Date(), closedAt: null, closeReason: null,
+    } as any);
+    workspaces._store.set('a', row('a', 'r-1'));
+    workspaces._store.set('z', row('z', 'r-other'));
+
+    expect(await service.markStrandedForRunners(['r-1'])).toBe(1);
+    expect(workspaces._store.get('z')).toMatchObject({ status: WorkspaceStatus.ACTIVE, closeReason: null });
+  });
+
+  // ── tenancy: the same user, a runner in another organization ────────
+  //
+  // The runner and workspace doubles evaluate `where`, but no test put a
+  // second organization's rows in them, so the org half of the runner
+  // picker and of listForOwner could be deleted with the module green.
+
+  it('create never pins a workspace to the user’s runner in another organization', async () => {
+    const elsewhere = makeRunner({ id: 'r-9', organizationId: 'org-2' });
+    runners._store.set(elsewhere.id, elsewhere);
+
+    await expect(service.create({ cwd: '/work' }, ownerUserId, organizationId))
+      .rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.create({ cwd: '/work', runnerId: 'r-9' }, ownerUserId, organizationId))
+      .rejects.toBeInstanceOf(NotFoundException);
+    expect(workspaces._store.size).toBe(0);
+  });
+
+  it('listForOwner lists only this organization’s workspaces', async () => {
+    runners._store.set('r-1', makeRunner());
+    runners._store.set('r-9', makeRunner({ id: 'r-9', organizationId: 'org-2' }));
+    const mine = await service.create({ cwd: '/work' }, ownerUserId, organizationId);
+    await service.create({ cwd: '/work' }, ownerUserId, 'org-2');
+
+    expect((await service.listForOwner(ownerUserId, organizationId)).map((w) => w.id)).toEqual([mine.id]);
   });
 });

@@ -212,7 +212,8 @@ The `:?` form makes Compose refuse to start rather than silently fall back. Rota
 | `MONITORING_STATS_WINDOW_SECONDS` | Rolling window the live monitoring dashboard aggregates over | `300` |
 | `DB_MIGRATIONS_RUN` | Whether the API runs pending migrations on startup (see [Database migrations](#database-migrations)) | `true` |
 | `RATE_LIMIT_TTL` | Rate-limit window in seconds | `60` |
-| `RATE_LIMIT_MAX` | Requests allowed per window | `100` |
+| `RATE_LIMIT_MAX` | Requests allowed per window, per client address (see [Rate limiting](#rate-limiting)) | `100` |
+| `TRUSTED_PROXY_HOPS` | How many proxies in front of the API append to `X-Forwarded-For`. The client address is read this many entries from the right of the header. Keep `1` behind a single ingress or reverse proxy; add one for each extra proxy (a CDN, an L7 load balancer) | `1` |
 | `BULL_REDIS_HOST` | Separate Redis for BullMQ (if desired) | Falls back to `REDIS_HOST` |
 | `RESEND_API_KEY` | [Resend](https://resend.com) API key. The only outbound-email transport. Without it no mail is sent at all (see [Outbound email](#outbound-email)) | -- |
 | `MAIL_FROM` | Sender address for outbound mail. `EMAIL_FROM` is accepted as a fallback | `almyty <notifications@almyty.com>` |
@@ -325,7 +326,20 @@ Either way, back up the database before upgrading.
 
 ## Rate limiting
 
-Rate limits are backed by Redis, so the configured limit (`RATE_LIMIT_MAX` per `RATE_LIMIT_TTL` seconds) is shared across every API replica rather than counted per process. Point all replicas at the same Redis and the limit holds for the cluster as a whole.
+Every API request counts against a limit of `RATE_LIMIT_MAX` requests per `RATE_LIMIT_TTL` seconds, kept separately for each client address. Sensitive routes such as login, registration and password reset have their own, tighter limits on top, also per client address.
+
+Limits are backed by Redis, so a client's count is shared across every API replica rather than kept per process. Point all replicas at the same Redis and the limit holds for the cluster as a whole.
+
+The API does not trust `X-Forwarded-For` blindly, because the client writes the left end of that header. Every proxy appends the address it received the connection from, so the API counts `TRUSTED_PROXY_HOPS` entries in from the right: with one ingress in front, the rightmost entry is the address the ingress saw. Set it to match your topology:
+
+- **One ingress or reverse proxy** (the default, and what `k8s/base` gives you): `TRUSTED_PROXY_HOPS=1`.
+- **A CDN or L7 load balancer in front of the ingress** that appends its own hop: `TRUSTED_PROXY_HOPS=2`, and one more for each further proxy.
+
+Set it too high and a client can choose its own rate-limit bucket by sending a longer header. Set it too low and different clients are counted as one, which throttles them harder but never lets anyone past the limit. The ingress also has to see the real client address: if a TCP load balancer in front of it rewrites the source address, enable PROXY protocol (or preserve the source IP) on that load balancer, or every client arrives as the load balancer.
+
+Do not expose the API port directly to the internet alongside a proxy. A request that bypasses the proxy can write whatever `X-Forwarded-For` it likes.
+
+Because the limit is per client, size `RATE_LIMIT_MAX` for one busy source rather than for the whole platform. A single dashboard page load issues several API calls at once, many users can share one office NAT address, and inbound chat-channel webhooks arrive from each provider's small pool of addresses for all of your tenants. A few hundred requests a minute per address is a reasonable starting point; watch for `429` responses and adjust.
 
 ## Compliance and data residency
 

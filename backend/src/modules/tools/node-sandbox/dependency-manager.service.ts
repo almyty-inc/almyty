@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import * as crypto from 'crypto';
+import * as dns from 'dns';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -8,12 +9,63 @@ import {
   DependencyInstallResult,
   NpmRegistryConfig,
 } from './types';
+import {
+  validateUrl,
+  validateUrlAllowingPrivate,
+} from '../../../common/security/url-validator';
+import { classifyAddress } from '../../../common/security/ip-classification';
+import {
+  EgressProxyOptions,
+  startEgressProxy,
+} from '../../../common/security/egress-proxy';
 
 // Absolute path under the OS tmpdir. Containers often have a read-only
 // rootfs with /tmp mounted writable — a relative path would fail mkdir.
 const DEFAULT_DEPS_PATH = path.join(os.tmpdir(), 'almyty-tool-deps');
 const DEFAULT_INSTALL_TIMEOUT = 120_000; // 2 minutes
 const DEFAULT_MAX_CACHE_SIZE_MB = 2048; // 2 GB
+
+function registryPrivateUrlsAllowed(): boolean {
+  return process.env.NPM_REGISTRY_ALLOW_PRIVATE_URLS === 'true';
+}
+
+/**
+ * What the egress proxy lets npm reach for one registry: TLS on 443 and
+ * plain HTTP on 80 anywhere public, plus the registry's own port, and --
+ * only when NPM_REGISTRY_ALLOW_PRIVATE_URLS is on -- the registry host
+ * itself even though it is private.
+ */
+export function registryProxyOptions(registry: NpmRegistryConfig): EgressProxyOptions {
+  const url = new URL(registry.url);
+  const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
+  return {
+    connectPorts: url.protocol === 'https:' ? [443, port] : [443],
+    httpPorts: url.protocol === 'http:' ? [80, port] : [80],
+    exemptHosts: registryPrivateUrlsAllowed() ? [url.hostname] : [],
+  };
+}
+
+/** npm flags that send every request through the egress proxy, if any. */
+export function npmProxyArgs(proxyUrl?: string): string[] {
+  if (!proxyUrl) return [];
+  return [`--proxy=${proxyUrl}`, `--https-proxy=${proxyUrl}`, '--noproxy='];
+}
+
+/**
+ * The environment for a spawned npm. With a proxy, every inherited proxy
+ * setting is dropped so none can route a request around it (npm reads
+ * `npm_config_*`, and its fetcher also honours the conventional
+ * HTTP(S)_PROXY / NO_PROXY variables).
+ */
+export function npmEnv(npmCacheDir: string, proxyUrl?: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, npm_config_cache: npmCacheDir };
+  if (proxyUrl) {
+    for (const key of Object.keys(env)) {
+      if (/^(?:npm_config_)?(?:https?_proxy|proxy|no_?proxy|all_proxy)$/i.test(key)) delete env[key];
+    }
+  }
+  return env;
+}
 
 // npm package-name grammar (scoped or unscoped). Names can't start with
 // `.` or `_`, must be lowercase, and may not contain URL/path characters.
@@ -48,8 +100,8 @@ export class DependencyManagerService {
     registry?: NpmRegistryConfig,
   ): Promise<DependencyInstallResult> {
     this.validateDependencies(dependencies);
-    if (registry) this.validateRegistry(registry);
-    const hash = this.hashDeps(dependencies);
+    if (registry) await this.validateRegistry(registry);
+    const hash = this.hashDeps(dependencies, registry);
     const installDir = path.join(this.basePath(), hash);
 
     // Fast path — already installed
@@ -115,13 +167,34 @@ export class DependencyManagerService {
     return process.env.SANDBOX_DEPS_PATH || DEFAULT_DEPS_PATH;
   }
 
-  /** Create a deterministic hash for a set of dependencies (key order independent) */
-  private hashDeps(deps: Record<string, string>): string {
+  /**
+   * Cache key for an installed dependency set (key order independent).
+   *
+   * The registry is part of the key. It used to be ignored, so an install
+   * of `lodash@^4` from a tenant's own registry landed in the same
+   * directory as `lodash@^4` from npmjs -- and whichever ran first was
+   * served to every later tool asking for that set, from any registry and
+   * any organization. A registry that answered with a doctored `lodash`
+   * could plant it for tools that never named that registry. The auth
+   * token is folded in as a digest, so two organizations sharing a
+   * private registry URL with different credentials do not share what one
+   * of them was entitled to download.
+   *
+   * A set installed from the default registry keeps its old key.
+   */
+  private hashDeps(deps: Record<string, string>, registry?: NpmRegistryConfig): string {
     const sorted = Object.keys(deps)
       .sort()
       .map((k) => `${k}@${deps[k]}`)
       .join('\n');
-    return crypto.createHash('sha256').update(sorted).digest('hex').slice(0, 16);
+    const hash = crypto.createHash('sha256').update(sorted);
+    if (registry) {
+      const token = registry.authToken
+        ? crypto.createHash('sha256').update(registry.authToken).digest('hex')
+        : '';
+      hash.update(`\nregistry=${registry.url}\nscope=${registry.scope ?? ''}\ntoken=${token}`);
+    }
+    return hash.digest('hex').slice(0, 16);
   }
 
   /** Check whether a directory has been fully installed */
@@ -156,25 +229,77 @@ export class DependencyManagerService {
   }
 
   /**
-   * Validate a private-registry config. Reject CR/LF in any field (which
-   * would inject arbitrary directives into the generated .npmrc) and
-   * require an http(s) registry URL.
+   * Validate a private-registry config before the backend talks to it.
+   *
+   * `npm install` runs in the HOST process, so the registry URL decides
+   * where the backend itself sends requests -- and, with an authToken,
+   * where it sends a bearer header. It is held to the same SSRF floor as
+   * every other server-side request:
+   *
+   *   - CR/LF in any field is refused (it would inject .npmrc directives);
+   *   - `validateUrl`: http(s) only, no embedded credentials, no private /
+   *     loopback / link-local / metadata host or literal, in any spelling
+   *     (the shared classifier unwraps IPv4-mapped, NAT64, 6to4 and the
+   *     other IPv6 forms that embed an IPv4 address);
+   *   - the hostname is resolved and EVERY returned address is checked,
+   *     so a public name pointed at an internal address is refused up front
+   *     with a clear error rather than a failed install.
+   *
+   * A name that does not resolve at all is let through: npm cannot reach
+   * it either. This is only the configuration-time half. npm resolves the
+   * name again when it connects, follows redirects and fetches tarballs
+   * from whatever host the registry names, so the install itself runs
+   * through `startEgressProxy`, which vets every host npm contacts and
+   * connects to the address it vetted.
+   *
+   * Self-hosted installs with a registry on their own network (Verdaccio,
+   * Nexus on the LAN) set NPM_REGISTRY_ALLOW_PRIVATE_URLS=true, which keeps
+   * the scheme and credential rules and drops only the address bans for
+   * the registry host itself -- the same shape as OLLAMA_ALLOW_PRIVATE_URLS
+   * / LLM_ALLOW_PRIVATE_URLS. Redirects and tarball URLs to OTHER hosts are
+   * still held to the floor by the proxy.
    */
-  private validateRegistry(registry: NpmRegistryConfig): void {
+  private async validateRegistry(registry: NpmRegistryConfig): Promise<void> {
     const fields = [registry.url, registry.scope, registry.authToken];
     for (const f of fields) {
       if (typeof f === 'string' && /[\r\n]/.test(f)) {
         throw new BadRequestException('Registry config must not contain newlines');
       }
     }
-    let parsed: URL;
-    try {
-      parsed = new URL(registry.url);
-    } catch {
-      throw new BadRequestException(`Invalid registry URL: ${registry.url}`);
+    if (typeof registry.url !== 'string' || registry.url.length === 0) {
+      throw new BadRequestException('Registry URL is required');
     }
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new BadRequestException(`Registry URL must be http(s): ${registry.url}`);
+
+    const allowPrivate = registryPrivateUrlsAllowed();
+    const check = allowPrivate
+      ? validateUrlAllowingPrivate(registry.url)
+      : validateUrl(registry.url);
+    if (!check.valid) {
+      throw new BadRequestException(`Registry URL refused: ${check.error}`);
+    }
+    if (allowPrivate) return;
+
+    const host = new URL(registry.url).hostname;
+    const literal = classifyAddress(host);
+    if (literal.kind === 'blocked') {
+      throw new BadRequestException(
+        `Registry URL refused: ${host} is a private or reserved address`,
+      );
+    }
+    if (literal.kind === 'public') return;
+
+    let addresses: Array<{ address: string; family: number }>;
+    try {
+      addresses = await dns.promises.lookup(host, { all: true });
+    } catch {
+      return;
+    }
+    for (const { address } of addresses) {
+      if (classifyAddress(address).kind !== 'public') {
+        throw new BadRequestException(
+          `Registry URL refused: ${host} resolves to a private or reserved address`,
+        );
+      }
     }
   }
 
@@ -218,22 +343,37 @@ export class DependencyManagerService {
       fs.writeFileSync(path.join(installDir, '.npmrc'), lines.join('\n') + '\n');
     }
 
-    // Run npm install
-    try {
-      await this.runNpmInstall(installDir);
-    } catch (err: any) {
-      // Clean up on failure — do NOT leave a .installed marker
-      this.logger.error(`npm install failed for ${hash}: ${err.message}`);
-      try {
-        fs.rmSync(installDir, { recursive: true, force: true });
-      } catch {
-        // best effort
-      }
-      throw err;
-    }
+    // A tenant registry is installed through the egress proxy: npm
+    // resolves names again at connect time, follows redirects and fetches
+    // whatever `dist.tarball` URL the registry names, so the URL check in
+    // validateRegistry alone cannot hold it to the SSRF floor. The proxy
+    // vets every host npm contacts and connects to the address it vetted.
+    // The default registry needs none of this and keeps its direct path.
+    const proxy = registry ? await startEgressProxy(registryProxyOptions(registry)) : undefined;
 
-    // Auto-install @types/* for packages that are missing bundled declarations
-    await this.installMissingTypes(installDir, dependencies);
+    try {
+      // Run npm install
+      try {
+        await this.runNpmInstall(installDir, proxy?.url);
+      } catch (err: any) {
+        // Clean up on failure — do NOT leave a .installed marker
+        this.logger.error(`npm install failed for ${hash}: ${err.message}`);
+        if (proxy?.refused.length) {
+          this.logger.warn(`npm egress refused for ${hash}: ${proxy.refused.slice(0, 5).join(', ')}`);
+        }
+        try {
+          fs.rmSync(installDir, { recursive: true, force: true });
+        } catch {
+          // best effort
+        }
+        throw err;
+      }
+
+      // Auto-install @types/* for packages that are missing bundled declarations
+      await this.installMissingTypes(installDir, dependencies, proxy?.url);
+    } finally {
+      await proxy?.close();
+    }
 
     // Mark as completed
     const lockData = {
@@ -256,7 +396,7 @@ export class DependencyManagerService {
   }
 
   /** Spawn npm install and wait for completion */
-  private runNpmInstall(cwd: string): Promise<void> {
+  private runNpmInstall(cwd: string, proxyUrl?: string): Promise<void> {
     const timeout = parseInt(process.env.SANDBOX_INSTALL_TIMEOUT || '', 10) || DEFAULT_INSTALL_TIMEOUT;
 
     // CRITICAL: --ignore-scripts is REQUIRED here. The install runs in
@@ -287,15 +427,12 @@ export class DependencyManagerService {
           '--ignore-scripts',
           '--no-package-lock',
           `--cache=${npmCacheDir}`,
+          ...npmProxyArgs(proxyUrl),
         ],
         {
           cwd,
           stdio: 'pipe',
-          env: {
-            ...process.env,
-            NODE_ENV: 'production',
-            npm_config_cache: npmCacheDir,
-          },
+          env: { ...npmEnv(npmCacheDir, proxyUrl), NODE_ENV: 'production' },
         },
       );
 
@@ -333,6 +470,7 @@ export class DependencyManagerService {
   private async installMissingTypes(
     installDir: string,
     dependencies: Record<string, string>,
+    proxyUrl?: string,
   ): Promise<void> {
     const typesToInstall: string[] = [];
 
@@ -371,12 +509,13 @@ export class DependencyManagerService {
             '--ignore-scripts',
             '--no-package-lock',
             `--cache=${npmCacheDir}`,
+            ...npmProxyArgs(proxyUrl),
             ...typesToInstall,
           ],
           {
             cwd: installDir,
             stdio: 'pipe',
-            env: { ...process.env, npm_config_cache: npmCacheDir },
+            env: npmEnv(npmCacheDir, proxyUrl),
           },
         );
         child.on('close', () => resolve());

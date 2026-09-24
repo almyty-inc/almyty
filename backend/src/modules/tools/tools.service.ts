@@ -1,9 +1,9 @@
 import { Inject, forwardRef } from '@nestjs/common';
-import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like, In, MoreThanOrEqual } from 'typeorm';
+import { Repository, In } from 'typeorm';
 
-import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
+import { Tool, ToolStatus, ToolExecutionMethod } from '../../entities/tool.entity';
 import { ToolVersion } from '../../entities/tool-version.entity';
 import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';
@@ -23,9 +23,12 @@ import {
   assertAttachable,
   assertNotOthersPrivate,
   isOthersPrivate,
+  nameTaken,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
+import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
+import { precheckToolQuota, withToolQuota } from './tool-quota';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -83,10 +86,9 @@ export class ToolsService {
         throw new ForbiddenException('User does not have permission to create tools');
       }
 
-      // Check organization limits
-      if (!organization.canAddMoreTools()) {
-        throw new BadRequestException('Organization has reached tool limit');
-      }
+      // Fail fast before the validation below; the enforcing check runs
+      // with the insert (withToolQuota).
+      await precheckToolQuota(this.toolRepository.manager, organizationId);
 
       // Validate categories if provided
       let categories: ToolCategory[] = [];
@@ -170,7 +172,15 @@ export class ToolsService {
         },
       });
 
-      const savedTool = await this.toolRepository.save(tool);
+      // Check organization limits and insert under the organization's
+      // tool-quota lock: a real COUNT, serialised against concurrent
+      // creates, not the unloaded relation canAddMoreTools() used to read.
+      const savedTool = await withToolQuota(
+        this.toolRepository.manager,
+        organizationId,
+        1,
+        (tx) => tx.getRepository(Tool).save(tool),
+      );
 
       // Create initial version
       await this.createToolVersion(savedTool, 'Initial tool creation', userId);
@@ -188,9 +198,7 @@ export class ToolsService {
       // renderer has a single answer. Report the collision instead
       // of letting the driver error out as a 500.
       if (isUniqueViolation(error)) {
-        throw new ConflictException(
-          `A tool named '${createToolDto.name}' already exists in this organization`,
-        );
+        throw nameTaken('tool', createToolDto.name);
       }
       this.logger.error(`Failed to create tool: ${error.message}`);
       throw error;
@@ -336,6 +344,16 @@ export class ToolsService {
           const api = await this.apiRepository.findOne({ where: { id: tool.apiId, organizationId } });
           if (api) assertAttachable({ visibility: scope.visibility, ownerId: scope.ownerId, noun: 'tool' }, [api], 'API');
         }
+        // Going private would detach it from shared agents and gateways
+        // that use it (they would fail at run time). Refuse and say which.
+        if (scope.visibility === 'private' && tool.visibility !== 'private') {
+          await assertNoSharedDependents(
+            this.toolRepository.manager,
+            this.accessPolicy,
+            { noun: 'tool', organizationId, targets: [{ kind: 'tool', id: tool.id }] },
+            userId,
+          );
+        }
         tool.visibility = scope.visibility;
         tool.teamId = scope.teamId;
         if (scope.ownerId) tool.createdBy = scope.ownerId;
@@ -362,6 +380,11 @@ export class ToolsService {
       return updatedTool;
 
     } catch (error) {
+      // A rename onto a taken name trips `tools_org_name_uq`; answer it as
+      // create does rather than as a 500 carrying the driver's text.
+      if (isUniqueViolation(error)) {
+        throw nameTaken('tool', updateToolDto.name ?? '');
+      }
       this.logger.error(`Failed to update tool: ${error.message}`);
       throw error;
     }

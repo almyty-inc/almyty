@@ -4,7 +4,7 @@ import {
   validateUrl,
   validateUrlAllowingPrivate,
 } from '../../../common/security/url-validator';
-import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
+import { agentsExempting, ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 
 import {
   ActualState,
@@ -80,7 +80,12 @@ export class CustomEndpointAdapter implements ModelProviderAdapter {
     const check = customLlmPrivateUrlsAllowed() ? validateUrlAllowingPrivate(url) : validateUrl(url);
     if (!check.valid) return { state: 'failed', url, message: `endpoint URL refused: ${check.error}` };
     try {
-      const res = await this.http.get(`${url}/models`, { headers: this.headers(credentials) });
+      const res = await this.http.get(`${url}/models`, {
+        headers: this.headers(credentials),
+        // The instance pins DNS, which also refuses the LAN name the
+        // LLM_ALLOW_PRIVATE_URLS hatch exists for; exempt this host only.
+        ...(customLlmPrivateUrlsAllowed() ? agentsExempting(new URL(url).hostname) : {}),
+      });
       const ids = (res.data?.data ?? []).map((m: any) => m.id);
       if (ref.model && ids.length > 0 && !ids.includes(ref.model)) {
         return { state: 'missing', url, message: `model ${ref.model} is not served`, details: { served: ids.slice(0, 20) } };

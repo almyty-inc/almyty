@@ -1,23 +1,20 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 import { Inject, forwardRef } from '@nestjs/common';
-import { callOpenAI, callOpenAIStream, callAnthropic, callAnthropicStream, callGoogle, callPerplexity, callPerplexityStream, callCustomProvider } from './providers';
 import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } from '../../entities/llm-provider.entity';
 import { decideEgress, hostMatches } from '../connections/egress-policy';
 import { llmCallOptionsFor } from './providers/safe-request';
 import { AuditLogService } from '../audit-log/audit-log.service';
-import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditResource } from '../../entities/audit-log.entity';
 import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
-import { Message, MessageRole, MessageType, MessageStatus, ToolCall, MessageContent } from '../../entities/message.entity';
+import { Message, MessageRole } from '../../entities/message.entity';
 import { User } from '../../entities/user.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
 import { Tool } from '../../entities/tool.entity';
-import { ToolExecutorService, ToolExecutionOptions } from '../tools/tool-executor.service';
-import { callLlmProviderHttp } from './providers/safe-request';
+import { ToolExecutorService } from '../tools/tool-executor.service';
 import { LlmChatHelper } from './llm-chat.helper';
 import { LlmStatsHelper } from './llm-stats.helper';
 import { LlmChatRunnerHelper } from './llm-chat-runner.helper';

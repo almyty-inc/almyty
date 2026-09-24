@@ -1,6 +1,5 @@
 import { validate } from 'class-validator'
 import { plainToInstance } from 'class-transformer'
-import { Type } from 'class-transformer'
 import { IsOptional, IsString } from 'class-validator'
 
 // DecisionDto is inlined in approvals.controller.ts; mirror the

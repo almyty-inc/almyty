@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
-import { AddRoleDialog } from './add-role-dialog'
+import { AddRoleForm } from './add-role-form'
 import { OrchestratorSettings, type OrchestratorConfigView } from './orchestrator-settings'
 import { RolesPanel, type AgentRoleView, type ResolvedRoleView } from './roles-panel'
 import { StrategyPicker, type StrategyView } from './strategy-picker'
@@ -38,7 +38,28 @@ interface ExecutionSettings {
   orchestrator?: OrchestratorConfigView
 }
 
-export function ExecutionTab({ agentId }: { agentId: string }) {
+/**
+ * Strategies, roles and the orchestrator all act on a pipeline graph: a
+ * strategy compiles to one, a role fills its role-named nodes, and the
+ * orchestrator picks a strategy. An autonomous agent has no graph -- it
+ * runs the ReAct loop, which reads none of settings.execution or the
+ * agent's roles -- so for one the tab says so in a line instead of
+ * offering choices that would save and do nothing. The server refuses
+ * them too (STRATEGY_WORKFLOW_ONLY).
+ */
+export function ExecutionTab({ agentId, mode }: { agentId: string; mode?: 'workflow' | 'autonomous' }) {
+  if (mode === 'autonomous') {
+    return (
+      <p data-testid="execution-workflow-only" className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+        Strategies, roles and the orchestrator apply to workflow agents. This agent is autonomous: it runs its own loop on
+        the model set in its configuration.
+      </p>
+    )
+  }
+  return <WorkflowExecutionTab agentId={agentId} />
+}
+
+function WorkflowExecutionTab({ agentId }: { agentId: string }) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [addingRole, setAddingRole] = useState(false)
@@ -153,12 +174,11 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roles.length])
 
-  const neededSlots = useMemo(() => {
-    const selected = strategies.find((s) => s.key === selectedStrategy)
-    const wanted = selected ? selected.roleSlots : strategies.flatMap((s) => s.roleSlots)
-    return [...new Set(wanted)].filter((slot) => !roleKeys.includes(slot))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strategies, selectedStrategy, roleKeys.join(',')])
+  // Cheap enough to derive on every render; memoising it on a joined key
+  // string only hid the dependency from the linter.
+  const selected = strategies.find((s) => s.key === selectedStrategy)
+  const wanted = selected ? selected.roleSlots : strategies.flatMap((s) => s.roleSlots)
+  const neededSlots = [...new Set(wanted)].filter((slot) => !roleKeys.includes(slot))
 
   return (
     <div className="space-y-6">
@@ -175,6 +195,16 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
           </Button>
         </CardHeader>
         <CardContent>
+          {addingRole && (
+            <AddRoleForm
+              existingKeys={roleKeys}
+              neededKeys={neededSlots}
+              saving={addRole.isPending}
+              error={addRole.isError ? getApiErrorMessage(addRole.error, 'Could not add that role') : undefined}
+              onCreate={(role) => addRole.mutate(role)}
+              onCancel={() => setAddingRole(false)}
+            />
+          )}
           <RolesPanel
             roles={roles}
             resolved={resolve.data}
@@ -258,16 +288,6 @@ export function ExecutionTab({ agentId }: { agentId: string }) {
           />
         </CardContent>
       </Card>
-
-      <AddRoleDialog
-        open={addingRole}
-        onOpenChange={setAddingRole}
-        existingKeys={roleKeys}
-        neededKeys={neededSlots}
-        saving={addRole.isPending}
-        error={addRole.isError ? getApiErrorMessage(addRole.error, 'Could not add that role') : undefined}
-        onCreate={(role) => addRole.mutate(role)}
-      />
     </div>
   )
 }

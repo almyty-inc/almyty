@@ -1,127 +1,87 @@
 import { encryptField } from '../../../../common/security/field-crypto';
 import { ModelDeployment } from '../../../../entities/model-deployment.entity';
+import { FakeRepository, UnmodelledQueryError, fakeRepository } from '../../../../test/fake-repository';
 
 /**
- * In-memory stand-ins for the gate scenarios: enough of a TypeORM
- * repository (create/save/find/findOne by equality) to drive the real
- * ModelDeploymentsService and ModelDeploymentsProcessor end to end, an
- * audit sink that keeps every row, and an envelope that encrypts with the
- * platform key so getDecryptedProviderConfig round-trips.
+ * In-memory stand-ins for the gate scenarios: the shared truthful
+ * repository (rows copied in and out, every `where` evaluated, `update`
+ * a real compare-and-set) plus the one query builder the reconcile loop
+ * uses, an audit sink that keeps every row, and an envelope that encrypts
+ * with the platform key so getDecryptedProviderConfig round-trips.
+ *
+ * The double this replaces handed out the stored object itself, so a
+ * card the processor flipped in memory was "saved" whether or not
+ * `models.save()` ran; and its claim builder took the row id and the
+ * `deploying` parameter from the call and ignored the SQL, so the claim's
+ * WHERE could be rewritten to match every row, in any state, with every
+ * gate green.
  */
 export function ensureTestKey(): void {
   process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'unit-test-key-32-bytes-minimum-len';
 }
 
 /**
- * Enough of TypeORM's FindOperator to drive the real queries: `In(...)`,
- * `IsNull()` and `Not(...)` wrapping either. The sweep asks for failed
- * rows that still have an endpoint as `externalRef: Not(IsNull())`, and a
- * fake that compared the operator object by identity answered "no rows",
- * which looks exactly like a broken sweep.
+ * The clauses of the deploy claim this builder evaluates, by their exact
+ * SQL. Anything else throws: a claim whose predicate changed must fail
+ * here rather than be read as the old one.
  */
-function operatorMatches(op: any, value: any): boolean {
-  switch (op._type) {
-    case 'in':
-      return (op._value as any[]).includes(value);
-    case 'isNull':
-      return value === null || value === undefined;
-    case 'not':
-      return !matchesValue(op._value, value);
-    default:
-      return op._value === value;
-  }
-}
+const CLAIM_CLAUSES: Record<string, (row: any, params: Record<string, any>) => boolean> = {
+  'id = :id': (row, p) => row.id === p.id,
+  '(state != :deploying OR "lastReconcileAt" IS NULL OR "lastReconcileAt" < :staleClaim)': (row, p) =>
+    row.state !== p.deploying || row.lastReconcileAt == null || new Date(row.lastReconcileAt) < p.staleClaim,
+};
 
-function isOperator(v: any): boolean {
-  return !!v && typeof v === 'object' && '_type' in v;
-}
-
-function matchesValue(expected: any, value: any): boolean {
-  return isOperator(expected) ? operatorMatches(expected, value) : expected === value;
-}
-
-function matches(row: any, where: Record<string, any> | undefined): boolean {
-  return Object.entries(where ?? {}).every(([k, v]) => matchesValue(v, row[k]));
-}
-
-export interface FakeRepo<T extends { id?: string }> {
-  rows: Map<string, T>;
-  create: jest.Mock;
-  save: jest.Mock;
-  update: jest.Mock;
-  find: jest.Mock;
-  findOne: jest.Mock;
+export interface FakeRepo<T extends { id?: string }> extends FakeRepository<T> {
   createQueryBuilder: jest.Mock;
+  /** The stored row, as a copy. Change it through the repository. */
   get(id: string): T;
 }
 
 export function fakeRepo<T extends { id?: string }>(factory: () => T, seed: T[] = []): FakeRepo<T> {
-  const rows = new Map<string, T>();
+  const repo = fakeRepository<T>({ seed, make: factory });
   let seq = 0;
-  for (const r of seed) rows.set(r.id!, r);
-  return {
-    rows,
-    create: jest.fn((partial: Partial<T>) => Object.assign(factory(), partial)),
-    save: jest.fn(async (row: T) => {
-      if (!row.id) (row as any).id = `${(row as any).providerType ?? 'row'}-${++seq}`;
-      rows.set(row.id!, row);
-      return row;
-    }),
+  const innerSave = repo.save.getMockImplementation()!;
+  // Ids read like the old fake's (`stub-1`), which the gate specs print.
+  repo.save.mockImplementation(async (entity: any) => {
+    for (const e of Array.isArray(entity) ? entity : [entity]) {
+      if (e.id == null) e.id = `${e.providerType ?? 'row'}-${++seq}`;
+    }
+    return innerSave(entity);
+  });
+  return Object.assign(repo, {
     /**
-     * Column-scoped write, the way the reconcile loop writes now: only
-     * the named columns land, so a stale in-memory `desired` cannot push
-     * a committed teardown back out.
-     */
-    update: jest.fn(async (criteria: any, patch: Record<string, any>) => {
-      const id = typeof criteria === 'string' ? criteria : criteria?.id;
-      const row: any = id ? rows.get(id) : undefined;
-      if (row) Object.assign(row, patch);
-      return { affected: row ? 1 : 0 };
-    }),
-    find: jest.fn(async (opts?: { where?: Record<string, any> }) => [...rows.values()].filter((r) => matches(r, opts?.where))),
-    findOne: jest.fn(async (opts?: { where?: Record<string, any> }) => [...rows.values()].find((r) => matches(r, opts?.where)) ?? null),
-    /**
-     * The conditional claim the reconcile loop takes before deploying.
-     *
-     * adapter.deploy() runs for minutes, so the processor now claims the
-     * row with `UPDATE ... WHERE id = ? AND state != 'deploying'` and
-     * bails when nothing matched -- otherwise the 2-minute sweep and a
-     * user pressing retry both saw externalRef null and both deployed,
-     * and the second save orphaned the first (paid) endpoint. The claim
-     * is a lease: past `staleClaim` an abandoned one is taken over.
+     * `UPDATE ... SET ... WHERE <clauses>` evaluated against every row,
+     * with the true number of rows it touched.
      */
     createQueryBuilder: jest.fn(() => {
-      let patch: Record<string, any> = {};
-      let targetId: string | undefined;
-      let excludedState: string | undefined;
-      let staleClaim: Date | undefined;
-
+      let patch: Record<string, any> | undefined;
+      const clauses: Array<{ sql: string; params: Record<string, any> }> = [];
       const qb: any = {
         update: () => qb,
         set: (values: Record<string, any>) => { patch = values; return qb; },
-        where: (_clause: string, params: any) => { targetId = params.id; return qb; },
-        andWhere: (_clause: string, params?: any) => {
-          if (params?.deploying) excludedState = params.deploying;
-          if (params?.staleClaim) staleClaim = params.staleClaim;
-          return qb;
-        },
+        where: (sql: string, params: Record<string, any> = {}) => { clauses.push({ sql, params }); return qb; },
+        andWhere: (sql: string, params: Record<string, any> = {}) => { clauses.push({ sql, params }); return qb; },
         execute: async () => {
-          const row: any = targetId ? rows.get(targetId) : undefined;
-          if (!row) return { affected: 0 };
-          const claimExpired = staleClaim ? !row.lastReconcileAt || new Date(row.lastReconcileAt) < staleClaim : false;
-          if (excludedState && row.state === excludedState && !claimExpired) return { affected: 0 };
-          Object.assign(row, patch);
-          return { affected: 1 };
+          if (!patch || clauses.length === 0) throw new UnmodelledQueryError('an UPDATE without SET or WHERE');
+          const params = Object.assign({}, ...clauses.map((c) => c.params));
+          const predicates = clauses.map(({ sql }) => {
+            const p = CLAIM_CLAUSES[sql.replace(/\s+/g, ' ').trim()];
+            if (!p) throw new UnmodelledQueryError(`the clause "${sql}" is not modelled`);
+            return p;
+          });
+          const hits = repo.rows().filter((row) => predicates.every((p) => p(row, params)));
+          for (const row of hits) repo.seed(Object.assign(row, patch));
+          return { affected: hits.length, raw: [] };
         },
       };
       return qb;
     }),
-    get(id: string) {
-      const row = rows.get(id);
+    get(id: string): T {
+      const row = repo.row(id);
       if (!row) throw new Error(`no row ${id}`);
       return row;
     },
-  };
+  });
 }
 
 export function fakeAudit() {
