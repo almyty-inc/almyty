@@ -117,15 +117,17 @@ export async function roundTrip(options: RoundTripOptions): Promise<RoundTripRes
 
   const emitter = new EventEmitter();
   const runRepository = {
-    createQueryBuilder: () => ({
-      where: () => ({
-        andWhere: () => ({
-          andWhere: () => ({
-            orderBy: () => ({ limit: () => ({ getMany: async () => [] }) }),
-          }),
-        }),
-      }),
-    }),
+    // No open thread to continue: every round trip starts a fresh run.
+    createQueryBuilder: () => {
+      const qb: any = {
+        where: () => qb,
+        andWhere: () => qb,
+        orderBy: () => qb,
+        limit: () => qb,
+        getMany: async () => [],
+      };
+      return qb;
+    },
     findOne: async () => run,
     save: async (row: any) => {
       Object.assign(run, row);
