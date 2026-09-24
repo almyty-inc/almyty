@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Code, Play, Zap, Settings, Download, Terminal, FileCode, BookOpen, Copy, Check, ChevronRight, Globe, Bot, Server, Store } from 'lucide-react'
+import { ArrowLeft, Code, Play, Zap, BookOpen, Copy, Check, ChevronRight, Globe, Bot, Server, Store } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -583,7 +583,7 @@ export function ToolDetailPage() {
 
         {/* Exports Tab */}
         <TabsContent value="exports">
-          <ExportsSection toolId={id!} toolName={tool.name} gateways={tool.gatewayAssociations || []} />
+          <ExportsSection toolId={id!} gateways={tool.gatewayAssociations || []} />
         </TabsContent>
 
         {/* Gateways Tab */}
@@ -676,7 +676,7 @@ interface GatewayInfo {
   gateway?: { id: string; name: string; type: string; endpoint: string; organizationId?: string }
 }
 
-function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolName: string; gateways: GatewayInfo[] }) {
+function ExportsSection({ toolId, gateways }: { toolId: string; gateways: GatewayInfo[] }) {
   const [copiedField, setCopiedField] = useState<string | null>(null)
   const { currentOrganization } = useOrganizationStore()
 
@@ -694,11 +694,10 @@ function ExportsSection({ toolId, toolName, gateways }: { toolId: string; toolNa
   // Get first gateway of each type for endpoint URLs
   const mcpGateway = gateways.find(g => g.gateway?.type === 'mcp')?.gateway
   const skillsGateway = gateways.find(g => g.gateway?.type === 'skills')?.gateway
-  const firstGateway = gateways[0]?.gateway
 
   const apiBase = import.meta.env.ALMYTY_API_BASE_URL || window.location.origin
 
-  const { data: skillData, isLoading: skillLoading } = useQuery({
+  const { data: skillData } = useQuery({
     queryKey: ['tool-skill', toolId],
     queryFn: () => toolsApi.getSkill(toolId, orgId),
     enabled: !!orgId,

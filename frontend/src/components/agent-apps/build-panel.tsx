@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Copy, Download, Hammer, Lock, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, Copy, Download, Hammer, Lock, ShieldAlert } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'

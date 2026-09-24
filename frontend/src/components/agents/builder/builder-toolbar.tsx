@@ -66,7 +66,6 @@ export function BuilderToolbar({
   redo,
   isEditing,
   agentVersion,
-  showTestPanel,
   onToggleTestPanel,
   saveDisabled,
   isSaving,

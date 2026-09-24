@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Node } from '@xyflow/react'
-import { X, Trash2, ChevronDown, ChevronUp, Code } from 'lucide-react'
+import { X, Trash2, Code } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -272,7 +272,6 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
   const { currentOrganization } = useOrganizationStore()
   const [toolSearch, setToolSearch] = useState('')
   const [showAllTools, setShowAllTools] = useState(false)
-  const VISIBLE_TOOLS_LIMIT = 8
   const { data: tools } = useQuery({
     queryKey: ['tools', currentOrganization?.id],
     queryFn: async () => {
@@ -284,17 +283,7 @@ function LlmCallConfig({ node, updateData, onUpdateNode }: { node: Node; updateD
 
   const temperature = typeof node.data.temperature === 'number' ? node.data.temperature : 0.7
 
-  // Filter tools by search
   const toolList = (Array.isArray(tools) ? tools : (tools as any)?.tools || []) as Array<Pick<Tool, 'id' | 'name'>>
-  const filteredTools = useMemo(() => {
-    if (!toolSearch.trim()) return toolList
-    const q = toolSearch.toLowerCase()
-    return toolList.filter((t) => t.name?.toLowerCase().includes(q))
-  }, [toolList, toolSearch])
-
-  const visibleTools = showAllTools ? filteredTools : filteredTools.slice(0, VISIBLE_TOOLS_LIMIT)
-  const hasMoreTools = filteredTools.length > VISIBLE_TOOLS_LIMIT
-
   // Extract template variables from prompts
   const systemPromptVars = extractTemplateVariables((node.data.systemPrompt as string) || '')
   const userPromptVars = extractTemplateVariables((node.data.userPromptTemplate as string) || '')

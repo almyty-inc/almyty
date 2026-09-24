@@ -6,14 +6,14 @@
 import React from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import {
-  AlertCircle, CheckCircle, Cloud, Code, Database, Globe, Key, Lock,
-  Package, Server, Shield, Unlock, Webhook, XCircle,
+  Cloud, Code, Database, Globe, Key, Lock,
+  Package, Server, Shield, Unlock, Webhook,
 } from 'lucide-react'
 
 import { ApiTypeBadge } from '@/components/ui/api-type-badge'
 import { createActionsColumn, createSortableColumn } from '@/components/ui/data-table'
 import { VisibilityBadge, type Team } from '@/components/ui/team-filter'
-import { Api, ApiAuthType, ApiHealthStatus, ApiType } from '@/types'
+import { Api, ApiAuthType, ApiType } from '@/types'
 
 function getApiTypeIcon(type: ApiType) {
   switch (type) {
@@ -25,15 +25,6 @@ function getApiTypeIcon(type: ApiType) {
     case ApiType.SDK: return Package
     case ApiType.OTHER: return Code
     default: return Code
-  }
-}
-
-function getHealthStatusIcon(status: ApiHealthStatus) {
-  switch (status) {
-    case ApiHealthStatus.HEALTHY: return CheckCircle
-    case ApiHealthStatus.DEGRADED: return AlertCircle
-    case ApiHealthStatus.UNHEALTHY: return XCircle
-    default: return AlertCircle
   }
 }
 
@@ -76,7 +67,6 @@ export function createApisColumns({
       cell: ({ row }) => {
         const api = row.original
         const TypeIcon = getApiTypeIcon(api.type)
-        const HealthIcon = getHealthStatusIcon(api.healthStatus)
 
         return (
           <div className="flex items-center space-x-3">
