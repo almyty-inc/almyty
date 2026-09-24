@@ -48,8 +48,15 @@ describe('OrganizationsService: resource handover', () => {
     };
     const teams: any = { findOne: jest.fn(), remove: jest.fn(), manager: { transaction } };
     const auditRows = [{ id: 'audit-1' }];
+    // A connection the handover wiped, secrets as they were.
+    const wiped = { id: 'conn-1', organizationId: 'org-1', connectorKey: 'github', previousConfig: { accessToken: 'encrypted:x' } };
     const handover = {
-      handOverPrivateResources: jest.fn(async () => { calls.push('handover'); return auditRows; }),
+      handOverPrivateResources: jest.fn(async (_m: any, args: any) => {
+        calls.push('handover');
+        args.wipedConnections?.push(wiped);
+        return auditRows;
+      }),
+      revokeWipedConnectionsAtProviders: jest.fn(async () => { calls.push('provider revoke'); }),
       demoteTeamResources: jest.fn(async () => { calls.push('demote'); return auditRows; }),
     };
     const audit = { publishCommitted: jest.fn(() => { calls.push('publish'); }) };
@@ -59,7 +66,7 @@ describe('OrganizationsService: resource handover', () => {
       handover as any,
       audit as any,
     );
-    return { service, memberships, teams, handover, audit, manager, txMembership, txTeam, qb, calls, auditRows };
+    return { service, memberships, teams, handover, audit, manager, txMembership, txTeam, qb, calls, auditRows, wiped };
   }
 
   describe('removeMember', () => {
@@ -75,11 +82,19 @@ describe('OrganizationsService: resource handover', () => {
         toUserId: 'admin-1',
         actorUserId: 'admin-1',
         reason: 'member_removed',
+        wipedConnections: [t.wiped],
       });
       expect(t.txMembership.remove).toHaveBeenCalledWith(target);
-      // Handover and removal in one transaction; audit streamed after commit.
-      expect(t.calls).toEqual(['begin', 'handover', 'membership.remove', 'commit', 'publish']);
+      // Handover and removal in one transaction; audit streamed after
+      // commit; the wiped connections revoked at their providers last,
+      // where a provider failing cannot undo the removal.
+      expect(t.calls).toEqual(['begin', 'handover', 'membership.remove', 'commit', 'publish', 'provider revoke']);
       expect(t.audit.publishCommitted).toHaveBeenCalledWith(t.auditRows);
+      expect(t.handover.revokeWipedConnectionsAtProviders).toHaveBeenCalledWith([t.wiped], {
+        userId: 'leaver',
+        actorUserId: 'admin-1',
+        reason: 'member_removed',
+      });
       // The membership goes through the transaction's manager, not the bare repository.
       expect(t.memberships.remove).not.toHaveBeenCalled();
     });
@@ -121,6 +136,8 @@ describe('OrganizationsService: resource handover', () => {
       await expect(t.service.removeMember(org, 'leaver', 'owner-1')).rejects.toThrow('db down');
       expect(t.txMembership.remove).not.toHaveBeenCalled();
       expect(t.audit.publishCommitted).not.toHaveBeenCalled();
+      // Nothing was wiped, so nothing is revoked at a provider either.
+      expect(t.handover.revokeWipedConnectionsAtProviders).not.toHaveBeenCalled();
     });
 
     it('hands nothing over when the removal itself is refused', async () => {

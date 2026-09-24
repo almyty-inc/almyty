@@ -75,12 +75,20 @@ describe('sandboxed tool code is held to the gateway host policy', () => {
 });
 
 describe('sandboxHostPolicy', () => {
-  it('keeps only the host restrictions, and is null when there are none', () => {
+  it('carries the host, scheme and method rules, and is null when there are none', () => {
     expect(sandboxHostPolicy(null)).toBeNull();
-    expect(sandboxHostPolicy({ requireHttps: true, allowedHttpMethods: ['GET'] })).toBeNull();
+    expect(sandboxHostPolicy({ maxResponseSizeBytes: 1000, allowedHttpMethods: [' '] })).toBeNull();
+    expect(sandboxHostPolicy({ requireHttps: true, allowedHttpMethods: [' get ', ''] })).toEqual({
+      allowedDomains: [],
+      blockedDomains: [],
+      requireHttps: true,
+      allowedHttpMethods: ['GET'],
+    });
     expect(sandboxHostPolicy({ allowedDomains: ['', 'api.example.com'], blockedDomains: [] })).toEqual({
       allowedDomains: ['api.example.com'],
       blockedDomains: [],
+      requireHttps: false,
+      allowedHttpMethods: [],
     });
   });
 });

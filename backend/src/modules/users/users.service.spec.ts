@@ -9,9 +9,7 @@ import { UserOrganization, OrganizationRole } from '../../entities/user-organiza
 import { ApiKey } from '../../entities/api-key.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
-
-// Unmock bcrypt from global setup to test actual hashing
-jest.unmock('bcryptjs');
+import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
 
 /**
  * bcrypt at cost 12 is deliberate work: roughly a quarter second idle,
@@ -26,6 +24,7 @@ describe('UsersService', () => {
   let userRepository: any;
   let userOrganizationRepository: any;
   let apiKeyRepository: any;
+  let offboarding: { offboard: jest.Mock };
 
 
   beforeEach(async () => {
@@ -66,6 +65,7 @@ describe('UsersService', () => {
             save: jest.fn(),
           },
         },
+        { provide: ConnectionOffboardingService, useValue: { offboard: jest.fn(async () => undefined) } },
       ],
     }).compile();
 
@@ -73,6 +73,7 @@ describe('UsersService', () => {
     userRepository = module.get(getRepositoryToken(User));
     userOrganizationRepository = module.get(getRepositoryToken(UserOrganization));
     apiKeyRepository = module.get(getRepositoryToken(ApiKey));
+    offboarding = module.get(ConnectionOffboardingService);
   });
 
   describe('findOne', () => {
@@ -452,6 +453,39 @@ describe('UsersService', () => {
       userRepository.findOne.mockResolvedValue(null);
 
       await expect(service.delete('non-existent')).rejects.toThrow();
+      expect(offboarding.offboard).not.toHaveBeenCalled();
+    });
+
+    /**
+     * credentials.ownerUserId has no foreign key, so a deleted account's
+     * own connections stayed stored, and valid at the provider, owned by
+     * nobody. They are wiped and provider-revoked first, in every
+     * organization, and only then is the account removed.
+     */
+    it("offboards the person's own connections everywhere before removing the account", async () => {
+      const mockUser = { id: 'user-1', email: 'test@test.com' };
+      userRepository.findOne.mockResolvedValue(mockUser);
+      const order: string[] = [];
+      offboarding.offboard.mockImplementation(async () => { order.push('offboard'); });
+      userRepository.remove.mockImplementation(async () => { order.push('remove'); });
+
+      await service.delete('user-1', 'owner-1');
+
+      expect(offboarding.offboard).toHaveBeenCalledWith({
+        organizationId: null,
+        userId: 'user-1',
+        actorUserId: 'owner-1',
+        reason: 'user_deleted',
+      });
+      expect(order).toEqual(['offboard', 'remove']);
+    });
+
+    it('keeps the account when the connection wipe fails, so the delete can be retried', async () => {
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', email: 'test@test.com' });
+      offboarding.offboard.mockRejectedValue(new Error('db down'));
+
+      await expect(service.delete('user-1')).rejects.toThrow('db down');
+      expect(userRepository.remove).not.toHaveBeenCalled();
     });
   });
 

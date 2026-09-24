@@ -93,6 +93,8 @@ import { OrganizationsService } from '../modules/organizations/organizations.ser
 import { OrganizationsInvitesHelper } from '../modules/organizations/organizations-invites.helper';
 import { TeamMembershipHelper } from '../modules/organizations/team-membership.helper';
 import { ResourceHandoverHelper } from '../modules/organizations/resource-handover.helper';
+import { ConnectionOffboardingService } from '../modules/connections/connection-offboarding.service';
+import { ConnectionsService } from '../modules/connections/connections.service';
 import { RunnerService } from '../modules/runner/runner.service';
 
 // Audit
@@ -268,6 +270,9 @@ const mockRedis = {
     OrganizationsInvitesHelper,
     TeamMembershipHelper,
     ResourceHandoverHelper,
+    // The real wipe; no provider is contacted from these tests.
+    ConnectionOffboardingService,
+    { provide: ConnectionsService, useValue: { revokeAtProvider: async () => ({ attempted: false, revoked: false }) } },
     // Only the member-offboarding runner delete reaches it here.
     { provide: RunnerService, useValue: { deleteForDepartedOwner: async () => {} } },
 

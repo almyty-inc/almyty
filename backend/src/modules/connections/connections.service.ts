@@ -76,6 +76,15 @@ export interface PendingForm {
   method: ConnectMethodType;
   form: { schema: ConnectMethod['schema']; keyPageUrl: string | null };
 }
+
+/** What asking a provider to revoke a connection's grant came to. */
+export interface ProviderRevokeOutcome {
+  /** False when the provider offers no way to revoke (nothing was sent). */
+  attempted: boolean;
+  revoked: boolean;
+  via?: 'rotation' | 'connector' | 'oauth2';
+  error?: string;
+}
 export type ConnectResult = PendingRedirect | PendingForm | { pending: false; connection: ConnectionView; rotation?: RotateOutcome };
 
 /** Personal / free orgs let members keep their own keys; production tiers start closed. */
@@ -379,26 +388,98 @@ export class ConnectionsService {
   async disconnect(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<{ revoked: boolean; revokeError?: string }> {
     const row = await this.load(organizationId, id);
     this.assertCanManage(principal, row);
-    const connector = await this.catalog.find(organizationId, row.connectorKey!);
-    let revoked = false;
-    let revokeError: string | undefined;
-    const providerRevoke = this.rotation
-      ? await this.rotation.revoke({ id: row.id, organizationId, connectorKey: row.connectorKey!, name: row.name, secrets: await this.decryptConfig(row) }, { userId: principal.id })
-      : { supported: false, revoked: false };
-    if (providerRevoke.supported) {
-      revoked = providerRevoke.revoked;
-      revokeError = providerRevoke.error;
-    } else if (connector?.revoke) {
-      const outcome = await this.validation.revoke(connector, await this.decryptConfig(row));
-      revoked = outcome.ok;
-      revokeError = outcome.error;
-    }
+    const { revoked, error: revokeError } = await this.revokeAtProvider(row, principal.id);
     await this.credentials.remove(row);
     this.auditLog.log({
       organizationId, userId: principal.id, action: AuditAction.CONNECTION_DISCONNECT, resourceType: AuditResource.CONNECTION,
       resourceId: id, resourceName: row.name, details: { connectorKey: row.connectorKey, revoked, revokeError: revokeError ?? null },
     });
     return { revoked, revokeError };
+  }
+
+  /**
+   * Revoke a connection's grant at its provider. Best-effort and never
+   * throws: the caller removes or wipes the row locally whatever this
+   * answers. In order, the first that applies:
+   *
+   *  1. a rotation provider that can revoke the key it minted;
+   *  2. the connector's declared `revoke` probe;
+   *  3. RFC 7009 token revocation, when the OAuth method the connection
+   *     was made with declares a `revocationUrl` -- the refresh token
+   *     first (which, per the RFC, also ends the access tokens it
+   *     issued), then the access token.
+   *
+   * `attempted: false` means the provider offers no way to revoke.
+   */
+  async revokeAtProvider(
+    row: Pick<Credential, 'id' | 'organizationId' | 'name' | 'connectorKey' | 'metadata' | 'config'>,
+    actorUserId?: string,
+  ): Promise<ProviderRevokeOutcome> {
+    try {
+      if (!row.connectorKey) return { attempted: false, revoked: false };
+      const secrets = await this.decryptConfig(row as Credential);
+      if (this.rotation) {
+        const outcome = await this.rotation.revoke(
+          { id: row.id, organizationId: row.organizationId, connectorKey: row.connectorKey, name: row.name, secrets },
+          { userId: actorUserId },
+        );
+        if (outcome.supported) return { attempted: true, revoked: outcome.revoked, via: 'rotation', error: outcome.error };
+      }
+      const connector = await this.catalog.find(row.organizationId, row.connectorKey);
+      if (connector?.revoke) {
+        const outcome = await this.validation.revoke(connector, secrets);
+        return { attempted: true, revoked: outcome.ok, via: 'connector', error: outcome.error };
+      }
+      const methodType = row.metadata?.connectMethod as ConnectMethodType | undefined;
+      const method = connector && methodType ? connector.connect.find((m) => m.type === methodType) : undefined;
+      if (connector && method?.oauth?.revocationUrl) {
+        const outcome = await this.revokeOAuthTokens(connector, method, secrets);
+        return { attempted: true, revoked: outcome.ok, via: 'oauth2', error: outcome.error };
+      }
+      return { attempted: false, revoked: false };
+    } catch (err: any) {
+      return { attempted: true, revoked: false, error: String(err?.message ?? err) };
+    }
+  }
+
+  /** RFC 7009: POST each token to the revocation endpoint, authenticated as at the token endpoint. */
+  private async revokeOAuthTokens(
+    connector: ConnectorDefinition,
+    method: ConnectMethod,
+    secrets: Record<string, any>,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const oauth = method.oauth!;
+    const url = interpolate(oauth.revocationUrl!, splitSecrets(secrets, method.schema).plain);
+    const urlCheck = validateUrl(url);
+    if (!urlCheck.valid) return { ok: false, error: `revocation URL refused: ${urlCheck.error}` };
+
+    const accessField = method.secretField ?? (method.credentialType === CredentialType.OAUTH2 ? 'accessToken' : 'apiKey');
+    const tokens: Array<[string, 'refresh_token' | 'access_token']> = [];
+    if (typeof secrets.refreshToken === 'string' && secrets.refreshToken) tokens.push([secrets.refreshToken, 'refresh_token']);
+    if (typeof secrets[accessField] === 'string' && secrets[accessField]) tokens.push([secrets[accessField], 'access_token']);
+    if (tokens.length === 0) return { ok: false, error: 'the connection holds no token to revoke' };
+
+    const client = oauth.clientId === 'platform' ? this.platformClient(connector.key) : null;
+    const errors: string[] = [];
+    for (const [token, hint] of tokens) {
+      const fields: Record<string, string> = { token, token_type_hint: hint };
+      if (client) {
+        fields.client_id = client.clientId;
+        fields.client_secret = client.clientSecret;
+      }
+      try {
+        const res = await this.validation.request(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+          body: new URLSearchParams(fields).toString(),
+        });
+        // 200 whether or not the token was still valid (RFC 7009 2.2).
+        if (!res.ok) errors.push(`${hint}: HTTP ${res.status}`);
+      } catch (e: any) {
+        errors.push(`${hint}: ${e?.message ?? e}`);
+      }
+    }
+    return errors.length ? { ok: false, error: errors.join('; ') } : { ok: true };
   }
 
   // ------------------------------------------------------------------

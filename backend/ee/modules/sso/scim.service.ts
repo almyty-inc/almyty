@@ -4,6 +4,8 @@ import {
   ConflictException,
   BadRequestException,
   Optional,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { NotificationsService } from '../../../src/modules/notifications/notifications.service';
@@ -18,6 +20,7 @@ import {
 } from '../../../src/entities/user-organization.entity';
 import { Team } from '../../../src/entities/team.entity';
 import { UserTeam, TeamRole } from '../../../src/entities/user-team.entity';
+import { ConnectionOffboardingService } from '../../../src/modules/connections/connection-offboarding.service';
 import { SsoConfigService, provisioningRole } from './sso-config.service';
 import { isEffectiveMembership } from '../../../src/common/authorization/membership';
 
@@ -75,6 +78,11 @@ export class ScimService {
     // dependency direction; @Optional() keeps existing tests working.
     @Optional()
     private readonly notifications?: NotificationsService,
+    // Not @Optional(): Nest must inject it (deprovisioning refuses to run
+    // without it). Typed optional only so specs that build this service
+    // positionally and never deprovision still compile.
+    @Inject(forwardRef(() => ConnectionOffboardingService))
+    private readonly connectionOffboarding?: ConnectionOffboardingService,
   ) {}
 
   // ── Users ─────────────────────────────────────────────────────────
@@ -194,6 +202,7 @@ export class ScimService {
     }
     if (input.active !== undefined) {
       membership.isActive = input.active;
+      if (wasActive && !membership.isActive) await this.offboardConnections(orgId, userId);
       await this.membershipRepo.save(membership);
     }
     if (wasActive && !membership.isActive) this.notifyDeprovision(orgId, user);
@@ -243,6 +252,7 @@ export class ScimService {
       }
     }
     if (profileTouched) await this.userRepo.save(user);
+    if (wasActive && !membership.isActive) await this.offboardConnections(orgId, userId);
     await this.membershipRepo.save(membership);
     if (wasActive && !membership.isActive) this.notifyDeprovision(orgId, user);
     return this.toScimUser(user, membership);
@@ -252,9 +262,33 @@ export class ScimService {
   async deleteUser(orgId: string, userId: string) {
     const { user, membership } = await this.loadMember(orgId, userId);
     const wasActive = membership.isActive;
+    if (wasActive) await this.offboardConnections(orgId, userId);
     membership.isActive = false;
     await this.membershipRepo.save(membership);
     if (wasActive) this.notifyDeprovision(orgId, user);
+  }
+
+  /**
+   * A deprovisioned member's own connections (Personal and Private) go
+   * the way a removed member's do: wiped here, then revoked at the
+   * provider (ConnectionOffboardingService). The IdP deactivating
+   * someone is the organization saying they left; their accounts at
+   * third parties must not keep working on its behalf.
+   *
+   * Runs before the membership is saved inactive, so a failure leaves the
+   * member active and the IdP's retry does it all again, rather than
+   * leaving an inactive member whose connections still work.
+   */
+  private async offboardConnections(orgId: string, userId: string): Promise<void> {
+    if (!this.connectionOffboarding) {
+      throw new Error('ConnectionOffboardingService is not wired into ScimService');
+    }
+    await this.connectionOffboarding.offboard({
+      organizationId: orgId,
+      userId,
+      actorUserId: null,
+      reason: 'scim_deprovisioned',
+    });
   }
 
   /**
