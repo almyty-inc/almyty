@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { unlimitedToolQuotaManager } from '../../test/tool-quota.fake';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ToolsService, CreateToolDto, UpdateToolDto, ToolSearchFilters } from './tools.service';
 import { ToolsOperationHelper } from './tools-operation.helper';
@@ -124,6 +125,7 @@ describe('ToolsService', () => {
 
   beforeEach(async () => {
     toolRepo = {
+      manager: unlimitedToolQuotaManager(),
       create: jest.fn(),
       save: jest.fn(),
       findOne: jest.fn(),
@@ -300,13 +302,19 @@ describe('ToolsService', () => {
     });
 
     it('should throw BadRequestException when organization has reached tool limit', async () => {
-      const org = makeOrganization({ settings: { maxTools: 1 }, tools: [makeTool()] as any });
+      // Loaded the way production loads it: no `tools` relation. The
+      // limit is read from settings and compared against a COUNT.
+      const org = makeOrganization({ settings: { maxTools: 1 } });
       const user = makeUser();
 
       organizationRepo.findOne.mockResolvedValue(org);
       userRepo.findOne.mockResolvedValue(user);
+      toolRepo.manager = {
+        getRepository: () => ({ findOne: jest.fn().mockResolvedValue(org), count: jest.fn().mockResolvedValue(1) }),
+      };
 
-      await expect(service.createTool(dto, 'org-1', 'user-1')).rejects.toThrow(BadRequestException);
+      await expect(service.createTool(dto, 'org-1', 'user-1')).rejects.toThrow('Organization has reached tool limit');
+      expect(toolRepo.save).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when some category IDs are not found', async () => {

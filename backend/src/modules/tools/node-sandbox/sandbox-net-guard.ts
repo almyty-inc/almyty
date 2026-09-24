@@ -6,8 +6,8 @@
  * loading — but its `--allow-net` flag is all-or-nothing. There's
  * no `--allow-net=<host>` or `--deny-net=<cidr>` primitive. That's
  * what this module provides: a set of monkey-patches applied to
- * `dns.lookup`, `net.Socket.prototype.connect`, and `dgram`
- * **before any user code runs**, so every outbound connection
+ * `dns.lookup`, the c-ares resolvers, `net.Socket.prototype.connect`,
+ * and `dgram` **before any user code runs**, so every outbound connection
  * attempt — regardless of whether it originates from direct user
  * code, an installed npm dependency, or a transitive require —
  * flows through one choke point that can refuse it.
@@ -252,7 +252,8 @@ let locked = false;
 
 /**
  * Install the monkey-patches on `net.Socket.prototype.connect`,
- * `dns.lookup`, `dns.promises.lookup`, and `dgram.createSocket`.
+ * `dns.lookup`, `dns.promises.lookup`, the c-ares resolvers (server
+ * changes and answers, see patchDnsResolvers), and `dgram`.
  *
  * Idempotent: calling this more than once is a no-op. Must be
  * called from the sandbox worker bootstrap BEFORE any user code
@@ -276,6 +277,7 @@ export function installSandboxNetGuard(options: NetGuardOptions = {}): void {
   }
 
   patchDnsLookup();
+  patchDnsResolvers();
   patchSocketConnect();
   patchDgram();
 }
@@ -396,6 +398,167 @@ function patchDnsLookup(): void {
     }
     return result;
   };
+}
+
+// ── c-ares resolver patches ─────────────────────────────────────
+
+/**
+ * `dns.lookup` is getaddrinfo. Everything else in `dns` -- `resolve4`,
+ * `resolve6`, `resolve`, `resolveAny` and the rest, on the module, on
+ * `dns.promises`, and on any `new dns.Resolver()` -- is c-ares, which the
+ * lookup patch above never sees. Two things went round the guard that
+ * way:
+ *
+ *   1. `setServers`. c-ares opens its own UDP and TCP sockets in C, so
+ *      neither the dgram patch nor the Socket#connect patch sees them.
+ *      Pointing a resolver at `10.0.0.5:6379` and resolving an
+ *      attacker-chosen name was a packet channel to any internal
+ *      host:port.
+ *   2. The answers. A resolver hands back internal addresses the lookup
+ *      patch would have refused.
+ *
+ * (1) is closed at the one place every server change goes through: the
+ * native `ChannelWrap.prototype.setServers`, which `Resolver#setServers`,
+ * `dns.setServers` and `dns.promises.setServers` all end in. Patching the
+ * JS-level `setServers` instead would leave `resolver._handle.setServers`
+ * as a way round it. A server is accepted if it is one the host was
+ * already configured with when the guard was installed (those are
+ * usually private -- a VPC resolver, kube-dns, systemd-resolved -- and
+ * asking them is exactly what `dns.lookup` does anyway), a public
+ * address, or a test-harness allow-list entry.
+ *
+ * (2) is closed by wrapping every query method on both Resolver
+ * prototypes and on both module objects, and refusing an answer that
+ * contains a banned address. That half is defence in depth: a banned
+ * address learned from DNS still cannot be connected to, because
+ * Socket#connect refuses the literal.
+ */
+
+type ServerEntry = [number, string, number];
+
+/** `ip:port` for every resolver the host had when the guard went in. */
+let systemDnsServers: Set<string> = new Set();
+
+function dnsServerKey(ip: string, port: number): string {
+  return `${String(ip).toLowerCase()}:${port}`;
+}
+
+function isAllowedDnsServer(ip: string, port: number): boolean {
+  if (systemDnsServers.has(dnsServerKey(ip, port))) return true;
+  if (isAllowedTestTarget(ip, port)) return true;
+  if (!net.isIP(ip)) return false;
+  return !isBannedAddress(ip);
+}
+
+/** The first banned address in a resolver answer, or null. */
+function bannedAddressInAnswer(result: unknown): string | null {
+  const items = Array.isArray(result) ? result : [result];
+  for (const item of items) {
+    const address =
+      typeof item === 'string'
+        ? item
+        : item && typeof item === 'object'
+          ? (item as { address?: unknown }).address
+          : undefined;
+    if (typeof address === 'string' && net.isIP(address) && isBannedAddress(address)) {
+      return address;
+    }
+  }
+  return null;
+}
+
+/**
+ * Wrap one query method. Handles both the callback form (last argument
+ * is a function) and the promise form. The caller's callback is invoked
+ * without a receiver: the original calls it with `this` set to the
+ * native QueryReqWrap, which would hand user code the request class.
+ */
+function wrapResolverQuery(orig: (...a: any[]) => any): (...a: any[]) => any {
+  return function patchedResolverQuery(this: unknown, ...args: any[]): any {
+    const name = String(args[0]);
+    const lowered = name.toLowerCase();
+    const last = args.length - 1;
+    const cb = last >= 0 && typeof args[last] === 'function' ? args[last] : null;
+    const answerExempt = isAllowedTestTarget(name, 0) || isAllowedTestTarget(name, -1);
+
+    if (BANNED_HOSTNAMES.has(lowered) && !allowedTestTargets.has(`${lowered}:*`)) {
+      const err = refusal(name, 'banned hostname');
+      if (cb) {
+        process.nextTick(() => cb(err));
+        return undefined;
+      }
+      return Promise.reject(err);
+    }
+
+    if (cb) {
+      args[last] = (err: any, result: any, ...rest: any[]) => {
+        if (err) return cb(err);
+        const hit = answerExempt ? null : bannedAddressInAnswer(result);
+        if (hit) return cb(refusal(`${name} (resolved ${hit})`, 'banned IP'));
+        return cb(null, result, ...rest);
+      };
+      return orig.apply(this, args);
+    }
+
+    const out = orig.apply(this, args);
+    if (out && typeof out.then === 'function') {
+      return out.then((result: any) => {
+        const hit = answerExempt ? null : bannedAddressInAnswer(result);
+        if (hit) throw refusal(`${name} (resolved ${hit})`, 'banned IP');
+        return result;
+      });
+    }
+    return out;
+  };
+}
+
+const RESOLVER_QUERY_METHOD = /^(resolve|reverse)/;
+
+function wrapQueryMethodsOn(target: any): void {
+  for (const key of Object.getOwnPropertyNames(target)) {
+    if (!RESOLVER_QUERY_METHOD.test(key)) continue;
+    const orig = target[key];
+    if (typeof orig !== 'function') continue;
+    target[key] = wrapResolverQuery(orig);
+  }
+}
+
+function patchDnsResolvers(): void {
+  const probe = new dns.Resolver();
+  const channelProto = Object.getPrototypeOf(probe._handle);
+
+  systemDnsServers = new Set(
+    (probe._handle.getServers() || []).map(([ip, port]: [string, number]) =>
+      dnsServerKey(ip, port),
+    ),
+  );
+
+  const origSetServers = channelProto.setServers;
+  channelProto.setServers = function patchedChannelSetServers(
+    this: unknown,
+    servers: ServerEntry[],
+    ...rest: any[]
+  ): any {
+    for (const entry of Array.isArray(servers) ? servers : []) {
+      const ip = Array.isArray(entry) ? entry[1] : undefined;
+      const port = Array.isArray(entry) ? entry[2] : undefined;
+      if (typeof ip !== 'string' || typeof port !== 'number' || !isAllowedDnsServer(ip, port)) {
+        throw refusal(`DNS server ${ip}:${port}`, 'not an allowed resolver');
+      }
+    }
+    return origSetServers.call(this, servers, ...rest);
+  };
+
+  // The prototypes the `new dns.Resolver()` / `new dns.promises.Resolver()`
+  // instances use. The query methods are own properties of each.
+  wrapQueryMethodsOn(dns.Resolver.prototype);
+  wrapQueryMethodsOn(dns.promises.Resolver.prototype);
+  // The module-level functions were bound to the ORIGINAL prototype
+  // methods when `dns` loaded, so they are separate objects to wrap. (A
+  // later `dns.setServers` re-binds them from the prototypes above, which
+  // are wrapped by then.)
+  wrapQueryMethodsOn(dns);
+  wrapQueryMethodsOn(dns.promises);
 }
 
 // ── net.Socket.prototype.connect patch ──────────────────────────
