@@ -10,8 +10,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * temporary agent's parent run is known and has one, null everywhere
  * else. Both columns are varchar, so no cast can fail on a stray value.
  */
-export class AgentOwnerNotSystem1750811100000 implements MigrationInterface {
-  name = 'AgentOwnerNotSystem1750811100000';
+export class AgentOwnerNotSystem1750812100000 implements MigrationInterface {
+  name = 'AgentOwnerNotSystem1750812100000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

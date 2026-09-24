@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 
-import { AgentOwnerNotSystem1750811100000 } from '../../migrations/1750811100000-AgentOwnerNotSystem';
+import { AgentOwnerNotSystem1750812100000 } from '../../migrations/1750812100000-AgentOwnerNotSystem';
 
 /**
  * The migration that takes the 'system' sentinel out of agents."createdBy",
@@ -63,7 +63,7 @@ describeOrSkip('agent owner migration (real Postgres)', () => {
       [memberRun, visitorRun, OTHER],
     );
 
-    const migration = new AgentOwnerNotSystem1750811100000();
+    const migration = new AgentOwnerNotSystem1750812100000();
     const runner = { query: (sql: string) => db.query(sql) } as any;
     await migration.up(runner);
     // Idempotent: a second run changes nothing.

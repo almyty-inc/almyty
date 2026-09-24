@@ -27,7 +27,13 @@ describe('create_agent records a real owner', () => {
         'create_agent',
         { name: 'Researcher', instructions: 'Find sources' },
         { id: 'run-1', organizationId: 'org-1', agentId: 'agent-parent', ...run } as any,
-        { id: 'agent-parent', name: 'Planner', modelConfig: { model: 'm' } } as any,
+        {
+          id: 'agent-parent',
+          name: 'Planner',
+          modelConfig: { model: 'm' },
+          agentConfig: { canCreateAgents: true },
+          toolIds: [],
+        } as any,
       );
     return { agents, create };
   }
