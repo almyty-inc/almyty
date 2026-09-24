@@ -346,6 +346,12 @@ jobs:
         working-directory: backend
         run: npx tsc --noEmit
 
+      # Errors fail the PR (unused imports and variables are the enforced
+      # rule); the two warning-level rules are reported but do not.
+      - name: ESLint
+        working-directory: backend
+        run: npm run lint
+
       # The EE overlay (backend/ee + tsconfig.ee.json) is not covered by
       # the plain tsc run above, so a broken overlay used to surface
       # only at deploy time. Compile it here so it fails CI instead.
@@ -397,6 +403,12 @@ jobs:
       - name: tsc --noEmit && vite build
         working-directory: frontend
         run: npm run build
+
+      # ESLint with --max-warnings 0: unused imports and variables and the
+      # react-hooks rules the config keeps on fail the PR.
+      - name: ESLint
+        working-directory: frontend
+        run: npm run lint
 
   # ─── Dependency vulnerability scan (npm audit) ───────────────
   # Fails the PR if npm audit finds a high- or critical-severity
