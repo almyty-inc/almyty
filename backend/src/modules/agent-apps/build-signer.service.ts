@@ -111,7 +111,7 @@ export class BuildSignerService {
 
       return kind === 'apple'
         ? await this.signApple(identity, params, certificatePath, passwordPath, bundleId)
-        : await this.signAuthenticode(identity, params, certificatePath);
+        : await this.signAuthenticode(params, certificatePath, passwordPath);
     } finally {
       // Before the scratch directory is removed rather than relying on
       // it, so a failure to clean up the directory does not leave a
@@ -215,21 +215,16 @@ export class BuildSignerService {
   }
 
   private async signAuthenticode(
-    identity: { certificatePassword: string },
     params: { artifactPath: string; workDir: string; runner: ToolchainRunner },
     certificatePath: string,
+    passwordPath: string,
   ): Promise<SigningOutcome> {
     const tool = SIGNING_TOOL.authenticode!;
     const outputPath = `${params.artifactPath}.signed`;
 
     const result = await params.runner.run(
       tool,
-      authenticodeSignArgs(
-        params.artifactPath,
-        certificatePath,
-        identity.certificatePassword,
-        outputPath,
-      ),
+      authenticodeSignArgs(params.artifactPath, certificatePath, passwordPath, outputPath),
       { cwd: params.workDir },
     );
 

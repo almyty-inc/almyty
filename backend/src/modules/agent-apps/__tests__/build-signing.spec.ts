@@ -146,22 +146,24 @@ describe('signing arguments', () => {
   it('timestamps an Authenticode signature', () => {
     // An untimestamped signature stops verifying when the certificate
     // expires, which breaks every copy already shipped.
-    const args = authenticodeSignArgs('/w/app.exe', '/w/c.pfx', 'pw', '/w/out.exe');
+    const args = authenticodeSignArgs('/w/app.exe', '/w/c.pfx', '/w/pw', '/w/out.exe');
     expect(args).toContain('-t');
     expect(args.join(' ')).toContain('timestamp');
   });
 
   it('writes the signed Windows binary to a separate path', () => {
     // osslsigncode refuses to sign in place.
-    const args = authenticodeSignArgs('/w/app.exe', '/w/c.pfx', 'pw', '/w/out.exe');
+    const args = authenticodeSignArgs('/w/app.exe', '/w/c.pfx', '/w/pw', '/w/out.exe');
     expect(args[args.indexOf('-in') + 1]).toBe('/w/app.exe');
     expect(args[args.indexOf('-out') + 1]).toBe('/w/out.exe');
   });
 
   it('passes every argument separately, so a path can never be parsed as a flag', () => {
-    const args = authenticodeSignArgs('/w/my app.exe', '/w/c.pfx', 'p w', '/w/o.exe');
+    const args = authenticodeSignArgs('/w/my app.exe', '/w/c.pfx', '/w/pass file', '/w/o.exe');
     expect(args).toContain('/w/my app.exe');
-    expect(args).toContain('p w');
+    expect(args[args.indexOf('-readpass') + 1]).toBe('/w/pass file');
+    // The password itself is read from that file, never passed as -pass.
+    expect(args).not.toContain('-pass');
   });
 });
 
