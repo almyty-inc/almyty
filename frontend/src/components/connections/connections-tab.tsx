@@ -8,7 +8,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { ExternalLink, Plug, Plus, Search, User, Users } from 'lucide-react'
+import { ExternalLink, Lock, Plug, Plus, Search, User, Users } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -265,7 +265,9 @@ export function ConnectorCard({ connector, connections }: ConnectorCardProps) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="truncate font-medium">{c.name}</span>
-                      {c.owner === 'user' ? (
+                      {c.owner === 'private' ? (
+                        <Badge variant="outline" className="gap-1 text-[10px]"><Lock className="h-3 w-3" aria-hidden="true" /> private</Badge>
+                      ) : c.owner === 'user' ? (
                         <Badge variant="outline" className="gap-1 text-[10px]"><User className="h-3 w-3" aria-hidden="true" /> personal</Badge>
                       ) : (
                         <Badge variant="outline" className="gap-1 text-[10px]"><Users className="h-3 w-3" aria-hidden="true" /> org</Badge>

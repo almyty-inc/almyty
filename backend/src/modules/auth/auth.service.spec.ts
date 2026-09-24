@@ -17,9 +17,7 @@ import { AuditAction } from '../../entities/audit-log.entity';
 import { MailService } from '../mail/mail.service';
 import { ReferralsService } from '../referrals/referrals.service';
 import { CaptchaService } from './captcha.service';
-
-// Unmock bcrypt from global setup to test actual hashing
-jest.unmock('bcryptjs');
+import { realJwtService, signExpiredTestJwt, signTestJwt } from '../../test/jwt';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -862,62 +860,84 @@ describe('AuthService', () => {
   });
 
   describe('refreshToken', () => {
+    // Real signing and verification: the tokens below are minted with the
+    // test secret and the service verifies them with a real JwtService, so a
+    // forged, expired or wrong-type token is rejected by the library rather
+    // than by a stubbed verify.
+    beforeEach(() => {
+      (service as any).jwtService = realJwtService();
+    });
+
     it('should refresh token successfully', async () => {
-      const mockPayload = { sub: 'user-1', type: 'refresh' };
       const mockUser = {
         id: 'user-1',
         email: 'test@example.com',
         isActive: true,
         organizationMemberships: [],
       } as any;
-
-      jwtService.verify.mockReturnValue(mockPayload);
       userRepository.findOne.mockResolvedValue(mockUser);
-      jwtService.sign.mockReturnValueOnce('new-access-token').mockReturnValueOnce('new-refresh-token');
 
-      const result = await service.refreshToken('valid-refresh-token');
+      const result = await service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh' }));
 
-      expect(result.accessToken).toBe('new-access-token');
-      expect(result.refreshToken).toBe('new-refresh-token');
+      const jwt = realJwtService();
+      expect(jwt.verify(result.accessToken)).toEqual(expect.objectContaining({ sub: 'user-1' }));
+      expect(jwt.verify(result.refreshToken)).toEqual(
+        expect.objectContaining({ sub: 'user-1', type: 'refresh', tv: 0 }),
+      );
     });
 
     it('should throw error for invalid token type', async () => {
-      const mockPayload = { sub: 'user-1', type: 'access' };
-      jwtService.verify.mockReturnValue(mockPayload);
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'access' })),
+      ).rejects.toThrow(UnauthorizedException);
+    });
 
-      await expect(service.refreshToken('invalid-token')).rejects.toThrow(UnauthorizedException);
+    it('rejects a refresh token signed with another secret', async () => {
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', isActive: true, organizationMemberships: [] } as any);
+
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh' }, { secret: 'forged' })),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(userRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('rejects an expired refresh token', async () => {
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', isActive: true, organizationMemberships: [] } as any);
+
+      await expect(
+        service.refreshToken(signExpiredTestJwt({ sub: 'user-1', type: 'refresh' })),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(userRepository.findOne).not.toHaveBeenCalled();
     });
 
     it('should throw error for inactive user', async () => {
-      const mockPayload = { sub: 'user-1', type: 'refresh' };
-      const mockUser = { id: 'user-1', isActive: false } as any;
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', isActive: false } as any);
 
-      jwtService.verify.mockReturnValue(mockPayload);
-      userRepository.findOne.mockResolvedValue(mockUser);
-
-      await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh' })),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw error if user not found', async () => {
-      const mockPayload = { sub: 'user-1', type: 'refresh' };
-      jwtService.verify.mockReturnValue(mockPayload);
       userRepository.findOne.mockResolvedValue(null);
 
-      await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh' })),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should reject a refresh token whose tv is stale (revoked)', async () => {
-      const mockPayload = { sub: 'user-1', type: 'refresh', tv: 0 };
       const mockUser = {
         id: 'user-1',
         isActive: true,
         tokenVersion: 1, // bumped after the token was issued
         organizationMemberships: [],
       } as any;
-      jwtService.verify.mockReturnValue(mockPayload);
       userRepository.findOne.mockResolvedValue(mockUser);
 
-      await expect(service.refreshToken('token')).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.refreshToken(signTestJwt({ sub: 'user-1', type: 'refresh', tv: 0 })),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
@@ -1646,88 +1666,7 @@ describe('AuthService email verification', () => {
   });
 });
 
-  describe('updateProfile email change', () => {
-    const currentUser = () => ({
-      id: 'user-123',
-      email: 'old@gmail.com',
-      normalizedEmail: 'old@gmail.com',
-      firstName: 'Old',
-      lastName: 'Name',
-      isVerified: true,
-      verifiedAt: new Date('2025-01-01'),
-      verificationToken: null,
-      organizationMemberships: [],
-    });
-
-    /**
-     * `normalizedEmail` is the identity key register() dedupes on and
-     * the unique index is built on. Moving `email` and leaving it behind
-     * meant an account could change address without changing identity,
-     * so the alias dedupe stopped describing the row it belonged to.
-     */
-    it('moves normalizedEmail with the address', async () => {
-      const user = currentUser();
-      userRepository.findOne
-        .mockResolvedValueOnce(user as any) // load self
-        .mockResolvedValueOnce(null); // nobody holds the new address
-      userRepository.save.mockImplementation(async (u: any) => u);
-
-      const saved: any = await service.updateProfile('user-123', {
-        email: 'N.e.w+tag@gmail.com',
-      } as any);
-
-      expect(saved.email).toBe('N.e.w+tag@gmail.com');
-      expect(saved.normalizedEmail).toBe('new@gmail.com');
-    });
-
-    /**
-     * A changed address is an UNPROVEN address. Keeping isVerified set
-     * let anyone repoint their account at a mailbox they do not control
-     * and stay "verified" on it -- and verified identity is exactly what
-     * acceptInvite's caller-email check and the referral payout gate
-     * read to decide who somebody is.
-     */
-    it('drops verification so the new address has to prove itself', async () => {
-      const user = currentUser();
-      userRepository.findOne
-        .mockResolvedValueOnce(user as any)
-        .mockResolvedValueOnce(null);
-      userRepository.save.mockImplementation(async (u: any) => u);
-
-      const saved: any = await service.updateProfile('user-123', {
-        email: 'new@example.com',
-      } as any);
-
-      expect(saved.isVerified).toBe(false);
-      expect(saved.verifiedAt).toBeNull();
-    });
-
-    it('refuses an address already taken under its canonical form', async () => {
-      const user = currentUser();
-      userRepository.findOne
-        .mockResolvedValueOnce(user as any)
-        .mockResolvedValueOnce({ id: 'someone-else' } as any);
-
-      await expect(
-        service.updateProfile('user-123', { email: 'taken@gmail.com' } as any),
-      ).rejects.toThrow(BadRequestException);
-
-      expect(userRepository.save).not.toHaveBeenCalled();
-    });
-
-    it('leaves verification alone when the address is unchanged', async () => {
-      const user = currentUser();
-      userRepository.findOne.mockResolvedValueOnce(user as any);
-      userRepository.save.mockImplementation(async (u: any) => u);
-
-      const saved: any = await service.updateProfile('user-123', {
-        name: 'New Name',
-        email: 'old@gmail.com',
-      } as any);
-
-      expect(saved.isVerified).toBe(true);
-      expect(saved.verifiedAt).not.toBeNull();
-      expect(saved.firstName).toBe('New');
-    });
-  });
+  // Email changes (password, verification reset, both mailboxes told, the
+  // normalizedEmail move and the taken-address refusal) are covered
+  // against a truthful user table in __tests__/email-change-requires-reauth.spec.ts.
 });

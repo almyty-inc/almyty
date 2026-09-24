@@ -81,6 +81,7 @@ import { GatewayAuthValidators } from '../modules/gateways/gateway-auth-validato
 import { GatewaysStatsHelper } from '../modules/gateways/gateways-stats.helper';
 import { GatewayInitHelper } from '../modules/gateways/gateway-init.helper';
 import { AccessPolicyService } from '../common/authorization/access-policy.service';
+import { ExecutionAccessService } from '../common/authorization/execution-access.service';
 import { McpService } from '../modules/mcp/mcp.service';
 import { AlmytyMcpService } from '../modules/mcp/almyty-mcp.service';
 import { McpSessionService } from '../modules/mcp/mcp-session.service';
@@ -93,6 +94,8 @@ import { OrganizationsService } from '../modules/organizations/organizations.ser
 import { OrganizationsInvitesHelper } from '../modules/organizations/organizations-invites.helper';
 import { TeamMembershipHelper } from '../modules/organizations/team-membership.helper';
 import { ResourceHandoverHelper } from '../modules/organizations/resource-handover.helper';
+import { ConnectionOffboardingService } from '../modules/connections/connection-offboarding.service';
+import { ConnectionsService } from '../modules/connections/connections.service';
 import { RunnerService } from '../modules/runner/runner.service';
 
 // Audit
@@ -120,6 +123,7 @@ import { ApisService } from '../modules/apis/apis.service';
 import { ToolsService } from '../modules/tools/tools.service';
 import { AgentsService } from '../modules/agents/agents.service';
 import { LlmProvidersService } from '../modules/llm-providers/llm-providers.service';
+import { DEV_ONLY_JWT_SECRET } from '../modules/auth/dev-jwt-secret';
 
 // Mock Redis
 const mockRedis = {
@@ -210,7 +214,7 @@ const mockRedis = {
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get('JWT_SECRET', 'test-jwt-secret'),
+        secret: config.get('JWT_SECRET', DEV_ONLY_JWT_SECRET),
         signOptions: { expiresIn: '1h', issuer: 'almyty', audience: 'almyty-api' },
         verifyOptions: { issuer: 'almyty', audience: 'almyty-api' },
       }),
@@ -248,6 +252,8 @@ const mockRedis = {
     GatewaysStatsHelper,
     GatewayInitHelper,
     AccessPolicyService,
+    // Who may run what (AuthorizationModule in the real app).
+    ExecutionAccessService,
     AlmytyMcpService,
     McpSessionService,
 
@@ -268,6 +274,9 @@ const mockRedis = {
     OrganizationsInvitesHelper,
     TeamMembershipHelper,
     ResourceHandoverHelper,
+    // The real wipe; no provider is contacted from these tests.
+    ConnectionOffboardingService,
+    { provide: ConnectionsService, useValue: { revokeAtProvider: async () => ({ attempted: false, revoked: false }) } },
     // Only the member-offboarding runner delete reaches it here.
     { provide: RunnerService, useValue: { deleteForDepartedOwner: async () => {} } },
 

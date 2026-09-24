@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -55,6 +57,7 @@ describe('a cancelled run is recorded as cancelled, not as a pipeline failure', 
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         AgentExecutionEngine,
         AgentExecutionCancellationService,
         AgentExecutionStateHelper,

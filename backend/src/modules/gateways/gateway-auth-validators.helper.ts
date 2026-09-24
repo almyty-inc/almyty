@@ -155,7 +155,8 @@ export class GatewayAuthValidators {
       relations: { user: { organizationMemberships: true } },
     });
 
-    if (!apiKeyRecord) {
+    const ownerMembership = apiKeyRecord ? this.keyOwnerMembership(apiKeyRecord) : undefined;
+    if (!apiKeyRecord || !ownerMembership) {
       return {
         isValid: false,
         error: 'Invalid API key',
@@ -180,7 +181,7 @@ export class GatewayAuthValidators {
       userId: apiKeyRecord.userId,
       user: apiKeyRecord.user,
       scopes: apiKeyRecord.scopes,
-      roles: apiKeyRecord.user?.organizationMemberships?.map(m => m.role) || [],
+      roles: [ownerMembership.role],
       organizationId: apiKeyRecord.organizationId,
       metadata: {
         keyId: apiKeyRecord.id,
@@ -230,7 +231,8 @@ export class GatewayAuthValidators {
       relations: { user: { organizationMemberships: true } },
     });
 
-    if (!apiKeyRecord) {
+    const ownerMembership = apiKeyRecord ? this.keyOwnerMembership(apiKeyRecord) : undefined;
+    if (!apiKeyRecord || !ownerMembership) {
       return {
         isValid: false,
         error: 'Invalid bearer token',
@@ -251,9 +253,25 @@ export class GatewayAuthValidators {
       userId: apiKeyRecord.userId,
       user: apiKeyRecord.user,
       scopes: apiKeyRecord.scopes,
-      roles: apiKeyRecord.user?.organizationMemberships?.map(m => m.role) || [],
+      roles: [ownerMembership.role],
       organizationId: apiKeyRecord.organizationId,
     };
+  }
+
+  /**
+   * The owner's membership that still justifies a key, or undefined.
+   *
+   * A key is minted by a user and acts as that user; the platform
+   * ApiKeyStrategy refuses one whose owner is no longer an effective
+   * member of the key's org. Without the same check here, removing a
+   * member (or deactivating the account) left every gateway key they had
+   * minted working. The role reported is the one in THIS org, not every
+   * role the owner holds anywhere.
+   */
+  private keyOwnerMembership(apiKeyRecord: ApiKey) {
+    const owner = apiKeyRecord.user;
+    if (!owner || owner.isActive === false) return undefined;
+    return findEffectiveMembership(owner.organizationMemberships, apiKeyRecord.organizationId);
   }
 
   async validateBasicAuth(
@@ -498,6 +516,26 @@ export class GatewayAuthValidators {
           isValid: false,
           error: 'OAuth2 token not bound to this gateway',
           errorCode: 'OAUTH2_TOKEN_WRONG_GATEWAY',
+        };
+      }
+
+      // The token is a member's delegation and ends with the membership.
+      // Removing a member leaves the tokens they authorized in place, so
+      // the holder is checked here the way the Basic and JWT validators
+      // beside this one check theirs: an active user with an effective
+      // membership in the gateway's organization, or no access. A token
+      // naming no user is nobody's delegation and is refused too.
+      const holder = oauthToken.userId
+        ? await this.userRepository.findOne({
+            where: { id: oauthToken.userId },
+            relations: { organizationMemberships: true },
+          })
+        : null;
+      if (!holder || !holder.isActive || !hasEffectiveMembership(holder.organizationMemberships, gatewayOrgId)) {
+        return {
+          isValid: false,
+          error: 'OAuth2 token holder is not a member of this organization',
+          errorCode: 'OAUTH2_TOKEN_HOLDER_NOT_MEMBER',
         };
       }
 

@@ -1,12 +1,18 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, IsNull, Not } from 'typeorm';
+
+import { Agent } from '../../entities/agent.entity';
+import { isOthersPrivate } from '../../common/authorization/private-visibility';
+import { resourceOwnerId } from '../../common/authorization/access-policy.service';
 
 import {
   SpendBudget, SpendBudgetBehavior, SpendBudgetPeriod,
 } from '../../entities/spend-budget.entity';
 import { SpendAlert, SpendAlertLevel } from '../../entities/spend-alert.entity';
 import { UserOrganization, OrganizationRole } from '../../entities/user-organization.entity';
+import { UserTeam } from '../../entities/user-team.entity';
+import { isEffectiveMembership } from '../../common/authorization/membership';
 import { User } from '../../entities/user.entity';
 import { MailService } from '../mail/mail.service';
 import { renderEmailTemplate } from '../mail/email-templates';
@@ -50,29 +56,59 @@ export class BudgetsService {
     private readonly userRepo: Repository<User>,
     private readonly spend: SpendService,
     private readonly mail: MailService,
-    // @Global notifications pipeline; @Optional() and appended last so
-    // the existing spec (positional construction) keeps working.
+    // @Global notifications pipeline; @Optional() so a module without it
+    // still boots.
     @Optional()
-    private readonly notifications?: NotificationsService,
+    private readonly notifications: NotificationsService | undefined,
+    // Agent visibility: a budget or breach on another member's private
+    // agent is hidden from the caller, and notifies only that agent's owner.
+    @InjectRepository(Agent)
+    private readonly agentRepo: Repository<Agent>,
+    // Team agents: a budget on one is visible to that team and the org's
+    // owners/admins only.
+    @InjectRepository(UserTeam)
+    private readonly userTeamRepo: Repository<UserTeam>,
   ) {}
 
   // ── CRUD (T2.4) ──────────────────────────────────────────────────
+  //
+  // `viewerId` is the calling user. A budget scoped to an agent the caller
+  // may not see (another member's private agent, or a team agent outside
+  // the caller's teams -- see hiddenAgentIds) answers exactly like a
+  // missing budget: it is not listed, and get/update/delete are 404. The
+  // breach alerts below follow the same rule. Such a budget is still
+  // enforced (enforceForRun): the ceiling was set on the org's spend, and
+  // hiding it must not turn into a way to shed it.
 
-  list(organizationId: string): Promise<SpendBudget[]> {
+  async list(organizationId: string, viewerId: string | null | undefined): Promise<SpendBudget[]> {
+    const hidden = await this.hiddenAgentIds(organizationId, viewerId);
     return this.budgetRepo.find({
-      where: { organizationId },
+      where: this.visibleScope(organizationId, hidden) as any,
       order: { createdAt: 'DESC' },
     });
   }
 
-  async get(id: string, organizationId: string): Promise<SpendBudget> {
+  async get(
+    id: string,
+    organizationId: string,
+    viewerId: string | null | undefined,
+  ): Promise<SpendBudget> {
     const budget = await this.budgetRepo.findOne({ where: { id, organizationId } });
     if (!budget) throw new NotFoundException('Budget not found');
+    if (budget.agentId) {
+      const hidden = await this.hiddenAgentIds(organizationId, viewerId);
+      if (hidden.includes(budget.agentId)) throw new NotFoundException('Budget not found');
+    }
     return budget;
   }
 
-  async create(organizationId: string, dto: CreateBudgetDto): Promise<SpendBudget> {
+  async create(
+    organizationId: string,
+    dto: CreateBudgetDto,
+    viewerId: string | null | undefined,
+  ): Promise<SpendBudget> {
     this.validate(dto, true);
+    if (dto.agentId) await this.assertTargetableAgent(organizationId, dto.agentId, viewerId);
     const budget = this.budgetRepo.create({
       organizationId,
       agentId: dto.agentId ?? null,
@@ -86,9 +122,15 @@ export class BudgetsService {
     return this.budgetRepo.save(budget);
   }
 
-  async update(id: string, organizationId: string, dto: UpdateBudgetDto): Promise<SpendBudget> {
-    const budget = await this.get(id, organizationId);
+  async update(
+    id: string,
+    organizationId: string,
+    dto: UpdateBudgetDto,
+    viewerId: string | null | undefined,
+  ): Promise<SpendBudget> {
+    const budget = await this.get(id, organizationId, viewerId);
     this.validate(dto, false);
+    if (dto.agentId) await this.assertTargetableAgent(organizationId, dto.agentId, viewerId);
     if (dto.agentId !== undefined) budget.agentId = dto.agentId ?? null;
     if (dto.llmProviderId !== undefined) budget.llmProviderId = dto.llmProviderId ?? null;
     if (dto.periodType !== undefined) budget.periodType = dto.periodType;
@@ -99,7 +141,8 @@ export class BudgetsService {
     return this.budgetRepo.save(budget);
   }
 
-  async remove(id: string, organizationId: string): Promise<void> {
+  async remove(id: string, organizationId: string, viewerId: string | null | undefined): Promise<void> {
+    await this.get(id, organizationId, viewerId);
     const res = await this.budgetRepo.delete({ id, organizationId });
     if (!res.affected) throw new NotFoundException('Budget not found');
   }
@@ -136,12 +179,109 @@ export class BudgetsService {
 
   // ── Alerts read-side ─────────────────────────────────────────────
 
-  listAlerts(organizationId: string, limit = 100): Promise<SpendAlert[]> {
+  /**
+   * Recent breaches, without those on another member's private agent:
+   * a breach row carries that agent's id and spend. The filter is in the
+   * query, so `limit` still means "this many rows the caller may see".
+   */
+  async listAlerts(
+    organizationId: string,
+    viewerId: string | null | undefined,
+    limit = 100,
+  ): Promise<SpendAlert[]> {
+    const hidden = await this.hiddenAgentIds(organizationId, viewerId);
     return this.alertRepo.find({
-      where: { organizationId },
+      where: this.visibleScope(organizationId, hidden) as any,
       order: { at: 'DESC' },
       take: Math.min(Math.max(limit, 1), 500),
     });
+  }
+
+  // ── Agent visibility ─────────────────────────────────────────────
+
+  /**
+   * The org's agents `viewerId` may not see, by the same rule as the agent
+   * itself (AccessPolicyService.canAccess, 'read'):
+   *  - a private agent is hidden from everyone but its owner, org
+   *    owners/admins included; one with no recorded owner is nobody's;
+   *  - a team agent is hidden from members outside its team; org
+   *    owners/admins see it; one with no team is hidden from non-admins.
+   * With no known viewer, or a viewer who is not an effective member of
+   * the org, every private and team agent is hidden.
+   *
+   * A budget or breach row names its agent and that agent's spend, so it
+   * is visible exactly when the agent is.
+   */
+  async hiddenAgentIds(
+    organizationId: string,
+    viewerId: string | null | undefined,
+  ): Promise<string[]> {
+    const agents = await this.agentRepo.find({
+      where: [
+        { organizationId, visibility: 'private' },
+        { organizationId, visibility: 'team' },
+      ],
+      select: { id: true, visibility: true, teamId: true, createdBy: true },
+    });
+    if (agents.length === 0) return [];
+
+    const membership = viewerId
+      ? await this.userOrgRepo.findOne({ where: { userId: viewerId, organizationId, isActive: true } })
+      : null;
+    const role = isEffectiveMembership(membership) ? membership!.role : null;
+    const isAdmin = role === OrganizationRole.OWNER || role === OrganizationRole.ADMIN;
+
+    const teamIds = [...new Set(agents.map((a) => a.teamId).filter((t): t is string => !!t))];
+    const myTeams = new Set<string>();
+    if (role && !isAdmin && teamIds.length > 0) {
+      const rows = await this.userTeamRepo.find({
+        where: { userId: viewerId!, teamId: In(teamIds), isActive: true },
+        select: { teamId: true },
+      });
+      for (const row of rows) myTeams.add(row.teamId);
+    }
+
+    return agents
+      .filter((a) => {
+        if (a.visibility === 'private') return isOthersPrivate(a, viewerId);
+        if (!role) return true;
+        if (isAdmin) return false;
+        return !a.teamId || !myTeams.has(a.teamId);
+      })
+      .map((a) => a.id);
+  }
+
+  /**
+   * `where` for budget and alert rows the viewer may see: org-wide rows,
+   * and agent-scoped rows whose agent is not in `hidden`. The IsNull arm
+   * is needed because NOT IN never matches a NULL agentId.
+   */
+  private visibleScope(organizationId: string, hidden: string[]) {
+    if (hidden.length === 0) return { organizationId };
+    return [
+      { organizationId, agentId: IsNull() },
+      { organizationId, agentId: Not(In(hidden)) },
+    ];
+  }
+
+  /**
+   * 404 when `agentId` is not an agent of this org, or is an agent the
+   * caller may not see (another member's private agent, or a team agent
+   * outside the caller's teams). Used before a budget is pointed at an
+   * agent; the answer for a hidden agent is the same as for a missing one.
+   */
+  private async assertTargetableAgent(
+    organizationId: string,
+    agentId: string,
+    viewerId: string | null | undefined,
+  ): Promise<void> {
+    const agent = await this.agentRepo.findOne({
+      where: { id: agentId, organizationId },
+      select: { id: true, visibility: true, createdBy: true },
+    });
+    if (!agent || (await this.hiddenAgentIds(organizationId, viewerId)).includes(agent.id)) {
+      throw new NotFoundException('Agent not found');
+    }
   }
 
   // ── Enforcement (T2.5) ───────────────────────────────────────────
@@ -256,9 +396,9 @@ export class BudgetsService {
     }
   }
 
-  /** Email the org's owners/admins about a threshold breach. */
   /**
-   * Notify the org's owners/admins about a threshold breach: branded
+   * Notify a threshold breach to the recipients resolveRecipients picks
+   * (owners/admins, or a private agent's owner alone): branded
    * email (rendered from the shared budget.alert template) plus an
    * in-app notification row. Triggering logic is unchanged — this
    * fires exactly once per budget/period/level via recordAlert's
@@ -271,7 +411,7 @@ export class BudgetsService {
     level: SpendAlertLevel,
     spentCents: number,
   ): Promise<void> {
-    const recipients = await this.resolveRecipients(budget.organizationId);
+    const recipients = await this.resolveRecipients(budget);
     if (recipients.length === 0) return;
 
     const spent = `$${(spentCents / 100).toFixed(2)}`;
@@ -336,15 +476,37 @@ export class BudgetsService {
     }
   }
 
-  /** Owner/admin recipients for the org (budget-breach notification targets). */
+  /**
+   * Who hears about a breach.
+   *
+   * An org-wide budget, or one on an agent other members can see, goes to
+   * the org's owners/admins. A budget on a private agent goes to that
+   * agent's owner alone: the alert reports the agent's spend, and a "just
+   * me" agent is invisible to admins everywhere else. A private agent with
+   * no recorded owner, or whose owner is no longer an active member,
+   * notifies nobody rather than falling back to the admins.
+   */
   private async resolveRecipients(
-    organizationId: string,
+    budget: SpendBudget,
   ): Promise<Array<{ userId: string; email: string }>> {
+    const { organizationId } = budget;
+    let where: Array<Record<string, unknown>> = [
+      { organizationId, role: OrganizationRole.OWNER, isActive: true },
+      { organizationId, role: OrganizationRole.ADMIN, isActive: true },
+    ];
+    if (budget.agentId) {
+      const agent = await this.agentRepo.findOne({
+        where: { id: budget.agentId, organizationId },
+        select: { id: true, visibility: true, createdBy: true },
+      });
+      if (agent?.visibility === 'private') {
+        const owner = resourceOwnerId(agent);
+        if (!owner) return [];
+        where = [{ organizationId, userId: owner, isActive: true }];
+      }
+    }
     const memberships = await this.userOrgRepo.find({
-      where: [
-        { organizationId, role: OrganizationRole.OWNER, isActive: true },
-        { organizationId, role: OrganizationRole.ADMIN, isActive: true },
-      ],
+      where: where as any,
       select: { userId: true },
     });
     if (memberships.length === 0) return [];

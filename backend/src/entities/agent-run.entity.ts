@@ -5,6 +5,7 @@ import {
 import { Agent } from './agent.entity';
 import { Organization } from './organization.entity';
 import { Conversation } from './conversation.entity';
+import type { ExecutionPrincipal } from '../common/authorization/execution-access.service';
 
 export enum AgentRunStatus {
   PENDING = 'pending',
@@ -55,6 +56,17 @@ export class AgentRun {
    */
   @Column({ type: 'uuid', nullable: true })
   endUserId: string | null;
+
+  /**
+   * Whose scope this run executes in: the user who started it (session,
+   * API key, the agent owner at a schedule tick) or the gateway it came
+   * through. Every nested step -- child runs, tool calls -- is authorized
+   * against this, never against the child resource (see
+   * common/authorization/execution-access.service.ts). Child runs copy
+   * their parent's.
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  principal: ExecutionPrincipal | null;
 
   @Column({ nullable: true })
   conversationId: string;

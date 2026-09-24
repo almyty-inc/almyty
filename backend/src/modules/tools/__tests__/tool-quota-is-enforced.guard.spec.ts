@@ -63,7 +63,6 @@ const KNOWN_CREATION_SITES = [
   join('modules', 'mcp-sources', 'mcp-sources.service.ts'),
   join('modules', 'tool-hub', 'tool-hub.service.ts'),
   join('modules', 'runner', 'runner-capability.publisher.ts'),
-  join('modules', 'memory', 'canonical', 'memory-capability.publisher.ts'),
 ].sort();
 
 const files = walk(SRC).map((f) => ({ rel: relative(SRC, f), src: readFileSync(f, 'utf8') }));
@@ -111,6 +110,23 @@ describe('every Tool insert is behind the tool quota', () => {
     expect(src).toMatch(/\bcapGeneratedDescription\(/);
   });
 
+  it('bulk generation writes its batch whole (writeToolBatch), never row by row', () => {
+    // Row by row, two batches racing for the last slots each landed part
+    // of their operations. The real-Postgres race in
+    // test/integration/quota-race.integration.spec.ts proves the batch
+    // form; this keeps the bulk paths on it.
+    for (const rel of [
+      join('modules', 'apis', 'apis-tool-generator.helper.ts'),
+      join('modules', 'tools', 'tool-generator.service.ts'),
+    ]) {
+      const src = files.find((f) => f.rel === rel)!.src;
+      const generate = src.slice(src.indexOf('async generateToolsFromApi('));
+      const body = generate.slice(0, generate.search(/\n  (?:async |private |logMemoryPhase)/));
+      expect(body).toMatch(/\bwriteToolBatch\(/);
+      expect(body).not.toMatch(/\b(createFromOperation|updateFromOperation|generateToolFromOperation)\(/);
+      expect(body).not.toMatch(/\bwithToolQuota\(/);
+    }
+  });
   it('bulk paths enforce the per-schema cap and cap derived descriptions', () => {
     for (const rel of [
       join('modules', 'tools', 'tool-generator.service.ts'),

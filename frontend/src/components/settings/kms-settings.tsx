@@ -11,6 +11,7 @@ import { UpgradePrompt } from '@/components/plan-indicator'
 import { api } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 /**
  * Customer-managed encryption keys.
@@ -111,6 +112,12 @@ function Kms() {
   const canRotate = !arnLooksWrong && !busy
 
   const { confirm, dialog: confirmDialog } = useConfirm()
+  // A key ARN or region typed in but not attached or rotated asks before a
+  // navigation throws it away. The fields are prefilled from what is stored,
+  // so only a difference from that counts.
+  const guard = useLeaveGuard(
+    !busy && (cmkArn !== (data?.cmkArn || '') || awsRegion !== (data?.awsRegion || '')),
+  )
   return (
     <Card>
       <CardHeader>
@@ -239,6 +246,7 @@ function Kms() {
         )}
       </CardContent>
       {confirmDialog}
+      {guard.element}
     </Card>
   )
 }

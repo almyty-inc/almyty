@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { ConflictException, ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 
 import { Runner, RunnerState, RunnerIsolationTier } from '../../entities/runner.entity';
 import { RunnerSession } from '../../entities/runner-session.entity';
@@ -403,10 +403,16 @@ describe('RunnerService', () => {
     expect(found.id).toBe(runner.id);
   });
 
-  it('getUsable throws Forbidden for a runner in another org', async () => {
-    const runner = await registerAs('org');
-    await expect(service.getUsable(runner.id, ownerUserId, 'other-org'))
-      .rejects.toBeInstanceOf(ForbiddenException);
+  // A runner in another organization answers exactly like one that does
+  // not exist. It used to be a 403 "belongs to a different organization",
+  // which told a caller in any tenant which runner ids are real -- private
+  // runners included, since the org was compared before visibility.
+  it('getUsable answers a runner in another org with the same 404 as an unknown one', async () => {
+    const runner = await registerAs('private');
+    const foreign = await service.getUsable(runner.id, ownerUserId, 'other-org').catch((e) => e);
+    const unknown = await service.getUsable('00000000-0000-4000-8000-000000000000', ownerUserId, organizationId).catch((e) => e);
+    expect(foreign).toBeInstanceOf(NotFoundException);
+    expect(foreign.getResponse()).toEqual(unknown.getResponse());
   });
 
   it('getUsable throws NotFound for an unknown runner', async () => {

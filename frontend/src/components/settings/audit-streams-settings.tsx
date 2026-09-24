@@ -12,6 +12,7 @@ import { UpgradePrompt } from '@/components/plan-indicator'
 import { api } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 /**
  * Stream the audit log to a SIEM.
@@ -90,6 +91,9 @@ function AuditStreams() {
   const canAdd = endpoint.trim().length > 0 && !insecure && !create.isPending
 
   const { confirm, dialog: confirmDialog } = useConfirm()
+  // A target typed in but not added asks before a navigation throws it
+  // away; adding it clears the fields, so a saved one does not.
+  const guard = useLeaveGuard(!create.isPending && (endpoint !== '' || token !== ''))
   return (
     <Card>
       <CardHeader>
@@ -204,6 +208,7 @@ function AuditStreams() {
         </Button>
       </CardContent>
       {confirmDialog}
+      {guard.element}
     </Card>
   )
 }

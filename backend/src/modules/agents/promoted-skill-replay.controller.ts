@@ -9,6 +9,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { PromotedSkillsService } from '../promoted-skills/promoted-skills.service';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
  * Replay a promoted skill by re-running its source agent. Lives in the agents
@@ -50,7 +51,11 @@ export class PromotedSkillReplayController {
       throw new BadRequestException('The source agent no longer exists; cannot replay');
     }
     const input = body?.input ?? skill.inputExample ?? skill.description ?? '';
-    const run = await this.runtime.startRun(skill.agentId, organizationId, userId, input, {});
+    // Replayed as the caller: a skill promoted from a team agent replays
+    // only for that team, like running the agent directly.
+    const run = await this.runtime.startRun(skill.agentId, organizationId, userId, input, {
+      principal: userPrincipal(userId, 'replay'),
+    });
     return { runId: run.id };
   }
 }

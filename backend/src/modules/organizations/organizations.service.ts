@@ -23,6 +23,7 @@ import { CanonicalMemorySoftcapWarning } from '../memory/canonical/canonical-mem
 
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { pickWritableSettings } from './dto/organization-settings.dto';
 import { OrganizationsInvitesHelper } from './organizations-invites.helper';
 import { TeamMembershipHelper } from './team-membership.helper';
 import { CreateTeamDto } from './dto/create-team.dto';
@@ -30,6 +31,7 @@ import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ResourceHandoverHelper } from './resource-handover.helper';
+import type { WipedConnection } from '../connections/member-connection-offboarding';
 
 import { ORGANIZATION_ROLE_RANK } from './organization-role-rank';
 
@@ -42,8 +44,18 @@ export const USER_SECRET_FIELDS = [
   'twoFactorSecret',
 ] as const;
 
+/**
+ * Organization columns no organization payload carries. `billingInfo`
+ * holds the Stripe customer and subscription ids and the signed license
+ * token. Every member can read GET /organizations/:id and GET
+ * /organizations; the billing routes answer plan questions for admins,
+ * and nothing in the dashboard reads this column off an organization.
+ */
+export const ORGANIZATION_PRIVATE_FIELDS = ['billingInfo'] as const;
+
 /** Remove user credentials from anything carrying loaded member relations. */
 export function stripMemberSecrets<T extends { members?: any[]; settings?: any }>(organization: T): T {
+  for (const field of ORGANIZATION_PRIVATE_FIELDS) delete (organization as any)[field];
   for (const membership of organization.members ?? []) {
     if (membership?.user) for (const field of USER_SECRET_FIELDS) delete membership.user[field];
     // The membership row carries its own invite token.
@@ -113,9 +125,12 @@ export class OrganizationsService {
       throw new ConflictException('Organization with this name or slug already exists');
     }
 
-    // Create organization
+    // Create organization. Settings the creator may choose; the limits
+    // are not among them.
+    const { settings, ...fields } = createOrganizationDto;
     const organization = this.organizationRepository.create({
-      ...createOrganizationDto,
+      ...fields,
+      ...(settings ? { settings: pickWritableSettings(settings) as Organization['settings'] } : {}),
       slug,
     });
 
@@ -193,7 +208,9 @@ export class OrganizationsService {
         byId.get(organization.id) ?? 0;
     }
 
-    return organizations;
+    // Each member can list its organizations; the same payload rules as
+    // findOne apply (billing ids, license token, pending-invite tokens).
+    return organizations.map(organization => stripMemberSecrets(organization));
   }
 
   /**
@@ -252,7 +269,12 @@ export class OrganizationsService {
   }
 
   async update(id: string, updateOrganizationDto: UpdateOrganizationDto): Promise<Organization> {
-    const organization = await this.findOne(id);
+    // The stored row, not findOne's payload: findOne strips the
+    // pending-invite tokens out of settings, and this row is written back.
+    const organization = await this.organizationRepository.findOne({ where: { id } });
+    if (!organization) {
+      throw new NotFoundException('Organization not found');
+    }
 
     // Check for conflicts if name or slug is being updated
     if (updateOrganizationDto.name || updateOrganizationDto.slug) {
@@ -283,14 +305,18 @@ export class OrganizationsService {
     // Settings are patched, not replaced: a client sending only
     // { settings: { defaultRouting } } must not wipe the limits or the
     // pending invites other features keep in the same column. A key set
-    // to null clears it.
+    // to null clears it. Only the admin-writable keys are taken: the
+    // limits are the plan's, never the org's own admins'.
     const { settings, ...rest } = updateOrganizationDto;
     Object.assign(organization, rest);
     if (settings) {
-      organization.settings = { ...(organization.settings ?? {}), ...settings };
+      organization.settings = { ...(organization.settings ?? {}), ...pickWritableSettings(settings) };
     }
 
-    return this.organizationRepository.save(organization);
+    // Stripped after the write, never before: the row read above is the
+    // stored one, pending-invite tokens included, and saving a stripped
+    // copy would erase every outstanding invite on any settings change.
+    return stripMemberSecrets(await this.organizationRepository.save(organization));
   }
 
   /**
@@ -436,9 +462,12 @@ export class OrganizationsService {
     // The departed member's private resources would otherwise be nobody's:
     // visible to no one, deletable by no one. They move to whoever removed
     // them -- or, when the member leaves on their own, to the organization's
-    // longest-standing remaining owner -- and stay private. Same
-    // transaction as the membership removal, so neither happens alone.
+    // longest-standing remaining owner -- and stay private. Their runners
+    // are deregistered, their own connections revoked and grants naming
+    // them removed (ResourceHandoverHelper says why). Same transaction as
+    // the membership removal, so neither happens alone.
     const reason = userId === actorUserId ? 'member_left' : 'member_removed';
+    const wipedConnections: WipedConnection[] = [];
     const audit = await this.userOrganizationRepository.manager.transaction(async (manager) => {
       const toUserId =
         reason === 'member_removed'
@@ -450,11 +479,20 @@ export class OrganizationsService {
         toUserId,
         actorUserId,
         reason,
+        wipedConnections,
       });
       await manager.getRepository(UserOrganization).remove(membership);
       return entries;
     });
     this.auditLogService?.publishCommitted(audit);
+    // Their connections are already useless here; now end the grants at
+    // the providers too. After commit, best-effort: a provider that is
+    // down or refuses cannot undo the removal.
+    await this.requireHandover().revokeWipedConnectionsAtProviders(wipedConnections, {
+      userId,
+      actorUserId,
+      reason,
+    });
   }
 
   /**

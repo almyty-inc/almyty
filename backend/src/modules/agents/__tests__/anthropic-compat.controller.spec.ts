@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { INestApplication, NotFoundException } from '@nestjs/common';
@@ -28,6 +30,7 @@ describe('POST /v1/messages', () => {
   const apiKeyRow = {
     id: 'k1',
     organizationId: 'org-1',
+    user: { id: 'user-1', isActive: true, organizationMemberships: [{ organizationId: 'org-1', isActive: true }] },
     userId: 'u1',
     isActive: true,
     isExpired: () => false,
@@ -46,6 +49,7 @@ describe('POST /v1/messages', () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [AgentAnthropicCompatController],
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         { provide: AgentsService, useValue: agents },
         { provide: AgentExecutionEngine, useValue: engine },
         {
@@ -62,13 +66,13 @@ describe('POST /v1/messages', () => {
   afterAll(async () => await app?.close());
 
   beforeEach(() => {
-    agent = { id: 'a1', name: 'Helper', status: 'active' };
+    agent = { id: '0a9e2b7c-0000-4000-8000-0000000000a1', name: 'Helper', status: 'active' };
     execution = { id: 'e1', status: 'completed', output: 'hello back', totalTokens: 12, inputTokens: 9, outputTokens: 3 };
     jest.clearAllMocks();
   });
 
   const body = (over: Record<string, unknown> = {}) => ({
-    model: 'agent:a1',
+    model: 'agent:0a9e2b7c-0000-4000-8000-0000000000a1',
     max_tokens: 100,
     messages: [{ role: 'user', content: 'hello' }],
     ...over,
@@ -80,7 +84,7 @@ describe('POST /v1/messages', () => {
   it('answers in the Anthropic shape a client can actually parse', async () => {
     const { body: res } = await post(body()).expect(200);
 
-    expect(res).toMatchObject({ type: 'message', role: 'assistant', model: 'agent:a1' });
+    expect(res).toMatchObject({ type: 'message', role: 'assistant', model: 'agent:0a9e2b7c-0000-4000-8000-0000000000a1' });
     expect(res.content[0]).toEqual({ type: 'text', text: 'hello back' });
     expect(res.stop_reason).toBe('end_turn');
     expect(res.id).toMatch(/^msg_/);
@@ -105,7 +109,7 @@ describe('POST /v1/messages', () => {
   });
 
   it('requires max_tokens rather than inventing one, and says which field', async () => {
-    const { body: res } = await post({ model: 'agent:a1', messages: [{ role: 'user', content: 'hi' }] }).expect(400);
+    const { body: res } = await post({ model: 'agent:0a9e2b7c-0000-4000-8000-0000000000a1', messages: [{ role: 'user', content: 'hi' }] }).expect(400);
     expect(res.error.type).toBe('invalid_request_error');
     expect(res.error.message).toContain('max_tokens');
   });

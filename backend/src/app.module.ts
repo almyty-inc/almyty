@@ -118,6 +118,7 @@ import { loadEeModules } from './ee-loader';
 // Optional single-image frontend serving (almyty/almyty). Returns [] for the
 // plain api image, so the module tree is unchanged when SERVE_FRONTEND is off.
 import { frontendStaticImports } from './common/frontend/frontend-static';
+import { appQueryLogging } from './config/query-logger';
 
 @Module({
   imports: [
@@ -153,7 +154,9 @@ import { frontendStaticImports } from './common/frontend/frontend-static';
             migrationsRun:
               configService.get('DB_MIGRATIONS_RUN', 'true') !== 'false',
             synchronize: false,
-            logging: configService.get('NODE_ENV') === 'development',
+            // Failing and slow queries are logged with their SQL and error,
+            // never their parameters (row contents).
+            ...appQueryLogging(configService.get<string>('NODE_ENV')),
             ssl: dbSsl ? { rejectUnauthorized: false } : false,
             extra: {
               // Default pool 10 → 30. Tool generation now batches 20

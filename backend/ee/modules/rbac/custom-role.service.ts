@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -10,17 +11,27 @@ import { In, Repository } from 'typeorm';
 import { CustomRole } from '../../../src/entities/custom-role.entity';
 import { CustomRoleAssignment } from '../../../src/entities/custom-role-assignment.entity';
 import { AbacPolicy } from '../../../src/entities/abac-policy.entity';
+import { OrganizationRole } from '../../../src/entities/user-organization.entity';
 import {
   EvaluationContext,
   PolicyDecision,
   PolicyEvaluatorService,
 } from './policy-evaluator.service';
 
+/**
+ * Grants only an owner holds: the owner role itself (RolesGuard reads
+ * `role:owner`) and the two built-in permissions owners have and admins
+ * do not (`UserOrganization.hasPermission`).
+ */
+export const OWNER_ONLY_GRANTS = ['role:owner', 'admin', 'billing'] as const;
+
 export interface CreateCustomRoleInput {
   organizationId: string;
   name: string;
   description?: string;
   permissions?: string[];
+  /** The creator's org role; only an owner may grant OWNER_ONLY_GRANTS. */
+  actorRole?: OrganizationRole;
 }
 
 export interface UpdateCustomRoleInput {
@@ -53,6 +64,8 @@ export class CustomRoleService {
   async createRole(input: CreateCustomRoleInput): Promise<CustomRole> {
     const name = input.name?.trim();
     if (!name) throw new BadRequestException('role name is required');
+    const permissions = this.normalizePermissions(input.permissions ?? []);
+    this.assertMayGrant(permissions, input.actorRole);
     const existing = await this.roles.findOne({
       where: { organizationId: input.organizationId, name },
     });
@@ -61,7 +74,7 @@ export class CustomRoleService {
       organizationId: input.organizationId,
       name,
       description: input.description ?? null,
-      permissions: this.normalizePermissions(input.permissions ?? []),
+      permissions,
       active: true,
     });
     return this.roles.save(row);
@@ -84,13 +97,21 @@ export class CustomRoleService {
     organizationId: string,
     id: string,
     patch: UpdateCustomRoleInput,
+    actorRole?: OrganizationRole,
   ): Promise<CustomRole> {
     const row = await this.getRole(organizationId, id);
     if (patch.name !== undefined) row.name = patch.name.trim();
     if (patch.description !== undefined) row.description = patch.description;
-    if (patch.permissions !== undefined)
-      row.permissions = this.normalizePermissions(patch.permissions);
-    if (patch.active !== undefined) row.active = patch.active;
+    if (patch.permissions !== undefined) {
+      const permissions = this.normalizePermissions(patch.permissions);
+      this.assertMayGrant(permissions, actorRole);
+      row.permissions = permissions;
+    }
+    if (patch.active !== undefined) {
+      // Switching a role back on hands out what it carries again.
+      if (patch.active && !row.active) this.assertMayGrant(row.permissions ?? [], actorRole);
+      row.active = patch.active;
+    }
     return this.roles.save(row);
   }
 
@@ -106,8 +127,11 @@ export class CustomRoleService {
     roleId: string,
     userId: string,
     assignedBy?: string,
+    actorRole?: OrganizationRole,
   ): Promise<CustomRoleAssignment> {
-    await this.getRole(organizationId, roleId); // validates role in org
+    const role = await this.getRole(organizationId, roleId); // validates role in org
+    // Handing out a role an owner wrote is granting what it carries.
+    this.assertMayGrant(role.permissions ?? [], actorRole);
     const existing = await this.assignments.findOne({
       where: { customRoleId: roleId, userId },
     });
@@ -203,5 +227,22 @@ export class CustomRoleService {
 
   private normalizePermissions(perms: string[]): string[] {
     return [...new Set(perms.map((p) => p.trim()).filter(Boolean))].sort();
+  }
+
+  /**
+   * What only an owner holds, only an owner can grant. RolesGuard lets a
+   * `role:<name>` grant satisfy `@Roles(<name>)` and a permission grant
+   * cover a missing built-in one, so a role is exactly as strong as the
+   * grants it carries. `actorRole` is the grantor's org role; absent means
+   * unknown, which is treated as not an owner.
+   */
+  private assertMayGrant(perms: string[], actorRole: OrganizationRole | undefined): void {
+    if (actorRole === OrganizationRole.OWNER) return;
+    const exceeds = OWNER_ONLY_GRANTS.filter((cap) => this.evaluator.permits(perms, cap));
+    if (exceeds.length > 0) {
+      throw new ForbiddenException(
+        `Only an owner can grant ${exceeds.join(', ')} (directly or through a wildcard)`,
+      );
+    }
   }
 }

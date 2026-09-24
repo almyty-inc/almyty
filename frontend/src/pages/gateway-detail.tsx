@@ -32,6 +32,9 @@ import {
 } from '@/components/gateways/detail/channel-config-form'
 import { WidgetBuilder } from '@/components/gateways/widget-builder'
 import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
+import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
+import { VisitorOAuthCard } from '@/components/gateways/visitor-oauth-card'
+import { AllowedOriginsCard } from '@/components/gateways/allowed-origins-card'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 /** The tabs `?tab=` may open. */
@@ -446,6 +449,22 @@ export function GatewayDetailPage() {
             whiteLabel: entitlements.has('white_label'),
             enterpriseAuth: entitlements.has('sso'),
           }}
+        />
+      )}
+
+      {/* A domain the tenant owns: claim, publish DNS, verify, inline. */}
+      {gateway.type === 'hosted_chat' && <CustomDomainCard gatewayId={gateway.id} />}
+      {/* The identity provider visitors sign in with when access is OAuth. */}
+      {gateway.type === 'hosted_chat' && (
+        <VisitorOAuthCard gatewayId={gateway.id} authMode={gateway.configuration?.hostedChat?.authMode} />
+      )}
+      {/* Which third-party sites may call this public surface from the
+          browser. Keyed on the gateway so the card resets when the saved
+          list changes underneath it. */}
+      {(gateway.type === 'chat_widget' || gateway.type === 'hosted_chat') && (
+        <AllowedOriginsCard
+          key={`${gateway.id}:${JSON.stringify(gateway.configuration?.allowedOrigins ?? [])}`}
+          gateway={{ id: gateway.id, type: gateway.type, configuration: gateway.configuration }}
         />
       )}
 

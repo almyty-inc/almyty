@@ -53,6 +53,8 @@ export interface HostedChatBranding {
   aiDisclosure: string | null
   visitorCanDelete: boolean
   visitorCanExport: boolean
+  /** For oauth surfaces: the provider named on the sign-in button (Google, GitHub, ...). */
+  signInProvider?: string | null
 }
 
 export interface HostedChatConversation {
@@ -188,6 +190,21 @@ export const hostedChatApi = {
 
   /** Full-page redirect target that starts the tenant's SSO sign-in. */
   ssoLoginUrl: (slug: string) => `${HOSTED_CHAT_API_PREFIX}/public/chat/${slug}/auth/sso/login`,
+
+  /** Full-page navigation to the surface's own OAuth provider; the API redirects back here. */
+  oauthLoginUrl: (slug: string) => `${HOSTED_CHAT_API_PREFIX}/public/chat/${slug}/auth/oauth/login`,
+
+  /** Email a one-time sign-in code. The code is tied to this browser's session cookie. */
+  startEmailSignIn: (slug: string, email: string) =>
+    client()
+      .post(`/public/chat/${slug}/auth/email/start`, { email })
+      .then(() => undefined),
+
+  /** Redeem the code; on success the API replaces the session cookie with a signed-in one. */
+  verifyEmailSignIn: (slug: string, email: string, code: string) =>
+    client()
+      .post(`/public/chat/${slug}/auth/email/verify`, { email, code })
+      .then((r) => unwrap<{ authenticated: boolean; email: string }>(r.data)),
 
   /** SSE endpoint for an in-flight reply. Same origin, see above. */
 

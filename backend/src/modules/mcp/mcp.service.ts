@@ -143,7 +143,7 @@ export class McpService {
           break;
 
         case 'tools/get':
-          result = await this.toolHandler.handleToolGet(request.params, organizationId, userId);
+          result = await this.toolHandler.handleToolGet(request.params, organizationId, userId, gatewayId);
           break;
 
         case 'tools/call':
@@ -178,7 +178,7 @@ export class McpService {
           break;
 
         case 'prompts/get':
-          result = await this.contentHandler.handlePromptGet(request.params as McpGetPromptRequest, organizationId);
+          result = await this.contentHandler.handlePromptGet(request.params as McpGetPromptRequest, organizationId, gatewayId, caller);
           break;
 
         // Skills methods

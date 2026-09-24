@@ -20,22 +20,15 @@ export const VERIFICATION_RECORD_PREFIX = '_almyty-verify';
 /** The value prefix, so the record is self-describing in a zone file. */
 export const VERIFICATION_VALUE_PREFIX = 'almyty-domain-verification=';
 
-export type CustomDomainStatus =
-  | 'pending_verification'
-  | 'verifying'
-  | 'verified'
-  | 'failed'
-  | 'active';
+export type { CustomDomainConfig, CustomDomainStatus } from '../../../entities/gateway.entity';
+import type { CustomDomainConfig } from '../../../entities/gateway.entity';
 
-export interface CustomDomainConfig {
-  hostname: string;
-  status: CustomDomainStatus;
-  /** Random per-domain token; the tenant publishes this in DNS. */
-  verificationToken: string;
-  verifiedAt: string | null;
-  lastCheckedAt: string | null;
-  lastError: string | null;
-}
+/**
+ * Scheduled re-checks of a live domain that must find its TXT record gone,
+ * in a row, before the domain stops being served. One missed lookup is a
+ * DNS hiccup; three days running is a record that was removed.
+ */
+export const RECHECK_FAILURES_BEFORE_DEMOTION = 3;
 
 /**
  * Hostname rules for something that will become a TLS SAN and an ingress
@@ -134,6 +127,20 @@ export function resourceNameFor(hostname: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 40);
   return `chat-${readable}-${digest}`;
+}
+
+/**
+ * Keep a `customDomain` key out of a gateway's configuration.
+ *
+ * The claim lives in its own column (Gateway.customDomain), which no
+ * TypeORM save writes. A request body that still carries the key is
+ * dropped rather than stored, so nothing reading configuration can be
+ * misled by a block a tenant typed, and the verification path stays the
+ * only writer.
+ */
+export function stripCustomDomainFromConfiguration(incoming: Record<string, any> | null | undefined): void {
+  if (!incoming || typeof incoming !== 'object') return;
+  delete incoming.customDomain;
 }
 
 export function newCustomDomain(hostname: string): CustomDomainConfig {

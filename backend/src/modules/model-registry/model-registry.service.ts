@@ -12,12 +12,18 @@ import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssr
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { ModelManifest, manifestSha, totalSizeBytes, validateManifest } from './manifest';
 import { ParsedRegistryUri, parseRegistryUri } from './registry-uri';
+import { hfFetch } from './hf-fetch';
 
 /** The registry connection's credential type. */
 export const REGISTRY_CREDENTIAL_TYPE = CredentialType.S3_COMPATIBLE;
 
 export interface RegistryObjectStore {
-  getObject(bucket: string, key: string): Promise<Buffer>;
+  /**
+   * Read one object. `ifMatch` makes the read conditional on the object's
+   * etag, the way S3's If-Match does: a different object is refused (412,
+   * PreconditionFailed) rather than returned.
+   */
+  getObject(bucket: string, key: string, options?: { ifMatch?: string }): Promise<{ body: Buffer; etag: string }>;
   putObject(bucket: string, key: string, body: Buffer, contentType: string): Promise<{ etag: string }>;
   headObject(bucket: string, key: string): Promise<{ etag: string; sizeBytes: number } | null>;
 }
@@ -51,6 +57,36 @@ export class RegistryNotConnectedError extends Error {
     this.name = 'RegistryNotConnectedError';
     void organizationId;
   }
+}
+
+/**
+ * The bytes at a pinned s3:// URI are not the ones it was pinned to.
+ *
+ * `s3://bucket/prefix@<pin>` is supposed to be immutable, and the pin used
+ * to be parsed and then ignored: whatever manifest sat at the key was read
+ * and registered as the pinned version, so replacing it in the bucket
+ * silently changed what a "pinned" version pointed at.
+ */
+export class RegistryPinMismatchError extends Error {
+  readonly code = 'REGISTRY_PIN_MISMATCH';
+  constructor(uri: string, expected: string, actual: string | null) {
+    super(
+      actual
+        ? `The manifest at ${uri} does not match its pin: expected ${expected}, found ${actual}`
+        : `The manifest at ${uri} does not match its pin ${expected}`,
+    );
+    this.name = 'RegistryPinMismatchError';
+  }
+}
+
+/** A 64-hex pin is the manifest's sha256 (publishManifest's fallback); anything else is an etag. */
+export function isManifestShaPin(pin: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(pin ?? '');
+}
+
+/** Etags arrive quoted from some stores and not from others. */
+export function normalizeEtag(etag: string | null | undefined): string {
+  return String(etag ?? '').replace(/"/g, '').trim();
 }
 
 /** Test seam: a store per organization, or one store for every organization. */
@@ -228,9 +264,9 @@ export class ModelRegistryService implements OnModuleInit {
       return Buffer.concat(chunks);
     };
     const store: RegistryObjectStore = {
-      async getObject(bucket, key) {
-        const out = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-        return toBuffer(out.Body);
+      async getObject(bucket, key, options = {}) {
+        const out = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key, ...(options.ifMatch ? { IfMatch: options.ifMatch } : {}) }));
+        return { body: await toBuffer(out.Body), etag: String(out.ETag ?? '').replace(/"/g, '') };
       },
       async putObject(bucket, key, body, contentType) {
         const out = await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: contentType }));
@@ -260,7 +296,14 @@ export class ModelRegistryService implements OnModuleInit {
     } catch {
       throw Object.assign(new Error(`${MANIFEST_FILE} at ${uri} is not valid JSON`), { code: 'REGISTRY_MANIFEST_INVALID' });
     }
-    return validateManifest(json);
+    const manifest = validateManifest(json);
+    // A sha256 pin names the manifest's own digest: the bytes read must be
+    // the ones it was published as, not whatever sits at that key today.
+    if (parsed.scheme === 's3' && isManifestShaPin(parsed.pin)) {
+      const actual = manifestSha(manifest);
+      if (actual !== parsed.pin.toLowerCase()) throw new RegistryPinMismatchError(parsed.raw, parsed.pin, actual);
+    }
+    return manifest;
   }
 
   /**
@@ -310,7 +353,23 @@ export class ModelRegistryService implements OnModuleInit {
       case 's3': {
         const key = parsed.prefix ? `${parsed.prefix}/${file}` : file;
         const store = await this.objectStore(organizationId);
-        return (await store.getObject(parsed.location, key)).toString('utf8');
+        // An etag pin is checked by the store itself (If-Match, so what is
+        // read is exactly the pinned object) and again on what came back.
+        // A sha256 pin is a digest of the manifest, checked once parsed.
+        const etagPin = isManifestShaPin(parsed.pin) ? undefined : parsed.pin;
+        let object: { body: Buffer; etag: string };
+        try {
+          object = await store.getObject(parsed.location, key, etagPin ? { ifMatch: etagPin } : {});
+        } catch (err: any) {
+          if (err?.$metadata?.httpStatusCode === 412 || err?.name === 'PreconditionFailed') {
+            throw new RegistryPinMismatchError(parsed.raw, etagPin!, null);
+          }
+          throw err;
+        }
+        if (etagPin && normalizeEtag(object.etag) !== normalizeEtag(etagPin)) {
+          throw new RegistryPinMismatchError(parsed.raw, etagPin, normalizeEtag(object.etag));
+        }
+        return object.body.toString('utf8');
       }
       case 'file': {
         const path = join(parsed.location, file);
@@ -319,7 +378,10 @@ export class ModelRegistryService implements OnModuleInit {
       case 'hf': {
         // Read-only, optional: the hub serves raw files over HTTPS.
         const url = `https://huggingface.co/${parsed.location}/resolve/${parsed.pin}/${file}`;
-        const res = await fetch(url, { headers: process.env.HF_TOKEN ? { Authorization: `Bearer ${process.env.HF_TOKEN}` } : {} });
+        // The Hub redirects file reads to its CDN; hfFetch follows those
+        // hops only onto Hugging Face hosts, through the SSRF gate, and
+        // keeps the token off the CDN.
+        const res = await hfFetch(url, { headers: process.env.HF_TOKEN ? { Authorization: `Bearer ${process.env.HF_TOKEN}` } : {} });
         if (!res.ok) throw Object.assign(new Error(`hub returned ${res.status} for ${url}`), { code: 'REGISTRY_SOURCE_UNAVAILABLE' });
         return res.text();
       }

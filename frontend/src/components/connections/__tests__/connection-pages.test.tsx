@@ -136,6 +136,17 @@ describe('/settings/connections/:id', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('a private connection says it cannot be shared instead of offering grants', async () => {
+    vi.mocked(connectionsApi.list).mockResolvedValue([connection({ owner: 'private' })])
+    vi.mocked(connectionsApi.get).mockResolvedValue(connection({ owner: 'private' }))
+    renderAtRoute(<ConnectionDetailRoutePage />, DETAIL)
+    expect(await screen.findByRole('heading', { name: 'OpenAI prod' })).toBeInTheDocument()
+    expect(await screen.findByTestId('private-connection-note')).toHaveTextContent("Private connections can't be shared")
+    expect(screen.queryByRole('heading', { name: 'Who can use it' })).not.toBeInTheDocument()
+    expect(connectionsApi.listGrants).not.toHaveBeenCalled()
+    expect(screen.getByText(/\(private\)/)).toBeInTheDocument()
+  })
+
   it('rotates inline through POST /connections/:id/rotate', async () => {
     vi.mocked(connectionsApi.rotate).mockResolvedValue({ pending: false, connection: connection({ health: { status: 'valid' } }) })
     renderAtRoute(<ConnectionDetailRoutePage />, DETAIL)

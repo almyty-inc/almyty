@@ -64,6 +64,16 @@ import { ChannelEmailInboundController } from './channels/channel-email-inbound.
 import { ChannelWidgetController } from './channels/channel-widget.controller';
 import { HostedChatController } from './channels/hosted-chat.controller';
 import { HostedChatService } from './channels/hosted-chat.service';
+import { HostedChatEmailAuthController } from './channels/hosted-chat-email-auth.controller';
+import { VisitorEmailOtpService } from './channels/visitor-email-otp.service';
+import { VisitorEmailCode } from '../../entities/visitor-email-code.entity';
+import { CustomDomainController } from './channels/custom-domain.controller';
+import { CUSTOM_DOMAIN_STORE, CustomDomainService, PgCustomDomainStore } from './channels/custom-domain.service';
+import { VisitorOAuthConfigController } from './channels/visitor-oauth-config.controller';
+import { PgVisitorOAuthStore, VISITOR_OAUTH_STORE, VisitorOAuthConfigService } from './channels/visitor-oauth-config.service';
+import { VisitorOAuthService } from './channels/visitor-oauth.service';
+import { HostedChatOAuthController } from './channels/hosted-chat-oauth.controller';
+import { SurfaceCorsService } from './channels/surface-cors';
 // Multi-workspace channel installations (OAuth installs)
 import { ChannelInstallation } from '../../entities/channel-installation.entity';
 import { ChannelInstallationService } from './channels/channel-installation.service';
@@ -90,6 +100,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
       EndUser,
       Conversation,
       Message,
+      VisitorEmailCode,
     ]),
     JwtModule,
     ToolsModule,
@@ -98,6 +109,13 @@ import { ChannelInstallationsController } from './channels/channel-installations
   ],
   providers: [
     HostedChatService,
+    VisitorEmailOtpService,
+    CustomDomainService,
+    { provide: CUSTOM_DOMAIN_STORE, useClass: PgCustomDomainStore },
+    VisitorOAuthConfigService,
+    { provide: VISITOR_OAUTH_STORE, useClass: PgVisitorOAuthStore },
+    VisitorOAuthService,
+    SurfaceCorsService,
     GatewaysService,
     GatewayProtocolService,
     GatewayRateLimitService,
@@ -141,12 +159,17 @@ import { ChannelInstallationsController } from './channels/channel-installations
     ChannelEmailInboundController,
     ChannelWidgetController,
     HostedChatController,
+    HostedChatEmailAuthController,
+    CustomDomainController,
+    VisitorOAuthConfigController,
+    HostedChatOAuthController,
     ChannelInstallController,
     ChannelInstallationsController,
   ],
   exports: [
     GatewaysService,
     HostedChatService,
+    SurfaceCorsService,
     GatewayProtocolService,
     GatewayRateLimitService,
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,

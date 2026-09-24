@@ -75,24 +75,54 @@ function readableOn(hex: string): string {
   return luma > 0.6 ? '#18181b' : '#ffffff'
 }
 
+/** What the API may send a visitor back with after a sign-in that did not work. */
+const SIGN_IN_ERRORS: Record<string, string> = {
+  SIGN_IN_EXPIRED: 'That sign-in took too long or was started in another browser. Try again.',
+  SIGN_IN_DENIED: 'The sign-in was cancelled or refused.',
+  SIGN_IN_FAILED: 'We could not confirm who you are. Try again.',
+  EMAIL_NOT_ALLOWED: 'This chat only admits accounts from particular email domains.',
+  SIGN_IN_UNAVAILABLE: 'Sign-in is not set up for this chat right now.',
+}
+
+/** The reason code a failed redirect sign-in left in the address bar, if any. */
+function signInErrorFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  const code = new URLSearchParams(window.location.search).get('signin_error')
+  return code ? SIGN_IN_ERRORS[code] ?? SIGN_IN_ERRORS.SIGN_IN_FAILED : null
+}
+
 /**
  * What a visitor sees on a surface that requires sign-in, before they
  * have. Carries the tenant's name and colour so it reads as their door,
- * not ours. Only SSO has a flow behind it today; the other modes say so
- * rather than pretending.
+ * not ours. Email codes happen on this card; OAuth and SSO are a full-page
+ * trip to the identity provider and back.
  */
 function SignInScreen({
   slug,
   branding,
   available,
   style,
+  onSignedIn,
 }: {
   slug: string
   branding: HostedChatBranding
   available: boolean
   style: React.CSSProperties
+  onSignedIn: () => void
 }) {
   const sso = branding.authMode === 'sso'
+  const oauth = branding.authMode === 'oauth'
+  const emailCode = branding.authMode === 'email_otp'
+  const [redirectError] = useState(signInErrorFromUrl)
+  const redirectButton = (href: string, label: string) => (
+    <a
+      href={href}
+      className="mt-6 inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-medium"
+      style={{ backgroundColor: 'var(--tenant)', color: 'var(--on-tenant)' }}
+    >
+      {label}
+    </a>
+  )
   return (
     <div style={style} className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
       <div className="w-full max-w-sm rounded-2xl border bg-card p-8 text-center shadow-sm">
@@ -107,6 +137,11 @@ function SignInScreen({
           </div>
         )}
         <h1 className="font-heading text-xl font-semibold">Sign in to {branding.appName}</h1>
+        {redirectError && available && (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {redirectError}
+          </p>
+        )}
         {!available ? (
           <p className="mt-2 text-sm text-muted-foreground">
             This chat is not accepting sign-ins right now. Please contact {branding.appName}.
@@ -114,17 +149,20 @@ function SignInScreen({
         ) : sso ? (
           <>
             <p className="mt-2 text-sm text-muted-foreground">Use your organization account to continue.</p>
-            <a
-              href={hostedChatApi.ssoLoginUrl(slug)}
-              className="mt-6 inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-medium"
-              style={{ backgroundColor: 'var(--tenant)', color: 'var(--on-tenant)' }}
-            >
-              Continue with single sign-on
-            </a>
+            {redirectButton(hostedChatApi.ssoLoginUrl(slug), 'Continue with single sign-on')}
           </>
+        ) : oauth ? (
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sign in with {branding.signInProvider ?? 'your account'} to continue.
+            </p>
+            {redirectButton(hostedChatApi.oauthLoginUrl(slug), `Continue with ${branding.signInProvider ?? 'your account'}`)}
+          </>
+        ) : emailCode ? (
+          <EmailCodeSignIn slug={slug} onSignedIn={onSignedIn} />
         ) : (
           <p className="mt-2 text-sm text-muted-foreground">
-            This chat requires a sign-in method that is not set up yet. Please contact {branding.appName}.
+            This chat is not accepting sign-ins right now. Please contact {branding.appName}.
           </p>
         )}
         {!branding.whiteLabel && (
@@ -132,6 +170,124 @@ function SignInScreen({
         )}
       </div>
     </div>
+  )
+}
+
+/**
+ * Two steps on one card: the address, then the six-digit code mailed to
+ * it. The code only works in this browser (it is tied to the session
+ * cookie), so there is nothing to copy between devices.
+ */
+function EmailCodeSignIn({ slug, onSignedIn }: { slug: string; onSignedIn: () => void }) {
+  const [step, setStep] = useState<'email' | 'code'>('email')
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const send = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await hostedChatApi.startEmailSignIn(slug, email.trim())
+      setStep('code')
+      setCode('')
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Could not send the code. Please try again.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const verify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await hostedChatApi.verifyEmailSignIn(slug, email.trim(), code.trim())
+      onSignedIn()
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'That code did not work. Please try again.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const buttonStyle = { backgroundColor: 'var(--tenant)', color: 'var(--on-tenant)' }
+
+  return step === 'email' ? (
+    <form onSubmit={send} className="mt-4 space-y-3 text-left">
+      <p className="text-sm text-muted-foreground">We will email you a one-time code.</p>
+      <label htmlFor="hosted-chat-email" className="sr-only">
+        Email address
+      </label>
+      <input
+        id="hosted-chat-email"
+        type="email"
+        required
+        autoComplete="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="you@example.com"
+        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+      />
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={busy || !email.trim()}
+        className="inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60"
+        style={buttonStyle}
+      >
+        {busy ? 'Sending...' : 'Email me a code'}
+      </button>
+    </form>
+  ) : (
+    <form onSubmit={verify} className="mt-4 space-y-3 text-left">
+      <p className="text-sm text-muted-foreground">
+        Enter the 6-digit code we sent to <span className="font-medium text-foreground">{email.trim()}</span>.
+      </p>
+      <label htmlFor="hosted-chat-code" className="sr-only">
+        Sign-in code
+      </label>
+      <input
+        id="hosted-chat-code"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern="[0-9 ]{6,7}"
+        maxLength={7}
+        required
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        placeholder="123456"
+        className="w-full rounded-md border bg-background px-3 py-2 text-center font-mono text-lg tracking-widest"
+      />
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={busy || code.trim().length < 6}
+        className="inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60"
+        style={buttonStyle}
+      >
+        {busy ? 'Checking...' : 'Sign in'}
+      </button>
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <button type="button" className="underline" onClick={() => setStep('email')}>
+          Use a different address
+        </button>
+        <button type="button" className="underline" disabled={busy} onClick={() => void send()}>
+          Send a new code
+        </button>
+      </div>
+    </form>
   )
 }
 
@@ -363,6 +519,16 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         )
       })
 
+      // The server took back what it streamed for this reply: the step
+      // it came from turned out not to be the answer. Clear it so none of
+      // it stays on screen; the answer, if there is one, streams in after.
+      source.addEventListener('reset', () => {
+        if (activeThreadRef.current !== threadId) return
+        setMessages((current) =>
+          current.map((m) => (m.id === `run-${runId}` ? { ...m, content: '' } : m)),
+        )
+      })
+
       // Both the done event and onerror route here, and a closed
       // EventSource can still fire onerror after done; reconcile once.
       let finished = false
@@ -470,7 +636,17 @@ export function HostedChatPage({ slug }: HostedChatPageProps) {
         </div>
       )
     }
-    return <SignInScreen slug={slug} branding={branding} available={me?.available !== false} style={style} />
+    return (
+      <SignInScreen
+        slug={slug}
+        branding={branding}
+        available={me?.available !== false}
+        style={style}
+        onSignedIn={() => {
+          void refetchMe()
+        }}
+      />
+    )
   }
 
   const disclosure = disclosureLine(branding)

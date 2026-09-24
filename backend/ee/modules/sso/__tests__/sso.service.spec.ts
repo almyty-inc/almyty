@@ -1,5 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { SsoService } from '../sso.service';
+import { SamlReplayCache } from '../saml-replay-cache';
+import { FakeRedis } from '../../../../src/test/fake-redis';
 import { OrganizationRole } from '../../../../src/entities/user-organization.entity';
 
 function makeService() {
@@ -18,8 +20,22 @@ function makeService() {
     userRepo as any,
     membershipRepo as any,
     configService,
+    new SamlReplayCache(new FakeRedis()),
   );
   return { service, userRepo, membershipRepo, configService };
+}
+
+/** The profile node-saml hands back for a validated, signed assertion. */
+function samlProfile(email: string, id = `_a-${email}`) {
+  const notOnOrAfter = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  return {
+    issuer: 'https://idp.corp.com',
+    nameID: email,
+    email,
+    getAssertion: () => ({
+      Assertion: { $: { ID: id }, Conditions: [{ $: { NotOnOrAfter: notOnOrAfter } }] },
+    }),
+  };
 }
 
 const samlConfig = {
@@ -53,7 +69,7 @@ describe('SsoService — SAML', () => {
     // Fake SAML provider returning a signed profile.
     jest.spyOn(service, 'buildSaml').mockReturnValue({
       validatePostResponseAsync: jest.fn().mockResolvedValue({
-        profile: { nameID: 'alice@corp.com', email: 'alice@corp.com' },
+        profile: samlProfile('alice@corp.com'),
         loggedOut: false,
       }),
     } as any);
@@ -86,7 +102,7 @@ describe('SsoService — SAML', () => {
     configService.getDecrypted.mockResolvedValue(samlConfig);
     jest.spyOn(service, 'buildSaml').mockReturnValue({
       validatePostResponseAsync: jest.fn().mockResolvedValue({
-        profile: { nameID: 'stranger@corp.com', email: 'stranger@corp.com' },
+        profile: samlProfile('stranger@corp.com'),
         loggedOut: false,
       }),
     } as any);
@@ -104,17 +120,23 @@ describe('SsoService — OIDC', () => {
     const { service, userRepo, membershipRepo, configService } = makeService();
     configService.getDecrypted.mockResolvedValue(oidcConfig);
 
+    let sentNonce = '';
     jest.spyOn(service, 'buildOidcClient').mockResolvedValue({
-      callback: jest.fn().mockResolvedValue({
-        claims: () => ({ email: 'bob@corp.com', given_name: 'Bob' }),
-      }),
+      authorizationUrl: (params: Record<string, string>) => {
+        sentNonce = params.nonce;
+        return 'https://idp/authorize';
+      },
+      callback: jest.fn(async () => ({
+        claims: () => ({ email: 'bob@corp.com', given_name: 'Bob', nonce: sentNonce }),
+      })),
     } as any);
 
     const existingUser = { id: 'u-3', email: 'bob@corp.com' };
     userRepo.findOne.mockResolvedValue(existingUser);
     membershipRepo.findOne.mockResolvedValue({ userId: 'u-3', organizationId: 'org-1', isActive: true });
 
-    const user = await service.handleOidcCallback('org-1', { code: 'xyz' }, 'state-1');
+    const { state } = await service.getOidcLoginUrl('org-1');
+    const user = await service.handleOidcCallback('org-1', { code: 'xyz', state }, state);
     expect(user).toBe(existingUser);
   });
 
@@ -122,11 +144,13 @@ describe('SsoService — OIDC', () => {
     const { service, configService } = makeService();
     configService.getDecrypted.mockResolvedValue(oidcConfig);
     jest.spyOn(service, 'buildOidcClient').mockResolvedValue({
+      authorizationUrl: () => 'https://idp/authorize',
       callback: jest.fn().mockRejectedValue(new Error('invalid_grant')),
     } as any);
 
+    const { state } = await service.getOidcLoginUrl('org-1');
     await expect(
-      service.handleOidcCallback('org-1', { code: 'bad' }, 'state-1'),
+      service.handleOidcCallback('org-1', { code: 'bad', state }, state),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

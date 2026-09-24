@@ -4,6 +4,7 @@ import { ConflictException } from '@nestjs/common';
 import { GatewaysService, HOSTED_CHAT_SLUG_INDEX } from '../gateways.service';
 import { HostedChatService } from '../channels/hosted-chat.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
+import { ClauseModel, ExecutedQuery, RecordingQueryBuilder, matchingRows } from './recording-query-builder';
 
 /**
  * A hosted chat's slug and custom domain are global public addresses,
@@ -77,17 +78,39 @@ describe('hosted-chat address claims', () => {
         } as any,
       );
 
+    /**
+     * The pre-check's claim query, evaluated against a gateways table
+     * holding no real claim on 'acme' -- only a hosted chat on another
+     * slug and a non-hosted-chat gateway whose configuration carries the
+     * same block. The pre-check has to pass, so the conflict these tests
+     * see comes from the index. The canned `[]` that stood here passed
+     * with the type or slug predicate deleted, and since the pre-check's
+     * conflict reads the same, the tests could not tell which one fired.
+     */
+    const CLAIM_CLAUSES: ClauseModel = {
+      'gateway.type = :type': (row, p) => row.type === p.type,
+      "gateway.configuration -> 'hostedChat' ->> 'slug' = :slug": (row, p) =>
+        row.configuration?.hostedChat?.slug === p.slug,
+    };
+    const GATEWAYS = [
+      { id: 'gw-globex', type: GatewayType.HOSTED_CHAT, configuration: { hostedChat: { slug: 'globex' } } },
+      { id: 'gw-mcp', type: GatewayType.MCP, configuration: { hostedChat: { slug: 'acme' } } },
+    ];
+    let claimQuery: RecordingQueryBuilder | undefined;
+
     beforeEach(() => {
+      claimQuery = undefined;
       gatewayRepository = {
         get manager() { return unlimitedQuotaManager(this); },
         findOne: jest.fn().mockResolvedValue(null),
         create: jest.fn((row: any) => row),
         save: jest.fn(async (row: any) => row),
-        createQueryBuilder: jest.fn(() => ({
-          where: jest.fn().mockReturnThis(),
-          andWhere: jest.fn().mockReturnThis(),
-          getMany: jest.fn().mockResolvedValue([]),
-        })),
+        createQueryBuilder: jest.fn(
+          (alias: string) =>
+            (claimQuery = new RecordingQueryBuilder(alias, {
+              getMany: (query: ExecutedQuery) => matchingRows(query, GATEWAYS, CLAIM_CLAUSES),
+            })),
+        ),
       };
       service = makeService();
     });
@@ -99,6 +122,9 @@ describe('hosted-chat address claims', () => {
 
       await expect(attempt).rejects.toBeInstanceOf(ConflictException);
       await expect(attempt).rejects.toThrow("The web address 'acme' is already in use");
+      // The pre-check ran and passed; the index decided.
+      expect(claimQuery?.executed).toHaveLength(1);
+      expect(gatewayRepository.save).toHaveBeenCalled();
     });
 
     it('turns the slug index violation on update into the same conflict', async () => {
@@ -119,6 +145,8 @@ describe('hosted-chat address claims', () => {
 
       await expect(attempt).rejects.toBeInstanceOf(ConflictException);
       await expect(attempt).rejects.toThrow("The web address 'acme' is already in use");
+      expect(claimQuery?.executed).toHaveLength(1);
+      expect(gatewayRepository.save).toHaveBeenCalled();
     });
 
     it('leaves every other unique violation alone', async () => {
@@ -130,6 +158,76 @@ describe('hosted-chat address claims', () => {
         service.createGateway(createDto as any, 'org-1', 'user-1'),
       ).rejects.not.toBeInstanceOf(ConflictException);
     });
+
+    // findByCustomDomain serves only `status: 'active'`, on the promise
+    // that a domain gets there by passing the TXT check. But the block
+    // lives in the same configuration json the tenant writes, so a PATCH
+    // could simply say it was active: any hostname, no DNS record, and
+    // /public/chat/by-host would serve that tenant for it -- including a
+    // hostname another tenant had verified, which the fail-closed
+    // ambiguity rule then takes offline for its real owner.
+    describe('custom domain is server-owned', () => {
+      const forged = { hostname: 'chat.victim.com', status: 'active', verificationToken: 'x', verifiedAt: null, lastCheckedAt: null, lastError: null };
+
+      it('drops a custom domain supplied on create', async () => {
+        await service.createGateway(
+          { ...createDto, configuration: { ...hostedChatConfig, customDomain: forged } } as any,
+          'org-1',
+          'user-1',
+        );
+
+        const saved = gatewayRepository.save.mock.calls[0][0];
+        expect(saved.configuration.customDomain).toBeUndefined();
+      });
+
+      it('drops a custom domain supplied on update', async () => {
+        gatewayRepository.findOne.mockResolvedValue({
+          id: 'gw-1',
+          organizationId: 'org-1',
+          type: GatewayType.HOSTED_CHAT,
+          configuration: { hostedChat: { slug: 'acme', appName: 'Acme' } },
+        });
+
+        await service.updateGateway(
+          'gw-1',
+          { configuration: { ...hostedChatConfig, customDomain: forged } } as any,
+          'org-1',
+          'user-1',
+        );
+
+        const saved = gatewayRepository.save.mock.calls[0][0];
+        expect(saved.configuration.customDomain).toBeUndefined();
+      });
+
+      it('never copies a top-level claim or visitor OAuth block from the body onto the entity', async () => {
+        gatewayRepository.findOne.mockResolvedValue({
+          id: 'gw-1',
+          organizationId: 'org-1',
+          type: GatewayType.HOSTED_CHAT,
+          configuration: { hostedChat: { slug: 'acme', appName: 'Acme' } },
+          customDomain: null,
+          visitorOAuth: null,
+        });
+
+        await service.updateGateway(
+          'gw-1',
+          {
+            configuration: hostedChatConfig,
+            customDomain: forged,
+            visitorOAuth: { clientId: 'x', authorizationEndpoint: 'https://evil.example/authorize' },
+          } as any,
+          'org-1',
+          'user-1',
+        );
+
+        // The columns are update: false, so a save could not write them
+        // anyway; the entity the caller gets back must not claim otherwise.
+        const saved = gatewayRepository.save.mock.calls[0][0];
+        expect(saved.customDomain).toBeNull();
+        expect(saved.visitorOAuth).toBeNull();
+        expect(saved.configuration.customDomain).toBeUndefined();
+      });
+    });
   });
 
   describe('HostedChatService.findByCustomDomain', () => {
@@ -138,7 +236,7 @@ describe('hosted-chat address claims', () => {
         id: 'gw-1',
         type: GatewayType.HOSTED_CHAT,
         status: GatewayStatus.ACTIVE,
-        configuration: { customDomain: { hostname: 'chat.acme.com', status: 'active' } },
+        customDomain: { hostname: 'chat.acme.com', status: 'active' },
         isActive: () => true,
         ...over,
       } as unknown as Gateway);
@@ -153,10 +251,10 @@ describe('hosted-chat address claims', () => {
      */
     const CLAUSES: Record<string, (row: any, params: any) => boolean> = {
       'gateway.type = :type': (row, p) => row.type === p.type,
-      "gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname": (row, p) =>
-        row.configuration?.customDomain?.hostname === p.hostname,
-      "gateway.configuration -> 'customDomain' ->> 'status' = :status": (row, p) =>
-        row.configuration?.customDomain?.status === p.status,
+      "gateway.customDomain ->> 'hostname' = :hostname": (row, p) =>
+        row.customDomain?.hostname === p.hostname,
+      "gateway.customDomain ->> 'status' = :status": (row, p) =>
+        row.customDomain?.status === p.status,
     };
 
     const serviceFor = (rows: Gateway[]) => {
@@ -196,7 +294,7 @@ describe('hosted-chat address claims', () => {
     // the platform and take delivery before proving they own it.
     it('does not serve a claim that has not finished verification', async () => {
       const pending = gateway({
-        configuration: { customDomain: { hostname: 'chat.acme.com', status: 'pending' } },
+        customDomain: { hostname: 'chat.acme.com', status: 'pending' },
       } as any);
 
       await expect(serviceFor([pending]).findByCustomDomain('chat.acme.com')).resolves.toBeNull();

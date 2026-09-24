@@ -57,6 +57,10 @@
 const net = require('net');
 const dns = require('dns');
 const dgram = require('dgram');
+const tls = require('tls');
+const http = require('http');
+const https = require('https');
+const http2 = require('http2');
 import type * as netTypes from 'net';
 import type * as dgramTypes from 'dgram';
 import {
@@ -65,7 +69,8 @@ import {
   isBlockedHostname,
   stripBrackets,
 } from '../../../common/security/ip-classification';
-import { domainMatches } from '../../../common/security/gateway-tool-policy';
+import { decideToolRequest, domainMatches } from '../../../common/security/gateway-tool-policy';
+import type { SandboxNetPolicy } from './types';
 
 // ── Ban list ────────────────────────────────────────────────────
 
@@ -159,16 +164,25 @@ function isAllowedTestTarget(host: string, port: number): boolean {
  * policy allowed resolved to it -- the latter so a client that resolves
  * first and connects by address still works.
  *
- * Scheme (`requireHttps`) and method rules are HTTP-level and are not
- * visible to a socket; they are not enforced here.
+ * `requireHttps` and `allowedHttpMethods` are enforced here too (see
+ * `transportRefusal` and `patchHttpClients`). They were left to the
+ * executors on the grounds that a socket shows neither, which left a
+ * sandboxed tool free of both: it could send a DELETE a GET-only policy
+ * forbids, in plaintext, to a host the policy allowed.
  */
-export interface SandboxHostPolicy {
-  allowedDomains?: string[];
-  blockedDomains?: string[];
-}
+export type SandboxHostPolicy = SandboxNetPolicy;
 
 let hostPolicy: SandboxHostPolicy | null = null;
 const policyVettedAddresses = new Set<string>();
+
+/**
+ * The HTTP-level half of the policy. `requireHttps` is held at two
+ * layers: every TCP connect must be a TLS socket (so no client, however
+ * it builds its requests, can speak plaintext), and every request made
+ * through fetch / http / https / http2 must name https. The method list
+ * is held where a method is visible: those same request entry points.
+ */
+let transportPolicy: { requireHttps: boolean; allowedHttpMethods: string[] } | null = null;
 
 function policyRefusal(host: string): string | null {
   if (!hostPolicy) return null;
@@ -183,6 +197,17 @@ function policyRefusal(host: string): string | null {
     return "not on this gateway tool's allowed-domain list";
   }
   return null;
+}
+
+/**
+ * The scheme and method rules for one HTTP request, decided by the same
+ * `decideToolRequest` the host-side executors use. The domain rules are
+ * left to the connect / lookup patches, which see every connection.
+ */
+function transportRefusal(url: string, method: string): string | null {
+  if (!transportPolicy) return null;
+  const decision = decideToolRequest(transportPolicy, url, method);
+  return decision.allowed ? null : (decision.reason ?? 'refused by security policy');
 }
 
 function rememberPolicyAddresses(addrs: Array<{ address: string }>): void {
@@ -205,7 +230,8 @@ let locked = false;
 /**
  * Install the monkey-patches on `net.Socket.prototype.connect`,
  * `dns.lookup`, `dns.promises.lookup`, the c-ares resolvers (server
- * changes and answers, see patchDnsResolvers), and `dgram`.
+ * changes and answers, see patchDnsResolvers), `dgram`, and the HTTP
+ * request entry points (fetch, http, https, http2; see patchHttpClients).
  *
  * Idempotent: calling this more than once is a no-op. Must be
  * called from the sandbox worker bootstrap BEFORE any user code
@@ -235,10 +261,18 @@ export function installSandboxNetGuard(options: NetGuardOptions = {}): void {
       ? { allowedDomains: [...allowed], blockedDomains: [...blocked] }
       : null;
 
+  const requireHttps = options.hostPolicy?.requireHttps === true;
+  const allowedHttpMethods = (options.hostPolicy?.allowedHttpMethods ?? [])
+    .filter((m) => typeof m === 'string' && m.trim())
+    .map((m) => m.trim().toUpperCase());
+  transportPolicy =
+    requireHttps || allowedHttpMethods.length > 0 ? { requireHttps, allowedHttpMethods } : null;
+
   patchDnsLookup();
   patchDnsResolvers();
   patchSocketConnect();
   patchDgram();
+  patchHttpClients();
 }
 
 /**
@@ -287,6 +321,7 @@ export function resetSandboxNetGuardForTesting(): void {
   installed = false;
   allowedTestTargets = new Set();
   hostPolicy = null;
+  transportPolicy = null;
   policyVettedAddresses.clear();
 }
 
@@ -618,6 +653,21 @@ function patchSocketConnect(): void {
       return sock;
     }
 
+    // requireHttps, held where no client can route round it: every TCP
+    // connection must be a TLS socket. `tls.connect` (https, undici's
+    // fetch, http2, every TLS database driver) calls connect on the
+    // TLSSocket itself; a plain `net.Socket` here is plaintext. A
+    // STARTTLS protocol (a TLS upgrade after a plaintext greeting) is
+    // plaintext first and is refused too: the policy says HTTPS.
+    if (transportPolicy?.requireHttps && !(this instanceof tls.TLSSocket)) {
+      const sock = this;
+      const target = host && port !== undefined ? `${host}:${port}` : '<socket>';
+      process.nextTick(() =>
+        sock.emit('error', refusal(target, 'this gateway tool requires HTTPS; a plaintext connection is refused')),
+      );
+      return sock;
+    }
+
     if (host && port !== undefined) {
       // The gateway's host policy comes first and has no test bypass:
       // it narrows what the tool may reach, it never widens it.
@@ -699,6 +749,14 @@ function patchDgram(): void {
         address = a;
       }
     }
+    // UDP is never HTTPS.
+    if (transportPolicy?.requireHttps) {
+      const err = refusal(`${address ?? '<connected>'}:${port ?? '?'}`, 'this gateway tool requires HTTPS; UDP is refused');
+      const cb = args[args.length - 1];
+      if (typeof cb === 'function') process.nextTick(cb, err);
+      else process.nextTick(() => this.emit('error', err));
+      return;
+    }
     if (port !== undefined && address) {
       const policyReason = policyRefusal(address);
       if (policyReason) {
@@ -730,4 +788,123 @@ function patchDgram(): void {
     }
     return origSend.apply(this, args as any);
   };
+}
+
+// ── HTTP request entry points ───────────────────────────────────
+
+const SESSION_PATCHED = Symbol('sandboxHttp2SessionPatched');
+
+/** Best-effort absolute URL for a policy decision; the scheme is what matters. */
+function policyUrl(protocol: string, host: string | undefined): string {
+  const scheme = protocol.endsWith(':') ? protocol : `${protocol}:`;
+  const h = stripBrackets(String(host ?? '')).replace(/:\d+$/, '') || 'unknown';
+  const shown = net.isIP(h) === 6 ? `[${h}]` : h;
+  try {
+    return new URL(`${scheme}//${shown}/`).href;
+  } catch {
+    return `${scheme}//unknown/`;
+  }
+}
+
+/** Method and target of an `http.request` / `https.request` / `.get` call. */
+function describeNodeRequest(defaultProtocol: string, args: any[]): { url: string; method: string } {
+  let base: URL | null = null;
+  let i = 0;
+  if (typeof args[0] === 'string' || args[0] instanceof URL) {
+    try {
+      base = new URL(String(args[0]));
+    } catch {
+      base = null;
+    }
+    i = 1;
+  }
+  const opts = args[i] && typeof args[i] === 'object' ? args[i] : {};
+  const method = String(opts.method ?? 'GET').toUpperCase();
+  const protocol = String(opts.protocol ?? base?.protocol ?? opts.agent?.protocol ?? defaultProtocol);
+  const host = opts.hostname ?? opts.host ?? base?.hostname;
+  return { url: policyUrl(protocol, host), method };
+}
+
+/** Method and target of a `fetch(input, init)` call. */
+function describeFetch(input: any, init: any): { url: string; method: string } {
+  const isRequest =
+    !!input && typeof input === 'object' && !(input instanceof URL) && typeof input.url === 'string';
+  const url = isRequest ? input.url : String(input);
+  const method = String(init?.method ?? (isRequest ? input.method : undefined) ?? 'GET').toUpperCase();
+  return { url, method };
+}
+
+/** The origin an `http2.connect(authority)` call names. */
+function describeAuthority(authority: any): string {
+  if (typeof authority === 'string') return authority;
+  if (authority instanceof URL) return authority.href;
+  if (authority && typeof authority === 'object') {
+    return policyUrl(String(authority.protocol ?? 'https:'), authority.hostname ?? authority.host);
+  }
+  return 'https://unknown/';
+}
+
+/**
+ * Hold every HTTP request a tool makes to the gateway tool's scheme and
+ * method rules. These are the entry points that know a method: the
+ * `fetch` global (undici), `http` / `https` `request` and `get` (which
+ * axios, node-fetch, got, the AWS and Stripe SDKs and most others sit
+ * on), and `http2` sessions. A refused call throws (or, for fetch,
+ * rejects) with ERR_SANDBOX_NET_REFUSED before any byte is sent.
+ *
+ * The patches are installed whatever the policy and decide at call time,
+ * like the rest of the guard. After patching, the ESM views of the
+ * built-ins are re-synced so `import { request } from 'node:https'` in
+ * an installed dependency sees the patched function too.
+ */
+function patchHttpClients(): void {
+  const guardNodeModule = (mod: any, defaultProtocol: string) => {
+    for (const name of ['request', 'get']) {
+      const orig = mod[name];
+      mod[name] = function patchedHttpRequest(this: unknown, ...args: any[]) {
+        const { url, method } = describeNodeRequest(defaultProtocol, args);
+        const reason = transportRefusal(url, method);
+        if (reason) throw refusal(`${method} ${url}`, reason);
+        return orig.apply(this, args);
+      };
+    }
+  };
+  guardNodeModule(http, 'http:');
+  guardNodeModule(https, 'https:');
+
+  const origFetch = (globalThis as any).fetch;
+  if (typeof origFetch === 'function') {
+    (globalThis as any).fetch = function patchedFetch(this: unknown, input: any, init?: any) {
+      const { url, method } = describeFetch(input, init);
+      const reason = transportRefusal(url, method);
+      if (reason) return Promise.reject(refusal(`${method} ${url}`, reason));
+      return origFetch.call(this, input, init);
+    };
+  }
+
+  // http2 has no module-level request: a method is chosen per stream on
+  // a session. The session class is not exported, so its prototype is
+  // patched from the first session made, before that session is handed
+  // back -- no code can hold a session whose class is still unpatched.
+  const sessionOrigins = new WeakMap<object, string>();
+  const origConnect = http2.connect;
+  http2.connect = function patchedHttp2Connect(this: unknown, authority: any, ...rest: any[]) {
+    const session = origConnect.call(this, authority, ...rest);
+    sessionOrigins.set(session, describeAuthority(authority));
+    const proto = Object.getPrototypeOf(session);
+    if (proto && !Object.prototype.hasOwnProperty.call(proto, SESSION_PATCHED)) {
+      const origRequest = proto.request;
+      proto.request = function patchedHttp2Request(this: object, headers: any, ...more: any[]) {
+        const origin = sessionOrigins.get(this) ?? 'https://unknown/';
+        const method = String(headers?.[':method'] ?? 'GET').toUpperCase();
+        const reason = transportRefusal(origin, method);
+        if (reason) throw refusal(`${method} ${origin}`, reason);
+        return origRequest.call(this, headers, ...more);
+      };
+      Object.defineProperty(proto, SESSION_PATCHED, { value: true });
+    }
+    return session;
+  };
+
+  require('module').syncBuiltinESMExports();
 }

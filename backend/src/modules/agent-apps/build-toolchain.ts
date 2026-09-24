@@ -1,4 +1,6 @@
 import { spawn } from 'child_process';
+import { promises as fs } from 'fs';
+import { join } from 'path';
 
 /**
  * The commands that actually produce an artifact.
@@ -125,8 +127,9 @@ export function targetLabel(target: string): string {
 export const TOOL_FOR_TARGET: Record<string, string> = {
   tui: 'bun',
   binary: 'bun',
-  // electron-builder is run through npx so a build host does not have
-  // to carry a global install, but it still has to be reachable.
+  // electron-builder runs from the shell's lockfile install when there
+  // is one and through npx (pinned) otherwise; readiness asks for npx,
+  // the one of the two a host must carry.
   desktop: 'npx',
 };
 
@@ -219,17 +222,65 @@ export function safeExecutableName(slug: string): string {
 }
 
 /**
- * The Electron release the shell is packaged against.
+ * The Electron release the shell is packaged against: the exact version
+ * the shell's own package.json pins, or null when it pins none.
  *
  * Passed explicitly because electron-builder resolves the runtime from
  * an installed node_modules or a fixed version in package.json, and a
  * build directory has neither: it is a copy of the shell with no
  * install step. A range fails outright rather than picking a release.
+ *
+ * Read from the shell rather than written down here. This was a
+ * constant, 33.2.0, while the shell pinned 39.8.10: every desktop build
+ * shipped a runtime six majors older than the one the shell is developed
+ * and tested on. The shell's pin is now the one place the version lives.
  */
-export const ELECTRON_VERSION = '33.2.0';
+export function electronVersionOf(shellPackageJson: unknown): string | null {
+  const pkg = (shellPackageJson ?? {}) as {
+    dependencies?: Record<string, unknown>;
+    devDependencies?: Record<string, unknown>;
+  };
+  const pinned = pkg.devDependencies?.electron ?? pkg.dependencies?.electron;
+  return typeof pinned === 'string' && /^\d+\.\d+\.\d+$/.test(pinned) ? pinned : null;
+}
 
 /**
- * Arguments for packaging the desktop shell.
+ * The electron-builder release every desktop build is packaged with.
+ *
+ * Exactly the version packages/desktop-shell pins in its package.json and
+ * lockfile (a spec holds the two together). The packager used to be
+ * fetched as `npx --yes electron-builder`: whatever npm called latest at
+ * build time, downloaded and run on the machine that holds customers'
+ * signing certificates.
+ */
+export const ELECTRON_BUILDER_VERSION = '26.15.3';
+
+/** Where the shell's lockfile install puts the electron-builder binary. */
+export function localElectronBuilderPath(shellDir: string): string {
+  return join(shellDir, 'node_modules', '.bin', 'electron-builder');
+}
+
+/**
+ * The command that runs electron-builder with `args`.
+ *
+ * The binary the shell's lockfile installed when it is there (the build
+ * worker image runs `npm ci` in the shell for exactly this), so every
+ * dependency of the packager is the locked one. Without it, npx fetches
+ * the pinned release and nothing else: never a bare package name.
+ */
+export async function electronBuilderCommand(
+  shellDir: string,
+  args: string[],
+  exists: (path: string) => Promise<boolean> = async (path) => !!(await fs.stat(path).catch(() => null)),
+): Promise<{ tool: string; args: string[] }> {
+  const local = localElectronBuilderPath(shellDir);
+  if (await exists(local)) return { tool: local, args };
+  return { tool: 'npx', args: ['--yes', `electron-builder@${ELECTRON_BUILDER_VERSION}`, ...args] };
+}
+
+/**
+ * Arguments for packaging the desktop shell, for electron-builder itself
+ * (electronBuilderCommand decides what runs them).
  *
  * `--publish never` because a build must never push anything anywhere;
  * this produces a file and stops. `--config.<...>` sets identity from
@@ -245,13 +296,13 @@ export function electronBuilderArgs(options: {
   version: string;
   /** Filesystem-safe name for the executable inside the package. */
   executableName: string;
+  /** The exact Electron release to package: electronVersionOf(the shell's package.json). */
+  electronVersion: string;
 }): string[] | null {
   const target = ELECTRON_TARGETS[options.platformId];
   if (!target) return null;
 
   return [
-    '--yes',
-    'electron-builder',
     // The format is named rather than left to the platform default.
     // `--linux` alone builds every default target, which on Linux means
     // it also tries to produce a snap and fails the whole build on it.
@@ -265,7 +316,7 @@ export function electronBuilderArgs(options: {
     `--config.productName=${options.productName}`,
     `--config.appId=${options.appId}`,
     `--config.directories.output=${options.outputDir}`,
-    `--config.electronVersion=${ELECTRON_VERSION}`,
+    `--config.electronVersion=${options.electronVersion}`,
     // The build's version, not the shell's. Without this every artifact
     // carries the shell's package.json version, so an update looks
     // identical to what it replaces.

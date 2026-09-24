@@ -10,13 +10,17 @@ import { UserTeam } from '../../../src/entities/user-team.entity';
 import { AuthModule } from '../../../src/modules/auth/auth.module';
 import { SsoConfigService } from './sso-config.service';
 import { SsoService } from './sso.service';
+import { OidcLoginStateStoreFactory } from './oidc-login-state.store';
+import { SamlReplayCache } from './saml-replay-cache';
 import { ScimService } from './scim.service';
 import { ScimAuthGuard } from './guards/scim-auth.guard';
 import { SsoController } from './sso.controller';
 import { SsoConfigController } from './sso-config.controller';
 import { ScimController } from './scim.controller';
 import { HostedChatSsoController } from './hosted-chat-sso.controller';
+import { HostedChatSsoSettingsController } from './hosted-chat-sso-settings.controller';
 import { GatewaysModule } from '../../../src/modules/gateways/gateways.module';
+import { ConnectionsModule } from '../../../src/modules/connections/connections.module';
 
 
 /**
@@ -30,10 +34,12 @@ import { GatewaysModule } from '../../../src/modules/gateways/gateways.module';
     TypeOrmModule.forFeature([OrgSsoConfig, User, UserOrganization, Team, UserTeam]),
     AuthModule,
     GatewaysModule,
+    // SCIM deprovisioning wipes and provider-revokes the member's own connections.
+    ConnectionsModule,
   ],
 
-  providers: [SsoConfigService, SsoService, ScimService, ScimAuthGuard],
-  controllers: [SsoConfigController, SsoController, ScimController, HostedChatSsoController],
+  providers: [SsoConfigService, SsoService, SamlReplayCache, OidcLoginStateStoreFactory, ScimService, ScimAuthGuard],
+  controllers: [SsoConfigController, SsoController, ScimController, HostedChatSsoController, HostedChatSsoSettingsController],
   exports: [SsoConfigService, ScimService],
 })
 export class SsoModule {}

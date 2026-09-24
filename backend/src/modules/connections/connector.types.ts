@@ -45,7 +45,42 @@ export const CONNECTION_HEALTH_STATUSES: readonly ConnectionHealthStatus[] = [
   'valid', 'failed', 'expired', 'revoked', 'quota', 'unknown',
 ];
 
-export type ConnectionOwner = 'org' | 'user';
+/**
+ * Who a connection belongs to.
+ * - 'org': the organization's; members use it through grants.
+ * - 'user' (Personal): one member's key; only they use it unless they
+ *   share it, and admins who manage connections can still see and revoke it.
+ * - 'private': one member's key and nobody else's -- not shareable, and not
+ *   listed, usable or revocable by anyone else, org admins included.
+ *   Everyone else gets the not-found a missing id gets.
+ */
+export type ConnectionOwner = 'org' | 'user' | 'private';
+
+export const CONNECTION_OWNERS: readonly ConnectionOwner[] = ['org', 'user', 'private'];
+
+/** The owner tier a stored connection row is in. */
+export function connectionOwnerOf(row: { ownerUserId?: string | null; visibility?: string | null }): ConnectionOwner {
+  if (row.visibility === 'private') return 'private';
+  return row.ownerUserId ? 'user' : 'org';
+}
+
+/**
+ * The governance hook (EE) and connection policies speak of who holds the
+ * key: the organization or a user. A private connection is a user's key.
+ */
+export function heldBy(owner: ConnectionOwner): 'org' | 'user' {
+  return owner === 'org' ? 'org' : 'user';
+}
+
+/**
+ * True when `row` is a private connection that is not `userId`'s. A
+ * private row with no recorded owner is nobody's, so it is someone
+ * else's for everyone (fail closed), and so is any row for no caller.
+ */
+export function isOthersPrivateConnection(row: { ownerUserId?: string | null; visibility?: string | null }, userId: string | null | undefined): boolean {
+  if (row.visibility !== 'private') return false;
+  return !row.ownerUserId || !userId || row.ownerUserId !== userId;
+}
 
 export interface JsonSchemaProperty {
   type: 'string' | 'integer' | 'number' | 'boolean';
@@ -93,6 +128,13 @@ export interface OAuth2Config {
   /** Field of the token response holding the secret (default `access_token`). */
   tokenField?: string;
   refreshField?: string;
+  /**
+   * RFC 7009 token revocation endpoint. When set, disconnecting the
+   * connection and offboarding its owner revoke the tokens here, with the
+   * same client authentication as the token exchange. May reference
+   * non-secret config values as `{{field}}`.
+   */
+  revocationUrl?: string;
   /** Provider prints the code on-screen when no callback URL is sent (headless / CLI mode). */
   headlessCode?: boolean;
   /** Extra static query params for the authorize URL. */

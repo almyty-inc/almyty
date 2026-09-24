@@ -10,7 +10,9 @@ import { JwtPayload } from '../auth.service';
 import {
   effectiveMemberships,
   hasEffectiveMembership,
+  membershipOrgId,
 } from '../../../common/authorization/membership';
+import { DEV_ONLY_JWT_SECRET } from '../dev-jwt-secret';
 
 /**
  * Extract JWT from httpOnly cookie first, then fall back to Authorization header.
@@ -39,7 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ignoreExpiration: false,
       secretOrKey:
         configService.get<string>('JWT_SECRET') ||
-        'dev-only-jwt-secret-change-me-in-production',
+        DEV_ONLY_JWT_SECRET,
       // Enforce the iss + aud claims set by JwtModule.signOptions
       // (see auth.module.ts). passport-jwt configures these as
       // strings, not verifyOptions — if they're missing or wrong,
@@ -71,6 +73,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // until the user's first bump.
     if (((payload as any).tv ?? 0) !== (user.tokenVersion ?? 0)) {
       throw new UnauthorizedException('Token has been revoked');
+    }
+
+    // An SSO session reaches the organization whose IdP asserted it and
+    // no other (see sso-session.ts). Narrowing the loaded rows here means
+    // the header check below, RolesGuard and every handler that reads
+    // `organizationMemberships` see the one organization.
+    if (payload.sso) {
+      user.organizationMemberships = (user.organizationMemberships ?? []).filter(
+        (membership) => membershipOrgId(membership) === payload.sso,
+      );
+      (user as any).ssoOrganizationId = payload.sso;
     }
 
     // Only rows that actually grant access. A revoked invite keeps its

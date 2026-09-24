@@ -7,24 +7,23 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { createHash } from 'crypto';
 import * as v8 from 'v8';
 
 import { Api, ApiType } from '../../entities/api.entity';
 import { SchemaFormat } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
-import { Tool } from '../../entities/tool.entity';
+import { Tool, ToolStatus } from '../../entities/tool.entity';
 
 import { ToolsService } from '../tools/tools.service';
 import {
-  ToolQuotaExceededException,
   assertWithinPerSchemaCap,
   capGeneratedDescription,
   precheckToolQuota,
+  writeToolBatch,
 } from '../tools/tool-quota';
 import { ApisService } from './apis.service';
-import { isUniqueViolation } from '../../common/utils/unique-violation';
 
 /** What a generation run produced, including what it could not. */
 export interface ToolGenerationResult {
@@ -92,11 +91,13 @@ export class ApisToolGeneratorHelper {
       return true;
     });
 
-    // Quota, checked for the whole batch before any row is written (see
-    // tools/tool-quota.ts for the reject-not-truncate policy). Only
-    // operations whose tool name is not already taken add a row; the
-    // rest update in place. This batch check is unlocked; each insert
-    // re-checks under the organization's lock in createFromOperation.
+    // Quota (see tools/tool-quota.ts for the reject-not-truncate policy).
+    // Only operations whose tool name no live tool holds add a row; the
+    // rest update in place. A deleted tool frees its name, so it neither
+    // counts here nor gets "updated" below: its name gets a fresh row.
+    // This check is unlocked and only refuses early, before any row is
+    // built; writeToolBatch below re-checks the whole batch under the
+    // organization's lock as it writes it.
     assertWithinPerSchemaCap(activeOperations.length, `API '${api.name}'`);
     const plannedNames = [
       ...new Set(activeOperations.map((op) => this.generateSemanticToolName(api.name, op))),
@@ -104,7 +105,7 @@ export class ApisToolGeneratorHelper {
     const alreadyThere = plannedNames.length
       ? await this.apiRepository.manager
           .getRepository(Tool)
-          .count({ where: { organizationId: api.organizationId, name: In(plannedNames) } })
+          .count({ where: { organizationId: api.organizationId, name: In(plannedNames), status: Not(ToolStatus.DELETED) } })
       : 0;
     await precheckToolQuota(
       this.apiRepository.manager,
@@ -112,90 +113,38 @@ export class ApisToolGeneratorHelper {
       plannedNames.length - alreadyThere,
     );
 
-    // Tool generation batch size — 20 in-flight saves per batch. The
-    // old default of 5 was conservative for a 10-connection pool, but
-    // the pool was bumped (see config/database.config.ts) and the real
-    // cost is the per-tool roundtrip latency rather than connection
-    // contention. 20 keeps each batch under half the pool while
-    // cutting wall-time on 600-op imports from ~5 min sequential
-    // batches to ~1.5 min.
+    // Build every row first. Parameter generation and $ref resolution are
+    // the slow part and need no lock, so they run here, 20 operations at a
+    // time; nothing is written in this loop. The writes happen once, below.
     const BATCH_SIZE = 20;
-    const generatedTools: Tool[] = [];
+    const creates: Tool[] = [];
+    const updates: Tool[] = [];
 
     for (let i = 0; i < activeOperations.length; i += BATCH_SIZE) {
       await this.awaitHeapHeadroom();
       const batch = activeOperations.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(
+      await Promise.all(
         batch.map(async (operation) => {
-          const toolName = this.generateSemanticToolName(api.name, operation);
-          const toolDescription = capGeneratedDescription(
-            operation.description || `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation`,
-          );
-
-          const existingTool = await this.toolsService.findByName(toolName, api.organizationId);
-
+          const options = {
+            name: this.generateSemanticToolName(api.name, operation),
+            description: capGeneratedDescription(
+              operation.description || `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation`,
+            ),
+            organizationId: api.organizationId,
+          };
           try {
+            const existingTool = await this.toolsService.findByName(options.name, api.organizationId);
             if (existingTool) {
-              return await this.toolsService.updateFromOperation(existingTool.id, operation, {
-                name: toolName,
-                description: toolDescription,
-                organizationId: api.organizationId,
-              });
-            }
-            try {
-              return await this.toolsService.createFromOperation(operation, {
-                name: toolName,
-                description: toolDescription,
-                organizationId: api.organizationId,
-              });
-            } catch (error) {
-              // `tools_org_name_uq` fired: another writer created this
-              // tool between our findByName and this insert. The batch
-              // runs its lookups through Promise.all and a re-run of
-              // POST /apis/:id/generate-tools can overlap a schema
-              // import's tool-gen phase, so the window is real. Treat
-              // it as "someone else got there first" and update the
-              // row they wrote rather than failing the operation.
-              if (!isUniqueViolation(error)) throw error;
-              const raced = await this.toolsService.findByName(toolName, api.organizationId);
-              if (!raced) throw error;
-              return await this.toolsService.updateFromOperation(raced.id, operation, {
-                name: toolName,
-                description: toolDescription,
-                organizationId: api.organizationId,
-              });
+              updates.push(await this.toolsService.prepareUpdateFromOperation(existingTool, operation, options));
+            } else {
+              creates.push(await this.toolsService.buildFromOperation(operation, options));
             }
           } catch (error) {
-            // The batch precheck passed but a concurrent writer took the
-            // slots: createFromOperation's locked per-row check refused.
-            // Surface it rather than reporting a quietly short import.
-            if (error instanceof ToolQuotaExceededException) throw error;
             errorCount++;
             this.logger.error(`[TOOL-GEN] Failed: ${operation.name}: ${error.message}`);
-            return null;
           }
         }),
       );
-      // Trim each tool's heavy JSON columns before accumulating.
-      // The DB row is canonical; the in-memory copy is only kept so
-      // callers can count + reference Tool.id / .name / .operationId.
-      // Holding 587 fully-hydrated Tool entities (each with translated
-      // input + output schemas, parameters, configuration) adds tens
-      // of MB of retained heap for nothing once tool gen is done.
-      for (const tool of batchResults) {
-        if (!tool) continue;
-        (tool as any).parameters = null;
-        (tool as any).configuration = null;
-        (tool as any).httpConfig = null;
-        (tool as any).graphqlConfig = null;
-        (tool as any).soapConfig = null;
-        (tool as any).grpcConfig = null;
-        (tool as any).llmConfig = null;
-        (tool as any).sdkConfig = null;
-        (tool as any).metadata = null;
-        (tool as any).examples = null;
-        generatedTools.push(tool);
-      }
       // The operations consumed by this batch won't be touched again
       // by tool gen — drop their JSON metadata now so the per-row
       // schemas can be GC'd while the next batch runs, instead of
@@ -217,6 +166,54 @@ export class ApisToolGeneratorHelper {
           // progress reporting is best-effort
         }
       }
+    }
+
+    // Write the batch whole, in one transaction under the organization's
+    // tool-quota lock: it fits, or it is refused (ToolQuotaExceededException)
+    // before any row -- new or updated -- lands. Written row by row, two
+    // imports racing for the last slots both passed the precheck above and
+    // the loser stopped partway with an arbitrary subset of its operations.
+    const written = await writeToolBatch(
+      this.apiRepository.manager,
+      api.organizationId,
+      { creates, updates },
+      // Another writer created this name since findByName: regenerate
+      // that row in place, as an existing tool would have been.
+      (existing, built) => {
+        existing.description = built.description;
+        existing.parameters = built.parameters;
+        existing.metadata = { ...existing.metadata, ...built.metadata };
+        return existing;
+      },
+    );
+    skippedExisting += written.skipped.length;
+
+    for (let i = 0; i < written.created.length; i += BATCH_SIZE) {
+      await Promise.all(
+        written.created
+          .slice(i, i + BATCH_SIZE)
+          .map((tool) => this.toolsService.createToolVersion(tool, 'Auto-generated from API operation', 'system')),
+      );
+    }
+
+    // Trim each tool's heavy JSON columns before returning them.
+    // The DB row is canonical; the in-memory copy is only kept so
+    // callers can count + reference Tool.id / .name / .operationId.
+    // Holding 587 fully-hydrated Tool entities (each with translated
+    // input + output schemas, parameters, configuration) adds tens
+    // of MB of retained heap for nothing once tool gen is done.
+    const generatedTools: Tool[] = [...written.updated, ...written.created];
+    for (const tool of generatedTools) {
+      (tool as any).parameters = null;
+      (tool as any).configuration = null;
+      (tool as any).httpConfig = null;
+      (tool as any).graphqlConfig = null;
+      (tool as any).soapConfig = null;
+      (tool as any).grpcConfig = null;
+      (tool as any).llmConfig = null;
+      (tool as any).sdkConfig = null;
+      (tool as any).metadata = null;
+      (tool as any).examples = null;
     }
 
     this.logger.log(`[TOOL-GEN] Parallel tool generation complete for API ${api.name}:`);

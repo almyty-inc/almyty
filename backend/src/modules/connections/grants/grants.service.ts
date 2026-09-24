@@ -19,6 +19,7 @@ import { UserTeam } from '../../../entities/user-team.entity';
 import { Workspace } from '../../../entities/workspace.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { ConnectionPrincipal, membershipOf } from '../connections.permissions';
+import { connectionOwnerOf } from '../connector.types';
 import {
   canManage,
   canUse,
@@ -173,7 +174,12 @@ export class GrantsService {
     const who = isGrantPrincipal(principal) ? principal : await this.principalFor(principal, connection.organizationId, ctx);
     const grants = await this.grantsFor(connection.id);
     const decision = canUse(connection, who, grants, ctx);
-    if (!decision.allowed) throw new ConnectionNotGrantedError(connection.id, decision.reason);
+    if (!decision.allowed) {
+      // Another member's private connection is not found, not "not granted":
+      // the not-granted answer would confirm it exists.
+      if (connection.visibility === 'private') throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+      throw new ConnectionNotGrantedError(connection.id, decision.reason);
+    }
     return decision;
   }
 
@@ -199,7 +205,7 @@ export class GrantsService {
         principal: { userId, agentId, workspaceId },
         connectionId: connection.id,
         connectorKey: connection.connectorKey ?? null,
-        owner: connection.ownerUserId ? 'user' : 'org',
+        owner: connectionOwnerOf(connection),
         runId: ctx.runId ?? null,
         agentId,
         workspaceId,
@@ -256,6 +262,16 @@ export class GrantsService {
     const principal = await this.principalFor(actor, connection.organizationId);
     const existing = await this.grants.find({ where: { connectionId } });
     const decision = canManage(connection, principal, existing, { now: new Date(this.now()) });
+    if (connection.visibility === 'private') {
+      // Someone else's private connection does not exist for this caller.
+      if (!decision.allowed) throw new NotFoundException({ code: 'CONNECTION_NOT_FOUND', message: 'connection not found' });
+      // Its owner cannot share it either: a grant is a share, and private
+      // means not shared. Personal is the tier that can be shared.
+      throw new BadRequestException({
+        code: 'CONNECTION_PRIVATE',
+        message: 'a private connection cannot be shared; reconnect it as a personal or organization connection to grant access',
+      });
+    }
     if (!decision.allowed) throw new ForbiddenException({ code: 'CONNECTION_GRANT_FORBIDDEN', message: decision.reason });
 
     const principalType = input.principalType;
@@ -291,7 +307,7 @@ export class GrantsService {
       resourceName: connection.name,
       details: {
         grantId: row.id, principalType, principalId, permission, budgetId, expiresAt, refreshed,
-        owner: connection.ownerUserId ? 'user' : 'org', via: decision.via ?? null,
+        owner: connectionOwnerOf(connection), via: decision.via ?? null,
       },
     });
     return this.view(row);
@@ -372,7 +388,7 @@ export class GrantsService {
       resourceName: connection.name,
       details: {
         grantId: row.id, principalType: row.principalType, principalId: row.principalId, permission: row.permission,
-        owner: connection.ownerUserId ? 'user' : 'org', via: decision.via ?? null,
+        owner: connectionOwnerOf(connection), via: decision.via ?? null,
       },
     });
     return this.view({ ...row, id: grantId });

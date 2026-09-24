@@ -26,11 +26,17 @@ describe('ToolsService writes are organization-scoped', () => {
       seed: [
         { id: 'tool-theirs', name: 'Theirs', organizationId: OTHER_ORG, createdBy: USER, version: '1.0.0', visibility: 'org' },
         { id: 'tool-mine', name: 'Mine', organizationId: ORG, createdBy: USER, version: '1.0.0', visibility: 'org' },
+        { id: 'tool-on-foreign-api', name: 'Foreign', organizationId: ORG, createdBy: USER, version: '1.0.0', visibility: 'org', apiId: 'api-theirs-private' },
+        { id: 'tool-on-private-api', name: 'Private', organizationId: ORG, createdBy: USER, version: '1.0.0', visibility: 'org', apiId: 'api-mine-private' },
       ],
     });
     const apis = fakeRepository<any>([
       { id: 'api-theirs', organizationId: OTHER_ORG, visibility: 'org' },
       { id: 'api-mine', organizationId: ORG, visibility: 'org' },
+      // Private to somebody else. Only a row in the caller's own org may
+      // decide whether the tool bound to it can be shared.
+      { id: 'api-theirs-private', organizationId: OTHER_ORG, visibility: 'private', createdBy: 'someone-else' },
+      { id: 'api-mine-private', organizationId: ORG, visibility: 'private', createdBy: 'someone-else' },
     ]);
     const organizations = fakeRepository<any>({ make: () => new Organization(), seed: [{ id: ORG, settings: {} }] });
     // The tool quota counts through `toolRepository.manager`.
@@ -105,6 +111,24 @@ describe('ToolsService writes are organization-scoped', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(tools.rows().map((t) => t.name)).not.toContain('borrowed');
+    });
+  });
+
+  // A visibility change re-checks the tool's bound API: a private API
+  // cannot sit under a shared tool. That lookup is scoped to the caller's
+  // org, so a row in another org -- whatever its visibility -- neither
+  // blocks the change nor gets named in the refusal.
+  describe('updateTool visibility change', () => {
+    it("checks the bound API in the caller's organization", async () => {
+      await expect(
+        service.updateTool('tool-on-private-api', { visibility: 'org' } as any, ORG, USER),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("does not read another organization's API for the check", async () => {
+      await service.updateTool('tool-on-foreign-api', { visibility: 'org', name: 'Moved' } as any, ORG, USER);
+
+      expect(tools.row('tool-on-foreign-api')!.name).toBe('Moved');
     });
   });
 });

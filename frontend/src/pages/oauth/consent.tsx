@@ -48,6 +48,9 @@ export function OAuthConsentPage() {
   const responseType = params.get('response_type') || 'code'
   const codeChallenge = params.get('code_challenge') || ''
   const codeChallengeMethod = params.get('code_challenge_method') || ''
+  // RFC 8707 resource indicator: the gateway the token is for. It has to
+  // reach the code, or the token carries no audience the client asked for.
+  const resource = params.get('resource') || ''
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -110,6 +113,14 @@ export function OAuthConsentPage() {
       setSubmitting(false)
       return false
     }
+    // Only http(s) is a place to send the browser. Anything else --
+    // `javascript://localhost/...` parses fine and has host localhost --
+    // would run as script in this origin when assigned to location.href.
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      setSubmitError('The client supplied an invalid redirect URI.')
+      setSubmitting(false)
+      return false
+    }
     for (const [k, v] of Object.entries(extra)) url.searchParams.set(k, v)
     if (state) url.searchParams.set('state', state)
     window.location.href = url.toString()
@@ -130,6 +141,7 @@ export function OAuthConsentPage() {
           code_challenge_method: codeChallengeMethod,
           scope,
           state,
+          ...(resource ? { resource } : {}),
         },
       )
       redirectToClient({ code: res.code })

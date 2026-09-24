@@ -103,25 +103,26 @@ export const DEFAULT_PUBLIC_APP_LIMITS: NonNullable<AgentApp['limits']> = {
 };
 
 /**
- * The auth modes that have a sign-in flow behind them.
+ * The auth modes that keep a stranger out.
  *
- * `AppAuthMode` offers four, and the settings panel offers all four, but
- * only SSO is implemented: ee/modules/sso/hosted-chat-sso.controller.ts is
- * the one route that calls bindAuthenticatedVisitor, and it refuses unless
- * the surface is set to `sso`. No route ever issues an email code or
- * completes an OAuth round trip, so no visitor can ever hold an
- * `email_otp` or `oauth` identity.
+ * `AppAuthMode` offers four. SSO is a gate: only the organization's own
+ * IdP can vouch for someone (ee/modules/sso/hosted-chat-sso.controller.ts).
+ * Email codes have a sign-in flow too (hosted-chat-email-auth.controller.ts)
+ * but are NOT a gate: anyone with an inbox passes, so a surface set to
+ * email_otp is still open to the public and keeps every public-app cap.
+ * OAuth has one too (hosted-chat-oauth.controller.ts) and is counted open
+ * for the same reason: anyone with an account at a public provider passes,
+ * and an email-domain rule is surface configuration these caps do not read.
  *
- * That made isOpenToAnyone() fail OPEN. It compared against PUBLIC_LINK,
- * so selecting "Email verification" -- a mode nothing can satisfy --
- * skipped PUBLIC_NEEDS_COST_CAP, skipped PUBLIC_NEEDS_RATE_LIMIT, dropped
- * both rate limits to null in defaultLimitsFor(), and let
- * LOCAL_ACCESS_ON_PUBLIC pass, so a desktop or binary build with
- * `capabilities.shell` could publish to anyone who downloaded it.
+ * isOpenToAnyone() once compared against PUBLIC_LINK, so selecting
+ * "Email verification" skipped PUBLIC_NEEDS_COST_CAP and
+ * PUBLIC_NEEDS_RATE_LIMIT, dropped both rate limits to null in
+ * defaultLimitsFor(), and let LOCAL_ACCESS_ON_PUBLIC pass, so a desktop or
+ * binary build with `capabilities.shell` could publish to anyone who
+ * downloaded it.
  *
  * The predicate is now "can this mode actually keep a stranger out",
- * answered by this list, so an unimplemented mode is treated as open and
- * the caps stay on. Adding a mode here without a route that binds an
+ * answered by this list. Adding a mode here without a route that binds an
  * identity for it re-opens the hole; auth-modes-fail-closed.guard.spec.ts
  * checks the list against the routes.
  */

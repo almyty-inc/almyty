@@ -369,17 +369,20 @@ export class OAuth2Service {
       throw new BadRequestException('Missing code or state parameter');
     }
 
-    // Retrieve and delete state from Redis
+    // Consume the state in one step. A GET followed by a DEL leaves a
+    // window in which a replayed callback reads the same state, so one
+    // authorization would be exchanged -- and a credential created --
+    // twice. GETDEL (Redis 6.2+) reads and removes atomically: of any
+    // number of concurrent callbacks carrying this state, exactly one
+    // gets the payload.
     const stateKey = `oauth2:state:${state}`;
-    const raw = await this.redis.get(stateKey);
+    const raw = await this.redis.getdel(stateKey);
 
     if (!raw) {
       throw new UnauthorizedException(
         'Invalid or expired OAuth2 state. Please try again.',
       );
     }
-
-    await this.redis.del(stateKey);
 
     const statePayload = JSON.parse(raw);
     const {

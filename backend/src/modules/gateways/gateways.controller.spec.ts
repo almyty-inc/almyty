@@ -1,3 +1,4 @@
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { GatewaysController } from './gateways.controller';
 import { GatewayAuthController } from './gateway-auth.controller';
@@ -639,7 +640,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', sub: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = {
         id: 'gw-1',
-        tools: [{ toolId: 'tool-1', isActive: true }],
+        tools: [{ toolId: 'tool-1', isActive: true, tool: { id: 'tool-1', status: 'active', visibility: 'org' } }],
       };
       const mockExecutionResult = {
         success: true,
@@ -670,7 +671,7 @@ describe('GatewaysController', () => {
         // a gateway that carries no policy passes null, which allows
         // everything -- but it must still be passed, or the executor has
         // nothing to look the policy up by.
-        { userId: 'user-1', organizationId: 'org-1', gatewayId: 'gw-1', securityPolicy: null },
+        { userId: 'user-1', organizationId: 'org-1', gatewayId: 'gw-1', securityPolicy: null, principal: userPrincipal('user-1') },
       );
     });
 
@@ -678,7 +679,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', sub: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = {
         id: 'gw-1',
-        tools: [{ toolId: 'tool-1', isActive: true }],
+        tools: [{ toolId: 'tool-1', isActive: true, tool: { id: 'tool-1', status: 'active', visibility: 'org' } }],
       };
       const mockExecutionResult = {
         success: false,
@@ -739,7 +740,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', sub: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = {
         id: 'gw-1',
-        tools: [{ toolId: 'tool-1', isActive: true }],
+        tools: [{ toolId: 'tool-1', isActive: true, tool: { id: 'tool-1', status: 'active', visibility: 'org' } }],
       };
       const mockExecutionResult = { success: true, output: {} };
 
@@ -756,7 +757,7 @@ describe('GatewaysController', () => {
       expect(toolExecutorService.executeTool).toHaveBeenCalledWith(
         'tool-1',
         {},
-        { userId: 'user-1', organizationId: 'org-1', gatewayId: 'gw-1', securityPolicy: null },
+        { userId: 'user-1', organizationId: 'org-1', gatewayId: 'gw-1', securityPolicy: null, principal: userPrincipal('user-1') },
       );
     });
   });
@@ -973,7 +974,7 @@ describe('GatewaysController', () => {
       const mockRequest = { user: { id: 'user-1', sub: 'user-1', currentOrganizationId: 'org-1', organizations: [{ id: 'org-1' }] } };
       const mockGateway = {
         id: 'gw-1',
-        tools: [{ toolId: 'tool-1', isActive: true }],
+        tools: [{ toolId: 'tool-1', isActive: true, tool: { id: 'tool-1', status: 'active', visibility: 'org' } }],
       };
 
       gatewaysService.getGateway.mockResolvedValue(mockGateway as any);

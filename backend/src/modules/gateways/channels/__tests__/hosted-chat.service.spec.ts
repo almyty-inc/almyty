@@ -3,6 +3,14 @@ import { NotFoundException } from '@nestjs/common';
 import { HostedChatService } from '../hosted-chat.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gateway.entity';
 import type { EndUser } from '../../../../entities/end-user.entity';
+import { fakeRepository } from '../../../../test/fake-repository';
+import {
+  ClauseModel,
+  ExecutedQuery,
+  RecordingQueryBuilder,
+  clause,
+  matchingRows,
+} from '../../__tests__/recording-query-builder';
 
 const gateway = (overrides: Partial<Gateway> = {}): Gateway => {
   const gw = new Gateway();
@@ -21,6 +29,26 @@ const gateway = (overrides: Partial<Gateway> = {}): Gateway => {
   return Object.assign(gw, overrides);
 };
 
+/** A hosted-chat surface: the fixture above, of the type the lookups ask for. */
+const surface = (overrides: Partial<Gateway> = {}): Gateway =>
+  gateway({ type: GatewayType.HOSTED_CHAT, ...overrides });
+
+/**
+ * The slug and custom-domain lookups, evaluated against a gateways table.
+ * The chain that stood here answered a canned gateway whatever the WHERE
+ * said, so the type, slug, hostname or domain-status predicate could go
+ * with the suite green. A clause not listed throws.
+ */
+const SURFACE_CLAUSES: ClauseModel = {
+  'gateway.type = :type': (row, p) => row.type === p.type,
+  "gateway.configuration -> 'hostedChat' ->> 'slug' = :slug": (row, p) =>
+    row.configuration?.hostedChat?.slug === p.slug,
+  "gateway.customDomain ->> 'hostname' = :hostname": (row, p) =>
+    row.customDomain?.hostname === p.hostname,
+  "gateway.customDomain ->> 'status' = :status": (row, p) =>
+    row.customDomain?.status === p.status,
+};
+
 describe('HostedChatService', () => {
   let gatewayRepository: any;
   let endUserRepository: any;
@@ -29,16 +57,19 @@ describe('HostedChatService', () => {
   let runRepository: any;
   let auditLogService: any;
   let service: HostedChatService;
-  let qb: any;
+  let qb: RecordingQueryBuilder;
+  let surfaces: Gateway[];
 
   beforeEach(() => {
-    qb = {
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getOne: jest.fn(async () => gateway()),
-      getMany: jest.fn(async () => [gateway()]),
+    surfaces = [surface()];
+    gatewayRepository = {
+      createQueryBuilder: jest.fn(
+        (alias: string) =>
+          (qb = new RecordingQueryBuilder(alias, {
+            getMany: (query: ExecutedQuery) => matchingRows(query, surfaces, SURFACE_CLAUSES),
+          })),
+      ),
     };
-    gatewayRepository = { createQueryBuilder: jest.fn(() => qb) };
     endUserRepository = {
       findOne: jest.fn(async () => null),
       create: jest.fn((row: any) => row),
@@ -67,39 +98,46 @@ describe('HostedChatService', () => {
 
   describe('findBySlug', () => {
     it('resolves a live surface and normalises the slug', async () => {
-      await service.findBySlug('  ACME  ');
-      expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), { slug: 'acme' });
+      surfaces = [
+        surface({ id: 'gw-other', configuration: { hostedChat: { slug: 'globex' } } }),
+        surface(),
+        // A widget whose configuration happens to carry the same block is
+        // not a hosted-chat surface, and would make the address ambiguous.
+        gateway({ id: 'gw-widget' }),
+      ];
+      await expect(service.findBySlug('  ACME  ')).resolves.toMatchObject({ id: 'gw-1' });
+      expect(
+        clause(qb.executed[0], "gateway.configuration -> 'hostedChat' ->> 'slug' = :slug")?.params,
+      ).toEqual({ slug: 'acme' });
     });
 
     it('404s for an unknown slug', async () => {
-      qb.getMany.mockResolvedValueOnce([]);
       await expect(service.findBySlug('nope')).rejects.toThrow(NotFoundException);
     });
 
     it('404s rather than 403s for a real but inactive surface', async () => {
       // Whether acme.almyty.app exists is itself information; a public
       // endpoint should not confirm it while refusing to serve it.
-      qb.getMany.mockResolvedValueOnce([gateway({ status: GatewayStatus.INACTIVE })]);
+      surfaces = [surface({ status: GatewayStatus.INACTIVE })];
       await expect(service.findBySlug('acme')).rejects.toThrow(NotFoundException);
     });
 
     it('fails closed when two organizations claim the same live slug', async () => {
-      qb.getMany.mockResolvedValueOnce([
-        gateway({ id: 'gw-org-1', organizationId: 'org-1' }),
-        gateway({ id: 'gw-org-2', organizationId: 'org-2' }),
-      ]);
+      surfaces = [
+        surface({ id: 'gw-org-1', organizationId: 'org-1' }),
+        surface({ id: 'gw-org-2', organizationId: 'org-2' }),
+      ];
 
       await expect(service.findBySlug('acme')).rejects.toThrow(NotFoundException);
     });
 
     it('ignores an inactive historic claimant when one live surface remains', async () => {
-      const live = gateway({ id: 'gw-live', organizationId: 'org-1' });
-      qb.getMany.mockResolvedValueOnce([
-        gateway({ id: 'gw-old', organizationId: 'org-2', status: GatewayStatus.INACTIVE }),
-        live,
-      ]);
+      surfaces = [
+        surface({ id: 'gw-old', organizationId: 'org-2', status: GatewayStatus.INACTIVE }),
+        surface({ id: 'gw-live', organizationId: 'org-1' }),
+      ];
 
-      await expect(service.findBySlug('acme')).resolves.toBe(live);
+      await expect(service.findBySlug('acme')).resolves.toMatchObject({ id: 'gw-live' });
     });
 
     it('404s on an empty slug without touching the database', async () => {
@@ -392,6 +430,40 @@ describe('HostedChatService', () => {
       expect(messages.map((m) => m.id)).toEqual(['m1', 'm2']);
     });
 
+    /**
+     * An assistant turn that called tools is saved with the model's text
+     * alongside the call -- its narration of what it is about to look up
+     * or what the last tool said. That is the agent's working, and the
+     * replay a visitor reads must hold only the answers.
+     */
+    it('leaves out the assistant turns that called tools', async () => {
+      const at = (s: number) => new Date(Date.UTC(2026, 8, 1, 0, 0, s));
+      const messages = fakeRepository<any>([
+        { id: 'u1', conversationId: 'conv-1', role: 'user', type: 'text', content: 'where is my order?', createdAt: at(1) },
+        {
+          id: 'a1', conversationId: 'conv-1', role: 'assistant', type: 'tool_call', createdAt: at(2),
+          content: 'Looking up account 4411 for jane@corp.test', toolCalls: [{ id: 't1', name: 'crm_lookup', parameters: {} }],
+        },
+        { id: 't1', conversationId: 'conv-1', role: 'tool', type: 'tool_result', content: '{"tier":"gold"}', createdAt: at(3) },
+        // Tool calls recorded on a plain text row are the same thing.
+        {
+          id: 'a2', conversationId: 'conv-1', role: 'assistant', type: 'text', createdAt: at(4),
+          content: 'Internal: margin 41%', toolCalls: [{ id: 't2', name: 'notes', parameters: {} }],
+        },
+        { id: 'a3', conversationId: 'conv-1', role: 'assistant', type: 'text', content: 'It ships Monday.', createdAt: at(5) },
+        { id: 'x1', conversationId: 'conv-2', role: 'assistant', type: 'text', content: 'someone else', createdAt: at(6) },
+      ]);
+      const scoped = new HostedChatService(
+        gatewayRepository, endUserRepository, conversationRepository, messages as any, runRepository, auditLogService as any,
+      );
+
+      const transcript = await scoped.listMessages({ id: 'conv-1' } as any);
+
+      expect(transcript.map((m) => m.id)).toEqual(['u1', 'a3']);
+      expect(JSON.stringify(transcript)).not.toContain('4411');
+      expect(JSON.stringify(transcript)).not.toContain('margin');
+    });
+
     it('prefers the entity text accessor when parts are present', async () => {
       messageRepository.find.mockResolvedValueOnce([
         {
@@ -408,25 +480,35 @@ describe('HostedChatService', () => {
   });
 
   describe('findByCustomDomain', () => {
-    it('resolves an active, verified custom domain', async () => {
-      const gw = gateway();
-      qb.getMany.mockResolvedValueOnce([gw]);
-      await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBe(gw);
-      expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), {
-        hostname: 'chat.acme.com',
+    const domain = (hostname: string, status: string, overrides: Partial<Gateway> = {}) =>
+      surface({
+        ...overrides,
+        configuration: { hostedChat: { slug: `slug-${hostname}` } }, customDomain: { hostname, status } as any,
       });
+
+    it('resolves an active, verified custom domain', async () => {
+      surfaces = [
+        domain('chat.other.com', 'active', { id: 'gw-other' }),
+        domain('chat.acme.com', 'active'),
+        // A widget carrying the same block is not a hosted-chat surface.
+        domain('chat.acme.com', 'active', { id: 'gw-widget', type: GatewayType.CHAT_WIDGET }),
+      ];
+      await expect(service.findByCustomDomain(' Chat.Acme.com')).resolves.toMatchObject({ id: 'gw-1' });
+      expect(
+        clause(qb.executed[0], "gateway.customDomain ->> 'hostname' = :hostname")?.params,
+      ).toEqual({ hostname: 'chat.acme.com' });
     });
 
     it('only matches domains whose status is active', async () => {
       // A row exists for an unverified domain so the tenant can see the
       // record to publish, but serving under it would mean hosting a
       // hostname nobody proved they own.
-      await service.findByCustomDomain('chat.acme.com');
-      expect(qb.andWhere).toHaveBeenCalledWith(expect.any(String), { status: 'active' });
+      surfaces = [domain('chat.acme.com', 'pending')];
+      await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBeNull();
     });
 
     it('returns null rather than throwing for an unknown domain', async () => {
-      qb.getMany.mockResolvedValueOnce([]);
+      surfaces = [domain('chat.acme.com', 'active')];
       await expect(service.findByCustomDomain('nope.example')).resolves.toBeNull();
     });
 
@@ -434,7 +516,10 @@ describe('HostedChatService', () => {
       // Same fail-closed rule as findBySlug: a hostname is a global
       // public address, and picking one of two claimants would put a
       // tenant's agent and conversations under somebody else's URL.
-      qb.getMany.mockResolvedValueOnce([gateway(), gateway({ id: 'gw-2' } as any)]);
+      surfaces = [
+        domain('chat.acme.com', 'active'),
+        domain('chat.acme.com', 'active', { id: 'gw-2', organizationId: 'org-2' }),
+      ];
       await expect(service.findByCustomDomain('chat.acme.com')).resolves.toBeNull();
     });
 

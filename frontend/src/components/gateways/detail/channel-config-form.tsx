@@ -27,6 +27,7 @@ import { ConnectedChip } from '@/components/connections/connected-chip'
 import { ConnectionSelect, useConnectionOptions } from '@/components/connections/connection-select'
 import { ConnectionHealthBadge } from '@/components/connections/health-badge'
 import type { Connection } from '@/types/connections'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 export type ChannelType =
   | 'slack'
@@ -261,6 +262,12 @@ export function ChannelConfigForm({
     setClearConnection(false)
   }, [type, gateway.id, initialEditing])
 
+  // Typed-in credentials or a picked connection ask before a navigation
+  // throws them away. Not while saving: a save that lands clears them.
+  const guard = useLeaveGuard(
+    !isSaving && (Object.values(values).some((v) => v !== '') || !!connection || clearConnection),
+  )
+
   if (type === 'chat_widget') {
     return (
       <Card>
@@ -492,6 +499,7 @@ export function ChannelConfigForm({
           </Button>
         </div>
       </CardContent>
+      {guard.element}
     </Card>
   )
 }

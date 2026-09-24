@@ -76,7 +76,7 @@ describeIfDb('Private visibility: logs, export and promoted skills (real Postgre
     const bootstrap = new DataSource(connection());
     await bootstrap.initialize();
     await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
-    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+    await bootstrap.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA public`);
     await bootstrap.destroy();
 
     ds = new DataSource(versionsConfig({

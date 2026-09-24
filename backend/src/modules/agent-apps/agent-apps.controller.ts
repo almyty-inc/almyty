@@ -27,6 +27,44 @@ import {
 } from './dto/agent-apps-controller.dto';
 import { platformsFor, signingRequirementFor } from './build-targets';
 import { downloadedFilename, handoffFor } from './build-handoff';
+import { maskChannelConfigSecrets } from '../gateways/channels/channel-config.helper';
+import type { AppBuild } from '../../entities/app-build.entity';
+
+/**
+ * A distribution as the API shows it.
+ *
+ * Its configuration holds the operator's platform credentials (bot
+ * tokens, signing secrets, Twilio and Resend keys), the same values the
+ * gateway they are copied into masks on every response. GET /apps/:slug
+ * is readable by any member, so the row is never returned verbatim.
+ * addDistribution swaps a placeholder sent back for the stored value.
+ */
+export function publicDistribution<T extends { configuration?: Record<string, any> | null }>(
+  distribution: T,
+): T {
+  if (!distribution?.configuration) return distribution;
+  return { ...distribution, configuration: maskChannelConfigSecrets(distribution.configuration) };
+}
+
+/** An app as the API shows it: its distributions masked. */
+export function publicApp<T extends { distributions?: any[] | null }>(app: T): T {
+  if (!app?.distributions) return app;
+  return { ...app, distributions: app.distributions.map(publicDistribution) };
+}
+
+/**
+ * A build as the API shows it: without the toolchain log.
+ *
+ * The log is raw tool output, full of build-host paths and naming where
+ * the signing certificate was written. The processor keeps it for
+ * diagnosis server side and hands the operator `error` and
+ * `signingNote`, which are written for them.
+ */
+export function publicBuild<T extends Partial<Pick<AppBuild, 'log'>>>(build: T): Omit<T, 'log'> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { log, ...rest } = build;
+  return rest;
+}
 
 /**
  * The agent factory API.
@@ -75,7 +113,7 @@ export class AgentAppsController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Get one app with its distributions' })
   async findOne(@Param('slug') slug: string, @Request() req: any) {
-    return { success: true, data: await this.apps.findOne(this.org(req), slug) };
+    return { success: true, data: publicApp(await this.apps.findOne(this.org(req), slug)) };
   }
 
   /**
@@ -96,7 +134,10 @@ export class AgentAppsController {
   @Roles('admin', 'owner')
   @ApiOperation({ summary: 'Update an app' })
   async update(@Param('slug') slug: string, @Body() body: UpdateAppBodyDto, @Request() req: any) {
-    return { success: true, data: await this.apps.update(this.org(req), slug, body as UpdateAppDto) };
+    return {
+      success: true,
+      data: publicApp(await this.apps.update(this.org(req), slug, body as UpdateAppDto)),
+    };
   }
 
   @Delete(':slug')
@@ -122,12 +163,14 @@ export class AgentAppsController {
   ) {
     return {
       success: true,
-      data: await this.apps.addDistribution(
-        this.org(req),
-        slug,
-        body.target,
-        body.configuration ?? {},
-        body.gatewayId ?? null,
+      data: publicDistribution(
+        await this.apps.addDistribution(
+          this.org(req),
+          slug,
+          body.target,
+          body.configuration ?? {},
+          body.gatewayId ?? null,
+        ),
       ),
     };
   }
@@ -172,10 +215,12 @@ export class AgentAppsController {
   ) {
     return {
       success: true,
-      data: await this.apps.recordBuild(this.org(req), slug, target, {
-        ...body,
-        builtBy: req.user?.email ?? req.user?.id,
-      }),
+      data: publicDistribution(
+        await this.apps.recordBuild(this.org(req), slug, target, {
+          ...body,
+          builtBy: req.user?.email ?? req.user?.id,
+        }),
+      ),
     };
   }
 
@@ -196,7 +241,9 @@ export class AgentAppsController {
   ) {
     return {
       success: true,
-      data: await this.apps.publishDistribution(this.org(req), slug, target, req.user.id),
+      data: publicDistribution(
+        await this.apps.publishDistribution(this.org(req), slug, target, req.user.id),
+      ),
     };
   }
 
@@ -210,7 +257,9 @@ export class AgentAppsController {
   ) {
     return {
       success: true,
-      data: await this.apps.unpublishDistribution(this.org(req), slug, target, req.user.id),
+      data: publicDistribution(
+        await this.apps.unpublishDistribution(this.org(req), slug, target, req.user.id),
+      ),
     };
   }
 
@@ -271,11 +320,13 @@ export class AgentAppsController {
   ) {
     return {
       success: true,
-      data: await this.builds.request(
-        this.org(req),
-        slug,
-        body as RequestBuildDto,
-        req.user?.email ?? req.user?.id ?? null,
+      data: publicBuild(
+        await this.builds.request(
+          this.org(req),
+          slug,
+          body as RequestBuildDto,
+          req.user?.email ?? req.user?.id ?? null,
+        ),
       ),
     };
   }
@@ -293,7 +344,7 @@ export class AgentAppsController {
     return {
       success: true,
       data: builds.map((build) => ({
-        ...build,
+        ...publicBuild(build),
         handoff: handoffFor(
           build.platform,
           build.signed,

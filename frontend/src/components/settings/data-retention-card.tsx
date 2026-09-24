@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { useNotifications } from '@/store/app'
 import { organizationsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 const RETENTION_MIN_DAYS = 1
 const RETENTION_MAX_DAYS = 3650
@@ -38,6 +39,20 @@ const EMPTY_FORM: RetentionForm = {
   notificationsDays: '',
 }
 
+/** The form as the saved policy fills it. */
+function formFromPolicy(policy: any): RetentionForm {
+  return {
+    enabled: policy.enabled !== false,
+    agentRunsDays: policy.agentRunsDays ?? '',
+    conversationsDays: policy.conversationsDays ?? '',
+    requestLogsDays: policy.requestLogsDays ?? '',
+    usageMetricsDays: policy.usageMetricsDays ?? '',
+    auditLogDays: policy.auditLogDays ?? '',
+    toolExecutionsDays: policy.toolExecutionsDays ?? '',
+    notificationsDays: policy.notificationsDays ?? '',
+  }
+}
+
 export function DataRetentionCard({ organizationId }: { organizationId?: string }) {
   const { success, error } = useNotifications()
   const queryClient = useQueryClient()
@@ -52,16 +67,7 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
   // Initialize form values when the policy loads
   React.useEffect(() => {
     if (!policy) return
-    setForm({
-      enabled: policy.enabled !== false,
-      agentRunsDays: policy.agentRunsDays ?? '',
-      conversationsDays: policy.conversationsDays ?? '',
-      requestLogsDays: policy.requestLogsDays ?? '',
-      usageMetricsDays: policy.usageMetricsDays ?? '',
-      auditLogDays: policy.auditLogDays ?? '',
-      toolExecutionsDays: policy.toolExecutionsDays ?? '',
-      notificationsDays: policy.notificationsDays ?? '',
-    })
+    setForm(formFromPolicy(policy))
   }, [policy])
 
   const updateMutation = useMutation({
@@ -75,6 +81,12 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
       error('Failed to save retention policy', getApiErrorMessage(err, 'Please try again.'))
     },
   })
+
+  // A policy edited but not saved asks before a navigation throws it away.
+  // A save refetches the policy, which brings the form back in line.
+  const guard = useLeaveGuard(
+    !updateMutation.isPending && JSON.stringify(form) !== JSON.stringify(policy ? formFromPolicy(policy) : EMPTY_FORM),
+  )
 
   if (!organizationId) return null
 
@@ -159,6 +171,7 @@ export function DataRetentionCard({ organizationId }: { organizationId?: string 
           </>
         )}
       </CardContent>
+      {guard.element}
     </Card>
   )
 }

@@ -169,6 +169,48 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     ),
   }),
 
+  // Sent to the address an account USED to have. The whole point is that
+  // the person who owns it hears about the change even if it was not
+  // them, so it names the new address only partially and never carries a
+  // link that would act on the account.
+  'account.email_changed': (p) => ({
+    subject: 'Your almyty email address was changed',
+    html: renderBaseLayout({
+      heading: 'Your email address was changed',
+      bodyHtml:
+        para(
+          `The email address on your almyty account was changed${p.newEmailHint ? ` to <strong>${esc(p.newEmailHint)}</strong>` : ''}. Sign-in and account emails now go to the new address.`,
+        ) +
+        para('If you made this change, there is nothing else to do.'),
+      footerNote:
+        "If you did not make this change, reply to this email or contact support right away: someone may have access to your account.",
+    }),
+    text: flattenText(
+      `The email address on your almyty account was changed${p.newEmailHint ? ` to ${p.newEmailHint}` : ''}. If you did not make this change, contact support right away.`,
+    ),
+  }),
+
+  // A hosted-chat visitor's one-time sign-in code. The app name is the
+  // tenant's, so it is escaped and kept out of anything that looks like a
+  // link or a button: the code is the only thing to act on.
+  'visitor.sign_in_code': (p) => {
+    const app = String(p.appName || 'the chat').slice(0, 60);
+    const minutes = Number(p.minutes) || 10;
+    return {
+      subject: sanitizeSubject(`${p.code} is your sign-in code for ${app}`),
+      html: renderBaseLayout({
+        heading: `Your sign-in code for ${app}`,
+        bodyHtml:
+          para('Enter this code to continue:') +
+          `<p style="font-size: 28px; font-weight: 700; letter-spacing: 6px; margin: 8px 0 16px; font-family: 'JetBrains Mono', monospace;">${esc(p.code)}</p>`,
+        footerNote: `The code expires in ${minutes} minutes and works once. If you did not ask for it, you can ignore this email.`,
+      }),
+      text: flattenText(
+        `Your sign-in code for ${app} is ${p.code}. It expires in ${minutes} minutes and works once. If you did not ask for it, ignore this email.`,
+      ),
+    };
+  },
+
   'account.welcome': (p) => ({
     subject: 'Welcome to almyty',
     html: renderBaseLayout({
@@ -405,6 +447,24 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     }),
     text: flattenText(
       `The ${p.connectorName || p.connectorKey || 'connected account'} connection${p.connectionName ? ` ${p.connectionName}` : ''} is ${p.ageDays ?? ''} days old and due for rotation.${p.connectionsUrl ? ` ${p.connectionsUrl}` : ''}`,
+    ),
+  }),
+
+  // ── Hosted chat custom domains ──────────────────────────────────────
+
+  'domains.unverified': (p) => ({
+    subject: sanitizeSubject(`${p.hostname || 'Your custom domain'} is no longer served`),
+    html: renderBaseLayout({
+      heading: 'Custom domain stopped',
+      bodyHtml:
+        para(
+          `<strong>${esc(p.hostname || 'A custom domain')}</strong>${p.gatewayName ? ` on <strong>${esc(p.gatewayName)}</strong>` : ''} is no longer served.`,
+        ) + para(esc(p.reason || 'Its DNS verification record could not be found.')),
+      footerNote: 'You receive this because you administer the organization that owns this chat app.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `${p.hostname || 'A custom domain'}${p.gatewayName ? ` on ${p.gatewayName}` : ''} is no longer served. ${p.reason || 'Its DNS verification record could not be found.'}`,
     ),
   }),
 

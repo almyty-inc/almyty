@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { findModelNotFound } from '../llm-providers/model-errors';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
@@ -14,7 +14,9 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Organization } from '../../entities/organization.entity';
 import { resolveRunLimits } from './run-limits';
 import { BudgetsService } from '../budgets/budgets.service';
+import { resourceOwnerId } from '../../common/authorization/access-policy.service';
 import { AgentExecutionCancellationService } from './agent-execution-cancellation.service';
+import { ExecutionAccessService, ExecutionPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 
 // Re-export so existing `import { StreamEvent } from './agent-execution.engine'`
 // continues to work without changing every consumer in one shot.
@@ -45,6 +47,15 @@ export interface ExecuteAgentOptions {
    * the post-layer abort check fires, and the run marks CANCELLED.
    */
   signal?: AbortSignal;
+  /**
+   * Whose scope the run executes in: the user who started it (session, API
+   * key, the agent owner at a schedule tick) or the gateway it came through.
+   * The agent itself and every node beneath it -- tool_call, sub_agent --
+   * are authorized against this one principal (ExecutionAccessService); a
+   * sub-agent run is handed its parent's unchanged. Without one the run is
+   * `userId`'s.
+   */
+  principal?: ExecutionPrincipal;
 }
 
 export interface EngineInternalOptions {
@@ -136,6 +147,11 @@ export class AgentExecutionEngine {
     // engine with no registry simply cannot be cancelled out-of-band.
     @Optional()
     private readonly cancellations?: AgentExecutionCancellationService,
+    // The team/private execution gate. @Optional() only to keep the
+    // positional spec harnesses' order; execute() refuses to run anything
+    // without it. AgentsModule imports AuthorizationModule, which provides it.
+    @Optional()
+    private readonly executionAccess?: ExecutionAccessService,
   ) {}
 
   /**
@@ -164,6 +180,21 @@ export class AgentExecutionEngine {
 
     // ── Input validation ────────────────────────────────────────────────
     validateInput(options.input, internalOptions);
+
+    // Team and private scope are an execution boundary. Every path into a
+    // workflow run comes through here -- the execution controller, both
+    // compat APIs, the unified endpoint, the scheduler, gateways and the
+    // sub-agent executor -- so this is where the run's principal is checked
+    // against the agent, before anything is written. Refused as not found.
+    const principal: ExecutionPrincipal = options.principal ?? userPrincipal(userId);
+    if (!this.executionAccess) {
+      // Fail closed: an engine wired without the check runs nothing.
+      throw new Error('Agent execution access check is not configured');
+    }
+    if (agent?.organizationId && agent.organizationId !== organizationId) {
+      throw new NotFoundException('Agent not found');
+    }
+    await this.executionAccess.assertCanExecute(principal, agent, 'Agent');
 
     // Spend budgets, before the execution row exists so a rejected run
     // leaves nothing behind. enforceForRun had exactly one caller --
@@ -510,6 +541,10 @@ export class AgentExecutionEngine {
                   {
                     organizationId,
                     userId,
+                    // Inherited, never re-derived: every node of this run --
+                    // and every sub-agent run it starts -- executes in the
+                    // scope the run started in.
+                    principal,
                     edges: pipeline.edges,
                     nestingDepth: internalOptions?.nestingDepth,
                     // A nested run inherits the ceiling its parent was
@@ -1148,12 +1183,18 @@ export class AgentExecutionEngine {
       if (!this.notifications) return;
       const triggerType = (execution.metadata as any)?.triggerType;
       if (triggerType !== 'scheduled' && triggerType !== 'webhook') return;
-      if (!execution.userId) return;
+      // A private agent's failure goes to its owner alone. The run's userId
+      // is whoever the scheduler or webhook stamped, which can predate the
+      // agent going private or being handed over; an error text and the
+      // agent's name must not reach that member. No recorded owner: nobody.
+      const recipient =
+        agent.visibility === 'private' ? resourceOwnerId(agent) : execution.userId;
+      if (!recipient) return;
       const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
       await this.notifications.emit({
         type: 'run.failed',
         organizationId: execution.organizationId,
-        userIds: [execution.userId],
+        userIds: [recipient],
         title: `Run failed: ${agent.name}`,
         body: execution.error || 'Run failed',
         link: `/agents/${agent.id}`,

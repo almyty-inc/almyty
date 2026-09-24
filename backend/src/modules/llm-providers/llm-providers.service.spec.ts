@@ -2817,7 +2817,8 @@ describe('LlmProvidersService', () => {
       expect(toolExecutorService.executeTool).toHaveBeenCalledWith(
         'tool-1',
         { location: 'NYC' },
-        { userId: 'system', organizationId: 'org-1' }
+        // No user is passed as no user, not as a 'system' id Postgres would refuse.
+        { userId: undefined, organizationId: 'org-1', principal: { kind: 'user', userId: null, source: 'session' } }
       );
     });
   });

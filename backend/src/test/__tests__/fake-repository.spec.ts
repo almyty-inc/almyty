@@ -1,6 +1,7 @@
 import { In, IsNull, LessThan, MoreThanOrEqual, Not, Raw } from 'typeorm';
 
 import { fakeManager, fakeRepository, UnmodelledQueryError } from '../fake-repository';
+import { notOthersPrivateAgent, notOthersPrivateAgentRun, notOthersPrivateTool } from '../../modules/monitoring/private-rows';
 
 /**
  * The fake is only worth using if it can say no, so these pin the ways
@@ -133,6 +134,93 @@ describe('fakeRepository', () => {
     const r = repo();
     const rows = await r.find({ order: { id: 'DESC' }, skip: 0, take: 1 });
     expect(rows.map((w: Widget) => w.id)).toEqual(['w2']);
+  });
+
+  describe('Raw: the "not someone else\'s private resource" predicate', () => {
+    // The exact predicate PromotedSkillsService filters on, built by the
+    // same helper, so a change to the helper's SQL is seen here.
+    const notOthersPrivateSource = (viewer: string | null) =>
+      Raw((column) => `(${column} IS NULL OR ${notOthersPrivateAgent(column)})`, { privateViewerId: viewer });
+
+    const setup = () => {
+      const agents = fakeRepository<any>([
+        { id: 'a-private', visibility: 'private', createdBy: 'owner' },
+        { id: 'a-org', visibility: 'org', createdBy: 'owner' },
+        { id: 'a-ownerless', visibility: 'private', createdBy: null },
+      ]);
+      const skills = fakeRepository<any>({
+        tables: { agents },
+        seed: [
+          { id: 's-private', organizationId: 'org-1', agentId: 'a-private' },
+          { id: 's-org', organizationId: 'org-1', agentId: 'a-org' },
+          { id: 's-none', organizationId: 'org-1', agentId: null },
+          { id: 's-ownerless', organizationId: 'org-1', agentId: 'a-ownerless' },
+          { id: 's-gone', organizationId: 'org-1', agentId: 'a-deleted' },
+        ],
+      });
+      return { agents, skills };
+    };
+    const ids = async (skills: ReturnType<typeof setup>['skills'], viewer: string | null) =>
+      (await skills.find({ where: { agentId: notOthersPrivateSource(viewer) } })).map((s: any) => s.id).sort();
+
+    it('keeps the owner\'s private rows for the owner and drops them for anyone else', async () => {
+      const { skills } = setup();
+      expect(await ids(skills, 'owner')).toEqual(['s-gone', 's-none', 's-org', 's-private']);
+      expect(await ids(skills, 'someone-else')).toEqual(['s-gone', 's-none', 's-org']);
+    });
+
+    it('follows Postgres null semantics: a null viewer never owns a row, not even an ownerless one', async () => {
+      // `(NULL = NULL) IS NOT TRUE` is true, so the SQL drops a private
+      // resource with no recorded owner for a caller with no known user
+      // (fail closed), as it drops everyone else's private resources.
+      const { skills } = setup();
+      expect(await ids(skills, null)).toEqual(['s-gone', 's-none', 's-org']);
+    });
+
+    it('reads the other table at query time', async () => {
+      const { agents, skills } = setup();
+      await agents.update({ id: 'a-org' }, { visibility: 'private' });
+      expect(await ids(skills, 'someone-else')).toEqual(['s-gone', 's-none']);
+    });
+
+    it('works through findOne, count and delete criteria too', async () => {
+      const { skills } = setup();
+      expect(await skills.findOne({ where: { id: 's-private', agentId: notOthersPrivateSource('someone-else') } })).toBeNull();
+      expect(await skills.count({ where: { agentId: notOthersPrivateSource('owner') } })).toBe(4);
+      expect((await skills.delete({ id: 's-private', agentId: notOthersPrivateSource('someone-else') })).affected).toBe(0);
+      expect(skills.row('s-private')).toBeDefined();
+    });
+
+    it('throws for any Raw SQL outside the modelled shapes rather than matching', async () => {
+      const { agents, skills } = setup();
+      const refused = (op: any, repo: any = skills) =>
+        expect(repo.find({ where: { agentId: op } })).rejects.toBeInstanceOf(UnmodelledQueryError);
+
+      // The table the predicate reads was not supplied.
+      await refused(notOthersPrivateSource('owner'), fakeRepository<any>([{ id: 's', agentId: 'a-org' }]));
+      // A bound parameter with no value.
+      await refused(Raw((c) => `(${c} IS NULL OR ${notOthersPrivateAgent(c)})`, {}));
+      // A near miss of the modelled fragment: dropping the NOT, or flipping the owner test.
+      await refused(Raw((c) => notOthersPrivateAgent(c).replace('NOT EXISTS', 'EXISTS'), { privateViewerId: 'owner' }));
+      await refused(
+        Raw((c) => notOthersPrivateAgent(c).replace('IS NOT TRUE', 'IS TRUE'), { privateViewerId: 'owner' }),
+      );
+      // A fragment with a join is not modelled.
+      await refused(Raw((c) => notOthersPrivateAgentRun(c), { privateViewerId: 'owner' }));
+      // A literal Raw, and an unrelated expression.
+      await refused(Raw('a-org'));
+      await refused(Raw((c) => `${c} = 'a-org'`));
+      expect(agents.find).not.toHaveBeenCalled();
+    });
+
+    it('the tool fragment reads the tools table with its own owner column', async () => {
+      const tools = fakeRepository<any>([{ id: 't1', visibility: 'private', createdBy: 'owner' }]);
+      const execs = fakeRepository<any>({ tables: { tools }, seed: [{ id: 'e1', toolId: 't1' }] });
+      const where = (viewer: string | null) => ({ toolId: Raw((c) => notOthersPrivateTool(c), { privateViewerId: viewer }) });
+      expect(await execs.count({ where: where('owner') })).toBe(1);
+      expect(await execs.count({ where: where('someone-else') })).toBe(0);
+      expect(await execs.count({ where: where(null) })).toBe(0);
+    });
   });
 });
 

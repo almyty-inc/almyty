@@ -1,3 +1,5 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
+import { fakeRepository } from '../../../test/fake-repository';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -76,7 +78,15 @@ describe('gateway tool transformations reach execution', () => {
       {} as any,
       {} as any,
       {} as any,
-      { findOne: jest.fn().mockResolvedValue(gatewayTool) } as any,
+      // The tool attached, switched on, to an org-wide gw-1: the gateway
+      // serves it, so what is under test is only the row's transformations.
+      fakeRepository<GatewayTool>({
+        seed: [Object.assign(gatewayTool, { gatewayId: 'gw-1', toolId: 'tool-1', isActive: true, gateway: { id: 'gw-1', visibility: 'org' } })],
+        make: () => new GatewayTool(),
+      }) as any,
+      undefined,
+      // The real execution gate; these calls carry no user, so org tools pass.
+      membershipFixture().executionAccess,
     );
   }
 

@@ -18,6 +18,14 @@ import { SignalAdapter } from '../adapters/signal.adapter';
 import { MatrixAdapter } from '../adapters/matrix.adapter';
 import { IrcAdapter } from '../adapters/irc.adapter';
 import { installFetchMock } from '../adapters/__tests__/test-helpers';
+import {
+  BY_ID,
+  ClauseModel,
+  ExecutedQuery,
+  RecordingQueryBuilder,
+  matchingRows,
+  tableUpdates,
+} from '../../__tests__/recording-query-builder';
 
 /**
  * Two things the inbound channel pipeline has to get right when more
@@ -110,14 +118,30 @@ describe('inbound channel pipeline under concurrency', () => {
     emitter = new EventEmitter();
 
     const run: any = { id: 'run-1', metadata: {}, output: 'agent says hi' };
+    // The thread-continuation lookup, evaluated against a runs table
+    // whose every row sits on the default Slack thread ('111.222') but
+    // fails one predicate: another agent's live run, this agent's finished
+    // one. The canned `[]` that stood here could not tell the `agentId` or
+    // status predicate from its absence; now dropping either resumes a
+    // run that is not this conversation's, and no new run starts.
+    const created = new Date('2026-07-01T10:00:00Z');
+    const runRows = [
+      { id: 'run-other-agent', agentId: 'agent-2', status: 'running', metadata: { threadId: '111.222' }, createdAt: created },
+      { id: 'run-finished', agentId: 'agent-1', status: 'completed', metadata: { threadId: '111.222' }, createdAt: created },
+    ];
+    const RUN_CLAUSES: ClauseModel = {
+      'run.agentId = :agentId': (row, p) => row.agentId === p.agentId,
+      'run.status IN (:...activeStatuses)': (row, p) => p.activeStatuses.includes(row.status),
+      "run.metadata->>'threadId' = :threadId": (row, p) => row.metadata?.threadId === p.threadId,
+      "run.metadata->>'gatewayId' = :gatewayId": (row, p) => row.metadata?.gatewayId === p.gatewayId,
+    };
     runRepository = {
-      createQueryBuilder: jest.fn(() => ({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      })),
+      createQueryBuilder: jest.fn(
+        (alias: string) =>
+          new RecordingQueryBuilder(alias, {
+            getMany: (query: ExecutedQuery) => matchingRows(query, runRows, RUN_CLAUSES),
+          }),
+      ),
       save: jest.fn(async (r: any) => r),
       findOne: jest.fn(async () => run),
     };
@@ -207,6 +231,14 @@ describe('inbound channel pipeline under concurrency', () => {
       successfulRequests: 0,
       lastRequestAt: null,
     });
+    gatewayRows.set('gw-neighbour', {
+      id: 'gw-neighbour',
+      status: GatewayStatus.ACTIVE,
+      configuration: {},
+      totalRequests: 0,
+      successfulRequests: 0,
+      lastRequestAt: null,
+    });
     gatewayRepository = {
       save: jest.fn(async (g: any) => {
         gatewayRows.set(g.id, {
@@ -219,31 +251,10 @@ describe('inbound channel pipeline under concurrency', () => {
         });
         return g;
       }),
-      createQueryBuilder: jest.fn(() => {
-        let patch: Record<string, any> = {};
-        let targetId: string | undefined;
-        const qb: any = {
-          update: () => qb,
-          set: (values: Record<string, any>) => { patch = values; return qb; },
-          where: (_clause: string, params: any) => { targetId = params.id; return qb; },
-          execute: async () => {
-            const row = gatewayRows.get(targetId!);
-            if (!row) return { affected: 0 };
-            for (const [key, value] of Object.entries(patch)) {
-              if (typeof value === 'function') {
-                // `() => '"totalRequests" + 1'` and friends.
-                const sql = String(value());
-                const column = sql.replace(/"/g, '').split(' ')[0];
-                row[key] = sql.includes('+ 1') ? (row[column] ?? 0) + 1 : row[column];
-              } else {
-                row[key] = value;
-              }
-            }
-            return { affected: 1 };
-          },
-        };
-        return qb;
-      }),
+      // Evaluates the update's WHERE against the table: the hand-rolled
+      // builder that stood here read `params.id` and ignored the SQL, so
+      // a bump that lost `id = :id` still landed on the one right row.
+      createQueryBuilder: tableUpdates(() => [...gatewayRows.values()], BY_ID).createQueryBuilder,
     };
 
     agentRuntimeService = {
@@ -326,6 +337,8 @@ describe('inbound channel pipeline under concurrency', () => {
     ]);
 
     expect(gatewayRows.get('gw-1').totalRequests).toBe(2);
+    // The bump is addressed to this gateway's row and no other.
+    expect(gatewayRows.get('gw-neighbour').totalRequests).toBe(0);
   });
 
   // ── 2. one delivery, one run ──────────────────────────────────────────

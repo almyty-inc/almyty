@@ -9,6 +9,7 @@ import { Agent } from '../../entities/agent.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
+import { Gateway, GatewayStatus } from '../../entities/gateway.entity';
 import { AgentExecutionEngine, StreamEvent } from '../agents/agent-execution.engine';
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
 import { AgentExecutionCancellationService } from '../agents/agent-execution-cancellation.service';
@@ -20,6 +21,12 @@ import { AgentExecutionCancellationService } from '../agents/agent-execution-can
  * Lives in its own class so the controller stays a thin dispatcher.
  */
 import { AgentNotActive, agentIsInvokable, runsOnAutonomousRuntime } from '../agents/agent-invocation';
+import { ExecutionPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
+
+/** Whose scope a unified-endpoint agent request runs in: the key's or JWT's user. */
+export function unifiedPrincipal(apiKey: Pick<ApiKey, 'userId'>): ExecutionPrincipal {
+  return userPrincipal(apiKey.userId ?? null, 'api_key');
+}
 @Injectable()
 export class UnifiedAgentHelper {
   private readonly logger = new Logger(UnifiedAgentHelper.name);
@@ -47,6 +54,20 @@ export class UnifiedAgentHelper {
     body: any,
   ) {
     const apiKey = await this.authenticate(req, agent);
+
+    // The key's (or JWT's) user is who this request runs as, for every
+    // action below -- invoke, stream, runs, executions. A team agent the
+    // user is not a member for, or somebody else's private agent, answers
+    // as the controller answers a slug that matches nothing. So does an
+    // agent the key was not minted for: a gateway's key reaches only the
+    // agent that gateway publishes, and an agent's key only that agent.
+    const allowed =
+      (await this.keyReachesAgent(apiKey, agent)) &&
+      (await this.runtimeService.executionAccess.canExecute(unifiedPrincipal(apiKey), agent)).allowed;
+    if (!allowed) {
+      const [orgSlug, resourceSlug] = req.path.split('/').filter(Boolean);
+      throw new HttpException(`Resource not found: ${orgSlug}/${resourceSlug}`, HttpStatus.NOT_FOUND);
+    }
 
     const pathParts = req.path.split('/').filter(Boolean);
     const action = pathParts.slice(2).join('/') || '';
@@ -107,6 +128,26 @@ export class UnifiedAgentHelper {
     }
 
     throw new HttpException(`Unknown agent action: ${action}`, HttpStatus.NOT_FOUND);
+  }
+
+  /**
+   * May this key address `agent` at all?
+   *
+   * A platform key (no gatewayId, no agentId) acts as its user across the
+   * organization. A key minted for one agent reaches that agent only (the
+   * compat endpoints apply the same rule). A gateway's key is a credential
+   * for what that gateway publishes: here, the one agent of an agent
+   * gateway, and nothing on a tool gateway. Without this a gateway key handed
+   * to a third-party client ran every agent its minting user could run.
+   */
+  private async keyReachesAgent(apiKey: ApiKey, agent: Agent): Promise<boolean> {
+    if (apiKey.agentId && apiKey.agentId !== agent.id) return false;
+    if (!apiKey.gatewayId) return true;
+    const gateway = await this.agentRepository.manager.getRepository(Gateway).findOne({
+      where: { id: apiKey.gatewayId, organizationId: agent.organizationId, status: GatewayStatus.ACTIVE },
+      select: { id: true, agentId: true },
+    });
+    return !!gateway?.agentId && gateway.agentId === agent.id;
   }
 
   /**
@@ -211,6 +252,7 @@ export class UnifiedAgentHelper {
         organization.id,
         apiKey.userId ?? null,
         body.input || body,
+        { principal: unifiedPrincipal(apiKey) },
       );
       return res.json({ success: true, data: run, message: 'Autonomous agent run started' });
     }
@@ -223,6 +265,7 @@ export class UnifiedAgentHelper {
         input: body.input || body,
         variables: body.variables,
         metadata: body.metadata,
+        principal: unifiedPrincipal(apiKey),
       },
     );
 
@@ -300,6 +343,7 @@ export class UnifiedAgentHelper {
         variables: body.variables,
         metadata: body.metadata,
         signal: abort.signal,
+        principal: unifiedPrincipal(apiKey),
       },
       onEvent,
     );
@@ -335,7 +379,7 @@ export class UnifiedAgentHelper {
         organization.id,
         userId,
         body.input,
-        { conversationId: body.conversationId },
+        { conversationId: body.conversationId, principal: unifiedPrincipal(apiKey) },
       );
       return res.status(201).json({ success: true, data: run });
     }

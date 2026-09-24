@@ -41,6 +41,8 @@ import {
   ConnectMethodType,
   ConnectorDefinition,
   REDIRECT_METHODS,
+  connectionOwnerOf,
+  heldBy,
 } from './connector.types';
 import {
   CONNECTIONS_MANAGE,
@@ -73,6 +75,15 @@ export interface PendingForm {
   pending: true;
   method: ConnectMethodType;
   form: { schema: ConnectMethod['schema']; keyPageUrl: string | null };
+}
+
+/** What asking a provider to revoke a connection's grant came to. */
+export interface ProviderRevokeOutcome {
+  /** False when the provider offers no way to revoke (nothing was sent). */
+  attempted: boolean;
+  revoked: boolean;
+  via?: 'rotation' | 'connector' | 'oauth2';
+  error?: string;
 }
 export type ConnectResult = PendingRedirect | PendingForm | { pending: false; connection: ConnectionView; rotation?: RotateOutcome };
 
@@ -148,20 +159,23 @@ export class ConnectionsService {
     const method = this.pickMethod(connector, body.method);
     const owner: ConnectionOwner = body.owner ?? 'org';
     await this.assertCanCreate(principal, organizationId, owner);
-    await this.governance?.beforeConnect(organizationId, connector.key, owner);
-    const ownerUserId = owner === 'user' ? principal.id : null;
+    await this.governance?.beforeConnect(organizationId, connector.key, heldBy(owner));
+    // Personal and private both belong to the caller; private also takes
+    // the row out of everyone else's reach (admins included).
+    const ownerUserId = owner === 'org' ? null : principal.id;
+    const visibility = owner === 'private' ? 'private' : 'org';
 
     if (REDIRECT_METHODS.includes(method.type)) {
       const plainInput = this.plainInput(method, body.input);
       return this.startRedirect({
-        connector, method, organizationId, userId: principal.id, ownerUserId,
+        connector, method, organizationId, userId: principal.id, ownerUserId, visibility,
         mode: body.mode ?? 'browser', input: plainInput, rotateConnectionId: null, requestBase,
       });
     }
 
     const input = this.checkedInput(method, body.input);
     const view = await this.finalize({
-      connector, method, organizationId, userId: principal.id, ownerUserId,
+      connector, method, organizationId, userId: principal.id, ownerUserId, visibility,
       config: input, name: body.name, action: AuditAction.CONNECTION_CONNECT,
     });
     return { pending: false, connection: view };
@@ -231,7 +245,7 @@ export class ConnectionsService {
     }
     return this.finalize({
       connector, method, organizationId: pending.organizationId, userId: pending.userId, ownerUserId: pending.ownerUserId,
-      config, existing, expiresAt, scopesGranted,
+      config, existing, expiresAt, scopesGranted, visibility: pending.visibility,
       action: pending.rotateConnectionId ? AuditAction.CONNECTION_ROTATE : AuditAction.CONNECTION_CONNECT,
     });
   }
@@ -374,26 +388,98 @@ export class ConnectionsService {
   async disconnect(principal: ConnectionPrincipal, organizationId: string, id: string): Promise<{ revoked: boolean; revokeError?: string }> {
     const row = await this.load(organizationId, id);
     this.assertCanManage(principal, row);
-    const connector = await this.catalog.find(organizationId, row.connectorKey!);
-    let revoked = false;
-    let revokeError: string | undefined;
-    const providerRevoke = this.rotation
-      ? await this.rotation.revoke({ id: row.id, organizationId, connectorKey: row.connectorKey!, name: row.name, secrets: await this.decryptConfig(row) }, { userId: principal.id })
-      : { supported: false, revoked: false };
-    if (providerRevoke.supported) {
-      revoked = providerRevoke.revoked;
-      revokeError = providerRevoke.error;
-    } else if (connector?.revoke) {
-      const outcome = await this.validation.revoke(connector, await this.decryptConfig(row));
-      revoked = outcome.ok;
-      revokeError = outcome.error;
-    }
+    const { revoked, error: revokeError } = await this.revokeAtProvider(row, principal.id);
     await this.credentials.remove(row);
     this.auditLog.log({
       organizationId, userId: principal.id, action: AuditAction.CONNECTION_DISCONNECT, resourceType: AuditResource.CONNECTION,
       resourceId: id, resourceName: row.name, details: { connectorKey: row.connectorKey, revoked, revokeError: revokeError ?? null },
     });
     return { revoked, revokeError };
+  }
+
+  /**
+   * Revoke a connection's grant at its provider. Best-effort and never
+   * throws: the caller removes or wipes the row locally whatever this
+   * answers. In order, the first that applies:
+   *
+   *  1. a rotation provider that can revoke the key it minted;
+   *  2. the connector's declared `revoke` probe;
+   *  3. RFC 7009 token revocation, when the OAuth method the connection
+   *     was made with declares a `revocationUrl` -- the refresh token
+   *     first (which, per the RFC, also ends the access tokens it
+   *     issued), then the access token.
+   *
+   * `attempted: false` means the provider offers no way to revoke.
+   */
+  async revokeAtProvider(
+    row: Pick<Credential, 'id' | 'organizationId' | 'name' | 'connectorKey' | 'metadata' | 'config'>,
+    actorUserId?: string,
+  ): Promise<ProviderRevokeOutcome> {
+    try {
+      if (!row.connectorKey) return { attempted: false, revoked: false };
+      const secrets = await this.decryptConfig(row as Credential);
+      if (this.rotation) {
+        const outcome = await this.rotation.revoke(
+          { id: row.id, organizationId: row.organizationId, connectorKey: row.connectorKey, name: row.name, secrets },
+          { userId: actorUserId },
+        );
+        if (outcome.supported) return { attempted: true, revoked: outcome.revoked, via: 'rotation', error: outcome.error };
+      }
+      const connector = await this.catalog.find(row.organizationId, row.connectorKey);
+      if (connector?.revoke) {
+        const outcome = await this.validation.revoke(connector, secrets);
+        return { attempted: true, revoked: outcome.ok, via: 'connector', error: outcome.error };
+      }
+      const methodType = row.metadata?.connectMethod as ConnectMethodType | undefined;
+      const method = connector && methodType ? connector.connect.find((m) => m.type === methodType) : undefined;
+      if (connector && method?.oauth?.revocationUrl) {
+        const outcome = await this.revokeOAuthTokens(connector, method, secrets);
+        return { attempted: true, revoked: outcome.ok, via: 'oauth2', error: outcome.error };
+      }
+      return { attempted: false, revoked: false };
+    } catch (err: any) {
+      return { attempted: true, revoked: false, error: String(err?.message ?? err) };
+    }
+  }
+
+  /** RFC 7009: POST each token to the revocation endpoint, authenticated as at the token endpoint. */
+  private async revokeOAuthTokens(
+    connector: ConnectorDefinition,
+    method: ConnectMethod,
+    secrets: Record<string, any>,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const oauth = method.oauth!;
+    const url = interpolate(oauth.revocationUrl!, splitSecrets(secrets, method.schema).plain);
+    const urlCheck = validateUrl(url);
+    if (!urlCheck.valid) return { ok: false, error: `revocation URL refused: ${urlCheck.error}` };
+
+    const accessField = method.secretField ?? (method.credentialType === CredentialType.OAUTH2 ? 'accessToken' : 'apiKey');
+    const tokens: Array<[string, 'refresh_token' | 'access_token']> = [];
+    if (typeof secrets.refreshToken === 'string' && secrets.refreshToken) tokens.push([secrets.refreshToken, 'refresh_token']);
+    if (typeof secrets[accessField] === 'string' && secrets[accessField]) tokens.push([secrets[accessField], 'access_token']);
+    if (tokens.length === 0) return { ok: false, error: 'the connection holds no token to revoke' };
+
+    const client = oauth.clientId === 'platform' ? this.platformClient(connector.key) : null;
+    const errors: string[] = [];
+    for (const [token, hint] of tokens) {
+      const fields: Record<string, string> = { token, token_type_hint: hint };
+      if (client) {
+        fields.client_id = client.clientId;
+        fields.client_secret = client.clientSecret;
+      }
+      try {
+        const res = await this.validation.request(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+          body: new URLSearchParams(fields).toString(),
+        });
+        // 200 whether or not the token was still valid (RFC 7009 2.2).
+        if (!res.ok) errors.push(`${hint}: HTTP ${res.status}`);
+      } catch (e: any) {
+        errors.push(`${hint}: ${e?.message ?? e}`);
+      }
+    }
+    return errors.length ? { ok: false, error: errors.join('; ') } : { ok: true };
   }
 
   // ------------------------------------------------------------------
@@ -416,7 +502,7 @@ export class ConnectionsService {
       connectorDisplayName: connector?.displayName ?? row.connectorKey!,
       kind: connector?.kind ?? null,
       name: row.name,
-      owner: row.ownerUserId ? 'user' : 'org',
+      owner: connectionOwnerOf(row),
       ownerUserId: row.ownerUserId ?? null,
       method: (row.metadata?.connectMethod as ConnectMethodType | undefined) ?? null,
       accountLabel: row.accountLabel ?? null,
@@ -477,6 +563,8 @@ export class ConnectionsService {
       this.assertMember(principal, organizationId, CONNECTIONS_MANAGE);
       return;
     }
+    // Personal and private are both a member's own key: the same
+    // membership and the same org switch decide whether they may keep one.
     this.assertMember(principal, organizationId, CONNECTIONS_READ);
     if (!(await this.userScopedAllowed(organizationId))) {
       throw new ForbiddenException({ code: 'USER_CONNECTIONS_DISABLED', message: 'this organization does not allow user-scoped connections; ask an admin to enable allowUserScopedConnections or connect on behalf of the organization' });
@@ -535,6 +623,7 @@ export class ConnectionsService {
   private async startRedirect(args: {
     connector: ConnectorDefinition; method: ConnectMethod; organizationId: string; userId: string; ownerUserId: string | null;
     mode: 'browser' | 'headless'; input: Record<string, unknown>; rotateConnectionId: string | null; requestBase?: string;
+    visibility?: 'org' | 'private';
   }): Promise<PendingRedirect> {
     const { connector, method } = args;
     const oauth = method.oauth;
@@ -574,6 +663,7 @@ export class ConnectionsService {
       organizationId: args.organizationId,
       userId: args.userId,
       ownerUserId: args.ownerUserId,
+      visibility: args.visibility ?? 'org',
       connectorKey: connector.key,
       methodType: method.type,
       codeVerifier: pkce?.codeVerifier ?? null,
@@ -623,6 +713,8 @@ export class ConnectionsService {
     connector: ConnectorDefinition; method: ConnectMethod; organizationId: string; userId: string; ownerUserId: string | null;
     config: Record<string, unknown>; existing?: Credential; name?: string; expiresAt?: Date | null; scopesGranted?: string[];
     action: AuditAction;
+    /** Only read on create: 'private' makes the new row its owner's alone. */
+    visibility?: 'org' | 'private';
   }): Promise<ConnectionView> {
     const { connector, method, organizationId } = args;
     const result = await this.validation.validate(connector, args.config as Record<string, any>, { organizationId });
@@ -645,7 +737,16 @@ export class ConnectionsService {
     row.type = (method.credentialType ?? CredentialType.API_KEY) as CredentialType;
     row.name = args.name ?? row.name ?? `${connector.displayName}${label ? ` (${label})` : ''}`;
     if (!args.existing) row.description = `${connector.displayName} connection via ${method.type}`;
-    row.visibility = row.visibility ?? 'org';
+    // The tier is chosen once, at connect; a rotation keeps it. A private
+    // row always carries its owner (fail closed: no owner, no private row).
+    if (args.existing) {
+      row.visibility = row.visibility ?? 'org';
+    } else if (args.visibility === 'private') {
+      if (!args.ownerUserId) throw new ForbiddenException({ code: 'CONNECTION_OWNER_REQUIRED', message: 'a private connection needs an owner' });
+      row.visibility = 'private';
+    } else {
+      row.visibility = 'org';
+    }
     row.isActive = true;
     row.accountLabel = label;
     row.healthStatus = result.status;
@@ -663,7 +764,7 @@ export class ConnectionsService {
     this.auditLog.log({
       organizationId, userId: args.userId, action: args.action, resourceType: AuditResource.CONNECTION,
       resourceId: saved.id, resourceName: saved.name,
-      details: { connectorKey: connector.key, method: method.type, owner: args.ownerUserId ? 'user' : 'org', ok: result.ok, status: result.status, error: result.error ?? null },
+      details: { connectorKey: connector.key, method: method.type, owner: connectionOwnerOf(saved), ok: result.ok, status: result.status, error: result.error ?? null },
     });
     if (result.ok && !args.ownerUserId && !args.existing) await this.applyDefaultGrant(saved, args.userId);
     const view = this.view(saved, connector);

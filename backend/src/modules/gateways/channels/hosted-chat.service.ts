@@ -2,12 +2,11 @@ import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { createHash, randomBytes } from 'crypto';
-import { promises as dns } from 'dns';
 
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { EndUser } from '../../../entities/end-user.entity';
 import { Conversation, ConversationStatus } from '../../../entities/conversation.entity';
-import { Message, MessageRole } from '../../../entities/message.entity';
+import { Message, MessageRole, MessageType } from '../../../entities/message.entity';
 import { AgentRun } from '../../../entities/agent-run.entity';
 import {
   HostedChatConfig,
@@ -18,12 +17,7 @@ import { AuditLogService } from '../../audit-log/audit-log.service';
 import { OrgLicenseResolver } from '../../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
 import { isPrivateGateway } from '../private-gateway';
-
-import {
-  CustomDomainConfig,
-  VERIFICATION_RECORD_PREFIX,
-  isVerified,
-} from './custom-domain';
+import { providerLabel, visitorOAuthConfigured } from './visitor-oauth';
 
 /**
  * The tenant-facing half of the hosted chat app.
@@ -156,6 +150,8 @@ export class HostedChatService {
       logoUrl: config.logoUrl,
       suggestedPrompts: config.suggestedPrompts,
       authMode: config.authMode,
+      // The name on the sign-in button; never an endpoint or a client id.
+      signInProvider: config.authMode === 'oauth' && gateway.visitorOAuth ? providerLabel(gateway.visitorOAuth) : null,
       whiteLabel: entitled ? config.whiteLabel : false,
       visitorCanDelete: config.visitorCanDelete,
       visitorCanExport: config.visitorCanExport,
@@ -230,8 +226,9 @@ export class HostedChatService {
   // The auth mode on a surface was stored and shown but never enforced:
   // every visitor was admitted anonymously whatever the tenant chose.
   // Core only ever asks "is this visitor signed in the way the surface
-  // requires?"; the sign-in flows themselves (SSO in ee/) attach the
-  // identity through bindAuthenticatedVisitor below.
+  // requires?"; the sign-in flows themselves (email codes in
+  // hosted-chat-email-auth.controller.ts, SSO in ee/) attach the identity
+  // through bindAuthenticatedVisitor below.
 
   /** The auth mode this surface is configured with. */
   authMode(gateway: Gateway): HostedChatConfig['authMode'] {
@@ -258,7 +255,12 @@ export class HostedChatService {
    * lost the entitlement must close, not silently fall back to open.
    */
   async authModeAvailable(gateway: Gateway): Promise<boolean> {
-    if (this.authMode(gateway) !== 'sso') return true;
+    const mode = this.authMode(gateway);
+    // OAuth needs a provider to send the visitor to; without one the
+    // surface is closed, and the page says so rather than offering a
+    // button that goes nowhere.
+    if (mode === 'oauth') return visitorOAuthConfigured(gateway.visitorOAuth);
+    if (mode !== 'sso') return true;
     if (!this.orgLicense) return false;
     return this.orgLicense.hasForOrg(gateway.organizationId, 'sso');
   }
@@ -392,10 +394,17 @@ export class HostedChatService {
     return grouped;
   }
 
-  /** Tool calls and system scaffolding stay out of a public transcript. */
+  /**
+   * Tool calls and system scaffolding stay out of a public transcript. An
+   * assistant turn that called tools is scaffolding too: its text is the
+   * agent narrating its working (what it is about to look up, what the
+   * last tool said), saved alongside the call, not an answer.
+   */
   private isPublicTurn(m: Message): boolean {
     return (
       (m.role === MessageRole.USER || m.role === MessageRole.ASSISTANT) &&
+      m.type !== MessageType.TOOL_CALL &&
+      !(Array.isArray(m.toolCalls) && m.toolCalls.length > 0) &&
       m.metadata?.internal !== true
     );
   }
@@ -497,10 +506,10 @@ export class HostedChatService {
     const gateways = await this.gatewayRepository
       .createQueryBuilder('gateway')
       .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
-      .andWhere("gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname", {
+      .andWhere("gateway.customDomain ->> 'hostname' = :hostname", {
         hostname: normalized,
       })
-      .andWhere("gateway.configuration -> 'customDomain' ->> 'status' = :status", {
+      .andWhere("gateway.customDomain ->> 'status' = :status", {
         status: 'active',
       })
       .getMany();
@@ -525,35 +534,6 @@ export class HostedChatService {
     }
 
     return active[0] ?? null;
-  }
-
-  /**
-   * Look for the tenant's verification TXT record.
-   *
-   * Returns the outcome rather than throwing: "not published yet" is the
-   * expected state for most of a domain's life, not an error, and the
-   * caller shows it as a next step.
-   */
-  async checkDomainVerification(
-    domain: CustomDomainConfig,
-  ): Promise<{ verified: boolean; error: string | null }> {
-    const name = `${VERIFICATION_RECORD_PREFIX}.${domain.hostname}`;
-    try {
-      // resolveTxt returns chunk arrays, since a long TXT value is split
-      // across strings on the wire; join each record before comparing.
-      const records = await dns.resolveTxt(name);
-      const flattened = records.map((chunks) => chunks.join(''));
-      if (isVerified(flattened, domain)) return { verified: true, error: null };
-      return {
-        verified: false,
-        error: 'The TXT record was found but did not match. Check you copied the whole value.',
-      };
-    } catch (err: any) {
-      if (err?.code === 'ENOTFOUND' || err?.code === 'ENODATA') {
-        return { verified: false, error: 'No TXT record found at that name yet.' };
-      }
-      return { verified: false, error: `Could not read DNS: ${err?.message ?? err}` };
-    }
   }
 
   /**

@@ -6,6 +6,8 @@ import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { Message } from '../../entities/message.entity';
 
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
+import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
+import { findGatewayRun } from '../gateways/gateway-servable';
 import { MetricsRecorderService } from '../../common/metrics/metrics-recorder.service';
 import { MetricType } from '../../entities/usage-metric.entity';
 import { agentRunToTask } from './a2a-task.mapper';
@@ -34,7 +36,8 @@ export class A2AMessageHandler {
     private readonly helpers: {
       pollForCompletion: (runId: string, organizationId: string) => Promise<Task>;
       getRunMessages: (run: AgentRun) => Promise<Message[]>;
-      findActiveRunByConversationId: (conversationId: string, organizationId: string) => Promise<AgentRun | null>;
+      /** A context of `gateway`'s own agent (findGatewayRun), or null. */
+      findActiveRunByConversationId: (conversationId: string, gateway: Gateway) => Promise<AgentRun | null>;
       writeStreamResponse: (res: Response, rpcId: string | number, payload: StreamResponse) => void;
       jsonRpcError: (id: string | number | null, code: number, message: string, data?: any) => JsonRpcResponse;
     },
@@ -104,9 +107,9 @@ export class A2AMessageHandler {
     // If message.taskId is provided, continue that specific task
     if (params.message?.taskId) {
       const taskId = params.message.taskId;
-      const existingRun = await this.runRepository.findOne({
-        where: { id: taskId, organizationId: gateway.organizationId },
-      });
+      // Only a task of this gateway's agent can be continued: another
+      // agent's task id is not found, as an unknown one is.
+      const existingRun = await findGatewayRun(this.runRepository, gateway, { id: taskId });
       if (!existingRun) {
         throw Object.assign(new Error('Task not found'), {
           code: A2A_ERROR_CODES.TASK_NOT_FOUND,
@@ -118,7 +121,10 @@ export class A2AMessageHandler {
         gateway.organizationId,
         null,
         text,
-        existingRun.conversationId ? { conversationId: existingRun.conversationId } : undefined,
+        {
+          ...(existingRun.conversationId ? { conversationId: existingRun.conversationId } : {}),
+          principal: gatewayPrincipal(gateway),
+        },
       );
       this.recordWorkflow(gateway);
       // Return task with the ORIGINAL task ID (the one the client sent)
@@ -130,10 +136,9 @@ export class A2AMessageHandler {
 
     // If contextId is provided, look for an existing conversation/run
     if (params.contextId) {
-      const existingRun = await this.helpers.findActiveRunByConversationId(
-        params.contextId,
-        gateway.organizationId,
-      );
+      // A context of this gateway's agent only: another agent's context id
+      // reads as one never seen, and starts a fresh run of this agent.
+      const existingRun = await this.helpers.findActiveRunByConversationId(params.contextId, gateway);
 
       if (existingRun) {
         if (existingRun.status === AgentRunStatus.WAITING_INPUT) {
@@ -164,6 +169,9 @@ export class A2AMessageHandler {
       gateway.organizationId,
       null, // no user context in A2A calls
       text,
+      // Runs in the gateway's scope: an A2A gateway serves its agent only
+      // when its own visibility covers it, re-checked on every message.
+      { principal: gatewayPrincipal(gateway) },
     );
     this.recordWorkflow(gateway);
 
@@ -208,10 +216,7 @@ export class A2AMessageHandler {
 
     // Resume or start a new run
     if (params.contextId) {
-      const existingRun = await this.helpers.findActiveRunByConversationId(
-        params.contextId,
-        gateway.organizationId,
-      );
+      const existingRun = await this.helpers.findActiveRunByConversationId(params.contextId, gateway);
       if (existingRun && existingRun.status === AgentRunStatus.WAITING_INPUT) {
         await this.agentRuntimeService.sendInput(
           existingRun.id,
@@ -225,6 +230,7 @@ export class A2AMessageHandler {
           gateway.organizationId,
           null,
           text,
+          { principal: gatewayPrincipal(gateway) },
         );
         this.recordWorkflow(gateway);
       }
@@ -234,6 +240,7 @@ export class A2AMessageHandler {
         gateway.organizationId,
         null,
         text,
+        { principal: gatewayPrincipal(gateway) },
       );
       this.recordWorkflow(gateway);
     }
@@ -267,9 +274,8 @@ export class A2AMessageHandler {
       });
     }
 
-    const run = await this.runRepository.findOne({
-      where: { id: params.id, organizationId: gateway.organizationId },
-    });
+    // Only a run of this gateway's agent; any other is not found.
+    const run = await findGatewayRun(this.runRepository, gateway, { id: params.id });
     if (!run) {
       throw Object.assign(new Error('Task not found'), {
         code: A2A_ERROR_CODES.TASK_NOT_FOUND,

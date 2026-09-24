@@ -154,6 +154,8 @@ describe('McpService - Tool Execution', () => {
           // No gateway on this path, so no gateway_tools.securityPolicy
           // applies -- but the executor is told so explicitly.
           gatewayId: null,
+          // The caller's scope; with no user, org tools only.
+          principal: { kind: 'user', userId: null, source: 'session' },
         }
       );
     });
@@ -198,6 +200,8 @@ describe('McpService - Tool Execution', () => {
           // No gateway on this path, so no gateway_tools.securityPolicy
           // applies -- but the executor is told so explicitly.
           gatewayId: null,
+          // The caller's scope; with no user, org tools only.
+          principal: { kind: 'user', userId: null, source: 'session' },
         }
       );
     });

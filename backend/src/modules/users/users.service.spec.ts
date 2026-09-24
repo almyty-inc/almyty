@@ -9,9 +9,7 @@ import { UserOrganization, OrganizationRole } from '../../entities/user-organiza
 import { ApiKey } from '../../entities/api-key.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
-
-// Unmock bcrypt from global setup to test actual hashing
-jest.unmock('bcryptjs');
+import { ConnectionOffboardingService } from '../connections/connection-offboarding.service';
 
 /**
  * bcrypt at cost 12 is deliberate work: roughly a quarter second idle,
@@ -26,6 +24,7 @@ describe('UsersService', () => {
   let userRepository: any;
   let userOrganizationRepository: any;
   let apiKeyRepository: any;
+  let offboarding: { offboard: jest.Mock };
 
 
   beforeEach(async () => {
@@ -66,6 +65,7 @@ describe('UsersService', () => {
             save: jest.fn(),
           },
         },
+        { provide: ConnectionOffboardingService, useValue: { offboard: jest.fn(async () => undefined) } },
       ],
     }).compile();
 
@@ -73,6 +73,7 @@ describe('UsersService', () => {
     userRepository = module.get(getRepositoryToken(User));
     userOrganizationRepository = module.get(getRepositoryToken(UserOrganization));
     apiKeyRepository = module.get(getRepositoryToken(ApiKey));
+    offboarding = module.get(ConnectionOffboardingService);
   });
 
   describe('findOne', () => {
@@ -452,13 +453,46 @@ describe('UsersService', () => {
       userRepository.findOne.mockResolvedValue(null);
 
       await expect(service.delete('non-existent')).rejects.toThrow();
+      expect(offboarding.offboard).not.toHaveBeenCalled();
+    });
+
+    /**
+     * credentials.ownerUserId has no foreign key, so a deleted account's
+     * own connections stayed stored, and valid at the provider, owned by
+     * nobody. They are wiped and provider-revoked first, in every
+     * organization, and only then is the account removed.
+     */
+    it("offboards the person's own connections everywhere before removing the account", async () => {
+      const mockUser = { id: 'user-1', email: 'test@test.com' };
+      userRepository.findOne.mockResolvedValue(mockUser);
+      const order: string[] = [];
+      offboarding.offboard.mockImplementation(async () => { order.push('offboard'); });
+      userRepository.remove.mockImplementation(async () => { order.push('remove'); });
+
+      await service.delete('user-1', 'owner-1');
+
+      expect(offboarding.offboard).toHaveBeenCalledWith({
+        organizationId: null,
+        userId: 'user-1',
+        actorUserId: 'owner-1',
+        reason: 'user_deleted',
+      });
+      expect(order).toEqual(['offboard', 'remove']);
+    });
+
+    it('keeps the account when the connection wipe fails, so the delete can be retried', async () => {
+      userRepository.findOne.mockResolvedValue({ id: 'user-1', email: 'test@test.com' });
+      offboarding.offboard.mockRejectedValue(new Error('db down'));
+
+      await expect(service.delete('user-1')).rejects.toThrow('db down');
+      expect(userRepository.remove).not.toHaveBeenCalled();
     });
   });
 
   describe('findAll', () => {
     function makeQB() {
       return {
-        innerJoin: jest.fn().mockReturnThis(),
+        innerJoinAndSelect: jest.fn().mockReturnThis(),
         leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -489,7 +523,7 @@ describe('UsersService', () => {
       expect(result.total).toBe(2);
       // The org filter must run as an inner join — without that the previous
       // shape returned every user in the database to any caller.
-      expect(mockQueryBuilder.innerJoin).toHaveBeenCalledWith(
+      expect(mockQueryBuilder.innerJoinAndSelect).toHaveBeenCalledWith(
         'user.organizationMemberships',
         'membership',
         'membership.organizationId = :organizationId',
@@ -558,7 +592,9 @@ describe('UsersService', () => {
       expect(savedUser.lastName).toBe('Smith');
     });
 
-    it('should update email when not taken by another user', async () => {
+    // A new address goes through AuthService.changeEmail (password,
+    // verification reset, both mailboxes told); this path refuses it.
+    it('refuses to change the email directly', async () => {
       const mockUser = {
         id: 'user-1',
         firstName: 'John',
@@ -566,17 +602,10 @@ describe('UsersService', () => {
         email: 'old@test.com',
       } as User;
 
-      userRepository.findOne
-        .mockResolvedValueOnce(mockUser)
-        .mockResolvedValueOnce(null);
+      userRepository.findOne.mockResolvedValueOnce(mockUser);
 
-      userRepository.save.mockImplementation(user => Promise.resolve(user));
-
-      await service.update('user-1', { email: 'new@test.com' });
-
-      expect(userRepository.save).toHaveBeenCalled();
-      const savedUser = userRepository.save.mock.calls[0][0];
-      expect(savedUser.email).toBe('new@test.com');
+      await expect(service.update('user-1', { email: 'new@test.com' })).rejects.toThrow(BadRequestException);
+      expect(userRepository.save).not.toHaveBeenCalled();
     });
 
     it('should allow user to update to their own email', async () => {

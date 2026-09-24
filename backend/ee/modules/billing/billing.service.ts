@@ -22,6 +22,7 @@ import {
   DUNNING_GRACE_DAYS_ENV,
   DUNNING_SUBSCRIPTION_STATUSES,
   LICENSE_PRIVATE_KEY_ENV,
+  LIVE_SUBSCRIPTION_STATUSES,
   PAID_PLANS,
   PLAN_BUSINESS,
   SELF_SERVE_PLANS,
@@ -35,6 +36,7 @@ import {
   STRIPE_PRICE_BUSINESS_ENV,
   STRIPE_PRICE_PRO_ANNUAL_ENV,
   STRIPE_PRICE_PRO_ENV,
+  TERMINAL_SUBSCRIPTION_STATUSES,
 } from './billing.constants';
 import { StripeService } from './stripe.service';
 
@@ -153,6 +155,18 @@ export class BillingService {
     }
 
     const org = await this.getOrg(organizationId);
+    // A second checkout while a subscription is live opens a second, parallel
+    // subscription: the org is billed twice, and canceling either one used to
+    // downgrade the org. Plan and seat changes go through the portal.
+    const current = org.billingInfo || {};
+    if (
+      current.stripeSubscriptionId &&
+      LIVE_SUBSCRIPTION_STATUSES.includes(current.subscriptionStatus)
+    ) {
+      throw new BadRequestException(
+        'This organization already has an active subscription — change plan or seats in the billing portal',
+      );
+    }
     const customerId = await this.ensureCustomer(org);
     const seats = Math.max(1, Number(input.seats) || 1);
 
@@ -222,6 +236,7 @@ export class BillingService {
         organizationId = await this.applySubscription(
           event.data.object as Stripe.Subscription,
           event.type === 'customer.subscription.deleted',
+          event.created,
         );
         break;
       case 'invoice.payment_failed':
@@ -255,6 +270,7 @@ export class BillingService {
   private async applySubscription(
     subscription: Stripe.Subscription,
     deleted: boolean,
+    eventCreated?: number,
   ): Promise<string | undefined> {
     const org = await this.findOrgForSubscription(subscription);
     if (!org) {
@@ -265,12 +281,51 @@ export class BillingService {
     }
 
     const status = subscription.status;
-    const info = { ...(org.billingInfo || {}) };
+    const terminal =
+      deleted || TERMINAL_SUBSCRIPTION_STATUSES.includes(status);
+    const current = org.billingInfo || {};
+
+    // Stripe does not deliver events in order. Three guards keep a late or
+    // unrelated event from overwriting the state that is actually current:
+    //  1. an event older than the last one applied is stale;
+    //  2. a subscription that already ended cannot come back to life (Stripe
+    //     never reactivates a canceled subscription), so a non-terminal event
+    //     for it is a late delivery even when it carries the same second;
+    //  3. while the org has a live subscription, events for any OTHER
+    //     subscription (e.g. a stale second one being canceled) do not
+    //     touch the org — otherwise deleting that one downgraded an org
+    //     that is still paying for its live subscription.
+    const lastAt = Number(current.subscriptionEventAt) || 0;
+    const sameSub = current.stripeSubscriptionId === subscription.id;
+    const currentLive =
+      !!current.stripeSubscriptionId &&
+      LIVE_SUBSCRIPTION_STATUSES.includes(current.subscriptionStatus);
+    const staleReason =
+      eventCreated && eventCreated < lastAt
+        ? 'older than the last applied event'
+        : sameSub && !terminal &&
+            TERMINAL_SUBSCRIPTION_STATUSES.includes(current.subscriptionStatus)
+          ? 'subscription already ended'
+          : !sameSub && currentLive
+            ? `org is on live subscription ${current.stripeSubscriptionId}`
+            : null;
+    if (staleReason) {
+      this.logger.warn(
+        `Ignoring Stripe event for subscription ${subscription.id} ` +
+          `(status=${status}) on org ${org.id}: ${staleReason}`,
+      );
+      return org.id;
+    }
+
+    const info = { ...current };
     info.stripeSubscriptionId = subscription.id;
-    info.subscriptionStatus = status;
+    // A deleted event always ends the subscription, whatever status it carries.
+    info.subscriptionStatus =
+      terminal && !TERMINAL_SUBSCRIPTION_STATUSES.includes(status) ? 'canceled' : status;
+    if (eventCreated) info.subscriptionEventAt = Math.max(lastAt, eventCreated);
 
     // Terminal / deleted → downgrade to free and revoke the license token.
-    if (deleted || status === 'canceled' || status === 'incomplete_expired') {
+    if (terminal) {
       org.plan = PLAN_FREE;
       org.planExpiresAt = null;
       info.licenseToken = null;
@@ -288,24 +343,47 @@ export class BillingService {
       return org.id;
     }
 
-    const plan = this.planFromSubscription(subscription);
     const seats = this.seatsFromSubscription(subscription);
-    const periodEnd = this.periodEndFromSubscription(subscription);
-
     info.seats = seats;
 
-    if (DUNNING_SUBSCRIPTION_STATUSES.includes(status)) {
-      // Keep entitlements but flag dunning + start/extend the grace window.
+    // Only a paid-up (active/trialing) or in-grace (past_due/unpaid)
+    // subscription carries entitlements. `incomplete` (first payment not
+    // made) and `paused` (trial ended without a payment method) used to fall
+    // through and mint the full plan token until the period end.
+    const dunning = DUNNING_SUBSCRIPTION_STATUSES.includes(status);
+    if (!dunning && !ACTIVE_SUBSCRIPTION_STATUSES.includes(status)) {
+      org.plan = PLAN_FREE;
+      org.planExpiresAt = null;
+      info.licenseToken = null;
+      info.dunning = false;
+      info.graceUntil = null;
+      org.billingInfo = info;
+      await this.orgRepo.save(org);
+      this.orgLicense?.invalidate(org.id);
+      this.logger.log(`Org ${org.id} has no entitlements while subscription is ${status}`);
+      return org.id;
+    }
+
+    const plan = this.planFromSubscription(subscription);
+    const periodEnd = this.periodEndFromSubscription(subscription);
+    let expiresAt = periodEnd || this.graceDeadline();
+
+    if (dunning) {
+      // Keep entitlements but flag dunning + start the grace window. Stripe
+      // advances the period end on renewal whether or not the invoice was
+      // paid, so the token must stop at the grace deadline — otherwise an
+      // unpaid annual subscription kept its plan for another year.
       info.dunning = true;
       info.graceUntil =
         info.graceUntil || this.graceDeadline().toISOString();
-    } else if (ACTIVE_SUBSCRIPTION_STATUSES.includes(status)) {
+      const graceUntil = new Date(info.graceUntil);
+      if (graceUntil < expiresAt) expiresAt = graceUntil;
+    } else {
       info.dunning = false;
       info.graceUntil = null;
     }
 
-    const expiresAt = periodEnd || this.graceDeadline();
-    const token = this.mintToken(plan, seats, expiresAt, org.name);
+    const token = this.mintToken(plan, seats, expiresAt, org.name, org.id);
     info.licenseToken = token;
 
     org.plan = plan;
@@ -325,6 +403,11 @@ export class BillingService {
   ): Promise<string | undefined> {
     const org = await this.findOrgForCustomer(this.customerId(invoice.customer));
     if (!org) return undefined;
+    // A late invoice failure must not relabel an ended subscription as
+    // past_due: that would read as live and block a fresh checkout.
+    if (!LIVE_SUBSCRIPTION_STATUSES.includes(org.billingInfo?.subscriptionStatus)) {
+      return org.id;
+    }
     const info = { ...(org.billingInfo || {}) };
     info.dunning = true;
     info.graceUntil = info.graceUntil || this.graceDeadline().toISOString();
@@ -357,6 +440,7 @@ export class BillingService {
     seats: number,
     expiresAt: Date,
     issuedTo: string,
+    organizationId: string,
   ): string {
     const privateKey = this.config.get<string>(LICENSE_PRIVATE_KEY_ENV);
     if (!privateKey) {
@@ -370,6 +454,8 @@ export class BillingService {
       expiresAt: expiresAt ? expiresAt.toISOString() : null,
       issuedTo,
       issuedAt: new Date().toISOString(),
+      // Binds the token to this org: resolveToken refuses it anywhere else.
+      organizationId,
     };
     return signLicense(payload, privateKey);
   }

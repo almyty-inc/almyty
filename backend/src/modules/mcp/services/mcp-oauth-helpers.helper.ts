@@ -66,9 +66,19 @@ export function verifyClientAuth(client: OAuthClient, presented?: string): void 
   throw new UnauthorizedException(`Unsupported token_endpoint_auth_method: ${method}`);
 }
 
+/** Loopback hosts a native client may listen on (RFC 8252 section 7.3). */
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
 /**
- * OAuth 2.1: redirect_uri must use HTTPS (except localhost) and must
- * not contain a fragment identifier.
+ * OAuth 2.1: redirect_uri must be https, or http on a loopback host, and
+ * must not contain a fragment identifier.
+ *
+ * The scheme is checked first and on its own. This used to read "https,
+ * or any scheme at all when the host is localhost", and a URL such as
+ * `javascript://localhost/%0aalert(1)//` has host localhost: the consent
+ * page hands the redirect to `window.location.href`, so a client could
+ * register one and run script in the dashboard's origin the moment the
+ * user clicked Approve or Deny.
  */
 export function validateRedirectUri(uri: string): void {
   let parsed: URL;
@@ -78,10 +88,11 @@ export function validateRedirectUri(uri: string): void {
     throw new BadRequestException(`Invalid redirect_uri: ${uri}`);
   }
 
-  const isLocalhost =
-    parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new BadRequestException('redirect_uri must use HTTPS (or HTTP on a loopback host)');
+  }
 
-  if (!isLocalhost && parsed.protocol !== 'https:') {
+  if (parsed.protocol === 'http:' && !LOOPBACK_HOSTS.has(parsed.hostname)) {
     throw new BadRequestException(
       'redirect_uri must use HTTPS (except for localhost)',
     );

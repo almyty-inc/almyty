@@ -8,6 +8,15 @@ import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
+import { agentOwnerUserId } from './agent-owner';
+import { AgentExecution, AgentExecutionStatus } from '../../entities/agent-execution.entity';
+import {
+  ExecutionAccessService,
+  UserPrincipal,
+  userPrincipal,
+} from '../../common/authorization/execution-access.service';
+import { User } from '../../entities/user.entity';
+import { hasEffectiveMembership } from '../../common/authorization/membership';
 
 
 export interface AgentScheduleConfig {
@@ -79,6 +88,13 @@ export class AgentSchedulerService implements OnModuleInit {
     private readonly agentRepo: Repository<Agent>,
     @InjectQueue(QUEUE_NAME)
     private readonly schedulerQueue: Queue,
+    // Fire-time authorization: a tick runs as the agent's owner now, and
+    // only if that owner may still run the agent.
+    private readonly executionAccess: ExecutionAccessService,
+    @InjectRepository(AgentExecution)
+    private readonly executionRepo: Repository<AgentExecution>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
   ) {}
 
   async onModuleInit() {
@@ -143,6 +159,43 @@ export class AgentSchedulerService implements OnModuleInit {
    * on the agent (settings.modelIssue + schedule.pausedReason) that the
    * UI surfaces. Re-enabling the schedule after fixing the model clears it.
    */
+  /**
+   * The user a scheduled run acts as. `null` is an agent with no recorded
+   * owner, which runs as nobody (agentOwnerUserId). `undefined` is an
+   * owner who can no longer run it: the account is inactive or is no
+   * longer an effective member of the agent's organization.
+   */
+  private async scheduleOwner(agent: Agent): Promise<string | null | undefined> {
+    const ownerId = agentOwnerUserId(agent);
+    if (!ownerId) return null;
+    const user = await this.userRepo
+      .findOne({ where: { id: ownerId }, relations: { organizationMemberships: true } })
+      .catch(() => null);
+    if (!user || user.isActive === false) return undefined;
+    return hasEffectiveMembership(user.organizationMemberships, agent.organizationId) ? user.id : undefined;
+  }
+
+  /** Pause a schedule whose owner can no longer run it, and say why. */
+  private async pauseForOwner(agent: Agent): Promise<void> {
+    const settings = { ...(agent.settings || {}) };
+    if (settings.schedule) {
+      settings.schedule = {
+        ...settings.schedule,
+        enabled: false,
+        pausedReason: {
+          code: 'OWNER_NOT_MEMBER',
+          message:
+            'The member who owns this agent is no longer active in the organization, so its schedule was paused. Re-enable it as a current member to start it again.',
+          detectedAt: new Date().toISOString(),
+        } as any,
+      };
+    }
+    agent.settings = settings;
+    await this.agentRepo.save(agent);
+    await this.removeRepeatableJob(agent.id);
+    this.logger.warn(`[SCHEDULED_RUN] Paused schedule for agent ${agent.id}: its owner is not a current member`);
+  }
+
   async pauseForBrokenModel(agentId: string, organizationId: string, err: unknown): Promise<void> {
     const agent = await this.agentRepo.findOne({ where: { id: agentId, organizationId } });
     if (!agent) return;
@@ -165,6 +218,49 @@ export class AgentSchedulerService implements OnModuleInit {
     this.logger.warn(
       `[SCHEDULED_RUN] Paused schedule for agent ${agentId}: model "${issue.model}" is no longer served by its provider`,
     );
+  }
+
+  /**
+   * Stop a schedule whose owner can no longer run its agent -- they left
+   * the agent's team, or the organization, or the agent became somebody
+   * else's private agent. Not a silent skip: a FAILED execution is written
+   * with a reason a person can act on (it shows in the agent's run
+   * history), and the schedule is disabled with the same reason on
+   * `schedule.pausedReason`. Re-enabling it -- by someone who can run the
+   * agent, since a schedule runs as the agent's owner -- starts it again.
+   */
+  async pauseForLostAccess(agent: Agent, principal: UserPrincipal, reason: string): Promise<void> {
+    const message = principal.userId
+      ? `Scheduled run refused: the agent's owner (${principal.userId}) can no longer run this agent ` +
+        `(${reason}). The schedule has been paused.`
+      : `Scheduled run refused: this agent has no owner who can run it (${reason}). The schedule has been paused.`;
+    try {
+      await this.executionRepo.save(
+        this.executionRepo.create({
+          agentId: agent.id,
+          organizationId: agent.organizationId,
+          userId: principal.userId,
+          status: AgentExecutionStatus.FAILED,
+          input: {},
+          error: message,
+          metadata: { triggerType: 'scheduled', refusedBy: 'execution_access' },
+        }),
+      );
+    } catch (err: any) {
+      this.logger.error(`[SCHEDULED_RUN] Could not record the refused run for agent ${agent.id}: ${err.message}`);
+    }
+    const settings = { ...(agent.settings || {}) };
+    if (settings.schedule) {
+      settings.schedule = {
+        ...settings.schedule,
+        enabled: false,
+        pausedReason: { code: 'OWNER_CANNOT_RUN', message, detectedAt: new Date().toISOString() } as any,
+      };
+    }
+    agent.settings = settings;
+    await this.agentRepo.save(agent);
+    await this.removeRepeatableJob(agent.id);
+    this.logger.warn(`[SCHEDULED_RUN] Paused schedule for agent ${agent.id}: ${message}`);
   }
 
   async unscheduleAgent(agentId: string, organizationId: string): Promise<Agent> {
@@ -303,7 +399,8 @@ export class AgentSchedulerService implements OnModuleInit {
       {
         agentId: agent.id,
         organizationId: agent.organizationId,
-        userId: agent.createdBy || 'system',
+        // No user in the payload: the run is the agent's current owner's,
+        // read when it fires (handleScheduledExecution).
         input,
       },
       {
@@ -340,7 +437,7 @@ export class AgentSchedulerService implements OnModuleInit {
       return;
     }
 
-    const { agentId, organizationId, userId, input } = job.data;
+    const { agentId, organizationId, input } = job.data;
 
     if (!agentId || !organizationId) {
       this.logger.warn(`[SCHEDULED_RUN] Missing agentId/organizationId in job payload — dropping`);
@@ -365,14 +462,37 @@ export class AgentSchedulerService implements OnModuleInit {
         return;
       }
 
+      // A scheduled run acts as the agent's creator. It used to take the
+      // user id written into the job when the schedule was set and run as
+      // them on every tick, whether or not they were still in the
+      // organization -- a removed member's schedule kept running with
+      // their identity (and their private tools and credentials). An
+      // owner has to be an active, current member at tick time; an agent
+      // with no recorded owner runs as nobody (see agentOwnerUserId).
+      const owner = await this.scheduleOwner(agent);
+      if (owner === undefined) {
+        await this.pauseForOwner(agent);
+        return;
+      }
+
       this.logger.log(`[SCHEDULED_RUN] Executing agent ${agentId}`);
+      // Then the scope: the owner, as they are now, must still be allowed
+      // to run this agent (a team agent whose owner left the team stops,
+      // visibly, instead of running for somebody outside it).
+      const principal = userPrincipal(owner ?? null, 'schedule');
+      const access = await this.executionAccess.canExecute(principal, agent);
+      if (!access.allowed) {
+        await this.pauseForLostAccess(agent, principal, access.reason);
+        return;
+      }
       const execution = await this.executionEngine.execute(
         agent,
         organizationId,
-        userId,
+        owner,
         {
           input,
           metadata: { triggerType: 'scheduled' },
+          principal,
         },
       );
       // The engine reports node failures in the returned execution rather

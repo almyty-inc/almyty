@@ -36,6 +36,39 @@ export class ToolsOperationHelper {
     // enforcing check runs with the insert below.
     await precheckToolQuota(this.toolRepository.manager, options.organizationId);
 
+    const tool = await this.buildFromOperation(operation, options);
+
+    // Per-row enforcement, under the organization's tool-quota lock. Bulk
+    // callers (ApisToolGeneratorHelper) do not come through here: they
+    // build every row with buildFromOperation and write the batch whole
+    // with writeToolBatch.
+    const savedTool = await withToolQuota(
+      this.toolRepository.manager,
+      options.organizationId,
+      1,
+      (tx) => tx.getRepository(Tool).save(tool),
+    );
+
+    // Create initial version
+    await this.tools.createToolVersion(savedTool, 'Auto-generated from API operation', 'system');
+
+    this.logger.log(`Auto-generated tool '${savedTool.name}' from operation '${operation.name}'`);
+
+    return savedTool;
+  }
+
+  /**
+   * The Tool row createFromOperation would insert, not yet saved and not
+   * counted against the quota: whoever saves it enforces that.
+   */
+  async buildFromOperation(
+    operation: Operation,
+    options: {
+      name: string;
+      description: string;
+      organizationId: string;
+    }
+  ): Promise<Tool> {
     // Load the operation with its API
     const operationWithApi = await this.operationRepository.findOne({
       where: { id: operation.id },
@@ -94,22 +127,7 @@ export class ToolsOperationHelper {
       },
     });
 
-    // Per-row enforcement, under the organization's tool-quota lock. The
-    // bulk caller (ApisToolGeneratorHelper) has already refused a batch
-    // that would not fit; this is what holds when two batches race.
-    const savedTool = await withToolQuota(
-      this.toolRepository.manager,
-      options.organizationId,
-      1,
-      (tx) => tx.getRepository(Tool).save(tool),
-    );
-
-    // Create initial version
-    await this.tools.createToolVersion(savedTool, 'Auto-generated from API operation', 'system');
-
-    this.logger.log(`Auto-generated tool '${savedTool.name}' from operation '${operationWithApi.name}'`);
-
-    return savedTool;
+    return tool;
   }
 
   async updateFromOperation(
@@ -130,6 +148,27 @@ export class ToolsOperationHelper {
       throw new NotFoundException('Tool not found');
     }
 
+    const updatedTool = await this.toolRepository.save(await this.prepareUpdateFromOperation(tool, operation, options));
+
+    this.logger.log(`Updated tool '${updatedTool.name}' from operation '${operation.name}'`);
+
+    return updatedTool;
+  }
+
+  /**
+   * Apply an operation to a loaded tool the way updateFromOperation does,
+   * without saving it. Bulk callers write a batch of these with
+   * writeToolBatch (tools/tool-quota.ts).
+   */
+  async prepareUpdateFromOperation(
+    tool: Tool,
+    operation: Operation,
+    options: {
+      name: string;
+      description: string;
+      organizationId: string;
+    }
+  ): Promise<Tool> {
     // Load the operation with its API
     const operationWithApi = await this.operationRepository.findOne({
       where: { id: operation.id },
@@ -163,11 +202,7 @@ export class ToolsOperationHelper {
       },
     };
 
-    const updatedTool = await this.toolRepository.save(tool);
-
-    this.logger.log(`Updated tool '${updatedTool.name}' from operation '${operationWithApi.name}'`);
-
-    return updatedTool;
+    return tool;
   }
 
   async generateToolParametersFromOperation(operation: Operation): Promise<Record<string, any>> {

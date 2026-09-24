@@ -125,6 +125,9 @@ function methodViolations(method: ConnectMethod, where: string): string[] {
     else {
       if (!isHttpsOrHttp(method.oauth.authorizeUrl)) errors.push(`${where}: oauth.authorizeUrl must be http(s)`);
       if (!isHttpsOrHttp(method.oauth.tokenUrl)) errors.push(`${where}: oauth.tokenUrl must be http(s)`);
+      if (method.oauth.revocationUrl !== undefined && !isHttpsOrHttp(method.oauth.revocationUrl)) {
+        errors.push(`${where}: oauth.revocationUrl must be http(s)`);
+      }
       if (method.type === 'oauth2_pkce' && method.oauth.pkce === false) errors.push(`${where}: oauth2_pkce must keep pkce on`);
     }
   }

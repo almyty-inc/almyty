@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { screen, fireEvent, waitFor } from '@testing-library/react'
 
 import { render } from '../../test/setup'
@@ -22,6 +22,7 @@ const QUERY = new URLSearchParams({
   response_type: 'code',
   code_challenge: 'chal',
   code_challenge_method: 'S256',
+  resource: 'https://api.example/acme/support',
 })
 
 vi.mock('react-router-dom', async () => {
@@ -80,6 +81,18 @@ describe('the OAuth consent screen after a failed approval', () => {
     expect(screen.getByText('Call this gateway’s tools')).toBeInTheDocument()
   })
 
+  it('forwards the RFC 8707 resource to the code-issuing POST', async () => {
+    // The authorize GET hands it over on the query string; dropping it here
+    // left every code, and so every token, without the audience asked for.
+    ;(apiPost as any).mockResolvedValue({ code: 'auth-code' })
+    render(<OAuthConsentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }, WAIT))
+    await waitFor(() => expect(apiPost).toHaveBeenCalled(), WAIT)
+    expect((apiPost as any).mock.calls[0][1]).toMatchObject({
+      resource: 'https://api.example/acme/support',
+    })
+  })
+
   it('lets the user retry the approval', async () => {
     await approveAndFail(new Error('boom'))
     await screen.findByRole('alert', {}, WAIT)
@@ -117,5 +130,52 @@ describe('the OAuth consent screen after a failed approval', () => {
 
     expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent('Unknown client.')
     expect(screen.queryByRole('button', { name: 'Deny' })).toBeNull()
+  })
+})
+
+/**
+ * The redirect target is assigned to `window.location.href` from the
+ * dashboard's own origin, so it must be an http(s) URL and nothing else.
+ * `javascript://localhost/%0a...` parses as a URL with host localhost; the
+ * backend used to accept it at client registration, and this page would
+ * then have run it as script on Approve or Deny.
+ */
+describe('the OAuth consent screen with a non-http redirect_uri', () => {
+  const ORIGINAL = QUERY.get('redirect_uri')!
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    QUERY.set('redirect_uri', 'javascript://localhost/%0aalert(document.domain)//')
+    ;(apiGet as any).mockResolvedValue({
+      clientName: 'Evil',
+      gatewayName: 'Support Gateway',
+      scopes: ['mcp:tools'],
+    })
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { href: '', pathname: '/oauth/consent', search: '' },
+    })
+  })
+
+  afterEach(() => {
+    QUERY.set('redirect_uri', ORIGINAL)
+  })
+
+  it('does not navigate to it when the user denies', async () => {
+    render(<OAuthConsentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Deny' }, WAIT))
+
+    expect(window.location.href).toBe('')
+    expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent(/invalid redirect URI/i)
+  })
+
+  it('does not navigate to it after an approval', async () => {
+    ;(apiPost as any).mockResolvedValue({ code: 'auth-code' })
+    render(<OAuthConsentPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }, WAIT))
+    await waitFor(() => expect(apiPost).toHaveBeenCalled(), WAIT)
+
+    expect(await screen.findByRole('alert', {}, WAIT)).toHaveTextContent(/invalid redirect URI/i)
+    expect(window.location.href).toBe('')
   })
 })

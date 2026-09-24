@@ -1,10 +1,12 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 
 import { Agent } from '../../entities/agent.entity';
+import { Tool } from '../../entities/tool.entity';
+import { principalOfRun } from '../../common/authorization/execution-access.service';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AgentRunStatus } from '../../entities/agent-run.entity';
 import { MemoryError } from '../memory/canonical/canonical.types';
@@ -13,6 +15,8 @@ import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.ser
 import { Provenance, Tier } from '../memory/canonical/canonical.types';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ApprovalsService } from '../approvals/approvals.service';
+import { runMayWriteSharedMemory } from './memory-autosave.policy';
+import { canReference } from '../../common/authorization/private-visibility';
 
 @Injectable()
 export class AgentBuiltInToolsHelper {
@@ -68,6 +72,11 @@ export class AgentBuiltInToolsHelper {
       }
 
       case 'store_memory': {
+        // A visitor's run does not write shared memory unless the product
+        // opted its visitors in -- the rule auto-save follows too.
+        if (!runMayWriteSharedMemory(run)) {
+          return { result: null, error: 'memory is not kept for visitor conversations' };
+        }
         try {
           // Map the legacy `type` hint into the canonical tier:
           //   'fact'/'preference'/'instruction' → 'long' (durable)
@@ -127,7 +136,47 @@ export class AgentBuiltInToolsHelper {
       }
 
       case 'create_agent': {
+        // Offered only when the agent may create agents (buildToolDefinitions),
+        // but a tool call is whatever name the model emits, so the gate has
+        // to hold here too.
+        if (!agent.agentConfig?.canCreateAgents) {
+          return { result: null, error: 'This agent is not allowed to create agents' };
+        }
+        // A child gets a subset of the parent's own tools, never more. The
+        // ids came straight from the model's arguments, so a parent limited
+        // to two tools could mint a child holding any tool in the
+        // organization -- a prompt-injected run widening its own reach.
+        const requestedToolIds: string[] = Array.isArray(parameters.toolIds) ? parameters.toolIds : [];
+        const parentToolIds = new Set(agent.toolIds ?? []);
+        const outside = requestedToolIds.filter((id) => !parentToolIds.has(id));
+        if (outside.length > 0) {
+          return {
+            result: null,
+            error: `A temporary agent can only use tools this agent has; not available: ${outside.join(', ')}`,
+          };
+        }
         try {
+          // The temporary agent's tools are checked against the run's
+          // scope now, not only when the child calls them: a model must not
+          // be able to hand a team or private tool id it was never offered
+          // to an agent it builds. Any id outside the scope (or the org) is
+          // refused as not found, and nothing is created.
+          const requestedToolIds: string[] = Array.isArray(parameters.toolIds)
+            ? [...new Set(parameters.toolIds.filter((id: unknown): id is string => typeof id === 'string'))]
+            : [];
+          if (requestedToolIds.length > 0) {
+            const found = await this.agentRepository.manager.getRepository(Tool).find({
+              where: { id: In(requestedToolIds), organizationId: run.organizationId },
+              select: { id: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
+            });
+            const usable = new Set(
+              (await this.runtime.executionAccess.filterExecutable(principalOfRun(run), found)).map((t) => t.id),
+            );
+            const missing = requestedToolIds.filter((id) => !usable.has(id));
+            if (missing.length > 0) {
+              return { result: null, error: `Failed to create temporary agent: tool not found: ${missing.join(', ')}` };
+            }
+          }
           const tempAgent = this.agentRepository.create({
             name: parameters.name,
             description: `Temporary agent created by ${agent.name}`,
@@ -136,12 +185,16 @@ export class AgentBuiltInToolsHelper {
             status: 'active' as any,
             personality: parameters.personality || null,
             instructions: parameters.instructions,
-            toolIds: parameters.toolIds || [],
+            toolIds: requestedToolIds,
             modelConfig: agent.modelConfig,
             isTemporary: true,
             parentRunId: run.id,
             pipeline: { nodes: [], edges: [] },
-            createdBy: 'system',
+            // Owned by whoever the parent run works for -- the user
+            // invoke_agent runs the child as -- and by nobody for a run
+            // without one (a visitor's). Never a sentinel string in an
+            // owner column.
+            createdBy: run.userId ?? null,
           });
           const savedAgent = await this.agentRepository.save(tempAgent);
           return { result: { agentId: savedAgent.id, name: savedAgent.name, status: 'created' } };
@@ -151,13 +204,51 @@ export class AgentBuiltInToolsHelper {
       }
 
       case 'invoke_agent': {
+        // Same gate as create_agent: invoke_agent is offered only with it.
+        if (!agent.agentConfig?.canCreateAgents) {
+          return { result: null, error: 'This agent is not allowed to invoke agents' };
+        }
+        // Which agents this run may start: the temporary agents it created
+        // itself, and -- when the agent may call agents at all -- exactly
+        // the ones it is offered as call_agent_* tools (active, not
+        // temporary, not itself, and referenceable from this agent). The
+        // id used to go to startRun unchecked, so a run could start any
+        // agent in the organization its user could see, including ones the
+        // agent's own allow-list leaves out.
+        const target = await this.agentRepository.findOne({
+          where: { id: String(parameters.agentId ?? ''), organizationId: run.organizationId },
+        }).catch(() => null);
+        const ownTemporary = !!target && target.isTemporary && target.parentRunId === run.id;
+        const callable =
+          !!target &&
+          !!agent.agentConfig?.canCallAgents &&
+          !target.isTemporary &&
+          target.id !== agent.id &&
+          target.status === ('active' as any) &&
+          canReference({ visibility: agent.visibility, ownerId: agent.createdBy }, target);
+        if (!ownTemporary && !callable) {
+          return { result: null, error: 'Agent not found or not callable from this agent' };
+        }
         try {
+          // The child works for whoever the parent works for. A visitor
+          // run has no user (userId is null and the visitor is its
+          // endUserId); substituting the string 'system' put a non-uuid
+          // into the conversation's userId column and the child never
+          // started.
           const childRun = await this.runtime.startRun(
-            parameters.agentId,
+            target!.id,
             run.organizationId,
-            run.userId || 'system',
+            run.userId ?? null,
             parameters.input,
-            { parentRunId: run.id, maxSteps: 20 },
+            {
+              parentRunId: run.id,
+              maxSteps: 20,
+              endUserId: run.endUserId ?? null,
+              // The child runs in the parent's scope, unchanged: the model
+              // cannot start a team or private agent the run's starter
+              // could not have started directly.
+              principal: principalOfRun(run),
+            },
           );
           const result = await this.runtime.waitForRun(childRun.id, 60000);
           if (result?.status === AgentRunStatus.COMPLETED) {

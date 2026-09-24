@@ -1,3 +1,4 @@
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ModuleRef } from '@nestjs/core';
 import { AlmytyMcpService } from '../almyty-mcp.service';
@@ -79,6 +80,8 @@ describe('AlmytyMcpService', () => {
   };
   const mockRuntimeService: any = {
     startRun: jest.fn().mockResolvedValue({ id: 'run-1', status: 'running' }),
+    // The real execution gate the MCP invoke path asks before anything else.
+    executionAccess: membershipFixture().executionAccess,
   };
   const mockLlmProvidersService = { getProviders: jest.fn().mockResolvedValue([]), createProvider: jest.fn().mockResolvedValue({ id: 'prov-1' }) };
   const mockSchemaImportQueue = { add: jest.fn().mockResolvedValue({ id: 'job-1' }) };
@@ -956,7 +959,7 @@ describe('AlmytyMcpService', () => {
         expect.objectContaining({ id: 'agent-1', status: 'active', mode: 'workflow' }),
         'org-1',
         'user-1',
-        { input: { q: 'hello' }, variables: { v: 1 }, metadata: { source: 'mcp' } },
+        { input: { q: 'hello' }, variables: { v: 1 }, metadata: { source: 'mcp' }, principal: { kind: 'user', userId: null, source: 'system_gateway' } },
       );
       // Autonomous runtime must NOT be involved for a workflow agent.
       expect(mockRuntimeService.startRun).not.toHaveBeenCalled();
@@ -970,7 +973,8 @@ describe('AlmytyMcpService', () => {
     it('invoke_agent routes an autonomous agent to the runtime, not the pipeline engine', async () => {
       mockAgentsService.getAgent.mockResolvedValueOnce({ id: 'agent-2', name: 'Auto', mode: 'autonomous', status: 'active' });
       const res = await callTool('invoke_agent', { agentId: 'agent-2', input: { message: 'go' } });
-      expect(mockRuntimeService.startRun).toHaveBeenCalledWith('agent-2', 'org-1', 'user-1', { message: 'go' });
+      // The org's own MCP endpoint acts as its caller ('user-1' is not a user id: nobody).
+      expect(mockRuntimeService.startRun).toHaveBeenCalledWith('agent-2', 'org-1', 'user-1', { message: 'go' }, { principal: { kind: 'user', userId: null, source: 'system_gateway' } });
       expect(mockExecutionEngine.execute).not.toHaveBeenCalled();
       const parsed = parse(res);
       expect(parsed.mode).toBe('autonomous');
@@ -1468,14 +1472,15 @@ describe('AlmytyMcpService', () => {
 
     it('list_budgets shows the ceiling and what a breach does', async () => {
       const res = await callTool('list_budgets');
-      expect(mockBudgetsService.list).toHaveBeenCalledWith('org-1');
+      // The caller rides along: a budget on another member's private agent is hidden.
+      expect(mockBudgetsService.list).toHaveBeenCalledWith('org-1', 'user-1');
       expect(parse(res).budgets[0]).toMatchObject({ limitCents: 5000, behavior: 'reject' });
     });
 
     it('get_spend defaults to the month and the day bucket', async () => {
       const res = await callTool('get_spend');
       expect(mockSpendService.getSummary).toHaveBeenCalledWith('org-1', {
-        from: expect.any(Date), granularity: 'day',
+        from: expect.any(Date), granularity: 'day', viewerId: 'user-1',
       });
       expect(parse(res).period).toBe('month');
       expect(parse(res).totalCents).toBe(1234);

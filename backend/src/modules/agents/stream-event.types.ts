@@ -71,13 +71,29 @@ export interface PipelineExecutionFailed {
 
 export interface RuntimeLlmStarted {
   type: 'llm.started';
-  data?: { step: number };
+  /**
+   * `answer` is set on composing runs only (final-answer.ts): false for a
+   * call that offers tools, true for the no-tools call that writes the
+   * visitor's answer.
+   */
+  data?: { step: number; answer?: boolean };
   timestamp: number;
 }
 
 export interface RuntimeLlmChunk {
   type: 'llm.chunk';
   data?: { step: number; content?: string };
+  timestamp: number;
+}
+
+/**
+ * The provider's certain verdict on a step: a plain answer (`text`) or a
+ * reply that calls tools (`tool`). At most once per step, and only when
+ * the stream made it certain; see StreamChunk.stepKind.
+ */
+export interface RuntimeLlmStepKind {
+  type: 'llm.step_kind';
+  data?: { step: number; kind: 'text' | 'tool' };
   timestamp: number;
 }
 
@@ -89,6 +105,13 @@ export interface RuntimeLlmResponse {
     toolCalls?: Array<{ id: string; name: string }>;
     usage?: { inputTokens: number; outputTokens: number };
     cost?: number;
+    /**
+     * Composing runs only (final-answer.ts): whether this reply is the
+     * visitor's answer. `fallback` says the answer call failed or came
+     * back empty and this is the draft standing in.
+     */
+    answer?: boolean;
+    fallback?: 'error' | 'empty';
   };
   timestamp: number;
 }
@@ -151,6 +174,7 @@ export type PipelineStreamEvent =
 export type RuntimeStreamEvent =
   | RuntimeLlmStarted
   | RuntimeLlmChunk
+  | RuntimeLlmStepKind
   | RuntimeLlmResponse
   | RuntimeToolStarted
   | RuntimeToolResult

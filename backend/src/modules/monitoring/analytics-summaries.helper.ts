@@ -5,9 +5,14 @@ import { Repository } from 'typeorm';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 
-/** Runs of agents that are private to somebody other than :_privateMe. */
+/**
+ * Runs of agents that are private to somebody other than :_privateMe.
+ * `(owner = me) IS NOT TRUE` fails closed: an ownerless private agent, or
+ * no known caller, leaves the runs hidden (IS DISTINCT FROM would have
+ * matched null against null and shown them).
+ */
 const NOT_OTHERS_PRIVATE_AGENT_RUN =
-  `NOT EXISTS (SELECT 1 FROM agents pa WHERE pa.id = run."agentId" AND pa.visibility = 'private' AND pa."createdBy" IS DISTINCT FROM :_privateMe)`;
+  `NOT EXISTS (SELECT 1 FROM agents pa WHERE pa.id = run."agentId" AND pa.visibility = 'private' AND (pa."createdBy" = :_privateMe) IS NOT TRUE)`;
 
 /**
  * A fallback that remembers it was used.

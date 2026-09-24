@@ -14,6 +14,8 @@ import {
   ProcessToolchainRunner,
   bunCompileArgs,
   electronBuilderArgs,
+  electronBuilderCommand,
+  electronVersionOf,
   safeExecutableName,
 } from './build-toolchain';
 import { artifactExtension, type MacPackaging } from './build-targets';
@@ -288,6 +290,23 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
       };
     }
 
+    // The Electron release is the one the shell pins, read from the shell
+    // itself so the two cannot drift (build-toolchain electronVersionOf).
+    let shellPackage: unknown = null;
+    try {
+      shellPackage = JSON.parse(await fs.readFile(join(shell, 'package.json'), 'utf8'));
+    } catch {
+      // Unreadable or not JSON: no pin, refused just below.
+    }
+    const electronVersion = electronVersionOf(shellPackage);
+    if (!electronVersion) {
+      return {
+        ok: false,
+        log: '',
+        error: 'The desktop shell does not pin an exact Electron release in its package.json.',
+      };
+    }
+
     const app = await this.builds.appFor(build.appId);
     if (!app) return { ok: false, log: '', error: 'That app no longer exists.' };
 
@@ -338,9 +357,13 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
       appId: bundleId || this.bundleIdFor(app.slug),
       version: version || '1.0.0',
       executableName: safeExecutableName(app.slug),
+      electronVersion,
     });
 
-    const result = await this.toolchain.run('npx', args!, { cwd: projectDir });
+    // The shell's lockfile-installed electron-builder, or the pinned
+    // release through npx; never whatever npm calls latest today.
+    const command = await electronBuilderCommand(shell, args!);
+    const result = await this.toolchain.run(command.tool, command.args, { cwd: projectDir });
     if (!result.ok) {
       return { ok: false, log: result.output, error: result.error ?? 'Packaging failed.' };
     }

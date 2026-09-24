@@ -29,6 +29,7 @@ describe('MCP Gateway Scoping', () => {
       gatewayId: 'gateway-1',
       toolId: 'tool-1',
       isActive: true,
+      gateway: { id: 'gateway-1', organizationId: 'org-1', visibility: 'org' },
       tool: {
         id: 'tool-1',
         name: 'open_meteo_forecast',

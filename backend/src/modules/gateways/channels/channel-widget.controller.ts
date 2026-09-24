@@ -61,6 +61,12 @@ export class ChannelWidgetController {
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=300');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    // helmet's default Cross-Origin-Resource-Policy is same-origin, which
+    // makes a browser refuse this script on every site but ours -- that
+    // is, everywhere it is meant to be embedded. The script is public by
+    // design and carries no data; which sites may then TALK to the
+    // gateway is the allowed-origins list, enforced by SurfaceCorsService.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     return res.send(buildWidgetScript(id));
   }
 
