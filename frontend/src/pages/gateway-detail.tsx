@@ -32,6 +32,7 @@ import {
 } from '@/components/gateways/detail/channel-config-form'
 import { WidgetBuilder } from '@/components/gateways/widget-builder'
 import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
+import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 /** The tabs `?tab=` may open. */
@@ -448,6 +449,9 @@ export function GatewayDetailPage() {
           }}
         />
       )}
+
+      {/* A domain the tenant owns: claim, publish DNS, verify, inline. */}
+      {gateway.type === 'hosted_chat' && <CustomDomainCard gatewayId={gateway.id} />}
 
       {/* Authentication */}
       {gateway.type !== 'skills' && (

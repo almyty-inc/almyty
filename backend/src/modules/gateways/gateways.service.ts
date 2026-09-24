@@ -864,6 +864,18 @@ export class GatewaysService {
    * private gateway is a 404, not a 403, so a caller probing ids learns
    * nothing about it.
    */
+  /**
+   * A gateway of this organization that the caller may manage, by the
+   * same rule updateGateway applies. For write paths that live outside
+   * this service (the custom-domain verification flow).
+   */
+  async findManageable(gatewayId: string, organizationId: string, userId: string): Promise<Gateway> {
+    const gateway = await this.gatewayRepository.findOne({ where: { id: gatewayId, organizationId } });
+    if (!gateway) throw new NotFoundException('Gateway not found');
+    await this.assertCanManage(gateway, userId);
+    return gateway;
+  }
+
   private async assertCanManage(gateway: Gateway, userId: string): Promise<void> {
     if (!gatewayServableTo(gateway, userId)) {
       throw new NotFoundException('Gateway not found');
