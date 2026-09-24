@@ -17,6 +17,7 @@ import { ApisImportHelper } from './apis-import.helper';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
 import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
 import { assertNotOthersPrivate, nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
@@ -657,6 +658,10 @@ export class ApisService {
         maxContentLength: 256 * 1024,
         maxBodyLength: 256 * 1024,
         maxRedirects: 0,
+        // The string check above does not see what the name resolves to;
+        // the pinned agents refuse a private address at connect time.
+        httpAgent: ssrfSafeHttpAgent,
+        httpsAgent: ssrfSafeHttpsAgent,
       };
 
       // Add authentication if configured. The secret comes from the

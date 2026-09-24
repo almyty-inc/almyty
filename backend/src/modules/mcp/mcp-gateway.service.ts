@@ -5,6 +5,7 @@ import axios from 'axios';
 import * as crypto from 'crypto';
 
 import { validateUrl } from '../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { Tool } from '../../entities/tool.entity';
@@ -269,6 +270,13 @@ export class McpGatewayService {
         timeout: 5000,
         maxContentLength: 1 * 1024 * 1024,
         maxBodyLength: 1 * 1024 * 1024,
+        // Refuse redirects: a peer that 302s to an internal host would
+        // otherwise walk around the string check above.
+        maxRedirects: 0,
+        // The string check above does not see what the name resolves to;
+        // the pinned agents refuse a private address at connect time.
+        httpAgent: ssrfSafeHttpAgent,
+        httpsAgent: ssrfSafeHttpsAgent,
       });
       
       if (!response.data.protocol || response.data.protocol !== 'mcp') {
@@ -353,6 +361,10 @@ export class McpGatewayService {
         maxBodyLength: 10 * 1024 * 1024,
         // Don't follow redirects across the SSRF gate.
         maxRedirects: 0,
+        // The string check above does not see what the name resolves to;
+        // the pinned agents refuse a private address at connect time.
+        httpAgent: ssrfSafeHttpAgent,
+        httpsAgent: ssrfSafeHttpsAgent,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -446,6 +458,10 @@ export class McpGatewayService {
           maxContentLength: 1 * 1024 * 1024,
           maxBodyLength: 1 * 1024 * 1024,
           maxRedirects: 0,
+          // The string check above does not see what the name resolves to;
+          // the pinned agents refuse a private address at connect time.
+          httpAgent: ssrfSafeHttpAgent,
+          httpsAgent: ssrfSafeHttpsAgent,
         });
         isHealthy = true;
         responseTime = Date.now() - startTime;
