@@ -8,6 +8,7 @@ import { AgentRuntimeService } from './agent-runtime.service';
 import { Agent } from '../../entities/agent.entity';
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
 import { runWithRequestContext } from '../../common/request-context';
+import { agentOwnerUserId } from './agent-owner';
 
 /**
  * A run in one of these is finished; a late queue failure must not
@@ -19,13 +20,6 @@ const TERMINAL_RUN_STATUSES: AgentRunStatus[] = [
   AgentRunStatus.CANCELLED,
   AgentRunStatus.TIMEOUT,
 ];
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** An agent's recorded owner, if it is a user id; otherwise nobody. */
-function ownerUserId(createdBy: string | null | undefined): string | null {
-  return typeof createdBy === 'string' && UUID_RE.test(createdBy) ? createdBy : null;
-}
 
 @Processor('agent-runtime')
 export class AgentRuntimeProcessor {
@@ -120,7 +114,7 @@ export class AgentRuntimeProcessor {
       await this.runtimeService.startRun(
         agentId,
         organizationId,
-        ownerUserId(agent.createdBy),
+        agentOwnerUserId(agent),
         agent.heartbeat.prompt,
         { maxSteps: 10 },
       );
