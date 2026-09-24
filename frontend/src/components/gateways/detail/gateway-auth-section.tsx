@@ -528,9 +528,9 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
           </div>
         )}
       </CardContent>
+
       {confirmDialog}
       {guard.element}
-      {confirmDialog}
     </Card>
   )
 }

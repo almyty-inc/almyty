@@ -1,22 +1,25 @@
 /**
- * The gateway page's inline edit sections ask before a navigation throws
- * away what was typed into them. A clean section, a cancelled one and one
- * whose save is in flight leave without asking.
+ * The gateway page's inline edit sections, and its settings page, ask
+ * before a navigation throws away what was typed into them. A clean
+ * section, a cancelled one and a save that lands leave without asking.
  */
-import { describe, it, vi, beforeEach } from 'vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 
 import { renderAtRoute } from '@/test/render-at-route'
 import { expectLeaveAsks, expectLeavesWithoutAsking } from '@/test/leave-guard'
+import { LEAVE_TITLE } from '@/hooks/use-leave-guard'
 import { GatewayAuthSection } from '../gateway-auth-section'
 import { SecurityPolicyForm } from '../security-policy-form'
-import { GatewayEditForm } from '../gateway-edit-form'
+import { GatewayEditPage } from '@/pages/gateway-edit'
 import { gatewaysApi } from '@/lib/api'
 
 vi.mock('react-router-dom', async () => vi.importActual('react-router-dom'))
 
 vi.mock('@/lib/api', () => ({
   gatewaysApi: {
+    getById: vi.fn(),
+    update: vi.fn(),
     getAuthConfigs: vi.fn(),
     listApiKeys: vi.fn(),
     createAuthConfig: vi.fn(),
@@ -80,20 +83,41 @@ describe('tool security policy', () => {
   })
 })
 
-describe('gateway settings', () => {
+describe('gateway settings page', () => {
   const gateway = { id: 'gw-1', name: 'Support', endpoint: '/support', description: '', status: 'active', type: 'mcp' }
-  const form = (isSaving = false) => (
-    <GatewayEditForm gateway={gateway} isSaving={isSaving} onSubmit={vi.fn()} onCancel={vi.fn()} />
-  )
+  const page = () =>
+    renderAtRoute(<GatewayEditPage />, {
+      path: '/gateways/:id/edit',
+      url: '/gateways/gw-1/edit',
+      paths: ['/gateways/:id', '/elsewhere'],
+    })
+
+  beforeEach(() => {
+    vi.mocked(gatewaysApi.getById).mockResolvedValue(gateway as any)
+  })
 
   it('asks once a setting is edited', async () => {
-    const { router } = at(form())
-    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Support v2' } })
+    const { router } = page()
+    const name = await screen.findByLabelText(/^Name/)
+    await waitFor(() => expect(name).toHaveValue('Support'))
+    fireEvent.change(name, { target: { value: 'Support v2' } })
     await expectLeaveAsks(router)
   })
 
   it('leaves unchanged settings without asking', async () => {
-    const { router } = at(form())
+    const { router } = page()
+    await waitFor(() => expect(screen.getByLabelText(/^Name/)).toHaveValue('Support'))
     await expectLeavesWithoutAsking(router)
+  })
+
+  it('returns to the gateway without asking once the save lands', async () => {
+    vi.mocked(gatewaysApi.update).mockResolvedValue({} as any)
+    const { router } = page()
+    const name = await screen.findByLabelText(/^Name/)
+    await waitFor(() => expect(name).toHaveValue('Support'))
+    fireEvent.change(name, { target: { value: 'Support v2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/gateways/gw-1'))
+    expect(screen.queryByText(LEAVE_TITLE)).not.toBeInTheDocument()
   })
 })

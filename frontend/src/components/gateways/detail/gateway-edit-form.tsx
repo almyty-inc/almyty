@@ -26,7 +26,6 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { PRIVATE_CAPABLE_GATEWAY_TYPES } from '@/components/gateways/create-gateway-form'
 import { useOrganizationStore } from '@/store/organization'
-import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 export const editGatewaySchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -47,9 +46,11 @@ export interface GatewayEditFormProps {
   onSubmit: (data: EditGatewayForm & { visibility?: Visibility; teamId?: string | null }) => void
   onCancel: () => void
   isSystem?: boolean
+  /** Called with true while the form holds unsaved edits, false once it does not. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSystem }: GatewayEditFormProps) {
+export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSystem, onDirtyChange }: GatewayEditFormProps) {
   const { currentOrganization } = useOrganizationStore()
   const formRef = React.useRef<HTMLFormElement>(null)
   const form = useForm<EditGatewayForm>({
@@ -76,9 +77,12 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
   const privateNotPossible =
     visibility.visibility === 'private' && !PRIVATE_CAPABLE_GATEWAY_TYPES.has(gateway?.type)
   const scopeChanged = visibility.visibility !== stored.visibility || visibility.teamId !== stored.teamId
-  // Unsaved edits ask before a navigation throws them away. Not while the
-  // save is in flight: the page leaves for the detail view once it lands.
-  const guard = useLeaveGuard((form.formState.isDirty || scopeChanged) && !isSaving)
+  // The page owns the leave guard (it also owns the navigation after a
+  // save), so it is told whenever the form holds unsaved edits.
+  const dirty = form.formState.isDirty || scopeChanged
+  React.useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
 
   const submit = (data: EditGatewayForm) => {
     if (privateNotPossible) return
@@ -170,7 +174,6 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
         submitting={isSaving}
         submitDisabled={privateNotPossible}
       />
-      {guard.element}
     </form>
   )
 }
