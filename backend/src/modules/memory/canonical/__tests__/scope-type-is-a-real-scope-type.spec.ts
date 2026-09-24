@@ -37,7 +37,9 @@ describe('canonical memory scope_type is always a real ScopeType', () => {
     for (const scopeType of SCOPE_TYPE_VALUES) {
       const scope = ownScope({ scope_type: scopeType, scope_id: 'org-1' });
       expect(SCOPE_TYPE_VALUES).toContain(scope.scope_type);
-      expect(scope.scope_id).toBe('org-1');
+      // Every scope is the caller's organization; `user` is additionally
+      // the caller's own slice of it.
+      expect(scope.scope_id).toBe(scopeType === 'user' ? 'org-1:user:u-1' : 'org-1');
     }
   });
 

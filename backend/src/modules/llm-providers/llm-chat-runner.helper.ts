@@ -411,7 +411,7 @@ export class LlmChatRunnerHelper {
         // the outbound tool HTTP request and the LLM provider
         // follow-up both, not just one.
         const executionOptions: ToolExecutionOptions = {
-          userId: session.userId || 'system',
+          userId: session.userId ?? undefined,
           organizationId,
           signal,
         };

@@ -248,7 +248,7 @@ export class GatewayProtocolService {
 
       // Execute the tool
       const executionOptions: ToolExecutionOptions = {
-        userId: request.userId || 'system',
+        userId: request.userId ?? undefined,
         organizationId: gateway.organizationId,
         timeout: gatewayTool.getEffectiveTimeout(),
         retries: gatewayTool.getEffectiveRetries(),
@@ -351,7 +351,7 @@ export class GatewayProtocolService {
 
     try {
       const executionOptions: ToolExecutionOptions = {
-        userId: request.userId || 'system',
+        userId: request.userId ?? undefined,
         organizationId: gateway.organizationId,
         timeout: gatewayTool.getEffectiveTimeout(),
         retries: gatewayTool.getEffectiveRetries(),
