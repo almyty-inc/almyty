@@ -383,7 +383,7 @@ export class BillingService {
       info.graceUntil = null;
     }
 
-    const token = this.mintToken(plan, seats, expiresAt, org.name);
+    const token = this.mintToken(plan, seats, expiresAt, org.name, org.id);
     info.licenseToken = token;
 
     org.plan = plan;
@@ -440,6 +440,7 @@ export class BillingService {
     seats: number,
     expiresAt: Date,
     issuedTo: string,
+    organizationId: string,
   ): string {
     const privateKey = this.config.get<string>(LICENSE_PRIVATE_KEY_ENV);
     if (!privateKey) {
@@ -453,6 +454,8 @@ export class BillingService {
       expiresAt: expiresAt ? expiresAt.toISOString() : null,
       issuedTo,
       issuedAt: new Date().toISOString(),
+      // Binds the token to this org: resolveToken refuses it anywhere else.
+      organizationId,
     };
     return signLicense(payload, privateKey);
   }

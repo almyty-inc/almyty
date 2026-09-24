@@ -23,6 +23,7 @@ import { CanonicalMemorySoftcapWarning } from '../memory/canonical/canonical-mem
 
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import { pickWritableSettings } from './dto/organization-settings.dto';
 import { OrganizationsInvitesHelper } from './organizations-invites.helper';
 import { TeamMembershipHelper } from './team-membership.helper';
 import { CreateTeamDto } from './dto/create-team.dto';
@@ -123,9 +124,12 @@ export class OrganizationsService {
       throw new ConflictException('Organization with this name or slug already exists');
     }
 
-    // Create organization
+    // Create organization. Settings the creator may choose; the limits
+    // are not among them.
+    const { settings, ...fields } = createOrganizationDto;
     const organization = this.organizationRepository.create({
-      ...createOrganizationDto,
+      ...fields,
+      ...(settings ? { settings: pickWritableSettings(settings) as Organization['settings'] } : {}),
       slug,
     });
 
@@ -300,11 +304,12 @@ export class OrganizationsService {
     // Settings are patched, not replaced: a client sending only
     // { settings: { defaultRouting } } must not wipe the limits or the
     // pending invites other features keep in the same column. A key set
-    // to null clears it.
+    // to null clears it. Only the admin-writable keys are taken: the
+    // limits are the plan's, never the org's own admins'.
     const { settings, ...rest } = updateOrganizationDto;
     Object.assign(organization, rest);
     if (settings) {
-      organization.settings = { ...(organization.settings ?? {}), ...settings };
+      organization.settings = { ...(organization.settings ?? {}), ...pickWritableSettings(settings) };
     }
 
     // Stripped after the write, never before: the row read above is the

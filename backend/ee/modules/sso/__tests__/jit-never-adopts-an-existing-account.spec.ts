@@ -1,6 +1,8 @@
 import { UnauthorizedException } from '@nestjs/common';
 
 import { SsoService } from '../sso.service';
+import { SamlReplayCache } from '../saml-replay-cache';
+import { FakeRedis } from '../../../../src/test/fake-redis';
 import { OrganizationRole } from '../../../../src/entities/user-organization.entity';
 
 /**
@@ -53,6 +55,7 @@ describe('SSO JIT provisioning never adopts an existing account', () => {
       userRepo as any,
       membershipRepo as any,
       { getDecrypted: jest.fn() } as any,
+      new SamlReplayCache(new FakeRedis()),
     );
     return { service, userRepo, membershipRepo };
   }

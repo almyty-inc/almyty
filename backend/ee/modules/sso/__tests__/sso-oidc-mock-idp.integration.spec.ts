@@ -23,6 +23,8 @@ import { OAuth2Server } from 'oauth2-mock-server';
 import { URL } from 'url';
 
 import { SsoService } from '../sso.service';
+import { SamlReplayCache } from '../saml-replay-cache';
+import { FakeRedis } from '../../../../src/test/fake-redis';
 import type { DecryptedSsoConfig } from '../sso-config.service';
 import { User } from '../../../../src/entities/user.entity';
 import {
@@ -125,9 +127,12 @@ d('SSO OIDC — real authorization-code flow vs oauth2-mock-server', () => {
   beforeEach(() => {
     userRepo = new InMemoryUserRepo();
     membershipRepo = new InMemoryMembershipRepo();
-    sso = new SsoService(userRepo as any, membershipRepo as any, {
-      getDecrypted: async () => oidcConfig(issuerUrl),
-    } as any);
+    sso = new SsoService(
+      userRepo as any,
+      membershipRepo as any,
+      { getDecrypted: async () => oidcConfig(issuerUrl) } as any,
+      new SamlReplayCache(new FakeRedis()),
+    );
   });
 
   /**

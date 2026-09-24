@@ -63,6 +63,14 @@ ENV APP_BUILD_CLIENT_ENTRY=/opt/almyty/node_modules/@almyty/chat/dist/index.js
 # not in the API image.
 COPY --from=builder /app/packages/desktop-shell /opt/almyty/desktop-shell
 ENV APP_BUILD_DESKTOP_SHELL=/opt/almyty/desktop-shell
+# The packager, from the shell's own lockfile: electron-builder at the
+# exact version the shell pins, with every dependency locked. The processor
+# runs node_modules/.bin/electron-builder from here rather than asking npx
+# for a package by name. Electron itself is fetched by electron-builder for
+# the version each build names, so the install skips its download.
+RUN cd /opt/almyty/desktop-shell \
+ && ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci --no-audit --no-fund \
+ && test -x node_modules/.bin/electron-builder
 
 # Production deps + the built app.
 COPY package*.json ./

@@ -154,12 +154,13 @@ describe('LicenseService', () => {
           limits: { seats: 10 },
           expiresAt: null,
           issuedTo: 'paid-org',
+          organizationId: 'org-paid',
         },
         privatePem,
       );
 
       const svc = new LicenseService();
-      const snap = svc.resolveToken(token);
+      const snap = svc.resolveToken(token, 'org-paid');
 
       expect(snap.edition).toBe(EDITION_ENTERPRISE);
       expect(snap.entitlements).toContain(EE_ENTITLEMENTS.ADVANCED_RBAC);
@@ -176,13 +177,13 @@ describe('LicenseService', () => {
       const { publicPem, privatePem } = keypair();
       process.env[PUBLIC_KEY_ENV] = publicPem;
       const token = signLicense(
-        { entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null },
+        { entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null, organizationId: 'org-1' },
         privatePem,
       );
 
       const svc = new LicenseService();
       svc.load({ token: '' }); // community global
-      svc.resolveToken(token); // per-org enterprise resolution
+      svc.resolveToken(token, 'org-1'); // per-org enterprise resolution
 
       // Global state untouched by the per-org resolution.
       expect(svc.getEdition()).toBe(EDITION_COMMUNITY);
@@ -255,6 +256,48 @@ describe('LicenseService', () => {
 
       expect(snap.edition).toBe(EDITION_ENTERPRISE);
       expect(snap.entitlements).toContain(EE_ENTITLEMENTS.SSO);
+    });
+
+    // A token minted for org A, pasted into org B's billing record, used to
+    // grant B everything A paid for: nothing in the token said whose it was.
+    describe('org binding', () => {
+      const mint = (privatePem: string, over: Partial<LicensePayload> = {}) =>
+        signLicense({ entitlements: [EE_ENTITLEMENTS.SSO], limits: {}, expiresAt: null, ...over }, privatePem);
+
+      it('honours a token only in the org it was minted for', () => {
+        const { publicPem, privatePem } = keypair();
+        process.env[PUBLIC_KEY_ENV] = publicPem;
+        const token = mint(privatePem, { organizationId: 'org-a' });
+        const svc = new LicenseService();
+
+        expect(svc.resolveToken(token, 'org-a').entitlements).toContain(EE_ENTITLEMENTS.SSO);
+        const elsewhere = svc.resolveToken(token, 'org-b');
+        expect(elsewhere.edition).toBe(EDITION_COMMUNITY);
+        expect(elsewhere.entitlements).not.toContain(EE_ENTITLEMENTS.SSO);
+      });
+
+      it('refuses a stored token with no org claim, and a stored token with no asking org', () => {
+        const { publicPem, privatePem } = keypair();
+        process.env[PUBLIC_KEY_ENV] = publicPem;
+        const svc = new LicenseService();
+
+        expect(svc.resolveToken(mint(privatePem), 'org-a').edition).toBe(EDITION_COMMUNITY);
+        expect(svc.resolveToken(mint(privatePem, { organizationId: 'org-a' }), null).edition).toBe(EDITION_COMMUNITY);
+      });
+
+      it('applies an org-bound env token to that org only, and never process-wide', () => {
+        const { publicPem, privatePem } = keypair();
+        process.env[PUBLIC_KEY_ENV] = publicPem;
+        process.env[TOKEN_ENV] = mint(privatePem, { organizationId: 'org-a' });
+        const svc = new LicenseService();
+
+        expect(svc.resolveToken(null, 'org-a').edition).toBe(EDITION_ENTERPRISE);
+        expect(svc.resolveToken(null, 'org-b').edition).toBe(EDITION_COMMUNITY);
+
+        svc.load();
+        expect(svc.getEdition()).toBe(EDITION_COMMUNITY);
+        expect(svc.has(EE_ENTITLEMENTS.SSO)).toBe(false);
+      });
     });
   });
 });
