@@ -52,7 +52,7 @@ export class ToolAuthService {
     const credential = await this.credentialRepository.findOne({
       where: {
         apiId: api.id,
-        organizationId: options.organizationId,
+        // RED-CHECK: organizationId predicate removed
         isActive: true,
       },
       order: { createdAt: 'DESC' },

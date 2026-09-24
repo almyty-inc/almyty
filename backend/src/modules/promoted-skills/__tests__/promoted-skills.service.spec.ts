@@ -143,4 +143,25 @@ describe('PromotedSkillsService', () => {
     const served = await service.listForServing('org-1');
     expect(served).toEqual([{ name: 'my-skill', content: 'SKILL.md body' }]);
   });
+
+  /**
+   * `runRepo` is a bare `findOne: jest.fn()` in every test above, so the
+   * `organizationId` half of `where: { id: runId, organizationId }` was
+   * never exercised: deleting it left this whole suite green while one
+   * tenant could promote another tenant's run -- and a promoted skill
+   * embeds that run's transcript, input and final output.
+   */
+  it('refuses to promote a run that belongs to another organization', async () => {
+    const runs = [completedRun({ organizationId: 'org-2' })];
+    runRepo.findOne.mockImplementation(({ where }: any) =>
+      Promise.resolve(
+        runs.find((r) => r.id === where.id && r.organizationId === where.organizationId) || null,
+      ),
+    );
+
+    await expect(service.promoteFromRun('run-1', 'org-1', 'u', {})).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(skillStore).toHaveLength(0);
+  });
 });

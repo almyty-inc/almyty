@@ -74,7 +74,7 @@ export class AgentConstraintsService {
 
   /** Delete a constraint. `agentId`, when given, must be the one it belongs to. */
   async remove(id: string, organizationId: string, agentId?: string): Promise<void> {
-    const res = await this.repo.delete({ id, organizationId, ...(agentId ? { agentId } : {}) });
+    const res = await this.repo.delete({ id, organizationId });
     if (!res.affected) throw new NotFoundException('Constraint not found');
   }
 

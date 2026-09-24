@@ -17,6 +17,8 @@ describe('ReferralQualificationService', () => {
 
   const referrerOrg = () => orgRepo.store.find((o) => o.id === 'org-referrer');
   const referredOrg = () => orgRepo.store.find((o) => o.id === 'org-referred');
+  /** The row as the table holds it — reads hand out detached copies. */
+  const storedReferral = (id: string) => referralRepo.store.find((r) => r.id === id);
 
   beforeEach(async () => {
     referralRepo = makeRepo('ref');
@@ -83,9 +85,9 @@ describe('ReferralQualificationService', () => {
       const result = await sweeper.sweep();
 
       expect(result.qualified).toBe(1);
-      expect(referral.status).toBe(ReferralStatus.QUALIFIED);
-      expect(referral.qualifiedAt).toBeInstanceOf(Date);
-      expect(referral.rewardDays).toBe(14); // tier 1 default
+      expect(storedReferral(referral.id).status).toBe(ReferralStatus.QUALIFIED);
+      expect(storedReferral(referral.id).qualifiedAt).toBeInstanceOf(Date);
+      expect(storedReferral(referral.id).rewardDays).toBe(14); // tier 1 default
     });
 
     it('does not qualify with a gateway but no agent run', async () => {
@@ -95,7 +97,7 @@ describe('ReferralQualificationService', () => {
       const result = await sweeper.sweep();
 
       expect(result.qualified).toBe(0);
-      expect(referral.status).toBe(ReferralStatus.PENDING);
+      expect(storedReferral(referral.id).status).toBe(ReferralStatus.PENDING);
     });
 
     it('does not qualify with a run but no gateway', async () => {
@@ -103,7 +105,7 @@ describe('ReferralQualificationService', () => {
       agentRunRepo.store.push({ id: 'run-1', organizationId: 'org-referred' });
 
       await sweeper.sweep();
-      expect(referral.status).toBe(ReferralStatus.PENDING);
+      expect(storedReferral(referral.id).status).toBe(ReferralStatus.PENDING);
     });
 
     it('skips abuse-flagged referrals entirely', async () => {
@@ -113,8 +115,8 @@ describe('ReferralQualificationService', () => {
       const result = await sweeper.sweep();
 
       expect(result.qualified).toBe(0);
-      expect(referral.status).toBe(ReferralStatus.PENDING);
-      expect(referral.rewardDays).toBe(0);
+      expect(storedReferral(referral.id).status).toBe(ReferralStatus.PENDING);
+      expect(storedReferral(referral.id).rewardDays).toBe(0);
     });
 
     it('tier-1 extends a pro referrer planExpiresAt by 14 days', async () => {
@@ -155,9 +157,9 @@ describe('ReferralQualificationService', () => {
       const result = await sweeper.sweep();
 
       expect(result.rewarded).toBe(1);
-      expect(referral.status).toBe(ReferralStatus.REWARDED);
-      expect(referral.rewardedAt).toBeInstanceOf(Date);
-      expect(referral.rewardDays).toBe(44); // 14 + 30
+      expect(storedReferral(referral.id).status).toBe(ReferralStatus.REWARDED);
+      expect(storedReferral(referral.id).rewardedAt).toBeInstanceOf(Date);
+      expect(storedReferral(referral.id).rewardDays).toBe(44); // 14 + 30
       expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(expiry + 30 * DAY_MS);
     });
 
@@ -173,7 +175,7 @@ describe('ReferralQualificationService', () => {
       const result = await sweeper.sweep();
 
       expect(result.rewarded).toBe(0);
-      expect(referral.status).toBe(ReferralStatus.QUALIFIED);
+      expect(storedReferral(referral.id).status).toBe(ReferralStatus.QUALIFIED);
     });
 
     it('skips flagged referrals for tier 2 as well', async () => {
@@ -186,8 +188,8 @@ describe('ReferralQualificationService', () => {
       referredOrg().billingInfo = { stripeSubscriptionId: 'sub_123' };
 
       await sweeper.sweep();
-      expect(referral.status).toBe(ReferralStatus.QUALIFIED);
-      expect(referral.rewardDays).toBe(0);
+      expect(storedReferral(referral.id).status).toBe(ReferralStatus.QUALIFIED);
+      expect(storedReferral(referral.id).rewardDays).toBe(0);
     });
   });
 
@@ -358,6 +360,8 @@ describe('ReferralQualificationService verified-referee gating', () => {
   let agentRunRepo: ReturnType<typeof makeRepo>;
   let userRepo: ReturnType<typeof makeRepo>;
   let sweeper: ReferralQualificationService;
+  /** The row as the table holds it — reads hand out detached copies. */
+  const storedReferral = (id: string) => referralRepo.store.find((r) => r.id === id);
 
   beforeEach(() => {
     referralRepo = makeRepo('ref');
@@ -419,8 +423,8 @@ describe('ReferralQualificationService verified-referee gating', () => {
     const result = await sweeper.sweep();
 
     expect(result.qualified).toBe(0);
-    expect(referral.status).toBe(ReferralStatus.PENDING);
-    expect(referral.rewardDays).toBe(0);
+    expect(storedReferral(referral.id).status).toBe(ReferralStatus.PENDING);
+    expect(storedReferral(referral.id).rewardDays).toBe(0);
   });
 
   it('qualifies (and rewards tier 1) on a later sweep after the referee verifies', async () => {
@@ -431,25 +435,25 @@ describe('ReferralQualificationService verified-referee gating', () => {
     const result = await sweeper.sweep();
 
     expect(result.qualified).toBe(1);
-    expect(referral.status).toBe(ReferralStatus.QUALIFIED);
-    expect(referral.rewardDays).toBeGreaterThan(0);
+    expect(storedReferral(referral.id).status).toBe(ReferralStatus.QUALIFIED);
+    expect(storedReferral(referral.id).rewardDays).toBeGreaterThan(0);
   });
 
   it('holds the qualified -> rewarded (tier 2) transition for unverified referees too', async () => {
     const referral = await seedActivatedReferral();
-    referral.status = ReferralStatus.QUALIFIED;
-    referral.qualifiedAt = new Date();
+    storedReferral(referral.id).status = ReferralStatus.QUALIFIED;
+    storedReferral(referral.id).qualifiedAt = new Date();
     referredOrgRow().plan = 'pro';
     referredOrgRow().billingInfo = { stripeSubscriptionId: 'sub_1' };
 
     const held = await sweeper.sweep();
     expect(held.rewarded).toBe(0);
-    expect(referral.status).toBe(ReferralStatus.QUALIFIED);
+    expect(storedReferral(referral.id).status).toBe(ReferralStatus.QUALIFIED);
 
     userRepo.store[0].verifiedAt = new Date();
     const after = await sweeper.sweep();
     expect(after.rewarded).toBe(1);
-    expect(referral.status).toBe(ReferralStatus.REWARDED);
+    expect(storedReferral(referral.id).status).toBe(ReferralStatus.REWARDED);
   });
 
   function referredOrgRow() {

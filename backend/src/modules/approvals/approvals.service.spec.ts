@@ -7,9 +7,10 @@ class FakeApprovalsRepo {
   rows: ApprovalRequest[] = [];
   private idc = 0;
   async findOne({ where }: any) {
-    return this.rows.find(r =>
+    const row = this.rows.find(r =>
       Object.entries(where).every(([k, v]) => (r as any)[k] === v),
-    ) ?? null;
+    );
+    return row ? this.detach(row) : null;
   }
   async find({ where, order }: any = {}) {
     let out = this.rows.filter(r =>
@@ -24,15 +25,19 @@ class FakeApprovalsRepo {
     if (order?.createdAt === 'DESC') {
       out = [...out].sort((a, b) => +b.createdAt - +a.createdAt);
     }
-    return out;
+    return out.map(r => this.detach(r));
   }
   create(partial: Partial<ApprovalRequest>) {
     return { id: `a_${++this.idc}`, createdAt: new Date(), updatedAt: new Date(), ...partial } as ApprovalRequest;
   }
+  /** A detached copy, which is what a real read gives the caller. */
+  private detach(r: ApprovalRequest) {
+    return { ...r } as ApprovalRequest;
+  }
   async save(r: ApprovalRequest) {
     const existing = this.rows.findIndex(x => x.id === r.id);
-    if (existing >= 0) this.rows[existing] = r;
-    else this.rows.push(r);
+    if (existing >= 0) this.rows[existing] = this.detach(r);
+    else this.rows.push(this.detach(r));
     return r;
   }
   createQueryBuilder() {
@@ -62,7 +67,7 @@ class FakeApprovalsRepo {
       },
       orderBy: () => qb,
       take: (n: number) => { pending = pending.slice(0, n); return qb; },
-      getMany: async () => pending,
+      getMany: async () => pending.map(r => self.detach(r)),
       execute: async () => {
         const row = self.rows.find(r => r.id === targetId);
         if (!row) return { affected: 0 };
@@ -201,6 +206,57 @@ describe('ApprovalsService', () => {
       policy.decision = { allowed: false, reason: 'team lead required' };
       const row = await svc.create({ organizationId: 'o', teamId: 't1', runId: 'r', agentId: 'a', reason: 'x' });
       await expect(svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' }, row.organizationId)).rejects.toThrow(/team lead/);
+    });
+  });
+
+  describe('sweepExpired', () => {
+    it('flips a pending row past its expiry and emits once', async () => {
+      const { svc, approvals } = makeService();
+      const events: any[] = [];
+      const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x', ttlSeconds: 1 });
+      svc.on('approval.decided', (a: any) => events.push(a));
+
+      const flipped = await svc.sweepExpired(new Date(Date.now() + 60_000));
+
+      expect(flipped).toBe(1);
+      expect(approvals.rows[0].status).toBe('expired');
+      expect(approvals.rows[0].decisionReason).toBe('approval expired');
+      expect(events.map((e) => e.status)).toEqual(['expired']);
+      expect(row.id).toBe(approvals.rows[0].id);
+    });
+
+    /**
+     * The sweep's own compare-and-set.
+     *
+     * The sweep reads a batch of pending rows and then walks it, several
+     * DB round trips per row. A reviewer approving during that walk
+     * resumes the run and the gated tool call executes -- and the sweep,
+     * still holding the copy it loaded, would stamp 'expired' over the
+     * decision and emit 'approval.decided' a second time, telling the
+     * runtime to terminate a run whose action had already gone through.
+     * Only the UPDATE that actually moved the row off 'pending' counts.
+     *
+     * Nothing exercised `if (!claim.affected) continue;` before this:
+     * the guard could be deleted and every approvals suite stayed green.
+     */
+    it('does not expire a request that was decided after the batch was read', async () => {
+      const { svc, approvals } = makeService();
+      const row = await svc.create({ organizationId: 'o', teamId: null, runId: 'r', agentId: 'a', reason: 'x', ttlSeconds: 1 });
+
+      // The copy the sweep loaded, before the reviewer got there.
+      const stale = { ...approvals.rows[0] };
+      await svc.approve(row.id, { decidedBy: 'u' }, { id: 'u' }, row.organizationId);
+
+      const events: any[] = [];
+      svc.on('approval.decided', (a: any) => events.push(a));
+      jest.spyOn(approvals, 'find').mockResolvedValueOnce([stale as any]);
+
+      const flipped = await svc.sweepExpired(new Date(Date.now() + 60_000));
+
+      expect(flipped).toBe(0);
+      expect(events).toHaveLength(0);
+      expect(approvals.rows[0].status).toBe('approved');
+      expect(approvals.rows[0].decisionReason).not.toBe('approval expired');
     });
   });
 

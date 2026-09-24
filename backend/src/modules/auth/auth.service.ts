@@ -28,6 +28,10 @@ import {
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { CaptchaService } from './captcha.service';
 import { normalizeEmail, isDisposableEmail } from './email-normalization';
+import {
+  effectiveMemberships,
+  isEffectiveMembership,
+} from '../../common/authorization/membership';
 
 export interface JwtPayload {
   sub: string;
@@ -509,22 +513,33 @@ export class AuthService {
     // org id and authenticate as that org on every JwtAuthGuard route.
     // That walks straight through per-request scope checks, because the
     // thing those checks compare against is exactly this value.
+    //
+    // "Belongs to" is `isEffectiveMembership`, the same predicate
+    // JwtStrategy and ApiKeyStrategy use. A local `isActive: true` here
+    // was weaker than that: it accepted a pending invite, whose row is
+    // active and unaccepted until the invitee visits the accept route --
+    // so being invited was enough to mint a key stamped with the
+    // inviting org.
     if (orgId) {
       const membership = await this.userOrganizationRepository.findOne({
-        where: { userId, organizationId: orgId, isActive: true },
+        where: { userId, organizationId: orgId },
       });
-      if (!membership) {
+      if (!isEffectiveMembership(membership)) {
         throw new ForbiddenException('You are not a member of that organization');
       }
     }
 
+    // Same predicate on the default: a user whose only row is a pending
+    // or revoked invite has no org to fall back to, and gets an unscoped
+    // key rather than that org's.
     if (!orgId) {
       const user = await this.userRepository.findOne({
         where: { id: userId },
         relations: { organizationMemberships: true },
       });
-      if (user?.organizationMemberships?.length === 1) {
-        orgId = user.organizationMemberships[0].organizationId;
+      const memberships = effectiveMemberships(user?.organizationMemberships);
+      if (memberships.length === 1) {
+        orgId = memberships[0].organizationId;
       }
     }
 

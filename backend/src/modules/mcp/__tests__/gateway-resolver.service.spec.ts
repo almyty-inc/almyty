@@ -104,8 +104,27 @@ describe('GatewayResolverService', () => {
       const result = await service.resolveOrganization('my-cool-org');
 
       expect(result).toEqual(orgWithName);
-      expect(qbStub.where).toHaveBeenCalled();
+      // `toHaveBeenCalled()` alone let the whole predicate drift: a fluent
+      // stub returns itself whatever it is handed, so the SQL and the
+      // bound parameter were never looked at. Pin both.
+      expect(qbStub.where).toHaveBeenCalledWith(expect.stringContaining('org.name'), {
+        slug: 'my-cool-org',
+      });
       expect(qbStub.getOne).toHaveBeenCalled();
+    });
+
+    it('lower-cases the slug it binds, so a mixed-case path still resolves', async () => {
+      jest.spyOn(organizationRepository, 'findOne').mockResolvedValue(null);
+      const orgWithName = { ...mockOrganization, name: 'My Cool Org', slug: 'something-else' };
+      const qbStub: any = {
+        where: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue(orgWithName),
+      };
+      (organizationRepository as any).createQueryBuilder = jest.fn().mockReturnValue(qbStub);
+
+      await service.resolveOrganization('My-Cool-Org');
+
+      expect(qbStub.where).toHaveBeenCalledWith(expect.any(String), { slug: 'my-cool-org' });
     });
 
     it('should throw 404 for non-existent org', async () => {

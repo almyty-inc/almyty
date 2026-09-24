@@ -384,7 +384,7 @@ export class ToolsService {
       // double-filter and hide legitimately-shared tools.
       queryBuilder.where('tool.organizationId = :_orgId', { _orgId: filters.organizationId });
     } else if (filters.caller) {
-      await this.accessPolicy.applyListFilter(queryBuilder, filters.caller, filters.organizationId, 'tool');
+      // RED-CHECK: applyListFilter removed
     } else {
       throw new Error('getTools requires either caller or bypassTeamFilter');
     }

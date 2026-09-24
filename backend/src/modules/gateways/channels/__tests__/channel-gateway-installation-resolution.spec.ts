@@ -28,6 +28,7 @@ import { installFetchMock, parseSentJson } from '../adapters/__tests__/test-help
 describe('ChannelGatewayService installation resolution', () => {
   let fetchMock: ReturnType<typeof installFetchMock>;
   let runRepository: any;
+  let runRows: any[];
   let eventRepository: any;
   let gatewayRepository: any;
   let agentRuntimeService: any;
@@ -103,14 +104,36 @@ describe('ChannelGatewayService installation resolution', () => {
     emitter = new EventEmitter();
 
     const run: any = { id: 'run-1', metadata: {}, output: 'agent says hi' };
+    /**
+     * The thread-continuation lookup, modelled rather than stubbed.
+     *
+     * `agentId` is what keeps an inbound message from being appended to
+     * somebody else's conversation: the query matches on the platform's
+     * own thread id, which nothing in this system issued. A builder
+     * that chained fluently and answered `[]` could not tell that
+     * predicate from its absence, so `existingRuns` is filtered by the
+     * clauses the service actually passed.
+     */
+    runRows = [];
     runRepository = {
-      createQueryBuilder: jest.fn(() => ({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      })),
+      rows: runRows,
+      createQueryBuilder: jest.fn(() => {
+        const params: Record<string, any> = {};
+        const qb: any = {
+          where: (_c: string, p: any) => { Object.assign(params, p ?? {}); return qb; },
+          andWhere: (_c: string, p: any) => { Object.assign(params, p ?? {}); return qb; },
+          orderBy: () => qb,
+          limit: () => qb,
+          getMany: async () =>
+            runRows.filter(
+              (row: any) =>
+                row.agentId === params.agentId &&
+                (params.activeStatuses ?? []).includes(row.status) &&
+                row.metadata?.threadId === params.threadId,
+            ),
+        };
+        return qb;
+      }),
       save: jest.fn(async (r: any) => r),
       findOne: jest.fn(async () => run),
     };
@@ -236,6 +259,55 @@ describe('ChannelGatewayService installation resolution', () => {
     });
   });
 
+
+  describe('thread continuation', () => {
+    const activeRun = (over: Record<string, any> = {}) => ({
+      id: 'run-thread',
+      agentId: 'agent-1',
+      status: 'running',
+      metadata: { threadId: '111.222' },
+      output: 'agent says hi',
+      ...over,
+    });
+
+    it('continues the run already open on this thread', async () => {
+      runRows.push(activeRun());
+      const service = buildService(false);
+
+      await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
+
+      expect(agentRuntimeService.sendInput).toHaveBeenCalledWith('run-thread', 'org-1', 'hi there');
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The thread id is the platform's, not ours: `111.222` is a Slack
+     * message timestamp, and nothing stops the same value appearing in
+     * another workspace against another tenant's agent. `agentId` in
+     * that lookup is what keeps this message out of their conversation
+     * -- without it the inbound text is appended to their run and the
+     * reply is delivered to this channel.
+     */
+    it('will not continue a run that belongs to a different agent', async () => {
+      runRows.push(activeRun({ id: 'run-other-tenant', agentId: 'agent-99' }));
+      const service = buildService(false);
+
+      await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
+
+      expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+      expect(agentRuntimeService.startRun).toHaveBeenCalled();
+    });
+
+    it('will not continue a run that has already finished', async () => {
+      runRows.push(activeRun({ status: 'completed' }));
+      const service = buildService(false);
+
+      await service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
+
+      expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+      expect(agentRuntimeService.startRun).toHaveBeenCalled();
+    });
+  });
   describe('tenant id extraction', () => {
     it('slack adapter reads team_id (top level), event.team, and team.id', () => {
       const slack = new SlackAdapter();

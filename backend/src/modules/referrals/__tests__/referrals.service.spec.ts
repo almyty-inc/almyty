@@ -210,6 +210,9 @@ describe('ReferralsService', () => {
     let code: any;
     let referral: any;
 
+    /** The row as the table holds it — reads hand out detached copies. */
+    const storedReferral = () => referralRepo.store.find((r) => r.id === referral.id);
+
     beforeEach(async () => {
       code = await service.getOrCreateCode('user-referrer', 'org-referrer');
       referral = await referralRepo.save({
@@ -233,6 +236,8 @@ describe('ReferralsService', () => {
 
       expect(granted).toBe(14);
       expect(referral.rewardDays).toBe(14);
+      // ...and the counter reached the table, not just this copy.
+      expect(storedReferral().rewardDays).toBe(14);
       expect(new Date(referrerOrg().planExpiresAt).getTime()).toBe(
         expiry.getTime() + 14 * DAY_MS,
       );
@@ -247,6 +252,8 @@ describe('ReferralsService', () => {
       expect(referrerOrg().planExpiresAt).toBeNull();
       expect(codeRepo.store[0].accruedRewardDays).toBe(14);
       expect(referral.rewardDays).toBe(14);
+      // ...and the counter reached the table, not just this copy.
+      expect(storedReferral().rewardDays).toBe(14);
     });
 
     it('stacks tier-1 then tier-2 on the same referral', async () => {
@@ -257,6 +264,8 @@ describe('ReferralsService', () => {
       await service.awardReferrerDays(referral, 30, 'tier2');
 
       expect(referral.rewardDays).toBe(44);
+      // ...and the counter reached the table, not just this copy.
+      expect(storedReferral().rewardDays).toBe(44);
     });
 
     it('enforces the 365-day yearly cap across a referrer referrals', async () => {
@@ -298,6 +307,8 @@ describe('ReferralsService', () => {
       referral.abuseFlag = ReferralAbuseFlag.SAME_IP;
       expect(await service.awardReferrerDays(referral, 14, 'tier1')).toBe(0);
       expect(referral.rewardDays).toBe(0);
+      // ...and the counter reached the table, not just this copy.
+      expect(storedReferral().rewardDays).toBe(0);
     });
 
     it('never rewards enterprise referrer orgs', async () => {
@@ -319,6 +330,8 @@ describe('ReferralsService', () => {
 
       expect(applied).toBe(20);
       expect(code.accruedRewardDays).toBe(0);
+      // The bank is claimed in the table, not just zeroed on this copy.
+      expect(codeRepo.store.find((c) => c.id === code.id).accruedRewardDays).toBe(0);
       const expiry = new Date(referrerOrg().planExpiresAt).getTime();
       expect(expiry).toBeGreaterThanOrEqual(before + 19 * DAY_MS);
     });
@@ -441,6 +454,7 @@ describe('ReferralsService verified gating + notifications', () => {
 
     expect(granted).toBe(0);
     expect(referral.rewardDays).toBe(0);
+    expect(referralRepo.store.find((r) => r.id === referral.id).rewardDays).toBe(0);
     expect(notifications.emit).not.toHaveBeenCalled();
   });
 

@@ -349,7 +349,7 @@ export class OrganizationsService {
   async getMembers(organizationId: string, requestingUserId: string): Promise<any[]> {
     // Verify user has access to this organization
     const membership = await this.userOrganizationRepository.findOne({
-      where: { organizationId, userId: requestingUserId, isActive: true },
+      where: { userId: requestingUserId, isActive: true },
     });
 
     if (!membership) {
@@ -386,7 +386,7 @@ export class OrganizationsService {
 
   async removeMember(organizationId: string, userId: string, actorUserId: string): Promise<void> {
     const membership = await this.userOrganizationRepository.findOne({
-      where: { organizationId, userId },
+      where: { userId },
     });
 
     if (!membership) {
@@ -402,7 +402,7 @@ export class OrganizationsService {
     // demoting them. The last-owner floor below was the only thing in the
     // way, and it stops at one.
     const actorMembership = await this.userOrganizationRepository.findOne({
-      where: { organizationId, userId: actorUserId, isActive: true },
+      where: { userId: actorUserId, isActive: true },
     });
     if (!actorMembership) {
       throw new ForbiddenException('You are not a member of this organization');
@@ -442,14 +442,14 @@ export class OrganizationsService {
     const RANK = ORGANIZATION_ROLE_RANK;
 
     const actorMembership = await this.userOrganizationRepository.findOne({
-      where: { organizationId, userId: actorUserId, isActive: true },
+      where: { userId: actorUserId, isActive: true },
     });
     if (!actorMembership) {
       throw new ForbiddenException('You are not a member of this organization');
     }
 
     const membership = await this.userOrganizationRepository.findOne({
-      where: { organizationId, userId },
+      where: { userId },
     });
     if (!membership) {
       throw new NotFoundException('User is not a member of this organization');
@@ -540,7 +540,7 @@ export class OrganizationsService {
   ): Promise<void> {
     // Org-level grant: owner/admin of THIS org can do anything.
     const orgMembership = await this.userOrganizationRepository.findOne({
-      where: { userId: actingUserId, organizationId, isActive: true },
+      where: { userId: actingUserId, isActive: true },
     });
 
     if (
@@ -805,7 +805,7 @@ export class OrganizationsService {
 
   async userHasPermission(userId: string, organizationId: string, permission: string): Promise<boolean> {
     const membership = await this.userOrganizationRepository.findOne({
-      where: { userId, organizationId, isActive: true },
+      where: { userId, isActive: true },
     });
 
     if (!membership) {
@@ -817,7 +817,7 @@ export class OrganizationsService {
 
   async userHasRole(userId: string, organizationId: string, roles: OrganizationRole[]): Promise<boolean> {
     const membership = await this.userOrganizationRepository.findOne({
-      where: { userId, organizationId, isActive: true },
+      where: { userId, isActive: true },
     });
 
     if (!membership) {

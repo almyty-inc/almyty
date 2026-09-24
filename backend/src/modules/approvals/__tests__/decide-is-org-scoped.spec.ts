@@ -24,30 +24,61 @@ describe('approve/reject are scoped to the caller\'s organization', () => {
 
   class FakeApprovalsRepo {
     rows: ApprovalRequest[] = [];
+    /** A detached copy, which is what a real read gives the caller. */
+    private detach(r: ApprovalRequest): ApprovalRequest {
+      return { ...r } as ApprovalRequest;
+    }
     async findOne({ where }: any) {
-      return (
-        this.rows.find((r) =>
-          Object.entries(where).every(([k, v]) => (r as any)[k] === v),
-        ) ?? null
+      const row = this.rows.find((r) =>
+        Object.entries(where).every(([k, v]) => (r as any)[k] === v),
       );
+      return row ? this.detach(row) : null;
     }
     async find() {
-      return this.rows;
+      return this.rows.map((r) => this.detach(r));
     }
     create(partial: Partial<ApprovalRequest>) {
       return { id: 'a_1', createdAt: new Date(), ...partial } as ApprovalRequest;
     }
     async save(r: ApprovalRequest) {
-      this.rows.push(r);
+      this.rows.push(this.detach(r));
       return r;
     }
+    /**
+     * The CAS'd status flip: `WHERE id = ? AND status = 'pending'`.
+     *
+     * Modelled, not stubbed. This used to chain fluently and answer
+     * `{ affected: 1 }` to anything, which meant `decide()`'s
+     * `if (!claim.affected)` guard could be deleted outright and all four
+     * tests here still passed — and the predicates the flip is scoped by
+     * were never looked at either.
+     */
     createQueryBuilder() {
+      const self = this;
+      let patch: Partial<ApprovalRequest> = {};
+      let targetId: string | undefined;
+      let requiredStatus: string | undefined;
       const qb: any = {
         update: () => qb,
-        set: () => qb,
-        where: () => qb,
-        andWhere: () => qb,
-        execute: async () => ({ affected: 1 }),
+        set: (values: Partial<ApprovalRequest>) => {
+          patch = values;
+          return qb;
+        },
+        where: (_clause: string, params: any) => {
+          targetId = params?.id;
+          return qb;
+        },
+        andWhere: (_clause: string, params?: any) => {
+          if (params?.pending) requiredStatus = params.pending;
+          return qb;
+        },
+        execute: async () => {
+          const row = self.rows.find((r) => r.id === targetId);
+          if (!row) return { affected: 0 };
+          if (requiredStatus && row.status !== requiredStatus) return { affected: 0 };
+          Object.assign(row, patch);
+          return { affected: 1 };
+        },
       };
       return qb;
     }

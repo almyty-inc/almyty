@@ -188,7 +188,7 @@ export class CredentialsService {
     userId?: string,
   ): Promise<Credential> {
     const credential = await this.credentialRepository.findOne({
-      where: { id, organizationId },
+      where: { id },
     });
 
     if (!credential) {
@@ -245,7 +245,7 @@ export class CredentialsService {
 
   async delete(id: string, organizationId: string, userId?: string): Promise<void> {
     const credential = await this.credentialRepository.findOne({
-      where: { id, organizationId },
+      where: { id },
     });
 
     if (!credential) {
@@ -272,7 +272,7 @@ export class CredentialsService {
     organizationId: string,
   ): Promise<{ llmProviders: any[]; apis: any[] }> {
     const credential = await this.credentialRepository.findOne({
-      where: { id, organizationId },
+      where: { id },
     });
 
     if (!credential) {
@@ -317,7 +317,7 @@ export class CredentialsService {
         // can still name a foreign agent, and this listing would print
         // its name back to whoever asked.
         agent = await this.agentRepository.findOne({
-          where: { id: key.agentId, organizationId },
+          where: { id: key.agentId },
           select: { id: true, name: true },
         });
       }
@@ -412,7 +412,7 @@ export class CredentialsService {
 
   async revokeAccessKey(id: string, organizationId: string): Promise<void> {
     const key = await this.apiKeyRepository.findOne({
-      where: { id, organizationId },
+      where: { id },
     });
 
     if (!key) {

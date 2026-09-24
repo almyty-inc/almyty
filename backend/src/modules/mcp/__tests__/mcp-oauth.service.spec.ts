@@ -961,6 +961,29 @@ describe('McpOAuthService', () => {
       expect(result.expires_in).toBe(3600);
     });
 
+    /**
+     * The twin of "rejects a second concurrent exchange that lost the
+     * race", for rotation. It was missing, and the `update` double below
+     * answers `{ affected: 1 }` whatever the criteria says -- so deleting
+     * the `claim.affected !== 1` guard left this suite at 80/80.
+     *
+     * `mcp-oauth-single-use.spec.ts` proves the same branch against a
+     * table that evaluates the criteria; this keeps the pair visible here.
+     */
+    it('rejects a second concurrent rotation that lost the race', async () => {
+      jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue({ ...mockRefreshToken } as any);
+      // The other racer already rotated this token: the conditional
+      // UPDATE affects zero rows.
+      (oauthTokenRepository.update as jest.Mock).mockResolvedValueOnce({ affected: 0 });
+
+      await expect(
+        service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1'),
+      ).rejects.toThrow('has been revoked');
+
+      // The loser must not walk away with a pair.
+      expect(oauthTokenRepository.create).not.toHaveBeenCalled();
+    });
+
     it('should reject revoked refresh tokens', async () => {
       const revokedToken = { ...mockRefreshToken, isRevoked: true };
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(revokedToken as any);

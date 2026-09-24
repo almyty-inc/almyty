@@ -168,6 +168,39 @@ describe('SpendService', () => {
     ]);
   });
 
+  /**
+   * Every aggregation here is a raw query builder, so the only thing a
+   * unit test can prove about tenancy is the predicate that was asked
+   * for — and nothing did. The stub chained fluently and returned a
+   * canned row whatever it was handed, so `organizationId` could be
+   * dropped from all four queries with this suite still green: one
+   * org's Cost tab, forecast, period-to-date, budget enforcement and
+   * alert thresholds would every one of them have been computed from
+   * every organization's spend.
+   */
+  describe('organization scoping', () => {
+    it('scopes period-to-date, the timeseries, the per-agent split and the per-team split', async () => {
+      const runQb = makeQb({ total: '0' }, []);
+      const execQb = makeQb({ total: '0' }, []);
+      const service = new SpendService(repoOf(runQb), repoOf(execQb));
+      const from = new Date('2026-06-01T00:00:00Z');
+
+      await service.periodToDateCents({ organizationId: 'org-1', from });
+      await service.getSummary('org-1', { from }); // period-to-date + timeseries + byAgent
+      await service.byTeam('org-1', from);
+
+      // Both execution shapes, every query: agent_runs and
+      // agent_executions are separate tables, and a predicate dropped
+      // from one of them leaks exactly as much as one dropped from both.
+      for (const qb of [runQb, execQb]) {
+        expect(qb.where).toHaveBeenCalledTimes(5);
+        for (const call of qb.where.mock.calls) {
+          expect(call).toEqual(['run.organizationId = :orgId', { orgId: 'org-1' }]);
+        }
+      }
+    });
+  });
+
   describe('forecast', () => {
     const service = new SpendService({} as any, {} as any);
     const bucket = (spentCents: number) => ({ periodStart: 'x', spentCents, runCount: 1 });

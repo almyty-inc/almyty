@@ -13,10 +13,26 @@ import { FakePolicyApprovalsRepo } from './fake-policy-approvals';
 class FakeApprovalsRepo {
   rows: ApprovalRequest[] = [];
   private idc = 0;
+
+  /**
+   * A detached copy, which is what a real read gives the caller.
+   *
+   * This used to hand back the stored object itself, so every in-memory
+   * mutation the service made to the row it was holding was also a write
+   * to "the table". `applyPolicyProgress`'s
+   * `update({ id }, { payload })` could be deleted outright and this
+   * whole suite stayed green — the progress snapshot a reviewer sees on
+   * a still-pending request was never actually proven to be persisted.
+   */
+  private detach(r: ApprovalRequest): ApprovalRequest {
+    return { ...r, payload: structuredClone(r.payload) } as ApprovalRequest;
+  }
+
   async findOne({ where }: any) {
-    return (
-      this.rows.find((r) => Object.entries(where).every(([k, v]) => (r as any)[k] === v)) ?? null
+    const row = this.rows.find((r) =>
+      Object.entries(where).every(([k, v]) => (r as any)[k] === v),
     );
+    return row ? this.detach(row) : null;
   }
   create(partial: Partial<ApprovalRequest>) {
     return {
@@ -28,8 +44,8 @@ class FakeApprovalsRepo {
   }
   async save(r: ApprovalRequest) {
     const existing = this.rows.findIndex((x) => x.id === r.id);
-    if (existing >= 0) this.rows[existing] = r;
-    else this.rows.push(r);
+    if (existing >= 0) this.rows[existing] = this.detach(r);
+    else this.rows.push(this.detach(r));
     return r;
   }
 
@@ -39,10 +55,11 @@ class FakeApprovalsRepo {
    * along over the CAS'd flip.
    */
   async update(criteria: any, patch: Partial<ApprovalRequest>) {
-    const row = this.rows.find((r) => r.id === criteria.id);
-    if (!row) return { affected: 0 };
-    Object.assign(row, patch);
-    return { affected: 1 };
+    const rows = this.rows.filter((r) =>
+      Object.entries(criteria).every(([k, v]) => (r as any)[k] === v),
+    );
+    for (const row of rows) Object.assign(row, patch);
+    return { affected: rows.length };
   }
 
   /**
@@ -242,6 +259,34 @@ describe('ApprovalsService — approval policy hook', () => {
       expect(hook.scoreProgress).toHaveBeenCalledWith('org-1', 'pol-1', [
         { approverId: 'u1', roles: ['member'] },
       ]);
+    });
+
+    /**
+     * The progress snapshot has to reach the table, not just the object
+     * the deciding reviewer is holding.
+     *
+     * `applyPolicyProgress` mutates `row.payload` and then writes that
+     * one column back. Every assertion above reads the returned row, so
+     * with a fake that handed out the stored object the write itself was
+     * never exercised — deleting `update({ id }, { payload })` left the
+     * whole suite green. In production that is a 3-of-5 gate whose UI
+     * shows "0 of 3 collected" to the next reviewer, because the snapshot
+     * the request carries was only ever updated in one process's memory.
+     */
+    it('persists the progress snapshot on the request row', async () => {
+      const hook = makeQuorumHook(3);
+      const { svc, approvals } = makeService(hook);
+
+      const row = await svc.create(createInput);
+      await svc.approve(row.id, { decidedBy: 'u1' }, { id: 'u1' }, row.organizationId);
+
+      const stored = (approvals.rows[0].payload as any)._policy;
+      expect(stored.approvals).toEqual([{ approverId: 'u1', roles: ['member'] }]);
+      expect(stored.progress.satisfied).toBe(false);
+      expect(stored.progress.totalCollected).toBe(1);
+      // Only the payload column moved: the flip is the CAS'd write below.
+      expect(approvals.rows[0].status).toBe('pending');
+      expect(approvals.rows[0].decidedBy).toBeUndefined();
     });
 
     it('second approver satisfies the quorum and flips to approved', async () => {

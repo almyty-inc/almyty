@@ -2,6 +2,7 @@ import { ModelDeployment } from '../../../entities/model-deployment.entity';
 import { AdapterRegistry } from '../adapters/adapter.registry';
 import { StubAdapter } from '../adapters/stub.adapter';
 import { ModelDeploymentsProcessor } from '../model-deployments.processor';
+import { fakeRepo, newDeployment } from './gates/fakes';
 
 /**
  * The state machine, driven against the stub adapter with the
@@ -30,27 +31,25 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
       desired: { replicas: 1, minScale: 0, maxScale: 1 }, providerConfig: { token: 'valid', simulate: 'none' },
       externalRef: null, actual: null, state: 'pending', budgetId: null, createdBy: 'u-1', createdAt: new Date(), updatedAt: new Date(),
     });
-    deployments = {
-      findOne: jest.fn(async () => row),
-      save: jest.fn(async (r: any) => r),
-      // Column-scoped write: the reconcile loop writes only what it owns.
-      update: jest.fn(async (_criteria: any, patch: Record<string, any>) => { Object.assign(row, patch); return { affected: 1 }; }),
-      find: jest.fn(async () => [row]),
-      // The claim the processor takes before a minutes-long deploy, so
-      // the sweep and a retry cannot both deploy the same model.
-      createQueryBuilder: jest.fn(() => {
-        const qb: any = {
-          update: () => qb,
-          set: (values: Record<string, any>) => { Object.assign(row, values); return qb; },
-          where: () => qb,
-          andWhere: () => qb,
-          execute: async () => ({ affected: 1 }),
-        };
-        return qb;
-      }),
-    };
+    // The shared truthful repository double (gates/fakes): criteria are
+    // evaluated and the conditional claim behaves like the UPDATE it
+    // stands for. The hand-rolled double this replaces returned
+    // `{ affected: 1 }` from a query builder that ignored every clause,
+    // so `if (!claim.affected)` — the only thing stopping two replicas
+    // from each deploying a paid endpoint — could be deleted outright
+    // with this suite still green.
+    deployments = fakeRepo<ModelDeployment>(newDeployment, [row]);
     versions = { findOne: jest.fn(async () => ({ id: 'v-1', name: 'qwen', base: 'qwen3-0.6b', registryUri: 's3://r/q@1', quantizations: [], manifestSha: 'x' })) };
-    models = { findOne: jest.fn(async () => ({ id: 'm-1', organizationId: 'org-1', pricingOverride: null })), save: jest.fn(async (m: any) => m) };
+    // Criteria-evaluating: every card read in the loop is org-scoped,
+    // so a where that loses `organizationId` must answer differently.
+    models = {
+      findOne: jest.fn(async ({ where }: any) =>
+        where.id === 'm-1' && (where.organizationId ?? 'org-1') === 'org-1'
+          ? { id: 'm-1', organizationId: 'org-1', pricingOverride: null }
+          : null,
+      ),
+      save: jest.fn(async (m: any) => m),
+    };
     budgets = { findOne: jest.fn(async () => null) };
     service = { credentialsFor: jest.fn(async () => ({ token: 'valid' })), audit: jest.fn() };
     notifications = { emit: jest.fn(async () => undefined) };
@@ -65,6 +64,31 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
     expect(models.save).toHaveBeenCalledWith(expect.objectContaining({ id: 'm-1', status: 'active', endpointRef: expect.objectContaining({ deploymentId: 'd-1' }) }));
     const transitions = service.audit.mock.calls.map((c: any[]) => c[3]?.to);
     expect(transitions).toEqual(['deploying', 'ready']);
+  });
+
+  /**
+   * The deploy claim, from the losing side.
+   *
+   * adapter.deploy() runs for minutes, and two readers — the 2-minute
+   * sweep and a user pressing retry, or two API replicas — both see
+   * externalRef null. The conditional UPDATE lets exactly one through;
+   * the other matches no row and must stop there. It used to deploy
+   * anyway and overwrite externalRef, leaving the first endpoint a paid
+   * GPU no row points at: the orphan check only notices endpoints the
+   * PROVIDER has forgotten, never one the database has.
+   */
+  it('leaves a deployment alone when another replica already holds the claim', async () => {
+    row.state = 'deploying';
+    row.lastReconcileAt = new Date(); // a live claim, well inside the lease
+    const deploySpy = jest.spyOn(stub, 'deploy');
+
+    const out = await processor.reconcile('d-1');
+
+    expect(deploySpy).not.toHaveBeenCalled();
+    expect(out?.externalRef).toBeNull();
+    expect(out?.state).toBe('deploying');
+    // Nothing moved, so nothing is audited as having moved.
+    expect(service.audit).not.toHaveBeenCalled();
   });
 
   it('deploys a row that names its model inline, without ever reading a version', async () => {
@@ -127,6 +151,30 @@ describe('ModelDeploymentsProcessor.reconcile', () => {
 
     await processor.reconcile('d-1');
 
+    expect(models.findOne).toHaveBeenCalledWith({ where: { id: 'm-1', organizationId: 'org-1' } });
+    expect(models.save).not.toHaveBeenCalled();
+  });
+
+  it('never unroutes a catalog card that belongs to another organization', async () => {
+    // `clearCard` had the same shape as the pricing read below and the
+    // same exposure: a deployment carries whatever modelId its creator
+    // sent, so the lookup is organization-scoped. Unscoped, a teardown
+    // in one org flipped another org's card to inactive and dropped its
+    // endpoint — and the repository double answered with the same card
+    // whatever `where` it was handed, so the predicate could be deleted
+    // outright with this suite green.
+    await processor.reconcile('d-1');
+    models.save.mockClear();
+    models.findOne.mockImplementation(async ({ where }: any) =>
+      where.organizationId === 'org-1'
+        ? null
+        : { id: 'm-1', organizationId: 'org-2', status: 'active', endpointRef: null, metadata: {} },
+    );
+    row.state = 'tearing_down';
+
+    const out = await processor.reconcile('d-1');
+
+    expect(out?.state).toBe('torn_down');
     expect(models.findOne).toHaveBeenCalledWith({ where: { id: 'm-1', organizationId: 'org-1' } });
     expect(models.save).not.toHaveBeenCalled();
   });

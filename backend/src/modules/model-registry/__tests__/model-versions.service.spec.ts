@@ -13,10 +13,37 @@ const manifest = {
   quantizations: ['Q4_K_M'],
 };
 
+/**
+ * Enough of TypeORM's FindOperator to evaluate the criteria this service
+ * actually sends: `remove()` counts deployments with
+ * `state: Not(In(['torn_down']))`, and a double that ignored the
+ * operator would count a torn-down row as live (or, worse, count
+ * nothing and prove nothing).
+ */
+function whereMatches(row: Record<string, any>, where: any): boolean {
+  const valueMatches = (expected: any, actual: any): boolean => {
+    if (expected && typeof expected === 'object' && '_type' in expected) {
+      switch (expected._type) {
+        case 'in':
+          return (expected._value as any[]).includes(actual);
+        case 'isNull':
+          return actual === null || actual === undefined;
+        case 'not':
+          return !valueMatches(expected._value, actual);
+        default:
+          return expected._value === actual;
+      }
+    }
+    return expected === actual;
+  };
+  return Object.entries(where ?? {}).every(([k, v]) => valueMatches(v, row[k]));
+}
+
 describe('ModelVersionsService', () => {
   let rows: ModelVersion[];
   let versions: any;
   let deployments: { count: jest.Mock };
+  let deploymentRows: Array<Record<string, any>>;
   let registry: { describeVersion: jest.Mock };
   let audit: { log: jest.Mock };
   let svc: ModelVersionsService;
@@ -30,7 +57,13 @@ describe('ModelVersionsService', () => {
       findOne: jest.fn(async ({ where }: any) => rows.find((r) => Object.entries(where).every(([k, v]) => (r as any)[k] === v)) ?? null),
       remove: jest.fn(async (r: any) => { rows.splice(rows.indexOf(r), 1); return r; }),
     };
-    deployments = { count: jest.fn().mockResolvedValue(0) };
+    deploymentRows = [];
+    deployments = {
+      // Criteria-evaluating, so the org predicate and the
+      // `Not(In(TERMINAL))` state filter in `remove()` are actually
+      // exercised rather than assumed.
+      count: jest.fn(async ({ where }: any) => deploymentRows.filter((d) => whereMatches(d, where)).length),
+    };
     registry = { describeVersion: jest.fn() };
     audit = { log: jest.fn().mockResolvedValue(null) };
     svc = new ModelVersionsService(versions, deployments as any, registry as any, audit as any);
@@ -87,12 +120,33 @@ describe('ModelVersionsService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('remove refuses while a deployment that is not torn down references the version', async () => {
+  /**
+   * What holds a version alive is a *live* deployment *in this
+   * organization*. Both halves of that were canned: `count` was a mock
+   * returning whatever the test said next, so the criteria it was handed
+   * — `organizationId` and `state: Not(In(['torn_down']))` — were never
+   * looked at. Reduced to `{ modelVersionId }` alone, this suite stayed
+   * green while a torn-down deployment, or another tenant's, would have
+   * blocked the delete for good.
+   */
+  it('remove refuses while a live deployment in this org references the version', async () => {
     registry.describeVersion.mockRejectedValue(new Error('404'));
     const v = await svc.register('org', { name: 'a', registryUri: 'hf://x/y@1', base: 'b' });
-    deployments.count.mockResolvedValueOnce(2);
-    await expect(svc.remove('org', v.id)).rejects.toMatchObject({ response: { code: 'VERSION_IN_USE' } });
-    deployments.count.mockResolvedValueOnce(0);
+
+    deploymentRows.push(
+      { modelVersionId: v.id, organizationId: 'org', state: 'ready' },
+      { modelVersionId: v.id, organizationId: 'org', state: 'deploying' },
+    );
+    await expect(svc.remove('org', v.id)).rejects.toMatchObject({
+      response: { code: 'VERSION_IN_USE', message: expect.stringContaining('2 deployment') },
+    });
+
+    // Torn down, so it holds nothing. Neither does another tenant's row,
+    // whatever state it is in.
+    deploymentRows = [
+      { modelVersionId: v.id, organizationId: 'org', state: 'torn_down' },
+      { modelVersionId: v.id, organizationId: 'other-org', state: 'ready' },
+    ];
     await svc.remove('org', v.id, 'u');
     expect(rows).toHaveLength(0);
   });

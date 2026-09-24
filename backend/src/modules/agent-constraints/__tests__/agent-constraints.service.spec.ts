@@ -47,9 +47,20 @@ describe('AgentConstraintsService', () => {
         else store.push(c);
         return Promise.resolve(c);
       }),
-      delete: jest.fn(({ id, organizationId }: any) => {
+      // Criteria-evaluating, including the optional agentId: `remove()`
+      // documents that "a constraint reached through another agent's URL
+      // is not found", and a fake that dropped agentId from the criteria
+      // could never show that.
+      delete: jest.fn(({ id, organizationId, agentId }: any) => {
         const before = store.length;
-        store = store.filter((c) => !(c.id === id && c.organizationId === organizationId));
+        store = store.filter(
+          (c) =>
+            !(
+              c.id === id &&
+              c.organizationId === organizationId &&
+              (agentId === undefined || c.agentId === agentId)
+            ),
+        );
         return Promise.resolve({ affected: before - store.length });
       }),
     };
@@ -101,5 +112,34 @@ describe('AgentConstraintsService', () => {
 
   it('throws NotFound removing a missing constraint', async () => {
     await expect(service.remove('nope', 'org-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('does not remove a constraint reached through another agent', async () => {
+    const c = await service.add('org-1', 'a1', 'Always cite sources', 'u1');
+
+    await expect(service.remove(c.id, 'org-1', 'a2')).rejects.toBeInstanceOf(NotFoundException);
+    expect(store).toHaveLength(1);
+
+    await service.remove(c.id, 'org-1', 'a1');
+    expect(store).toHaveLength(0);
+  });
+
+  it('does not remove a constraint owned by another organization', async () => {
+    const c = await service.add('org-1', 'a1', 'Always cite sources', 'u1');
+
+    await expect(service.remove(c.id, 'org-2')).rejects.toBeInstanceOf(NotFoundException);
+    expect(store).toHaveLength(1);
+  });
+
+  it('does not flip a constraint reached through another agent or organization', async () => {
+    const c = await service.add('org-1', 'a1', 'Always cite sources', 'u1');
+
+    await expect(service.setActive(c.id, 'org-1', false, 'a2')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.setActive(c.id, 'org-2', false)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(store[0].active).toBe(true);
   });
 });

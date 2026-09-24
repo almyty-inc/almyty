@@ -934,6 +934,37 @@ describe('ToolsService', () => {
       expect(qb.skip).toHaveBeenCalledWith(20);
       expect(qb.take).toHaveBeenCalledWith(10);
     });
+
+    /**
+     * Every other test in this block asserts one `andWhere` -- search,
+     * type, status, categoryIds, apiId, tags -- and none of them asserted
+     * the tenant filter. Deleting the `applyListFilter` call outright left
+     * all twelve green, and `getTools` then returned every tool in the
+     * database to any caller.
+     */
+    it('narrows the query to the caller and their organization', async () => {
+      const qb = makeQueryBuilder([], 0);
+      toolRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getTools(baseFilters);
+
+      expect(accessPolicy.applyListFilter).toHaveBeenCalledWith(
+        qb,
+        { id: 'user-1' },
+        'org-1',
+        'tool',
+      );
+    });
+
+    it('still scopes to the organization on the bypassTeamFilter path', async () => {
+      const qb = makeQueryBuilder([], 0);
+      toolRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getTools({ organizationId: 'org-1', bypassTeamFilter: true });
+
+      expect(qb.where).toHaveBeenCalledWith('tool.organizationId = :_orgId', { _orgId: 'org-1' });
+      expect(accessPolicy.applyListFilter).not.toHaveBeenCalled();
+    });
   });
 
   // ─── getToolVersions ───────────────────────────────────────────────────────

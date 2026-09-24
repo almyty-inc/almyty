@@ -92,3 +92,87 @@ describe('ToolAuthService.applyApiAuth — api_key field-name compatibility', ()
     expect(cfg2.headers.Authorization).toBe(`Basic ${Buffer.from('u:p').toString('base64')}`);
   });
 });
+
+/**
+ * Tenant scoping on the stored-credential path.
+ *
+ * `applyApiAuth` resolves the secret with
+ * `where: { apiId, organizationId, isActive: true }` and is the single
+ * place a tool execution picks a credential up. Every spec that touches
+ * it stubs the repository with `findOne: jest.fn().mockResolvedValue(...)`
+ * -- a double that ignores its `where` -- so the `organizationId` half
+ * could be deleted and nothing went red, while an execution in one
+ * tenant would then pick up another tenant's credential for the same
+ * api id.
+ */
+describe('ToolAuthService.applyApiAuth — credential lookup is tenant-scoped', () => {
+  const rows: any[] = [];
+
+  const credentialRepository = {
+    findOne: jest.fn(async ({ where }: any) => {
+      const hit = rows.find((row) =>
+        Object.entries(where).every(([key, value]) => row[key] === value),
+      );
+      return hit ? Object.assign(Object.create(Object.getPrototypeOf(hit)), hit) : null;
+    }),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
+
+  let service: ToolAuthService;
+
+  beforeEach(async () => {
+    rows.length = 0;
+    credentialRepository.findOne.mockClear();
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        ToolAuthService,
+        { provide: EnvelopeCryptoService, useValue: makeEnvelopeCryptoMock() },
+        { provide: getRepositoryToken(Credential), useValue: credentialRepository },
+        { provide: ModuleRef, useValue: { get: jest.fn() } },
+      ],
+    }).compile();
+    service = moduleRef.get(ToolAuthService);
+  });
+
+  const storedBearer = (organizationId: string) =>
+    Object.assign(new Credential(), {
+      id: `cred-${organizationId}`,
+      apiId: 'api-1',
+      organizationId,
+      isActive: true,
+      type: 'bearer_token',
+      config: { token: `token-of-${organizationId}` },
+    });
+
+  const api = { id: 'api-1', authentication: null } as any;
+
+  it('uses the credential that belongs to the calling organization', async () => {
+    rows.push(storedBearer('org-2'), storedBearer('org-1'));
+    const config: any = { headers: {} };
+
+    await service.applyApiAuth(config, api, { organizationId: 'org-1' } as any);
+
+    expect(config.headers.Authorization).toBe('Bearer token-of-org-1');
+  });
+
+  it('does not reach for another organization’s credential', async () => {
+    rows.push(storedBearer('org-2'));
+    const config: any = { headers: {} };
+
+    await service.applyApiAuth(config, api, { organizationId: 'org-1' } as any);
+
+    expect(config.headers.Authorization).toBeUndefined();
+  });
+
+  it('ignores a deactivated credential rather than using it', async () => {
+    const stale = storedBearer('org-1');
+    stale.isActive = false;
+    rows.push(stale);
+    const config: any = { headers: {} };
+
+    await service.applyApiAuth(config, api, { organizationId: 'org-1' } as any);
+
+    expect(config.headers.Authorization).toBeUndefined();
+  });
+});

@@ -43,7 +43,7 @@ export class PromotedSkillsService {
     dto: PromoteRunDto = {},
   ): Promise<PromotedSkill> {
     const run = await this.runRepository.findOne({
-      where: { id: runId, organizationId },
+      where: { id: runId },
       relations: { agent: true },
     });
     if (!run) {

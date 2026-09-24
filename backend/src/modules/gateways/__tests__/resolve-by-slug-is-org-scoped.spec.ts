@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 
 import { GatewaysService } from '../gateways.service';
+import { fakeRepo } from './repository.fixtures';
 
 /**
  * `GET /gateways/resolve/:orgSlug/:gatewaySlug` acted on the slug in the
@@ -23,11 +24,12 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
   const CALLER_ORG_ID = 'org-caller';
 
   function makeService(overrides: { org?: any; gateway?: any } = {}) {
-    const organizationRepository = { findOne: jest.fn(async () => overrides.org ?? null) };
-    const gatewayRepository = {
-      findOne: jest.fn(async () => overrides.gateway ?? null),
-      find: jest.fn(async () => (overrides.gateway ? [overrides.gateway] : [])),
-    };
+    const organizationRepository = fakeRepo(overrides.org ? [overrides.org] : []);
+    // Truthful repositories: these evaluate the `where` they are given.
+    // A double that answered with the victim gateway however it was
+    // queried could not tell a scoped lookup from an unscoped one, which
+    // is the only thing this file is about.
+    const gatewayRepository = fakeRepo(overrides.gateway ? [overrides.gateway] : []);
     const service = Object.create(GatewaysService.prototype) as GatewaysService;
     (service as any).organizationRepository = organizationRepository;
     (service as any).gatewayRepository = gatewayRepository;
@@ -72,5 +74,23 @@ describe('resolveGateway is scoped to the caller\'s organization', () => {
 
     const gateway = await service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID);
     expect(gateway.id).toBe('gw-secret');
+  });
+
+  /**
+   * The org guard above is the first line, and it is not the only one:
+   * both gateway lookups carry `organizationId` too. Endpoint slugs are
+   * not globally unique -- the index is on (organizationId, endpoint) --
+   * so with that predicate gone, a slug resolved in the caller's own org
+   * would hand back whichever tenant's row the planner reached first.
+   */
+  it('will not match another organization row that shares the endpoint slug', async () => {
+    const { service } = makeService({
+      org: { id: CALLER_ORG_ID, slug: 'caller-corp' },
+      gateway: VICTIM_GATEWAY, // same endpoint slug, different org
+    });
+
+    await expect(
+      service.resolveGateway('caller-corp', 'prod-gateway', CALLER_ORG_ID),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

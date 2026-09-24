@@ -47,8 +47,26 @@ describe('ModelRouterService', () => {
     audit = { log: jest.fn().mockResolvedValue(null) };
     modelsUpdate = jest.fn().mockResolvedValue({ affected: 1 });
     svc = new ModelRouterService(
-      { find: jest.fn(async () => cards), update: modelsUpdate } as any,
-      { findOne: jest.fn(async ({ where }: any) => providers[where.id] ?? null) } as any,
+      // A criteria-evaluating find: `plan()` reads `where:
+      // { organizationId }` and nothing proved it. A fake that answered
+      // with the whole array whatever it was asked let the org filter be
+      // deleted outright with every routing spec still green — one
+      // tenant's policy resolving over another tenant's catalog.
+      {
+        find: jest.fn(async ({ where }: any = {}) =>
+          cards.filter((c) => !where || Object.entries(where).every(([k, v]) => (c as any)[k] === v)),
+        ),
+        update: modelsUpdate,
+      } as any,
+      {
+        findOne: jest.fn(async ({ where }: any) => {
+          const p = providers[where.id];
+          if (!p) return null;
+          // Provider rows are read org-scoped too; honour it here so a
+          // dropped predicate shows up as a missing provider.
+          return where.organizationId === undefined || p.organizationId === where.organizationId ? p : null;
+        }),
+      } as any,
       { findOne: jest.fn(async ({ where }: any) => deployments[where.id] ?? null) } as any,
       audit as any,
     );
@@ -62,6 +80,29 @@ describe('ModelRouterService', () => {
     expect(plan.candidates.map((c) => c.modelId)).toEqual(['a']);
     expect(plan.rejected).toEqual([{ modelId: 'b', reason: 'provider sick is unhealthy' }]);
     expect(plan.candidates[0].provider).toBe(providers.p1);
+  });
+
+  /**
+   * A plan is built from one organization's catalog and no other. The
+   * predicate that says so lived in `plan()` unwitnessed: the models
+   * repository double returned every card it had been given whatever
+   * `where` it was handed, so removing `where: { organizationId }`
+   * changed no test — while in production it would have made every other
+   * tenant's cards candidates for this tenant's calls.
+   */
+  it('plans only this organization’s catalog', async () => {
+    providers.p1 = provider();
+    providers.p2 = provider({ id: 'p2', organizationId: 'other', name: 'theirs' });
+    cards = [
+      card({ id: 'mine', providerId: 'p1' }),
+      card({ id: 'theirs', organizationId: 'other', providerId: 'p2' }),
+    ];
+
+    const plan = await svc.plan('org', {});
+    expect(plan.candidates.map((c) => c.modelId)).toEqual(['mine']);
+    // Not merely rejected further down: the other org's card is never
+    // looked at at all.
+    expect(plan.rejected).toEqual([]);
   });
 
   it('an endpoint card is called through its stored provider row, never a transient one', async () => {

@@ -43,6 +43,21 @@ function makeRepo(prefix: string, seed: any[] = []) {
   const whereMatches = (row: any, where: any): boolean =>
     Array.isArray(where) ? where.some((w) => matches(row, w)) : matches(row, where);
 
+  /**
+   * A row as a caller gets it back from the database: detached.
+   *
+   * Handing out the stored object itself would make every in-memory
+   * mutation a write — `updatePreferences` sets `existing.inApp` and
+   * then saves, and with a shared reference the `save` could be deleted
+   * outright without a test noticing.
+   */
+  const detach = (row: any): any => {
+    if (row === null || typeof row !== 'object') return row;
+    const out: any = {};
+    for (const [k, v] of Object.entries(row)) out[k] = v instanceof Date ? new Date(v.getTime()) : v;
+    return out;
+  };
+
   return {
     store,
     create: (data: any) => ({ ...data }),
@@ -51,25 +66,27 @@ function makeRepo(prefix: string, seed: any[] = []) {
         row.id = `${prefix}-${++idCounter}`;
         row.createdAt = row.createdAt ?? new Date();
         if (!('readAt' in row)) row.readAt = null;
-        store.push(row);
-      } else if (!store.includes(row)) {
+        store.push(detach(row));
+      } else {
         const idx = store.findIndex((r) => r.id === row.id);
-        if (idx >= 0) store[idx] = row;
-        else store.push(row);
+        if (idx >= 0) store[idx] = detach(row);
+        else store.push(detach(row));
       }
       return row;
     }),
     findOne: jest.fn(async ({ where }: any) => {
       const rows = store.filter((r) => whereMatches(r, where));
       rows.sort((a, b) => +new Date(b.createdAt ?? 0) - +new Date(a.createdAt ?? 0));
-      return rows[0] ?? null;
+      return rows[0] ? detach(rows[0]) : null;
     }),
-    find: jest.fn(async ({ where }: any = {}) => store.filter((r) => whereMatches(r, where))),
+    find: jest.fn(async ({ where }: any = {}) =>
+      store.filter((r) => whereMatches(r, where)).map(detach),
+    ),
     findAndCount: jest.fn(async ({ where, skip = 0, take }: any = {}) => {
       const rows = store
         .filter((r) => whereMatches(r, where))
         .sort((a, b) => +new Date(b.createdAt ?? 0) - +new Date(a.createdAt ?? 0));
-      return [rows.slice(skip, take ? skip + take : undefined), rows.length];
+      return [rows.slice(skip, take ? skip + take : undefined).map(detach), rows.length];
     }),
     count: jest.fn(async ({ where }: any = {}) => store.filter((r) => whereMatches(r, where)).length),
     update: jest.fn(async (criteria: any, patch: any) => {
