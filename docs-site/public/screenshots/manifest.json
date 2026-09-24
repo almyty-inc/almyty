@@ -710,7 +710,8 @@
       "title": "Skills CLI 1.5.0 help",
       "path": "screenshots/cli/skills-help.png",
       "capturedAt": "2026-09-22T13:42:14.000Z",
-      "status": "current",
+      "status": "needs-recapture",
+      "reason": "The September 24 source integration changed the skills installer security checks. Preserve the published 1.5.0 capture as dated evidence until the current published CLI is reviewed and recaptured.",
       "sha256": "b6859549f586c2f3312554002948e2da588722c6440a4eaf11ec186166205f72",
       "source": {
         "kind": "published-cli",

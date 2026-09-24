@@ -6,19 +6,14 @@ Bring your own model keys and every agent, Model Call node, and Model Prompt too
 
 ## Add an inference provider in the UI
 
-1. Open **Models** in the sidebar and click **Inference providers** in the page header.
-2. Add a provider.
+1. Open **Models** in the sidebar and click **Inference providers** in the page header (`/llm-providers`).
+2. Click **Add inference provider** to open `/llm-providers/new`.
+3. Enter a display name, select the provider type, and fill in the account, region, resource or endpoint fields that type requires.
+4. Select a credential from the vault, enter a new key, or connect an account. Keyless local providers do not require a key.
+5. Choose who can use the provider. When entering a new key, use **Test connection** where offered to check it before saving.
+6. Click **Add inference provider**. On its detail page, use **Edit** to choose a default model and adjust generation parameters.
 
-![Add Provider dialog](/screenshots/llm-providers-create.png)
-
-3. Select the provider type.
-4. Enter a display name and your API key.
-5. Choose a default model from the dropdown.
-6. Optionally adjust temperature, max tokens, and top-p.
-7. Click **Test Connection**. almyty sends a lightweight request to verify the key and model.
-8. Click **Save**.
-
-Its models now appear in the Models list, ready for Model Call nodes and Model Prompt tools. You can also set one up without leaving the Models page: **Add model**, then **A provider's API**, offers to set up a new inference provider before you pick the model.
+The provider's listed models are imported into **Models**. A model is selectable only after a validation call passes; saving a key alone does not prove the model can answer. You can also set up a provider inline from **Models → Add model → A provider's API**, before picking the model. Links from another setup page can include `?returnTo=` so saving or cancelling returns to that page.
 
 > **Pick from the live model list.** The dropdown is populated from the
 > provider's current models, not a hardcoded list. Providers deprecate models

@@ -6,13 +6,11 @@ configured provider, and returns the model's answer as raw text or as validated
 JSON. Use it for summarizing, classifying, extracting, or translating inside a
 larger agent flow.
 
-![Create Manual Tool execution method selector, including Model Prompt](/screenshots/tools-create-dialog.png)
-
 ## Create one in the UI
 
-1. Open **Tools**, click **Create Tool**, select **LLM**.
+1. Open **Tools → Create tool** (`/tools/new`) and select **Model prompt**.
 2. Give it a **name** and **description**.
-3. Choose an **LLM provider** and **model** from your configured providers (set these up under **Models > Inference providers** first).
+3. Choose a model with the shared model picker. Set up its inference provider under **Models → Inference providers** first if needed.
 4. Write a **system prompt** with standing instructions for the model.
 5. Write a **user prompt template** using `{{parameters.*}}` expressions for dynamic values.
 6. Define the **input parameters** referenced in the templates.
@@ -20,7 +18,7 @@ larger agent flow.
    - **Text**: returns the raw model response as a string
    - **JSON**: instructs the model to return structured JSON, optionally validated against a schema you provide
 8. Adjust **temperature** and **max tokens** if needed.
-9. Click **Create**.
+9. Click **Create tool**, then test it from the tool's detail page.
 
 ### Output modes
 

@@ -6,11 +6,9 @@ into each of them with template expressions. Use these when no imported schema
 exists (auto-generated API tools already cover imported schemas) and you want to
 wire up a single endpoint by hand.
 
-![Create Manual Tool execution method selector, including HTTP REST API](/screenshots/tools-create-dialog.png)
-
 ## Create one in the UI
 
-1. Open **Tools**, click **Create Tool**, select **HTTP**.
+1. Open **Tools → Create tool** (`/tools/new`) and select **HTTP REST API**.
 2. Give it a **name** and **description** (the description is what agents read when deciding to call it).
 3. Configure the request:
    - **Method**: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`
@@ -19,8 +17,7 @@ wire up a single endpoint by hand.
    - **Query parameters**: appended to the URL at execution time
    - **Body**: JSON or text with template expressions (POST/PUT/PATCH)
 4. Define **input parameters** in the schema builder. These become `{{parameters.*}}` in the URL, headers, and body.
-5. Optionally set **timeout** and **retry** count.
-6. Click **Create**.
+5. Click **Create tool**, then test it from the tool's detail page.
 
 ### Template expressions
 

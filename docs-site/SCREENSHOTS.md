@@ -21,6 +21,12 @@ earlier review, not verification against the new UI. Coordinate the next pass
 with the page-based configuration flows and platform guide rollout as well.
 Published CLI evidence is separate and is not relabeled by this UI refresh.
 
+The September 24 pass targets the v0.2.8 UI, including page-based creation,
+inline configuration, Private visibility and the platform guide. Obsolete
+dialog images have been removed from the updated instructions; their manifest
+entries remain pending until replaced or deliberately retired. Source-verified
+prose changes alone do not mark screenshot evidence current.
+
 Register a reviewed browser capture with its observed capture time:
 
 ```sh
@@ -74,9 +80,10 @@ authorized, seeded organization with the corresponding entitlements:
 - White-label surface controls
 
 No entitled staging fixture was available during the September 23 capture pass.
-Do not change billing, mint a license, or bypass a gate to obtain these images.
-Capture them when an authorized fixture is available, and retain the locked-state
-images as separate evidence.
+An authorized Business-plan demo fixture is available for the September 24 pass;
+Enterprise-only features still require an authorized fixture. Do not change
+billing, mint a license, or bypass a gate to obtain these images. Retain
+locked-state images as separate evidence from enabled-feature captures.
 
 Runner list/detail also need a publishable demo fixture without private hostnames.
 The runner label-description correction (#717, fixed in #718) and dashboard

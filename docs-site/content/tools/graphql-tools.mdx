@@ -5,18 +5,15 @@ result back to the agent. You get structured variable mapping, automatic type
 coercion, and error detection tuned to the GraphQL response shape, so the model
 calls a clean named action instead of assembling requests.
 
-![Create Manual Tool execution method selector, including GraphQL](/screenshots/tools-create-dialog.png)
-
 ## Create one in the UI
 
-1. Open **Tools**, click **Create Tool**, select **GraphQL**.
+1. Open **Tools → Create tool** (`/tools/new`) and select **GraphQL**.
 2. Give it a **name** and **description**.
 3. Enter the **GraphQL endpoint URL**.
 4. Write the **query or mutation** in the query editor.
 5. Define **input parameters**. These map to GraphQL variables via `{{parameters.*}}` expressions.
 6. Add **authentication headers** (typically a Bearer token).
-7. Optionally set an **operation name** if the document holds multiple operations.
-8. Click **Create**.
+7. Click **Create tool**, then test it from the tool's detail page.
 
 ### Variable mapping
 

@@ -1,130 +1,53 @@
-# SDK Tools
+# SDK tools
 
-An SDK tool set is generated from an npm package. Point almyty at a package like
-`stripe`, `@aws-sdk/client-s3`, or `lodash`, and it discovers the public API,
-infers parameter schemas, and creates one callable tool per function. You review
-and pick the functions you want, with no manual wiring.
+Connect an npm package as an SDK API, then turn one of its mapped methods into
+a tool. The API owns the package and version; the tool chooses the export,
+constructor arguments, method and inputs.
 
-![Create Manual Tool execution method selector, including SDK / npm Package](/screenshots/tools-create-dialog.png)
+## Create one in the UI
 
-## Create them in the UI
+1. Open **APIs → Connect API** (`/apis/new`) and choose **SDK / npm library**.
+2. Add the package names and versions. If needed, expand the private-registry settings and provide the registry URL, scope and credential.
+3. Create the API and wait for package analysis to finish. Its SDK maps describe the available exports, methods and parameter types.
+4. Open **Tools → Create tool** (`/tools/new`) and select **SDK / npm package**.
+5. Name the tool, choose its **SDK API**, then select a package, class or export, and method from the discovered map.
+6. Map each constructor or method argument to a tool **parameter**, a fixed **literal**, or a **credential** path. Parameter mappings build the tool's input schema.
+7. Optionally choose a response data path and inspect the generated-code preview.
+8. Set visibility and click **Create tool**. Test the saved tool from its detail page before assigning it to an agent or gateway.
 
-1. Open **Tools**, click **Create Tool**, select **SDK**.
-2. Enter the **npm package name** and **version** (e.g. `stripe` at `^17.0.0`).
-3. Click **Discover**. almyty installs the package in a sandbox, introspects its exports, and lists the functions with their signatures.
-4. Select which **functions** to generate tools from (or select all).
-5. Review the auto-generated **name**, **description**, and **parameter schema** per tool, editing any that need refinement.
-6. Click **Create** to generate the tools.
+Package analysis happens on the API, not through a separate Discover button on
+the tool-creation page. If the SDK API or method is missing, check the API's
+analysis result before continuing.
 
-### How discovery works
+## What is stored and executed
 
-When you click Discover, almyty:
+The tool stores an `sdkConfig`: package name and version, imports, optional
+client construction, method call and argument mappings. At execution time,
+almyty assembles JavaScript from that configuration and runs it through the
+SDK execution path. You do not need to paste generated code into the tool.
 
-1. Installs the package (and its dependencies) in an isolated environment.
-2. Loads the module and enumerates its named exports and default export.
-3. For each exported function or class method, infers a parameter schema from TypeScript types (if the package ships `.d.ts` files) or from JSDoc annotations.
-4. Presents the discovered functions in a table with name, description (from JSDoc or TS docs), and the inferred input schema.
-
-You filter the list, deselect functions you don't need, and edit parameter
-descriptions before creating the tools.
-
-### What gets created
-
-Each selected function becomes a JavaScript tool under the hood. The generated
-code `require()`s the package, calls the selected function with the input
-parameters, and returns the result. These tools run in the same hardened sandbox
-as all [JavaScript tools](/tools/javascript-tools), with the same filesystem
-isolation, SSRF guard, and resource limits.
-
-## Discovery payload and response
-
-Discovery takes a package name and version:
-
-```json
-{
-  "package": "stripe",
-  "version": "^17.0.0"
-}
-```
-
-It returns the introspected exports, methods, and inferred schemas:
-
-```json
-{
-  "package": "stripe",
-  "version": "17.4.0",
-  "exports": [
-    {
-      "name": "Stripe",
-      "type": "class",
-      "methods": [
-        {
-          "name": "customers.create",
-          "description": "Creates a new customer object",
-          "parameters": {
-            "type": "object",
-            "properties": {
-              "email": { "type": "string", "description": "Customer email" },
-              "name": { "type": "string", "description": "Customer name" },
-              "metadata": { "type": "object", "description": "Arbitrary metadata" }
-            }
-          }
-        }
-      ]
-    }
-  ]
-}
-```
-
-## Generation payload and response
-
-Generation takes the package, the chosen functions, and a linked credential:
-
-```json
-{
-  "package": "stripe",
-  "version": "^17.0.0",
-  "functions": ["customers.create", "customers.retrieve", "charges.create"],
-  "credentialId": "credential-uuid"
-}
-```
-
-It returns the tools it created, one per function:
-
-```json
-{
-  "created": [
-    { "id": "tool-uuid-1", "name": "stripe_customers_create", "type": "javascript" },
-    { "id": "tool-uuid-2", "name": "stripe_customers_retrieve", "type": "javascript" },
-    { "id": "tool-uuid-3", "name": "stripe_charges_create", "type": "javascript" }
-  ]
-}
-```
+The schema comes from the SDK map and the arguments you expose as parameters.
+Review it before publishing: package type information and runtime behavior can
+differ, and a mapped method still needs a real test with representative inputs.
 
 ## Credentials
 
-Many SDK packages need API keys or secrets. Link a credential from the vault when
-generating tools. The credential values reach your tools through the
-`credentials` closure argument at execution time, never hardcoded into the
-generated code.
+Create secrets in the [credential vault](/credentials), then use credential
+mappings for constructor or method arguments that need them. A mapping stores
+a reference such as `credentialName.field`, not the secret itself. Use literals
+for non-secret constants and parameters for values callers should supply.
 
-## Supported packages
+Private registry credentials are configured on the SDK API. They authorize
+package retrieval and are separate from the credentials a method needs when
+it calls an upstream service.
 
-Any npm package that installs in a Node.js environment works. Common examples:
+## Packages and runtime limits
 
-| Package | Use case |
-|---------|----------|
-| `stripe` | Payment processing |
-| `@aws-sdk/client-s3` | S3 file operations |
-| `@sendgrid/mail` | Transactional email |
-| `pg` | PostgreSQL queries |
-| `openai` | OpenAI API calls |
-| `lodash` | Data transformation utilities |
-| `cheerio` | HTML parsing and scraping |
-| `csv-parse` | CSV file processing |
+Package installation and introspection must succeed before methods are
+available to select. Native addons, host access and outbound requests remain
+subject to the runtime's security restrictions; installation alone does not
+prove every export can run.
 
-## Limitations
-
-- Packages that require native `.node` addons are not supported (the sandbox blocks native addon loading).
-- Discovery relies on TypeScript declarations or JSDoc. Packages with no type information produce tools with generic `object` parameter schemas that you refine manually.
-- Class-based packages (like `stripe`) require constructor arguments (API keys, config). These are wired through credentials, not parameters.
+Use the [API reference](/api-reference) for SDK API creation, package maps and
+tool configuration, and [JavaScript tools](/tools/javascript-tools) for the
+code-execution model.

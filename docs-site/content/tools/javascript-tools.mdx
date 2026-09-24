@@ -5,17 +5,14 @@ sandbox. Reach for it when you need data transformation, computation, or a
 service that has no ready-made HTTP or GraphQL wrapper. You can pull in any npm
 package, and the sandbox keeps adversarial code away from the host.
 
-![Create Manual Tool execution method selector, including Custom JavaScript](/screenshots/tools-create-dialog.png)
-
 ## Create one in the UI
 
-1. Open **Tools**, click **Create Tool**, select **Custom JavaScript**.
+1. Open **Tools → Create tool** (`/tools/new`) and select **Custom JavaScript**.
 2. Give it a **name** and **description**.
 3. Define **input parameters** in the JSON Schema builder. These arrive as `parameters` in your code.
-4. Under **Dependencies**, list any npm packages you need (name plus version, e.g. `pg` at `^8.20.0`).
-5. Write your code. `parameters`, `credentials`, `require`, and optionally `tools` are available in the closure.
-6. Click **Test** with sample inputs to check the output.
-7. Click **Create**.
+4. Write your code. `parameters`, `credentials`, `require`, and optionally `tools` are available in the closure.
+5. Choose the tool's visibility and click **Create tool**.
+6. On the tool's detail page, use **Test tool** with sample inputs to check the output.
 
 ### What you can do in the code editor
 
