@@ -5,9 +5,7 @@ import { Repository } from 'typeorm';
 
 import {
   callOpenAI,
-  callOpenAIStream,
   callAnthropic,
-  callAnthropicStream,
   callGoogle,
   callPerplexity,
   callVertex,
@@ -18,8 +16,7 @@ import { Conversation } from '../../entities/conversation.entity';
 import { Tool } from '../../entities/tool.entity';
 import { ToolCall } from '../../entities/message.entity';
 import { ToolExecutorService, ToolExecutionOptions } from '../tools/tool-executor.service';
-import { ChatRequest, ChatResponse, StreamChunk } from './dto/llm-providers.dto';
-import { callLlmProviderHttp } from './providers/safe-request';
+import { ChatRequest, ChatResponse } from './dto/llm-providers.dto';
 import { safeErrorBody, safeErrorMessage } from './llm-providers.service';
 import { LlmModelsHelper } from './llm-models.helper';
 import { DefaultModelResolver } from './default-model.resolver';

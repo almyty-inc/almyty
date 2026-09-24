@@ -1,13 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThan, Not, Repository } from 'typeorm';
-import { v7 as uuidv7 } from 'uuid';
+import { IsNull, LessThan, Not, Repository } from 'typeorm';
 
 import { CanonicalMemory } from './canonical-memory.entity';
 import { CanonicalMemoryService } from './canonical-memory.service';
-import { LIMITS } from './canonical.constants';
 import {
-  MemoryItem,
   Provenance,
   ScopeRef,
 } from './canonical.types';

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { McpSessionService } from './mcp-session.service';
-import { McpSession, McpNotification, McpTransport } from './types/mcp.types';
+import { McpNotification } from './types/mcp.types';
 
 describe('McpSessionService', () => {
   let service: McpSessionService;
@@ -266,7 +266,7 @@ describe('McpSessionService', () => {
 
     it('should not broadcast to uninitialized sessions', async () => {
       const session1 = service.createSession('org-1', 'http');
-      const session2 = service.createSession('org-1', 'websocket');
+      service.createSession('org-1', 'websocket');
 
       service.updateSession(session1.id, { isInitialized: true });
       // session2 remains uninitialized
@@ -365,7 +365,7 @@ describe('McpSessionService', () => {
     it('should return count of cleaned sessions', async () => {
       const session1 = service.createSession('org-1', 'http');
       const session2 = service.createSession('org-1', 'websocket');
-      const session3 = service.createSession('org-2', 'sse');
+      service.createSession('org-2', 'sse');
 
       const oldDate = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2 hours ago
       service['sessions'].get(session1.id)!.lastActivity = oldDate;

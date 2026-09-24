@@ -8,7 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThanOrEqual, EntityManager } from 'typeorm';
 
-import { Runner, RunnerIsolationTier, RunnerState } from '../../entities/runner.entity';
+import { Runner, RunnerIsolationTier } from '../../entities/runner.entity';
 import { Workspace, WorkspaceStatus } from '../../entities/workspace.entity';
 import { canAcceptWork } from '../runner/runner-state';
 

@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -12,7 +12,6 @@ import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
-import { compileSafeRegex, boundRegexInput } from '../../common/security/regex-safety';
 import { hashKey, isIpInCIDR, isIpInRanges, validateAuthConfiguration, validateKeyFormat } from './gateway-auth-utils';
 import {
   findEffectiveMembership,
@@ -340,7 +339,7 @@ export class GatewayAuthValidators {
         organizationId: gateway.organizationId,
       };
 
-    } catch (error) {
+    } catch {
       return {
         isValid: false,
         error: 'Invalid basic auth format',
@@ -430,7 +429,7 @@ export class GatewayAuthValidators {
         },
       };
 
-    } catch (error) {
+    } catch {
       return {
         isValid: false,
         error: 'Invalid JWT token',
@@ -531,7 +530,7 @@ export class GatewayAuthValidators {
     authConfig: GatewayAuth,
     headers: Record<string, string>,
     query: Record<string, string>,
-    body?: any
+    _body?: any
   ): Promise<AuthenticationResult> {
     // Custom auth logic would be implemented based on the configuration
     // This is a placeholder implementation

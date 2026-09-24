@@ -60,8 +60,6 @@ describe('Credential entity methods', () => {
       });
 
       cred.encryptSensitiveData();
-      const afterFirst = cred.config.apiKey;
-
       cred.encryptSensitiveData();
       const afterSecond = cred.config.apiKey;
 

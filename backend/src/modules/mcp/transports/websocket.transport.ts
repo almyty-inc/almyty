@@ -4,7 +4,6 @@ import { EventEmitter } from 'events';
 
 import { McpService } from '../mcp.service';
 import { McpSessionService } from '../mcp-session.service';
-import { JsonRpcRequest, JsonRpcResponse, McpSession } from '../types/mcp.types';
 
 export interface WebSocketConnection {
   id: string;
@@ -252,7 +251,7 @@ export class WebSocketTransport extends EventEmitter {
       if (connection.ws.readyState === WebSocket.OPEN) {
         connection.ws.close(1000, 'Session ended');
       }
-    } catch (error) {
+    } catch {
       // Connection already closed
     }
 

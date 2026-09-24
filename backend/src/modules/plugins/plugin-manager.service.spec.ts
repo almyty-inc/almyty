@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PluginManagerService } from './plugin-manager.service';
-import { evaluateConditions, validatePlugin } from './plugin-utils';
+import { validatePlugin } from './plugin-utils';
 import * as pluginUtils from './plugin-utils';
 import { PluginStoreHelper } from './plugin-store.helper';
 import { PluginHookType } from './types/plugin.types';
@@ -131,7 +131,7 @@ describe('PluginManagerService - Real Business Logic', () => {
     });
 
     it('should register plugin in hook registry', async () => {
-      const pluginId = await service.registerPlugin(mockPlugin);
+      await service.registerPlugin(mockPlugin);
 
       // Plugin should be registered for PRE_REQUEST hook
       const plugins = await service.getPluginsByHook(PluginHookType.PRE_REQUEST);
@@ -561,8 +561,7 @@ describe('PluginManagerService - Real Business Logic', () => {
     });
 
     it('should stop execution when plugin returns stop action', async () => {
-      const pluginId = await service.registerPlugin(mockPlugin);
-      const plugin = service.getPlugin(pluginId);
+      await service.registerPlugin(mockPlugin);
 
       // Mock executePlugin to return stop action
       jest.spyOn(service as any, 'executePlugin').mockResolvedValue({
@@ -923,8 +922,6 @@ describe('PluginManagerService - Real Business Logic', () => {
 
   describe('Built-in Plugin Loading - Branch Coverage', () => {
     it('should handle errors when loading individual built-in plugins', async () => {
-      const originalGet = service.getPlugin;
-
       await service['loader'].loadBuiltInPlugins(service['registerPlugin'].bind(service));
 
       expect(service).toBeDefined();

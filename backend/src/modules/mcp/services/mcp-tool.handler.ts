@@ -7,7 +7,6 @@ import * as Redis from 'ioredis';
 import {
   JsonRpcErrorCode,
   McpTool,
-  McpToolsListResult,
   McpCallToolRequest,
   McpCallToolResult,
 } from '../types/mcp.types';
@@ -117,7 +116,7 @@ export class McpToolHandler {
       if (cached) {
         return JSON.parse(cached);
       }
-    } catch (e) {
+    } catch {
       // Cache miss or Redis error — continue to query
     }
 
@@ -175,7 +174,7 @@ export class McpToolHandler {
 
     try {
       await this.redis.setex(cacheKey, 60, JSON.stringify(result));
-    } catch (e) {
+    } catch {
       // Non-critical
     }
 

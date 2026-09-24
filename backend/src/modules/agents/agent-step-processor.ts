@@ -1,11 +1,8 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { In, Not } from 'typeorm';
 
 import { AgentRun, AgentRunStatus } from '../../entities/agent-run.entity';
-import { ConversationStatus } from '../../entities/conversation.entity';
-import { Conversation } from '../../entities/conversation.entity';
 import { Message, MessageRole } from '../../entities/message.entity';
-import { batchAsync } from '../../common/utils/batch-async';
 import { AgentRuntimeService } from './agent-runtime.service';
 import { ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
 import { ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';

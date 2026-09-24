@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { AgentExecutionEngine, StreamEvent } from '../agent-execution.engine';
-import { AgentNodeExecutor, NodeExecutionResult } from '../agent-node-executor';
+import { AgentNodeExecutor } from '../agent-node-executor';
 import { AgentWebhookService } from '../agent-webhook.service';
 import { AgentExecutionStateHelper } from '../agent-execution-state.helper';
 import { Agent, AgentStatus, AgentPipeline } from '../../../entities/agent.entity';
@@ -616,9 +616,7 @@ describe('AgentExecutionEngine', () => {
       agentExecutionRepo.save.mockImplementation((e: any) => Promise.resolve(e));
       agentRepo.save.mockImplementation((a: any) => Promise.resolve(a));
 
-      let callCount = 0;
       nodeExecutor.execute.mockImplementation(async (node: any) => {
-        callCount++;
         if (node.type === 'llm_call') {
           return { output: 'text', cost: 0.05, tokens: 100, executionTime: 50 };
         }

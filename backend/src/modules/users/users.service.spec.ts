@@ -26,7 +26,6 @@ describe('UsersService', () => {
   let userRepository: any;
   let userOrganizationRepository: any;
   let apiKeyRepository: any;
-  let usageMetricRepository: any;
 
 
   beforeEach(async () => {
@@ -74,7 +73,6 @@ describe('UsersService', () => {
     userRepository = module.get(getRepositoryToken(User));
     userOrganizationRepository = module.get(getRepositoryToken(UserOrganization));
     apiKeyRepository = module.get(getRepositoryToken(ApiKey));
-    usageMetricRepository = module.get(getRepositoryToken(UsageMetric));
   });
 
   describe('findOne', () => {

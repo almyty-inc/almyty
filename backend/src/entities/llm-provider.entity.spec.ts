@@ -2,7 +2,6 @@ import {
   LlmProvider,
   LlmProviderType,
   LlmProviderStatus,
-  LlmProviderConfig,
 } from './llm-provider.entity';
 
 describe('LlmProvider Entity', () => {

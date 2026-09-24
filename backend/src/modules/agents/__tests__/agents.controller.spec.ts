@@ -19,7 +19,6 @@ describe('AgentsController', () => {
   let controller: AgentsController;
   let executionController: AgentExecutionController;
   let mgmtController: AgentManagementController;
-  let runsController: AgentRunsController;
   let agentsService: jest.Mocked<AgentsService>;
   let executionEngine: jest.Mocked<AgentExecutionEngine>;
   let runtimeService: jest.Mocked<AgentRuntimeService>;
@@ -123,7 +122,6 @@ describe('AgentsController', () => {
     controller = module.get<AgentsController>(AgentsController);
     executionController = module.get<AgentExecutionController>(AgentExecutionController);
     mgmtController = module.get<AgentManagementController>(AgentManagementController);
-    runsController = module.get<AgentRunsController>(AgentRunsController);
     agentsService = module.get(AgentsService);
     executionEngine = module.get(AgentExecutionEngine);
     runtimeService = module.get(AgentRuntimeService);

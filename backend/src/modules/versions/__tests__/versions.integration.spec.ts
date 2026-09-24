@@ -322,7 +322,6 @@ describe('CustomVersionSubscriber', () => {
   });
 
   it('calls saveVersion with INSERT event and owner from context', async () => {
-    const mockSaveVersion = jest.fn().mockResolvedValue(undefined);
     const mockEntity = { constructor: { name: 'Agent' }, id: '1', name: 'Test' };
     // Mark entity as versioned
     Reflect.defineMetadata(
@@ -330,17 +329,6 @@ describe('CustomVersionSubscriber', () => {
       true,
       mockEntity.constructor,
     );
-
-    const mockEvent = {
-      entity: mockEntity,
-      connection: {
-        getRepository: jest.fn().mockReturnValue({
-          extend: jest.fn().mockReturnValue({
-            saveVersion: mockSaveVersion,
-          }),
-        }),
-      },
-    } as any;
 
     // The subscriber uses isVersionedEntity which checks a specific symbol key.
     // Since we can't easily mock the decorator check, we verify the subscriber

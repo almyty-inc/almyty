@@ -2,8 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Patch,
-  Delete,
   Body,
   Param,
   Query,
@@ -11,14 +9,11 @@ import {
   Request,
   Res,
   ParseUUIDPipe,
-  ValidationPipe,
   HttpStatus,
   HttpException,
   Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
-import { Type } from 'class-transformer';
 import { Response } from 'express';
 
 import { AgentsService } from './agents.service';

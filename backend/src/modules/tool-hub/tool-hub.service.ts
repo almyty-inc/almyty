@@ -6,14 +6,14 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, ILike, IsNull, In } from 'typeorm';
+import { Repository } from 'typeorm';
 
 import { ToolTemplate } from '../../entities/tool-template.entity';
 import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { isOthersPrivate } from '../../common/authorization/private-visibility';
-import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditResource } from '../../entities/audit-log.entity';
 import {
   sanitizeConfiguration,
   sanitizeExamples,

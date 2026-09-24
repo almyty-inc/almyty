@@ -141,7 +141,7 @@ export class AcpServerService {
   private async handleSessionNew(
     gateway: Gateway,
     params: any,
-    rpcId: string | number,
+    _rpcId: string | number,
   ): Promise<SessionUpdate> {
     if (!params?.message?.parts) {
       throw Object.assign(new Error('Missing message.parts in params'), {
@@ -169,7 +169,7 @@ export class AcpServerService {
   private async handleSessionPrompt(
     gateway: Gateway,
     params: any,
-    rpcId: string | number,
+    _rpcId: string | number,
   ): Promise<SessionUpdate> {
     if (!params?.message?.parts) {
       throw Object.assign(new Error('Missing message.parts in params'), {

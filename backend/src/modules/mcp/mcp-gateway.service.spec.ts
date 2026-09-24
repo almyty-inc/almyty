@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { McpGatewayService, VirtualServer, GatewayPeer } from './mcp-gateway.service';
+import { McpGatewayService } from './mcp-gateway.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Gateway } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';

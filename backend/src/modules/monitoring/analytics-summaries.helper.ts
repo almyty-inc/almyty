@@ -20,7 +20,7 @@ const NOT_OTHERS_PRIVATE_AGENT_RUN =
  * panel down; what changes is that the answer now says it is partial.
  */
 function recorded<T>(failures: string[], name: string, fallback: T) {
-  return (err: unknown): T => {
+  return (_err: unknown): T => {
     failures.push(name);
     return fallback;
   };

@@ -327,7 +327,6 @@ describe('UnifiedEndpointController — agent path API key gate', () => {
         slug: 'org-one',
       }),
     };
-    const agentsServiceStub: any = {};
     const executionEngineStub: any = {
       execute: jest.fn().mockResolvedValue({
         id: 'exec-1',

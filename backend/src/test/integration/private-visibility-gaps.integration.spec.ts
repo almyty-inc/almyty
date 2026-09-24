@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { versionsConfig } from 'typeorm-versions';
 
-import { Agent, AgentStatus } from '../../entities/agent.entity';
+import { Agent } from '../../entities/agent.entity';
 import { AgentApp } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';

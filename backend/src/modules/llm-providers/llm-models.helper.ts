@@ -1,5 +1,4 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import axios from 'axios';
 
 import { callLlmProviderHttp, llmCallOptionsFor } from './providers/safe-request';
 import { LlmProvider, LlmProviderType } from '../../entities/llm-provider.entity';

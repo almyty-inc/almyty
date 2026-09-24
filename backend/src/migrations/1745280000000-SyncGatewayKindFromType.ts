@@ -27,7 +27,7 @@ export class SyncGatewayKindFromType1745280000000 implements MigrationInterface 
     `);
   }
 
-  public async down(queryRunner: QueryRunner): Promise<void> {
+  public async down(_queryRunner: QueryRunner): Promise<void> {
     // No rollback — previous values were incorrect
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
@@ -371,7 +371,7 @@ export class RealtimeExecutorService extends EventEmitter {
       
       // Default estimate
       return 5000;
-    } catch (error) {
+    } catch {
       return 5000; // Default fallback
     }
   }

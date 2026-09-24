@@ -75,7 +75,7 @@ export class MemorySyncService {
    * Run one sync pass for a scope. Idempotent — the third call in
    * a row with no upstream changes does no work.
    */
-  async sync(scope: ScopeRef, options: { force?: boolean } = {}): Promise<SyncResult> {
+  async sync(scope: ScopeRef, _options: { force?: boolean } = {}): Promise<SyncResult> {
     const cfg = await this.configRepo.findOne({
       where: { scopeType: scope.scope_type, scopeId: scope.scope_id },
     });

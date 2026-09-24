@@ -1,5 +1,5 @@
-import { IsArray, IsBoolean, IsEnum, IsNumber, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { IsEnum, IsNumber, IsObject, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 import { GatewayKind, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 import { RESOURCE_VISIBILITIES, type ResourceVisibility } from '../../../common/authorization/access-policy.service';

@@ -1,7 +1,7 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Job } from 'bull';
 
 import { CanonicalMemory } from './canonical-memory.entity';

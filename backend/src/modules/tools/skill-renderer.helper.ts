@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
 import { Tool } from '../../entities/tool.entity';
-import { buildGraphQLQueryTemplate, dedupeSharedSegments } from './skill-graphql.helper';
+import { buildGraphQLQueryTemplate } from './skill-graphql.helper';
 
 /**
  * Pure helpers extracted from SkillGeneratorService — GraphQL

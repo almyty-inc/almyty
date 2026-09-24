@@ -3,7 +3,6 @@ import {
   HEARTBEAT_INTERVAL_MS,
   STALE_THRESHOLD_MS,
   OFFLINE_GRACE_MS,
-  Event,
   RunnerSnapshot,
   canAcceptWork,
   isTerminal,

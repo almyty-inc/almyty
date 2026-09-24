@@ -7,7 +7,6 @@ import { buildThrottlerOptions } from './common/security/throttler-options';
 import { CacheModule } from '@nestjs/cache-manager';
 import { BullModule } from '@nestjs/bull';
 import { RedisModule } from '@nestjs-modules/ioredis';
-import * as redisStore from 'cache-manager-redis-store';
 import { versionsConfig } from 'typeorm-versions';
 import { CustomVersionSubscriber } from './common/custom-version-subscriber';
 import { VersionContextInterceptor } from './common/interceptors/version-context.interceptor';
@@ -115,9 +114,6 @@ import { CredentialRefModule } from './modules/credentials/credential-ref.module
 // runtime via the ee-loader — NOT statically imported here, so this file
 // compiles in the OSS build without the commercial tree present.
 import { loadEeModules } from './ee-loader';
-
-// Configuration
-import { databaseConfig } from './config/database.config';
 
 // Optional single-image frontend serving (almyty/almyty). Returns [] for the
 // plain api image, so the module tree is unchanged when SERVE_FRONTEND is off.

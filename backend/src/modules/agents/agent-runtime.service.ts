@@ -1,6 +1,6 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, Optional, forwardRef, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -12,14 +12,12 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
 import { EventEmitter } from 'events';
-import { LlmProvidersService, ChatRequest, ChatResponse } from '../llm-providers/llm-providers.service';
-import { ToolExecutorService, ToolExecutionOptions, ToolExecutionResult } from '../tools/tool-executor.service';
+import { LlmProvidersService } from '../llm-providers/llm-providers.service';
+import { ToolExecutorService } from '../tools/tool-executor.service';
 import { CanonicalMemoryService } from '../memory/canonical/canonical-memory.service';
-import { MemoryError, Provenance, Tier } from '../memory/canonical/canonical.types';
-import { MessageRole } from '../../entities/message.entity';
-import { Conversation, ConversationStatus } from '../../entities/conversation.entity';
+import { Tier } from '../memory/canonical/canonical.types';
+import { Conversation } from '../../entities/conversation.entity';
 import { Message } from '../../entities/message.entity';
-import { batchAsync } from '../../common/utils/batch-async';
 import { AgentRuntimeBuilders } from './agent-runtime-builders';
 import { AgentCollaborationHelper } from './agent-collaboration.helper';
 import { AgentHeartbeatHelper } from './agent-heartbeat.helper';
@@ -97,9 +95,6 @@ export const BUILT_IN_TOOLS = {
     },
   },
 };
-
-/** Interval between orphaned-emitter sweeps. */
-const RUNTIME_EMITTER_SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 
 
 /** Page size for GET /agents/:id/runs when the caller does not ask for one. */

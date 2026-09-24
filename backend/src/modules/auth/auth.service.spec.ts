@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { BadRequestException, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 
-import { AuthService, JwtPayload, AuthTokens } from './auth.service';
+import { AuthService, JwtPayload } from './auth.service';
 import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { Organization } from '../../entities/organization.entity';

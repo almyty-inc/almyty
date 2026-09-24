@@ -1101,9 +1101,8 @@ describe('ToolsService', () => {
     totals: { count: string; avg: string | null },
     usage: Array<{ toolId: string; count: string }>,
   ) => {
-    let selected: 'totals' | 'usage' = 'totals';
     const qb: any = {
-      select: (expr: string) => { selected = expr.includes('COUNT') ? 'totals' : 'usage'; return qb; },
+      select: () => qb,
       addSelect: () => qb,
       where: () => qb,
       andWhere: () => qb,

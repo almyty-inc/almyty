@@ -1,10 +1,10 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Not, Repository } from 'typeorm';
 import { MoreThanOrEqual } from 'typeorm';
 import { GatewayStats } from './gateways.service';
 
-import { Gateway, GatewayKind, GatewayType, GatewayStatus } from '../../entities/gateway.entity';
+import { Gateway, GatewayStatus } from '../../entities/gateway.entity';
 import { Organization } from '../../entities/organization.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { GatewaysService } from './gateways.service';

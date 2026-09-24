@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
 import { AgentRuntimeService } from '../../modules/agents/agent-runtime.service';
-import { AgentRun, AgentRunStatus, AgentMode } from '../../entities/agent-run.entity';
+import { AgentRun } from '../../entities/agent-run.entity';
 import { AgentRuntimeBuilders } from '../../modules/agents/agent-runtime-builders';
 import { AgentCollaborationHelper } from '../../modules/agents/agent-collaboration.helper';
 import { AgentBuiltInToolsHelper } from '../../modules/agents/agent-builtin-tools.helper';

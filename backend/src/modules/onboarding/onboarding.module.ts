@@ -12,7 +12,6 @@ import { AgentApp } from '../../entities/agent-app.entity';
 import { AppDistribution } from '../../entities/agent-app-distribution.entity';
 import { Runner } from '../../entities/runner.entity';
 
-import { ApisModule } from '../apis/apis.module';
 import { GatewaysModule } from '../gateways/gateways.module';
 import { AgentsModule } from '../agents/agents.module';
 import { AuthorizationModule } from '../../common/authorization/authorization.module';

@@ -1,4 +1,4 @@
-import { McpClientService, McpClientError, MCP_PROTOCOL_VERSION } from '../mcp-client.service';
+import { McpClientService, MCP_PROTOCOL_VERSION } from '../mcp-client.service';
 
 /**
  * All network is mocked: global.fetch is replaced with a jest mock

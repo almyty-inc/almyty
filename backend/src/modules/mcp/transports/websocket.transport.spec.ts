@@ -126,14 +126,13 @@ describe('WebSocketTransport', () => {
 
   describe('handleMessage', () => {
     let mockWs: any;
-    let connectionId: string;
 
     beforeEach(async () => {
       mockWs = new EventEmitter() as any;
       mockWs.send = jest.fn();
       mockWs.readyState = WebSocket.OPEN;
 
-      connectionId = await transport.handleWebSocketConnection(mockWs, 'org-1', 'user-1');
+      await transport.handleWebSocketConnection(mockWs, 'org-1', 'user-1');
     });
 
     it('should handle ping messages', async () => {
@@ -286,7 +285,7 @@ describe('WebSocketTransport', () => {
     });
 
     it('should handle pong events', async () => {
-      const connectionId = await transport.handleWebSocketConnection(mockWs, 'org-1');
+      await transport.handleWebSocketConnection(mockWs, 'org-1');
 
       mockWs.emit('pong');
 

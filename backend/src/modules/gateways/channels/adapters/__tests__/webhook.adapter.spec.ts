@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
 import { WebhookAdapter } from '../webhook.adapter';
-import { installFetchMock, parseSentJson } from './test-helpers';
+import { installFetchMock } from './test-helpers';
 
 describe('WebhookAdapter', () => {
   let adapter: WebhookAdapter;

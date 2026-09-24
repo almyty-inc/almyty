@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { ApiKeyStrategy } from './api-key.strategy';
 import { AuthService } from '../auth.service';
-import { Request } from 'express';
 
 describe('ApiKeyStrategy', () => {
   let strategy: ApiKeyStrategy;

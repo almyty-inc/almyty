@@ -1,9 +1,9 @@
 import { Inject, forwardRef } from '@nestjs/common';
-import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindManyOptions, Like, In, MoreThanOrEqual } from 'typeorm';
+import { Repository, In } from 'typeorm';
 
-import { Tool, ToolStatus, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
+import { Tool, ToolStatus, ToolExecutionMethod } from '../../entities/tool.entity';
 import { ToolVersion } from '../../entities/tool-version.entity';
 import { ToolCategory } from '../../entities/tool-category.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';

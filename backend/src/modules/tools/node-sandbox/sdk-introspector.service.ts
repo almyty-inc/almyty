@@ -5,16 +5,8 @@ import * as fs from 'fs';
 
 import {
   SdkMap,
-  SdkExport,
-  SdkMethod,
-  SdkParam,
-  SdkProperty,
-  SdkType,
 } from './types';
 import {
-  getJsDocDescription,
-  hasNonMethodProperties,
-  isPromiseType,
   runtimeIntrospect,
 } from './sdk-introspector-helpers.helper';
 import {

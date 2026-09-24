@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 import { RequestLog } from '../../entities/request-log.entity';
 import { UsageMetric, MetricType } from '../../entities/usage-metric.entity';
 import { ToolExecution } from '../../entities/tool-execution.entity';

@@ -91,7 +91,7 @@ describeIfDb('MCP OAuth + tools (real HTTP)', () => {
     org = await orgRepo.save(org);
 
     // Seed user via AuthService (hashes password properly)
-    const tokens = await authService.register({
+    await authService.register({
       email: TEST_EMAIL,
       password: TEST_PASSWORD,
       firstName: 'MCP',

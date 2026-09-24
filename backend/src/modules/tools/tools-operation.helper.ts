@@ -1,9 +1,9 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { ToolStatus } from '../../entities/tool.entity';
-import { Tool, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
+import { Tool, ToolType } from '../../entities/tool.entity';
 import { Operation } from '../../entities/operation.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
 import { ToolsService } from './tools.service';

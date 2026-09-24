@@ -17,8 +17,6 @@ import { AccessPolicyService } from '../../common/authorization/access-policy.se
 describe('GatewaysService', () => {
   let service: GatewaysService;
   let gatewayRepository: any;
-  let gatewayToolRepository: any;
-  let gatewayAuthRepository: any;
   let userRepository: any;
   let organizationRepository: any;
   let usageMetricRepository: any;
@@ -106,8 +104,6 @@ describe('GatewaysService', () => {
 
     service = module.get<GatewaysService>(GatewaysService);
     gatewayRepository = module.get(getRepositoryToken(Gateway));
-    gatewayToolRepository = module.get(getRepositoryToken(GatewayTool));
-    gatewayAuthRepository = module.get(getRepositoryToken(GatewayAuth));
     userRepository = module.get(getRepositoryToken(User));
     organizationRepository = module.get(getRepositoryToken(Organization));
     usageMetricRepository = module.get(getRepositoryToken(UsageMetric));
@@ -800,11 +796,6 @@ describe('GatewaysService', () => {
           tools: [{ id: 'tool-2' }],
           getActiveTools: jest.fn().mockReturnValue([{ id: 'tool-2' }]),
         },
-      ];
-
-      const mockMetrics = [
-        { type: 'response_time', value: 250, organizationId: 'org-1' },
-        { type: 'response_time', value: 150, organizationId: 'org-1' },
       ];
 
       const mockQueryBuilder = {
