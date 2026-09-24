@@ -1,5 +1,6 @@
 import { InjectQueue, OnQueueFailed, Process, Processor } from '@nestjs/bull';
 import { Injectable, Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Job, Queue } from 'bull';
 import { In, IsNull, Not, Repository } from 'typeorm';
@@ -14,6 +15,7 @@ import { EndpointProviderHelper } from '../llm-providers/endpoint-provider.helpe
 import { AdapterRegistry } from './adapters/adapter.registry';
 import { ActualState, EndpointRef, ModelProviderAdapter } from './adapters/adapter.interface';
 import { MODEL_RECONCILE_JOB, MODEL_RECONCILE_QUEUE, ModelDeploymentsService } from './model-deployments.service';
+import type { ModelCatalogService } from '../model-catalog/model-catalog.service';
 
 const REPEAT_JOB_ID = 'model-reconcile-sweep';
 const SWEEP_JOB = 'sweep';
@@ -34,6 +36,8 @@ const TERMINAL_STATES: ModelDeploymentState[] = ['torn_down', 'orphaned'];
 const MAX_TRANSIENT_ERRORS = 3;
 /** Errors that say the deployment itself is wrong, not the connection to the provider. */
 const TERMINAL_ERROR_CODES = ['ADAPTER_UNSUPPORTED_ARCHITECTURE', 'ADAPTER_UNSUPPORTED_SOURCE', 'ADAPTER_UNSUPPORTED_OPERATION', 'CREDENTIAL_NOT_FOUND', 'CREDENTIAL_INACTIVE', 'CREDENTIAL_EXPIRED', 'CONNECTION_NOT_GRANTED'];
+/** How an automatic validation run is marked in the audit trail. */
+export const AUTO_VALIDATION_SOURCE = 'hosted_model_ready';
 
 /** What the reconcile loop is allowed to write, by column. */
 type ObservedColumns = Partial<Pick<ModelDeployment, 'state' | 'actual' | 'externalRef' | 'lastError' | 'lastReconcileAt' | 'desired'>>;
@@ -62,6 +66,10 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
     private readonly service: ModelDeploymentsService,
     @Optional() private readonly notifications?: NotificationsService,
     @Optional() private readonly endpointProviders?: EndpointProviderHelper,
+    // The catalog is looked up when a hosted model becomes ready rather than
+    // injected: importing ModelCatalogModule here would pull llm-providers,
+    // and everything it imports, into this module for one call.
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
 
   cron(): string | undefined {
@@ -336,12 +344,15 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
 
       const next: ModelDeploymentState =
         actual.state === 'ready' ? 'ready' : actual.state === 'stopped' ? (wantReplicas === 0 ? 'ready' : 'degraded') : actual.state === 'degraded' ? 'degraded' : 'deploying';
+      const servable = next === 'ready' && actual.state === 'ready';
+      const becameReady = servable && d.state !== 'ready' && (await this.claimReady(d));
       await this.transition(d, d.state, next, undefined);
 
-      if (next === 'ready' && actual.state === 'ready') await this.fillCard(d, actual);
+      if (servable) await this.fillCard(d, actual);
       // Stopped (scaled to zero, paused, budget cap) is not servable.
       else if (actual.state === 'stopped' || next === 'degraded') await this.clearCard(d, `endpoint is ${actual.state}`);
       await this.chargeBudget(d, adapter, creds);
+      if (becameReady) await this.autoValidate(d);
       return d;
     } catch (error: any) {
       return this.recordError(d, error);
@@ -466,6 +477,51 @@ export class ModelDeploymentsProcessor implements OnApplicationBootstrap {
       }
     }
     await this.models.save(card);
+  }
+
+  /**
+   * Moves the row into `ready` only if no other tick already has. The sweep,
+   * a queued job and a second API replica can all read the same deploying
+   * row; the one whose update touches it is the one that made it ready.
+   */
+  private async claimReady(d: ModelDeployment): Promise<boolean> {
+    const claim = await this.deployments.update({ id: d.id, state: Not('ready' as ModelDeploymentState) }, { state: 'ready' });
+    return (claim?.affected ?? 0) > 0;
+  }
+
+  /**
+   * A hosted model that has just become ready gets its validation run
+   * without anyone pressing the button: until one run passes, its card is
+   * never selectable, and there is nothing to decide before running it.
+   *
+   * Once per move into ready (see claimReady), and only while the card
+   * still points at this endpoint and has not passed already. A failed or
+   * throwing run is recorded on the card by the catalog, never here: the
+   * reconcile tick has already written what it saw and does not depend on
+   * the outcome.
+   */
+  private async autoValidate(d: ModelDeployment): Promise<void> {
+    if (!d.modelId || (d.desired.replicas ?? 1) === 0) return;
+    if (!this.moduleRef) return;
+    let catalog: Pick<ModelCatalogService, 'validate'> | undefined;
+    try {
+      // Loaded here, not at the top of the file: model-catalog's imports
+      // reach llm-providers, and a file-level import closes a require cycle
+      // that leaves LlmProvidersService's constructor params undefined.
+      const { ModelCatalogService: token } = await import('../model-catalog/model-catalog.service');
+      catalog = this.moduleRef.get(token, { strict: false });
+    } catch {
+      catalog = undefined;
+    }
+    if (!catalog) return;
+    try {
+      const card = await this.models.findOne({ where: { id: d.modelId, organizationId: d.organizationId } });
+      if (!card || card.validationStatus === 'passed' || card.endpointRef?.deploymentId !== d.id) return;
+      const outcome = await catalog.validate(d.organizationId, card.id, undefined, AUTO_VALIDATION_SOURCE);
+      if (!outcome.passed) this.logger.warn(`Validation of hosted model ${card.id} failed after ${d.id} became ready: ${outcome.error}`);
+    } catch (error: any) {
+      this.logger.warn(`Could not validate the card of ${d.id} after it became ready: ${error?.message ?? error}`);
+    }
   }
 
   /** Charge the snapshot against the deployment's budget; over the line, scale to zero and say so. */
