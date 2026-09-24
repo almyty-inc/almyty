@@ -1,6 +1,7 @@
 import { UnifiedGatewayDelegation } from '../unified-gateway-delegation.helper';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
+import { refusingQueryBuilder } from './recording-query-builder';
 
 /**
  * A tenant MCP gateway reached through the unified endpoint hands the MCP
@@ -42,12 +43,9 @@ describe('UnifiedGatewayDelegation — MCP caller on tenant gateways', () => {
     const delegation = new UnifiedGatewayDelegation(
       { findOne: jest.fn() } as any,
       {
-        createQueryBuilder: jest.fn().mockReturnValue({
-          update: jest.fn().mockReturnThis(),
-          set: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          execute: jest.fn().mockResolvedValue(undefined),
-        }),
+        // MCP bumps its counters inside McpService; the delegation writes
+        // nothing to the gateways table on this path.
+        createQueryBuilder: refusingQueryBuilder('MCP counters belong to McpService'),
       } as any,
       mcpService as any,
       {} as any,

@@ -24,6 +24,8 @@ describe('AppBuildsService.request - the row never outlives the job', () => {
         return row;
       }),
       findOne: jest.fn().mockResolvedValue(null),
+      // No other builds in flight for this organization.
+      count: jest.fn().mockResolvedValue(0),
     };
     const service = new AppBuildsService(
       buildRepository as any,

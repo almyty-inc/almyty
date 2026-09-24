@@ -2,7 +2,7 @@ import { EntityManager } from 'typeorm';
 
 /**
  * Serialisation for per-organization quotas (`settings.maxTools`,
- * `settings.maxGateways`).
+ * `settings.maxGateways`, `settings.maxApis`).
  *
  * A quota check is a COUNT followed by an INSERT. Run unserialised, two
  * writers for the same organization both count N-1, both pass, and the
@@ -15,11 +15,11 @@ import { EntityManager } from 'typeorm';
  * and the organization id. It is released on commit or rollback, it
  * never touches the `organizations` row (so it cannot deadlock with the
  * FOR KEY SHARE locks every FK insert takes on that row, nor block a
- * settings update), and the tool and gateway quotas do not wait on each
+ * settings update), and the tool, gateway and API quotas do not wait on each
  * other. Under READ COMMITTED the COUNT that follows the lock takes a
  * fresh snapshot, so it sees every row the previous holder committed.
  */
-export type QuotaResource = 'tools' | 'gateways';
+export type QuotaResource = 'tools' | 'gateways' | 'apis';
 
 export class QuotaLockRequiresTransactionError extends Error {}
 

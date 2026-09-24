@@ -671,6 +671,8 @@ export class ToolsService {
   // ── Delegations to ToolsOperationHelper ──
   createFromOperation(...args: Parameters<ToolsOperationHelper['createFromOperation']>) { return this.operationHelper.createFromOperation(...args); }
   updateFromOperation(...args: Parameters<ToolsOperationHelper['updateFromOperation']>) { return this.operationHelper.updateFromOperation(...args); }
+  buildFromOperation(...args: Parameters<ToolsOperationHelper['buildFromOperation']>) { return this.operationHelper.buildFromOperation(...args); }
+  prepareUpdateFromOperation(...args: Parameters<ToolsOperationHelper['prepareUpdateFromOperation']>) { return this.operationHelper.prepareUpdateFromOperation(...args); }
   generateToolParametersFromOperation(...args: Parameters<ToolsOperationHelper['generateToolParametersFromOperation']>) { return this.operationHelper.generateToolParametersFromOperation(...args); }
   resolveSchemaRef(...args: Parameters<ToolsOperationHelper['resolveSchemaRef']>) { return this.operationHelper.resolveSchemaRef(...args); }
   mapOperationToToolType(...args: Parameters<ToolsOperationHelper['mapOperationToToolType']>) { return this.operationHelper.mapOperationToToolType(...args); }

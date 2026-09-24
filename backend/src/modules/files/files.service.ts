@@ -1,4 +1,5 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { isUUID } from 'class-validator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsSelect, Repository } from 'typeorm';
 import { AgentFile } from '../../entities/file.entity';
@@ -43,6 +44,15 @@ export class FilesService {
     file: { buffer: Buffer; originalname: string; mimetype: string; size: number },
     options?: { agentId?: string; runId?: string; uploadedBy?: string; extractText?: boolean },
   ): Promise<AgentFile> {
+    // agentId becomes a storage-key segment. Unchecked, `../<other org>/x`
+    // normalizes to a key under another org's prefix, which the key guard
+    // in StorageService accepts because it no longer starts with `..`.
+    // Both ids come from the query string, so hold them to the id shape.
+    for (const [field, value] of [['agentId', options?.agentId], ['runId', options?.runId]] as const) {
+      if (value && !isUUID(value)) {
+        throw new BadRequestException(`${field} must be a UUID`);
+      }
+    }
     const fileId = uuidv4();
     // Sanitize the user-supplied filename before embedding it in the
     // storage key. The key is used as a filesystem path by the local
@@ -75,7 +85,16 @@ export class FilesService {
       uploadedBy: options?.uploadedBy || null,
     });
 
-    const saved = await this.fileRepository.save(agentFile);
+    let saved: AgentFile;
+    try {
+      saved = await this.fileRepository.save(agentFile);
+    } catch (error) {
+      // No row points at the object, so nothing would ever delete it.
+      await this.storageService.delete(storageKey).catch((cleanupError) =>
+        this.logger.warn(`Could not remove orphaned upload ${storageKey}: ${cleanupError.message}`),
+      );
+      throw error;
+    }
 
     // Audit log (fire-and-forget)
     this.auditLogService.log({ organizationId, userId: options?.uploadedBy, action: AuditAction.FILE_UPLOAD, resourceType: AuditResource.FILE, resourceId: saved.id, resourceName: saved.name, details: { mimeType: file.mimetype, size: file.size } });

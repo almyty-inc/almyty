@@ -134,9 +134,6 @@ describe('OrganizationsService', () => {
         generateSlug: jest.fn(),
         getOwners: jest.fn(),
         getAdmins: jest.fn(),
-        canAddMoreApis: jest.fn(),
-        canAddMoreGateways: jest.fn(),
-        canAddMoreTools: jest.fn(),
       } as any;
 
       organizationRepository.findOne.mockResolvedValue(mockOrg);
@@ -208,9 +205,6 @@ describe('OrganizationsService', () => {
         generateSlug: jest.fn(),
         getOwners: jest.fn(),
         getAdmins: jest.fn(),
-        canAddMoreApis: jest.fn(),
-        canAddMoreGateways: jest.fn(),
-        canAddMoreTools: jest.fn(),
       } as any;
 
       const mockMembership = {
