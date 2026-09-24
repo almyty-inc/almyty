@@ -118,11 +118,11 @@ jest.mock('jsonwebtoken', () => ({
   verify: jest.fn(() => ({ sub: 'user-id', username: 'test-user' })),
 }));
 
-// Mock bcryptjs
-jest.mock('bcryptjs', () => ({
-  hash: jest.fn(() => Promise.resolve('hashed-password')),
-  compare: jest.fn(() => Promise.resolve(true)),
-}));
+// bcrypt and bcryptjs stay real here: a global double that says every
+// password matches makes every wrong-password path untestable. Specs that
+// want speed hash with a low cost factor (hash(pw, 4)); a spec that wants a
+// double declares its own jest.mock. Pinned by
+// __tests__/no-global-bcrypt-stub.spec.ts.
 
 // Global test helpers
 export class TestHelper {

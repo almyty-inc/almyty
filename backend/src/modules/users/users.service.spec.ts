@@ -10,9 +10,6 @@ import { ApiKey } from '../../entities/api-key.entity';
 import { UsageMetric } from '../../entities/usage-metric.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 
-// Unmock bcrypt from global setup to test actual hashing
-jest.unmock('bcryptjs');
-
 /**
  * bcrypt at cost 12 is deliberate work: roughly a quarter second idle,
  * and several seconds when eight jest workers are competing for the
