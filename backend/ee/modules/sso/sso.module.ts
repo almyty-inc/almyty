@@ -10,6 +10,7 @@ import { UserTeam } from '../../../src/entities/user-team.entity';
 import { AuthModule } from '../../../src/modules/auth/auth.module';
 import { SsoConfigService } from './sso-config.service';
 import { SsoService } from './sso.service';
+import { OidcLoginStateStoreFactory } from './oidc-login-state.store';
 import { ScimService } from './scim.service';
 import { ScimAuthGuard } from './guards/scim-auth.guard';
 import { SsoController } from './sso.controller';
@@ -32,7 +33,7 @@ import { GatewaysModule } from '../../../src/modules/gateways/gateways.module';
     GatewaysModule,
   ],
 
-  providers: [SsoConfigService, SsoService, ScimService, ScimAuthGuard],
+  providers: [SsoConfigService, SsoService, OidcLoginStateStoreFactory, ScimService, ScimAuthGuard],
   controllers: [SsoConfigController, SsoController, ScimController, HostedChatSsoController],
   exports: [SsoConfigService, ScimService],
 })

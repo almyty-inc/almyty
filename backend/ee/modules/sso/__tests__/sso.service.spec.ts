@@ -104,17 +104,23 @@ describe('SsoService — OIDC', () => {
     const { service, userRepo, membershipRepo, configService } = makeService();
     configService.getDecrypted.mockResolvedValue(oidcConfig);
 
+    let sentNonce = '';
     jest.spyOn(service, 'buildOidcClient').mockResolvedValue({
-      callback: jest.fn().mockResolvedValue({
-        claims: () => ({ email: 'bob@corp.com', given_name: 'Bob' }),
-      }),
+      authorizationUrl: (params: Record<string, string>) => {
+        sentNonce = params.nonce;
+        return 'https://idp/authorize';
+      },
+      callback: jest.fn(async () => ({
+        claims: () => ({ email: 'bob@corp.com', given_name: 'Bob', nonce: sentNonce }),
+      })),
     } as any);
 
     const existingUser = { id: 'u-3', email: 'bob@corp.com' };
     userRepo.findOne.mockResolvedValue(existingUser);
     membershipRepo.findOne.mockResolvedValue({ userId: 'u-3', organizationId: 'org-1', isActive: true });
 
-    const user = await service.handleOidcCallback('org-1', { code: 'xyz' }, 'state-1');
+    const { state } = await service.getOidcLoginUrl('org-1');
+    const user = await service.handleOidcCallback('org-1', { code: 'xyz', state }, state);
     expect(user).toBe(existingUser);
   });
 
@@ -122,11 +128,13 @@ describe('SsoService — OIDC', () => {
     const { service, configService } = makeService();
     configService.getDecrypted.mockResolvedValue(oidcConfig);
     jest.spyOn(service, 'buildOidcClient').mockResolvedValue({
+      authorizationUrl: () => 'https://idp/authorize',
       callback: jest.fn().mockRejectedValue(new Error('invalid_grant')),
     } as any);
 
+    const { state } = await service.getOidcLoginUrl('org-1');
     await expect(
-      service.handleOidcCallback('org-1', { code: 'bad' }, 'state-1'),
+      service.handleOidcCallback('org-1', { code: 'bad', state }, state),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });
