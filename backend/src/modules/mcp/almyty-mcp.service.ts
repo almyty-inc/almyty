@@ -1045,7 +1045,7 @@ export class AlmytyMcpService {
 
       // ── Cost governance ────────────────────────────────────────
       case 'list_budgets': {
-        const rows = await get(BudgetsService).list(orgId);
+        const rows = await get(BudgetsService).list(orgId, userId);
         return {
           total: rows.length,
           budgets: rows.map((b) => ({
@@ -1061,6 +1061,7 @@ export class AlmytyMcpService {
         const summary = await get(SpendService).getSummary(orgId, {
           from,
           granularity: args.granularity ?? 'day',
+          viewerId: userId ?? null,
         });
         return { period: periodType, from, ...summary };
       }

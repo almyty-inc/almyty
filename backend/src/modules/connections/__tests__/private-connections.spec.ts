@@ -50,4 +50,58 @@ describe('private connections', () => {
     expect(h.credentials.rows.map((r) => r.id)).toContain('conn-private');
     await expect(h.service.get(owner, ORG, 'conn-private')).resolves.toMatchObject({ id: 'conn-private' });
   });
+
+  describe('connecting one', () => {
+    const openai = {
+      method: 'GET', url: 'https://api.openai.com/v1/models',
+      handle: () => ({ status: 200, body: { data: [{ id: 'gpt-4o' }], object: 'list' } }),
+    };
+
+    it('owner: private makes a row only its creator sees, and audits it as private', async () => {
+      const h = buildHarness({ routes: [openai] });
+      const done = await h.service.connect(owner, ORG, 'openai', { owner: 'private', input: { apiKey: 'sk-private-key-1234' } });
+      if (done.pending !== false) throw new Error('expected a connection');
+      expect(done.connection).toMatchObject({ owner: 'private', ownerUserId: 'owner-1' });
+      const row = h.credentials.rows[0];
+      expect(row).toMatchObject({ visibility: 'private', ownerUserId: 'owner-1' });
+      expect(h.audit.log).toHaveBeenCalledWith(expect.objectContaining({ action: 'connection_connect', details: expect.objectContaining({ owner: 'private' }) }));
+
+      expect((await h.service.list(owner, ORG)).map((c) => c.id)).toEqual([row.id]);
+      for (const who of [peer, admin, orgOwner]) {
+        expect(await h.service.list(who, ORG)).toEqual([]);
+        await expect(h.service.get(who, ORG, row.id)).rejects.toMatchObject({ response: { code: 'CONNECTION_NOT_FOUND' } });
+      }
+    });
+
+    it('owner: user stays Personal: org visibility, still visible to admins', async () => {
+      const h = buildHarness({ routes: [openai] });
+      const done = await h.service.connect(owner, ORG, 'openai', { owner: 'user', input: { apiKey: 'sk-personal-key-1234' } });
+      if (done.pending !== false) throw new Error('expected a connection');
+      expect(done.connection).toMatchObject({ owner: 'user', ownerUserId: 'owner-1' });
+      expect(h.credentials.rows[0].visibility).toBe('org');
+      expect((await h.service.list(admin, ORG)).map((c) => c.id)).toContain(h.credentials.rows[0].id);
+    });
+
+    it('a private connect is refused where the org turned member-held keys off', async () => {
+      const h = buildHarness({ routes: [openai], org: { settings: { allowUserScopedConnections: false } } });
+      await expect(h.service.connect(owner, ORG, 'openai', { owner: 'private', input: { apiKey: 'sk-private-key-1234' } }))
+        .rejects.toMatchObject({ response: { code: 'USER_CONNECTIONS_DISABLED' } });
+      expect(h.credentials.rows).toHaveLength(0);
+    });
+
+    it('a redirect connect carries the private tier through the callback', async () => {
+      const h = buildHarness({
+        routes: [
+          { method: 'POST', url: 'https://openrouter.ai/api/v1/auth/keys', handle: () => ({ status: 200, body: { key: 'sk-or-v1-private-secret' } }) },
+          { method: 'GET', url: 'https://openrouter.ai/api/v1/key', handle: () => ({ status: 200, body: { data: { label: 'mine' } } }) },
+        ],
+      });
+      const start = await h.service.connect(owner, ORG, 'openrouter', { owner: 'private' });
+      if (!start.pending || !('state' in start)) throw new Error('expected a redirect');
+      const connection = await h.service.complete(start.state, 'code-1');
+      expect(connection).toMatchObject({ owner: 'private', ownerUserId: 'owner-1' });
+      expect(h.credentials.rows[0]).toMatchObject({ visibility: 'private', ownerUserId: 'owner-1' });
+      expect(await h.service.list(admin, ORG)).toEqual([]);
+    });
+  });
 });

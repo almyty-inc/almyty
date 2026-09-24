@@ -9,10 +9,11 @@ import { ColumnDef } from '@tanstack/react-table'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { Building, Crown, Eye, Shield, UserPlus, Users } from 'lucide-react'
 
 import { Field, FormPage, FormSection, InlineFormActions } from '@/components/layout/form-page'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -339,6 +340,8 @@ function InviteMemberForm({ org, onDone, onInvited }: { org: Organization; onDon
     onSuccess: onInvited,
     onError: (err: any) => error('Failed to invite member', getApiErrorMessage(err, 'Please try again.')),
   })
+  // Cancel and a sent invitation both close the form, so neither asks.
+  const guard = useLeaveGuard(form.formState.isDirty && !invite.isPending)
   return (
     <form
       onSubmit={form.handleSubmit((d) => invite.mutate(d))}
@@ -370,13 +373,13 @@ function InviteMemberForm({ org, onDone, onInvited }: { org: Organization; onDon
         submitLabel={invite.isPending ? 'Sending...' : 'Send invitation'}
         submitting={invite.isPending}
       />
+      {guard.element}
     </form>
   )
 }
 
 function SettingsTab({ org }: { org: Organization }) {
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
   const { upsertOrganization, removeOrganization } = useOrganizationStore()
   const { success, error } = useNotifications()
   const { confirm, dialog: confirmDialog } = useConfirm()
@@ -397,6 +400,9 @@ function SettingsTab({ org }: { org: Organization }) {
     },
     onError: (err: any) => error('Failed to update organization', getApiErrorMessage(err, 'Please try again.')),
   })
+  // Unsaved settings ask before a navigation throws them away. Reset and a
+  // save that lands both bring the fields back in line with the org.
+  const guard = useLeaveGuard(dirty && !updateOrgMutation.isPending)
 
   const deleteOrgMutation = useMutation({
     mutationFn: () => organizationsApi.delete(org.id),
@@ -407,7 +413,8 @@ function SettingsTab({ org }: { org: Organization }) {
       // interceptor kept stamping its id on X-Organization-Id.
       removeOrganization(org.id)
       success('Organization deleted', 'Organization has been deleted successfully.')
-      navigate('/organizations')
+      // Gone, so nothing typed into its settings is worth asking about.
+      guard.leave('/organizations')
     },
     onError: (err: any) => error('Failed to delete organization', getApiErrorMessage(err, 'Please try again.')),
   })
@@ -466,6 +473,7 @@ function SettingsTab({ org }: { org: Organization }) {
         </div>
       </FormSection>
       {confirmDialog}
+      {guard.element}
     </>
   )
 }

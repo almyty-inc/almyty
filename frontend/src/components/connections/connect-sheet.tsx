@@ -56,6 +56,7 @@ import {
   type ConnectRedirect,
   type ConnectResult,
   type Connection,
+  CONNECTION_OWNER_HINTS,
   type ConnectionOwner,
   type Connector,
   type ConnectorKind,
@@ -364,8 +365,8 @@ export function ConnectFlow({
           {!rotateConnection && allowUserScoped && (
             <div className="space-y-1.5">
               <Label>Owner</Label>
-              <div className="flex gap-2" role="radiogroup" aria-label="Owner">
-                {(['org', 'user'] as ConnectionOwner[]).map((o) => (
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Owner">
+                {(['org', 'user', 'private'] as ConnectionOwner[]).map((o) => (
                   <button
                     key={o}
                     type="button"
@@ -377,14 +378,12 @@ export function ConnectFlow({
                       owner === o ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:text-foreground',
                     )}
                   >
-                    {o === 'org' ? 'Whole organization' : 'Personal'}
+                    {o === 'org' ? 'Whole organization' : o === 'user' ? 'Personal' : 'Private'}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {owner === 'org'
-                  ? 'Anyone you grant access can use it.'
-                  : 'Only you can use it. Unlike Private, admins who manage connections can still see and revoke it.'}
+              <p className="text-xs text-muted-foreground" data-testid="connect-owner-hint">
+                {CONNECTION_OWNER_HINTS[owner]}
               </p>
             </div>
           )}

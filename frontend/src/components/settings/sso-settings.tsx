@@ -22,6 +22,7 @@ import { useCopySensitive } from '@/lib/clipboard'
 import { ssoApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 type Protocol = 'saml' | 'oidc'
 
@@ -119,6 +120,12 @@ function SsoSettingsForm() {
   })
 
   const { confirm, dialog: confirmDialog } = useConfirm()
+  // Identity provider settings edited but not saved ask before a
+  // navigation throws them away. A save refetches the config, which
+  // brings the form back in line.
+  const guard = useLeaveGuard(
+    !!data && !saveMutation.isPending && JSON.stringify(form) !== JSON.stringify({ ...data, oidcClientSecret: '' }),
+  )
   if (isLoading) {
     return (
       <Card>
@@ -337,6 +344,7 @@ function SsoSettingsForm() {
         </CardContent>
       </Card>
       {confirmDialog}
+      {guard.element}
     </div>
   )
 }
