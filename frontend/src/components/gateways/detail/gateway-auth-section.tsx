@@ -18,6 +18,7 @@ import { CopyField } from '@/components/ui/copy-field'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
@@ -70,6 +71,14 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
   const [authTypeError, setAuthTypeError] = useState<string | undefined>()
   const [newAuthType, setNewAuthType] = useState('')
   const [newAuthConfig, setNewAuthConfig] = useState<Record<string, string>>({})
+
+  // Either inline form with something chosen or typed in asks before a
+  // navigation throws it away. Cancel closes the form and a successful save
+  // resets it, so neither asks.
+  const guard = useLeaveGuard(
+    (addingAuth && (newAuthType !== '' || Object.values(newAuthConfig).some((v) => v !== ''))) ||
+      (generating && newKeyName !== ''),
+  )
 
   // Fetch auth configs
   const { data: authConfigsData, isLoading: authLoading } = useQuery({
@@ -519,7 +528,8 @@ export function GatewayAuthSection({ gatewayId, gatewayName }: GatewayAuthSectio
           </div>
         )}
       </CardContent>
-
+      {confirmDialog}
+      {guard.element}
       {confirmDialog}
     </Card>
   )

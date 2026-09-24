@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge'
 import { DataTable } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -368,6 +369,8 @@ function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDon
     },
     onError: (err) => error('Failed to save role', getApiErrorMessage(err)),
   })
+  // Cancel and a successful save both close the form, so neither asks.
+  const guard = useLeaveGuard(form.formState.isDirty && !saveMutation.isPending)
 
   return (
     <form
@@ -403,6 +406,7 @@ function RoleInlineForm({ editing, onDone }: { editing: CustomRole | null; onDon
         submitLabel={editing ? 'Save changes' : 'Create role'}
         submitting={saveMutation.isPending}
       />
+      {guard.element}
     </form>
   )
 }
@@ -715,6 +719,8 @@ function PolicyInlineForm({ onDone }: { onDone: () => void }) {
     },
     onError: (err) => error('Failed to create policy', getApiErrorMessage(err)),
   })
+  // Cancel and a successful create both close the form, so neither asks.
+  const guard = useLeaveGuard(form.formState.isDirty && !saveMutation.isPending)
 
   return (
     <form
@@ -763,6 +769,7 @@ function PolicyInlineForm({ onDone }: { onDone: () => void }) {
         <Textarea placeholder="What this policy enforces" rows={2} {...form.register('description')} />
       </Field>
       <InlineFormActions onCancel={onDone} submitLabel="Create policy" submitting={saveMutation.isPending} />
+      {guard.element}
     </form>
   )
 }

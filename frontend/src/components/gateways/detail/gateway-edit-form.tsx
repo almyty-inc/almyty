@@ -26,6 +26,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { PRIVATE_CAPABLE_GATEWAY_TYPES } from '@/components/gateways/create-gateway-form'
 import { useOrganizationStore } from '@/store/organization'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 export const editGatewaySchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -75,6 +76,9 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
   const privateNotPossible =
     visibility.visibility === 'private' && !PRIVATE_CAPABLE_GATEWAY_TYPES.has(gateway?.type)
   const scopeChanged = visibility.visibility !== stored.visibility || visibility.teamId !== stored.teamId
+  // Unsaved edits ask before a navigation throws them away. Not while the
+  // save is in flight: the page leaves for the detail view once it lands.
+  const guard = useLeaveGuard((form.formState.isDirty || scopeChanged) && !isSaving)
 
   const submit = (data: EditGatewayForm) => {
     if (privateNotPossible) return
@@ -166,6 +170,7 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
         submitting={isSaving}
         submitDisabled={privateNotPossible}
       />
+      {guard.element}
     </form>
   )
 }
