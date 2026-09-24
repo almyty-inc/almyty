@@ -37,6 +37,7 @@ import { ChannelCredentialService, ChannelUsePurpose } from './channel-credentia
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { outboundFailureDetail, safeFetch } from '../../../common/security/safe-fetch';
 import { isPrivateGateway } from '../private-gateway';
+import { gatewayPrincipal } from '../../../common/authorization/execution-access.service';
 
 /**
  * A handle on a `channel_events` row, so a later step can finish it.
@@ -345,6 +346,10 @@ export class ChannelGatewayService {
             gatewayType: gateway.type,
             source: normalized.metadata?.source || gateway.type,
           },
+          // Runs in the gateway's scope: a channel serves its agent only
+          // while the gateway's own visibility covers it, checked on every
+          // message.
+          principal: gatewayPrincipal(gateway),
         },
       );
 
@@ -640,7 +645,9 @@ export class ChannelGatewayService {
         // gateway-scoped thread lookup above can see the run at once.
         null,
         normalized.text,
-        { maxSteps: 25, metadata: channelMetadata },
+        // Runs in the gateway's scope: a channel serves its agent only while
+        // the gateway's own visibility covers it, checked on every message.
+        { maxSteps: 25, metadata: channelMetadata, principal: gatewayPrincipal(gateway) },
       );
 
       run.metadata = {

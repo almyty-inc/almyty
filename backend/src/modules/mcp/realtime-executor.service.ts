@@ -5,6 +5,7 @@ import * as Redis from 'ioredis';
 import * as crypto from 'crypto';
 
 import { ToolExecutorService, ToolExecutionResult, ToolExecutionOptions } from '../tools/tool-executor.service';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 import { McpSessionService } from './mcp-session.service';
 import { SseTransport } from './transports/sse.transport';
 import { WebSocketTransport } from './transports/websocket.transport';
@@ -216,10 +217,11 @@ export class RealtimeExecutorService extends EventEmitter {
       progressInterval.unref?.();
 
       // Execute the tool
+      // Execute the tool, in the scope the caller queued it with.
       const result: ToolExecutionResult = await this.toolExecutorService.executeTool(
         toolId,
         parameters,
-        options,
+        { ...options, principal: options.principal ?? userPrincipal(options.userId) },
       );
 
       // Complete execution

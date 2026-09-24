@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { InjectRedis } from '@nestjs-modules/ioredis';
@@ -9,6 +9,7 @@ import { Gateway } from '../../entities/gateway.entity';
 import { Tool, ToolStatus } from '../../entities/tool.entity';
 import { User } from '../../entities/user.entity';
 import { resourceOwnerId } from '../../common/authorization/access-policy.service';
+import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 import { gatewayServableTo, isPrivateGateway, resourceServableThroughGateway } from './private-gateway';
 
 export interface GatewayToolSearchFilters {
@@ -43,6 +44,10 @@ export class GatewayToolQueriesHelper {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     @InjectRedis() private readonly redis: Redis.Redis,
+    // Membership half of the gateway rule for team tools; @Optional() only
+    // to keep positional spec harnesses' order. Team tools are skipped
+    // without it.
+    @Optional() private readonly executionAccess?: ExecutionAccessService,
   ) {}
 
   async getGatewayTools(filters: GatewayToolSearchFilters): Promise<{
@@ -223,9 +228,23 @@ export class GatewayToolQueriesHelper {
         if (!resourceServableThroughGateway(gateway, tool)) {
           skipped.push({
             toolId,
-            reason: `Tool '${tool.name}' is private; it can only be served through a gateway that is private to you.`,
+            reason: tool.visibility === 'team'
+              ? `Tool '${tool.name}' is visible to its team only; it can only be served through a gateway scoped to that team.`
+              : `Tool '${tool.name}' is private; it can only be served through a gateway that is private to you.`,
           });
           continue;
+        }
+        // A team tool also needs the person attaching it to be able to run
+        // it -- the membership half of the gateway rule. Fails closed when
+        // the check is not wired.
+        if (tool.visibility === 'team') {
+          const decision = this.executionAccess
+            ? await this.executionAccess.canExecute(userPrincipal(userId), tool)
+            : { allowed: false };
+          if (!decision.allowed) {
+            skipped.push({ toolId, reason: 'Tool not found in this organization' });
+            continue;
+          }
         }
 
         // Status is classified here rather than filtered out of the query

@@ -24,6 +24,7 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService, ToolExecutionResult } from '../tools/tool-executor.service';
+import { ExecutionPrincipal, userPrincipal } from '../../common/authorization/execution-access.service';
 import { batchAsyncSettled } from '../../common/utils/batch-async';
 
 const UTCP_VERSION = '1.0.0';
@@ -353,6 +354,7 @@ export class UtcpService {
     organizationId: string,
     userId: string | null,
     gatewayId?: string | null,
+    principal?: ExecutionPrincipal,
   ): Promise<UtcpExecutionResult> {
     const startTime = Date.now();
 
@@ -373,6 +375,9 @@ export class UtcpService {
           // securityPolicy. UTCP proxy calls always arrive through a
           // gateway, so leaving it out silently skipped the policy.
           gatewayId: gatewayId ?? null,
+          // The gateway's scope when the call came through one; the
+          // caller's otherwise.
+          principal: principal ?? userPrincipal(userId),
         },
       );
 

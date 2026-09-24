@@ -37,7 +37,7 @@ import { shouldAutoSaveMemory } from './memory-autosave.policy';
  */
 import { capPersistedPayload } from './persist-cap';
 import { canReference } from '../../common/authorization/private-visibility';
-import { principalOfRun } from '../../common/authorization/execution-access.service';
+import { describePrincipal, principalOfRun } from '../../common/authorization/execution-access.service';
 /**
  * A run in one of these is finished and no worker may write it back to
  * running — the same list `AgentRun.isDone()` answers with.
@@ -191,6 +191,21 @@ export class AgentStepProcessor {
     const stepStart = Date.now();
     const agent = run.agent;
 
+    // The run's scope, re-checked against its agent on every step, not only
+    // when the run started: a run resumed after input, an approval or a
+    // wait -- or one whose starter left the agent's team mid-run, or whose
+    // agent moved to another team -- stops here with a reason instead of
+    // carrying on in a scope it no longer has.
+    const principal = principalOfRun(run);
+    const agentAccess = await this.s.executionAccess.canExecute(principal, agent);
+    if (!agentAccess.allowed) {
+      run.status = AgentRunStatus.FAILED;
+      run.error = `Run stopped: ${describePrincipal(principal)} can no longer run this agent (${agentAccess.reason}).`;
+      if (!(await this.commitStep(run, expectedStep))) return 'done';
+      this.s.emitEvent(runId, 'run.failed', { error: run.error, reasonCode: 'SCOPE_REVOKED' });
+      return 'done';
+    }
+
     // Enforce collaboration rules.maxTotalCost across sibling runs
     if (run.parentRunId && agent.collaboration?.rules?.maxTotalCost) {
       const siblingRuns = await this.s.runRepository.find({ where: { parentRunId: run.parentRunId } });
@@ -221,7 +236,7 @@ export class AgentStepProcessor {
       // The same goes for team and private tools outside the run's scope:
       // they are neither described to the model nor, in ToolExecutorService,
       // run for it.
-      const principal = principalOfRun(run);
+      // (principal: the run's, resolved above)
       const tools = await this.s.executionAccess.filterExecutable(principal, await this.resolveTools(agent));
 
       // Recall memories if memory is enabled

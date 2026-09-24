@@ -112,6 +112,13 @@ export interface ToolExecutionResult {
   rateLimited: boolean;
   retryCount: number;
   metadata?: Record<string, any>;
+  /**
+   * The tool does not exist in the caller's organization, or exists outside
+   * the call's scope (a team tool for a non-member, someone else's private
+   * tool). One flag for both, so an HTTP surface can answer 404 without
+   * being able to tell them apart.
+   */
+  notFound?: boolean;
 }
 
 export interface GraphQLRequest {

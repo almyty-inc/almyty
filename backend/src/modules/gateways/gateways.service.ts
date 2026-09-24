@@ -18,9 +18,10 @@ import { canPublishHostedChat } from './channels/hosted-chat.config';
 import { keepServerOwnedCustomDomain } from './channels/custom-domain';
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
-import { AccessPolicyService, normaliseVisibility, resourceOwnerId, type ResourceVisibility } from '../../common/authorization/access-policy.service';
+import { AccessPolicyService, normaliseVisibility, type ResourceVisibility } from '../../common/authorization/access-policy.service';
+import { ExecutionAccessService, gatewayPrincipal } from '../../common/authorization/execution-access.service';
 import { Agent } from '../../entities/agent.entity';
-import { PRIVATE_CAPABLE_GATEWAY_TYPES, gatewayServableTo, resourceServableThroughGateway } from './private-gateway';
+import { PRIVATE_CAPABLE_GATEWAY_TYPES, gatewayServableTo } from './private-gateway';
 import {
   encryptChannelConfigSecrets,
   hasInlineChannelSecret,
@@ -887,26 +888,25 @@ export class GatewaysService {
   }
 
   /**
-   * What a gateway serves has to be at least as private as the gateway.
+   * What a gateway serves has to be within the gateway's own scope.
    *
-   * A private agent or tool is its owner's alone; putting it behind a
-   * gateway that answers anyone else would hand it out. So a private
-   * resource can only sit behind a gateway private to the same owner,
-   * and another user's private resource is reported as not found.
+   * A gateway is a publication: whoever its auth admits gets what it
+   * serves. So a private agent or tool can only sit behind a gateway
+   * private to the same owner, and a team one only behind a gateway scoped
+   * to that team (or private to someone who may run it) -- the rule
+   * ExecutionAccessService applies again on every call. The person making
+   * the change must be able to run it themselves; a resource they cannot
+   * run is reported as not found.
    */
   async assertContentsServable(gateway: Gateway, userId: string): Promise<void> {
+    const executionAccess = new ExecutionAccessService(this.accessPolicy);
     if (gateway.agentId) {
       const agent = await this.gatewayRepository.manager?.findOne(Agent, {
         where: { id: gateway.agentId, organizationId: gateway.organizationId },
-        select: { id: true, visibility: true, createdBy: true },
+        select: { id: true, name: true, organizationId: true, visibility: true, teamId: true, createdBy: true },
       });
-      if (agent?.visibility === 'private' && resourceOwnerId(agent) !== userId) {
-        throw new NotFoundException('Agent not found');
-      }
-      if (agent && !resourceServableThroughGateway(gateway, agent)) {
-        throw new BadRequestException(
-          'A private agent can only be served through a gateway that is private to the same owner',
-        );
+      if (agent) {
+        await executionAccess.assertGatewayMayServe(gateway, agent, userId, 'Agent');
       }
     }
     if (gateway.id) {
@@ -914,10 +914,16 @@ export class GatewaysService {
         where: { gatewayId: gateway.id },
         relations: { tool: true },
       });
-      if ((rows ?? []).some((row) => row.tool && !resourceServableThroughGateway(gateway, row.tool))) {
-        throw new BadRequestException(
-          'This gateway serves private tools; it can only be private to their owner',
-        );
+      for (const row of rows ?? []) {
+        if (!row.tool) continue;
+        const decision = await executionAccess.canExecute(gatewayPrincipal(gateway, userId), row.tool);
+        if (!decision.allowed) {
+          throw new BadRequestException(
+            row.tool.visibility === 'team'
+              ? 'This gateway serves team tools; it can only be scoped to their team'
+              : 'This gateway serves private tools; it can only be private to their owner',
+          );
+        }
       }
     }
   }
@@ -1124,6 +1130,9 @@ export class GatewaysService {
         agentId: dto.agentId,
         configuration: dto.configuration,
         rateLimitConfig: dto.rateLimitConfig,
+        // The surface follows its agent's scope on every publish (a team
+        // agent is served through a gateway scoped to its team).
+        ...(dto.visibility !== undefined ? { visibility: dto.visibility, teamId: dto.teamId ?? null } : {}),
       },
       organizationId,
       userId,

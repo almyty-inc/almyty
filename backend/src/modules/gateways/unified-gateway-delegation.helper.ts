@@ -26,6 +26,7 @@ import { A2AAgentCardService } from '../a2a/a2a-agent-card.service';
 import { AcpServerService } from '../acp/acp-server.service';
 import { AcpDiscoveryService } from '../acp/acp-discovery.service';
 import { isPrivateGateway } from './private-gateway';
+import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
  * Per-protocol delegation for gateways exposed under
@@ -475,7 +476,15 @@ export class UnifiedGatewayDelegation {
 
     if (action === 'execute' && req.method === 'POST') {
       const userId = auth?.userId || (req as any).user?.sub || null;
-      const result = await this.utcpService.executeUtcpTool(body, organization.id, userId, gateway.id);
+      const result = await this.utcpService.executeUtcpTool(
+        body,
+        organization.id,
+        userId,
+        gateway.id,
+        // Runs in the gateway's scope: the gateway serves only what its own
+        // visibility covers.
+        gatewayPrincipal(gateway, userId),
+      );
       this.metrics?.record(MetricType.UTCP_DIRECT_CALL, {
         organizationId: organization.id,
         gatewayId: gateway.id,

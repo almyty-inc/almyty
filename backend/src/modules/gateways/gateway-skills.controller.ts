@@ -24,6 +24,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PrivateGatewayGuard } from './private-gateway.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { userPrincipal } from '../../common/authorization/execution-access.service';
 
 @Controller('gateways')
 @ApiTags('Gateways')
@@ -163,6 +164,9 @@ export class GatewaySkillsController {
         body.parameters || {},
         {
           userId,
+          // An authenticated member running a skill runs it as themselves:
+          // a team tool only for its team, a private one only for its owner.
+          principal: userPrincipal(userId),
           organizationId,
           // The gateway_tool row is already in hand, so hand its security
           // policy straight to the executor rather than making it re-query.

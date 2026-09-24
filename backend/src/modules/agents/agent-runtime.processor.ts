@@ -130,7 +130,8 @@ export class AgentRuntimeProcessor {
             userId: principal.userId,
             mode: AgentMode.AUTONOMOUS,
             status: AgentRunStatus.FAILED,
-            input: agent.heartbeat.prompt,
+            // What the heartbeat would have sent, as startRun records it.
+            input: agent.heartbeat.prompt as any,
             steps: [],
             error: message,
             principal,

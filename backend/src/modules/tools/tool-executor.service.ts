@@ -115,7 +115,7 @@ export class ToolExecutorService {
     let retryCount = 0;
     let cached = false;
     let rateLimited = false;
-    let accessDenied = false;
+    let notFound = false;
 
     // Short-circuit before any DB work if the caller already aborted
     // (e.g. the HTTP request was cancelled between queueing and
@@ -126,6 +126,7 @@ export class ToolExecutorService {
 
     try {
       if (!options.organizationId) {
+        notFound = true;
         throw new Error('Tool not found');
       }
 
@@ -142,6 +143,7 @@ export class ToolExecutorService {
       });
 
       if (!tool) {
+        notFound = true;
         throw new Error('Tool not found');
       }
 
@@ -162,7 +164,7 @@ export class ToolExecutorService {
       try {
         await this.executionAccess.assertCanExecute(options.principal!, tool, 'Tool');
       } catch {
-        accessDenied = true;
+        notFound = true;
         throw new Error('Tool not found');
       }
 
@@ -494,6 +496,9 @@ export class ToolExecutorService {
         cached,
         rateLimited,
         retryCount,
+        // Missing and refused are one answer, so a caller can turn it into
+        // a 404 without being able to tell the two apart.
+        ...(notFound ? { notFound: true } : {}),
       };
 
       try {
@@ -501,7 +506,7 @@ export class ToolExecutorService {
         // path would load a cross-org tool just to write an audit
         // record against it, confirming the tool's existence and
         // polluting its execution stats.
-        if (options.organizationId && !accessDenied) {
+        if (options.organizationId && !notFound) {
           const tool = await this.toolRepository.findOne({
             where: { id: toolId, organizationId: options.organizationId },
           });

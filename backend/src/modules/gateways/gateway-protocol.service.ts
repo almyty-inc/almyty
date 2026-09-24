@@ -7,6 +7,7 @@ import { Gateway, GatewayType } from '../../entities/gateway.entity';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { isPrivateGateway } from './private-gateway';
 import { ToolExecutorService, ToolExecutionOptions } from '../tools/tool-executor.service';
+import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
 
 export interface ProtocolRequest {
   gatewayId: string;
@@ -249,6 +250,9 @@ export class GatewayProtocolService {
       // Execute the tool
       const executionOptions: ToolExecutionOptions = {
         userId: request.userId || 'system',
+        // The gateway's scope, not the caller's: a gateway serves only what
+        // its own visibility covers (ExecutionAccessService).
+        principal: gatewayPrincipal(gateway, request.userId),
         organizationId: gateway.organizationId,
         timeout: gatewayTool.getEffectiveTimeout(),
         retries: gatewayTool.getEffectiveRetries(),
@@ -352,6 +356,9 @@ export class GatewayProtocolService {
     try {
       const executionOptions: ToolExecutionOptions = {
         userId: request.userId || 'system',
+        // The gateway's scope, not the caller's: a gateway serves only what
+        // its own visibility covers (ExecutionAccessService).
+        principal: gatewayPrincipal(gateway, request.userId),
         organizationId: gateway.organizationId,
         timeout: gatewayTool.getEffectiveTimeout(),
         retries: gatewayTool.getEffectiveRetries(),
