@@ -17,9 +17,7 @@ import { Repository } from 'typeorm';
 import { Request, Response } from 'express';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import * as Redis from 'ioredis';
-import * as crypto from 'crypto';
 
-import { Agent } from '../../entities/agent.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
@@ -32,6 +30,7 @@ import {
 } from './protocols/anthropic-messages';
 import { CompatRateLimiter } from './compat-rate-limit.helper';
 import { renderConversation, withSamplingOverrides } from './compat-conversation.helper';
+import { authenticateCompatKey, resolveCompatAgent } from './compat-auth.helper';
 import { USAGE_SPLIT_HEADER, usageSplitState } from './agent-openai-stream.helper';
 
 /**
@@ -147,7 +146,7 @@ export class AgentAnthropicCompatController {
           );
       }
 
-      const resolved = await this.resolveAgent(internal.model, apiKey.organizationId, apiKey.userId);
+      const resolved = await resolveCompatAgent(this.agentsService, internal.model, apiKey);
 
       // The caller's sampling, on a throwaway copy of the agent. `temperature`
       // and `max_tokens` were carried out of the request correctly and then
@@ -281,33 +280,10 @@ export class AgentAnthropicCompatController {
       }));
   }
 
+  /** See compat-auth.helper: the same key policy as the OpenAI route. */
   private async authenticate(authHeader?: string, xApiKey?: string): Promise<ApiKey> {
     const token = xApiKey?.trim() || (authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '');
     if (!token) throw new UnauthorizedException('Missing API key. Send it as x-api-key or Authorization: Bearer.');
-
-    const keyHash = crypto.createHash('sha256').update(token).digest('hex');
-    const apiKey = await this.apiKeys.findOne({ where: { keyHash, isActive: true }, relations: { organization: true } });
-
-    if (!apiKey) throw new UnauthorizedException('Invalid API key');
-    if (apiKey.isExpired()) throw new UnauthorizedException('API key has expired');
-    return apiKey;
-  }
-
-  // A private agent answers only to its owner's own API key.
-  private async resolveAgent(model: string, organizationId: string, callerId: string | null): Promise<Agent> {
-    const ref = model.replace(/^agent:/, '');
-
-    let agent: Agent | null = null;
-    try {
-      agent = await this.agentsService.getAgent(ref, organizationId, callerId ? { id: callerId } : null);
-    } catch (err) {
-      if (!(err instanceof NotFoundException)) throw err;
-    }
-    if (!agent) agent = await this.agentsService.findByName(ref, organizationId, callerId);
-    if (!agent) throw new NotFoundException(`Agent not found: ${model}`);
-    if (agent.status !== 'active') {
-      throw new BadRequestException(`Agent is not active: ${agent.name} (status: ${agent.status})`);
-    }
-    return agent;
+    return authenticateCompatKey(this.apiKeys, token);
   }
 }

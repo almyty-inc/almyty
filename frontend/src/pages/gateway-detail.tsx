@@ -32,6 +32,8 @@ import {
 } from '@/components/gateways/detail/channel-config-form'
 import { WidgetBuilder } from '@/components/gateways/widget-builder'
 import { HostedChatBuilder } from '@/components/gateways/hosted-chat-builder'
+import { CustomDomainCard } from '@/components/gateways/custom-domain-card'
+
 import { AllowedOriginsCard } from '@/components/gateways/allowed-origins-card'
 import { getApiErrorMessage } from '@/lib/api-error'
 
@@ -449,6 +451,9 @@ export function GatewayDetailPage() {
           }}
         />
       )}
+
+      {/* A domain the tenant owns: claim, publish DNS, verify, inline. */}
+      {gateway.type === 'hosted_chat' && <CustomDomainCard gatewayId={gateway.id} />}
 
       {/* Which third-party sites may call this public surface from the
           browser. Keyed on the gateway so the card resets when the saved

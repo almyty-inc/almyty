@@ -64,6 +64,11 @@ import { ChannelEmailInboundController } from './channels/channel-email-inbound.
 import { ChannelWidgetController } from './channels/channel-widget.controller';
 import { HostedChatController } from './channels/hosted-chat.controller';
 import { HostedChatService } from './channels/hosted-chat.service';
+import { HostedChatEmailAuthController } from './channels/hosted-chat-email-auth.controller';
+import { VisitorEmailOtpService } from './channels/visitor-email-otp.service';
+import { VisitorEmailCode } from '../../entities/visitor-email-code.entity';
+import { CustomDomainController } from './channels/custom-domain.controller';
+import { CUSTOM_DOMAIN_STORE, CustomDomainService, PgCustomDomainStore } from './channels/custom-domain.service';
 import { SurfaceCorsService } from './channels/surface-cors';
 // Multi-workspace channel installations (OAuth installs)
 import { ChannelInstallation } from '../../entities/channel-installation.entity';
@@ -91,6 +96,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
       EndUser,
       Conversation,
       Message,
+      VisitorEmailCode,
     ]),
     JwtModule,
     ToolsModule,
@@ -99,6 +105,9 @@ import { ChannelInstallationsController } from './channels/channel-installations
   ],
   providers: [
     HostedChatService,
+    VisitorEmailOtpService,
+    CustomDomainService,
+    { provide: CUSTOM_DOMAIN_STORE, useClass: PgCustomDomainStore },
     SurfaceCorsService,
     GatewaysService,
     GatewayProtocolService,
@@ -143,6 +152,8 @@ import { ChannelInstallationsController } from './channels/channel-installations
     ChannelEmailInboundController,
     ChannelWidgetController,
     HostedChatController,
+    HostedChatEmailAuthController,
+    CustomDomainController,
     ChannelInstallController,
     ChannelInstallationsController,
   ],

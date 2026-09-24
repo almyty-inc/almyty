@@ -22,12 +22,18 @@ export class WebhookAdapter extends BaseAdapter {
    * otherwise there is nothing stable to key on and a retry from that
    * sender is indistinguishable from a second message. Documented on
    * the endpoint rather than faked here.
+   *
+   * The body's id wins over a header's. X-Webhook-Signature covers the
+   * raw body only, so a header id is whatever the last sender wrote: a
+   * captured signed request resent with a fresh X-Delivery-Id verified,
+   * claimed a new delivery and ran the agent again. Keyed by the signed
+   * id, the replay collides with the original.
    */
   deliveryId(rawPayload: any, headers?: Record<string, string>): string | undefined {
+    const bodyId = rawPayload?.deliveryId ?? rawPayload?.requestId ?? rawPayload?.eventId;
     const headerId =
       headers?.['x-delivery-id'] ?? headers?.['x-request-id'] ?? headers?.['x-idempotency-key'];
-    const bodyId = rawPayload?.deliveryId ?? rawPayload?.requestId ?? rawPayload?.eventId;
-    const id = headerId ?? bodyId;
+    const id = typeof bodyId === 'string' && bodyId.length > 0 ? bodyId : headerId;
     return typeof id === 'string' && id.length > 0 ? `webhook:${id}` : undefined;
   }
 

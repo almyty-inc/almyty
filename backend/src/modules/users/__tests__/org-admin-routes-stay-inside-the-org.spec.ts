@@ -108,9 +108,13 @@ describe('org admin /users routes stay inside the organization', () => {
     expect(users.get(VICTIM).email).toBe('victim@b.test');
   });
 
-  it('a person can still change their own address through the same route', async () => {
-    await service.updateInOrg(ADMIN, ORG_A, { email: 'new-admin@a.test' }, ADMIN);
-    expect(users.get(ADMIN).email).toBe('new-admin@a.test');
+  it('a person changing their own address is sent to the email change flow, not written here', async () => {
+    // The controller moves a self-edit's email through AuthService.changeEmail
+    // (current password, verification reset); the service never writes it.
+    await expect(service.updateInOrg(ADMIN, ORG_A, { email: 'new-admin@a.test' }, ADMIN)).rejects.toThrow(
+      /email change flow/,
+    );
+    expect(users.get(ADMIN).email).not.toBe('new-admin@a.test');
   });
 
   it('does not rename someone who also belongs to another organization', async () => {
