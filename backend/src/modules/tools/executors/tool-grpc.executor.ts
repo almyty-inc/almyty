@@ -193,6 +193,9 @@ export class ToolGrpcExecutor {
       timeoutMs: options.timeout ?? tool.configuration?.timeout ?? 30000,
       requestStream,
       responseStream,
+      // baseUrl is tenant-written: dial the address the pinned lookup
+      // approved, not whatever grpc-js resolves on its own.
+      pinDns: true,
     });
 
     const executionTime = Date.now() - startTime;

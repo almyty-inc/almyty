@@ -138,3 +138,121 @@ describe('npm registry URL is held to the SSRF floor', () => {
     ).rejects.toThrow(/registry/i);
   });
 });
+
+/**
+ * What the up-front check cannot see: npm resolves the registry name again
+ * when it connects, follows redirects, and fetches tarballs from whatever
+ * host the packument names. A tenant registry install therefore runs with
+ * every request routed through the egress proxy, and nothing inherited
+ * from the environment can route around it.
+ */
+describe('a tenant registry install runs through the egress proxy', () => {
+  let tmpDir: string;
+  let service: DependencyManagerService;
+  let lookupSpy: jest.SpyInstance;
+  let counter = 1000;
+  const deps = () => ({ 'is-odd': `3.0.${++counter}` });
+
+  beforeAll(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sandbox-registry-proxy-'));
+    process.env.SANDBOX_DEPS_PATH = tmpDir;
+    service = new DependencyManagerService();
+    lookupSpy = jest
+      .spyOn(dns.promises, 'lookup')
+      .mockImplementation((async () => [{ address: '93.184.215.14', family: 4 }]) as any);
+  });
+
+  afterAll(() => {
+    lookupSpy.mockRestore();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    delete process.env.SANDBOX_DEPS_PATH;
+    delete process.env.HTTPS_PROXY;
+    delete process.env.npm_config_proxy;
+    delete process.env.NO_PROXY;
+  });
+
+  beforeEach(() => spawnMock.mockClear());
+
+  const npmCall = () => {
+    const [cmd, args, opts] = spawnMock.mock.calls[0];
+    expect(cmd).toBe('npm');
+    return { args: args as string[], env: (opts as { env: NodeJS.ProcessEnv }).env };
+  };
+
+  it('passes --proxy / --https-proxy on loopback and clears noproxy', async () => {
+    await service.ensureInstalled(deps(), { url: 'https://npm.example.com/' });
+    const { args } = npmCall();
+    const proxy = args.find((a) => a.startsWith('--https-proxy='));
+    expect(proxy).toMatch(/^--https-proxy=http:\/\/127\.0\.0\.1:\d+$/);
+    expect(args).toContain(proxy!.replace('--https-proxy=', '--proxy='));
+    expect(args).toContain('--noproxy=');
+  });
+
+  it('drops inherited proxy settings that could bypass it', async () => {
+    process.env.HTTPS_PROXY = 'http://corp-proxy.internal:3128';
+    process.env.npm_config_proxy = 'http://corp-proxy.internal:3128';
+    process.env.NO_PROXY = '*';
+    await service.ensureInstalled(deps(), { url: 'https://npm.example.com/' });
+    const { env } = npmCall();
+    expect(env.HTTPS_PROXY).toBeUndefined();
+    expect(env.npm_config_proxy).toBeUndefined();
+    expect(env.NO_PROXY).toBeUndefined();
+  });
+
+  it('leaves the default registry on its direct path', async () => {
+    await service.ensureInstalled(deps());
+    const { args } = npmCall();
+    expect(args.some((a) => a.includes('proxy'))).toBe(false);
+  });
+});
+
+/**
+ * The install cache is keyed by the registry, not only by the dependency
+ * set, so a set installed from one registry is never served to a tool that
+ * asked for the same set from another.
+ */
+describe('dependency cache key includes the registry', () => {
+  let tmpDir: string;
+  let service: DependencyManagerService;
+  let lookupSpy: jest.SpyInstance;
+
+  beforeAll(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sandbox-registry-cache-'));
+    process.env.SANDBOX_DEPS_PATH = tmpDir;
+    service = new DependencyManagerService();
+    lookupSpy = jest
+      .spyOn(dns.promises, 'lookup')
+      .mockImplementation((async () => [{ address: '93.184.215.14', family: 4 }]) as any);
+  });
+
+  afterAll(() => {
+    lookupSpy.mockRestore();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    delete process.env.SANDBOX_DEPS_PATH;
+  });
+
+  beforeEach(() => spawnMock.mockClear());
+
+  it('does not serve a set installed from a tenant registry to a default-registry request', async () => {
+    const same = { 'left-pad': '1.3.0' };
+    const fromTenant = await service.ensureInstalled(same, { url: 'https://npm.example.com/' });
+    const fromDefault = await service.ensureInstalled(same);
+    expect(fromDefault.installDir).not.toBe(fromTenant.installDir);
+    expect(fromDefault.cached).toBe(false);
+  });
+
+  it('separates two registries, and two tokens on one registry', async () => {
+    const same = { 'right-pad': '1.0.1' };
+    const a = await service.ensureInstalled(same, { url: 'https://npm.example.com/', authToken: 'a' });
+    const b = await service.ensureInstalled(same, { url: 'https://npm.example.com/', authToken: 'b' });
+    const c = await service.ensureInstalled(same, { url: 'https://other.example.com/', authToken: 'a' });
+    expect(new Set([a.installDir, b.installDir, c.installDir]).size).toBe(3);
+  });
+
+  it('still serves a cache hit for the same set from the same registry', async () => {
+    const same = { 'up-pad': '0.0.1' };
+    await service.ensureInstalled(same, { url: 'https://npm.example.com/' });
+    const again = await service.ensureInstalled(same, { url: 'https://npm.example.com/' });
+    expect(again.cached).toBe(true);
+  });
+});

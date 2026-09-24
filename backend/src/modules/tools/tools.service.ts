@@ -28,7 +28,7 @@ import {
 } from '../../common/authorization/private-visibility';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
-import { assertToolQuota } from './tool-quota';
+import { precheckToolQuota, withToolQuota } from './tool-quota';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
 @Injectable()
@@ -86,9 +86,9 @@ export class ToolsService {
         throw new ForbiddenException('User does not have permission to create tools');
       }
 
-      // Check organization limits: a real COUNT, not the unloaded
-      // `organization.tools` relation canAddMoreTools() used to read.
-      await assertToolQuota(this.toolRepository.manager, organizationId);
+      // Fail fast before the validation below; the enforcing check runs
+      // with the insert (withToolQuota).
+      await precheckToolQuota(this.toolRepository.manager, organizationId);
 
       // Validate categories if provided
       let categories: ToolCategory[] = [];
@@ -172,7 +172,15 @@ export class ToolsService {
         },
       });
 
-      const savedTool = await this.toolRepository.save(tool);
+      // Check organization limits and insert under the organization's
+      // tool-quota lock: a real COUNT, serialised against concurrent
+      // creates, not the unloaded relation canAddMoreTools() used to read.
+      const savedTool = await withToolQuota(
+        this.toolRepository.manager,
+        organizationId,
+        1,
+        (tx) => tx.getRepository(Tool).save(tool),
+      );
 
       // Create initial version
       await this.createToolVersion(savedTool, 'Initial tool creation', userId);

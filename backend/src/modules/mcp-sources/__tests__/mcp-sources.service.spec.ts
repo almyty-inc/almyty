@@ -59,7 +59,7 @@ describe('McpSourcesService', () => {
       remove: jest.fn(async (x: any) => x),
     };
     toolRepository = {
-      manager: unlimitedToolQuotaManager(),
+      get manager() { return unlimitedToolQuotaManager(this); },
       find: jest.fn().mockResolvedValue([]),
       create: jest.fn((x: any) => x),
       save: jest.fn(async (x: any) => ({ id: `tool-${x.name}`, ...x })),

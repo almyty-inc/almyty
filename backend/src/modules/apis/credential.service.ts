@@ -12,6 +12,7 @@ import { Credential, CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { Api } from '../../entities/api.entity';
 import { validateUrl } from '../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 
 export interface CreateCredentialDto {
   name: string;
@@ -217,6 +218,10 @@ export class CredentialService {
         maxContentLength: 5 * 1024 * 1024,
         maxBodyLength: 5 * 1024 * 1024,
         maxRedirects: 0,
+        // The string check above does not see what the name resolves to;
+        // the pinned agents refuse a private address at connect time.
+        httpAgent: ssrfSafeHttpAgent,
+        httpsAgent: ssrfSafeHttpsAgent,
         validateStatus: (status) => status < 500, // 4xx is OK (means API responded)
       });
 
@@ -305,6 +310,10 @@ export class CredentialService {
         maxContentLength: 256 * 1024,
         maxBodyLength: 256 * 1024,
         maxRedirects: 0,
+        // The string check above does not see what the name resolves to;
+        // the pinned agents refuse a private address at connect time.
+        httpAgent: ssrfSafeHttpAgent,
+        httpsAgent: ssrfSafeHttpsAgent,
       });
 
       const { access_token, refresh_token, expires_in } = response.data;

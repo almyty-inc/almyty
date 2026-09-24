@@ -1,3 +1,4 @@
+import { unlimitedQuotaManager } from '../../../test/tool-quota.fake';
 import { GatewaysService } from '../gateways.service';
 import { GatewaysController } from '../gateways.controller';
 import { Gateway, GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
@@ -38,6 +39,7 @@ describe('GatewaysService — channel secret encryption at rest', () => {
 
   beforeEach(() => {
     gatewayRepository = {
+      get manager() { return unlimitedQuotaManager(this); },
       findOne: jest.fn().mockResolvedValue(null),
       create: jest.fn((dto: any) => ({ ...dto })),
       save: jest.fn(async (g: any) => g),
@@ -272,6 +274,7 @@ describe('GatewaysService — channel secrets go to the credential store', () =>
     store = makeCredentialRefFake();
     let seq = 0;
     gatewayRepository = {
+      get manager() { return unlimitedQuotaManager(this); },
       findOne: jest.fn().mockResolvedValue(null),
       create: jest.fn((dto: any) => ({ ...dto })),
       save: jest.fn(async (g: any) => ({ ...g, id: g.id ?? `gw-${++seq}` })),

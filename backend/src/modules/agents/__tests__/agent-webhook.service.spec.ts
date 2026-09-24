@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { AgentWebhookService } from '../agent-webhook.service';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../../common/security/ssrf-safe-agent';
 
 // Factory mock — axios is a default export with methods on the function
 // itself; the bare jest.mock('axios') leaves axios.post undefined.
@@ -76,6 +77,17 @@ describe('AgentWebhookService', () => {
         makeExecution(),
       );
       expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+    });
+
+    // validateUrl judges the name as a string. A public webhook host whose
+    // A record answers 169.254.169.254 passed it and was posted to; the
+    // pinned agents re-check the resolved address at connect.
+    it('pins DNS and refuses redirects on delivery', async () => {
+      await service.sendExecutionWebhook(makeAgent(), makeExecution());
+      const axiosOpts = mockedAxios.post.mock.calls[0][2];
+      expect(axiosOpts.httpAgent).toBe(ssrfSafeHttpAgent);
+      expect(axiosOpts.httpsAgent).toBe(ssrfSafeHttpsAgent);
+      expect(axiosOpts.maxRedirects).toBe(0);
     });
   });
 

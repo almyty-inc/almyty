@@ -6,6 +6,7 @@ import axios from 'axios';
 import { Agent } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { validateUrl } from '../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 
 /** Outbound webhook payload limits. */
 const MAX_OUTPUT_BYTES = 100 * 1024; // 100 KB
@@ -97,6 +98,10 @@ export class AgentWebhookService {
           // chasing entirely; an honest webhook endpoint responds 2xx
           // directly.
           maxRedirects: 0,
+          // The string check above does not see what the name resolves to;
+          // the pinned agents refuse a private address at connect time.
+          httpAgent: ssrfSafeHttpAgent,
+          httpsAgent: ssrfSafeHttpsAgent,
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'almyty-webhook/1.0',

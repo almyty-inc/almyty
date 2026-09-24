@@ -138,6 +138,25 @@ export function decideToolRequest(
 }
 
 /**
+ * The part of a policy a sandboxed tool's own network calls can be held
+ * to: its allowed and blocked domains. The sandbox net guard sees sockets,
+ * not HTTP requests, so `requireHttps` and `allowedHttpMethods` do not
+ * translate; the executors that make HTTP requests themselves enforce
+ * those. Null when the policy restricts no host.
+ *
+ * This file is also loaded inside the sandbox worker (by the net guard),
+ * so it must keep importing nothing.
+ */
+export function sandboxHostPolicy(
+  policy: GatewayToolSecurityPolicy | null | undefined,
+): { allowedDomains: string[]; blockedDomains: string[] } | null {
+  const allowedDomains = (policy?.allowedDomains ?? []).filter((d) => typeof d === 'string' && d.trim());
+  const blockedDomains = (policy?.blockedDomains ?? []).filter((d) => typeof d === 'string' && d.trim());
+  if (allowedDomains.length === 0 && blockedDomains.length === 0) return null;
+  return { allowedDomains, blockedDomains };
+}
+
+/**
  * The response cap to hand axios, given the executor's own default.
  *
  * A policy may only tighten the install default, never raise it: a

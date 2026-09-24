@@ -125,7 +125,7 @@ describe('ToolsService', () => {
 
   beforeEach(async () => {
     toolRepo = {
-      manager: unlimitedToolQuotaManager(),
+      get manager() { return unlimitedToolQuotaManager(this); },
       create: jest.fn(),
       save: jest.fn(),
       findOne: jest.fn(),
@@ -309,9 +309,12 @@ describe('ToolsService', () => {
 
       organizationRepo.findOne.mockResolvedValue(org);
       userRepo.findOne.mockResolvedValue(user);
-      toolRepo.manager = {
-        getRepository: () => ({ findOne: jest.fn().mockResolvedValue(org), count: jest.fn().mockResolvedValue(1) }),
-      };
+      Object.defineProperty(toolRepo, 'manager', {
+        configurable: true,
+        value: {
+          getRepository: () => ({ findOne: jest.fn().mockResolvedValue(org), count: jest.fn().mockResolvedValue(1) }),
+        },
+      });
 
       await expect(service.createTool(dto, 'org-1', 'user-1')).rejects.toThrow('Organization has reached tool limit');
       expect(toolRepo.save).not.toHaveBeenCalled();

@@ -20,6 +20,7 @@ import { ToolExecutionOptions, ToolExecutionResult } from '../tool-execution.typ
 import { getByDotPath } from '../tool-execution-utils';
 import { EnvelopeCryptoService } from '../../kms/envelope-crypto.service';
 import { ToolInvocationBudget } from './tool-invocation-budget';
+import { sandboxHostPolicy } from '../../../common/security/gateway-tool-policy';
 
 @Injectable()
 export class ToolScriptExecutor {
@@ -152,6 +153,7 @@ export class ToolScriptExecutor {
         timeoutMs: tool.configuration?.timeout ?? api?.timeoutMs ?? 30000,
         signal: options.signal,
         invokeTool: this.buildInvokeToolCallback(options),
+        hostPolicy: sandboxHostPolicy(options.securityPolicy),
         ...this.sandboxTenancy(options),
       });
 
@@ -205,6 +207,7 @@ export class ToolScriptExecutor {
         timeoutMs: tool.configuration?.timeout ?? api?.timeoutMs ?? 30000,
         signal: options.signal,
         invokeTool: this.buildInvokeToolCallback(options),
+        hostPolicy: sandboxHostPolicy(options.securityPolicy),
         ...this.sandboxTenancy(options),
       });
 

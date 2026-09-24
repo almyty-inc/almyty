@@ -8,6 +8,7 @@ import {
   validateUrlAllowingPrivate,
   ollamaPrivateUrlsAllowed,
 } from '../../common/security/url-validator';
+import { agentsExempting, ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { LIMITS } from './canonical/canonical.constants';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 
@@ -262,6 +263,12 @@ export class EmbeddingService {
         maxContentLength: 2 * 1024 * 1024,
         maxBodyLength: 2 * 1024 * 1024,
         maxRedirects: 0,
+        // Pin DNS so a public name that resolves to a private address is
+        // refused at connect. The Ollama hatch exempts this one host (a
+        // machine-local server is the point of it), not every name.
+        ...(allowPrivate
+          ? agentsExempting(new URL(target).hostname)
+          : { httpAgent: ssrfSafeHttpAgent, httpsAgent: ssrfSafeHttpsAgent }),
       },
     );
 

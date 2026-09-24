@@ -13,6 +13,7 @@ import { randomBytes, createHash, timingSafeEqual } from 'crypto';
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
 import { validateUrl, validateResponseSize } from '../../common/security/url-validator';
+import { ssrfSafeDispatcher } from '../../common/security/safe-fetch';
 
 export interface OAuth2Preset {
   name: string;
@@ -413,12 +414,15 @@ export class OAuth2Service {
       method: 'POST',
       // SSRF: refuse redirects so a 302 from the token endpoint can't bounce this credential-bearing POST to an internal host.
       redirect: 'manual',
+      // ...and pin DNS: tokenUrl passed validateUrl as a string, which says
+      // nothing about what the name resolves to at connect time.
+      dispatcher: ssrfSafeDispatcher,
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
       },
       body: tokenParams.toString(),
-    });
+    } as RequestInit);
 
     const tokenData = await readTokenJson(tokenResponse);
 
@@ -507,12 +511,15 @@ export class OAuth2Service {
       method: 'POST',
       // SSRF: refuse redirects so a 302 from the token endpoint can't bounce this credential-bearing POST to an internal host.
       redirect: 'manual',
+      // ...and pin DNS: tokenUrl passed validateUrl as a string, which says
+      // nothing about what the name resolves to at connect time.
+      dispatcher: ssrfSafeDispatcher,
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
       },
       body: tokenParams.toString(),
-    });
+    } as RequestInit);
 
     const tokenData = await readTokenJson(tokenResponse);
 

@@ -3,6 +3,7 @@ import { EntityManager } from 'typeorm';
 
 import { Organization } from '../../entities/organization.entity';
 import { Tool } from '../../entities/tool.entity';
+import { inQuotaTransaction, lockQuota } from '../../common/quota/org-quota-lock';
 
 /**
  * The one place an organization's tool quota is enforced.
@@ -14,10 +15,11 @@ import { Tool } from '../../entities/tool.entity';
  * called it at all: schema-generated tools, MCP-synced tools, Tool Hub
  * installs and runner / memory capability rows were never checked.
  *
- * Every code path that inserts a Tool row calls `assertToolQuota` first,
- * with the number of NEW rows it is about to write (rows it updates in
- * place do not count). `tool-quota-is-enforced.guard.spec.ts` reads the
- * tree and fails when a file creates Tool rows without calling it.
+ * Every code path that inserts a Tool row does so through
+ * `withToolQuota` (or `assertToolQuota` on a transaction it already
+ * owns), with the number of NEW rows it is about to write (rows it
+ * updates in place do not count). `tool-quota-is-enforced.guard.spec.ts`
+ * reads the tree and fails when a file creates Tool rows without it.
  *
  * Bulk policy: REJECT, never truncate. A batch (schema import, MCP sync,
  * runner publish) that would take the organization over its limit is
@@ -26,10 +28,17 @@ import { Tool } from '../../entities/tool.entity';
  * an API with an arbitrary subset of its operations as tools, which is
  * worse to debug than a clear refusal.
  *
- * The count is a real COUNT(*) on `tools`, not a loaded relation. It is
- * not serialised against concurrent writers: two batches racing for the
- * last few slots can overshoot by at most one batch. The per-schema cap
- * below bounds how large that overshoot can be.
+ * The count is a real COUNT(*) on `tools`, not a loaded relation, and it
+ * is serialised: `withToolQuota` runs the check and the caller's insert
+ * in one transaction that first takes a per-organization advisory lock
+ * (`pg_advisory_xact_lock`, see `lockQuota`). A second writer for the
+ * same organization blocks on that lock until the first commits, then
+ * counts the rows the first wrote. Two batches racing for the last
+ * slots can no longer both pass.
+ *
+ * `precheckToolQuota` is the unlocked form, for bulk paths that want to
+ * refuse a whole batch before doing any work. It is advisory only; the
+ * per-row `withToolQuota` behind it is what holds under concurrency.
  */
 
 /**
@@ -55,22 +64,35 @@ export async function remainingToolQuota(
   manager: EntityManager,
   organizationId: string,
 ): Promise<number> {
-  const organization = await manager
-    .getRepository(Organization)
-    .findOne({ where: { id: organizationId } });
-  const maxTools = organization?.settings?.maxTools;
+  const maxTools = await maxToolsFor(manager, organizationId);
   if (!maxTools) return Infinity;
   const current = await manager.getRepository(Tool).count({ where: { organizationId } });
   return Math.max(0, maxTools - current);
 }
 
+async function maxToolsFor(manager: EntityManager, organizationId: string): Promise<number | undefined> {
+  const organization = await manager
+    .getRepository(Organization)
+    .findOne({ where: { id: organizationId } });
+  return organization?.settings?.maxTools;
+}
+
+function quotaExceeded(adding: number, remaining: number): ToolQuotaExceededException {
+  return new ToolQuotaExceededException(
+    adding === 1
+      ? 'Organization has reached tool limit'
+      : `Organization has reached tool limit: this would add ${adding} tools and only ${remaining} remain`,
+  );
+}
+
 /**
- * Throw ToolQuotaExceededException unless the organization can take
- * `adding` more tools. Pass the caller's transactional EntityManager
- * when the insert runs inside a transaction, so rows it deleted first
- * are not counted.
+ * Unlocked check: throw unless the organization can take `adding` more
+ * tools right now. For bulk paths that refuse a whole batch before any
+ * work starts. NOT an enforcement point on its own -- a concurrent
+ * writer can take the slots between this and the insert. The insert
+ * itself goes through `withToolQuota`.
  */
-export async function assertToolQuota(
+export async function precheckToolQuota(
   manager: EntityManager,
   organizationId: string,
   adding = 1,
@@ -78,11 +100,48 @@ export async function assertToolQuota(
   if (adding <= 0) return;
   const remaining = await remainingToolQuota(manager, organizationId);
   if (adding <= remaining) return;
-  throw new ToolQuotaExceededException(
-    adding === 1
-      ? 'Organization has reached tool limit'
-      : `Organization has reached tool limit: this would add ${adding} tools and only ${remaining} remain`,
-  );
+  throw quotaExceeded(adding, remaining);
+}
+
+/**
+ * The enforcing check. `manager` must be inside a transaction, and the
+ * caller's Tool inserts must run on that same transaction after this
+ * returns: it takes the organization's tool-quota lock (held to commit),
+ * then counts. Pass the transaction the insert runs on, so rows it
+ * deleted first are not counted. Most callers want `withToolQuota`.
+ */
+export async function assertToolQuota(
+  manager: EntityManager,
+  organizationId: string,
+  adding = 1,
+): Promise<void> {
+  if (adding <= 0) return;
+  // An unlimited organization needs no lock: nothing to overshoot.
+  const maxTools = await maxToolsFor(manager, organizationId);
+  if (!maxTools) return;
+  await lockQuota(manager, 'tools', organizationId);
+  const current = await manager.getRepository(Tool).count({ where: { organizationId } });
+  const remaining = Math.max(0, maxTools - current);
+  if (adding <= remaining) return;
+  throw quotaExceeded(adding, remaining);
+}
+
+/**
+ * Check the quota for `adding` new tools and run `insert` in the same
+ * transaction, under the organization's tool-quota lock. Reuses
+ * `manager`'s transaction when it has one. `insert` must write through
+ * the `tx` it is given; a write on any other manager escapes the lock.
+ */
+export function withToolQuota<T>(
+  manager: EntityManager,
+  organizationId: string,
+  adding: number,
+  insert: (tx: EntityManager) => Promise<T>,
+): Promise<T> {
+  return inQuotaTransaction(manager, async (tx) => {
+    await assertToolQuota(tx, organizationId, adding);
+    return insert(tx);
+  });
 }
 
 /** Reject a single schema / server that would produce too many tools. */
