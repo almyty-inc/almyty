@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { useState } from 'react'
-import { act, screen, waitFor, fireEvent } from '@testing-library/react'
+import { screen, waitFor, fireEvent } from '@testing-library/react'
 
 import { render } from '../../../test/setup'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../dialog'

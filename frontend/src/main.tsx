@@ -5,7 +5,6 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 
 import App from './App.tsx'
-import { ErrorBoundary } from '@/components/ui/error-boundary'
 import { initAnalytics } from '@/lib/analytics'
 import { initSentry } from '@/lib/sentry'
 import { telemetryAllowedOn } from '@/lib/tenant-host'

@@ -46,7 +46,6 @@ import { useNotifications } from '@/store/app'
 import { formatDateTime } from '@/lib/utils'
 import { captureEvent } from '@/lib/analytics'
 import {
-  interfaceStatusVariant,
   interfaceTypeIcons,
   getDefaultInterfaceConfig,
   maskSecret,

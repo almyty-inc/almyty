@@ -234,7 +234,7 @@ export function GatewaysPage() {
             try {
               await navigator.clipboard.writeText(fullEndpoint)
               success('Copied!', 'Full endpoint URL copied to clipboard')
-            } catch (err) {
+            } catch {
               errorNotif('Failed to copy', 'Could not copy endpoint to clipboard')
             }
           },

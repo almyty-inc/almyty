@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { User, AuthResponse } from '@/types'
+import { User } from '@/types'
 import { authApi } from '@/lib/api'
 import { useOrganizationStore } from './organization'
 import {
@@ -221,7 +221,7 @@ export const useAuthStore = create<AuthState>()(
         let user: User
         try {
           user = await authApi.getProfile()
-        } catch (error) {
+        } catch {
           // Only the server's answer signs the user out.
           localStorage.removeItem('user')
           set({

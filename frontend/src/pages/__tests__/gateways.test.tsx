@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient } from '@tanstack/react-query'
 import { render, mockGateway, mockTool } from '../../test/setup'
 import { GatewaysPage } from '../gateways'
-import { gatewaysApi, toolsApi } from '../../lib/api'
+import { gatewaysApi } from '../../lib/api'
 
 // Mock the API module
 vi.mock('../../lib/api', () => ({

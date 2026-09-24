@@ -1,4 +1,4 @@
-import type { Gateway, Tool, LlmProvider, User, Organization, Api, ApiAuthType } from './index';
+import type { Gateway, Tool, LlmProvider, User, Organization, ApiAuthType } from './index';
 import type { RouteAttribution } from './models';
 import type { CollaborationParticipant } from '@/components/agents/builder/collaboration';
 // Usage Metrics Types

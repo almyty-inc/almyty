@@ -36,7 +36,7 @@ export function LoginPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<LoginFormData>({
     mode: 'onTouched',
     resolver: zodResolver(loginSchema),

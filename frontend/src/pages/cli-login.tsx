@@ -38,7 +38,6 @@ export function CliLoginPage() {
 
   const params = new URLSearchParams(location.search)
   const callback = params.get('callback') || ''
-  const success = params.get('success') || ''
   const state = params.get('state') || ''
 
   const [status, setStatus] = useState<'idle' | 'sending' | 'done' | 'error'>('idle')

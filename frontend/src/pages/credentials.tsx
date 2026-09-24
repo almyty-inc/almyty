@@ -70,7 +70,6 @@ export function CredentialsPage() {
 
 function SecretsTab() {
   const qc = useQueryClient(), notify = useNotifications()
-  const navigate = useNavigate()
   const { currentOrganization } = useOrganizationStore()
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)

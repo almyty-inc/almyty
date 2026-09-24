@@ -116,7 +116,6 @@ const running = () =>
 
 describe('ModelsCatalog', () => {
   let queryClient: QueryClient
-  const onAddModel = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()

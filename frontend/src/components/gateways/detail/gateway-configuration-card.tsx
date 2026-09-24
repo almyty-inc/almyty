@@ -44,7 +44,7 @@ export function GatewayConfigurationCard({
     try {
       await navigator.clipboard.writeText(fullEndpoint)
       onCopySuccess('Copied!', 'Endpoint copied to clipboard')
-    } catch (err) {
+    } catch {
       onCopyError('Failed to copy', 'Could not copy to clipboard')
     }
   }

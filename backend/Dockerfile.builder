@@ -15,7 +15,7 @@
 FROM node:26-bookworm-slim AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 COPY . .
 RUN npm run build:ee && node scripts/ee-di-smoke.js
 
@@ -53,7 +53,7 @@ RUN set -eux; \
 # an entry point, a terminal or binary build fails with nothing to build.
 RUN mkdir -p /opt/almyty \
  && cd /opt/almyty \
- && npm install --omit=dev --legacy-peer-deps @almyty/chat@1.2.0 \
+ && npm install --omit=dev @almyty/chat@1.2.0 \
  && test -f /opt/almyty/node_modules/@almyty/chat/dist/index.js
 ENV APP_BUILD_CLIENT_ENTRY=/opt/almyty/node_modules/@almyty/chat/dist/index.js
 
@@ -66,7 +66,7 @@ ENV APP_BUILD_DESKTOP_SHELL=/opt/almyty/desktop-shell
 
 # Production deps + the built app.
 COPY package*.json ./
-RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist-ee ./dist-ee
 
 # This process is the build worker: consume build jobs, and only those.

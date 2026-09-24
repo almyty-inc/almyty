@@ -30,7 +30,6 @@ import {
   VisibilityBadge,
   filterByTeamVisibility,
   type TeamFilterValue,
-  type Team,
 } from '@/components/ui/team-filter'
 
 interface Runner {

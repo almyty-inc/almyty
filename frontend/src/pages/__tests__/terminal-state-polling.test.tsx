@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { waitFor } from '@testing-library/react'
 
 import { render } from '../../test/setup'
 import { WorkspaceDetailPage } from '../workspace-detail'

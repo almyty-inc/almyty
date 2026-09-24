@@ -59,7 +59,7 @@ export function RegisterPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<RegisterFormData>({
     // Validate on every touch so the submit button can reflect
     // isValid as soon as the user has engaged with each field.

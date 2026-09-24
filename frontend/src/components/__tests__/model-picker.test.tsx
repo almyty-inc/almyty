@@ -74,8 +74,6 @@ function renderPicker(value: ModelSelection, props: Partial<React.ComponentProps
   return { ...utils, onChange }
 }
 
-const modelSelect = () => screen.getByLabelText('Model', { selector: 'select' })
-
 describe('ModelPicker', () => {
   beforeEach(() => {
     vi.clearAllMocks()
