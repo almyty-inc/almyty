@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import { Agent } from '../../entities/agent.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
+import { markdownFence, markdownInline, yamlScalar } from '../../common/security/untrusted-text';
 
 /**
  * Pure rendering for promoted skills: slug/escape helpers, a deterministic
@@ -18,9 +19,9 @@ export class PromotedSkillRenderer {
       .slice(0, 60) || 'skill';
   }
 
+  /** One line, quoted whenever plain YAML would be ambiguous: it can't end the front matter. */
   private escapeYaml(text: string): string {
-    const t = (text || '').replace(/\n+/g, ' ').trim();
-    return /[:#\[\]{}]/.test(t) ? `"${t.replace(/"/g, '\\"')}"` : t;
+    return yamlScalar(text, 1024);
   }
 
   /**
@@ -73,7 +74,7 @@ export class PromotedSkillRenderer {
     lines.push('---');
     lines.push('');
 
-    lines.push(`# ${agent?.name || slug}`);
+    lines.push(`# ${markdownInline(agent?.name || slug)}`);
     lines.push('');
     if (description) {
       lines.push(description);
@@ -84,19 +85,19 @@ export class PromotedSkillRenderer {
     lines.push('');
     lines.push(
       `Use this skill for tasks like the one this run solved successfully${
-        agent?.description ? `: ${agent.description}` : '.'
+        agent?.description ? `: ${markdownInline(agent.description, 1000)}` : '.'
       }`,
     );
     lines.push('');
 
+    // The task and the result are run data (the result can carry tool
+    // output), so they go in fences they can't close.
     const taskText =
       typeof run.input === 'string' ? run.input : run.input ? JSON.stringify(run.input) : '';
     if (taskText) {
       lines.push('## Example task');
       lines.push('');
-      lines.push('```');
-      lines.push(taskText.slice(0, 1000));
-      lines.push('```');
+      lines.push(markdownFence(taskText.slice(0, 1000)));
       lines.push('');
     }
 
@@ -110,9 +111,7 @@ export class PromotedSkillRenderer {
     if (output) {
       lines.push('## Reference result');
       lines.push('');
-      lines.push('```');
-      lines.push(output.slice(0, 2000));
-      lines.push('```');
+      lines.push(markdownFence(output.slice(0, 2000)));
       lines.push('');
     }
 
