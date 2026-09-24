@@ -15,7 +15,7 @@ import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { GatewaysStatsHelper } from './gateways-stats.helper';
 import { GatewayInitHelper } from './gateway-init.helper';
 import { canPublishHostedChat } from './channels/hosted-chat.config';
-import { keepServerOwnedCustomDomain } from './channels/custom-domain';
+import { stripCustomDomainFromConfiguration } from './channels/custom-domain';
 import { EE_ENTITLEMENTS } from '../licensing/license.constants';
 import { OrgLicenseResolver } from '../licensing/org-license.resolver';
 import { AccessPolicyService, normaliseVisibility, resourceOwnerId, type ResourceVisibility } from '../../common/authorization/access-policy.service';
@@ -554,7 +554,7 @@ export class GatewaysService {
       }
 
       // Never taken from the body: a domain is active only once verified.
-      keepServerOwnedCustomDomain(createGatewayDto.configuration, null);
+      stripCustomDomainFromConfiguration(createGatewayDto.configuration);
       // Validate configuration based on gateway type
       this.init.validateGatewayConfiguration(createGatewayDto.type, createGatewayDto.configuration);
 
@@ -706,9 +706,11 @@ export class GatewaysService {
       // untouched fields. Swap masked placeholders for the stored
       // values so they survive the update.
       restoreMaskedChannelSecrets(updateGatewayDto.configuration, gateway.configuration);
-      // The custom domain block is written only by its verification
-      // path; see keepServerOwnedCustomDomain.
-      keepServerOwnedCustomDomain(updateGatewayDto.configuration, gateway.configuration);
+      // The custom domain claim and the visitor OAuth provider have
+      // their own columns and their own endpoints; neither is written here.
+      stripCustomDomainFromConfiguration(updateGatewayDto.configuration);
+      delete (updateGatewayDto as any).customDomain;
+      delete (updateGatewayDto as any).visitorOAuth;
 
       // Update fields
       Object.assign(gateway, updateGatewayDto);

@@ -4,7 +4,41 @@ import { LlmProvider, LlmProviderType, LlmProviderStatus, LlmProviderConfig } fr
 import { MessageRole, MessageContent, ToolCall } from '../../../entities/message.entity';
 import { type ResourceVisibility } from '../../../common/authorization/access-policy.service';
 
-export type StreamChunk = { content?: string; toolCalls?: any[] };
+/**
+ * One piece of a streamed model reply.
+ *
+ * `content` is a text delta. `stepKind` says, once and only when the
+ * provider's stream makes it certain, whether this reply is a plain
+ * answer (`text`) or one that calls tools (`tool`). A stream that never
+ * reaches certainty never sends it, and consumers must treat the reply
+ * as undecided until its final response lands. The hosted chat page
+ * relies on this to stream the final answer without ever showing the
+ * narration of a step that goes on to call tools.
+ */
+export type StreamChunk = { content?: string; toolCalls?: any[]; stepKind?: StreamStepKind };
+export type StreamStepKind = 'text' | 'tool';
+
+/**
+ * The once-only `stepKind` signal for one streamed reply. The first
+ * decision wins and later calls are ignored, so a provider can report
+ * the earliest certain point and still call a fallback at stream end.
+ */
+export function stepKindSignal(onChunk: (chunk: StreamChunk) => void): {
+  decide: (kind: StreamStepKind) => void;
+  readonly decided: StreamStepKind | null;
+} {
+  let decided: StreamStepKind | null = null;
+  return {
+    decide(kind: StreamStepKind) {
+      if (decided) return;
+      decided = kind;
+      onChunk({ stepKind: kind });
+    },
+    get decided() {
+      return decided;
+    },
+  };
+}
 
 export interface CreateLlmProviderDto {
   name: string;
