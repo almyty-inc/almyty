@@ -471,6 +471,9 @@ export const gatewaysApi = {
   setCustomDomain: (id: string, hostname: string) => apiPut(`/gateways/${id}/custom-domain`, { hostname }),
   verifyCustomDomain: (id: string) => apiPost(`/gateways/${id}/custom-domain/verify`),
   removeCustomDomain: (id: string) => apiDel(`/gateways/${id}/custom-domain`),
+  getVisitorOAuth: (id: string) => apiGet(`/gateways/${id}/visitor-oauth`),
+  setVisitorOAuth: (id: string, body: Record<string, unknown>) => apiPut(`/gateways/${id}/visitor-oauth`, body),
+  removeVisitorOAuth: (id: string) => apiDel(`/gateways/${id}/visitor-oauth`),
 
   // Tool association endpoints
   getTools: (id: string) => apiGet(`/gateways/${id}/tools`),
