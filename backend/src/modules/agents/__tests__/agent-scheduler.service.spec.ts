@@ -9,6 +9,8 @@ import { AgentExecutionEngine } from '../agent-execution.engine';
 import { ModelNotFoundError } from '../../llm-providers/model-errors';
 
 import { Agent, AgentStatus } from '../../../entities/agent.entity';
+import { User } from '../../../entities/user.entity';
+import { fakeRepository } from '../../../test/fake-repository';
 
 describe('AgentSchedulerService', () => {
   let service: AgentSchedulerService;
@@ -16,8 +18,16 @@ describe('AgentSchedulerService', () => {
   let queue: jest.Mocked<any>;
   let agentsService: jest.Mocked<any>;
   let executionEngine: jest.Mocked<any>;
+  const member = (organizationId: string, over: Record<string, any> = {}) => ({ organizationId, role: 'member', isActive: true, ...over });
+  let users: ReturnType<typeof fakeRepository>;
 
   beforeEach(async () => {
+    users = fakeRepository<any>([
+      { id: '11111111-1111-4111-8111-000000000001', isActive: true, organizationMemberships: [member('org-1')] },
+      { id: '11111111-1111-4111-8111-000000000002', isActive: true, organizationMemberships: [member('org-2')] },
+      { id: '11111111-1111-4111-8111-000000000003', isActive: true, organizationMemberships: [member('org-1', { isActive: false })] },
+      { id: '11111111-1111-4111-8111-000000000004', isActive: false, organizationMemberships: [member('org-1')] },
+    ]);
     agentRepo = {
       findOne: jest.fn(),
       find: jest.fn().mockResolvedValue([]),
@@ -42,6 +52,7 @@ describe('AgentSchedulerService', () => {
         { provide: AgentExecutionEngine, useValue: executionEngine },
         { provide: getRepositoryToken(Agent), useValue: agentRepo },
         { provide: getQueueToken('agent-scheduler'), useValue: queue },
+        { provide: getRepositoryToken(User), useValue: users },
       ],
     }).compile();
 
@@ -77,7 +88,7 @@ describe('AgentSchedulerService', () => {
   // ── intervalMinutes validation ──────────────────────────────────────
 
   describe('scheduleAgent: intervalMinutes validation', () => {
-    const baseAgent = { id: 'a1', organizationId: 'org-1', settings: {}, createdBy: 'u1', status: AgentStatus.ACTIVE };
+    const baseAgent = { id: 'a1', organizationId: 'org-1', settings: {}, createdBy: '11111111-1111-4111-8111-000000000001', status: AgentStatus.ACTIVE };
 
     beforeEach(() => {
       agentsService.getAgent.mockResolvedValue(baseAgent);
@@ -130,7 +141,7 @@ describe('AgentSchedulerService', () => {
       });
 
       await service.handleScheduledExecution({
-        data: { agentId: 'a1', organizationId: 'org-1', userId: 'u1', input: {} },
+        data: { agentId: 'a1', organizationId: 'org-1', userId: '11111111-1111-4111-8111-000000000001', input: {} },
       } as any);
 
       expect(agentRepo.findOne).toHaveBeenCalledWith({
@@ -153,7 +164,7 @@ describe('AgentSchedulerService', () => {
       ]);
 
       await service.handleScheduledExecution({
-        data: { agentId: 'a1', organizationId: 'org-1', userId: 'u1', input: {} },
+        data: { agentId: 'a1', organizationId: 'org-1', userId: '11111111-1111-4111-8111-000000000001', input: {} },
       } as any);
 
       expect(executionEngine.execute).not.toHaveBeenCalled();
@@ -210,16 +221,67 @@ describe('AgentSchedulerService', () => {
   });
 
 
+  // ── handleScheduledExecution: who the run acts as ───────────────────
+
+  /**
+   * A scheduled run acts as the agent's creator. The id was frozen into
+   * the job when the schedule was set and used on every tick, with no
+   * look at whether that person was still in the organization -- so a
+   * removed member's schedule went on running as them.
+   */
+  describe('handleScheduledExecution: the owner has to still be a member', () => {
+    const scheduledBy = (createdBy: string | null) => ({
+      id: 'a1',
+      organizationId: 'org-1',
+      createdBy,
+      status: AgentStatus.ACTIVE,
+      settings: { schedule: { enabled: true, intervalMinutes: 10, input: {} } },
+    });
+    // The job still names u1, as a job enqueued before the removal would.
+    const job = { data: { agentId: 'a1', organizationId: 'org-1', userId: '11111111-1111-4111-8111-000000000001', input: {} } } as any;
+
+    it('runs as the creator while they are an active member', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduledBy('11111111-1111-4111-8111-000000000001'));
+      await service.handleScheduledExecution(job);
+      expect(executionEngine.execute).toHaveBeenCalledWith(expect.anything(), 'org-1', '11111111-1111-4111-8111-000000000001', expect.anything());
+    });
+
+    it.each([
+      ['removed from the organization', '11111111-1111-4111-8111-000000000002'],
+      ['membership deactivated', '11111111-1111-4111-8111-000000000003'],
+      ['account deactivated', '11111111-1111-4111-8111-000000000004'],
+      ['gone entirely', '11111111-1111-4111-8111-000000000005'],
+    ])('does not run, and pauses the schedule, when the creator was %s', async (_label, createdBy) => {
+      agentRepo.findOne.mockResolvedValue(scheduledBy(createdBy));
+      queue.getRepeatableJobs.mockResolvedValue([{ id: 'schedule-a1', key: 'k-a1' }]);
+
+      await service.handleScheduledExecution({ data: { ...job.data, userId: createdBy } } as any);
+
+      expect(executionEngine.execute).not.toHaveBeenCalled();
+      const saved = agentRepo.save.mock.calls[0][0];
+      expect(saved.settings.schedule.enabled).toBe(false);
+      expect(saved.settings.schedule.pausedReason).toMatchObject({ code: 'OWNER_NOT_MEMBER' });
+      expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('k-a1');
+    });
+
+    it('runs an agent with no recorded owner as nobody, not as a made-up user', async () => {
+      agentRepo.findOne.mockResolvedValue(scheduledBy(null));
+      await service.handleScheduledExecution(job);
+      expect(executionEngine.execute).toHaveBeenCalledWith(expect.anything(), 'org-1', null, expect.anything());
+    });
+  });
+
   // ── handleScheduledExecution: retired model ─────────────────────────
 
   describe('handleScheduledExecution: model the vendor no longer serves', () => {
     const scheduled = () => ({
+      createdBy: '11111111-1111-4111-8111-000000000001',
       id: 'a1',
       organizationId: 'org-1',
       status: AgentStatus.ACTIVE,
       settings: { schedule: { enabled: true, intervalMinutes: 10, input: {} } },
     });
-    const job = { data: { agentId: 'a1', organizationId: 'org-1', userId: 'u1', input: {} } } as any;
+    const job = { data: { agentId: 'a1', organizationId: 'org-1', userId: '11111111-1111-4111-8111-000000000001', input: {} } } as any;
 
     it('pauses the schedule, records why on the agent, and removes the repeatable job', async () => {
       agentRepo.findOne.mockResolvedValue(scheduled());
