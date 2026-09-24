@@ -14,7 +14,7 @@ import {
 } from '../types/mcp.types';
 
 import { Tool, ToolStatus } from '../../../entities/tool.entity';
-import { withoutOthersPrivate } from '../../../common/authorization/private-visibility';
+import { isOthersPrivate, withoutOthersPrivate } from '../../../common/authorization/private-visibility';
 import { Resource } from '../../../entities/resource.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { Gateway } from '../../../entities/gateway.entity';
@@ -40,7 +40,12 @@ export class McpContentHandler {
     private promotedSkillsService: PromotedSkillsService,
   ) {}
 
-  async handleResourcesList(params: any, organizationId: string, gatewayId?: string): Promise<any> {
+  async handleResourcesList(
+    params: any,
+    organizationId: string,
+    gatewayId?: string,
+    caller?: { id: string },
+  ): Promise<any> {
     let resources: Resource[];
 
     if (gatewayId) {
@@ -65,6 +70,10 @@ export class McpContentHandler {
         relations: { api: true },
       });
     }
+
+    // Resources of another member's private API are not listed (with no
+    // known caller, no private API's resources are).
+    resources = resources.filter((r) => !r.api || !isOthersPrivate(r.api, caller?.id ?? null));
 
     const mcpResources: McpResource[] = resources.map(resource => ({
       uri: `almyty://resources/${resource.id}`,
@@ -91,6 +100,7 @@ export class McpContentHandler {
   async handleResourceRead(
     params: McpReadResourceRequest,
     organizationId: string,
+    caller?: { id: string },
   ): Promise<McpReadResourceResult> {
     const match = params.uri.match(/almyty:\/\/resources\/(.+)/);
     if (!match) {
@@ -103,7 +113,9 @@ export class McpContentHandler {
       relations: { api: true },
     });
 
-    if (!resource) {
+    // A resource of another member's private API (any private API when
+    // the caller is unknown) reads like one that does not exist.
+    if (!resource || (resource.api && isOthersPrivate(resource.api, caller?.id ?? null))) {
       throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, 'Resource not found');
     }
 
@@ -204,7 +216,7 @@ export class McpContentHandler {
 
       const schema = tool.parameters as any;
       const props = schema?.properties || {};
-      const argsList = Object.entries(props).map(([name, prop]: [string, any]) => {
+      const argsList = Object.entries(props).map(([name]: [string, any]) => {
         const value = params.arguments?.[name] || `<${name}>`;
         return `- ${name}: ${value}`;
       }).join('\n');
@@ -247,7 +259,9 @@ export class McpContentHandler {
       }
     });
 
-    const promoted = await this.promotedSkillsService.listForServing(organizationId);
+    // Skills promoted from another member's private agent are theirs alone;
+    // with no known caller no private-derived skill is listed.
+    const promoted = await this.promotedSkillsService.listForServing(organizationId, caller?.id ?? null);
     return { skills: [...skills.filter(Boolean), ...promoted] };
   }
 
@@ -260,7 +274,9 @@ export class McpContentHandler {
     const { toolId, gatewayId, promotedSkillId } = params || {};
 
     if (promotedSkillId) {
-      const skill = await this.promotedSkillsService.get(promotedSkillId, organizationId);
+      // Another member's private-derived skill (and, with no known caller,
+      // any private-derived skill) throws the same not-found as a missing one.
+      const skill = await this.promotedSkillsService.get(promotedSkillId, organizationId, caller?.id ?? null);
       return { name: skill.slug, content: skill.content };
     }
 

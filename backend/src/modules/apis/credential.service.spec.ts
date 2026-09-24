@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { CredentialService, CreateCredentialDto, UpdateCredentialDto } from './credential.service';
 import { Credential, CredentialType } from '../../entities/credential.entity';
 import { EnvelopeCryptoService } from '../kms/envelope-crypto.service';
@@ -244,7 +244,7 @@ describe('CredentialService', () => {
       credentialRepository.save.mockResolvedValue({ ...cred, name: 'Updated Name' });
 
       const dto: UpdateCredentialDto = { name: 'Updated Name' };
-      const result = await service.updateCredential('cred-1', 'org-1', dto);
+      await service.updateCredential('cred-1', 'org-1', dto);
 
       expect(credentialRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'cred-1', organizationId: 'org-1' },
@@ -499,7 +499,7 @@ describe('CredentialService', () => {
         },
       });
 
-      const result = await service.refreshOAuthToken(cred as unknown as Credential);
+      await service.refreshOAuthToken(cred as unknown as Credential);
 
       expect(axios.post).toHaveBeenCalledWith(
         'https://auth.example.com/token',
@@ -633,7 +633,7 @@ describe('CredentialService', () => {
       });
 
       // Fire two concurrent refreshes
-      const [r1, r2] = await Promise.all([
+      await Promise.all([
         service.refreshOAuthToken(cred as unknown as Credential),
         service.refreshOAuthToken(cred as unknown as Credential),
       ]);

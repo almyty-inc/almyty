@@ -90,6 +90,11 @@ export enum AuditAction {
   CONNECTION_GRANT = 'connection_grant',
   CONNECTION_REVOKE_GRANT = 'connection_revoke_grant',
   CONNECTOR_CREATE = 'connector_create',
+
+  // Governance: a departed member's private resources handed to someone
+  // else, and a deleted team's resources widened to the organization.
+  OWNERSHIP_TRANSFER = 'ownership_transfer',
+  VISIBILITY_CHANGE = 'visibility_change',
 }
 
 
@@ -116,6 +121,7 @@ export enum AuditResource {
   CONNECTOR = 'connector',
 
   REFERRAL = 'referral',
+  RUNNER = 'runner',
 }
 
 @Entity('audit_logs')

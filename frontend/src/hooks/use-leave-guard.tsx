@@ -17,7 +17,7 @@
  * `allowPrefix` lets a multi-step flow move between its own step routes
  * (`/apis/new/schema` -> `/apis/new/review`) without asking.
  */
-import { useCallback, useContext, useEffect, useRef, type ReactNode } from 'react'
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import {
   UNSAFE_DataRouterContext,
   useBlocker,
@@ -81,7 +81,11 @@ export function useLeaveGuard(dirty: boolean, options: LeaveGuardOptions = {}): 
   const { confirm, dialog } = useConfirm()
   const bypass = useRef(false)
   const dirtyRef = useRef(dirty)
-  dirtyRef.current = dirty
+  // Synced after commit, not during render; every reader runs in an event
+  // or navigation handler, which always comes after the layout effect.
+  useLayoutEffect(() => {
+    dirtyRef.current = dirty
+  }, [dirty])
   const { allowPrefix } = options
 
   // A refresh or a closed tab cannot be intercepted in-app; the browser's

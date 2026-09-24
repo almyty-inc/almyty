@@ -1,16 +1,13 @@
 import { Inject, forwardRef } from '@nestjs/common';
 import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, DataSource } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import axios from 'axios';
-import { createHash } from 'crypto';
-import * as v8 from 'v8';
 
 import { Api, ApiType, ApiStatus } from '../../entities/api.entity';
-import { ApiSchema, SchemaFormat } from '../../entities/api-schema.entity';
+import { ApiSchema } from '../../entities/api-schema.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Resource } from '../../entities/resource.entity';
-import { Tool } from '../../entities/tool.entity';
 import { Organization } from '../../entities/organization.entity';
 
 import { SchemaParserService } from '../schema-parser/schema-parser.service';
@@ -18,10 +15,12 @@ import { ToolsService } from '../tools/tools.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ApisImportHelper } from './apis-import.helper';
 import { ApisToolGeneratorHelper } from './apis-tool-generator.helper';
-import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
+import { AuditResource } from '../../entities/audit-log.entity';
 import { validateUrl } from '../../common/security/url-validator';
+import { ssrfSafeHttpAgent, ssrfSafeHttpsAgent } from '../../common/security/ssrf-safe-agent';
 import { AccessPolicyService, ResourceVisibility } from '../../common/authorization/access-policy.service';
-import { assertNotOthersPrivate, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
+import { assertNotOthersPrivate, nameTaken, resolveVisibilityWrite } from '../../common/authorization/private-visibility';
+import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { Credential } from '../../entities/credential.entity';
 import { CredentialRefResolver } from '../credentials/credential-ref.resolver';
 import { hasInlineApiSecret, inlineApiAuthView, splitInlineApiAuth } from '../credentials/inline-api-auth.helper';
@@ -157,7 +156,7 @@ export class ApisService {
     });
 
     if (existingApi) {
-      throw new BadRequestException('API with this name already exists in the organization');
+      throw nameTaken('API', createApiData.name);
     }
 
     // The creator owns the API; 'private' means private to them.
@@ -307,7 +306,7 @@ export class ApisService {
     });
 
     if (existingApi) {
-      throw new BadRequestException('API with this name already exists in the organization');
+      throw nameTaken('API', data.name);
     }
 
     const api = this.apiRepository.create({
@@ -356,7 +355,7 @@ export class ApisService {
     if (!organization) throw new NotFoundException('Organization not found');
 
     const existingApi = await this.apiRepository.findOne({ where: { name: data.name, organizationId } });
-    if (existingApi) throw new BadRequestException('API with this name already exists');
+    if (existingApi) throw nameTaken('API', data.name);
 
     if (!data.dependencies || Object.keys(data.dependencies).length === 0) {
       throw new BadRequestException('At least one npm package is required');
@@ -404,6 +403,15 @@ export class ApisService {
       }
     }
 
+    // A rename is held to the same organization-wide uniqueness as create
+    // (see nameTaken): the API's name seeds its generated tool names.
+    if (typeof updateApiData.name === 'string' && updateApiData.name !== api.name) {
+      const clash = await this.apiRepository.findOne({
+        where: { name: updateApiData.name, organizationId },
+        select: { id: true },
+      });
+      if (clash && clash.id !== api.id) throw nameTaken('API', updateApiData.name);
+    }
     // Re-validate team scoping if it's being changed.
     if (userId && ((updateApiData as any).visibility !== undefined || (updateApiData as any).teamId !== undefined)) {
       const updateAnyEarly = updateApiData as any;
@@ -426,6 +434,24 @@ export class ApisService {
         })
       : null;
     const becomesPrivate = scope?.visibility === 'private' && api.visibility !== 'private';
+    // Going private takes the API's generated tools private too (below),
+    // which would detach them from the shared agents and gateways that use
+    // them. Refuse and say which, as making one of those tools private does.
+    if (becomesPrivate && userId && scope?.ownerId) {
+      const goingPrivate: Array<{ id: string }> = await this.dataSource.query(
+        `SELECT id FROM tools
+          WHERE "organizationId" = $1 AND status <> 'deleted'
+            AND ("apiId" = $2 OR "operationId" IN (SELECT id FROM operations WHERE "apiId" = $2))
+            AND ("createdBy" IS NULL OR "createdBy" = 'system' OR "createdBy" = $3::varchar)`,
+        [organizationId, api.id, scope.ownerId],
+      );
+      await assertNoSharedDependents(
+        this.dataSource.manager,
+        this.accessPolicy,
+        { noun: 'API', organizationId, targets: goingPrivate.map((t) => ({ kind: 'tool' as const, id: t.id })) },
+        userId,
+      );
+    }
 
     const { visibility: _v, teamId: _t, ownerUserId: _o, ...rest } = updateAny;
     Object.assign(api, rest);
@@ -632,6 +658,10 @@ export class ApisService {
         maxContentLength: 256 * 1024,
         maxBodyLength: 256 * 1024,
         maxRedirects: 0,
+        // The string check above does not see what the name resolves to;
+        // the pinned agents refuse a private address at connect time.
+        httpAgent: ssrfSafeHttpAgent,
+        httpsAgent: ssrfSafeHttpsAgent,
       };
 
       // Add authentication if configured. The secret comes from the

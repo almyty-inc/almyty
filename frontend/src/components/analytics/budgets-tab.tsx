@@ -34,7 +34,7 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
-import { agentsApi, budgetsApi } from '@/lib/api'
+import { budgetsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { formatDateTime } from '@/lib/utils'
 import { useNotifications } from '@/store/app'
@@ -43,7 +43,6 @@ import {
   BEHAVIOR_LABELS,
   PERIOD_LABELS,
   formatBudgetCents,
-  type BudgetPayload,
   type SpendAlert,
   type SpendBudget,
   type SpendBudgetPeriod,

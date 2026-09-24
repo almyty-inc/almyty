@@ -19,7 +19,6 @@ describe('McpOAuthService', () => {
   let oauthClientRepository: Repository<OAuthClient>;
   let oauthCodeRepository: Repository<OAuthAuthorizationCode>;
   let oauthTokenRepository: Repository<OAuthAccessToken>;
-  let gatewayRepository: Repository<Gateway>;
 
   const mockGateway = {
     id: 'gateway-1',
@@ -96,7 +95,6 @@ describe('McpOAuthService', () => {
     oauthClientRepository = module.get(getRepositoryToken(OAuthClient));
     oauthCodeRepository = module.get(getRepositoryToken(OAuthAuthorizationCode));
     oauthTokenRepository = module.get(getRepositoryToken(OAuthAccessToken));
-    gatewayRepository = module.get(getRepositoryToken(Gateway));
 
     // Default: the client lookup now runs at the top of exchangeCode /
     // refreshToken / revokeToken so every test flow hits it. Return the
@@ -961,6 +959,20 @@ describe('McpOAuthService', () => {
       expect(result.expires_in).toBe(3600);
     });
 
+    // The rotation twin of "rejects a second concurrent exchange that lost
+    // the race". The default `update` double answers `{ affected: 1 }`, so
+    // without this the refusal was pinned nowhere in this file;
+    // `mcp-oauth-single-use.spec.ts` proves it against a table.
+    it('rejects a second concurrent rotation that lost the race', async () => {
+      jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue({ ...mockRefreshToken } as any);
+      (oauthTokenRepository.update as jest.Mock).mockResolvedValueOnce({ affected: 0 });
+
+      await expect(
+        service.refreshToken(rawRefreshToken, 'mcp_client_abc123', 'gateway-1'),
+      ).rejects.toThrow('has been revoked');
+      expect(oauthTokenRepository.save).not.toHaveBeenCalled();
+    });
+
     it('should reject revoked refresh tokens', async () => {
       const revokedToken = { ...mockRefreshToken, isRevoked: true };
       jest.spyOn(oauthTokenRepository, 'findOne').mockResolvedValue(revokedToken as any);
@@ -1188,7 +1200,7 @@ describe('McpOAuthService', () => {
       // clientId is part of the where clause, so a token belonging to a
       // different client simply isn't found and the handler returns 200
       // per RFC 7009.
-      const token = { ...mockAccessTokenForRevoke, clientId: 'mcp_client_other' };
+      const _token = { ...mockAccessTokenForRevoke, clientId: 'mcp_client_other' };
       // Since the where clause now scopes to clientId+gatewayId, the
       // service.findOne call wouldn't actually match this token in real
       // DB. Simulate that by returning null.

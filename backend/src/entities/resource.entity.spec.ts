@@ -1,4 +1,4 @@
-import { Resource, ResourceType } from './resource.entity';
+import { Resource } from './resource.entity';
 
 describe('Resource Entity', () => {
   describe('getRequiredProperties', () => {

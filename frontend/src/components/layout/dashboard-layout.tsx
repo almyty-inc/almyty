@@ -1,9 +1,8 @@
-import React, { Suspense, useEffect, useState } from 'react'
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import React, { Suspense, useEffect } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   LayoutDashboard,
-  Building,
   Zap,
   Globe,
   Wrench,
@@ -16,16 +15,12 @@ import {
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
-  Router,
-  Activity,
   Bot,
-  MessageSquare,
   Sun,
   Moon,
   Monitor,
   Key,
   Database,
-  Store,
   Cpu,
   FolderGit2,
   Package,

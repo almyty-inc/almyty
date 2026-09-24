@@ -11,6 +11,8 @@ import { Team } from '../../../entities/team.entity'
 import { UserTeam } from '../../../entities/user-team.entity'
 import { MailService } from '../../mail/mail.service'
 import { GatewaysService } from '../../gateways/gateways.service'
+import { AuditLogService } from '../../audit-log/audit-log.service'
+import { ResourceHandoverHelper } from '../resource-handover.helper'
 
 // Regression for #101. Orgs created in the migration gap (or via
 // code paths that skipped joinDefaultTeam) had no default team.
@@ -37,6 +39,8 @@ describe('OrganizationsService.getTeams self-heal (#101)', () => {
         { provide: getRepositoryToken(UserTeam), useValue: { find: jest.fn() } },
         { provide: MailService, useValue: { send: jest.fn(), sendInvitation: jest.fn() } },
         { provide: GatewaysService, useValue: { ensureSystemGateway: jest.fn() } },
+        { provide: ResourceHandoverHelper, useValue: {} },
+        { provide: AuditLogService, useValue: {} },
       ],
     }).compile()
 

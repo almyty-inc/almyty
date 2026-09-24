@@ -8,11 +8,13 @@
  * sail past the up-front string check.
  *
  * These agents install a custom `lookup` that resolves the hostname and
- * then re-validates every returned address through `validateUrl` (which
- * carries the full private/loopback/link-local/metadata/ULA/mapped-IPv6
- * ban list). If any resolved address is banned, the connection is
- * refused before a socket is opened. This mirrors what the sandbox
- * net-guard does for tool code, but for the host-side executors.
+ * then classifies every returned address with `classifyAddress` from
+ * `ip-classification.ts` — the same function `validateUrl` and the sandbox
+ * net guard use, so an IPv6 answer that embeds a banned IPv4 address
+ * (mapped, NAT64, 6to4, ...) is refused exactly as the IPv4 would be. If
+ * any resolved address is banned, the connection is refused before a
+ * socket is opened. This mirrors what the sandbox net-guard does for tool
+ * code, but for the host-side executors.
  *
  * Use by attaching to an axios request: `{ httpAgent, httpsAgent }`.
  * `maxRedirects: 0` is still required on the request itself — the agent
@@ -21,7 +23,7 @@
 import { Agent as HttpAgent } from 'http';
 import { Agent as HttpsAgent } from 'https';
 import * as dns from 'dns';
-import { validateUrl } from './url-validator';
+import { classifyAddress, isBlockedHostname } from './ip-classification';
 
 type LookupCallback = (
   err: NodeJS.ErrnoException | null,
@@ -29,11 +31,17 @@ type LookupCallback = (
   family?: number,
 ) => void;
 
-export function isAddressBanned(address: string, family?: number): boolean {
-  // Reuse the full IP ban list in validateUrl by handing it a URL whose
-  // host is the resolved IP. IPv6 must be bracketed.
-  const host = family === 6 ? `[${address}]` : address;
-  return !validateUrl(`http://${host}`).valid;
+/**
+ * Is a resolved address one the server must not connect to? Anything that
+ * is not a public IP literal is refused: a resolver answer that does not
+ * even parse as an address is not something to hand to connect().
+ */
+export function isAddressBanned(address: string, _family?: number): boolean {
+  return classifyAddress(address).kind !== 'public';
+}
+
+function ssrfBlocked(message: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(message), { code: 'ERR_SSRF_BLOCKED' });
 }
 
 /**
@@ -51,6 +59,12 @@ export function pinnedLookup(
     typeof options === 'function' ? (options as LookupCallback) : (callback as LookupCallback);
   const opts = typeof options === 'function' || typeof options === 'number' ? {} : options;
 
+  // Metadata and cluster names are refused before DNS is asked at all.
+  if (isBlockedHostname(hostname)) {
+    process.nextTick(() => cb(ssrfBlocked(`SSRF blocked: ${hostname} is a blocked hostname`), '', undefined));
+    return;
+  }
+
   (dns.lookup as any)(hostname, opts, (err: NodeJS.ErrnoException | null, address: any, family?: number) => {
     if (err) return cb(err, address, family);
 
@@ -61,10 +75,7 @@ export function pinnedLookup(
     for (const a of addrs) {
       if (isAddressBanned(a.address, a.family)) {
         return cb(
-          Object.assign(
-            new Error(`SSRF blocked: ${hostname} resolved to disallowed address ${a.address}`),
-            { code: 'ERR_SSRF_BLOCKED' },
-          ),
+          ssrfBlocked(`SSRF blocked: ${hostname} resolved to disallowed address ${a.address}`),
           address,
           family,
         );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Search, Brain } from 'lucide-react'
 
@@ -10,16 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
 import { useNewParamRedirect } from '@/hooks/use-new-param-redirect'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   Select,
   SelectContent,
@@ -53,7 +44,6 @@ export function LlmProvidersPage() {
   const navigate = useNavigate()
   // ?new=1 (command palette, onboarding, bookmarks) lands on the add page.
   useNewParamRedirect('/llm-providers/new')
-  const [providerToDelete, setProviderToDelete] = useState<LlmProvider | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -94,6 +84,21 @@ export function LlmProvidersPage() {
       notifications.error('Error', getApiErrorMessage(error, 'Failed to delete provider'))
     }
   })
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  const handleDeleteProvider = async (provider: LlmProvider) => {
+    const ok = await confirm({
+      title: 'Delete this provider?',
+      description: (
+        <>
+          Are you sure you want to delete &quot;{provider.name}&quot;? This action cannot be undone.
+          All configuration and usage history will be permanently removed.
+        </>
+      ),
+      confirmLabel: 'Delete provider',
+      destructive: true,
+    })
+    if (ok) deleteProviderMutation.mutate(provider.id)
+  }
 
   const toggleProviderStatusMutation = useMutation({
     mutationFn: async ({ providerId, status }: { providerId: string; status: string }) => {
@@ -123,7 +128,7 @@ export function LlmProvidersPage() {
 
   const columns = buildProviderColumns({
     navigate,
-    setProviderToDelete,
+    onDeleteProvider: handleDeleteProvider,
     toggleProviderStatusMutation,
     teamLookup,
   })
@@ -226,32 +231,7 @@ export function LlmProvidersPage() {
         </Card>
       )}
 
-      {/* Delete Confirmation AlertDialog */}
-      <AlertDialog open={!!providerToDelete} onOpenChange={() => setProviderToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete provider?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete &quot;{providerToDelete?.name}&quot;? This action cannot be undone.
-              All configuration and usage history will be permanently removed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (providerToDelete) {
-                  deleteProviderMutation.mutate(providerToDelete.id)
-                  setProviderToDelete(null)
-                }
-              }}
-              variant="destructive"
-            >
-              Delete provider
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
     </div>
   )
 }

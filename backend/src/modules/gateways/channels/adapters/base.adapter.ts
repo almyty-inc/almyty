@@ -117,7 +117,7 @@ export abstract class BaseAdapter {
    * reachable gateway with no secret set accepted forged payloads from
    * anyone and ran the agent on them.
    */
-  async verifyWebhook(payload: any, headers: Record<string, string>, config: Record<string, any>, rawBody?: string): Promise<boolean> {
+  async verifyWebhook(_payload: any, _headers: Record<string, string>, _config: Record<string, any>, _rawBody?: string): Promise<boolean> {
     return this.inboundIsUnauthenticatedByDesign;
   }
 
@@ -129,7 +129,7 @@ export abstract class BaseAdapter {
    * reply. Returning undefined (the default) keeps the gateway's own
    * single-workspace configuration.
    */
-  extractTenantId(rawPayload: any): string | undefined {
+  extractTenantId(_rawPayload: any): string | undefined {
     return undefined;
   }
 
@@ -148,7 +148,7 @@ export abstract class BaseAdapter {
    * differs between two deliveries of the same message is worse than no
    * key, because it looks like a guarantee and is not one.
    */
-  deliveryId(rawPayload: any, headers?: Record<string, string>): string | undefined {
+  deliveryId(_rawPayload: any, _headers?: Record<string, string>): string | undefined {
     return undefined;
   }
 

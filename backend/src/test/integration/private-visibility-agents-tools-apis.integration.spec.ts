@@ -5,7 +5,7 @@ import { versionsConfig } from 'typeorm-versions';
 import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
-import { Api, ApiStatus, ApiType } from '../../entities/api.entity';
+import { Api, ApiType } from '../../entities/api.entity';
 import { AuditLog } from '../../entities/audit-log.entity';
 import { Conversation } from '../../entities/conversation.entity';
 import { Gateway, GatewayType } from '../../entities/gateway.entity';

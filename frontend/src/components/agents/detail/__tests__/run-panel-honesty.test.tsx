@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { screen, fireEvent, waitFor } from '@testing-library/react'
 
 import { render } from '../../../../test/setup'
-import { InvokeDialog } from '../invoke-dialog'
+import { RunPanel } from '../run-panel'
 import { agentsApi } from '@/lib/api'
 
 vi.mock('@/lib/api', () => ({ agentsApi: { invoke: vi.fn() } }))
@@ -20,7 +20,7 @@ vi.mock('@/store/app', () => ({ useNotifications: () => notify }))
  * "Result", so a failed run looked like a successful one whose answer
  * happened to be a wall of JSON.
  */
-describe('the invoke dialog reports what actually happened', () => {
+describe('the run panel reports what actually happened', () => {
   const agent = { id: 'a1', name: 'Support bot' } as any
 
   beforeEach(() => vi.clearAllMocks())
@@ -33,7 +33,7 @@ describe('the invoke dialog reports what actually happened', () => {
       error: 'Role "principal" could not be filled: no models are registered.',
     })
 
-    render(<InvokeDialog agent={agent} open onOpenChange={() => {}} />)
+    render(<RunPanel agent={agent} onClose={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /run agent/i }))
 
     await waitFor(() => expect(notify.error).toHaveBeenCalled())
@@ -50,7 +50,7 @@ describe('the invoke dialog reports what actually happened', () => {
       error: 'No models are registered for this organization.',
     })
 
-    render(<InvokeDialog agent={agent} open onOpenChange={() => {}} />)
+    render(<RunPanel agent={agent} onClose={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /run agent/i }))
 
     expect(await screen.findByTestId('invoke-failed')).toHaveTextContent('No models are registered')
@@ -64,7 +64,7 @@ describe('the invoke dialog reports what actually happened', () => {
       output: 'Hello, I can help with that.',
     })
 
-    render(<InvokeDialog agent={agent} open onOpenChange={() => {}} />)
+    render(<RunPanel agent={agent} onClose={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /run agent/i }))
 
     await waitFor(() => expect(notify.success).toHaveBeenCalled())
@@ -76,7 +76,7 @@ describe('the invoke dialog reports what actually happened', () => {
   it('says so when a run completes having produced nothing', async () => {
     ;(agentsApi.invoke as any).mockResolvedValue({ id: 'run-1', status: 'completed', output: null })
 
-    render(<InvokeDialog agent={agent} open onOpenChange={() => {}} />)
+    render(<RunPanel agent={agent} onClose={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /run agent/i }))
 
     expect(await screen.findByTestId('invoke-no-output')).toBeInTheDocument()

@@ -5,6 +5,7 @@ import { AgentManagementController } from '../agent-management.controller';
 
 describe('AgentTechDocHelper', () => {
   const ORG = 'org-1';
+  const VIEWER = 'user-1';
 
   const providers = [
     { id: 'p-anthropic', name: 'Anthropic prod', type: 'anthropic' },
@@ -156,7 +157,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('assembles every Annex-IV section', async () => {
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
 
       expect(doc.documentType).toBe('agent-technical-documentation');
       expect(doc.generalDescription).toBeDefined();
@@ -170,7 +171,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('fills generalDescription from the agent and organization', async () => {
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
 
       expect(doc.generalDescription.name).toBe('Ops Copilot');
       expect(doc.generalDescription.purpose).toBe('Triage and resolve ops tickets autonomously.');
@@ -180,7 +181,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('lists the agent-config model plus verify checkers with resolved providers', async () => {
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
 
       const sources = doc.modelAndProviders.models.map((m) => m.source);
       expect(sources).toContain('agent config');
@@ -204,7 +205,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('lists resolved tools with API source and flags unresolved tool ids', async () => {
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
 
       expect(doc.capabilitiesAndTools.tools).toEqual([
         {
@@ -220,7 +221,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('exposes built-in tools including request_approval, memory and agent-creation tools', async () => {
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
 
       const names = doc.capabilitiesAndTools.builtInTools.map((t) => t.name);
       expect(names).toEqual(
@@ -232,7 +233,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('reports human oversight: approval availability, history counts, constraints, verification', async () => {
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
 
       expect(doc.humanOversight.approvalGate.requestApprovalToolAvailable).toBe(true);
       expect(doc.humanOversight.approvalHistory).toEqual({
@@ -257,7 +258,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('reports data governance: memory, files, webhook, schedule and heartbeat inputs', async () => {
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
 
       expect(doc.dataGovernance.memory).toEqual({ enabled: true, autoSave: true, scopes: ['workspace'] });
       expect(doc.dataGovernance.fileAttachments.count).toBe(3);
@@ -267,7 +268,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('reports logging and traceability including run counts and versioning note', async () => {
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
 
       expect(doc.loggingAndTraceability.executions).toMatchObject({
         total: 10,
@@ -285,7 +286,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('returns the last 10 version snapshots, newest first', async () => {
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
 
       expect(doc.changeHistory).toHaveLength(10);
       expect(doc.changeHistory[0].version).toBe('1.0.11');
@@ -304,7 +305,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('extracts models from pipeline llm_call nodes and verify-node checkers', async () => {
-      const doc = await helper.build('agent-2', ORG);
+      const doc = await helper.build('agent-2', ORG, VIEWER);
 
       const llmEntry = doc.modelAndProviders.models.find((m) => m.source === 'pipeline llm_call node llm1');
       expect(llmEntry).toMatchObject({
@@ -318,7 +319,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('collects tools from tool_call and llm_call nodes with node-level references', async () => {
-      const doc = await helper.build('agent-2', ORG);
+      const doc = await helper.build('agent-2', ORG, VIEWER);
 
       expect(doc.capabilitiesAndTools.tools).toHaveLength(1);
       expect(doc.capabilitiesAndTools.tools[0].id).toBe('t-weather');
@@ -329,7 +330,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('summarizes the pipeline and marks built-ins/approval gate as unavailable', async () => {
-      const doc = await helper.build('agent-2', ORG);
+      const doc = await helper.build('agent-2', ORG, VIEWER);
 
       expect(doc.capabilitiesAndTools.builtInTools).toEqual([]);
       expect(doc.humanOversight.approvalGate.requestApprovalToolAvailable).toBe(false);
@@ -343,7 +344,7 @@ describe('AgentTechDocHelper', () => {
     });
 
     it('handles empty change history', async () => {
-      const doc = await helper.build('agent-2', ORG);
+      const doc = await helper.build('agent-2', ORG, VIEWER);
       expect(doc.changeHistory).toEqual([]);
     });
   });
@@ -351,14 +352,63 @@ describe('AgentTechDocHelper', () => {
   describe('build — missing agent', () => {
     it('propagates NotFoundException from the agent lookup', async () => {
       agentsService.getAgent.mockRejectedValue(new NotFoundException('Agent not found: nope'));
-      await expect(helper.build('nope', ORG)).rejects.toThrow(NotFoundException);
+      await expect(helper.build('nope', ORG, VIEWER)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('build — another member\'s private provider and tool', () => {
+    it('does not name them, and looks the agent up as the viewer', async () => {
+      agentsService.getAgent.mockResolvedValue(autonomousAgent());
+      providerRepo.find.mockResolvedValue([
+        { id: 'p-anthropic', name: 'Anthropic prod', type: 'anthropic', visibility: 'private', ownerUserId: 'someone-else' },
+        { id: 'p-openai', name: 'OpenAI prod', type: 'openai', visibility: 'org', ownerUserId: null },
+      ]);
+      toolRepo.find.mockResolvedValue([
+        { ...tools[0], visibility: 'private', createdBy: 'someone-else' },
+      ]);
+
+      const doc = await helper.build('agent-1', ORG, VIEWER);
+
+      expect(agentsService.getAgent).toHaveBeenCalledWith('agent-1', ORG, { id: VIEWER });
+      const anthropic = doc.modelAndProviders.models.find((m) => m.providerId === 'p-anthropic');
+      expect(anthropic?.providerName).toBeNull();
+      expect(doc.modelAndProviders.providers.map((p) => p.id)).toEqual(['p-openai']);
+      expect(doc.capabilitiesAndTools.tools).toEqual([]);
+      expect(doc.capabilitiesAndTools.unresolvedToolIds).toEqual(expect.arrayContaining(['t-weather', 't-deleted']));
+      expect(JSON.stringify(doc)).not.toContain('Anthropic prod');
+      expect(JSON.stringify(doc)).not.toContain('get_weather');
+    });
+
+    it('names the viewer\'s own private provider and tool', async () => {
+      agentsService.getAgent.mockResolvedValue(autonomousAgent());
+      providerRepo.find.mockResolvedValue([
+        { id: 'p-anthropic', name: 'Anthropic prod', type: 'anthropic', visibility: 'private', ownerUserId: VIEWER },
+      ]);
+      toolRepo.find.mockResolvedValue([{ ...tools[0], visibility: 'private', createdBy: VIEWER }]);
+
+      const doc = await helper.build('agent-1', ORG, VIEWER);
+
+      expect(doc.modelAndProviders.providers.map((p) => p.name)).toEqual(['Anthropic prod']);
+      expect(doc.capabilitiesAndTools.tools.map((t) => t.name)).toEqual(['get_weather']);
+    });
+
+    it('names nothing private when there is no viewer', async () => {
+      agentsService.getAgent.mockResolvedValue(autonomousAgent());
+      providerRepo.find.mockResolvedValue([
+        { id: 'p-anthropic', name: 'Anthropic prod', type: 'anthropic', visibility: 'private', ownerUserId: VIEWER },
+      ]);
+
+      const doc = await helper.build('agent-1', ORG, null);
+
+      expect(agentsService.getAgent).toHaveBeenCalledWith('agent-1', ORG, null);
+      expect(doc.modelAndProviders.providers).toEqual([]);
     });
   });
 
   describe('renderMarkdown', () => {
     it('renders every section heading and key facts', async () => {
       agentsService.getAgent.mockResolvedValue(autonomousAgent());
-      const doc = await helper.build('agent-1', ORG);
+      const doc = await helper.build('agent-1', ORG, VIEWER);
       const md = helper.renderMarkdown(doc);
 
       expect(md).toContain('# Technical Documentation: Ops Copilot');
@@ -400,7 +450,7 @@ describe('AgentManagementController — GET :id/technical-documentation', () => 
 
     const result = await controller.getTechnicalDocumentation('agent-1', undefined as any, mockRequest, res as any);
 
-    expect(techDocHelper.build).toHaveBeenCalledWith('agent-1', 'org-1');
+    expect(techDocHelper.build).toHaveBeenCalledWith('agent-1', 'org-1', 'user-1');
     expect(result).toEqual({ success: true, data: doc });
     expect(res.setHeader).not.toHaveBeenCalled();
   });

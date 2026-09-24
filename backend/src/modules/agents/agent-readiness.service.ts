@@ -9,6 +9,7 @@ import { AgentValidationHelper } from './agent-validation.helper';
 import { StrategyPipelineResolver } from './strategies/strategy-pipeline.resolver';
 import { StrategyCompileError } from './strategies/strategy-compiler';
 import { ModelRouterService } from '../model-catalog/routing/model-router.service';
+import { providerUsableBy } from '../llm-providers/private-provider';
 
 /** Read-only configuration preflight. Never invokes a model or orchestrator. */
 @Injectable()
@@ -91,11 +92,14 @@ export class AgentReadinessService {
           }
         }
       } else if (config.providerId) {
+        // Another member's private provider reads as missing: the run
+        // would refuse it for this user, and saying anything else would
+        // tell them it exists. No known user cannot own one (fail closed).
         const provider = await this.providers.findOne({
           where: { id: config.providerId, organizationId: agent.organizationId },
-          select: { id: true, status: true },
+          select: { id: true, status: true, visibility: true, ownerUserId: true },
         });
-        if (!provider || provider.status !== LlmProviderStatus.ACTIVE) {
+        if (!provider || !providerUsableBy(provider, userId) || provider.status !== LlmProviderStatus.ACTIVE) {
           throw new BadRequestException(`Not ready: ${label} needs an available provider in this organization. Edit that node's model configuration.`);
         }
       } else {

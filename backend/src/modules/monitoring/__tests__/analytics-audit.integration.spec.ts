@@ -17,7 +17,6 @@ import { Conversation } from '../../../entities/conversation.entity';
 import { Message } from '../../../entities/message.entity';
 import { AuditLog, AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AgentRun } from '../../../entities/agent-run.entity';
-import { MoreThanOrEqual } from 'typeorm';
 
 // ---------------------------------------------------------------------------
 // Helpers to build chainable query builder mocks

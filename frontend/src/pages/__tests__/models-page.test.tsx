@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { fireEvent, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { QueryClient } from '@tanstack/react-query'
 
 import { render } from '../../test/setup'

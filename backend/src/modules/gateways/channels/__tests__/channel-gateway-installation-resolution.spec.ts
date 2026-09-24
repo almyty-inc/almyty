@@ -28,6 +28,7 @@ import { installFetchMock, parseSentJson } from '../adapters/__tests__/test-help
 describe('ChannelGatewayService installation resolution', () => {
   let fetchMock: ReturnType<typeof installFetchMock>;
   let runRepository: any;
+  let runRows: any[];
   let eventRepository: any;
   let gatewayRepository: any;
   let agentRuntimeService: any;
@@ -103,14 +104,46 @@ describe('ChannelGatewayService installation resolution', () => {
     emitter = new EventEmitter();
 
     const run: any = { id: 'run-1', metadata: {}, output: 'agent says hi' };
+    // The thread-continuation lookup, evaluated against `runRows` rather
+    // than answered with a canned `[]`, which could not tell the `agentId`
+    // or status predicate from its absence. Unmodelled SQL throws.
+    runRows = [];
+    const RUN_CLAUSES: Record<string, (row: any, p: any) => boolean> = {
+      'run.agentId = :agentId': (row, p) => row.agentId === p.agentId,
+      'run.status IN (:...activeStatuses)': (row, p) => p.activeStatuses.includes(row.status),
+      "run.metadata->>'threadId' = :threadId": (row, p) => row.metadata?.threadId === p.threadId,
+    };
     runRepository = {
-      createQueryBuilder: jest.fn(() => ({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue([]),
-      })),
+      createQueryBuilder: jest.fn(() => {
+        const filters: Array<(row: any) => boolean> = [];
+        let take = Infinity;
+        const add = (clause: string, params: any) => {
+          const test = RUN_CLAUSES[clause];
+          if (!test) throw new Error(`unmodelled run clause: ${clause}`);
+          filters.push((row) => test(row, params));
+          return qb;
+        };
+        const qb: any = {
+          where: add,
+          andWhere: add,
+          orderBy: (column: string, direction: string) => {
+            if (column !== 'run.createdAt' || direction !== 'DESC') {
+              throw new Error(`unmodelled run order: ${column} ${direction}`);
+            }
+            return qb;
+          },
+          limit: (n: number) => {
+            take = n;
+            return qb;
+          },
+          getMany: async () =>
+            runRows
+              .filter((row) => filters.every((f) => f(row)))
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .slice(0, take),
+        };
+        return qb;
+      }),
       save: jest.fn(async (r: any) => r),
       findOne: jest.fn(async () => run),
     };
@@ -235,6 +268,106 @@ describe('ChannelGatewayService installation resolution', () => {
       expect(agentRuntimeService.startRun).toHaveBeenCalled();
     });
   });
+
+  describe('thread continuation', () => {
+    const openRun = (over: Record<string, any> = {}) => ({
+      id: 'run-thread',
+      agentId: 'agent-1',
+      status: 'running',
+      createdAt: 1,
+      metadata: { threadId: '111.222' },
+      output: 'agent says hi',
+      ...over,
+    });
+    const deliver = (service: ChannelGatewayService) =>
+      service.handleInboundMessage(makeGateway(), slackEvent('T777'), signedHeaders(slackEvent('T777')));
+
+    it('continues the run already open on this thread', async () => {
+      runRows.push(openRun());
+
+      await deliver(buildService(false));
+
+      expect(agentRuntimeService.sendInput).toHaveBeenCalledWith('run-thread', 'org-1', 'hi there');
+      expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+    });
+
+    // The thread id is the platform's, not ours: nothing stops the same
+    // value appearing against another tenant's agent. `agentId` is what
+    // keeps this message out of their conversation.
+    it('will not continue a run that belongs to a different agent', async () => {
+      runRows.push(openRun({ id: 'run-other-tenant', agentId: 'agent-99' }));
+
+      await deliver(buildService(false));
+
+      expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+      expect(agentRuntimeService.startRun).toHaveBeenCalled();
+    });
+
+    it('will not continue a run that has already finished', async () => {
+      runRows.push(openRun({ status: 'completed' }));
+
+      await deliver(buildService(false));
+
+      expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+      expect(agentRuntimeService.startRun).toHaveBeenCalled();
+    });
+
+    it('will not continue a run open on another thread', async () => {
+      runRows.push(openRun({ metadata: { threadId: '999.000' } }));
+
+      await deliver(buildService(false));
+
+      expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+      expect(agentRuntimeService.startRun).toHaveBeenCalled();
+    });
+
+    // The widget's thread id is whatever the anonymous visitor sends. With
+    // the `agentId` predicate gone, presenting another agent's thread id
+    // appended the visitor's text to that run and streamed its replies back.
+    describe('from the chat widget', () => {
+      const widgetGateway = () => {
+        const gateway = makeGateway();
+        gateway.type = GatewayType.CHAT_WIDGET;
+        return gateway;
+      };
+
+      it('continues the visitor\'s own open run', async () => {
+        runRows.push(openRun());
+
+        await buildService(false).handleWidgetMessage(widgetGateway(), {
+          message: 'hi there',
+          threadId: '111.222',
+        });
+
+        expect(agentRuntimeService.sendInput).toHaveBeenCalledWith('run-thread', 'org-1', 'hi there');
+        expect(agentRuntimeService.startRun).not.toHaveBeenCalled();
+      });
+
+      it('will not continue another agent\'s run whose thread id the visitor presents', async () => {
+        runRows.push(openRun({ id: 'run-other-tenant', agentId: 'agent-99' }));
+
+        await buildService(false).handleWidgetMessage(widgetGateway(), {
+          message: 'hi there',
+          threadId: '111.222',
+        });
+
+        expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+        expect(agentRuntimeService.startRun).toHaveBeenCalled();
+      });
+
+      it('will not continue a finished run', async () => {
+        runRows.push(openRun({ status: 'completed' }));
+
+        await buildService(false).handleWidgetMessage(widgetGateway(), {
+          message: 'hi there',
+          threadId: '111.222',
+        });
+
+        expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+      });
+    });
+  });
+
 
   describe('tenant id extraction', () => {
     it('slack adapter reads team_id (top level), event.team, and team.id', () => {

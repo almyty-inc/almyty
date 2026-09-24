@@ -22,7 +22,7 @@ export class ApiKeyAuthGuard extends AuthGuard('api-key') {
     return super.canActivate(context);
   }
 
-  handleRequest(err: any, user: any, info: any) {
+  handleRequest(err: any, user: any, _info: any) {
     if (err || !user) {
       throw err || new Error('Invalid API key');
     }

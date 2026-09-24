@@ -3,6 +3,7 @@ import { ModelDeployment } from '../../../../entities/model-deployment.entity';
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../../../entities/llm-provider.entity';
 import { AuditAction } from '../../../../entities/audit-log.entity';
 import { ModelRouterService } from '../model-router.service';
+import { fakeRepository } from '../../../../test/fake-repository';
 
 function card(over: Partial<Model>): Model {
   return Object.assign(new Model(), {
@@ -40,6 +41,26 @@ describe('ModelRouterService', () => {
   let svc: ModelRouterService;
   let modelsUpdate: jest.Mock;
 
+  /**
+   * Reads go through the shared truthful table over whatever `cards` and
+   * `providers` hold at call time, so every `where` is evaluated. The
+   * doubles these replace answered every card for any organization and
+   * looked providers up by id alone, so the org predicate in `plan()`,
+   * `providerFor()` and `providerForModelId()` could each be deleted with
+   * the module's suites green.
+   */
+  const cardTable = () => fakeRepository<Model>({ seed: cards, make: () => new Model() });
+  const modelsRepo = (update?: jest.Mock) => ({
+    find: jest.fn(async (o: any) => cardTable().find(o)),
+    findOne: jest.fn(async (o: any) => cardTable().findOne(o)),
+    update,
+  });
+  const providersRepo = () => ({
+    findOne: jest.fn(async (o: any) =>
+      fakeRepository<LlmProvider>({ seed: Object.values(providers), make: () => new LlmProvider() }).findOne(o),
+    ),
+  });
+
   beforeEach(() => {
     cards = [];
     providers = {};
@@ -47,11 +68,34 @@ describe('ModelRouterService', () => {
     audit = { log: jest.fn().mockResolvedValue(null) };
     modelsUpdate = jest.fn().mockResolvedValue({ affected: 1 });
     svc = new ModelRouterService(
-      { find: jest.fn(async () => cards), update: modelsUpdate } as any,
-      { findOne: jest.fn(async ({ where }: any) => providers[where.id] ?? null) } as any,
+      modelsRepo(modelsUpdate) as any,
+      providersRepo() as any,
       { findOne: jest.fn(async ({ where }: any) => deployments[where.id] ?? null) } as any,
       audit as any,
     );
+  });
+
+  it('plans only this organization’s catalog, through this organization’s providers', async () => {
+    providers.p1 = provider();
+    providers.p2 = provider({ id: 'p2', organizationId: 'other', name: 'theirs' });
+    cards = [
+      card({ id: 'mine', providerId: 'p1' }),
+      card({ id: 'theirs', organizationId: 'other', providerId: 'p2' }),
+      // Our card pointing at another tenant's provider row: not callable.
+      card({ id: 'borrowed', providerId: 'p2' }),
+    ];
+
+    const plan = await svc.plan('org', {});
+    expect(plan.candidates.map((c) => c.modelId)).toEqual(['mine']);
+    expect(plan.rejected).toEqual([{ modelId: 'borrowed', reason: 'no callable provider' }]);
+  });
+
+  it('resolves a named model only from this organization’s catalog', async () => {
+    providers.p2 = provider({ id: 'p2', organizationId: 'other' });
+    cards = [card({ id: 'theirs', organizationId: 'other', providerId: 'p2' })];
+
+    await expect(svc.providerForModelId('org', 'theirs')).rejects.toThrow(/not in this organization/);
+    await expect(svc.providerForModelId('other', 'theirs')).resolves.toMatchObject({ provider: { id: 'p2' } });
   });
 
   it('resolves stored providers and drops cards whose provider is unhealthy', async () => {
@@ -61,7 +105,7 @@ describe('ModelRouterService', () => {
     const plan = await svc.plan('org', {});
     expect(plan.candidates.map((c) => c.modelId)).toEqual(['a']);
     expect(plan.rejected).toEqual([{ modelId: 'b', reason: 'provider sick is unhealthy' }]);
-    expect(plan.candidates[0].provider).toBe(providers.p1);
+    expect(plan.candidates[0].provider).toMatchObject({ id: 'p1', name: 'stored' });
   });
 
   it('an endpoint card is called through its stored provider row, never a transient one', async () => {
@@ -69,7 +113,7 @@ describe('ModelRouterService', () => {
     cards = [card({ id: 'e', providerId: 'p9', endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' }, vendorModelId: 'my-llama' })];
     const plan = await svc.plan('org', {});
     expect(plan.candidates).toHaveLength(1);
-    expect(plan.candidates[0].provider).toBe(providers.p9);
+    expect(plan.candidates[0].provider).toMatchObject({ id: 'p9', name: 'deployed llama' });
     expect(plan.candidates[0].provider.id).not.toMatch(/^endpoint:/);
   });
 
@@ -216,8 +260,8 @@ describe('ModelRouterService', () => {
     cards = [card({ id: 'e', providerId: 'p9', endpointRef: { url: 'https://ep.example/v1', deploymentId: 'd1' } })];
     const credentialRefs = { tryResolve: jest.fn().mockResolvedValue({ credential: { id: 'cred-1' }, config: { apiKey: 'vault-fresh' } }) };
     const withRefs = new ModelRouterService(
-      { find: jest.fn(async () => cards) } as any,
-      { findOne: jest.fn(async ({ where }: any) => providers[where.id] ?? null) } as any,
+      modelsRepo() as any,
+      providersRepo() as any,
       { findOne: jest.fn(async ({ where }: any) => deployments[where.id] ?? null) } as any,
       audit as any,
       credentialRefs as any,

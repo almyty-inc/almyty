@@ -11,7 +11,6 @@ import * as Redis from 'ioredis';
 
 import { UsageMetric, MetricType, MetricStatus } from '../../entities/usage-metric.entity';
 import * as path from 'path';
-import * as fs from 'fs/promises';
 import * as crypto from 'crypto';
 
 import {
@@ -28,7 +27,7 @@ import {
 import { PluginLoaderHelper, isSafeHandlerName } from './plugin-loader.helper';
 import { PluginStoreHelper } from './plugin-store.helper';
 import * as pluginUtils from './plugin-utils';
-import { evaluateConditions, runWithTimeout, validatePlugin } from './plugin-utils';
+import { runWithTimeout, validatePlugin } from './plugin-utils';
 
 @Injectable()
 export class PluginManagerService extends EventEmitter implements OnModuleInit, OnModuleDestroy {
@@ -567,7 +566,7 @@ export class PluginManagerService extends EventEmitter implements OnModuleInit, 
     this.registry.plugins.delete(pluginId);
     
     // Remove from hook registry
-    for (const [hookType, pluginIds] of this.registry.byHook.entries()) {
+    for (const pluginIds of this.registry.byHook.values()) {
       const index = pluginIds.indexOf(pluginId);
       if (index > -1) {
         pluginIds.splice(index, 1);

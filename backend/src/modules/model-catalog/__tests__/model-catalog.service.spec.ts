@@ -2,23 +2,19 @@ import { Model } from '../../../entities/model.entity';
 import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../../entities/llm-provider.entity';
 import { AuditAction } from '../../../entities/audit-log.entity';
 import { ModelCatalogService } from '../model-catalog.service';
+import { fakeRepository } from '../../../test/fake-repository';
 
+/**
+ * The shared truthful table, with `rows` read as the table holds it now.
+ * The double this replaces stored and handed out the caller's own object
+ * and was only ever seeded with one organization, so a dropped save or
+ * organization predicate in this service changed nothing it could see.
+ */
 function memRepo<T extends { id?: string }>(seed: T[] = [], make: () => T) {
-  const rows = [...seed];
-  const matches = (row: any, where: any) => Object.entries(where).every(([k, v]) => row[k] === v);
-  return {
-    rows,
-    create: jest.fn((partial: any) => Object.assign(make(), partial)),
-    save: jest.fn(async (row: any) => {
-      if (!row.id) row.id = 'id-' + (rows.length + 1);
-      const i = rows.findIndex((r) => r.id === row.id);
-      if (i >= 0) rows[i] = row; else rows.push(row);
-      return row;
-    }),
-    find: jest.fn(async ({ where }: any = {}) => rows.filter((r) => !where || matches(r, where))),
-    findOne: jest.fn(async ({ where }: any) => rows.find((r) => matches(r, where)) ?? null),
-    remove: jest.fn(async (row: any) => { const i = rows.indexOf(row); if (i >= 0) rows.splice(i, 1); return row; }),
-  };
+  const repo = fakeRepository<T>({ seed, make, idPrefix: 'id' });
+  const current = repo.rows;
+  Object.defineProperty(repo, 'rows', { get: () => current() });
+  return repo as unknown as Omit<typeof repo, 'rows'> & { readonly rows: T[] };
 }
 
 describe('ModelCatalogService', () => {
@@ -43,7 +39,10 @@ describe('ModelCatalogService', () => {
     priceFeed = { lookup: jest.fn().mockReturnValue(null) };
     svc = new ModelCatalogService(
       models as any,
-      { findOne: jest.fn().mockResolvedValue(null) } as any,
+      fakeRepository([
+        { id: 'v-mine', organizationId: 'org', name: 'mine' },
+        { id: 'v-theirs', organizationId: 'org2', name: 'theirs' },
+      ]) as any,
       providers as any,
       router as any,
       runner as any,
@@ -139,9 +138,10 @@ describe('ModelCatalogService', () => {
       const third = await svc.syncFromProvider('org', 'p1');
       expect(third.reinstated.map((c) => c.vendorModelId)).toEqual(['y']);
       expect(third.created).toEqual([]);
-      expect(y.status).toBe('active');
-      expect(y.metadata?.retiredAt).toBeUndefined();
-      expect(y.metadata?.reinstatedAt).toEqual(expect.any(String));
+      const back = models.row(y.id)!;
+      expect(back.status).toBe('active');
+      expect(back.metadata?.retiredAt).toBeUndefined();
+      expect(back.metadata?.reinstatedAt).toEqual(expect.any(String));
     });
 
     it('sync leaves a card an admin set inactive alone and retires nothing from an empty list', async () => {
@@ -156,12 +156,12 @@ describe('ModelCatalogService', () => {
       fetch().mockResolvedValueOnce([{ id: 'x' }, { id: 'y' }]);
       const again = await svc.syncFromProvider('org', 'p1');
       expect(again.reinstated).toEqual([]);
-      expect(y.status).toBe('inactive');
+      expect(models.row(y.id)?.status).toBe('inactive');
     });
 
     it('syncAll walks every active provider and reports a provider that fails to list', async () => {
-      providers.rows.push(Object.assign(new LlmProvider(), { id: 'p2', organizationId: 'org', name: 'Broken', type: LlmProviderType.MISTRAL, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {} }));
-      providers.rows.push(Object.assign(new LlmProvider(), { id: 'p3', organizationId: 'org', name: 'Off', type: LlmProviderType.OPENAI, status: LlmProviderStatus.INACTIVE, isHealthy: true, configuration: {} }));
+      providers.seed(Object.assign(new LlmProvider(), { id: 'p2', organizationId: 'org', name: 'Broken', type: LlmProviderType.MISTRAL, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {} }));
+      providers.seed(Object.assign(new LlmProvider(), { id: 'p3', organizationId: 'org', name: 'Off', type: LlmProviderType.OPENAI, status: LlmProviderStatus.INACTIVE, isHealthy: true, configuration: {} }));
       fetch().mockImplementation(async (p: LlmProvider) => {
         if (p.id === 'p2') throw new Error('listing failed');
         return [{ id: 'gpt-x' }];
@@ -190,7 +190,7 @@ describe('ModelCatalogService', () => {
     });
 
     it('backfill syncs only active providers that have no cards yet', async () => {
-      providers.rows.push(Object.assign(new LlmProvider(), { id: 'p2', organizationId: 'org2', name: 'Other', type: LlmProviderType.OPENAI, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {} }));
+      providers.seed(Object.assign(new LlmProvider(), { id: 'p2', organizationId: 'org2', name: 'Other', type: LlmProviderType.OPENAI, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {} }));
       fetch().mockResolvedValueOnce([{ id: 'a' }]);
       await svc.syncFromProvider('org', 'p1');
       fetch().mockClear();
@@ -245,6 +245,39 @@ describe('ModelCatalogService', () => {
       expect(models.rows).toHaveLength(2);
       expect(models.rows.every((m) => m.status === 'inactive' && m.metadata?.retiredReason === 'provider deleted' && !m.isSelectable())).toBe(true);
       expect(await svc.retireProviderCards('org', 'p1')).toBe(0);
+    });
+  });
+
+  describe('organization scoping', () => {
+    const theirProvider = Object.assign(new LlmProvider(), {
+      id: 'p-theirs', organizationId: 'org2', name: 'Theirs', type: LlmProviderType.OPENAI, status: LlmProviderStatus.ACTIVE, isHealthy: true, configuration: {},
+    });
+
+    it('another organization’s card is not listed, read, changed or removed', async () => {
+      const theirs = models.seed(Object.assign(new Model(), { id: 'm-theirs', organizationId: 'org2', name: 'theirs', vendorModelId: 'x', status: 'active' }));
+
+      expect(await svc.list('org')).toEqual([]);
+      await expect(svc.get('org', theirs.id)).rejects.toMatchObject({ status: 404 });
+      await expect(svc.update('org', theirs.id, { status: 'inactive' })).rejects.toMatchObject({ status: 404 });
+      await expect(svc.remove('org', theirs.id)).rejects.toMatchObject({ status: 404 });
+      expect(models.row(theirs.id)).toMatchObject({ organizationId: 'org2', status: 'active' });
+    });
+
+    it('a card cannot be registered against another organization’s provider or version', async () => {
+      providers.seed(theirProvider);
+      await expect(svc.register('org', { name: 'a', vendorModelId: 'm', providerId: 'p-theirs' })).rejects.toMatchObject({ status: 404 });
+      await expect(svc.register('org', { name: 'a', vendorModelId: 'm', providerId: 'p1', modelVersionId: 'v-theirs' })).rejects.toMatchObject({ status: 404 });
+      expect(models.rows).toHaveLength(0);
+
+      const card = await svc.register('org', { name: 'a', vendorModelId: 'm', providerId: 'p1', modelVersionId: 'v-mine' });
+      await expect(svc.update('org', card.id, { modelVersionId: 'v-theirs' })).rejects.toMatchObject({ status: 404 });
+      expect(models.row(card.id)?.modelVersionId).toBe('v-mine');
+    });
+
+    it('update writes the change to the table', async () => {
+      const card = await svc.register('org', { name: 'a', vendorModelId: 'm', providerId: 'p1' });
+      await svc.update('org', card.id, { name: 'renamed', region: 'eu' });
+      expect(models.row(card.id)).toMatchObject({ name: 'renamed', region: 'eu' });
     });
   });
 });

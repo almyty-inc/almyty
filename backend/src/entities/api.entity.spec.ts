@@ -1,4 +1,4 @@
-import { Api, ApiType, ApiStatus } from './api.entity';
+import { Api, ApiStatus } from './api.entity';
 import { ApiSchema } from './api-schema.entity';
 import { Operation } from './operation.entity';
 

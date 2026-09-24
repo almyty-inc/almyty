@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { createHash } from 'crypto';
 import * as v8 from 'v8';
 
@@ -17,6 +17,12 @@ import { Operation } from '../../entities/operation.entity';
 import { Tool } from '../../entities/tool.entity';
 
 import { ToolsService } from '../tools/tools.service';
+import {
+  ToolQuotaExceededException,
+  assertWithinPerSchemaCap,
+  capGeneratedDescription,
+  precheckToolQuota,
+} from '../tools/tool-quota';
 import { ApisService } from './apis.service';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 
@@ -86,6 +92,26 @@ export class ApisToolGeneratorHelper {
       return true;
     });
 
+    // Quota, checked for the whole batch before any row is written (see
+    // tools/tool-quota.ts for the reject-not-truncate policy). Only
+    // operations whose tool name is not already taken add a row; the
+    // rest update in place. This batch check is unlocked; each insert
+    // re-checks under the organization's lock in createFromOperation.
+    assertWithinPerSchemaCap(activeOperations.length, `API '${api.name}'`);
+    const plannedNames = [
+      ...new Set(activeOperations.map((op) => this.generateSemanticToolName(api.name, op))),
+    ];
+    const alreadyThere = plannedNames.length
+      ? await this.apiRepository.manager
+          .getRepository(Tool)
+          .count({ where: { organizationId: api.organizationId, name: In(plannedNames) } })
+      : 0;
+    await precheckToolQuota(
+      this.apiRepository.manager,
+      api.organizationId,
+      plannedNames.length - alreadyThere,
+    );
+
     // Tool generation batch size — 20 in-flight saves per batch. The
     // old default of 5 was conservative for a 10-connection pool, but
     // the pool was bumped (see config/database.config.ts) and the real
@@ -102,7 +128,9 @@ export class ApisToolGeneratorHelper {
       const batchResults = await Promise.all(
         batch.map(async (operation) => {
           const toolName = this.generateSemanticToolName(api.name, operation);
-          const toolDescription = operation.description || `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation`;
+          const toolDescription = capGeneratedDescription(
+            operation.description || `${(operation.method || 'GET').toUpperCase()} ${operation.endpoint || ''} operation`,
+          );
 
           const existingTool = await this.toolsService.findByName(toolName, api.organizationId);
 
@@ -138,6 +166,10 @@ export class ApisToolGeneratorHelper {
               });
             }
           } catch (error) {
+            // The batch precheck passed but a concurrent writer took the
+            // slots: createFromOperation's locked per-row check refused.
+            // Surface it rather than reporting a quietly short import.
+            if (error instanceof ToolQuotaExceededException) throw error;
             errorCount++;
             this.logger.error(`[TOOL-GEN] Failed: ${operation.name}: ${error.message}`);
             return null;

@@ -1,12 +1,13 @@
-import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { ToolStatus } from '../../entities/tool.entity';
-import { Tool, ToolType, ToolExecutionMethod } from '../../entities/tool.entity';
+import { Tool, ToolType } from '../../entities/tool.entity';
 import { Operation } from '../../entities/operation.entity';
 import { ApiSchema } from '../../entities/api-schema.entity';
 import { ToolsService } from './tools.service';
+import { capGeneratedDescription, precheckToolQuota, withToolQuota } from './tool-quota';
 
 @Injectable()
 export class ToolsOperationHelper {
@@ -31,6 +32,10 @@ export class ToolsOperationHelper {
       organizationId: string;
     }
   ): Promise<Tool> {
+    // Fail fast before loading and translating the operation; the
+    // enforcing check runs with the insert below.
+    await precheckToolQuota(this.toolRepository.manager, options.organizationId);
+
     // Load the operation with its API
     const operationWithApi = await this.operationRepository.findOne({
       where: { id: operation.id },
@@ -58,7 +63,7 @@ export class ToolsOperationHelper {
     // Create the tool
     const tool = this.toolRepository.create({
       name: options.name,
-      description: options.description,
+      description: capGeneratedDescription(options.description),
       type: this.mapOperationToToolType(operationWithApi),
       parameters: toolParameters,
       configuration: toolConfiguration,
@@ -89,7 +94,15 @@ export class ToolsOperationHelper {
       },
     });
 
-    const savedTool = await this.toolRepository.save(tool);
+    // Per-row enforcement, under the organization's tool-quota lock. The
+    // bulk caller (ApisToolGeneratorHelper) has already refused a batch
+    // that would not fit; this is what holds when two batches race.
+    const savedTool = await withToolQuota(
+      this.toolRepository.manager,
+      options.organizationId,
+      1,
+      (tx) => tx.getRepository(Tool).save(tool),
+    );
 
     // Create initial version
     await this.tools.createToolVersion(savedTool, 'Auto-generated from API operation', 'system');
@@ -131,7 +144,7 @@ export class ToolsOperationHelper {
     const toolParameters = await this.generateToolParametersFromOperation(operationWithApi);
 
     // Update tool fields
-    tool.description = options.description;
+    tool.description = capGeneratedDescription(options.description);
     tool.parameters = toolParameters;
     tool.metadata = {
       ...tool.metadata,

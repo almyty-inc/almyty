@@ -6,16 +6,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { DataTable, createActionsColumn } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { QueryError } from '@/components/ui/query-error'
@@ -80,11 +70,9 @@ export function CredentialsPage() {
 
 function SecretsTab() {
   const qc = useQueryClient(), notify = useNotifications()
-  const navigate = useNavigate()
   const { currentOrganization } = useOrganizationStore()
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
-  const [credentialToDelete, setCredentialToDelete] = useState<VaultCredential | null>(null)
 
   const { data: credentialsRaw, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['credentials'], queryFn: () => credentialsApi.getAll(),
@@ -93,11 +81,26 @@ function SecretsTab() {
   const visibleCredentials = filterByTeamVisibility(credentials as any[], teamFilter)
   const deleteMut = useMutation({
     mutationFn: (id: string) => credentialsApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); setCredentialToDelete(null); notify.success('Credential deleted', 'The secret has been removed from the vault.') },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['credentials'] }); notify.success('Credential deleted', 'The secret has been removed from the vault.') },
     // A failed delete used to be silent: the dialog closed and the row
     // stayed, which reads as a UI glitch rather than a rejected request.
-    onError: (err) => { setCredentialToDelete(null); notify.error('Failed to delete credential', getApiErrorMessage(err, 'Please try again.')) },
+    onError: (err) => { notify.error('Failed to delete credential', getApiErrorMessage(err, 'Please try again.')) },
   })
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  const handleDelete = async (credential: VaultCredential) => {
+    const ok = await confirm({
+      title: 'Delete this credential?',
+      description: (
+        <>
+          This will permanently delete "{credential.name}" from the vault.
+          Anything using it will stop authenticating. This action cannot be undone.
+        </>
+      ),
+      confirmLabel: 'Delete credential',
+      destructive: true,
+    })
+    if (ok) deleteMut.mutate(credential.id)
+  }
 
   const columns = [
     { accessorKey: 'name', header: 'Name', cell: ({ row }: any) => (
@@ -141,7 +144,7 @@ function SecretsTab() {
           {/* View + Edit had no onClick handlers and silently no-op'd;
               drop them until a real detail/edit dialog exists. Delete
               is the only actionable item right now. */}
-          <DropdownMenuItem className="text-destructive" onClick={() => setCredentialToDelete(row.original)}><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
+          <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(row.original)}><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     )}),
@@ -182,33 +185,7 @@ function SecretsTab() {
         click away from Copy, so it goes through a confirm that names the
         credential rather than firing the mutation straight from the menu.
       */}
-      <AlertDialog
-        open={credentialToDelete !== null}
-        onOpenChange={(open) => { if (!open) setCredentialToDelete(null) }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete credential?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete "{credentialToDelete?.name}" from the vault.
-              Anything using it will stop authenticating. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (credentialToDelete) {
-                  deleteMut.mutate(credentialToDelete.id)
-                }
-              }}
-              variant="destructive"
-            >
-              Delete credential
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
     </>
   )
 }

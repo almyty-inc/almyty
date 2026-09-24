@@ -1,5 +1,4 @@
 import { ApiType, ApiStatus } from '../../../entities/api.entity';
-import { SchemaFormat } from '../../../entities/api-schema.entity';
 
 export interface CreateApiData {
   name: string;

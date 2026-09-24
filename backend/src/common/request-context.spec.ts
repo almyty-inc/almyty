@@ -15,11 +15,6 @@ import {
  * no path to the tool execution it made. Nothing minted one before.
  */
 describe('request correlation', () => {
-  const runMiddleware = (req: any, res: any) =>
-    new Promise<void>((resolve) => {
-      requestContextMiddleware(req, res, () => resolve());
-    });
-
   const request = (headers: Record<string, any> = {}) => ({ headers });
   const response = () => {
     const headers: Record<string, string> = {};

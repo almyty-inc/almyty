@@ -1,4 +1,4 @@
-import { JsonSchema, JsonSchemaType } from './json-schema.entity';
+import { JsonSchema } from './json-schema.entity';
 
 describe('JsonSchema Entity', () => {
   describe('validate', () => {

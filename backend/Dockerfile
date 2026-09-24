@@ -19,7 +19,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-RUN npm ci --omit=dev --legacy-peer-deps
+RUN npm ci --omit=dev
 
 # Development image
 FROM base AS development
@@ -27,7 +27,7 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 # Copy source code
 COPY . .
@@ -42,7 +42,7 @@ WORKDIR /app
 
 # Copy package files and install all dependencies
 COPY package*.json ./
-RUN npm ci --legacy-peer-deps
+RUN npm ci
 
 # Copy source code and build the EE assembly (one-image open-core model:
 # the image contains the EE modules, every EE route is entitlement-gated at
@@ -60,7 +60,7 @@ RUN adduser --system --uid 1001 nestjs
 
 # Copy package files and install production dependencies
 COPY package*.json ./
-RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy built application (EE layout: dist-ee/src + dist-ee/ee)
 COPY --from=builder --chown=nestjs:nodejs /app/dist-ee ./dist-ee
@@ -97,7 +97,7 @@ RUN set -eux; \
 # @almyty/chat the monorepo currently ships.
 RUN mkdir -p /opt/almyty \
  && cd /opt/almyty \
- && npm install --omit=dev --legacy-peer-deps @almyty/chat@1.2.0 \
+ && npm install --omit=dev @almyty/chat@1.2.0 \
  && test -f /opt/almyty/node_modules/@almyty/chat/dist/index.js \
  && chown -R nestjs:nodejs /opt/almyty
 # -----------------------------------------------------------------------------

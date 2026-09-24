@@ -13,6 +13,7 @@ import { LlmProvider } from '../../entities/llm-provider.entity';
 import { AgentApp } from '../../entities/agent-app.entity';
 import { AppDistribution, DistributionStatus } from '../../entities/agent-app-distribution.entity';
 import { Runner } from '../../entities/runner.entity';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
 
 /**
  * A chainable query-builder stub. Every builder method returns `this`;
@@ -49,6 +50,7 @@ describe('OnboardingService', () => {
   let appRepo: any;
   let distributionRepo: any;
   let runnerRepo: any;
+  let accessPolicy: any;
 
   beforeEach(async () => {
     providerRepo = { count: jest.fn().mockResolvedValue(0) };
@@ -61,6 +63,10 @@ describe('OnboardingService', () => {
     appRepo = { findOne: jest.fn().mockResolvedValue(null) };
     distributionRepo = { count: jest.fn().mockResolvedValue(0) };
     runnerRepo = { count: jest.fn().mockResolvedValue(0) };
+    accessPolicy = {
+      visibleWhere: jest.fn(async (_user: any, org: string, base: any) => [{ ...base, organizationId: org }]),
+      applyListFilter: jest.fn(async () => ({ bypass: false, teamIds: [] })),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -75,6 +81,7 @@ describe('OnboardingService', () => {
         { provide: getRepositoryToken(AgentApp), useValue: appRepo },
         { provide: getRepositoryToken(AppDistribution), useValue: distributionRepo },
         { provide: getRepositoryToken(Runner), useValue: runnerRepo },
+        { provide: AccessPolicyService, useValue: accessPolicy },
       ],
     }).compile();
 
@@ -91,8 +98,15 @@ describe('OnboardingService', () => {
     requestLogRepo.createQueryBuilder.mockReturnValue(makeQb({ count: 0, one: null }));
   }
 
-  /** The `where` object of the one call a count/findOne repo received. */
-  const whereOf = (fn: jest.Mock) => fn.mock.calls[0][0].where;
+  /**
+   * The `where` of the one call a count/findOne repo received. Visible-set
+   * counts pass one where per visibility tier; the stub returns a single
+   * tier, the base where plus the org.
+   */
+  const whereOf = (fn: jest.Mock) => {
+    const where = fn.mock.calls[0][0].where;
+    return Array.isArray(where) ? where[0] : where;
+  };
 
   describe('getState — each step false on an empty org', () => {
     it('reports every step false and no links', async () => {
@@ -423,6 +437,77 @@ describe('OnboardingService', () => {
       const ordered = qbs.filter((qb) => qb.orderBy.mock.calls.length > 0);
       expect(ordered).toHaveLength(1);
       expect(ordered[0].limit).toHaveBeenCalledWith(1);
+    });
+  });
+
+  /**
+   * A step counts what the caller can see. Another member's private
+   * provider, API, tool, gateway or agent must not tick a step or become
+   * the guide's link, for org admins too: the tick would tell them it
+   * exists. The visible set itself is AccessPolicyService's (and is
+   * exercised against Postgres in onboarding-private.integration.spec).
+   */
+  describe('counts the caller\'s visible set', () => {
+    it('asks the access policy for every private-capable count, with the right owner column', async () => {
+      stubEmpty();
+      await service.getState(ORG, USER);
+
+      const calls = accessPolicy.visibleWhere.mock.calls.map((c: any[]) => ({
+        user: c[0],
+        org: c[1],
+        owner: c[3]?.ownerColumn,
+      }));
+      expect(calls).toEqual(
+        expect.arrayContaining([
+          { user: { id: USER }, org: ORG, owner: 'ownerUserId' }, // provider, api
+          { user: { id: USER }, org: ORG, owner: 'createdBy' }, // tools, agents
+        ]),
+      );
+      // provider + api + tools + first agent + agent run
+      expect(accessPolicy.visibleWhere).toHaveBeenCalledTimes(5);
+      for (const repoCall of [providerRepo.count, apiRepo.count, toolRepo.count, agentRepo.count, agentRepo.findOne]) {
+        expect(Array.isArray(repoCall.mock.calls[0][0].where)).toBe(true);
+      }
+    });
+
+    it('filters both gateway reads through the list filter', async () => {
+      stubEmpty();
+      const log = { timestamp: new Date('2026-02-02T00:00:00Z') };
+      requestLogRepo.createQueryBuilder.mockReturnValue(makeQb({ count: 0, one: log }));
+      const gwQbs: any[] = [];
+      gatewayRepo.createQueryBuilder.mockImplementation(() => {
+        const qb = makeQb({ count: 1, one: null });
+        gwQbs.push(qb);
+        return qb;
+      });
+
+      await service.getState(ORG, USER);
+
+      expect(gwQbs).toHaveLength(2); // gatewayWithTool + realActivationAt
+      for (const qb of gwQbs) {
+        expect(accessPolicy.applyListFilter).toHaveBeenCalledWith(qb, { id: USER }, ORG, 'gw', { ownerColumn: 'ownerUserId' });
+      }
+    });
+
+    it('leaves traffic through another member\'s private gateway or tool out of the call steps', async () => {
+      stubEmpty();
+      const qbs: any[] = [];
+      requestLogRepo.createQueryBuilder.mockImplementation(() => {
+        const qb = makeQb({ count: 0, one: null });
+        qbs.push(qb);
+        return qb;
+      });
+
+      await service.getState(ORG, USER);
+
+      expect(qbs).toHaveLength(2);
+      for (const qb of qbs) {
+        const privateClause = qb.andWhere.mock.calls.find((c: any[]) => String(c[0]).includes("visibility = 'private'"));
+        expect(privateClause).toBeDefined();
+        expect(privateClause[0]).toContain('FROM gateways');
+        expect(privateClause[0]).toContain('FROM tools');
+        expect(privateClause[1]).toEqual({ privateViewerId: USER });
+      }
     });
   });
 });

@@ -4,7 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 // Flat config for ESLint 10. Minimal setup wired to the plugins already in
-// devDependencies (no type-aware linting to keep it fast and CI-optional).
+// devDependencies (no type-aware linting, so it is fast enough to gate CI).
 export default [
   {
     ignores: [
@@ -45,9 +45,20 @@ export default [
       ...reactHooks.configs.recommended.rules,
       // Relaxed to match the pre-existing (config-less) lint baseline. The
       // codebase predates enforced linting; these rules are opt-in cleanups,
-      // not gate failures. Lint is intentionally outside the CI gate.
+      // not gate failures. What stays on is a CI gate (ci.yml, ESLint step).
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
+      // Dead imports and variables pile up fast under bulk edits; this is
+      // the one relaxed rule worth enforcing. Prefix with `_` to keep a
+      // positional parameter or a deliberately ignored value.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
       '@typescript-eslint/no-empty-object-type': 'off',
       '@typescript-eslint/ban-ts-comment': 'off',
       '@typescript-eslint/no-require-imports': 'off',

@@ -10,6 +10,11 @@ import axios from 'axios';
 
 import { ExternalAgent } from '../../entities/external-agent.entity';
 import { validateUrl } from '../../common/security/url-validator';
+import { outboundFailureDetail } from '../../common/security/safe-fetch';
+import { pinnedRedirects } from '../../common/security/pinned-redirects';
+
+/** An agent card is a small JSON document; anything bigger is not one. */
+const MAX_CARD_BYTES = 1024 * 1024;
 
 @Injectable()
 export class ExternalAgentsService {
@@ -40,7 +45,7 @@ export class ExternalAgentsService {
     let card: any;
     let resolvedUrl = sanitizedUrl;
     try {
-      const response = await axios.get(sanitizedUrl, { timeout: 10_000 });
+      const response = await this.fetchCard(sanitizedUrl);
       card = response.data;
     } catch {
       // Try .well-known/agent-card.json
@@ -50,12 +55,12 @@ export class ExternalAgentsService {
         throw new BadRequestException(wkValidation.error);
       }
       try {
-        const response = await axios.get(wkValidation.sanitizedUrl!, { timeout: 10_000 });
+        const response = await this.fetchCard(wkValidation.sanitizedUrl!);
         card = response.data;
         resolvedUrl = wkValidation.sanitizedUrl!;
       } catch (err: any) {
         throw new BadRequestException(
-          `Failed to fetch agent card from ${sanitizedUrl} or ${wellKnownUrl}: ${err.message}`,
+          `Failed to fetch agent card from ${sanitizedUrl} or ${wellKnownUrl}: ${outboundFailureDetail(err)}`,
         );
       }
     }
@@ -155,7 +160,7 @@ export class ExternalAgentsService {
     }
 
     try {
-      const response = await axios.get(validation.sanitizedUrl!, { timeout: 10_000 });
+      const response = await this.fetchCard(validation.sanitizedUrl!);
       const card = response.data;
 
       agent.cachedCard = card;
@@ -169,5 +174,24 @@ export class ExternalAgentsService {
     }
 
     return this.externalAgentRepository.save(agent);
+  }
+
+  /**
+   * GET an agent card from a URL that passed validateUrl.
+   *
+   * The string check says nothing about where the name resolves or where
+   * the host sends us next, and the card body is handed back to the
+   * caller -- so an unpinned fetch here was a readable SSRF. The pinned
+   * agents refuse a name that resolves to a private address; each
+   * redirect hop is re-validated (cards do move, so hops are followed,
+   * a few of them, rather than refused).
+   */
+  private fetchCard(url: string) {
+    return axios.get(url, {
+      timeout: 10_000,
+      maxContentLength: MAX_CARD_BYTES,
+      maxBodyLength: MAX_CARD_BYTES,
+      ...pinnedRedirects(),
+    });
   }
 }

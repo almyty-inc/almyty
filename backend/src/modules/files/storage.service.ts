@@ -95,7 +95,7 @@ class LocalStorageProvider implements StorageProvider {
     return candidate;
   }
 
-  async upload(key: string, data: Buffer, contentType: string): Promise<string> {
+  async upload(key: string, data: Buffer, _contentType: string): Promise<string> {
     const filePath = this.resolveSafe(key);
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
@@ -127,7 +127,7 @@ class LocalStorageProvider implements StorageProvider {
    * a file record's id rather than a storage key. It never resolved.
    * Callers check `canPresign` and serve the bytes themselves.
    */
-  async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
+  async getSignedUrl(key: string, _expiresInSeconds?: number): Promise<string> {
     assertSafeStorageKey(key);
     throw new BadRequestException(
       'This deployment stores files locally, which cannot produce a direct link.',

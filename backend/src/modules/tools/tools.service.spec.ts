@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { unlimitedToolQuotaManager } from '../../test/tool-quota.fake';
 import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { ToolsService, CreateToolDto, UpdateToolDto, ToolSearchFilters } from './tools.service';
 import { ToolsOperationHelper } from './tools-operation.helper';
@@ -124,6 +125,7 @@ describe('ToolsService', () => {
 
   beforeEach(async () => {
     toolRepo = {
+      get manager() { return unlimitedToolQuotaManager(this); },
       create: jest.fn(),
       save: jest.fn(),
       findOne: jest.fn(),
@@ -300,13 +302,22 @@ describe('ToolsService', () => {
     });
 
     it('should throw BadRequestException when organization has reached tool limit', async () => {
-      const org = makeOrganization({ settings: { maxTools: 1 }, tools: [makeTool()] as any });
+      // Loaded the way production loads it: no `tools` relation. The
+      // limit is read from settings and compared against a COUNT.
+      const org = makeOrganization({ settings: { maxTools: 1 } });
       const user = makeUser();
 
       organizationRepo.findOne.mockResolvedValue(org);
       userRepo.findOne.mockResolvedValue(user);
+      Object.defineProperty(toolRepo, 'manager', {
+        configurable: true,
+        value: {
+          getRepository: () => ({ findOne: jest.fn().mockResolvedValue(org), count: jest.fn().mockResolvedValue(1) }),
+        },
+      });
 
-      await expect(service.createTool(dto, 'org-1', 'user-1')).rejects.toThrow(BadRequestException);
+      await expect(service.createTool(dto, 'org-1', 'user-1')).rejects.toThrow('Organization has reached tool limit');
+      expect(toolRepo.save).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException when some category IDs are not found', async () => {
@@ -945,6 +956,34 @@ describe('ToolsService', () => {
       expect(qb.skip).toHaveBeenCalledWith(20);
       expect(qb.take).toHaveBeenCalledWith(10);
     });
+
+    // The query builder here answers canned rows, so the tenant filter
+    // can only be proved by what was applied to it. Every other test in
+    // this block asserts one andWhere; none asserted this.
+    it('hands the query to the access policy with the caller and organization', async () => {
+      const qb = makeQueryBuilder([], 0);
+      toolRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getTools(baseFilters);
+
+      expect(accessPolicy.applyListFilter).toHaveBeenCalledWith(
+        qb,
+        { id: 'user-1' },
+        'org-1',
+        'tool',
+        { ownerColumn: 'createdBy' },
+      );
+    });
+
+    it('scopes to the organization on the bypassTeamFilter path', async () => {
+      const qb = makeQueryBuilder([], 0);
+      toolRepo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.getTools({ organizationId: 'org-1', bypassTeamFilter: true });
+
+      expect(qb.where).toHaveBeenCalledWith('tool.organizationId = :_orgId', { _orgId: 'org-1' });
+      expect(accessPolicy.applyListFilter).not.toHaveBeenCalled();
+    });
   });
 
   // ─── getToolVersions ───────────────────────────────────────────────────────
@@ -1101,9 +1140,8 @@ describe('ToolsService', () => {
     totals: { count: string; avg: string | null },
     usage: Array<{ toolId: string; count: string }>,
   ) => {
-    let selected: 'totals' | 'usage' = 'totals';
     const qb: any = {
-      select: (expr: string) => { selected = expr.includes('COUNT') ? 'totals' : 'usage'; return qb; },
+      select: () => qb,
       addSelect: () => qb,
       where: () => qb,
       andWhere: () => qb,

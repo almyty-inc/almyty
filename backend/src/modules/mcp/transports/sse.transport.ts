@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 
 import { McpService } from '../mcp.service';
 import { McpSessionService } from '../mcp-session.service';
-import { JsonRpcRequest, JsonRpcResponse, McpSession } from '../types/mcp.types';
+import { JsonRpcRequest, JsonRpcResponse } from '../types/mcp.types';
 import { randomUUID } from 'crypto';
 
 export interface SseConnection {
@@ -46,7 +46,7 @@ export class SseTransport extends EventEmitter {
     response: Response,
     organizationId: string,
     userId?: string,
-    serverId?: string,
+    _serverId?: string,
   ): Promise<string> {
     // randomUUID, not Date.now()+Math.random(): the id is what a POST to
     // this connection is addressed by, and Math.random() is not a CSPRNG
@@ -288,7 +288,7 @@ export class SseTransport extends EventEmitter {
       if (!connection.response.destroyed) {
         connection.response.end();
       }
-    } catch (error) {
+    } catch {
       // Connection already closed
     }
 

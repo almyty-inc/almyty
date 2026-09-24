@@ -1,19 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { AlertTriangle, ListChecks, X, ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { AlertTriangle, ListChecks } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { QueryError } from '@/components/ui/query-error'
 import { LoadingSpinner } from '@/components/ui/loading-spinner'
-import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 import { useAgentPipeline } from '@/components/agents/builder/use-agent-pipeline'
 import { BuilderToolbar } from '@/components/agents/builder/builder-toolbar'
@@ -76,10 +68,6 @@ export function AgentBuilderPage() {
   const [showTestPanel, setShowTestPanel] = useState(false)
   const [agentVisibility, setAgentVisibility] = useState<VisibilityValue>({ visibility: 'org', teamId: null })
   const [showVisibility, setShowVisibility] = useState(false)
-
-  // ── Tool picker state ──────────────────────────────────────────────────
-  const [toolSearch, setToolSearch] = useState('')
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   // ── Pipeline state (nodes, edges, undo/redo, CRUD) ─────────────────────
   const pipeline = useAgentPipeline()

@@ -1,10 +1,9 @@
 import { IsString, IsOptional, IsEnum, IsObject, IsArray, IsNumber, Min, Max, IsBoolean, MaxLength, IsUUID, ValidateIf } from 'class-validator';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 
 import { LlmProviderType, LlmProviderStatus } from '../../../entities/llm-provider.entity';
 import { MessageRole, MessageContent } from '../../../entities/message.entity';
 import { RESOURCE_VISIBILITIES, type ResourceVisibility } from '../../../common/authorization/access-policy.service';
-import { ConversationStatus } from '../../../entities/conversation.entity';
 
 export class CreateLlmProviderBodyDto {
   @IsString()

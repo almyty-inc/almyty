@@ -8,7 +8,6 @@ import {
   User,
   Wrench,
   Plus,
-  MessageSquare,
   X,
 } from 'lucide-react'
 
@@ -21,7 +20,6 @@ import { ModelPicker } from '@/components/model-picker'
 import { llmProvidersApi, toolsApi } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import { useOrganizationStore } from '@/store/organization'
-import { useNotifications } from '@/store/app'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { llmProvidersQuery } from '@/lib/llm-providers-query'
 
@@ -52,7 +50,6 @@ export function ChatPage() {
 
   const { currentOrganization } = useOrganizationStore()
   const navigate = useNavigate()
-  const notifications = useNotifications()
 
   // Provider state
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null)

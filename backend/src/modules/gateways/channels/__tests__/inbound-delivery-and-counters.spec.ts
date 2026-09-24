@@ -158,27 +158,37 @@ describe('inbound channel pipeline under concurrency', () => {
         if (target) Object.assign(target, patch);
         return { affected: target ? 1 : 0 };
       }),
+      // Each clause is evaluated by its SQL, not by which parameter it
+      // binds: keyed on the parameters alone, an inverted lease or status
+      // comparison still matched. A clause not listed here throws.
       createQueryBuilder: jest.fn(() => {
-        const params: Record<string, any> = {};
+        const TAKEOVER_CLAUSES: Record<string, (r: any, p: any) => boolean> = {
+          '"gatewayId" = :gatewayId': (r, p) => r.gatewayId === p.gatewayId,
+          '"deliveryId" = :deliveryId': (r, p) => r.deliveryId === p.deliveryId,
+          'status = :received': (r, p) => r.status === p.received,
+          '"createdAt" < :cutoff': (r, p) => r.createdAt < p.cutoff,
+        };
+        const filters: Array<(r: any) => boolean> = [];
         let patch: Record<string, any> = {};
+        const clause = (sql: string, p: any) => {
+          const test = TAKEOVER_CLAUSES[sql];
+          if (!test) throw new Error(`unmodelled channel_events clause: ${sql}`);
+          filters.push((r) => test(r, p));
+          return qb;
+        };
         const qb: any = {
           update: () => qb,
           set: (values: Record<string, any>) => { patch = values; return qb; },
-          where: (_c: string, p: any) => { Object.assign(params, p); return qb; },
-          andWhere: (_c: string, p: any) => { Object.assign(params, p ?? {}); return qb; },
+          where: clause,
+          andWhere: clause,
           execute: async () => {
-            const match = eventRepository.rows.find(
-              (r: any) =>
-                r.gatewayId === params.gatewayId &&
-                r.deliveryId === params.deliveryId &&
-                r.status === params.received &&
-                r.createdAt < params.cutoff,
-            );
-            if (!match) return { affected: 0 };
-            for (const [key, value] of Object.entries(patch)) {
-              match[key] = typeof value === 'function' ? new Date() : value;
+            const hits = eventRepository.rows.filter((r: any) => filters.every((f) => f(r)));
+            for (const match of hits) {
+              for (const [key, value] of Object.entries(patch)) {
+                match[key] = typeof value === 'function' ? new Date() : value;
+              }
             }
-            return { affected: 1 };
+            return { affected: hits.length };
           },
         };
         return qb;

@@ -14,9 +14,8 @@ import {
   HttpStatus,
   HttpException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsObject, IsNumber, Min, Max } from 'class-validator';
-import { Type } from 'class-transformer';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { IsString, IsOptional, IsEnum, IsObject } from 'class-validator';
 
 import { LlmProvidersService } from './llm-providers.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';

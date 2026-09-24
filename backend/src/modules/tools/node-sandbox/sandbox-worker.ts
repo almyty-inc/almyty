@@ -131,13 +131,14 @@ interface InvokeToolResponseMessage {
 
 async function run() {
   const input = workerData as WorkerInput;
-  const { code, parameters, credentials, modulePaths, toolInvokeEnabled, testNetAllow } =
+  const { code, parameters, credentials, modulePaths, toolInvokeEnabled, testNetAllow, hostPolicy } =
     input;
 
   // Step 1 — install network guard BEFORE anything else can require
   // net/http/https/dgram. This patches the prototypes in place so
-  // every subsequent require sees the patched version.
-  installSandboxNetGuard({ testAllow: testNetAllow });
+  // every subsequent require sees the patched version. The gateway
+  // tool's host policy, when there is one, goes in with it.
+  installSandboxNetGuard({ testAllow: testNetAllow, hostPolicy });
   // Seal it. The guard is a module in the same realm and the same
   // require cache as the tool code about to run, and both its install
   // and reset entry points are exports — so without this, user code

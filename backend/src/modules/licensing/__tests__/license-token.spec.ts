@@ -41,7 +41,7 @@ describe('license-token', () => {
     const { publicPem, privatePem } = keypair();
     const token = signLicense(basePayload, privatePem);
 
-    const [version, payload, sig] = token.split('.');
+    const [version, , sig] = token.split('.');
     const forged: LicensePayload = { ...basePayload, entitlements: ['sso', 'byo_kms'] };
     const forgedPayload = Buffer.from(JSON.stringify(forged), 'utf8')
       .toString('base64')

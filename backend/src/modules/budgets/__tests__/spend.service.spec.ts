@@ -168,6 +168,59 @@ describe('SpendService', () => {
     ]);
   });
 
+  /**
+   * Every aggregation here is a raw query builder, and the stub above
+   * chains any clause and answers a canned row, so `organizationId` could
+   * be dropped from any of these queries with the suite green: the Cost
+   * tab, period-to-date, budget enforcement and alerts would have summed
+   * every organization's spend. This builder records each query's
+   * clauses, one builder per query, and the test asserts every one of
+   * them binds this organization.
+   */
+  describe('organization scoping', () => {
+    const CHAIN = ['select', 'addSelect', 'where', 'andWhere', 'groupBy', 'orderBy', 'limit', 'setParameter', 'leftJoin'];
+
+    function recordingRepo() {
+      const queries: Array<{ clauses: Array<[string, Record<string, any> | undefined]>; ran: boolean }> = [];
+      const repo = {
+        createQueryBuilder: jest.fn(() => {
+          const q = { clauses: [] as Array<[string, Record<string, any> | undefined]>, ran: false };
+          queries.push(q);
+          const qb: any = {};
+          for (const m of CHAIN) {
+            qb[m] = (...args: any[]) => {
+              if (m === 'where' || m === 'andWhere') q.clauses.push([args[0], args[1]]);
+              return qb;
+            };
+          }
+          qb.getRawOne = async () => ((q.ran = true), { total: '0' });
+          qb.getRawMany = async () => ((q.ran = true), []);
+          return qb;
+        }),
+      };
+      return { repo: repo as any, queries };
+    }
+
+    it('binds the organization on every query, over both execution shapes', async () => {
+      const runs = recordingRepo();
+      const execs = recordingRepo();
+      const service = new SpendService(runs.repo, execs.repo);
+      const from = new Date('2026-06-01T00:00:00Z');
+
+      await service.periodToDateCents({ organizationId: 'org-1', from });
+      await service.getSummary('org-1', { from }); // period-to-date + timeseries + byAgent
+      await service.byTeam('org-1', from);
+
+      for (const { queries } of [runs, execs]) {
+        expect(queries).toHaveLength(5);
+        for (const q of queries) {
+          expect(q.ran).toBe(true);
+          expect(q.clauses).toContainEqual(['run.organizationId = :orgId', { orgId: 'org-1' }]);
+        }
+      }
+    });
+  });
+
   describe('forecast', () => {
     const service = new SpendService({} as any, {} as any);
     const bucket = (spentCents: number) => ({ periodStart: 'x', spentCents, runCount: 1 });

@@ -11,6 +11,8 @@ import { Team } from '../../entities/team.entity';
 import { UserTeam } from '../../entities/user-team.entity';
 import { MailService } from '../mail/mail.service';
 import { GatewaysService } from '../gateways/gateways.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { ResourceHandoverHelper } from './resource-handover.helper';
 import { DataSource, EntitySchema } from 'typeorm';
 
 describe('OrganizationsService', () => {
@@ -95,6 +97,14 @@ describe('OrganizationsService', () => {
             ensureSystemGateway: jest.fn().mockResolvedValue({}),
           },
         },
+        {
+          provide: ResourceHandoverHelper,
+          useValue: {
+            handOverPrivateResources: jest.fn().mockResolvedValue([]),
+            demoteTeamResources: jest.fn().mockResolvedValue([]),
+          },
+        },
+        { provide: AuditLogService, useValue: { publishCommitted: jest.fn() } },
       ],
     }).compile();
 
@@ -104,6 +114,16 @@ describe('OrganizationsService', () => {
     userOrganizationRepository = module.get(getRepositoryToken(UserOrganization));
     teamRepository = module.get(getRepositoryToken(Team));
     userTeamRepository = module.get(getRepositoryToken(UserTeam));
+    // removeMember / deleteTeam run in a transaction; hand the callback a
+    // manager whose repositories are these same mocks, so the assertions
+    // below read the same way. The handover itself is covered in
+    // __tests__/member-removal-handover.spec.ts.
+    const txManager = {
+      getRepository: (entity: unknown) =>
+        entity === UserOrganization ? userOrganizationRepository : entity === Team ? teamRepository : undefined,
+    };
+    userOrganizationRepository.manager = { transaction: jest.fn((cb: any) => cb(txManager)) };
+    teamRepository.manager = { transaction: jest.fn((cb: any) => cb(txManager)) };
   });
 
   describe('findOne', () => {
@@ -684,6 +704,8 @@ describe('OrganizationsService', () => {
         providers: [
           OrganizationsService,
           OrganizationsInvitesHelper,
+          { provide: ResourceHandoverHelper, useValue: {} },
+          { provide: AuditLogService, useValue: {} },
           { provide: TeamMembershipHelper, useValue: localHelper },
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
@@ -1048,6 +1070,8 @@ describe('OrganizationsService', () => {
         providers: [
           OrganizationsService,
           OrganizationsInvitesHelper,
+          { provide: ResourceHandoverHelper, useValue: {} },
+          { provide: AuditLogService, useValue: {} },
           { provide: TeamMembershipHelper, useValue: { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) } },
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
@@ -1100,6 +1124,8 @@ describe('OrganizationsService', () => {
         providers: [
           OrganizationsService,
           OrganizationsInvitesHelper,
+          { provide: ResourceHandoverHelper, useValue: {} },
+          { provide: AuditLogService, useValue: {} },
           { provide: TeamMembershipHelper, useValue: { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) } },
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
@@ -1139,6 +1165,8 @@ describe('OrganizationsService', () => {
         providers: [
           OrganizationsService,
           OrganizationsInvitesHelper,
+          { provide: ResourceHandoverHelper, useValue: {} },
+          { provide: AuditLogService, useValue: {} },
           { provide: TeamMembershipHelper, useValue: { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) } },
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },
@@ -1205,6 +1233,8 @@ describe('OrganizationsService', () => {
         providers: [
           OrganizationsService,
           OrganizationsInvitesHelper,
+          { provide: ResourceHandoverHelper, useValue: {} },
+          { provide: AuditLogService, useValue: {} },
           { provide: TeamMembershipHelper, useValue: { joinDefaultTeam: jest.fn().mockResolvedValue(undefined) } },
           { provide: getRepositoryToken(Organization), useValue: organizationRepository },
           { provide: getRepositoryToken(User), useValue: userRepository },

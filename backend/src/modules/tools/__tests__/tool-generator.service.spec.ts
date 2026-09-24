@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { unlimitedToolQuotaManager } from '../../../test/tool-quota.fake';
 import { Repository } from 'typeorm';
 
 import { ToolGeneratorService } from '../tool-generator.service';
@@ -99,6 +100,8 @@ describe('ToolGeneratorService', () => {
         {
           provide: getRepositoryToken(Tool),
           useValue: {
+            get manager() { return unlimitedToolQuotaManager(this); },
+            count: jest.fn().mockResolvedValue(0),
             create: jest.fn(),
             save: jest.fn(),
             findOne: jest.fn(),

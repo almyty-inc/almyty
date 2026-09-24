@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Settings, Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, Radio, Lock, CreditCard, Gift, Bell, Plug } from 'lucide-react'
+import { Building, Users, User, Shield, ShieldCheck, KeyRound, ShieldAlert, ScrollText, Radio, Lock, CreditCard, Gift, Bell, Plug } from 'lucide-react'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'

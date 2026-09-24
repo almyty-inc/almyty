@@ -28,7 +28,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { runStatusVariant, formatDuration } from './constants'
 import type { AgentRun } from '@/types'
 import { VerifyStepCard, VerifySummary } from './verify-step'
-import { PromoteRunDialog } from './promote-run-dialog'
+import { PromoteRunSection } from './promote-run-section'
 import { RouteTraceTimeline } from './route-trace-timeline'
 
 interface RunsTabProps {
@@ -217,12 +217,8 @@ export function RunsTab({ runs, agentId }: RunsTabProps) {
                                 </div>
                               </div>
                             )}
-                            {/* Promote a completed run to a reusable skill */}
-                            {run.status === 'completed' && (
-                              <div className="flex justify-end pt-1">
-                                <PromoteRunDialog runId={run.id} />
-                              </div>
-                            )}
+                            {/* Promote a completed run to a reusable skill, in place */}
+                            {run.status === 'completed' && <PromoteRunSection runId={run.id} />}
                           </div>
                         </TableCell>
                       </TableRow>

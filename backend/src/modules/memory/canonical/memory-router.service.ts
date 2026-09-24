@@ -10,7 +10,6 @@ import { ZepBackend } from './backends/zep.backend';
 import { SupermemoryBackend } from './backends/supermemory.backend';
 import { VertexMemoryBankBackend } from './backends/vertex-memory-bank.backend';
 import {
-  BackendCredentials,
   BackendRoutingConfig,
   MemoryBackend,
   TransferReport,

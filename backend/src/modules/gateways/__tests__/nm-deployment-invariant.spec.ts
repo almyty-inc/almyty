@@ -1,3 +1,4 @@
+import { unlimitedQuotaManager } from '../../../test/tool-quota.fake';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
@@ -45,6 +46,7 @@ describe('n:m deployment invariant (GatewaysService.createGateway)', () => {
         {
           provide: getRepositoryToken(Gateway),
           useValue: {
+            get manager() { return unlimitedQuotaManager(this); },
             // Endpoint-uniqueness lookup: emulate the real DB by
             // matching against everything "saved" so far.
             findOne: jest.fn(async ({ where }: any) =>

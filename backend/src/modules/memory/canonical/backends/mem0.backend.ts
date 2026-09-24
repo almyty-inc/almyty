@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { MemoryClient, MemoryNotFoundError, type Memory } from 'mem0ai';
+import { Mem0Client, Mem0NotFoundError, type Mem0Memory } from './mem0.client';
 import { v7 as uuidv7 } from 'uuid';
 
 import {
@@ -21,10 +21,10 @@ import {
 } from './memory-backend.interface';
 
 /**
- * Mem0 backend, on the official `mem0ai` SDK. Credentials arrive
- * per-call from the router (which decrypts the org's Credential row);
- * we cache one MemoryClient per (host, apiKey) pair so we don't
- * reconstruct on every request.
+ * Mem0 backend, on the Mem0 platform API (`mem0.client.ts`).
+ * Credentials arrive per-call from the router (which decrypts the
+ * org's Credential row); we cache one Mem0Client per (host, apiKey)
+ * pair so we don't reconstruct on every request.
  *
  * Capability story:
  *   ✓ vector_search, mode_memory, batch_writes
@@ -48,7 +48,7 @@ export class Mem0Backend implements MemoryBackend {
   readonly supported_modes = new Set<Mode>(['memory']);
 
   private readonly logger = new Logger(Mem0Backend.name);
-  private readonly clientCache = new Map<string, MemoryClient>();
+  private readonly clientCache = new Map<string, Mem0Client>();
   private static readonly CLIENT_CACHE_MAX = 64;
 
   async init(): Promise<void> {}
@@ -75,7 +75,7 @@ export class Mem0Backend implements MemoryBackend {
       const memory = await client.get(id);
       return this.toCanonical(memory);
     } catch (e) {
-      if (e instanceof MemoryNotFoundError) return null;
+      if (e instanceof Mem0NotFoundError) return null;
       throw e;
     }
   }
@@ -98,7 +98,7 @@ export class Mem0Backend implements MemoryBackend {
         },
       },
     );
-    const created = memories[0];
+    const created = (Array.isArray(memories) ? memories : (memories?.results ?? []))[0];
     return this.toCanonical({
       ...created,
       metadata: { ...(created?.metadata || {}), mem0_id: created?.id, almyty_id: item.id },
@@ -115,7 +115,7 @@ export class Mem0Backend implements MemoryBackend {
       await client.delete(id);
       return true;
     } catch (e) {
-      if (e instanceof MemoryNotFoundError) return false;
+      if (e instanceof Mem0NotFoundError) return false;
       throw e;
     }
   }
@@ -187,7 +187,11 @@ export class Mem0Backend implements MemoryBackend {
   // ── translation ─────────────────────────────────────────────
 
   toCanonical(raw: any): MemoryItem {
-    const m = raw as Memory;
+    const m = raw as Mem0Memory & Record<string, any>;
+    // The API speaks snake_case; the old SDK camelised responses, so
+    // accept both rather than trust one spelling from a third party.
+    const createdAt = m?.created_at ?? m?.createdAt;
+    const updatedAt = m?.updated_at ?? m?.updatedAt;
     const meta = (m?.metadata ?? {}) as Record<string, any>;
     const now = new Date();
     const content =
@@ -208,7 +212,7 @@ export class Mem0Backend implements MemoryBackend {
       metadata: meta,
       file_refs: Array.isArray(meta.file_refs) ? meta.file_refs : [],
       tier: meta.tier ?? 'project',
-      valid_from: m?.createdAt ? new Date(m.createdAt) : now,
+      valid_from: createdAt ? new Date(createdAt) : now,
       valid_until: null, superseded_by: null, ttl_seconds: null,
       source_uri: null, source_version: null, source_checksum: null,
       chunk_index: null, chunk_total: null, chunk_of: null,
@@ -220,8 +224,8 @@ export class Mem0Backend implements MemoryBackend {
           model: null, provider: null, tool_chain: [],
           created_by: 'sync', source_backend: 'mem0',
         } as Provenance),
-      created_at: m?.createdAt ? new Date(m.createdAt) : now,
-      updated_at: m?.updatedAt ? new Date(m.updatedAt) : now,
+      created_at: createdAt ? new Date(createdAt) : now,
+      updated_at: updatedAt ? new Date(updatedAt) : now,
       accessed_at: null, access_count: 0, deleted_at: null, deleted_by: null,
     };
   }
@@ -245,19 +249,19 @@ export class Mem0Backend implements MemoryBackend {
 
   // ── client lifecycle ────────────────────────────────────────
 
-  private requireClient(creds?: BackendCredentials): MemoryClient {
+  private requireClient(creds?: BackendCredentials): Mem0Client {
     const c = this.client(creds);
     if (!c) throw new Error('mem0: missing apiKey credential — set in the org credential store');
     return c;
   }
 
-  private client(creds?: BackendCredentials): MemoryClient | null {
+  private client(creds?: BackendCredentials): Mem0Client | null {
     if (!creds?.apiKey) return null;
     const host = creds.baseUrl || 'https://api.mem0.ai';
     const cacheKey = `${host}|${creds.apiKey}`;
     const cached = this.clientCache.get(cacheKey);
     if (cached) return cached;
-    const client = new MemoryClient({ apiKey: creds.apiKey, host });
+    const client = new Mem0Client(creds.apiKey, host);
     if (this.clientCache.size >= Mem0Backend.CLIENT_CACHE_MAX) {
       const oldest = this.clientCache.keys().next().value;
       if (oldest !== undefined) this.clientCache.delete(oldest);

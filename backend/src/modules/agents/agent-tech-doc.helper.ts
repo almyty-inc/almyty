@@ -12,6 +12,8 @@ import { Tool } from '../../entities/tool.entity';
 import { AgentsService } from './agents.service';
 import { AgentConstraintsService } from '../agent-constraints/agent-constraints.service';
 import { BUILT_IN_TOOLS } from './agent-runtime.service';
+import { isOthersPrivate } from '../../common/authorization/private-visibility';
+import { providerUsableBy } from '../llm-providers/private-provider';
 
 // ── Document shape ──
 
@@ -170,18 +172,24 @@ export class AgentTechDocHelper {
     private readonly fileRepository: Repository<AgentFile>,
   ) {}
 
-  async build(agentId: string, organizationId: string): Promise<AgentTechnicalDocumentation> {
+  /**
+   * `viewerId` is who is reading. The agent itself 404s when it is another
+   * member's private agent, and another member's private provider or tool
+   * it references is not named (see resolveProviders / collectTools). No
+   * viewer cannot own anything private, so nothing private is named.
+   */
+  async build(agentId: string, organizationId: string, viewerId: string | null): Promise<AgentTechnicalDocumentation> {
     // Throws NotFoundException (404) for missing agents — reuse the canonical lookup.
-    const agent = await this.agentsService.getAgent(agentId, organizationId);
+    const agent = await this.agentsService.getAgent(agentId, organizationId, viewerId ? { id: viewerId } : null);
     const organization = await this.organizationRepository.findOne({ where: { id: organizationId } });
 
     const nodes: AgentPipelineNode[] = agent.pipeline?.nodes ?? [];
     const edges = agent.pipeline?.edges ?? [];
 
     const modelEntries = this.collectModelEntries(agent, nodes);
-    await this.resolveProviders(modelEntries, organizationId);
+    await this.resolveProviders(modelEntries, organizationId, viewerId);
 
-    const { tools, unresolvedToolIds } = await this.collectTools(agent, nodes, organizationId);
+    const { tools, unresolvedToolIds } = await this.collectTools(agent, nodes, organizationId, viewerId);
 
     const [approvalCounts, constraints, runCount, fileCount] = await Promise.all([
       this.countApprovals(agentId, organizationId),
@@ -565,13 +573,15 @@ export class AgentTechDocHelper {
     return checkers;
   }
 
-  private async resolveProviders(entries: TechDocModelEntry[], organizationId: string): Promise<void> {
+  private async resolveProviders(entries: TechDocModelEntry[], organizationId: string, viewerId: string | null): Promise<void> {
     const ids = [...new Set(entries.map((e) => e.providerId).filter(Boolean))] as string[];
     if (ids.length === 0) return;
     const providers = await this.llmProviderRepository.find({
       where: { id: In(ids), organizationId },
     });
-    const byId = new Map(providers.map((p) => [p.id, p]));
+    // Another member's private provider is not named: its entry keeps the
+    // id the agent config already shows and nothing else, like a deleted one.
+    const byId = new Map(providers.filter((p) => providerUsableBy(p, viewerId)).map((p) => [p.id, p]));
     for (const entry of entries) {
       const provider = entry.providerId ? byId.get(entry.providerId) : undefined;
       if (provider) {
@@ -585,6 +595,7 @@ export class AgentTechDocHelper {
     agent: Agent,
     nodes: AgentPipelineNode[],
     organizationId: string,
+    viewerId: string | null,
   ): Promise<{ tools: TechDocToolEntry[]; unresolvedToolIds: string[] }> {
     const references = new Map<string, string[]>();
     const addRef = (toolId: string, source: string) => {
@@ -612,7 +623,9 @@ export class AgentTechDocHelper {
             relations: { api: true },
           })
         : [];
-    const foundById = new Map(found.map((t) => [t.id, t]));
+    // Another member's private tool is listed as unresolved, the same as
+    // a missing one; its name and API stay out of the document.
+    const foundById = new Map(found.filter((t) => !isOthersPrivate(t, viewerId)).map((t) => [t.id, t]));
 
     const tools: TechDocToolEntry[] = [];
     const unresolvedToolIds: string[] = [];

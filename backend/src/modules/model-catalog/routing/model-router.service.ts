@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 
 import { Model } from '../../../entities/model.entity';
 import { ModelDeployment } from '../../../entities/model-deployment.entity';
-import { LlmProvider, LlmProviderStatus, LlmProviderType } from '../../../entities/llm-provider.entity';
+import { LlmProvider, LlmProviderStatus } from '../../../entities/llm-provider.entity';
 import { AuditAction, AuditResource } from '../../../entities/audit-log.entity';
 import { AuditLogService } from '../../audit-log/audit-log.service';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';

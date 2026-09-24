@@ -29,6 +29,14 @@ export class PromotedSkillsController {
     return organizationId;
   }
 
+  /**
+   * Who is asking. A skill promoted from another member's private agent is
+   * answered as not found, for org admins too.
+   */
+  private viewer(req: any): string | null {
+    return req.user?.sub || req.user?.id || null;
+  }
+
   @Post()
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'Promote a completed agent run into a reusable skill' })
@@ -49,7 +57,7 @@ export class PromotedSkillsController {
   @Roles('member', 'admin', 'owner')
   @ApiOperation({ summary: 'List promoted skills' })
   async list(@Request() req: any) {
-    return this.service.list(this.orgId(req));
+    return this.service.list(this.orgId(req), this.viewer(req));
   }
 
   @Get(':id')
@@ -57,7 +65,7 @@ export class PromotedSkillsController {
   @ApiParam({ name: 'id', description: 'Promoted skill ID' })
   @ApiOperation({ summary: 'Get a promoted skill' })
   async get(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    return this.service.get(id, this.orgId(req));
+    return this.service.get(id, this.orgId(req), this.viewer(req));
   }
 
   @Get(':id/skill.md')
@@ -65,7 +73,7 @@ export class PromotedSkillsController {
   @ApiParam({ name: 'id', description: 'Promoted skill ID' })
   @ApiOperation({ summary: 'Get the raw SKILL.md for a promoted skill' })
   async raw(@Param('id', ParseUUIDPipe) id: string, @Request() req: any, @Res() res: Response) {
-    const skill = await this.service.get(id, this.orgId(req));
+    const skill = await this.service.get(id, this.orgId(req), this.viewer(req));
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
     res.send(skill.content);
   }
@@ -75,7 +83,7 @@ export class PromotedSkillsController {
   @ApiParam({ name: 'id', description: 'Promoted skill ID' })
   @ApiOperation({ summary: 'Delete a promoted skill' })
   async remove(@Param('id', ParseUUIDPipe) id: string, @Request() req: any) {
-    await this.service.remove(id, this.orgId(req));
+    await this.service.remove(id, this.orgId(req), this.viewer(req));
     return { success: true };
   }
 }

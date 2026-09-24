@@ -78,12 +78,12 @@ export class OpenAPIParserService implements SchemaParser {
       let schemaObject: any;
       try {
         schemaObject = JSON.parse(rawSchema);
-      } catch (jsonError) {
+      } catch {
         // Not JSON — try YAML
         try {
           const yaml = require('js-yaml');
           schemaObject = yaml.load(rawSchema);
-        } catch (yamlError) {
+        } catch {
           schemaObject = rawSchema;
         }
       }
@@ -237,11 +237,11 @@ export class OpenAPIParserService implements SchemaParser {
       let schemaObject: any;
       try {
         schemaObject = JSON.parse(schema);
-      } catch (jsonError) {
+      } catch {
         try {
           const yaml = require('js-yaml');
           schemaObject = yaml.load(schema);
-        } catch (yamlError) {
+        } catch {
           schemaObject = schema;
         }
       }

@@ -12,6 +12,7 @@ import {
   ResourceVisibility,
   normaliseVisibility,
 } from '../../common/authorization/access-policy.service';
+import { nameTaken } from '../../common/authorization/private-visibility';
 
 /**
  * Runner ids are uuids. Checked before an id that arrived over the wire
@@ -576,11 +577,29 @@ export class RunnerService {
 
   async unregister(runnerId: string, userId: string, organizationId: string): Promise<void> {
     const runner = await this.loadManageable(runnerId, userId, organizationId);
+    await this.deleteRunner(runner);
+  }
 
+  /**
+   * Delete a runner whose owner is leaving the organization, inside the
+   * membership removal's transaction. No access check: the caller has
+   * already authorised the removal, and a private runner is a binding to
+   * the departed person's own machine that nobody else may take over.
+   */
+  async deleteForDepartedOwner(runner: Runner, manager: EntityManager): Promise<void> {
+    await this.deleteRunner(runner, manager);
+  }
+
+  /** The one delete path: the runner's published tools go with it. */
+  private async deleteRunner(runner: Runner, manager?: EntityManager): Promise<void> {
     // Drop published capabilities first so a concurrent dispatch can't
     // race against deletion and find a tool whose runner is gone.
-    await this.capabilities.unpublish(runner.id);
-    await this.runners.remove(runner);
+    await this.capabilities.unpublish(runner.id, manager);
+    if (manager) {
+      await manager.getRepository(Runner).remove(runner);
+    } else {
+      await this.runners.remove(runner);
+    }
   }
 
   // ── internals ───────────────────────────────────────────────────────
@@ -622,9 +641,7 @@ export class RunnerService {
   private async assertNameFreeInOrganization(name: string, ownerUserId: string, organizationId: string): Promise<void> {
     const clash = await this.runners.findOne({ where: { organizationId, name } });
     if (clash && clash.ownerUserId !== ownerUserId) {
-      throw new ConflictException(
-        `the runner name '${name}' is already used in this organization; pick another name`,
-      );
+      throw nameTaken('runner', name);
     }
   }
 

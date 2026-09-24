@@ -19,6 +19,18 @@ import {
   PAGE_INTRO_TOPICS,
   PageIntroTopic,
 } from './dto/onboarding.dto';
+import { AccessPolicyService } from '../../common/authorization/access-policy.service';
+import { notOthersPrivateGateway, notOthersPrivateTool } from '../monitoring/private-rows';
+
+type Viewer = { id: string };
+
+/**
+ * A request log the viewer may count: not traffic through another
+ * member's private gateway or tool. Binds :privateViewerId.
+ */
+function visibleLog(alias: string): string {
+  return `${notOthersPrivateGateway(`${alias}."gatewayId"`)} AND ${notOthersPrivateTool(`${alias}."toolId"`)}`;
+}
 
 /**
  * User-Agent substring that identifies a request originating from the
@@ -67,9 +79,19 @@ export class OnboardingService {
     private readonly distributionRepo: Repository<AppDistribution>,
     @InjectRepository(Runner)
     private readonly runnerRepo: Repository<Runner>,
+    private readonly accessPolicy: AccessPolicyService,
   ) {}
 
+  /**
+   * Every step counts what the caller can see, not what the org holds:
+   * another member's private provider, API, tool, gateway or agent -- and
+   * traffic through their private gateway or tool -- neither ticks a step
+   * nor becomes the guide's link, for org admins too. A tick the caller
+   * cannot follow to anything would tell them the private resource exists.
+   * Apps and distributions have no private tier and stay org-wide.
+   */
   async getState(organizationId: string, userId: string): Promise<OnboardingState> {
+    const viewer: Viewer = { id: userId };
     const [
       hasProvider,
       hasApi,
@@ -84,14 +106,14 @@ export class OnboardingService {
       hasRunner,
       prefs,
     ] = await Promise.all([
-      this.hasHealthyProvider(organizationId),
-      this.hasApi(organizationId),
-      this.hasTools(organizationId),
-      this.gatewayWithTool(organizationId),
-      this.firstSuccessfulCall(organizationId),
-      this.hasExternalClientCall(organizationId),
-      this.firstAgent(organizationId),
-      this.hasSuccessfulAgentRun(organizationId),
+      this.hasHealthyProvider(organizationId, viewer),
+      this.hasApi(organizationId, viewer),
+      this.hasTools(organizationId, viewer),
+      this.gatewayWithTool(organizationId, viewer),
+      this.firstSuccessfulCall(organizationId, viewer),
+      this.hasExternalClientCall(organizationId, viewer),
+      this.firstAgent(organizationId, viewer),
+      this.hasSuccessfulAgentRun(organizationId, viewer),
       this.firstApp(organizationId),
       this.hasShippedDistribution(organizationId),
       this.hasConnectedRunner(organizationId, userId),
@@ -129,7 +151,7 @@ export class OnboardingService {
     // of its own. Gateways an older build seeded as a sample workspace (tagged
     // metadata.sampleWorkspace) still do not count, so poking at one cannot
     // close onboarding.
-    const activatedRealAt = await this.realActivationAt(organizationId, firstCallLog);
+    const activatedRealAt = await this.realActivationAt(organizationId, viewer, firstCallLog);
 
     return {
       steps,
@@ -149,22 +171,34 @@ export class OnboardingService {
    * step counted a provider whose key had been rejected on every call.
    * Same pair the router uses (model-router.service.ts).
    */
-  private async hasHealthyProvider(organizationId: string): Promise<boolean> {
+  private async hasHealthyProvider(organizationId: string, viewer: Viewer): Promise<boolean> {
     const count = await this.providerRepo.count({
-      where: { organizationId, status: LlmProviderStatus.ACTIVE, isHealthy: true },
+      where: await this.accessPolicy.visibleWhere<LlmProvider>(
+        viewer,
+        organizationId,
+        { status: LlmProviderStatus.ACTIVE, isHealthy: true },
+        { ownerColumn: 'ownerUserId' },
+      ),
     });
     return count > 0;
   }
 
-  private async hasApi(organizationId: string): Promise<boolean> {
-    const count = await this.apiRepo.count({ where: { organizationId } });
+  private async hasApi(organizationId: string, viewer: Viewer): Promise<boolean> {
+    const count = await this.apiRepo.count({
+      where: await this.accessPolicy.visibleWhere<Api>(viewer, organizationId, {}, { ownerColumn: 'ownerUserId' }),
+    });
     return count > 0;
   }
 
   /** Generated from an API or written by hand; a deleted tool is gone. */
-  private async hasTools(organizationId: string): Promise<boolean> {
+  private async hasTools(organizationId: string, viewer: Viewer): Promise<boolean> {
     const count = await this.toolRepo.count({
-      where: { organizationId, status: Not(ToolStatus.DELETED) },
+      where: await this.accessPolicy.visibleWhere<Tool>(
+        viewer,
+        organizationId,
+        { status: Not(ToolStatus.DELETED) },
+        { ownerColumn: 'createdBy' },
+      ),
     });
     return count > 0;
   }
@@ -174,13 +208,15 @@ export class OnboardingService {
    * first because that is the one a coding harness connects to with a
    * single command. One row, so the guide can link to its integrations.
    */
-  private async gatewayWithTool(organizationId: string): Promise<Gateway | null> {
-    return this.gatewayRepo
+  private async gatewayWithTool(organizationId: string, viewer: Viewer): Promise<Gateway | null> {
+    const qb = this.gatewayRepo
       .createQueryBuilder('gw')
       .innerJoin('gw.tools', 'gt')
       .select(['gw.id', 'gw.name', 'gw.type', 'gw.endpoint', 'gw.createdAt'])
       .where('gw.organizationId = :organizationId', { organizationId })
-      .andWhere('gw.isSystem = false')
+      .andWhere('gw.isSystem = false');
+    await this.accessPolicy.applyListFilter(qb, viewer, organizationId, 'gw', { ownerColumn: 'ownerUserId' });
+    return qb
       .orderBy(`CASE WHEN gw.type = '${GatewayType.MCP}' THEN 0 ELSE 1 END`, 'ASC')
       .addOrderBy('gw.createdAt', 'ASC')
       .limit(1)
@@ -192,9 +228,14 @@ export class OnboardingService {
    * copies the runtime spawns for a sub-agent step, not something a
    * person made.
    */
-  private async firstAgent(organizationId: string): Promise<Pick<Agent, 'id' | 'name'> | null> {
+  private async firstAgent(organizationId: string, viewer: Viewer): Promise<Pick<Agent, 'id' | 'name'> | null> {
     return this.agentRepo.findOne({
-      where: { organizationId, isTemporary: false },
+      where: await this.accessPolicy.visibleWhere<Agent>(
+        viewer,
+        organizationId,
+        { isTemporary: false },
+        { ownerColumn: 'createdBy' },
+      ),
       select: { id: true, name: true },
       order: { createdAt: 'ASC' },
     });
@@ -206,9 +247,14 @@ export class OnboardingService {
    * agent-runtime-misc.helper), so one counter answers "has any agent of
    * this org ever worked" without reading either runs table.
    */
-  private async hasSuccessfulAgentRun(organizationId: string): Promise<boolean> {
+  private async hasSuccessfulAgentRun(organizationId: string, viewer: Viewer): Promise<boolean> {
     const count = await this.agentRepo.count({
-      where: { organizationId, isTemporary: false, successfulExecutions: MoreThan(0) },
+      where: await this.accessPolicy.visibleWhere<Agent>(
+        viewer,
+        organizationId,
+        { isTemporary: false, successfulExecutions: MoreThan(0) },
+        { ownerColumn: 'createdBy' },
+      ),
     });
     return count > 0;
   }
@@ -256,17 +302,18 @@ export class OnboardingService {
    * without it this fetched every successful log the org ever wrote
    * and kept the first.
    */
-  private async firstSuccessfulCall(organizationId: string): Promise<RequestLog | null> {
+  private async firstSuccessfulCall(organizationId: string, viewer: Viewer): Promise<RequestLog | null> {
     return this.requestLogRepo
       .createQueryBuilder('log')
       .where('log.organizationId = :orgId', { orgId: organizationId })
       .andWhere('log.statusCode >= 200 AND log.statusCode < 300')
+      .andWhere(visibleLog('log'), { privateViewerId: viewer.id })
       .orderBy('log.timestamp', 'ASC')
       .limit(1)
       .getOne();
   }
 
-  private async hasExternalClientCall(organizationId: string): Promise<boolean> {
+  private async hasExternalClientCall(organizationId: string, viewer: Viewer): Promise<boolean> {
     const count = await this.requestLogRepo
       .createQueryBuilder('log')
       .where('log.organizationId = :orgId', { orgId: organizationId })
@@ -276,6 +323,7 @@ export class OnboardingService {
         "(log.userAgent IS NULL OR log.userAgent NOT ILIKE :ua)",
         { ua: `%${ALMYTY_FRONTEND_UA}%` },
       )
+      .andWhere(visibleLog('log'), { privateViewerId: viewer.id })
       .getCount();
     return count > 0;
   }
@@ -297,17 +345,19 @@ export class OnboardingService {
    */
   private async realActivationAt(
     organizationId: string,
+    viewer: Viewer,
     firstCall: RequestLog | null,
   ): Promise<string | null> {
     if (!firstCall) return null;
-    const nonSampleGateway = await this.gatewayRepo
+    const qb = this.gatewayRepo
       .createQueryBuilder('gw')
       .where('gw.organizationId = :organizationId', { organizationId })
       .andWhere('gw.isSystem = false')
       .andWhere(
         "(gw.metadata IS NULL OR gw.metadata->>'sampleWorkspace' IS NULL)",
-      )
-      .getCount();
+      );
+    await this.accessPolicy.applyListFilter(qb, viewer, organizationId, 'gw', { ownerColumn: 'ownerUserId' });
+    const nonSampleGateway = await qb.getCount();
     return nonSampleGateway > 0 ? firstCall.timestamp.toISOString() : null;
   }
 
