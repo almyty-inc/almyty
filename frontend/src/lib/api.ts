@@ -474,6 +474,8 @@ export const gatewaysApi = {
   getVisitorOAuth: (id: string) => apiGet(`/gateways/${id}/visitor-oauth`),
   setVisitorOAuth: (id: string, body: Record<string, unknown>) => apiPut(`/gateways/${id}/visitor-oauth`, body),
   removeVisitorOAuth: (id: string) => apiDel(`/gateways/${id}/visitor-oauth`),
+  // What to register at the org's IdP for hosted-chat SSO visitor sign-in (EE).
+  getHostedChatSso: (id: string) => apiGet(`/gateways/${id}/hosted-chat-sso`),
 
   // Tool association endpoints
   getTools: (id: string) => apiGet(`/gateways/${id}/tools`),

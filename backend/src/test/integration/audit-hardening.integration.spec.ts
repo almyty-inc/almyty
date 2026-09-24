@@ -28,8 +28,6 @@ import { membershipFixture } from '../execution-access.fixture';
  * These are unit-level tests that exercise the real code paths
  * with minimal stubs. They don't need real Postgres.
  */
-jest.unmock('jsonwebtoken');
-
 import * as crypto from 'crypto';
 import { UnauthorizedException, HttpException } from '@nestjs/common';
 import { MonitoringController } from '../../modules/monitoring/monitoring.controller';

@@ -11,6 +11,7 @@ import { Gateway } from '../../entities/gateway.entity';
 import { User } from '../../entities/user.entity';
 import { ApiKey } from '../../entities/api-key.entity';
 import { OAuthAccessToken } from '../../entities/oauth-access-token.entity';
+import { realJwtService, signExpiredTestJwt, signTestJwt } from '../../test/jwt';
 
 describe('GatewayAuthService - Real Business Logic', () => {
   let service: GatewayAuthService;
@@ -18,7 +19,6 @@ describe('GatewayAuthService - Real Business Logic', () => {
   let gatewayRepository: Repository<Gateway>;
   let userRepository: Repository<User>;
   let apiKeyRepository: Repository<ApiKey>;
-  let jwtService: JwtService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -61,12 +61,7 @@ describe('GatewayAuthService - Real Business Logic', () => {
             findOne: jest.fn(),
           },
         },
-        {
-          provide: JwtService,
-          useValue: {
-            verify: jest.fn(),
-          },
-        },
+        { provide: JwtService, useValue: realJwtService() },
       ],
     }).compile();
 
@@ -75,7 +70,6 @@ describe('GatewayAuthService - Real Business Logic', () => {
     gatewayRepository = module.get(getRepositoryToken(Gateway));
     userRepository = module.get(getRepositoryToken(User));
     apiKeyRepository = module.get(getRepositoryToken(ApiKey));
-    jwtService = module.get<JwtService>(JwtService);
 
     // Default: gatewayRepository.findOne returns a gateway in `org-1`.
     // The validate* paths all resolve the gateway's organizationId for
@@ -875,44 +869,55 @@ describe('GatewayAuthService - Real Business Logic', () => {
         roles: ['admin'],
         org: 'org-1',
       };
-
-      jest.spyOn(jwtService, 'verify').mockReturnValue(payload);
+      const token = signTestJwt(payload, { secret: 'test-secret' });
 
       const authConfig = { configuration: { secret: 'test-secret' } } as Partial<GatewayAuth> as GatewayAuth;
-      const result = await service['validateJWT'](authConfig, { authorization: 'Bearer valid.jwt.token' });
+      const result = await service['validateJWT'](authConfig, { authorization: `Bearer ${token}` });
 
       expect(result.isValid).toBe(true);
       expect(result.userId).toBe('user-123');
       expect(result.scopes).toEqual(['read', 'write']);
       expect(result.roles).toEqual(['admin']);
       expect(result.organizationId).toBe('org-1');
-      expect(result.metadata.jwtPayload).toEqual(payload);
+      expect(result.metadata.jwtPayload).toEqual(expect.objectContaining(payload));
     });
 
     it('should parse scope string into array', async () => {
-      const payload = {
-        sub: 'user-123',
-        scope: 'read write admin',
-      };
-
-      jest.spyOn(jwtService, 'verify').mockReturnValue(payload);
+      const token = signTestJwt({ sub: 'user-123', scope: 'read write admin' }, { secret: 'test-secret' });
 
       const authConfig = { configuration: { secret: 'test-secret' } } as Partial<GatewayAuth> as GatewayAuth;
-      const result = await service['validateJWT'](authConfig, { authorization: 'Bearer token' });
+      const result = await service['validateJWT'](authConfig, { authorization: `Bearer ${token}` });
 
       expect(result.scopes).toEqual(['read', 'write', 'admin']);
     });
 
     it('should return error for invalid JWT', async () => {
-      jest.spyOn(jwtService, 'verify').mockImplementation(() => {
-        throw new Error('Invalid token');
-      });
-
       const authConfig = { configuration: { secret: 'test-secret' } } as Partial<GatewayAuth> as GatewayAuth;
       const result = await service['validateJWT'](authConfig, { authorization: 'Bearer invalid' });
 
       expect(result.isValid).toBe(false);
       expect(result.error).toBe('Invalid JWT token');
+      expect(result.errorCode).toBe('JWT_INVALID');
+    });
+
+    it('rejects a token signed with a secret other than the gateway one', async () => {
+      // The backend login secret must never pass as gateway auth.
+      const token = signTestJwt({ sub: 'user-123' }, { secret: 'backend-login-secret' });
+
+      const authConfig = { configuration: { secret: 'test-secret' } } as Partial<GatewayAuth> as GatewayAuth;
+      const result = await service['validateJWT'](authConfig, { authorization: `Bearer ${token}` });
+
+      expect(result.isValid).toBe(false);
+      expect(result.errorCode).toBe('JWT_INVALID');
+    });
+
+    it('rejects an expired token signed with the gateway secret', async () => {
+      const token = signExpiredTestJwt({ sub: 'user-123' }, { secret: 'test-secret' });
+
+      const authConfig = { configuration: { secret: 'test-secret' } } as Partial<GatewayAuth> as GatewayAuth;
+      const result = await service['validateJWT'](authConfig, { authorization: `Bearer ${token}` });
+
+      expect(result.isValid).toBe(false);
       expect(result.errorCode).toBe('JWT_INVALID');
     });
   });

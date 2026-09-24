@@ -250,6 +250,19 @@ export class HostedChatSsoController {
     return `${origin}${HostedChatSsoController.apiPrefix()}/public/chat/${slug}/auth/sso/saml/acs`;
   }
 
+  /**
+   * Every ACS URL samlAcsUrl can answer for this surface: its own subdomain,
+   * and its verified custom domain if it has one. What the organization
+   * registers at its IdP (shown on the gateway page by
+   * HostedChatSsoSettingsController).
+   */
+  static samlAcsUrls(gateway: Pick<Gateway, 'configuration' | 'customDomain'>, slug: string): string[] {
+    const urls = [HostedChatSsoController.samlAcsUrl(gateway, slug)];
+    const custom = gateway.customDomain?.status === 'active' ? gateway.customDomain.hostname : null;
+    if (custom) urls.push(HostedChatSsoController.samlAcsUrl(gateway, slug, custom));
+    return urls;
+  }
+
   static stateCookieOptions() {
     return {
       httpOnly: true,
