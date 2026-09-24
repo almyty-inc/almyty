@@ -81,6 +81,7 @@ import { GatewayAuthValidators } from '../modules/gateways/gateway-auth-validato
 import { GatewaysStatsHelper } from '../modules/gateways/gateways-stats.helper';
 import { GatewayInitHelper } from '../modules/gateways/gateway-init.helper';
 import { AccessPolicyService } from '../common/authorization/access-policy.service';
+import { ExecutionAccessService } from '../common/authorization/execution-access.service';
 import { McpService } from '../modules/mcp/mcp.service';
 import { AlmytyMcpService } from '../modules/mcp/almyty-mcp.service';
 import { McpSessionService } from '../modules/mcp/mcp-session.service';
@@ -251,6 +252,8 @@ const mockRedis = {
     GatewaysStatsHelper,
     GatewayInitHelper,
     AccessPolicyService,
+    // Who may run what (AuthorizationModule in the real app).
+    ExecutionAccessService,
     AlmytyMcpService,
     McpSessionService,
 
