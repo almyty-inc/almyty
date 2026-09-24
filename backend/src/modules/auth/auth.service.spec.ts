@@ -1197,7 +1197,7 @@ describe('AuthService', () => {
   });
 
   describe('changePassword', () => {
-    it('should change password successfully', async () => { // eslint-disable-line jest/no-done-callback
+    it('should change password successfully', async () => {
       jest.setTimeout(15000);
       const currentPassword = 'CurrentPassword123!';
       const newPassword = 'NewPassword456!';
