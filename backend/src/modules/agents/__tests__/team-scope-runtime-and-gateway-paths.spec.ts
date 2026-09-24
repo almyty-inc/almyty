@@ -5,6 +5,7 @@ import { NotFoundException } from '@nestjs/common';
 import { AgentRuntimeService } from '../agent-runtime.service';
 import { AgentBuiltInToolsHelper } from '../agent-builtin-tools.helper';
 import { AgentRuntimeProcessor } from '../agent-runtime.processor';
+import { AgentStepProcessor } from '../agent-step-processor';
 import { ChannelGatewayService } from '../../gateways/channels/channel-gateway.service';
 import { ChatWidgetAdapter } from '../../gateways/channels/adapters/chat-widget.adapter';
 import { SlackAdapter } from '../../gateways/channels/adapters/slack.adapter';
@@ -147,7 +148,7 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       // A child run "finishes" as soon as it is asked about.
       waitForRun: async (id: string) => ({ ...runs.row(id), status: AgentRunStatus.COMPLETED, output: 'ok' }),
     };
-    const events = { ensureRunEmitter: jest.fn(), getRunEmitter: jest.fn().mockReturnValue(null) };
+    const events = { ensureRunEmitter: jest.fn(), getRunEmitter: jest.fn().mockReturnValue(null), emitEvent: jest.fn() };
     runtime = new AgentRuntimeService(
       runs as any,
       agents as any,
@@ -203,6 +204,56 @@ describe('team scope is an execution boundary (runtime and gateway paths)', () =
       await expect(start('private-agent', userPrincipal(CAST.admin))).rejects.toThrow(NotFoundException);
       await expect(start('private-agent', userPrincipal(CAST.member))).rejects.toThrow(NotFoundException);
       expect(runs.rows()).toHaveLength(1);
+    });
+  });
+
+  describe('every step of an autonomous run re-checks the run scope', () => {
+    const stepOf = (principal: ExecutionPrincipal) => {
+      runs.seed(
+        Object.assign(new AgentRun(), {
+          id: 'run-resumed',
+          agentId: 'team-agent',
+          organizationId: CAST.org,
+          status: AgentRunStatus.RUNNING,
+          currentStep: 3,
+          steps: [],
+          totalCost: 0,
+          totalTokens: 0,
+          executionTime: 0,
+          toolCallCount: 0,
+          maxSteps: 50,
+          limits: {},
+          principal,
+          // fakeRepository does not join; the row carries its agent.
+          agent: agents.row('team-agent'),
+        }),
+      );
+      const chatStream = jest.fn();
+      (runtime as any).llmProvidersService = { chatStream };
+      (runtime as any).builders = { buildMessages: async () => [], buildToolDefinitions: () => [] };
+      (runtime as any).organizationRepository = fakeRepository<any>([{ id: CAST.org }]);
+      (runtime as any).logger = { warn: jest.fn(), debug: jest.fn(), log: jest.fn(), error: jest.fn() };
+      const processor = new AgentStepProcessor(runtime, {} as any, {} as any, {} as any);
+      return { processor, chatStream };
+    };
+
+    it('stops a run, with a reason, once its starter has left the agent\'s team (e.g. resumed after input)', async () => {
+      const { processor, chatStream } = stepOf(userPrincipal(CAST.member));
+      m.leaveTeam(CAST.team, CAST.member);
+      await expect(processor.processStep('run-resumed')).resolves.toBe('done');
+      const after = runs.row('run-resumed')!;
+      expect(after.status).toBe(AgentRunStatus.FAILED);
+      expect(after.error).toContain(`user ${CAST.member} can no longer run this agent`);
+      expect(chatStream).not.toHaveBeenCalled();
+    });
+
+    it('carries on while the starter is still in the team', async () => {
+      const { processor, chatStream } = stepOf(userPrincipal(CAST.member));
+      chatStream.mockRejectedValue(new Error('model reached'));
+      await processor.processStep('run-resumed').catch(() => undefined);
+      // It got as far as calling the model, and failed only on what the model did.
+      expect(chatStream).toHaveBeenCalledTimes(1);
+      expect(runs.row('run-resumed')!.error).toBe('model reached');
     });
   });
 
