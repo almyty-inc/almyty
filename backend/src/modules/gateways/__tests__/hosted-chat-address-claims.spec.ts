@@ -1,3 +1,4 @@
+import { unlimitedQuotaManager } from '../../../test/tool-quota.fake';
 import { ConflictException } from '@nestjs/common';
 
 import { GatewaysService, HOSTED_CHAT_SLUG_INDEX } from '../gateways.service';
@@ -78,6 +79,7 @@ describe('hosted-chat address claims', () => {
 
     beforeEach(() => {
       gatewayRepository = {
+        get manager() { return unlimitedQuotaManager(this); },
         findOne: jest.fn().mockResolvedValue(null),
         create: jest.fn((row: any) => row),
         save: jest.fn(async (row: any) => row),

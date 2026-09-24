@@ -1,3 +1,4 @@
+import { unlimitedQuotaManager } from '../../../test/tool-quota.fake';
 import { GatewaysService } from '../gateways.service';
 import { GatewayStatus, GatewayType } from '../../../entities/gateway.entity';
 
@@ -53,6 +54,7 @@ describe('GatewaysService - createGateway leaves nothing behind when it fails', 
 
   beforeEach(() => {
     gatewayRepository = {
+      get manager() { return unlimitedQuotaManager(this); },
       findOne: jest.fn().mockResolvedValue(null),
       create: jest.fn((dto: any) => ({ ...dto })),
       save: jest.fn(async (g: any) => ({ ...g, id: 'gw-1' })),

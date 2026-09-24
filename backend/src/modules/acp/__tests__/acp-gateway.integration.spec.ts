@@ -1,3 +1,4 @@
+import { unlimitedQuotaManager } from '../../../test/tool-quota.fake';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Gateway, GatewayType, GatewayKind } from '../../../entities/gateway.entity';
@@ -41,6 +42,7 @@ describe('ACP Gateway Integration', () => {
         {
           provide: getRepositoryToken(Gateway),
           useValue: {
+            get manager() { return unlimitedQuotaManager(this); },
             findOne: jest.fn().mockResolvedValue(null),
             find: jest.fn().mockResolvedValue([]),
             create: jest.fn().mockImplementation((dto) => ({ ...dto, id: 'gw-new' })),
