@@ -131,6 +131,8 @@ export class RecordingQueryBuilder extends ClauseRecorder {
   skip(...args: any[]) { return this.note('skip', args); }
   take(...args: any[]) { return this.note('take', args); }
   limit(...args: any[]) { return this.note('limit', args); }
+  update(...args: any[]) { return this.note('update', args); }
+  set(...args: any[]) { return this.note('set', args); }
 
   private async run(terminal: string): Promise<any> {
     const query: ExecutedQuery = {
@@ -151,6 +153,27 @@ export class RecordingQueryBuilder extends ClauseRecorder {
   getRawMany() { return this.run('getRawMany'); }
   getRawOne() { return this.run('getRawOne'); }
   getRawAndEntities() { return this.run('getRawAndEntities'); }
+  getOne() { return this.run('getOne'); }
+  execute() { return this.run('execute'); }
+}
+
+/** SQL of a clause -> whether a row satisfies it under the bound parameters. */
+export type ClauseModel = Record<string, (row: any, params: Record<string, any>) => boolean>;
+
+/**
+ * The rows that satisfy every top-level clause of `query`, each clause
+ * evaluated by its exact SQL through `model`. A clause the model does not
+ * list, or a bracketed group, throws: a double that guessed at SQL it was
+ * not told about would be a silent match.
+ */
+export function matchingRows<T>(query: ExecutedQuery, rows: T[], model: ClauseModel): T[] {
+  const tests = query.clauses.map((c) => {
+    if (!('sql' in c)) throw new UnmodelledQueryBuilderCall('a bracketed clause is not modelled');
+    const test = model[c.sql];
+    if (!test) throw new UnmodelledQueryBuilderCall(`clause not modelled: ${c.sql}`);
+    return test;
+  });
+  return rows.filter((row) => tests.every((test) => test(row, query.parameters)));
 }
 
 /**
@@ -179,3 +202,60 @@ export function organizationScope(query: ExecutedQuery, alias: string): unknown 
   }
   return bound.size ? [...bound][0] : undefined;
 }
+
+/**
+ * Apply one `set()` to a row the way Postgres would. A value is written
+ * as given; a function is a raw SQL expression, and only the column
+ * copies the counter updates use are modelled: `"col"` and `"col" + 1`.
+ */
+function applySet(row: any, values: Record<string, any>): void {
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value !== 'function') {
+      row[key] = value;
+      continue;
+    }
+    const sql = String(value()).trim();
+    const m = /^"(\w+)"( \+ 1)?$/.exec(sql);
+    if (!m) throw new UnmodelledQueryBuilderCall(`set expression not modelled: ${sql}`);
+    row[key] = m[2] ? (row[m[1]] ?? 0) + 1 : row[m[1]];
+  }
+}
+
+/**
+ * A `createQueryBuilder` for `update().set().where().execute()` writes
+ * against a table: the WHERE is evaluated through `model` (unmodelled
+ * SQL throws), the one `set()` is applied to the rows it matched, and the
+ * result reports how many that was. `builders` holds every builder made,
+ * so a spec can read the write that ran. Any other terminal throws.
+ */
+export function tableUpdates(rows: any[] | (() => any[]), model: ClauseModel) {
+  const builders: RecordingQueryBuilder[] = [];
+  const createQueryBuilder = jest.fn((alias?: string) => {
+    const qb: RecordingQueryBuilder = new RecordingQueryBuilder(alias, {
+      execute: (query: ExecutedQuery) => {
+        const sets = qb.argsOf('set');
+        if (sets.length !== 1) {
+          throw new UnmodelledQueryBuilderCall(`an update takes exactly one set(), got ${sets.length}`);
+        }
+        const hits = matchingRows(query, typeof rows === 'function' ? rows() : rows, model);
+        for (const row of hits) applySet(row, sets[0][0]);
+        return { affected: hits.length };
+      },
+    });
+    builders.push(qb);
+    return qb;
+  });
+  return { createQueryBuilder, builders };
+}
+
+/** The `id = :id` single-row update the gateway counter bumps use. */
+export const BY_ID: ClauseModel = { 'id = :id': (row, p) => row.id === p.id };
+/**
+ * A `createQueryBuilder` for a path that must not build a query at all.
+ * It throws synchronously, so a fire-and-forget write that would have
+ * been swallowed by its own `.catch` still fails the request under test.
+ */
+export const refusingQueryBuilder = (why: string) =>
+  jest.fn(() => {
+    throw new UnmodelledQueryBuilderCall(`createQueryBuilder() was not expected: ${why}`);
+  });
