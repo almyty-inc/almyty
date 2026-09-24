@@ -110,7 +110,9 @@ export const DEFAULT_PUBLIC_APP_LIMITS: NonNullable<AgentApp['limits']> = {
  * Email codes have a sign-in flow too (hosted-chat-email-auth.controller.ts)
  * but are NOT a gate: anyone with an inbox passes, so a surface set to
  * email_otp is still open to the public and keeps every public-app cap.
- * OAuth has no sign-in route at all, so no visitor can hold that identity.
+ * OAuth has one too (hosted-chat-oauth.controller.ts) and is counted open
+ * for the same reason: anyone with an account at a public provider passes,
+ * and an email-domain rule is surface configuration these caps do not read.
  *
  * isOpenToAnyone() once compared against PUBLIC_LINK, so selecting
  * "Email verification" skipped PUBLIC_NEEDS_COST_CAP and

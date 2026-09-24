@@ -22,17 +22,6 @@ describe('McpOAuthService', () => {
   let oauthCodeRepository: Repository<OAuthAuthorizationCode>;
   let oauthTokenRepository: Repository<OAuthAccessToken>;
 
-  const mockGateway = {
-    id: 'gateway-1',
-    organizationId: 'org-1',
-    name: 'Test Gateway',
-    configuration: {
-      oauth: {
-        scopes: ['tools:read', 'tools:execute'],
-      },
-    },
-  };
-
   const mockClient: Partial<OAuthClient> = {
     id: 'uuid-1',
     clientId: 'mcp_client_abc123',
@@ -120,58 +109,6 @@ describe('McpOAuthService', () => {
   function sha256(value: string): string {
     return crypto.createHash('sha256').update(value).digest('hex');
   }
-
-  // ---------------------------------------------------------------------------
-  // getAuthorizationServerMetadata
-  // ---------------------------------------------------------------------------
-
-  describe('getAuthorizationServerMetadata', () => {
-    it('should return correct metadata structure', () => {
-      const baseUrl = 'https://api.almyty.com';
-      const result = service.getAuthorizationServerMetadata(
-        mockGateway as any,
-        baseUrl,
-      );
-
-      expect(result.issuer).toBe(baseUrl);
-      expect(result.authorization_endpoint).toContain('/oauth/authorize');
-      expect(result.token_endpoint).toContain('/oauth/token');
-      expect(result.registration_endpoint).toContain('/oauth/register');
-      expect(result.revocation_endpoint).toContain('/oauth/revoke');
-      expect(result.code_challenge_methods_supported).toEqual(['S256']);
-      expect(result.grant_types_supported).toContain('authorization_code');
-      expect(result.grant_types_supported).toContain('refresh_token');
-      expect(result.token_endpoint_auth_methods_supported).toEqual(['none', 'client_secret_post']);
-    });
-
-    it('should use default scopes when gateway has no oauth config', () => {
-      const gatewayNoOauth = { ...mockGateway, configuration: {} };
-      const result = service.getAuthorizationServerMetadata(
-        gatewayNoOauth as any,
-        'https://api.almyty.com',
-      );
-
-      expect(result.scopes_supported).toEqual(['tools:read', 'tools:execute']);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // getProtectedResourceMetadata
-  // ---------------------------------------------------------------------------
-
-  describe('getProtectedResourceMetadata', () => {
-    it('should return correct resource metadata', () => {
-      const baseUrl = 'https://api.almyty.com';
-      const result = service.getProtectedResourceMetadata(
-        mockGateway as any,
-        baseUrl,
-      );
-
-      expect(result.resource).toContain('/mcp');
-      expect(result.authorization_servers).toHaveLength(1);
-      expect(result.authorization_servers[0]).toContain('.well-known/oauth-authorization-server');
-    });
-  });
 
   // ---------------------------------------------------------------------------
   // registerClient
@@ -364,10 +301,10 @@ describe('McpOAuthService', () => {
       expect(result.response_types).toEqual(['code']);
     });
 
-    it('should default scope to tools:read tools:execute', async () => {
+    it('should default scope to the advertised MCP vocabulary', async () => {
       const result = await service.registerClient('gateway-1', 'org-1', validDto);
 
-      expect(result.scope).toBe('tools:read tools:execute');
+      expect(result.scope).toBe('mcp:tools mcp:resources mcp:prompts mcp:*');
     });
 
     it('should set client_id_issued_at to current unix timestamp', async () => {

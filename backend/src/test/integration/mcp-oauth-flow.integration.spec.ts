@@ -12,9 +12,6 @@
  *   5. System gateway routes to AlmytyMcpService (returns tools)
  *   6. prompts/get, resources/list return valid (not error) responses
  */
-// Undo the global JWT mock from test/setup.ts — this test needs real JWT
-jest.unmock('jsonwebtoken');
-
 import * as crypto from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { McpOAuthService } from '../../modules/mcp/services/mcp-oauth.service';

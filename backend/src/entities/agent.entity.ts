@@ -53,6 +53,24 @@ export interface AgentPipeline {
   edges: AgentPipelineEdge[];
 }
 
+/**
+ * Why the system switched an agent's schedule or heartbeat off on its own,
+ * recorded on it (`settings.schedule.pausedReason`, `heartbeat.pausedReason`)
+ * so the agent page can say what happened. Turning it back on clears it.
+ *
+ * - MODEL_NOT_FOUND: the vendor retired the configured model.
+ * - OWNER_CANNOT_RUN: the owner, whom scheduled and heartbeat runs act as,
+ *   can no longer run the agent (left its team, or it became private to
+ *   someone else).
+ * - OWNER_NOT_MEMBER: the owner is no longer an active member of the org.
+ * - RESTORE_FAILED: the schedule could not be restored after a restart.
+ */
+export interface AgentPauseReason {
+  code: 'MODEL_NOT_FOUND' | 'OWNER_CANNOT_RUN' | 'OWNER_NOT_MEMBER' | 'RESTORE_FAILED';
+  message: string;
+  detectedAt: string;
+}
+
 @Entity('agents')
 @VersionedEntity()
 @Index(['organizationId', 'name'])
@@ -117,6 +135,8 @@ export class Agent {
     enabled: boolean;
     intervalMinutes: number;
     prompt: string;
+    /** Set when the system turned the heartbeat off on its own; see AgentPauseReason. */
+    pausedReason?: AgentPauseReason;
   };
 
   @Column({ type: 'uuid', array: true, default: '{}' })

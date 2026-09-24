@@ -736,6 +736,61 @@ describe('McpOAuthController', () => {
       ).rejects.toMatchObject({ response: { error: 'access_denied' } });
     });
 
+    // RFC 8707: the only resource this path protects is this gateway, so a
+    // resource naming anything else is invalid_target, and one naming it
+    // reaches the code (it used to be dropped on the floor).
+    describe('resource indicator', () => {
+      const member = { sub: 'u1', id: 'u1', organizations: [{ id: 'org-uuid-1234' }] };
+      const gatewayUrl = () => `${(controller as any).resolve.getBaseUrl()}/${orgSlug}/${gatewaySlug}`;
+      const authorizeWith = (resource: string | undefined) =>
+        controller.authorize(
+          orgSlug,
+          gatewaySlug,
+          validQuery.responseType,
+          validQuery.clientId,
+          validQuery.redirectUri,
+          validQuery.codeChallenge,
+          validQuery.codeChallengeMethod,
+          validQuery.scope,
+          validQuery.state,
+          resource,
+          mockReq(member),
+          mockRes(),
+        );
+      const postWith = (resource: string | undefined) =>
+        controller.authorizePost(
+          orgSlug,
+          gatewaySlug,
+          {
+            response_type: 'code',
+            client_id: validQuery.clientId,
+            redirect_uri: validQuery.redirectUri,
+            code_challenge: validQuery.codeChallenge,
+            code_challenge_method: 'S256',
+            resource,
+          },
+          mockReq(member),
+        );
+
+      it('refuses a resource that is not this gateway, on GET and POST', async () => {
+        await expect(authorizeWith('https://evil.example/mcp')).rejects.toMatchObject({
+          response: { error: 'invalid_target' },
+        });
+        await expect(postWith(`${gatewayUrl()}-other`)).rejects.toMatchObject({
+          response: { error: 'invalid_target' },
+        });
+        expect(mcpOAuthService.createAuthorizationCode).not.toHaveBeenCalled();
+      });
+
+      it('hands this gateway resource to the code, and no scope default of its own', async () => {
+        (mcpOAuthService.createAuthorizationCode as jest.Mock).mockResolvedValue('code-1');
+        await postWith(`${gatewayUrl()}/`);
+        const params = (mcpOAuthService.createAuthorizationCode as jest.Mock).mock.calls[0][4];
+        expect(params.resource).toBe(gatewayUrl());
+        expect(params.scope).toBeUndefined();
+      });
+    });
+
     it('should reject missing required params (no response_type)', async () => {
       const res = mockRes();
 
@@ -1265,6 +1320,7 @@ describe('McpOAuthController', () => {
           'https://example.com/callback',
           mockGateway.id,
           undefined, // no client_secret for this public client
+          undefined, // no RFC 8707 resource named at the token endpoint
         );
         expect(result).toEqual(tokenResponse);
       });

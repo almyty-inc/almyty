@@ -229,11 +229,14 @@ export class StreamableHttpTransport extends EventEmitter {
       this.emit('envelope', body, session);
       // A response/error may belong to a dispatch whose pending call lives on
       // a DIFFERENT pod (the one that issued the request). Fan it out so that
-      // pod can match by correlation id. (heartbeat/hello stay local — they're
-      // processed wherever they land and a broadcast would double-write.)
+      // pod can match by correlation id, with the session it arrived on so
+      // that pod can check it came from the runner it asked. (heartbeat/hello
+      // stay local — they're processed wherever they land and a broadcast
+      // would double-write.)
       if (this.redis && (body.type === 'response' || body.type === 'error')) {
+        const origin = { id: session.id, organizationId: session.organizationId, userId: session.userId };
         this.redis
-          .publish(CH_RESP, JSON.stringify(body))
+          .publish(CH_RESP, JSON.stringify({ envelope: body, session: origin }))
           .catch((err) => this.logger.warn(`CH_RESP publish failed: ${err?.message ?? err}`));
       }
       res.status(202).end();
@@ -676,7 +679,16 @@ export class StreamableHttpTransport extends EventEmitter {
     } else if (channel === CH_RESP) {
       // A response/error from any pod; re-emit locally so the pod with the
       // matching pending dispatch call resolves it (load-and-delete dedups).
-      this.emit('envelope', parsed, undefined);
+      // The session it was posted on travels with it: the dispatcher only
+      // accepts a response from the session of the runner it asked.
+      const envelope = parsed?.envelope;
+      const origin = parsed?.session;
+      if (!envelope || !origin?.id) return;
+      this.emit('envelope', envelope, {
+        id: String(origin.id),
+        organizationId: String(origin.organizationId ?? ''),
+        userId: origin.userId ?? undefined,
+      });
     }
   }
 

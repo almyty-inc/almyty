@@ -471,6 +471,11 @@ export const gatewaysApi = {
   setCustomDomain: (id: string, hostname: string) => apiPut(`/gateways/${id}/custom-domain`, { hostname }),
   verifyCustomDomain: (id: string) => apiPost(`/gateways/${id}/custom-domain/verify`),
   removeCustomDomain: (id: string) => apiDel(`/gateways/${id}/custom-domain`),
+  getVisitorOAuth: (id: string) => apiGet(`/gateways/${id}/visitor-oauth`),
+  setVisitorOAuth: (id: string, body: Record<string, unknown>) => apiPut(`/gateways/${id}/visitor-oauth`, body),
+  removeVisitorOAuth: (id: string) => apiDel(`/gateways/${id}/visitor-oauth`),
+  // What to register at the org's IdP for hosted-chat SSO visitor sign-in (EE).
+  getHostedChatSso: (id: string) => apiGet(`/gateways/${id}/hosted-chat-sso`),
 
   // Tool association endpoints
   getTools: (id: string) => apiGet(`/gateways/${id}/tools`),
@@ -961,6 +966,8 @@ export const agentsApi = {
   schedule: (id: string, intervalMinutes: number, input?: any) =>
     apiPost(`/agents/${id}/schedule`, { intervalMinutes, input }),
   unschedule: (id: string) => apiDel(`/agents/${id}/schedule`),
+  setHeartbeat: (id: string, body: { enabled: boolean; intervalMinutes?: number; prompt?: string }) =>
+    apiPatch(`/agents/${id}/heartbeat`, body),
   // Runs (autonomous mode)
   startRun: (id: string, input: any, options?: any) => apiPost(`/agents/${id}/runs`, { input, ...options }),
   listRuns: (id: string, params?: any) => apiGet(`/agents/${id}/runs`, { params }),

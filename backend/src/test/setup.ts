@@ -1,5 +1,6 @@
 // Global test setup
 import { Test, TestingModule } from '@nestjs/testing';
+import { assertExtensionsInPublic } from './integration/test-db-extensions';
 
 // The integration specs boot a real Nest graph and run every migration in
 // their own Postgres schema before the first assertion. That does not finish
@@ -10,6 +11,18 @@ import { Test, TestingModule } from '@nestjs/testing';
 // the test.
 if (process.env.RUN_DB_INTEGRATION === '1') {
   jest.setTimeout(120_000);
+}
+
+// After every DB-integration spec file, the extensions the migrations need
+// must still be in `public`. A spec that let its migrations create one in
+// its own schema fails here, by name, rather than some later spec failing
+// with "function uuid_generate_v4() does not exist".
+if (process.env.RUN_DB_INTEGRATION === '1') {
+  afterAll(async () => {
+    const specPath = expect.getState().testPath ?? '';
+    if (!/[\\/]test[\\/]integration[\\/]/.test(specPath)) return;
+    await assertExtensionsInPublic(specPath);
+  });
 }
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -112,17 +125,17 @@ jest.mock('redis', () => ({
   createClient: () => mockRedis,
 }));
 
-// Mock JWT
-jest.mock('jsonwebtoken', () => ({
-  sign: jest.fn(() => 'mock-jwt-token'),
-  verify: jest.fn(() => ({ sub: 'user-id', username: 'test-user' })),
-}));
-
 // bcrypt and bcryptjs stay real here: a global double that says every
 // password matches makes every wrong-password path untestable. Specs that
 // want speed hash with a low cost factor (hash(pw, 4)); a spec that wants a
 // double declares its own jest.mock. Pinned by
 // __tests__/no-global-bcrypt-stub.spec.ts.
+
+// jsonwebtoken stays real for the same reason: a global double whose verify
+// returned a fixed payload for any string let forged, expired and
+// wrong-secret tokens through every real JwtService in the suite. Specs sign
+// real tokens with src/test/jwt.ts. Pinned by
+// __tests__/no-global-jwt-stub.spec.ts.
 
 // Global test helpers
 export class TestHelper {

@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../../test/execution-access.fixture';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
@@ -119,6 +121,7 @@ describe('AgentExecutionEngine - a layer that times out', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         AgentExecutionEngine,
         { provide: getRepositoryToken(Agent), useValue: agentRepo },
         { provide: getRepositoryToken(AgentExecution), useValue: agentExecutionRepo },

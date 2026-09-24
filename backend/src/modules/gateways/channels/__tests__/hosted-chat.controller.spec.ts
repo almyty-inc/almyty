@@ -164,10 +164,12 @@ describe('HostedChatController', () => {
       expect(hostedChat.deleteVisitor).not.toHaveBeenCalled();
     });
 
-    it('tells the runtime whether visitor turns may feed shared memory', async () => {
+    it('tells the runtime whether visitor turns may feed shared memory, and to compose the answer', async () => {
       await controller.postMessage('acme', { message: 'hi' }, req(), res);
       const options = agentRuntimeService.startRun.mock.calls[0][4];
-      expect(options.metadata).toEqual({ visitorMemory: false });
+      // composeFinalAnswer: the visitor watches the reply stream, so the
+      // answer is written by a no-tools call (agents/final-answer.ts).
+      expect(options.metadata).toEqual({ visitorMemory: false, composeFinalAnswer: true });
     });
   });
 

@@ -114,9 +114,11 @@ describe('MCP prompts/get and private tools', () => {
   });
 
   it('on a gateway, only that gateway\'s servable tools answer; a private tool needs the owner\'s private gateway', async () => {
-    gatewayTools.find.mockResolvedValue([{ tool: orgTool }, { tool: ownerTool }]);
     const orgGateway = { id: 'gw-1', visibility: 'org', ownerUserId: 'owner' };
-    (mcp as any).toolHandler.gatewayToolRepository.manager = { getRepository: () => ({ findOne: jest.fn().mockResolvedValue(orgGateway) }) };
+    gatewayTools.find.mockResolvedValue([
+      { gatewayId: 'gw-1', isActive: true, tool: orgTool, gateway: orgGateway },
+      { gatewayId: 'gw-1', isActive: true, tool: ownerTool, gateway: orgGateway },
+    ]);
     expect((await rpc({ name: 'use-weather' }, undefined, 'gw-1')).error).toBeUndefined();
     expect((await rpc({ name: 'use-secret-lookup' }, 'owner', 'gw-1')).error).toBeDefined();
     expect((await rpc({ name: 'use-team-report' }, 'lead', 'gw-1')).error).toBeDefined();

@@ -16,7 +16,13 @@ import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { ToolCategory } from '../../../entities/tool-category.entity';
 import { ToolsService } from '../../tools/tools.service';
 import { ToolExecutorService } from '../../tools/tool-executor.service';
-import { isOthersPrivate, servableOnGateway, withoutOthersPrivate } from '../../../common/authorization/private-visibility';
+import { isOthersPrivate, withoutOthersPrivate } from '../../../common/authorization/private-visibility';
+import { servableToolsOnGateway } from '../../gateways/gateway-servable';
+import {
+  ExecutionPrincipal,
+  gatewayPrincipal,
+  userPrincipal,
+} from '../../../common/authorization/execution-access.service';
 import { Gateway } from '../../../entities/gateway.entity';
 import { MetricsRecorderService } from '../../../common/metrics/metrics-recorder.service';
 import { MetricType, MetricStatus } from '../../../entities/usage-metric.entity';
@@ -127,13 +133,8 @@ export class McpToolHandler {
     let totalCount: number | undefined;
 
     if (gatewayId) {
-      const gatewayTools = await this.gatewayToolRepository.find({
-        where: { gatewayId, isActive: true },
-        relations: { tool: true },
-      });
-      // A private tool is served through a gateway only when the gateway is
-      // private to the tool's own owner.
-      tools = await this.servableThroughGateway(gatewayTools.map((gt: any) => gt.tool).filter(Boolean), gatewayId);
+      // What the gateway serves -- the same set tools/call resolves against.
+      tools = await servableToolsOnGateway(this.gatewayToolRepository, gatewayId);
       this.logger.log(`[GATEWAY-SCOPE] Returning ${tools.length} tools for gateway ${gatewayId}`);
     } else {
       // Page at the database, and ask for the page actually being served.
@@ -267,15 +268,11 @@ export class McpToolHandler {
       ...this.listScope(gatewayId, caller),
     });
 
-    let tools = gatewayId
-      ? await this.servableThroughGateway(result.tools, gatewayId)
-      : withoutOthersPrivate(result.tools, caller?.id);
+    let tools = withoutOthersPrivate(result.tools, caller?.id);
     if (gatewayId) {
-      const gatewayTools = await this.gatewayToolRepository.find({
-        where: { gatewayId, isActive: true },
-      });
-      const gatewayToolIds = new Set(gatewayTools.map(gt => gt.toolId));
-      tools = tools.filter(t => gatewayToolIds.has(t.id));
+      // Search inside what the gateway serves, never around it.
+      const servable = new Set((await servableToolsOnGateway(this.gatewayToolRepository, gatewayId)).map((t) => t.id));
+      tools = tools.filter((t) => servable.has(t.id));
     }
 
     return {
@@ -293,17 +290,21 @@ export class McpToolHandler {
     };
   }
 
-  async handleToolGet(params: any, organizationId: string, userId?: string): Promise<any> {
+  async handleToolGet(params: any, organizationId: string, userId?: string, gatewayId?: string): Promise<any> {
     const toolName = params?.name as string;
 
     if (!toolName) {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Missing required parameter: name');
     }
 
-    const allTools = await this.toolRepository.find({
-      where: { status: ToolStatus.ACTIVE, organizationId },
-      relations: { categories: true, operation: true },
-    });
+    // Through a gateway, only the tools that gateway serves: describing an
+    // org tool the gateway never published would be a listing by other means.
+    const allTools = gatewayId
+      ? await servableToolsOnGateway(this.gatewayToolRepository, gatewayId, { categories: true, operation: true })
+      : await this.toolRepository.find({
+          where: { status: ToolStatus.ACTIVE, organizationId },
+          relations: { categories: true, operation: true },
+        });
 
     // Another member's private tool is "not found".
     const tool = withoutOthersPrivate(allTools, userId).find(t => this.sanitizeToolName(t.name) === toolName);
@@ -345,25 +346,30 @@ export class McpToolHandler {
       throw this.createError(JsonRpcErrorCode.INVALID_PARAMS, 'Tool name is required');
     }
 
-    let tool = await this.toolsService.findByName(params.name, organizationId);
+    // Through a gateway, only what that gateway lists (the same set tools/list
+    // reads); without one, the caller's own view of the organization.
+    const tool = gatewayId
+      ? await this.resolveGatewayTool(params.name, gatewayId)
+      : await this.resolveOrgTool(params.name, organizationId, userId);
     // Another member's private tool is not callable here, and does not
     // exist as far as this caller is told.
-    if (tool && isOthersPrivate(tool, userId)) {
-      throw this.createError(JsonRpcErrorCode.TOOL_NOT_FOUND, `Tool not found: ${params.name}`);
-    }
-    // Through a gateway, a private tool is callable only when the gateway is
-    // private to the tool's own owner.
-    if (tool && gatewayId && (await this.servableThroughGateway([tool], gatewayId)).length === 0) {
+    if (!tool || isOthersPrivate(tool, userId)) {
       throw this.createError(JsonRpcErrorCode.TOOL_NOT_FOUND, `Tool not found: ${params.name}`);
     }
 
-    if (!tool) {
-      const allTools = await this.toolsService.getTools({ organizationId, ...this.listScope(undefined, userId ? { id: userId } : undefined) });
-      tool = allTools.tools.find(t => this.sanitizeToolName(t.name) === params.name);
-
-      if (!tool) {
+    // Whose scope the call runs in. Through a gateway it is the gateway's --
+    // a gateway serves only what its own visibility covers, re-checked on
+    // every call -- and on the gateway-less path it is the caller's own.
+    let principal: ExecutionPrincipal = userPrincipal(userId ?? null);
+    if (gatewayId) {
+      const gateway = await this.gatewayToolRepository.manager.getRepository(Gateway).findOne({
+        where: { id: gatewayId, organizationId },
+        select: { id: true, organizationId: true, visibility: true, teamId: true, ownerUserId: true, isSystem: true },
+      });
+      if (!gateway) {
         throw this.createError(JsonRpcErrorCode.TOOL_NOT_FOUND, `Tool not found: ${params.name}`);
       }
+      principal = gatewayPrincipal(gateway, userId ?? null);
     }
 
     try {
@@ -377,8 +383,14 @@ export class McpToolHandler {
           // load `gateway_tools.securityPolicy` for this tool and enforce it
           // on the outbound request; without it the policy is invisible here.
           gatewayId: gatewayId ?? null,
+          principal,
         },
       );
+      // A tool outside the call's scope is the same "not found" as a tool
+      // that does not exist.
+      if (result.notFound) {
+        throw this.createError(JsonRpcErrorCode.TOOL_NOT_FOUND, `Tool not found: ${params.name}`);
+      }
 
       this.metrics?.record(MetricType.MCP_TOOL_CALL, {
         organizationId,
@@ -398,6 +410,7 @@ export class McpToolHandler {
         isError: !result.success,
       };
     } catch (error) {
+      if (error?.code === JsonRpcErrorCode.TOOL_NOT_FOUND) throw error;
       this.metrics?.record(MetricType.MCP_TOOL_CALL, {
         organizationId,
         userId: userId || null,
@@ -472,13 +485,8 @@ export class McpToolHandler {
     caller?: { id: string },
   ): Promise<Tool[]> {
     if (gatewayId) {
-      const gatewayTools = await this.gatewayToolRepository.find({
-        where: { gatewayId, isActive: true },
-        relations: { tool: { categories: true } },
-      });
-      // Gateway membership gates org/team tools; a private tool is served
-      // only through a gateway private to the tool's own owner.
-      return this.servableThroughGateway(gatewayTools.map((gt: any) => gt.tool).filter(Boolean), gatewayId);
+      // The gateway's own set: what tools/list shows and tools/call runs.
+      return servableToolsOnGateway(this.gatewayToolRepository, gatewayId, { categories: true });
     }
     const result = await this.toolsService.getTools({ organizationId, status: ToolStatus.ACTIVE, ...this.listScope(gatewayId, caller) });
     return result.tools;
@@ -486,14 +494,7 @@ export class McpToolHandler {
 
   private async getToolsForGateway(organizationId: string, gatewayId?: string, userId?: string): Promise<Tool[]> {
     if (gatewayId) {
-      const gatewayTools = await this.gatewayToolRepository.find({
-        where: { gatewayId },
-        relations: { tool: true },
-      });
-      return this.servableThroughGateway(
-        gatewayTools.map((gt) => gt.tool).filter((t) => t && t.status === ToolStatus.ACTIVE),
-        gatewayId,
-      );
+      return servableToolsOnGateway(this.gatewayToolRepository, gatewayId);
     }
     const tools = await this.toolRepository.find({
       where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
@@ -502,20 +503,31 @@ export class McpToolHandler {
   }
 
   /**
-   * The tools a gateway may serve. A gateway is reached by whoever holds
-   * its endpoint or key, so a private tool passes only when the gateway is
-   * itself private to the tool's own owner (the same rule the UTCP manual
-   * and the skill/CLI/SDK bundles apply). The gateway row is read only when
-   * there is a private tool to decide about.
+   * The tool a gateway call names, from the set the gateway lists.
+   *
+   * tools/list and tools/call both read `servableToolsOnGateway`, so a name
+   * the listing does not carry resolves to nothing here -- the same
+   * not-found a tool that does not exist gets. This used to look the name
+   * up across the whole organization, which let a gateway run any org tool
+   * it never published.
    */
-  private async servableThroughGateway<T extends Tool>(tools: T[], gatewayId: string): Promise<T[]> {
-    if (!tools.some((t) => t.visibility === 'private')) return tools;
-    const gateway = await this.gatewayToolRepository.manager.getRepository(Gateway).findOne({
-      where: { id: gatewayId },
-      select: { id: true, visibility: true, ownerUserId: true },
-    });
-    return servableOnGateway(tools, gateway);
+  private async resolveGatewayTool(name: string, gatewayId: string): Promise<Tool | null> {
+    const servable = await servableToolsOnGateway(this.gatewayToolRepository, gatewayId);
+    return (
+      servable.find((t) => t.name === name) ??
+      servable.find((t) => this.sanitizeToolName(t.name) === name) ??
+      null
+    );
   }
+
+  /** The tool a gateway-less call names: the caller's own view of the org. */
+  private async resolveOrgTool(name: string, organizationId: string, userId?: string): Promise<Tool | null> {
+    const byName = await this.toolsService.findByName(name, organizationId);
+    if (byName) return byName;
+    const allTools = await this.toolsService.getTools({ organizationId, ...this.listScope(undefined, userId ? { id: userId } : undefined) });
+    return allTools.tools.find((t) => this.sanitizeToolName(t.name) === name) ?? null;
+  }
+
   private createError(code: JsonRpcErrorCode, message: string): any {
     const error = new Error() as any;
     error.code = code;

@@ -71,7 +71,12 @@ export interface PipelineExecutionFailed {
 
 export interface RuntimeLlmStarted {
   type: 'llm.started';
-  data?: { step: number };
+  /**
+   * `answer` is set on composing runs only (final-answer.ts): false for a
+   * call that offers tools, true for the no-tools call that writes the
+   * visitor's answer.
+   */
+  data?: { step: number; answer?: boolean };
   timestamp: number;
 }
 
@@ -100,6 +105,13 @@ export interface RuntimeLlmResponse {
     toolCalls?: Array<{ id: string; name: string }>;
     usage?: { inputTokens: number; outputTokens: number };
     cost?: number;
+    /**
+     * Composing runs only (final-answer.ts): whether this reply is the
+     * visitor's answer. `fallback` says the answer call failed or came
+     * back empty and this is the draft standing in.
+     */
+    answer?: boolean;
+    fallback?: 'error' | 'empty';
   };
   timestamp: number;
 }

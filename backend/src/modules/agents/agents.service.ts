@@ -18,7 +18,6 @@ import { AccessPolicyService, ResourceVisibility } from '../../common/authorizat
 import {
   assertAttachable,
   assertNotOthersPrivate,
-  isOthersPrivate,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
@@ -505,7 +504,13 @@ export class AgentsService {
       where: { organizationId, status: AgentStatus.ACTIVE },
       order: { createdAt: 'DESC' },
     });
-    return agents.filter((a) => !isOthersPrivate(a, callerId ?? null));
+    // The list read rule (filterVisible): org agents, the caller's teams'
+    // agents (every team's for an org owner/admin) and the caller's own
+    // private ones. With no caller, org agents only. It is the same rule
+    // that decides whether an agent may be RUN, so /v1/models never lists
+    // a model the completion endpoint would then refuse.
+    if (!callerId) return agents.filter((a) => (a.visibility ?? 'org') === 'org');
+    return this.accessPolicy.filterVisible({ id: callerId }, organizationId, agents);
   }
 
   async getAgents(filters: AgentSearchFilters): Promise<{

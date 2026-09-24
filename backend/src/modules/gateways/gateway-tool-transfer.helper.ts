@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -15,6 +16,7 @@ import { User } from '../../entities/user.entity';
 import { AuditAction, AuditResource } from '../../entities/audit-log.entity';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { gatewayServableTo, resourceServableThroughGateway } from './private-gateway';
+import { ExecutionAccessService, userPrincipal } from '../../common/authorization/execution-access.service';
 
 /**
  * Copy / remove operations for gateway-tool associations.
@@ -38,6 +40,9 @@ export class GatewayToolTransferHelper {
     private readonly userRepository: Repository<User>,
     private readonly auditLogService: AuditLogService,
     @InjectRedis() private readonly redis: Redis.Redis,
+    // Membership half of the gateway rule for team tools; @Optional() only
+    // to keep positional spec harnesses' order.
+    @Optional() private readonly executionAccess?: ExecutionAccessService,
   ) {}
 
   async copyToolsFromGateway(
@@ -86,13 +91,27 @@ export class GatewayToolTransferHelper {
       const skipped: Array<{ toolId: string; reason: string }> = [];
 
       for (const sourceTool of sourceTools) {
-        // A private tool only travels to a gateway private to its owner.
+        // A tool only travels to a gateway whose scope covers it: a private
+        // tool to a gateway private to its owner, a team tool to a gateway
+        // scoped to its team -- and a team tool only for someone who may
+        // run it (fails closed when that check is not wired).
         if (!resourceServableThroughGateway(targetGateway, sourceTool.tool)) {
           skipped.push({
             toolId: sourceTool.toolId,
-            reason: 'Tool is private; it can only be served through a gateway that is private to its owner',
+            reason: sourceTool.tool?.visibility === 'team'
+              ? 'Tool is visible to its team only; it can only be served through a gateway scoped to that team'
+              : 'Tool is private; it can only be served through a gateway that is private to its owner',
           });
           continue;
+        }
+        if (sourceTool.tool?.visibility === 'team') {
+          const decision = this.executionAccess
+            ? await this.executionAccess.canExecute(userPrincipal(userId), sourceTool.tool)
+            : { allowed: false };
+          if (!decision.allowed) {
+            skipped.push({ toolId: sourceTool.toolId, reason: 'Tool not found in this organization' });
+            continue;
+          }
         }
         if (existingToolIds.has(sourceTool.toolId) && !overrideExisting) {
           skipped.push({

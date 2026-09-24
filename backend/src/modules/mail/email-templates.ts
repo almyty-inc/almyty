@@ -450,6 +450,24 @@ const TEMPLATES: Record<string, TemplateRenderer> = {
     ),
   }),
 
+  // ── Hosted chat custom domains ──────────────────────────────────────
+
+  'domains.unverified': (p) => ({
+    subject: sanitizeSubject(`${p.hostname || 'Your custom domain'} is no longer served`),
+    html: renderBaseLayout({
+      heading: 'Custom domain stopped',
+      bodyHtml:
+        para(
+          `<strong>${esc(p.hostname || 'A custom domain')}</strong>${p.gatewayName ? ` on <strong>${esc(p.gatewayName)}</strong>` : ''} is no longer served.`,
+        ) + para(esc(p.reason || 'Its DNS verification record could not be found.')),
+      footerNote: 'You receive this because you administer the organization that owns this chat app.',
+      orgName: p.organizationName,
+    }),
+    text: flattenText(
+      `${p.hostname || 'A custom domain'}${p.gatewayName ? ` on ${p.gatewayName}` : ''} is no longer served. ${p.reason || 'Its DNS verification record could not be found.'}`,
+    ),
+  }),
+
   // ── Lifecycle activation emails (new-signup cadence) ─────────────────
   // Sent by the lifecycle module: welcome on verify, a state-aware T+2
   // nudge, a T+5 showcase, a T+10 last touch, and a post-activation

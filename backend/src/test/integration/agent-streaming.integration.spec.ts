@@ -1,3 +1,5 @@
+import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
+import { membershipFixture } from '../../test/execution-access.fixture';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bull';
@@ -226,6 +228,7 @@ describe('Agent Streaming (integration)', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: ExecutionAccessService, useValue: membershipFixture().executionAccess },
         AgentRuntimeService,
         AgentRuntimeBuilders,
         AgentCollaborationHelper,

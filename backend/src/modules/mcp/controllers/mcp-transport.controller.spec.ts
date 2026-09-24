@@ -2,14 +2,12 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { McpTransportController } from './mcp-transport.controller';
 import { McpService } from '../mcp.service';
 import { SseTransport } from '../transports/sse.transport';
-import { WebSocketTransport } from '../transports/websocket.transport';
 import { StreamableHttpTransport } from '../transports/streamable-http.transport';
 
 describe('McpTransportController', () => {
   let controller: McpTransportController;
   let mcpService: any;
   let sseTransport: any;
-  let wsTransport: any;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -32,14 +30,6 @@ describe('McpTransportController', () => {
           },
         },
         {
-          provide: WebSocketTransport,
-          useValue: {
-            getActiveConnections: jest.fn(),
-            broadcastToAll: jest.fn(),
-            getConnectionStats: jest.fn(),
-          },
-        },
-        {
           provide: StreamableHttpTransport,
           useValue: { handlePost: jest.fn(), handleStream: jest.fn() },
         },
@@ -49,56 +39,38 @@ describe('McpTransportController', () => {
     controller = module.get<McpTransportController>(McpTransportController);
     mcpService = module.get(McpService);
     sseTransport = module.get(SseTransport);
-    wsTransport = module.get(WebSocketTransport);
-  });
-
-  describe('getWebSocketInfo', () => {
-    it('should return WebSocket information', async () => {
-      const result = await controller.getWebSocketInfo();
-
-      expect(result).toEqual({
-        protocol: 'mcp-websocket',
-        version: '1.0.0',
-        endpoint: expect.any(String),
-        features: expect.any(Object),
-      });
-    });
   });
 
   describe('getTransportStats', () => {
-    it('should return transport statistics', async () => {
-      const mockRequest = {
-        user: { currentOrganizationId: 'org-1' }
-      };
-
-      mcpService.getActiveSessions = jest.fn().mockResolvedValue([]);
+    // Any member may call this, so it answers for the caller's organization
+    // only. It used to return `connections: <platform total>` for each
+    // transport beside the org's own count -- every other tenant's load, to
+    // anyone with a login.
+    it('counts only the caller organization, never the platform total', async () => {
+      mcpService.getActiveSessions = jest.fn().mockResolvedValue([{ id: 's1' }]);
       sseTransport.getConnectionStats.mockReturnValue({
-        total: 5,
-        totalMessages: 100,
+        total: 57,
         averageAge: 300,
-        byOrganization: { 'org-1': 2 }
-      });
-      wsTransport.getConnectionStats.mockReturnValue({
-        total: 3,
-        totalMessages: 50,
-        averageAge: 200,
-        byOrganization: { 'org-1': 1 }
+        byOrganization: { 'org-1': 2, 'org-2': 55 },
       });
 
-      const result = await controller.getTransportStats(mockRequest);
+      const result = await controller.getTransportStats({ user: { currentOrganizationId: 'org-1' } });
 
-      expect(result).toEqual({
-        totalSessions: 0,
-        transports: expect.any(Object),
-        serverInfo: expect.any(Object),
-      });
+      expect(mcpService.getActiveSessions).toHaveBeenCalledWith('org-1');
+      expect(result.totalSessions).toBe(1);
+      expect(result.transports).toEqual({ sse: { organizationConnections: 2 } });
+      expect(JSON.stringify(result)).not.toMatch(/\b57\b|\b55\b|averageAge/);
+    });
+
+    it('refuses without an organization context instead of reading undefined', async () => {
+      await expect(controller.getTransportStats({ user: {} })).rejects.toThrow('Organization context required');
     });
   });
 
   describe('getTransportHealth', () => {
     it('returns only a minimal {status, transports} shape — no uptime or connection counts leaked', async () => {
       // This endpoint used to dump process.uptime() + global
-      // SSE/WS connection counts to anyone. Regression: pin the
+      // connection counts to anyone. Regression: pin the
       // stripped-down shape so nothing global slips back in.
       const result = await controller.getTransportHealth();
 
@@ -106,7 +78,6 @@ describe('McpTransportController', () => {
         status: 'healthy',
         transports: {
           sse: { status: 'active' },
-          websocket: { status: 'active' },
         },
       });
       expect(Object.keys(result)).toEqual(['status', 'transports']);
@@ -116,75 +87,22 @@ describe('McpTransportController', () => {
   });
 
   describe('broadcast', () => {
-    it('should broadcast message successfully', async () => {
-      const mockRequest = {
-        user: { id: 'user-1', currentOrganizationId: 'org-1' }
-      };
-
-      const broadcastDto = {
-        message: 'Test broadcast',
-        recipients: ['all'],
-      };
-
+    it('broadcasts to the organization over SSE', async () => {
       sseTransport.broadcast = jest.fn().mockResolvedValue(3);
-      wsTransport.broadcastToOrganization = jest.fn().mockResolvedValue(2);
 
-      const result = await controller.broadcast(mockRequest, broadcastDto);
+      const result = await controller.broadcast(
+        { user: { id: 'user-1', currentOrganizationId: 'org-1' } },
+        { message: 'Test broadcast' },
+      );
 
-      expect(result).toEqual({
-        message: 'Broadcast sent',
-        recipients: expect.any(Object),
-      });
+      expect(sseTransport.broadcast).toHaveBeenCalledWith('org-1', 'Test broadcast');
+      expect(result).toEqual({ message: 'Broadcast sent', recipients: { sse: 3, total: 3 } });
     });
 
     it('should throw error when organization context is missing', async () => {
-      const mockRequest = {
-        user: { id: 'user-1' }
-      };
-
-      const broadcastDto = {
-        message: 'Test broadcast',
-      };
-
-      await expect(controller.broadcast(mockRequest, broadcastDto)).rejects.toThrow('Organization context required');
-    });
-
-    it('should broadcast only to SSE when transport is sse', async () => {
-      const mockRequest = {
-        user: { id: 'user-1', currentOrganizationId: 'org-1' }
-      };
-
-      const broadcastDto = {
-        message: 'Test broadcast',
-        transport: 'sse' as const,
-      };
-
-      sseTransport.broadcast = jest.fn().mockResolvedValue(3);
-      wsTransport.broadcastToOrganization = jest.fn().mockResolvedValue(0);
-
-      const result = await controller.broadcast(mockRequest, broadcastDto);
-
-      expect(result.recipients.sse).toBe(3);
-      expect(sseTransport.broadcast).toHaveBeenCalledWith('org-1', 'Test broadcast');
-    });
-
-    it('should broadcast only to WebSocket when transport is websocket', async () => {
-      const mockRequest = {
-        user: { id: 'user-1', currentOrganizationId: 'org-1' }
-      };
-
-      const broadcastDto = {
-        message: 'Test broadcast',
-        transport: 'websocket' as const,
-      };
-
-      sseTransport.broadcast = jest.fn().mockResolvedValue(0);
-      wsTransport.broadcastToOrganization = jest.fn().mockResolvedValue(2);
-
-      const result = await controller.broadcast(mockRequest, broadcastDto);
-
-      expect(result.recipients.websocket).toBe(2);
-      expect(wsTransport.broadcastToOrganization).toHaveBeenCalledWith('org-1', 'Test broadcast');
+      await expect(
+        controller.broadcast({ user: { id: 'user-1' } }, { message: 'Test broadcast' }),
+      ).rejects.toThrow('Organization context required');
     });
   });
 

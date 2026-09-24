@@ -68,4 +68,28 @@ describe('migration runner logging', () => {
     expect(out).toContain('failed, error: boom');
     expect(out).toContain('relation "widgets" does not exist');
   });
+
+  it('logs a failing migration query with its SQL and error but not its parameters', () => {
+    AppDataSource.setOptions({ logging: cliLoggingOverride() as any });
+
+    AppDataSource.logger.logQueryError(
+      'duplicate key value violates unique constraint "UQ_users_email"',
+      'UPDATE "users" SET "email" = $1 WHERE "id" = $2',
+      ['alice@example.com', 'row-secret-id'],
+    );
+    AppDataSource.logger.logQuerySlow(
+      2500,
+      'SELECT * FROM "credentials" WHERE "value" = $1',
+      ['sk-live-row-contents'],
+    );
+
+    // The console logger highlights SQL with ANSI colour codes.
+    // eslint-disable-next-line no-control-regex
+    const out = printed.join('\n').replace(/\u001b\[[0-9;]*m/g, '');
+    expect(out).toContain('UPDATE "users" SET "email" = $1');
+    expect(out).toContain('violates unique constraint');
+    expect(out).not.toContain('alice@example.com');
+    expect(out).not.toContain('row-secret-id');
+    expect(out).not.toContain('sk-live-row-contents');
+  });
 });
