@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 
 import { ApprovalsService } from '../approvals.service';
 import { ApprovalRequest } from '../../../entities/approval-request.entity';
+import { fakeApprovalsRepo } from './approvals-repo.fixture';
 
 /**
  * `POST /approvals/:id/approve|reject` read `req.user` and never used it.
@@ -22,39 +23,8 @@ describe('approve/reject are scoped to the caller\'s organization', () => {
   const VICTIM_ORG = 'org-victim';
   const ATTACKER_ORG = 'org-attacker';
 
-  class FakeApprovalsRepo {
-    rows: ApprovalRequest[] = [];
-    async findOne({ where }: any) {
-      return (
-        this.rows.find((r) =>
-          Object.entries(where).every(([k, v]) => (r as any)[k] === v),
-        ) ?? null
-      );
-    }
-    async find() {
-      return this.rows;
-    }
-    create(partial: Partial<ApprovalRequest>) {
-      return { id: 'a_1', createdAt: new Date(), ...partial } as ApprovalRequest;
-    }
-    async save(r: ApprovalRequest) {
-      this.rows.push(r);
-      return r;
-    }
-    createQueryBuilder() {
-      const qb: any = {
-        update: () => qb,
-        set: () => qb,
-        where: () => qb,
-        andWhere: () => qb,
-        execute: async () => ({ affected: 1 }),
-      };
-      return qb;
-    }
-  }
-
   function makeService(policyAllows = true) {
-    const approvals = new FakeApprovalsRepo();
+    const approvals = fakeApprovalsRepo();
     const policy = {
       canAccess: jest.fn(async () => ({ allowed: policyAllows, reason: 'not a member' })),
       applyListFilter: jest.fn(async () => ({ bypass: true, teamIds: [] })),
@@ -83,7 +53,7 @@ describe('approve/reject are scoped to the caller\'s organization', () => {
 
   it('answers 404 for another tenant\'s DECIDED approval, not "already approved"', async () => {
     const { svc, approvals } = makeService();
-    approvals.rows.push(victimRow('approved'));
+    approvals.seed(victimRow('approved'));
 
     await expect(
       svc.approve('a-victim', { decidedBy: 'u-attacker' }, { id: 'u-attacker' }, ATTACKER_ORG),
@@ -92,18 +62,19 @@ describe('approve/reject are scoped to the caller\'s organization', () => {
 
   it('answers 404 for another tenant\'s PENDING approval, not 403', async () => {
     const { svc, approvals } = makeService(false);
-    approvals.rows.push(victimRow('pending'));
+    approvals.seed(victimRow('pending'));
 
     await expect(
       svc.reject('a-victim', { decidedBy: 'u-attacker' }, { id: 'u-attacker' }, ATTACKER_ORG),
     ).rejects.toBeInstanceOf(NotFoundException);
+    expect(approvals.row('a-victim')!.status).toBe('pending');
   });
 
   it('never even asks the access policy about a foreign row', async () => {
     // The org predicate is the gate; canAccess is the second layer, not
     // the first. If it is consulted at all here, the row was loaded.
     const { svc, approvals, policy } = makeService();
-    approvals.rows.push(victimRow('pending'));
+    approvals.seed(victimRow('pending'));
 
     await expect(
       svc.approve('a-victim', { decidedBy: 'u-attacker' }, { id: 'u-attacker' }, ATTACKER_ORG),
@@ -113,7 +84,7 @@ describe('approve/reject are scoped to the caller\'s organization', () => {
 
   it('still decides a row in the caller\'s own organization', async () => {
     const { svc, approvals } = makeService();
-    approvals.rows.push({ ...victimRow('pending'), organizationId: ATTACKER_ORG } as any);
+    approvals.seed({ ...victimRow('pending'), organizationId: ATTACKER_ORG } as any);
 
     const decided = await svc.approve(
       'a-victim',
@@ -122,5 +93,6 @@ describe('approve/reject are scoped to the caller\'s organization', () => {
       ATTACKER_ORG,
     );
     expect(decided.status).toBe('approved');
+    expect(approvals.row('a-victim')).toMatchObject({ status: 'approved', decidedBy: 'u-member' });
   });
 });
