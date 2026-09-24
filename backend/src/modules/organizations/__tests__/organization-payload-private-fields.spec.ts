@@ -80,13 +80,15 @@ describe('organization payloads', () => {
   });
 
   it('PATCH keeps the stored billing info and invite tokens, and returns neither', async () => {
-    const result: any = await service.update('org-1', { settings: { maxApis: 9 } } as any);
+    const result: any = await service.update('org-1', { settings: { allowUserScopedConnections: true } } as any);
 
     expect(result).not.toHaveProperty('billingInfo');
     expect(JSON.stringify(result)).not.toContain('invite-secret');
 
     const row: any = organizations.row('org-1');
-    expect(row.settings.maxApis).toBe(9);
+    expect(row.settings.allowUserScopedConnections).toBe(true);
+    // Plan limits are not writable here; the stored one is untouched.
+    expect(row.settings.maxApis).toBe(5);
     expect(row.settings.pendingInvites[0].inviteToken).toBe('invite-secret');
     expect(row.billingInfo.licenseToken).toBe('signed.license.token');
   });

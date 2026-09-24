@@ -215,6 +215,12 @@ describe('BillingService', () => {
       const verified = verifyLicense(org.billingInfo.licenseToken, publicPem);
       expect(verified.valid).toBe(true);
       expect(verified.payload.limits.seats).toBe(3);
+      // Bound to the org it was minted for, and refused anywhere else.
+      expect(verified.payload.organizationId).toBe(ORG_ID);
+      expect(verifyLicense(org.billingInfo.licenseToken, publicPem, { organizationId: 'another-org' })).toMatchObject({
+        valid: false,
+        reason: 'organization',
+      });
 
       // ...and unlocks the pro set through the PER-ORG resolution path the app
       // actually uses (resolveToken), not the process-global load(). The old
@@ -222,7 +228,7 @@ describe('BillingService', () => {
       // which is why a live payment unlocked nothing while this test was green.
       const license = new LicenseService();
       license.load({ publicKeyPem: publicPem }); // global stays community, as in prod
-      const snap = license.resolveToken(org.billingInfo.licenseToken);
+      const snap = license.resolveToken(org.billingInfo.licenseToken, ORG_ID);
       // Business unlocks the governance set (per almyty.com/pricing).
       expect(snap.entitlements).toContain(EE_ENTITLEMENTS.SSO);
       expect(snap.entitlements).toContain(EE_ENTITLEMENTS.ADVANCED_RBAC);
@@ -243,7 +249,7 @@ describe('BillingService', () => {
       expect(org.plan).toBe(PLAN_ENTERPRISE);
       const license = new LicenseService();
       license.load({ publicKeyPem: publicPem });
-      const snap = license.resolveToken(org.billingInfo.licenseToken);
+      const snap = license.resolveToken(org.billingInfo.licenseToken, ORG_ID);
       expect(snap.entitlements).toContain(EE_ENTITLEMENTS.SSO);
       expect(snap.entitlements).toContain(EE_ENTITLEMENTS.BYO_KMS);
     });

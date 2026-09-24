@@ -193,6 +193,20 @@ describe('OrganizationsService', () => {
       expect(organizationRepository.save).not.toHaveBeenCalled();
     });
 
+    it('keeps plan limits out of a new organization, even past the DTO', async () => {
+      organizationRepository.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'org-new' });
+      organizationRepository.create.mockImplementation((value: any) => value);
+      organizationRepository.save.mockImplementation(async (o: any) => ({ ...o, id: 'org-new' }));
+
+      await service.create({ name: 'Acme', settings: { maxTools: 100000, egressAllowlist: ['localhost'] } } as any, 'user-1');
+
+      expect(organizationRepository.create).toHaveBeenCalledWith({
+        name: 'Acme',
+        slug: 'acme',
+        settings: { egressAllowlist: ['localhost'] },
+      });
+    });
+
     it('should create organization successfully', async () => {
       const createDto = {
         name: 'New Organization',
@@ -310,6 +324,18 @@ describe('OrganizationsService', () => {
       const cleared = await service.update('org-1', { settings: { defaultRouting: null } } as any);
       expect(cleared.settings.defaultRouting).toBeNull();
       expect(cleared.settings.maxApis).toBe(5);
+    });
+
+    it('never takes a plan limit from the patch, even past the DTO', async () => {
+      const mockOrg = { id: 'org-1', name: 'Acme', settings: { maxTools: 10, maxApis: 5, maxGateways: 2, pendingInvites: [] } };
+      organizationRepository.findOne.mockResolvedValue(mockOrg);
+      organizationRepository.save.mockImplementation(async (o: any) => o);
+
+      const result = await service.update('org-1', {
+        settings: { maxTools: 100000, maxApis: 100000, maxGateways: 100000, pendingInvites: [{ inviteToken: 'mine' }], allowUserScopedConnections: true },
+      } as any);
+
+      expect(result.settings).toEqual({ maxTools: 10, maxApis: 5, maxGateways: 2, pendingInvites: [], allowUserScopedConnections: true });
     });
 
     it('should throw NotFoundException if organization not found', async () => {
