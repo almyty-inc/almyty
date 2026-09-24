@@ -14,7 +14,7 @@ import {
 } from '../types/mcp.types';
 
 import { Tool, ToolStatus } from '../../../entities/tool.entity';
-import { isOthersPrivate, withoutOthersPrivate } from '../../../common/authorization/private-visibility';
+import { isOthersPrivate } from '../../../common/authorization/private-visibility';
 import { Resource } from '../../../entities/resource.entity';
 import { GatewayTool } from '../../../entities/gateway-tool.entity';
 import { Gateway } from '../../../entities/gateway.entity';
@@ -177,16 +177,26 @@ export class McpContentHandler {
     return result;
   }
 
+  /**
+   * prompts/get answers from the same tool set prompts/list offered: the
+   * gateway's servable tools, or the caller's visible tools (their own
+   * private ones included, nobody else's, and only their teams' tools).
+   * A prompt for any other tool reads like one that does not exist, and
+   * with neither a caller nor a gateway there is no tool set at all.
+   */
   async handlePromptGet(
     params: McpGetPromptRequest,
     organizationId: string,
+    gatewayId?: string,
+    caller?: { id: string },
   ): Promise<McpGetPromptResult> {
-    if (params.name === 'list-available-tools') {
-      // No caller reaches this path: private tools are never listed here.
-      const tools = withoutOthersPrivate(await this.toolRepository.find({
-        where: { organization: { id: organizationId }, status: ToolStatus.ACTIVE },
-      }), null);
+    const isToolPrompt = params.name === 'list-available-tools' || params.name.startsWith('use-');
+    if (!isToolPrompt) {
+      throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Prompt '${params.name}' not found`);
+    }
+    const tools: Tool[] = await this.toolHandler.getToolsForScope(organizationId, gatewayId, caller);
 
+    if (params.name === 'list-available-tools') {
       const toolList = tools.map((t) => `- **${t.name}**: ${t.description || 'No description'}`).join('\n');
 
       return {
@@ -203,39 +213,35 @@ export class McpContentHandler {
       };
     }
 
-    if (params.name.startsWith('use-')) {
-      const toolName = params.name.replace('use-', '');
-      const tool = await this.toolRepository.findOne({
-        where: { name: toolName, organization: { id: organizationId } },
-      });
+    const toolName = params.name.slice('use-'.length);
+    // prompts/list names a prompt after the sanitized tool name; accept
+    // that and the raw name, but only among the tools in scope.
+    const tool = tools.find((t) => this.toolHandler.sanitizeToolName(t.name) === toolName)
+      ?? tools.find((t) => t.name === toolName);
 
-      // No caller reaches this path, so no private tool does either.
-      if (!tool || tool.visibility === 'private') {
-        throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Tool '${toolName}' not found`);
-      }
-
-      const schema = tool.parameters as any;
-      const props = schema?.properties || {};
-      const argsList = Object.entries(props).map(([name]: [string, any]) => {
-        const value = params.arguments?.[name] || `<${name}>`;
-        return `- ${name}: ${value}`;
-      }).join('\n');
-
-      return {
-        description: `Execute ${tool.name}`,
-        messages: [
-          {
-            role: 'user',
-            content: {
-              type: 'text',
-              text: `Please execute the **${tool.name}** tool${tool.description ? ' (' + tool.description + ')' : ''} with the following parameters:\n\n${argsList}`,
-            } as McpTextContent,
-          },
-        ],
-      };
+    if (!tool) {
+      throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Tool '${toolName}' not found`);
     }
 
-    throw this.createError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, `Prompt '${params.name}' not found`);
+    const schema = tool.parameters as any;
+    const props = schema?.properties || {};
+    const argsList = Object.entries(props).map(([name]: [string, any]) => {
+      const value = params.arguments?.[name] || `<${name}>`;
+      return `- ${name}: ${value}`;
+    }).join('\n');
+
+    return {
+      description: `Execute ${tool.name}`,
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please execute the **${tool.name}** tool${tool.description ? ' (' + tool.description + ')' : ''} with the following parameters:\n\n${argsList}`,
+          } as McpTextContent,
+        },
+      ],
+    };
   }
 
   async handleSkillsList(
