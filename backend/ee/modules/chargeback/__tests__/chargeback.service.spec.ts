@@ -60,4 +60,17 @@ describe('ChargebackService', () => {
     const report = await svc.getReport('org-1', { period: 'week' as any });
     expect(report.window.period).toBe('month');
   });
+
+  // The per-agent rows name an agent and its spend: the viewer is handed to
+  // SpendService so another member's private agent is left out, and a
+  // report with no viewer asks for none of them.
+  it('asks for the per-agent breakdown as the calling user', async () => {
+    const spend = makeSpend();
+    const svc = new ChargebackService(spend as any);
+    await svc.getReport('org-1', { viewerId: 'user-7' });
+    expect(spend.getSummary.mock.calls[0][1]).toMatchObject({ viewerId: 'user-7' });
+
+    await svc.getReport('org-1', {});
+    expect(spend.getSummary.mock.calls[1][1]).toMatchObject({ viewerId: null });
+  });
 });

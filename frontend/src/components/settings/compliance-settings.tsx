@@ -62,6 +62,7 @@ import {
   type EnforceablePlugin,
 } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 /** PII categories the built-in pii-filter can mask (from the OSS plugin). */
 const PII_CATEGORIES: Array<{ value: string; label: string }> = [
@@ -135,7 +136,7 @@ function CompliancePolicyForm() {
     reset,
     watch,
     setValue,
-    formState: { isSubmitting },
+    formState: { isSubmitting, isDirty },
   } = useForm<PolicyForm>({
     resolver: zodResolver(policySchema),
     defaultValues: {
@@ -171,6 +172,10 @@ function CompliancePolicyForm() {
     onError: (err: any) =>
       error('Failed to save', getApiErrorMessage(err, 'Please try again.')),
   })
+
+  // A policy edited but not saved asks before a navigation throws it away.
+  // A save refetches the policy and resets the form to it.
+  const guard = useLeaveGuard(isDirty && !saveMutation.isPending)
 
   const piiFilter = watch('piiFilter')
   const securityScanner = watch('securityScanner')
@@ -319,6 +324,7 @@ function CompliancePolicyForm() {
           </Button>
         </form>
       </CardContent>
+      {guard.element}
     </Card>
   )
 }

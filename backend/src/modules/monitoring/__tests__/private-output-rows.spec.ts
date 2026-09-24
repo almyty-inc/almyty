@@ -46,7 +46,10 @@ describe('private-rows fragments', () => {
   ])('%s: compares the owner as text so uuid and varchar owners mix in one query', (_n, fragment, table, owner) => {
     const sql = fragment('x."id"');
     expect(sql).toContain(`FROM ${table}`);
-    expect(sql).toContain(`${owner}::text IS DISTINCT FROM CAST(:privateViewerId AS text)`);
+    // `(owner = viewer) IS NOT TRUE`: a null owner or a null viewer never
+    // matches as "the viewer's own" (IS DISTINCT FROM matched null to null).
+    expect(sql).toContain(`(${owner}::text = CAST(:privateViewerId AS text)) IS NOT TRUE`);
+    expect(sql).not.toContain('IS DISTINCT FROM');
     expect(sql).toContain("visibility = 'private'");
   });
 });

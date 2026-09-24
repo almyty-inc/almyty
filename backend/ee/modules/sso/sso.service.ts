@@ -12,12 +12,9 @@ import { SAML, Profile } from '@node-saml/passport-saml';
 import * as oidc from 'openid-client';
 
 import { User } from '../../../src/entities/user.entity';
-import {
-  UserOrganization,
-  OrganizationRole,
-} from '../../../src/entities/user-organization.entity';
+import { UserOrganization } from '../../../src/entities/user-organization.entity';
 import { isEffectiveMembership } from '../../../src/common/authorization/membership';
-import { DecryptedSsoConfig, SsoConfigService } from './sso-config.service';
+import { DecryptedSsoConfig, SsoConfigService, provisioningRole } from './sso-config.service';
 
 export interface SsoUserProfile {
   email: string;
@@ -235,6 +232,14 @@ export class SsoService {
     expectedState: string | undefined,
     redirectUri?: string,
   ): Promise<{ sub: string; email: string; name?: string; givenName?: string; familyName?: string }> {
+    // No state to compare is a refusal, not a skipped check: without an
+    // expectation openid-client accepts a response that carries no
+    // `state`, so a code minted for someone else's login could be
+    // planted in this browser (login CSRF).
+    if (!expectedState) {
+      throw new UnauthorizedException('Sign-in session expired or did not match. Start again.');
+    }
+
     const config = await this.loadEnabledConfig(orgId, 'oidc');
     const client = await this.buildOidcClient(config, redirectUri);
 
@@ -243,7 +248,7 @@ export class SsoService {
       const tokenSet = await client.callback(
         redirectUri ?? config.oidcRedirectUri,
         params,
-        expectedState ? { state: expectedState } : {},
+        { state: expectedState },
       );
       claims = tokenSet.claims();
     } catch (err) {
@@ -254,6 +259,13 @@ export class SsoService {
     const email = (claims.email as string | undefined)?.toLowerCase();
     if (!email) {
       throw new UnauthorizedException('OIDC claims did not include an email');
+    }
+    // Members are matched by email, so an address the IdP itself says is
+    // unproven (self-service sign-up, an editable profile field) must not
+    // sign anyone in as the member who owns it. An IdP that does not send
+    // the claim at all is trusted as configured.
+    if (claims.email_verified === false || claims.email_verified === 'false') {
+      throw new UnauthorizedException('The identity provider has not verified this email address');
     }
     const sub = typeof claims.sub === 'string' && claims.sub ? claims.sub : email;
     return {
@@ -374,7 +386,7 @@ export class SsoService {
     const membership = this.membershipRepo.create({
       userId,
       organizationId,
-      role: (role as OrganizationRole) || OrganizationRole.MEMBER,
+      role: provisioningRole(role),
       isActive: true,
       inviteAccepted: true,
     });

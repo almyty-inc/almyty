@@ -24,6 +24,11 @@ export interface ChargebackOptions {
   /** How many buckets ahead to project. */
   forecastPeriods?: number;
   to?: Date;
+  /**
+   * The calling user. The per-agent rows leave out other members' private
+   * agents (see SpendService.getSummary); absent means no private agent's row.
+   */
+  viewerId?: string | null;
 }
 
 /**
@@ -46,7 +51,12 @@ export class ChargebackService {
     const forecastPeriods = opts.forecastPeriods ?? 1;
 
     const [summary, byTeam] = await Promise.all([
-      this.spend.getSummary(organizationId, { from, to: opts.to, granularity }),
+      this.spend.getSummary(organizationId, {
+        from,
+        to: opts.to,
+        granularity,
+        viewerId: opts.viewerId ?? null,
+      }),
       this.spend.byTeam(organizationId, from, opts.to),
     ]);
 

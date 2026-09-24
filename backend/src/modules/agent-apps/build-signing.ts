@@ -122,19 +122,23 @@ export function appleNotarizeArgs(artifactPath: string, apiKeyPath: string): str
  *
  * osslsigncode writes to a separate output file rather than in place,
  * so the caller moves the result over the original.
+ *
+ * `-readpass` rather than `-pass`, for the same reason the macOS path
+ * uses a password file: an argument list is visible in `ps` to every
+ * process on the host, and a build host runs other tenants' builds.
  */
 export function authenticodeSignArgs(
   artifactPath: string,
   certificatePath: string,
-  password: string,
+  passwordFilePath: string,
   outputPath: string,
 ): string[] {
   return [
     'sign',
     '-pkcs12',
     certificatePath,
-    '-pass',
-    password,
+    '-readpass',
+    passwordFilePath,
     // A signature with no timestamp stops verifying the day the
     // certificate expires, which turns every shipped copy into a
     // warning rather than only new ones.

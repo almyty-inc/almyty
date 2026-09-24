@@ -158,6 +158,82 @@ describe('hosted-chat address claims', () => {
         service.createGateway(createDto as any, 'org-1', 'user-1'),
       ).rejects.not.toBeInstanceOf(ConflictException);
     });
+
+    // findByCustomDomain serves only `status: 'active'`, on the promise
+    // that a domain gets there by passing the TXT check. But the block
+    // lives in the same configuration json the tenant writes, so a PATCH
+    // could simply say it was active: any hostname, no DNS record, and
+    // /public/chat/by-host would serve that tenant for it -- including a
+    // hostname another tenant had verified, which the fail-closed
+    // ambiguity rule then takes offline for its real owner.
+    describe('custom domain is server-owned', () => {
+      const forged = { hostname: 'chat.victim.com', status: 'active', verificationToken: 'x', verifiedAt: null, lastCheckedAt: null, lastError: null };
+
+      it('drops a custom domain supplied on create', async () => {
+        await service.createGateway(
+          { ...createDto, configuration: { ...hostedChatConfig, customDomain: forged } } as any,
+          'org-1',
+          'user-1',
+        );
+
+        const saved = gatewayRepository.save.mock.calls[0][0];
+        expect(saved.configuration.customDomain).toBeUndefined();
+      });
+
+      it('drops a custom domain supplied on update', async () => {
+        gatewayRepository.findOne.mockResolvedValue({
+          id: 'gw-1',
+          organizationId: 'org-1',
+          type: GatewayType.HOSTED_CHAT,
+          configuration: { hostedChat: { slug: 'acme', appName: 'Acme' } },
+        });
+
+        await service.updateGateway(
+          'gw-1',
+          { configuration: { ...hostedChatConfig, customDomain: forged } } as any,
+          'org-1',
+          'user-1',
+        );
+
+        const saved = gatewayRepository.save.mock.calls[0][0];
+        expect(saved.configuration.customDomain).toBeUndefined();
+      });
+
+      it('keeps the stored domain, whatever the body says about it', async () => {
+        const stored = { ...forged, hostname: 'chat.acme.com', status: 'pending_verification' };
+        gatewayRepository.findOne.mockResolvedValue({
+          id: 'gw-1',
+          organizationId: 'org-1',
+          type: GatewayType.HOSTED_CHAT,
+          configuration: { hostedChat: { slug: 'acme', appName: 'Acme' }, customDomain: stored },
+        });
+
+        await service.updateGateway(
+          'gw-1',
+          { configuration: { ...hostedChatConfig, customDomain: { ...stored, status: 'active' } } } as any,
+          'org-1',
+          'user-1',
+        );
+
+        const saved = gatewayRepository.save.mock.calls[0][0];
+        expect(saved.configuration.customDomain).toEqual(stored);
+      });
+
+      it('keeps the stored domain when an edit round-trips the config without it', async () => {
+        const stored = { ...forged, hostname: 'chat.acme.com' };
+        gatewayRepository.findOne.mockResolvedValue({
+          id: 'gw-1',
+          organizationId: 'org-1',
+          type: GatewayType.HOSTED_CHAT,
+          configuration: { hostedChat: { slug: 'acme', appName: 'Acme' }, customDomain: stored },
+        });
+
+        await service.updateGateway('gw-1', { configuration: hostedChatConfig } as any, 'org-1', 'user-1');
+
+        const saved = gatewayRepository.save.mock.calls[0][0];
+        expect(saved.configuration.customDomain).toEqual(stored);
+      });
+    });
   });
 
   describe('HostedChatService.findByCustomDomain', () => {

@@ -131,9 +131,10 @@ describe('ScimService — Users', () => {
 
 describe('ScimService — Groups', () => {
   it('creates a group (team) with members', async () => {
-    const { service, teamRepo, userTeamRepo } = makeService();
+    const { service, teamRepo, userTeamRepo, membershipRepo } = makeService();
     teamRepo.findOne.mockResolvedValue(null);
     userTeamRepo.findOne.mockResolvedValue(null);
+    membershipRepo.findOne.mockResolvedValue({ userId: 'u-1', organizationId: 'org-1', isActive: true });
 
     const result = await service.createGroup('org-1', {
       displayName: 'Engineering',
@@ -149,9 +150,10 @@ describe('ScimService — Groups', () => {
   });
 
   it('adds and removes members via PATCH', async () => {
-    const { service, teamRepo, userTeamRepo } = makeService();
+    const { service, teamRepo, userTeamRepo, membershipRepo } = makeService();
     teamRepo.findOne.mockResolvedValue({ id: 'team-1', organizationId: 'org-1', name: 'Eng' });
     userTeamRepo.findOne.mockResolvedValue(null);
+    membershipRepo.findOne.mockResolvedValue({ userId: 'u-2', organizationId: 'org-1', isActive: true });
     userTeamRepo.find.mockResolvedValue([{ userId: 'u-2', isActive: true }]);
 
     await service.patchGroup('org-1', 'team-1', {

@@ -21,6 +21,9 @@ import { agentsApi } from '@/lib/api'
 import { getApiErrorMessage } from '@/lib/api-error'
 import { useNotifications } from '@/store/app'
 import type { Agent } from '@/types'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
+
+const DEFAULT_INPUT = '{\n  "message": "Hello"\n}'
 
 interface RunPanelProps {
   agent: Agent
@@ -32,8 +35,12 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
   const { success, error: errorNotif } = useNotifications()
   const sectionRef = useRef<HTMLElement>(null)
 
-  const [invokeInput, setInvokeInput] = useState('{\n  "message": "Hello"\n}')
+  const [invokeInput, setInvokeInput] = useState(DEFAULT_INPUT)
   const [invokeResult, setInvokeResult] = useState<Record<string, unknown> | null>(null)
+  // Input edited since the last run (or since the panel opened) asks before
+  // a navigation throws it away. Running it, or closing the panel, does not.
+  const [lastRunInput, setLastRunInput] = useState(DEFAULT_INPUT)
+  const guard = useLeaveGuard(invokeInput !== lastRunInput)
 
   // Opened from the header: bring the panel into view on small screens,
   // where it would otherwise start below the fold.
@@ -89,7 +96,9 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
 
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!invokeMutation.isPending) invokeMutation.mutate()
+    if (invokeMutation.isPending) return
+    setLastRunInput(invokeInput)
+    invokeMutation.mutate()
   }
 
   return (
@@ -195,6 +204,7 @@ export function RunPanel({ agent, onClose }: RunPanelProps) {
           {getApiErrorMessage(invokeMutation.error, 'The run failed.')}
         </div>
       )}
+      {guard.element}
     </section>
   )
 }

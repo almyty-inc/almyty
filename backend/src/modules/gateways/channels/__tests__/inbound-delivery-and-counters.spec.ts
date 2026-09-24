@@ -133,6 +133,7 @@ describe('inbound channel pipeline under concurrency', () => {
       'run.agentId = :agentId': (row, p) => row.agentId === p.agentId,
       'run.status IN (:...activeStatuses)': (row, p) => p.activeStatuses.includes(row.status),
       "run.metadata->>'threadId' = :threadId": (row, p) => row.metadata?.threadId === p.threadId,
+      "run.metadata->>'gatewayId' = :gatewayId": (row, p) => row.metadata?.gatewayId === p.gatewayId,
     };
     runRepository = {
       createQueryBuilder: jest.fn(
