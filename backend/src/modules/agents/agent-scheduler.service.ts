@@ -8,6 +8,7 @@ import { Agent, AgentStatus } from '../../entities/agent.entity';
 import { AgentsService } from './agents.service';
 import { AgentExecutionEngine } from './agent-execution.engine';
 import { findModelNotFound, isModelNotFoundError } from '../llm-providers/model-errors';
+import { agentOwnerUserId } from './agent-owner';
 
 
 export interface AgentScheduleConfig {
@@ -303,7 +304,8 @@ export class AgentSchedulerService implements OnModuleInit {
       {
         agentId: agent.id,
         organizationId: agent.organizationId,
-        userId: agent.createdBy || 'system',
+        // No user in the payload: the run is the agent's current owner's,
+        // read when it fires (handleScheduledExecution).
         input,
       },
       {
@@ -340,7 +342,7 @@ export class AgentSchedulerService implements OnModuleInit {
       return;
     }
 
-    const { agentId, organizationId, userId, input } = job.data;
+    const { agentId, organizationId, input } = job.data;
 
     if (!agentId || !organizationId) {
       this.logger.warn(`[SCHEDULED_RUN] Missing agentId/organizationId in job payload — dropping`);
@@ -366,10 +368,13 @@ export class AgentSchedulerService implements OnModuleInit {
       }
 
       this.logger.log(`[SCHEDULED_RUN] Executing agent ${agentId}`);
+      this.logger.log(`[SCHEDULED_RUN] Executing agent ${agentId}`);
+      // As the agent's owner now, not the `userId` snapshotted into the
+      // job when the schedule was enqueued (see agentOwnerUserId).
       const execution = await this.executionEngine.execute(
         agent,
         organizationId,
-        userId,
+        agentOwnerUserId(agent),
         {
           input,
           metadata: { triggerType: 'scheduled' },

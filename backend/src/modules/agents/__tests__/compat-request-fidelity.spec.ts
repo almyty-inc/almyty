@@ -65,6 +65,7 @@ function makeApiKey(): any {
     keyHash: TEST_KEY_HASH,
     organizationId: 'org-1',
     userId: 'user-1',
+    user: { id: 'user-1', isActive: true, organizationMemberships: [{ organizationId: 'org-1', isActive: true }] },
     isActive: true,
     lastUsedAt: null,
     isExpired: jest.fn().mockReturnValue(false),
@@ -73,7 +74,7 @@ function makeApiKey(): any {
 
 function makeAgent(): any {
   return {
-    id: 'agent-abc-123',
+    id: '0a9e2b7c-0000-4000-8000-000000000123',
     name: 'My Test Agent',
     status: 'active',
     createdAt: new Date('2026-01-15T00:00:00Z'),
@@ -156,7 +157,7 @@ describe('compat request fidelity', () => {
       // Only the last user line used to survive, so the agent was amnesiac
       // with no error and no header to diagnose it from.
       const { captured } = await chat({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         messages: [
           { role: 'system', content: 'Answer only in French.' },
           { role: 'user', content: 'My name is Frane.' },
@@ -175,7 +176,7 @@ describe('compat request fidelity', () => {
       // agent-templates.ts binds {{input.message}} in every template, so a fix
       // that parked the conversation anywhere else would reach nothing.
       const { captured } = await chat({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         messages: [
           { role: 'user', content: 'alpha' },
           { role: 'assistant', content: 'beta' },
@@ -189,7 +190,7 @@ describe('compat request fidelity', () => {
 
     it('leaves a single-turn request exactly as it was', async () => {
       const { captured } = await chat({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         messages: [{ role: 'user', content: 'Hello' }],
       });
       expect(captured!.input.message).toBe('Hello');
@@ -197,7 +198,7 @@ describe('compat request fidelity', () => {
 
     it('flattens content parts instead of handing a prompt an object', async () => {
       const { captured } = await chat({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         messages: [{ role: 'user', content: [{ type: 'text', text: 'describe this' }] }],
       });
       expect(captured!.input.message).toBe('describe this');
@@ -209,7 +210,7 @@ describe('compat request fidelity', () => {
   describe('sampling the caller asked for is honoured', () => {
     it('puts temperature 0 where the engine reads it', async () => {
       const { captured } = await chat({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         messages: [{ role: 'user', content: 'hi' }],
         temperature: 0,
       });
@@ -220,7 +221,7 @@ describe('compat request fidelity', () => {
 
     it('puts max_tokens where the engine reads it', async () => {
       const { captured } = await chat({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         messages: [{ role: 'user', content: 'hi' }],
         max_tokens: 48,
       });
@@ -231,7 +232,7 @@ describe('compat request fidelity', () => {
     it('does not touch the stored agent', async () => {
       const stored = makeAgent();
       agentsService.getAgent.mockResolvedValue(stored);
-      await chat({ model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }], temperature: 0 });
+      await chat({ model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }], temperature: 0 });
       expect(stored.pipeline.nodes[1].data.temperature).toBe(0.9);
       expect(stored.modelConfig.temperature).toBe(0.9);
     });
@@ -239,7 +240,7 @@ describe('compat request fidelity', () => {
     it('leaves the agent untouched when the caller asked for nothing', async () => {
       const stored = makeAgent();
       agentsService.getAgent.mockResolvedValue(stored);
-      const { captured } = await chat({ model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }] });
+      const { captured } = await chat({ model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }] });
       expect(captured!.agent).toBe(stored);
     });
   });
@@ -258,7 +259,7 @@ describe('compat request fidelity', () => {
       ['logprobs', { logprobs: true }],
     ])('refuses %s with a 400 that names the field', async (param, extra) => {
       const { res } = await chat({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         messages: [{ role: 'user', content: 'hi' }],
         ...(extra as any),
       });
@@ -275,7 +276,7 @@ describe('compat request fidelity', () => {
 
     it('still runs a request carrying only the defaults a client library sends', async () => {
       const { res } = await chat({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         messages: [{ role: 'user', content: 'hi' }],
         temperature: 0.7,
         n: 1,
@@ -303,7 +304,7 @@ describe('compat request fidelity', () => {
       executionEngine.execute.mockRejectedValue(new Error('LLM provider crashed'));
 
       await openai.chatCompletions(
-        { model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }], stream: true },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }], stream: true },
         `Bearer ${TEST_API_KEY}`,
         req,
         res,
@@ -322,7 +323,7 @@ describe('compat request fidelity', () => {
       executionEngine.execute.mockRejectedValue(new Error('boom'));
 
       await openai.chatCompletions(
-        { model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }], stream: true },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }], stream: true },
         `Bearer ${TEST_API_KEY}`,
         req,
         res,
@@ -344,7 +345,7 @@ describe('compat request fidelity', () => {
       executionEngine.execute.mockResolvedValue({ id: 'e', status: 'failed', error: 'node blew up', totalTokens: 0 });
 
       await openai.chatCompletions(
-        { model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }], stream: true },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }], stream: true },
         `Bearer ${TEST_API_KEY}`,
         req,
         res,
@@ -357,7 +358,7 @@ describe('compat request fidelity', () => {
 
     it('reports a failed non-streaming run as an error status, not a 200 with finish_reason error', async () => {
       const { res } = await chat(
-        { model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }] },
         { id: 'e', status: 'failed', error: 'node blew up', totalTokens: 0, output: null },
       );
       expect(res.status).toHaveBeenCalledWith(502);
@@ -371,7 +372,7 @@ describe('compat request fidelity', () => {
       executionEngine.execute.mockResolvedValue({ id: 'e', status: 'completed', output: 'ok', totalTokens: 5 });
 
       await openai.chatCompletions(
-        { model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }], stream: true },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }], stream: true },
         `Bearer ${TEST_API_KEY}`,
         req,
         res,
@@ -394,7 +395,7 @@ describe('compat request fidelity', () => {
 
       await openai.chatCompletions(
         {
-          model: 'agent:agent-abc-123',
+          model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
           messages: [{ role: 'user', content: 'hi' }],
           stream: true,
           stream_options: { include_usage: true },
@@ -419,7 +420,7 @@ describe('compat request fidelity', () => {
       executionEngine.execute.mockResolvedValue({ id: 'e', status: 'completed', output: 'ok', totalTokens: 77 });
 
       await openai.chatCompletions(
-        { model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }], stream: true },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }], stream: true },
         `Bearer ${TEST_API_KEY}`,
         req,
         res,
@@ -434,7 +435,7 @@ describe('compat request fidelity', () => {
   describe('usage is not invented', () => {
     it('reports the measured split, never the total apportioned 60/40', async () => {
       const { res } = await chat(
-        { model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }] },
         { id: 'e', status: 'completed', output: 'ok', totalTokens: 100, inputTokens: 82, outputTokens: 18 },
       );
       const body = res.json.mock.calls[res.json.mock.calls.length - 1][0];
@@ -451,7 +452,7 @@ describe('compat request fidelity', () => {
 
     it('reports zeros and says unavailable for a run that recorded no split', async () => {
       const { res } = await chat(
-        { model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }] },
         { id: 'e', status: 'completed', output: 'ok', totalTokens: 100 },
       );
       const body = res.json.mock.calls[res.json.mock.calls.length - 1][0];
@@ -469,7 +470,7 @@ describe('compat request fidelity', () => {
       const req = makeReq();
       executionEngine.execute.mockResolvedValue({ id: 'e', status: 'completed', output: 'ok', totalTokens: 5 });
       await openai.chatCompletions(
-        { model: 'agent:agent-abc-123', messages: [{ role: 'user', content: 'hi' }], stream: true },
+        { model: 'agent:0a9e2b7c-0000-4000-8000-000000000123', messages: [{ role: 'user', content: 'hi' }], stream: true },
         `Bearer ${TEST_API_KEY}`,
         req,
         res,
@@ -502,7 +503,7 @@ describe('compat request fidelity', () => {
       // forwarded it; nothing downstream read input.systemPrompt, so the most
       // load-bearing field an Anthropic client sends never reached a model.
       const { captured } = await messages({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         max_tokens: 100,
         system: 'You are a pirate. Always say arr.',
         messages: [{ role: 'user', content: 'hello' }],
@@ -513,7 +514,7 @@ describe('compat request fidelity', () => {
 
     it('gets the whole conversation to the model', async () => {
       const { captured } = await messages({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         max_tokens: 100,
         messages: [
           { role: 'user', content: 'My name is Frane.' },
@@ -527,7 +528,7 @@ describe('compat request fidelity', () => {
 
     it('honours temperature and max_tokens', async () => {
       const { captured } = await messages({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         max_tokens: 64,
         temperature: 0,
         messages: [{ role: 'user', content: 'hello' }],
@@ -539,7 +540,7 @@ describe('compat request fidelity', () => {
 
     it('says unavailable when the run recorded no split', async () => {
       const { res } = await messages({
-        model: 'agent:agent-abc-123',
+        model: 'agent:0a9e2b7c-0000-4000-8000-000000000123',
         max_tokens: 100,
         messages: [{ role: 'user', content: 'hello' }],
       });
