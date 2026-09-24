@@ -83,6 +83,7 @@ export const AGENT_STEP_COLUMNS = {
   isTemporary: true,
   parentRunId: true,
   collaboration: true,
+  models: true,
   webhookUrl: true,
   totalExecutions: true,
   successfulExecutions: true,

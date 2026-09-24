@@ -151,6 +151,7 @@ export const AGENT_LIST_COLUMNS = [
   'isTemporary',
   'parentRunId',
   'collaboration',
+  'models',
   'webhookUrl',
   'totalExecutions',
   'successfulExecutions',
