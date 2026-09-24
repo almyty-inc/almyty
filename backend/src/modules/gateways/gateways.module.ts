@@ -64,6 +64,7 @@ import { ChannelEmailInboundController } from './channels/channel-email-inbound.
 import { ChannelWidgetController } from './channels/channel-widget.controller';
 import { HostedChatController } from './channels/hosted-chat.controller';
 import { HostedChatService } from './channels/hosted-chat.service';
+import { SurfaceCorsService } from './channels/surface-cors';
 // Multi-workspace channel installations (OAuth installs)
 import { ChannelInstallation } from '../../entities/channel-installation.entity';
 import { ChannelInstallationService } from './channels/channel-installation.service';
@@ -98,6 +99,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
   ],
   providers: [
     HostedChatService,
+    SurfaceCorsService,
     GatewaysService,
     GatewayProtocolService,
     GatewayRateLimitService,
@@ -147,6 +149,7 @@ import { ChannelInstallationsController } from './channels/channel-installations
   exports: [
     GatewaysService,
     HostedChatService,
+    SurfaceCorsService,
     GatewayProtocolService,
     GatewayRateLimitService,
     GatewayAuthService, GatewayAuthValidators, GatewaysStatsHelper,

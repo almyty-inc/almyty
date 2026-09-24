@@ -7,14 +7,18 @@ import { AgentAppsController } from '../agent-apps.controller';
 import { AgentAppsService } from '../agent-apps.service';
 import { MASKED_CHANNEL_SECRET } from '../../gateways/channels/channel-config.helper';
 import { fakeRepository } from '../../../test/fake-repository';
+import { makeEnvelopeCryptoMock } from '../../../test/envelope-crypto.mock';
+import { Credential } from '../../../entities/credential.entity';
+import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
+import { decryptField } from '../../../common/security/field-crypto';
 
 /**
- * A distribution's configuration is where the operator's platform
- * credentials live: a Slack bot token and signing secret, a Twilio auth
- * token, a Resend key. The gateway those same values are copied into
- * masks them on every response, and GET /apps/:slug is readable by any
- * member, so returning the distribution row verbatim handed every
- * member the tokens the gateway API refuses to show them.
+ * A distribution's platform credentials (a Slack bot token and signing
+ * secret, a Twilio auth token, a Resend key) belong in its credential,
+ * but a row written before that still carries them inline, as the seed
+ * here does. GET /apps/:slug is readable by any member, so whatever the
+ * row holds is masked on the way out, and the next write moves it into
+ * the store.
  */
 
 const ORG = 'org-1';
@@ -38,6 +42,7 @@ function makeService() {
       },
     ],
   });
+  const credentials = fakeRepository<Credential>({ make: () => new Credential(), idPrefix: 'cred' });
   const service = new AgentAppsService(
     apps as any,
     distributions as any,
@@ -45,6 +50,8 @@ function makeService() {
     fakeRepository<any>() as any,
     fakeRepository<any>() as any,
     {} as any,
+    undefined,
+    new CredentialRefResolver(credentials as any, makeEnvelopeCryptoMock()),
   );
   // findOne's relation load: attach the distributions the way TypeORM would.
   const findOne = service.findOne.bind(service);
@@ -53,7 +60,7 @@ function makeService() {
     (app as any).distributions = await distributions.find({ where: { appId: app.id } });
     return app;
   });
-  return { service, distributions };
+  return { service, distributions, credentials };
 }
 
 const req = { user: { id: 'user-1', currentOrganizationId: ORG } };
@@ -87,15 +94,19 @@ describe('distribution secrets never leave /apps in the clear', () => {
   });
 
   it('keeps the stored secret when a masked placeholder is sent back', async () => {
-    const { service, distributions } = makeService();
+    const { service, distributions, credentials } = makeService();
 
     await service.addDistribution(ORG, 'acme-support', DistributionTarget.SLACK, {
       bot_token: MASKED_CHANNEL_SECRET,
       signing_secret: 'rotated-secret',
     });
 
+    // The row keeps a reference; the values are in the distribution's
+    // credential, the kept one and the rotated one both.
     const [row] = await distributions.find({ where: { id: 'dist-1' } });
-    expect(row.configuration.bot_token).toBe(SECRET);
-    expect(row.configuration.signing_secret).toBe('rotated-secret');
+    expect(JSON.stringify(row.configuration)).not.toContain(SECRET);
+    const credential = credentials.row(row.configuration.credentialId)!;
+    expect(decryptField(credential.config.bot_token, ORG)).toBe(SECRET);
+    expect(decryptField(credential.config.signing_secret, ORG)).toBe('rotated-secret');
   });
 });

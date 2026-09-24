@@ -1,10 +1,15 @@
-import { readFileSync } from 'fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
+
 import {
   BUN_TARGETS,
+  ELECTRON_BUILDER_VERSION,
   ELECTRON_TARGETS,
   electronVersionOf,
   electronBuilderArgs,
+  electronBuilderCommand,
+  localElectronBuilderPath,
   safeExecutableName,
   MAX_LOG_CHARS,
   ProcessToolchainRunner,
@@ -255,6 +260,65 @@ describe('electronBuilderArgs', () => {
     for (const id of Object.keys(BUN_TARGETS)) {
       expect(ELECTRON_TARGETS[id]).toBeDefined();
     }
+  });
+});
+
+describe('electronBuilderCommand', () => {
+  const args = ['--linux', 'AppImage', '--x64'];
+
+  it('runs the binary the shell lockfile installed when it is there', async () => {
+    const seen: string[] = [];
+    const command = await electronBuilderCommand('/opt/shell', args, async (path) => {
+      seen.push(path);
+      return true;
+    });
+    expect(seen).toEqual([join('/opt/shell', 'node_modules', '.bin', 'electron-builder')]);
+    expect(command).toEqual({ tool: localElectronBuilderPath('/opt/shell'), args });
+  });
+
+  it('falls back to npx for exactly the pinned release, never a bare package name', async () => {
+    const command = await electronBuilderCommand('/opt/shell', args, async () => false);
+    expect(command.tool).toBe('npx');
+    expect(command.args).toEqual(['--yes', `electron-builder@${ELECTRON_BUILDER_VERSION}`, ...args]);
+    expect(command.args).not.toContain('electron-builder');
+  });
+
+  it('checks the real filesystem by default', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'almyty-shell-'));
+    expect((await electronBuilderCommand(dir, args)).tool).toBe('npx');
+    mkdirSync(join(dir, 'node_modules', '.bin'), { recursive: true });
+    writeFileSync(localElectronBuilderPath(dir), '#!/bin/sh\n');
+    expect((await electronBuilderCommand(dir, args)).tool).toBe(localElectronBuilderPath(dir));
+  });
+
+  it('pins the same exact version the desktop shell locks', () => {
+    const shell = join(__dirname, '..', '..', '..', '..', '..', 'packages', 'desktop-shell');
+    const pkg = JSON.parse(readFileSync(join(shell, 'package.json'), 'utf8'));
+    const lock = JSON.parse(readFileSync(join(shell, 'package-lock.json'), 'utf8'));
+    expect(ELECTRON_BUILDER_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(pkg.devDependencies['electron-builder']).toBe(ELECTRON_BUILDER_VERSION);
+    expect(lock.packages['node_modules/electron-builder'].version).toBe(ELECTRON_BUILDER_VERSION);
+  });
+
+  it('is what the build processor runs electron-builder through', () => {
+    const source = readFileSync(join(__dirname, '..', 'app-build.processor.ts'), 'utf8');
+    expect(source).toContain('electronBuilderCommand(');
+    expect(source).not.toMatch(/toolchain\.run\(\s*'npx'/);
+  });
+
+  it('leaves the invocation out of the electron-builder arguments', () => {
+    const built = electronBuilderArgs({
+      platformId: 'linux-x64',
+      projectDir: '/w/shell',
+      outputDir: '/w/out',
+      productName: 'Acme',
+      appId: 'com.acme',
+      version: '1.0.0',
+      executableName: 'acme',
+      electronVersion: '39.0.0',
+    })!;
+    expect(built[0]).toBe('--linux');
+    expect(built).not.toContain('--yes');
   });
 });
 

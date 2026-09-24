@@ -14,6 +14,7 @@ import {
   ProcessToolchainRunner,
   bunCompileArgs,
   electronBuilderArgs,
+  electronBuilderCommand,
   electronVersionOf,
   safeExecutableName,
 } from './build-toolchain';
@@ -359,7 +360,10 @@ export class AppBuildProcessor implements OnApplicationBootstrap {
       electronVersion,
     });
 
-    const result = await this.toolchain.run('npx', args!, { cwd: projectDir });
+    // The shell's lockfile-installed electron-builder, or the pinned
+    // release through npx; never whatever npm calls latest today.
+    const command = await electronBuilderCommand(shell, args!);
+    const result = await this.toolchain.run(command.tool, command.args, { cwd: projectDir });
     if (!result.ok) {
       return { ok: false, log: result.output, error: result.error ?? 'Packaging failed.' };
     }

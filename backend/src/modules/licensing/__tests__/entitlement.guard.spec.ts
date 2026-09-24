@@ -25,10 +25,10 @@ function resolverFor(
 ): OrgLicenseResolver {
   return {
     entitlementsForOrg: async (organizationId: string) =>
-      license.resolveToken(tokensByOrg[organizationId] ?? null),
+      license.resolveToken(tokensByOrg[organizationId] ?? null, organizationId),
     hasForOrg: async (organizationId: string, entitlement: string) =>
       license
-        .resolveToken(tokensByOrg[organizationId] ?? null)
+        .resolveToken(tokensByOrg[organizationId] ?? null, organizationId)
         .entitlements.includes(entitlement),
     invalidate: () => undefined,
   } as unknown as OrgLicenseResolver;
@@ -124,7 +124,7 @@ describe('EntitlementGuard', () => {
 
     const svc = new LicenseService();
     const token = signLicense(
-      { entitlements: [EE_ENTITLEMENTS.SSO], limits: { seats: 5 }, expiresAt: null },
+      { entitlements: [EE_ENTITLEMENTS.SSO], limits: { seats: 5 }, expiresAt: null, organizationId: 'org-paid' },
       privatePem,
     );
 
