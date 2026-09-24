@@ -17,6 +17,18 @@ import { SignalAdapter } from '../adapters/signal.adapter';
 import { MatrixAdapter } from '../adapters/matrix.adapter';
 import { IrcAdapter } from '../adapters/irc.adapter';
 import { CapturedFetch, installFetchMock } from '../adapters/__tests__/test-helpers';
+import {
+  ClauseModel,
+  ExecutedQuery,
+  RecordingQueryBuilder,
+  matchingRows,
+} from '../../__tests__/recording-query-builder';
+
+const RUN_CLAUSES: ClauseModel = {
+  'run.agentId = :agentId': (row, p) => row.agentId === p.agentId,
+  'run.status IN (:...activeStatuses)': (row, p) => p.activeStatuses.includes(row.status),
+  "run.metadata->>'threadId' = :threadId": (row, p) => row.metadata?.threadId === p.threadId,
+};
 
 /**
  * Round-trip harness for the channel surfaces.
@@ -117,15 +129,15 @@ export async function roundTrip(options: RoundTripOptions): Promise<RoundTripRes
 
   const emitter = new EventEmitter();
   const runRepository = {
-    createQueryBuilder: () => ({
-      where: () => ({
-        andWhere: () => ({
-          andWhere: () => ({
-            orderBy: () => ({ limit: () => ({ getMany: async () => [] }) }),
-          }),
-        }),
+    // The thread-continuation lookup over an empty runs table: a round
+    // trip is a first message. The builder still checks the SQL it is
+    // handed -- a clause it does not model throws -- where the nested
+    // chain that stood here accepted anything. Its predicates are
+    // exercised against real rows in channel-gateway-installation-resolution.
+    createQueryBuilder: (alias: string) =>
+      new RecordingQueryBuilder(alias, {
+        getMany: (query: ExecutedQuery) => matchingRows(query, [], RUN_CLAUSES),
       }),
-    }),
     findOne: async () => run,
     save: async (row: any) => {
       Object.assign(run, row);
