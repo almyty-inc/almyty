@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
 import {
   AccessPolicyService,
@@ -146,4 +146,25 @@ export function servableOnGateway<T extends ResourceLike>(
     const owner = resourceOwnerId(tool);
     return !!owner && gateway?.visibility === 'private' && gateway.ownerUserId === owner;
   });
+}
+/**
+ * The one answer to "that name is taken", for APIs, tools and runners.
+ *
+ * Names stay unique across the whole organization, private rows included.
+ * They are resolution keys, not labels: gateways, skills and the MCP
+ * catalog find a tool by name (`tools_org_name_uq`), generated tool names
+ * are built from the API's name, and a runner's name becomes its tools'
+ * `runner.<name>.<method>` prefix. Per-owner uniqueness would let two
+ * members' tools answer to one name -- and, for runners, reopen the
+ * takeover #741 closed.
+ *
+ * What the answer must not do is tell the caller more than "taken": not
+ * whose it is, not that it is private, and not a different status or
+ * wording for a private row than for one they can see. Every clash gets
+ * this same 409.
+ */
+export function nameTaken(noun: string, name: string): ConflictException {
+  return new ConflictException(
+    `The ${noun} name '${name}' is already in use in this organization. Choose another name.`,
+  );
 }

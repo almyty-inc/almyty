@@ -12,6 +12,7 @@ import {
   ResourceVisibility,
   normaliseVisibility,
 } from '../../common/authorization/access-policy.service';
+import { nameTaken } from '../../common/authorization/private-visibility';
 
 /**
  * Runner ids are uuids. Checked before an id that arrived over the wire
@@ -622,9 +623,7 @@ export class RunnerService {
   private async assertNameFreeInOrganization(name: string, ownerUserId: string, organizationId: string): Promise<void> {
     const clash = await this.runners.findOne({ where: { organizationId, name } });
     if (clash && clash.ownerUserId !== ownerUserId) {
-      throw new ConflictException(
-        `the runner name '${name}' is already used in this organization; pick another name`,
-      );
+      throw nameTaken('runner', name);
     }
   }
 

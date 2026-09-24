@@ -323,7 +323,7 @@ export class AgentManagementController {
         );
       }
 
-      const doc = await this.techDocHelper.build(id, organizationId);
+      const doc = await this.techDocHelper.build(id, organizationId, req.user?.sub || req.user?.id || null);
 
       if (format === 'markdown') {
         res.setHeader('Content-Type', 'text/markdown; charset=utf-8');

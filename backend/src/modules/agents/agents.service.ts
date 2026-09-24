@@ -21,7 +21,10 @@ import {
   isOthersPrivate,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
-import { collectAgentReferences } from './agent-references';
+import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
+import { collectAgentReferences, collectProviderReferences } from './agent-references';
+import { LlmProvider } from '../../entities/llm-provider.entity';
+import { providerUsableBy } from '../llm-providers/private-provider';
 
 export interface AgentSearchFilters {
   search?: string;
@@ -287,6 +290,41 @@ export class AgentsService {
     }
   }
 
+  /**
+   * Refuse naming an LLM provider the saving user cannot use: one that is
+   * not in this organization, or another member's private provider. The
+   * run would refuse it anyway (llm-provider-secrets, the router), so say
+   * no where somebody is looking. Both cases get the same message, so the
+   * answer does not tell the caller a private provider with that id exists.
+   * A save with no known user cannot own a private provider: fail closed.
+   *
+   * Only references the save adds are checked (`previous` is the stored
+   * agent on update), so an agent whose provider was since deleted can
+   * still be edited in other ways.
+   */
+  private async assertProvidersUsable(
+    next: Parameters<typeof collectProviderReferences>[0],
+    previous: Parameters<typeof collectProviderReferences>[0] | null,
+    organizationId: string,
+    userId: string | null | undefined,
+  ): Promise<void> {
+    const before = previous ? collectProviderReferences(previous) : new Set<string>();
+    const added = [...collectProviderReferences(next)].filter((id) => !before.has(id));
+    if (added.length === 0) return;
+    const found = await this.agentRepository.manager.getRepository(LlmProvider).find({
+      where: { id: In(added), organizationId },
+      select: { id: true, visibility: true, ownerUserId: true },
+    });
+    const usable = new Set(found.filter((p) => providerUsableBy(p, userId)).map((p) => p.id));
+    const refused = added.filter((id) => !usable.has(id));
+    if (refused.length) {
+      throw new BadRequestException(
+        `These providers are not available in this organization: ${refused.join(', ')}. ` +
+          'Choose another provider in Models.',
+      );
+    }
+  }
+
   async createAgent(
     createDto: CreateAgentInput,
     organizationId: string,
@@ -342,6 +380,17 @@ export class AgentsService {
           collaboration: createDto.collaboration as Agent['collaboration'],
         },
         organizationId,
+      );
+      await this.assertProvidersUsable(
+        {
+          modelConfig: createDto.modelConfig as Agent['modelConfig'],
+          pipeline: createDto.pipeline,
+          agentConfig: createDto.agentConfig as Agent['agentConfig'],
+          collaboration: createDto.collaboration as Agent['collaboration'],
+        },
+        null,
+        organizationId,
+        userId,
       );
 
       const agent = this.agentRepository.create({
@@ -585,6 +634,27 @@ export class AgentsService {
         organizationId,
       );
     }
+    // Going private would detach this agent from the shared agents that
+    // call it as a sub-agent or collaborator. Refuse and say which.
+    if (scope?.visibility === 'private' && agent.visibility !== 'private' && userId) {
+      await assertNoSharedDependents(
+        this.agentRepository.manager,
+        this.accessPolicy,
+        { noun: 'agent', organizationId, targets: [{ kind: 'agent', id: agent.id }] },
+        userId,
+      );
+    }
+    await this.assertProvidersUsable(
+      {
+        modelConfig: updateDto.modelConfig !== undefined ? (updateDto.modelConfig as Agent['modelConfig']) : agent.modelConfig,
+        pipeline: updateDto.pipeline ?? agent.pipeline,
+        agentConfig: updateDto.agentConfig !== undefined ? (updateDto.agentConfig as Agent['agentConfig']) : agent.agentConfig,
+        collaboration: updateDto.collaboration !== undefined ? (updateDto.collaboration as Agent['collaboration']) : agent.collaboration,
+      },
+      agent,
+      organizationId,
+      userId,
+    );
 
     const { visibility: _v, teamId: _t, ...rest } = updateDto;
     Object.assign(agent, rest);

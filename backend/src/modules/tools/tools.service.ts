@@ -23,8 +23,10 @@ import {
   assertAttachable,
   assertNotOthersPrivate,
   isOthersPrivate,
+  nameTaken,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
+import { assertNoSharedDependents } from '../../common/authorization/private-dependents';
 import { isUniqueViolation } from '../../common/utils/unique-violation';
 export type { CreateToolDto, UpdateToolDto, ToolSearchFilters, ToolUsageStats };
 
@@ -188,9 +190,7 @@ export class ToolsService {
       // renderer has a single answer. Report the collision instead
       // of letting the driver error out as a 500.
       if (isUniqueViolation(error)) {
-        throw new ConflictException(
-          `A tool named '${createToolDto.name}' already exists in this organization`,
-        );
+        throw nameTaken('tool', createToolDto.name);
       }
       this.logger.error(`Failed to create tool: ${error.message}`);
       throw error;
@@ -336,6 +336,16 @@ export class ToolsService {
           const api = await this.apiRepository.findOne({ where: { id: tool.apiId, organizationId } });
           if (api) assertAttachable({ visibility: scope.visibility, ownerId: scope.ownerId, noun: 'tool' }, [api], 'API');
         }
+        // Going private would detach it from shared agents and gateways
+        // that use it (they would fail at run time). Refuse and say which.
+        if (scope.visibility === 'private' && tool.visibility !== 'private') {
+          await assertNoSharedDependents(
+            this.toolRepository.manager,
+            this.accessPolicy,
+            { noun: 'tool', organizationId, targets: [{ kind: 'tool', id: tool.id }] },
+            userId,
+          );
+        }
         tool.visibility = scope.visibility;
         tool.teamId = scope.teamId;
         if (scope.ownerId) tool.createdBy = scope.ownerId;
@@ -362,6 +372,11 @@ export class ToolsService {
       return updatedTool;
 
     } catch (error) {
+      // A rename onto a taken name trips `tools_org_name_uq`; answer it as
+      // create does rather than as a 500 carrying the driver's text.
+      if (isUniqueViolation(error)) {
+        throw nameTaken('tool', updateToolDto.name ?? '');
+      }
       this.logger.error(`Failed to update tool: ${error.message}`);
       throw error;
     }
