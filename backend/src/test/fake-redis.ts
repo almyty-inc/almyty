@@ -82,6 +82,15 @@ export class FakeRedis {
     return value;
   }
 
+  /** GETDEL key: the value, removed in the same step, or null. */
+  async getdel(key: string): Promise<string | null> {
+    this.commands.push({ name: 'getdel', args: [key] });
+    const value = this.live(key)?.value ?? null;
+    this.store.delete(key);
+    await roundTrip();
+    return value;
+  }
+
   async del(...keys: string[]): Promise<number> {
     this.commands.push({ name: 'del', args: keys });
     let removed = 0;

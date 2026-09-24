@@ -43,10 +43,10 @@ const SURFACE_CLAUSES: ClauseModel = {
   'gateway.type = :type': (row, p) => row.type === p.type,
   "gateway.configuration -> 'hostedChat' ->> 'slug' = :slug": (row, p) =>
     row.configuration?.hostedChat?.slug === p.slug,
-  "gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname": (row, p) =>
-    row.configuration?.customDomain?.hostname === p.hostname,
-  "gateway.configuration -> 'customDomain' ->> 'status' = :status": (row, p) =>
-    row.configuration?.customDomain?.status === p.status,
+  "gateway.customDomain ->> 'hostname' = :hostname": (row, p) =>
+    row.customDomain?.hostname === p.hostname,
+  "gateway.customDomain ->> 'status' = :status": (row, p) =>
+    row.customDomain?.status === p.status,
 };
 
 describe('HostedChatService', () => {
@@ -483,7 +483,7 @@ describe('HostedChatService', () => {
     const domain = (hostname: string, status: string, overrides: Partial<Gateway> = {}) =>
       surface({
         ...overrides,
-        configuration: { hostedChat: { slug: `slug-${hostname}` }, customDomain: { hostname, status } },
+        configuration: { hostedChat: { slug: `slug-${hostname}` } }, customDomain: { hostname, status } as any,
       });
 
     it('resolves an active, verified custom domain', async () => {
@@ -495,7 +495,7 @@ describe('HostedChatService', () => {
       ];
       await expect(service.findByCustomDomain(' Chat.Acme.com')).resolves.toMatchObject({ id: 'gw-1' });
       expect(
-        clause(qb.executed[0], "gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname")?.params,
+        clause(qb.executed[0], "gateway.customDomain ->> 'hostname' = :hostname")?.params,
       ).toEqual({ hostname: 'chat.acme.com' });
     });
 

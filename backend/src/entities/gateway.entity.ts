@@ -90,6 +90,60 @@ export interface RateLimitConfig {
   perIpPerHour?: number;
 }
 
+export type CustomDomainStatus =
+  | 'pending_verification'
+  | 'verifying'
+  | 'verified'
+  | 'failed'
+  | 'active';
+
+/**
+ * A hosted chat surface's claim on a hostname the tenant owns. Written
+ * only by CustomDomainService through targeted SQL; see the column.
+ */
+export interface CustomDomainConfig {
+  hostname: string;
+  status: CustomDomainStatus;
+  /** Random per-domain token the tenant publishes in DNS. Public by design, not a secret. */
+  verificationToken: string;
+  verifiedAt: string | null;
+  lastCheckedAt: string | null;
+  lastError: string | null;
+  /** Scheduled re-checks of a live domain that found the record gone, in a row. */
+  consecutiveFailures?: number;
+}
+
+/** Which identity provider a hosted chat surface signs visitors in with. */
+export type VisitorOAuthPreset = 'google' | 'github' | 'microsoft' | 'oidc' | 'oauth2';
+
+/**
+ * A hosted chat surface's own OAuth / OIDC provider. Endpoints are
+ * resolved when it is saved (discovery included), so sign-in never
+ * depends on a discovery document fetched mid-flow. The client secret is
+ * not here: `credentialId` names the managed credential that holds it.
+ */
+export interface VisitorOAuthConfig {
+  preset: VisitorOAuthPreset;
+  /** Expected `iss` of ID tokens; null for plain OAuth 2.0 (GitHub). */
+  issuer: string | null;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  userinfoEndpoint: string | null;
+  jwksUri: string | null;
+  /** Where the endpoints came from, when discovered. */
+  discoveryUrl: string | null;
+  /** Microsoft Entra tenant, for the microsoft preset. */
+  tenant: string | null;
+  clientId: string;
+  scopes: string[];
+  /** Lowercase domains; empty admits any account the provider vouches for. */
+  allowedEmailDomains: string[];
+  credentialId: string | null;
+  /** How the client authenticates at the token endpoint. */
+  tokenEndpointAuthMethod: 'client_secret_post' | 'client_secret_basic';
+  updatedAt: string;
+}
+
 
 @Entity('gateways')
 @VersionedEntity()
@@ -198,6 +252,24 @@ export class Gateway {
 
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any>;
+
+  /**
+   * The hosted chat custom domain claim. Its own column, never inside
+   * `configuration`, and never written by a TypeORM save (`update:
+   * false`, `insert: false`): a save writes back whatever the entity
+   * held when it was loaded, so a gateway edit that began before a
+   * verify, a removal or a scheduled demotion finished would put the old
+   * claim back. Only CustomDomainService writes it, with targeted SQL.
+   */
+  @Column({ type: 'jsonb', nullable: true, update: false, insert: false })
+  customDomain: CustomDomainConfig | null;
+
+  /**
+   * The hosted chat surface's visitor OAuth provider. Same rule as
+   * customDomain: written only by VisitorOAuthConfigService.
+   */
+  @Column({ type: 'jsonb', nullable: true, update: false, insert: false })
+  visitorOAuth: VisitorOAuthConfig | null;
 
   @Column({ default: 0 })
   totalRequests: number;

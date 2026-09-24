@@ -8,6 +8,7 @@ import {
   Bell,
   Coins,
   Gift,
+  Globe,
   KeyRound,
   Lock,
   Shield,
@@ -103,6 +104,12 @@ const PRESENTATION: Record<string, NotificationPresentation> = {
     accentClass: 'text-cyan-500',
     label: 'Rotation due',
     description: 'A connection is older than your rotation rule allows.',
+  },
+  'domains.unverified': {
+    icon: Globe,
+    accentClass: 'text-red-500',
+    label: 'Custom domain stopped',
+    description: 'A hosted chat custom domain lost its DNS proof and is no longer served.',
   },
   'account.welcome': {
     icon: User,

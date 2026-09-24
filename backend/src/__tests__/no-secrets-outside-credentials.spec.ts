@@ -46,6 +46,7 @@ const ALLOWED: Record<string, string> = {
   'user.entity.ts:verificationToken': 'first-party e-mail verification token',
   'user.entity.ts:resetPasswordToken': 'first-party password reset token',
   'user-organization.entity.ts:inviteToken': 'first-party invite token',
+  'gateway.entity.ts:customDomain': 'first-party DNS verification token (verificationToken), published in the tenant zone by design',
 };
 
 interface ScannedColumn {

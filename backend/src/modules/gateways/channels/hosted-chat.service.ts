@@ -17,6 +17,7 @@ import { AuditLogService } from '../../audit-log/audit-log.service';
 import { OrgLicenseResolver } from '../../licensing/org-license.resolver';
 import { EE_ENTITLEMENTS } from '../../licensing/license.constants';
 import { isPrivateGateway } from '../private-gateway';
+import { providerLabel, visitorOAuthConfigured } from './visitor-oauth';
 
 /**
  * The tenant-facing half of the hosted chat app.
@@ -149,6 +150,8 @@ export class HostedChatService {
       logoUrl: config.logoUrl,
       suggestedPrompts: config.suggestedPrompts,
       authMode: config.authMode,
+      // The name on the sign-in button; never an endpoint or a client id.
+      signInProvider: config.authMode === 'oauth' && gateway.visitorOAuth ? providerLabel(gateway.visitorOAuth) : null,
       whiteLabel: entitled ? config.whiteLabel : false,
       visitorCanDelete: config.visitorCanDelete,
       visitorCanExport: config.visitorCanExport,
@@ -252,7 +255,12 @@ export class HostedChatService {
    * lost the entitlement must close, not silently fall back to open.
    */
   async authModeAvailable(gateway: Gateway): Promise<boolean> {
-    if (this.authMode(gateway) !== 'sso') return true;
+    const mode = this.authMode(gateway);
+    // OAuth needs a provider to send the visitor to; without one the
+    // surface is closed, and the page says so rather than offering a
+    // button that goes nowhere.
+    if (mode === 'oauth') return visitorOAuthConfigured(gateway.visitorOAuth);
+    if (mode !== 'sso') return true;
     if (!this.orgLicense) return false;
     return this.orgLicense.hasForOrg(gateway.organizationId, 'sso');
   }
@@ -498,10 +506,10 @@ export class HostedChatService {
     const gateways = await this.gatewayRepository
       .createQueryBuilder('gateway')
       .where('gateway.type = :type', { type: GatewayType.HOSTED_CHAT })
-      .andWhere("gateway.configuration -> 'customDomain' ->> 'hostname' = :hostname", {
+      .andWhere("gateway.customDomain ->> 'hostname' = :hostname", {
         hostname: normalized,
       })
-      .andWhere("gateway.configuration -> 'customDomain' ->> 'status' = :status", {
+      .andWhere("gateway.customDomain ->> 'status' = :status", {
         status: 'active',
       })
       .getMany();
