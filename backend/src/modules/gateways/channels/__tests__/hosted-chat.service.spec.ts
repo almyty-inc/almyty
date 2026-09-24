@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { HostedChatService } from '../hosted-chat.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gateway.entity';
 import type { EndUser } from '../../../../entities/end-user.entity';
+import { fakeRepository } from '../../../../test/fake-repository';
 
 const gateway = (overrides: Partial<Gateway> = {}): Gateway => {
   const gw = new Gateway();
@@ -390,6 +391,40 @@ describe('HostedChatService', () => {
       ]);
       const messages = await service.listMessages({ id: 'conv-1' } as any);
       expect(messages.map((m) => m.id)).toEqual(['m1', 'm2']);
+    });
+
+    /**
+     * An assistant turn that called tools is saved with the model's text
+     * alongside the call -- its narration of what it is about to look up
+     * or what the last tool said. That is the agent's working, and the
+     * replay a visitor reads must hold only the answers.
+     */
+    it('leaves out the assistant turns that called tools', async () => {
+      const at = (s: number) => new Date(Date.UTC(2026, 8, 1, 0, 0, s));
+      const messages = fakeRepository<any>([
+        { id: 'u1', conversationId: 'conv-1', role: 'user', type: 'text', content: 'where is my order?', createdAt: at(1) },
+        {
+          id: 'a1', conversationId: 'conv-1', role: 'assistant', type: 'tool_call', createdAt: at(2),
+          content: 'Looking up account 4411 for jane@corp.test', toolCalls: [{ id: 't1', name: 'crm_lookup', parameters: {} }],
+        },
+        { id: 't1', conversationId: 'conv-1', role: 'tool', type: 'tool_result', content: '{"tier":"gold"}', createdAt: at(3) },
+        // Tool calls recorded on a plain text row are the same thing.
+        {
+          id: 'a2', conversationId: 'conv-1', role: 'assistant', type: 'text', createdAt: at(4),
+          content: 'Internal: margin 41%', toolCalls: [{ id: 't2', name: 'notes', parameters: {} }],
+        },
+        { id: 'a3', conversationId: 'conv-1', role: 'assistant', type: 'text', content: 'It ships Monday.', createdAt: at(5) },
+        { id: 'x1', conversationId: 'conv-2', role: 'assistant', type: 'text', content: 'someone else', createdAt: at(6) },
+      ]);
+      const scoped = new HostedChatService(
+        gatewayRepository, endUserRepository, conversationRepository, messages as any, runRepository, auditLogService as any,
+      );
+
+      const transcript = await scoped.listMessages({ id: 'conv-1' } as any);
+
+      expect(transcript.map((m) => m.id)).toEqual(['u1', 'a3']);
+      expect(JSON.stringify(transcript)).not.toContain('4411');
+      expect(JSON.stringify(transcript)).not.toContain('margin');
     });
 
     it('prefers the entity text accessor when parts are present', async () => {
