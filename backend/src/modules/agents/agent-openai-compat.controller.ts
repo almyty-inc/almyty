@@ -32,7 +32,7 @@ import {
   unsupportedOpenAIField,
   withSamplingOverrides,
 } from './compat-conversation.helper';
-import { agentsForKey, authenticateCompatKey, compatPrincipal, resolveCompatAgent } from './compat-auth.helper';
+import { agentsForKey, authenticateCompatKey, resolveCompatAgent } from './compat-auth.helper';
 import { ExecutionAccessService } from '../../common/authorization/execution-access.service';
 
 /** Maximum request body size in bytes (1 MB). */

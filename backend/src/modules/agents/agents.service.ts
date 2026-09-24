@@ -18,7 +18,6 @@ import { AccessPolicyService, ResourceVisibility } from '../../common/authorizat
 import {
   assertAttachable,
   assertNotOthersPrivate,
-  isOthersPrivate,
   resolveVisibilityWrite,
 } from '../../common/authorization/private-visibility';
 import { assertNoSharedDependents } from '../../common/authorization/private-dependents';

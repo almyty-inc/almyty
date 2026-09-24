@@ -22,7 +22,7 @@
  * path. Types are re-exported below so no caller needs to update
  * its import path.
  */
-import { Injectable, Logger, BadRequestException, Optional, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional, ForbiddenException } from '@nestjs/common';
 import { PluginManagerService } from '../plugins/plugin-manager.service';
 import { PluginHookType } from '../plugins/types/plugin.types';
 import { InjectRepository } from '@nestjs/typeorm';

@@ -33,7 +33,6 @@ import { fakeManager, fakeRepository } from '../../../test/fake-repository';
 import { CAST, castFixture, MembershipFixture } from '../../../test/execution-access.fixture';
 import {
   ExecutionPrincipal,
-  gatewayPrincipal,
   userPrincipal,
 } from '../../../common/authorization/execution-access.service';
 
