@@ -1,6 +1,14 @@
 import { Logger } from '@nestjs/common';
 import { EmailProvisioningService } from '../email-provisioning.service';
 import { Gateway, GatewayStatus, GatewayType } from '../../../../entities/gateway.entity';
+import {
+  ClauseModel,
+  ExecutedQuery,
+  RecordingQueryBuilder,
+  clause,
+  matchingRows,
+  organizationScope,
+} from '../../__tests__/recording-query-builder';
 
 /**
  * Inbound-address provisioning for email channel gateways. Covers the
@@ -17,7 +25,23 @@ describe('EmailProvisioningService', () => {
   let gatewayRepository: { update: jest.Mock; createQueryBuilder: jest.Mock };
   let eventRepository: { create: jest.Mock; save: jest.Mock };
   let configService: { get: jest.Mock };
-  let queryBuilder: any;
+  let queryBuilder: RecordingQueryBuilder;
+  let gatewayRows: Gateway[];
+
+  /**
+   * The recipient lookup, evaluated against a gateways table. The chain
+   * that stood here answered a canned row whatever the WHERE said, so
+   * the type or status predicate could go -- delivering mail to a paused
+   * gateway, or to a Slack one carrying the same config key -- with the
+   * suite green. A clause not listed throws.
+   */
+  const RECIPIENT_CLAUSES: ClauseModel = {
+    'gateway.type = :type': (row, p) => row.type === p.type,
+    'gateway.status = :status': (row, p) => row.status === p.status,
+    "LOWER(gateway.configuration ->> 'inbound_address') IN (:...addresses)": (row, p) =>
+      typeof row.configuration?.inbound_address === 'string' &&
+      p.addresses.includes(row.configuration.inbound_address.toLowerCase()),
+  };
 
   const makeGateway = (over: Partial<Gateway> = {}): Gateway =>
     ({
@@ -32,14 +56,15 @@ describe('EmailProvisioningService', () => {
     } as unknown as Gateway);
 
   beforeEach(() => {
-    queryBuilder = {
-      where: jest.fn().mockReturnThis(),
-      andWhere: jest.fn().mockReturnThis(),
-      getOne: jest.fn().mockResolvedValue(null),
-    };
+    gatewayRows = [];
     gatewayRepository = {
       update: jest.fn().mockResolvedValue(undefined),
-      createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
+      createQueryBuilder: jest.fn(
+        (alias: string) =>
+          (queryBuilder = new RecordingQueryBuilder(alias, {
+            getOne: (query: ExecutedQuery) => matchingRows(query, gatewayRows, RECIPIENT_CLAUSES)[0] ?? null,
+          })),
+      ),
     };
     eventRepository = {
       create: jest.fn((e) => e),
@@ -158,31 +183,37 @@ describe('EmailProvisioningService', () => {
 
   describe('resolveGatewayByRecipient', () => {
     it('resolves the active email gateway owning the recipient address, across orgs', async () => {
-      const gateway = makeGateway();
-      queryBuilder.getOne.mockResolvedValue(gateway);
+      const inbound = (address: string) => ({ resend_api_key: 're_test', inbound_address: address });
+      gatewayRows.push(
+        // Each decoy differs from the owner in exactly one predicate, and
+        // sits ahead of it, so a dropped predicate hands it back instead.
+        makeGateway({ id: 'gw-paused', status: GatewayStatus.INACTIVE, configuration: inbound('support-bot@inbound.almyty.example') }),
+        makeGateway({ id: 'gw-slack', type: GatewayType.SLACK, configuration: inbound('support-bot@inbound.almyty.example') }),
+        makeGateway({ id: 'gw-other-address', configuration: inbound('billing@inbound.almyty.example') }),
+        makeGateway({ id: 'gw-owner', organizationId: 'org-2', configuration: inbound('Support-Bot@inbound.almyty.example') }),
+      );
 
       const found = await service.resolveGatewayByRecipient([
         'Support Bot <Support-Bot@Inbound.Almyty.example>',
       ]);
 
-      expect(found).toBe(gateway);
-      expect(queryBuilder.where).toHaveBeenCalledWith('gateway.type = :type', {
-        type: GatewayType.EMAIL,
-      });
-      expect(queryBuilder.andWhere).toHaveBeenCalledWith('gateway.status = :status', {
-        status: GatewayStatus.ACTIVE,
-      });
+      expect(found?.id).toBe('gw-owner');
       // Address normalized to the bare lowercase mailbox before matching.
-      expect(queryBuilder.andWhere).toHaveBeenCalledWith(
-        "LOWER(gateway.configuration ->> 'inbound_address') IN (:...addresses)",
-        { addresses: ['support-bot@inbound.almyty.example'] },
-      );
+      expect(
+        clause(queryBuilder.executed[0], "LOWER(gateway.configuration ->> 'inbound_address') IN (:...addresses)")?.params,
+      ).toEqual({ addresses: ['support-bot@inbound.almyty.example'] });
       // No org filter — this is the cross-org fallback by design.
-      const clauses = [
-        queryBuilder.where.mock.calls,
-        queryBuilder.andWhere.mock.calls,
-      ].flat();
-      expect(clauses.some(([sql]) => String(sql).includes('organizationId'))).toBe(false);
+      expect(organizationScope(queryBuilder.executed[0], 'gateway')).toBeUndefined();
+    });
+
+    it('resolves nothing when only an inactive or non-email gateway holds the address', async () => {
+      const inbound = { inbound_address: 'support-bot@inbound.almyty.example' };
+      gatewayRows.push(
+        makeGateway({ id: 'gw-paused', status: GatewayStatus.INACTIVE, configuration: inbound }),
+        makeGateway({ id: 'gw-slack', type: GatewayType.SLACK, configuration: inbound }),
+      );
+
+      expect(await service.resolveGatewayByRecipient(['support-bot@inbound.almyty.example'])).toBeNull();
     });
 
     it('returns null without querying when no recipient is resolvable', async () => {

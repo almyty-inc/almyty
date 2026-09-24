@@ -14,6 +14,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Organization } from '../../entities/organization.entity';
 import { resolveRunLimits } from './run-limits';
 import { BudgetsService } from '../budgets/budgets.service';
+import { resourceOwnerId } from '../../common/authorization/access-policy.service';
 import { AgentExecutionCancellationService } from './agent-execution-cancellation.service';
 
 // Re-export so existing `import { StreamEvent } from './agent-execution.engine'`
@@ -1148,12 +1149,18 @@ export class AgentExecutionEngine {
       if (!this.notifications) return;
       const triggerType = (execution.metadata as any)?.triggerType;
       if (triggerType !== 'scheduled' && triggerType !== 'webhook') return;
-      if (!execution.userId) return;
+      // A private agent's failure goes to its owner alone. The run's userId
+      // is whoever the scheduler or webhook stamped, which can predate the
+      // agent going private or being handed over; an error text and the
+      // agent's name must not reach that member. No recorded owner: nobody.
+      const recipient =
+        agent.visibility === 'private' ? resourceOwnerId(agent) : execution.userId;
+      if (!recipient) return;
       const baseUrl = process.env.FRONTEND_URL || 'https://app.staging.almyty.com';
       await this.notifications.emit({
         type: 'run.failed',
         organizationId: execution.organizationId,
-        userIds: [execution.userId],
+        userIds: [recipient],
         title: `Run failed: ${agent.name}`,
         body: execution.error || 'Run failed',
         link: `/agents/${agent.id}`,

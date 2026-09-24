@@ -283,9 +283,10 @@ export class AnalyticsService {
       .addSelect('MAX(exec.createdAt)', 'lastUsed')
       .where('exec.organizationId = :orgId', { orgId: organizationId })
       .andWhere('exec.createdAt >= :since', { since })
-      // Another member's private tools are not in this caller's usage table.
+      // Another member's private tools are not in this caller's usage table
+      // (nor, fail closed, an ownerless private tool, nor any for no caller).
       .andWhere(
-        `NOT EXISTS (SELECT 1 FROM tools pt WHERE pt.id = exec."toolId" AND pt.visibility = 'private' AND pt."createdBy" IS DISTINCT FROM :_privateMe)`,
+        `NOT EXISTS (SELECT 1 FROM tools pt WHERE pt.id = exec."toolId" AND pt.visibility = 'private' AND (pt."createdBy" = :_privateMe) IS NOT TRUE)`,
         { _privateMe: callerId ?? null },
       )
       .groupBy('exec.toolId')

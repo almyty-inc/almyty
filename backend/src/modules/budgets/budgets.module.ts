@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { SpendBudget } from '../../entities/spend-budget.entity';
 import { SpendAlert } from '../../entities/spend-alert.entity';
+import { Agent } from '../../entities/agent.entity';
 import { AgentRun } from '../../entities/agent-run.entity';
 import { AgentExecution } from '../../entities/agent-execution.entity';
 import { UserOrganization } from '../../entities/user-organization.entity';
@@ -19,7 +20,7 @@ import { BudgetsController } from './budgets.controller';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([SpendBudget, SpendAlert, AgentRun, AgentExecution, UserOrganization, User]),
+    TypeOrmModule.forFeature([SpendBudget, SpendAlert, Agent, AgentRun, AgentExecution, UserOrganization, User]),
   ],
   providers: [BudgetsService, SpendService],
   controllers: [BudgetsController],

@@ -12,6 +12,7 @@ import { QueryError } from '@/components/ui/query-error'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageHeader } from '@/components/layout/page-header'
 import { Field, InlineFormActions } from '@/components/layout/form-page'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
 
 import { approvalsApi } from '@/lib/api'
 import { formatRelativeTime } from '@/lib/utils'
@@ -43,6 +44,9 @@ export function ApprovalsPage() {
   const { success, error: errNotif } = useNotifications()
   const [decisionFor, setDecisionFor] = useState<{ row: ApprovalRequest; intent: 'approve' | 'reject' } | null>(null)
   const [decisionReason, setDecisionReason] = useState('')
+  // A written note asks before a navigation throws it away. Cancel and a
+  // recorded decision both clear it, so neither asks.
+  const guard = useLeaveGuard(decisionFor !== null && decisionReason !== '')
 
   useEffect(() => {
     document.title = 'Approvals | almyty'
@@ -213,6 +217,7 @@ export function ApprovalsPage() {
           ))}
         </div>
       )}
+      {guard.element}
     </div>
   )
 }

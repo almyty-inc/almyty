@@ -40,6 +40,7 @@ export class ChargebackController {
       period: period === 'day' ? 'day' : 'month',
       granularity: granularity as any,
       forecastPeriods: forecastPeriods ? parseInt(forecastPeriods, 10) : undefined,
+      viewerId: req.user?.id ?? null,
     });
     return { success: true, data };
   }

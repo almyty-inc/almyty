@@ -11,6 +11,8 @@ export interface PendingConnect {
   organizationId: string;
   userId: string;
   ownerUserId: string | null;
+  /** 'private' when the connection being made is its owner's alone. */
+  visibility?: 'org' | 'private';
   connectorKey: string;
   methodType: string;
   codeVerifier: string | null;
@@ -65,11 +67,14 @@ export class MemoryConnectStateStore implements ConnectStateStore {
   }
 }
 
+/**
+ * The two commands the store needs. GETDEL (Redis >= 6.2) is required, not
+ * optional: a GET followed by a DEL lets two callbacks carrying the same
+ * state both read it before either deletes it, so there is no fallback.
+ */
 interface RedisLike {
   set(key: string, value: string, mode: 'EX', ttl: number): Promise<unknown>;
-  getdel?(key: string): Promise<string | null>;
-  get(key: string): Promise<string | null>;
-  del(key: string): Promise<unknown>;
+  getdel(key: string): Promise<string | null>;
 }
 
 /** Redis-backed store so a callback can land on any API replica. */
@@ -83,14 +88,7 @@ export class RedisConnectStateStore implements ConnectStateStore {
   }
 
   async take(state: string): Promise<PendingConnect | null> {
-    const key = RedisConnectStateStore.PREFIX + state;
-    let raw: string | null;
-    if (typeof this.redis.getdel === 'function') {
-      raw = await this.redis.getdel(key);
-    } else {
-      raw = await this.redis.get(key);
-      if (raw) await this.redis.del(key);
-    }
+    const raw = await this.redis.getdel(RedisConnectStateStore.PREFIX + state);
     return raw ? (JSON.parse(raw) as PendingConnect) : null;
   }
 }

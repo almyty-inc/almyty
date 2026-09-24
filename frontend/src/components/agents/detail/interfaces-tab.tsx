@@ -92,6 +92,15 @@ const CHANNEL_TYPES = [
 import { SurfacesCanvas } from '@/components/agents/surfaces/surfaces-canvas'
 import type { SurfaceDescriptor } from '@/components/agents/surfaces/surface-types'
 import { getApiErrorMessage } from '@/lib/api-error'
+import { useLeaveGuard } from '@/hooks/use-leave-guard'
+
+/** The config keys that hold a value, in a stable order, for comparison. */
+function filledIn(config: Record<string, any>): [string, unknown][] {
+  return Object.keys(config)
+    .sort()
+    .filter((k) => config[k] !== '' && config[k] !== undefined && config[k] !== null && config[k] !== false)
+    .map((k) => [k, config[k]])
+}
 
 export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
   const queryClient = useQueryClient()
@@ -112,6 +121,18 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
   const [view, setView] = useState<'canvas' | 'list'>('canvas')
   const deployRef = useRef<HTMLFormElement>(null)
   const setupRef = useRef<HTMLElement>(null)
+
+  // A deploy form with something typed into it asks before a navigation
+  // throws it away. Picking a type fills in that type's defaults, which is
+  // not work of the user's, so only values that differ from them count.
+  // Cancel and a successful deploy both reset the form, so neither asks.
+  const deployDirty =
+    deployInterfaceOpen &&
+    (newInterfaceName !== '' ||
+      channelConnection !== null ||
+      JSON.stringify(filledIn(interfaceConfig)) !==
+        JSON.stringify(filledIn(getDefaultInterfaceConfig(newInterfaceType))))
+  const guard = useLeaveGuard(deployDirty)
 
   // Both sections open at the top of the tab; a click on a card or tile
   // further down would otherwise change something off-screen.
@@ -570,6 +591,7 @@ export function InterfacesTab({ agentId, agentName }: InterfacesTabProps) {
           })}
         </div>
       )}
+      {guard.element}
     </>
   )
 }

@@ -5,6 +5,7 @@ import { WhatsAppCloudAdapter } from '../channels/adapters/whatsapp-cloud.adapte
 import { SmsAdapter } from '../channels/adapters/sms.adapter';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
+import { BY_ID, tableUpdates } from './recording-query-builder';
 
 /**
  * whatsapp_cloud + sms delegation through the unified endpoint.
@@ -23,6 +24,7 @@ describe('UnifiedGatewayDelegation — whatsapp_cloud + sms', () => {
     handleInboundMessage: jest.Mock;
   };
   let gatewayResolver: { resolveAndAuthenticate: jest.Mock };
+  let counters: any[];
 
   const organization = { id: 'org-1', slug: 'acme' } as Organization;
 
@@ -100,6 +102,10 @@ describe('UnifiedGatewayDelegation — whatsapp_cloud + sms', () => {
   };
 
   beforeEach(() => {
+    counters = [
+      { id: 'gw-wac-1', totalRequests: 0, successfulRequests: 0, lastRequestAt: null },
+      { id: 'gw-neighbour', totalRequests: 0, successfulRequests: 0, lastRequestAt: null },
+    ];
     channelGatewayService = {
       getAdapter: jest.fn((type: string) =>
         type === GatewayType.SMS ? new SmsAdapter() : new WhatsAppCloudAdapter(),
@@ -112,14 +118,9 @@ describe('UnifiedGatewayDelegation — whatsapp_cloud + sms', () => {
 
     delegation = new UnifiedGatewayDelegation(
       { findOne: jest.fn() } as any, // agent repo
-      {
-        createQueryBuilder: jest.fn().mockReturnValue({
-          update: jest.fn().mockReturnThis(),
-          set: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          execute: jest.fn().mockResolvedValue(undefined),
-        }),
-      } as any, // gateway repo
+      // The gateways table the counter bump writes to; its WHERE is
+      // evaluated, where the chain that stood here ignored it.
+      tableUpdates(counters, BY_ID) as any, // gateway repo
       {} as any, // mcp
       {} as any, // almyty mcp
       {} as any, // mcp oauth
@@ -224,6 +225,11 @@ describe('UnifiedGatewayDelegation — whatsapp_cloud + sms', () => {
         status: 401,
       });
       expect(channelGatewayService.handleInboundMessage).not.toHaveBeenCalled();
+      // Counted as a failed request on this gateway, and on no other.
+      expect(counters).toEqual([
+        expect.objectContaining({ id: 'gw-wac-1', totalRequests: 1, successfulRequests: 0 }),
+        { id: 'gw-neighbour', totalRequests: 0, successfulRequests: 0, lastRequestAt: null },
+      ]);
     });
 
     it('treats sms gateways as channel webhooks (no almyty API-key auth)', async () => {

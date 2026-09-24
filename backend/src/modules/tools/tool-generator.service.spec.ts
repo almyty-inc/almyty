@@ -33,7 +33,8 @@ describe('ToolGeneratorService', () => {
             count: jest.fn().mockResolvedValue(0),
             create: jest.fn(),
             save: jest.fn(),
-            find: jest.fn(),
+            // No generated name is taken by another tool at write time.
+            find: jest.fn().mockResolvedValue([]),
             findOne: jest.fn(),
           },
         },
@@ -206,7 +207,7 @@ describe('ToolGeneratorService', () => {
   });
 
   describe('generateToolsFromApi', () => {
-    it('should skip existing tools', async () => {
+    it('regenerates an existing tool in place instead of adding a row', async () => {
       const mockApi = {
         id: 'api-1',
         name: 'User API',
@@ -235,8 +236,12 @@ describe('ToolGeneratorService', () => {
 
       const result = await service.generateToolsFromApi(mockApi);
 
-      expect(result.summary.skipped).toBe(1);
-      expect(result.summary.generated).toBe(0);
+      // Regenerated in place (one UPDATE in the batch), not a new row. This
+      // used to read skipped: 1, which only held because the save mock
+      // answered undefined and the loop counted that as a failed schema.
+      expect(result.summary.generated).toBe(1);
+      expect(result.summary.skipped).toBe(0);
+      expect(toolRepository.create).not.toHaveBeenCalled();
     });
 
     it('should skip inactive operations', async () => {

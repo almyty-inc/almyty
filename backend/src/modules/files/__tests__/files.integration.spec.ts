@@ -218,10 +218,10 @@ describe('FilesService (integration)', () => {
         originalname: 'agent-doc.txt',
         mimetype: 'text/plain',
         size: buffer.length,
-      }, { agentId: 'agent-xyz' });
+      }, { agentId: '9b2f4c1e-7a3d-4e8b-9c1a-2f6d8e0b4a71' });
 
-      expect(result.storageKey).toContain('agent-xyz');
-      expect(result.agentId).toBe('agent-xyz');
+      expect(result.storageKey).toContain('9b2f4c1e-7a3d-4e8b-9c1a-2f6d8e0b4a71');
+      expect(result.agentId).toBe('9b2f4c1e-7a3d-4e8b-9c1a-2f6d8e0b4a71');
     });
   });
 
