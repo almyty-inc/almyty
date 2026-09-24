@@ -25,7 +25,8 @@ vi.mock('@/lib/hosted-chat', async () => {
       streamUrl: vi.fn(() => 'http://localhost/stream'),
       me: vi.fn(),
       ssoLoginUrl: vi.fn((slug: string) => '/api/public/chat/' + slug + '/auth/sso/login'),
-
+      startEmailSignIn: vi.fn(),
+      verifyEmailSignIn: vi.fn(),
     },
     downloadBlob: vi.fn(),
     reloadAfterVisitorDeletion: vi.fn(),
@@ -581,12 +582,55 @@ describe('HostedChatPage', { retry: 2 }, () => {
     })
 
     it('is honest about a sign-in method that is not built yet', async () => {
-      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'email_otp' }))
-      ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'email_otp', available: true, authenticated: false, email: null, displayName: null })
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'oauth' }))
+      ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'oauth', available: true, authenticated: false, email: null, displayName: null })
 
       render(<HostedChatPage slug="acme" />)
 
       expect(await screen.findByText(/not set up yet/)).toBeInTheDocument()
+    })
+
+    it('signs a visitor in with an emailed code, then opens the chat', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'email_otp' }))
+      ;(hostedChatApi.me as any)
+        .mockResolvedValueOnce({ authMode: 'email_otp', available: true, authenticated: false, email: null, displayName: null })
+        .mockResolvedValue({ authMode: 'email_otp', available: true, authenticated: true, email: 'ada@example.com', displayName: null })
+      ;(hostedChatApi.startEmailSignIn as any).mockResolvedValue(undefined)
+      ;(hostedChatApi.verifyEmailSignIn as any).mockResolvedValue({ authenticated: true, email: 'ada@example.com' })
+
+      render(<HostedChatPage slug="acme" />)
+
+      fireEvent.change(await screen.findByLabelText('Email address'), { target: { value: 'ada@example.com' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Email me a code' }))
+      await waitFor(() => expect(hostedChatApi.startEmailSignIn).toHaveBeenCalledWith('acme', 'ada@example.com'))
+
+      fireEvent.change(await screen.findByLabelText('Sign-in code'), { target: { value: '123456' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+      await waitFor(() =>
+        expect(hostedChatApi.verifyEmailSignIn).toHaveBeenCalledWith('acme', 'ada@example.com', '123456'),
+      )
+
+      // Admission is the backend's call: the page re-asks /me and only then opens.
+      expect(await screen.findByLabelText('Message')).toBeInTheDocument()
+    })
+
+    it('shows the server refusal and keeps the chat closed on a wrong code', async () => {
+      ;(hostedChatApi.branding as any).mockResolvedValue(branding({ authMode: 'email_otp' }))
+      ;(hostedChatApi.me as any).mockResolvedValue({ authMode: 'email_otp', available: true, authenticated: false, email: null, displayName: null })
+      ;(hostedChatApi.startEmailSignIn as any).mockResolvedValue(undefined)
+      ;(hostedChatApi.verifyEmailSignIn as any).mockRejectedValue({
+        response: { status: 400, data: { code: 'CODE_INVALID', message: 'That code is not right. Check it, or ask for a new one.' } },
+      })
+
+      render(<HostedChatPage slug="acme" />)
+
+      fireEvent.change(await screen.findByLabelText('Email address'), { target: { value: 'ada@example.com' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Email me a code' }))
+      fireEvent.change(await screen.findByLabelText('Sign-in code'), { target: { value: '000000' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(/not right/)
+      expect(screen.queryByLabelText('Message')).toBeNull()
     })
   })
 })

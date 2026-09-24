@@ -555,7 +555,9 @@ describe('UsersService', () => {
       expect(savedUser.lastName).toBe('Smith');
     });
 
-    it('should update email when not taken by another user', async () => {
+    // A new address goes through AuthService.changeEmail (password,
+    // verification reset, both mailboxes told); this path refuses it.
+    it('refuses to change the email directly', async () => {
       const mockUser = {
         id: 'user-1',
         firstName: 'John',
@@ -563,17 +565,10 @@ describe('UsersService', () => {
         email: 'old@test.com',
       } as User;
 
-      userRepository.findOne
-        .mockResolvedValueOnce(mockUser)
-        .mockResolvedValueOnce(null);
+      userRepository.findOne.mockResolvedValueOnce(mockUser);
 
-      userRepository.save.mockImplementation(user => Promise.resolve(user));
-
-      await service.update('user-1', { email: 'new@test.com' });
-
-      expect(userRepository.save).toHaveBeenCalled();
-      const savedUser = userRepository.save.mock.calls[0][0];
-      expect(savedUser.email).toBe('new@test.com');
+      await expect(service.update('user-1', { email: 'new@test.com' })).rejects.toThrow(BadRequestException);
+      expect(userRepository.save).not.toHaveBeenCalled();
     });
 
     it('should allow user to update to their own email', async () => {

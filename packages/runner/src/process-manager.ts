@@ -469,12 +469,14 @@ export async function shellExec(
   cmd: string,
   env?: Record<string, string>,
   timeoutMs = 60_000,
+  cwd?: string,
 ): Promise<ShellExecResult> {
   try {
     const { stdout, stderr } = await execFileAsync('/bin/sh', ['-c', cmd], {
       env: { ...process.env, ...(env ?? {}) } as NodeJS.ProcessEnv,
       timeout: timeoutMs,
       maxBuffer: 10 * 1024 * 1024,
+      ...(cwd ? { cwd } : {}),
     });
     return { stdout, stderr, exitCode: 0 };
   } catch (err: any) {

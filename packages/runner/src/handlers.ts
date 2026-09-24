@@ -1,3 +1,4 @@
+import { isAbsolute, resolve as resolvePath } from 'path';
 import { ProcessManager, shellExec } from './process-manager.js';
 import { enforceSpawnPolicy, enforceShellPolicy } from './policy.js';
 import { detectRuntimeInfo, RUNNER_VERSION } from './runtime-info.js';
@@ -167,14 +168,37 @@ async function shell(ctx: HandlerContext, req: RequestPayload): Promise<unknown>
   // the process manager's bookkeeping; one-shot execution returns
   // stdout+stderr+exit and forgets.
   requireWorkspace(req);
-  const p = req.params as { cmd?: string; env?: Record<string, string>; timeoutMs?: number };
-  const cmd = requireString(p.cmd, 'cmd');
+  // The parameters are the ones the backend publishes for this method
+  // (runner-capability.publisher.ts): `command`, and a `cwd` relative to
+  // the workspace root. This read `cmd` and ignored `cwd`, so every call
+  // through the published tool failed "cmd is required".
+  const p = req.params as { command?: string; cwd?: string; env?: Record<string, string>; timeoutMs?: number };
+  const cmd = requireString(p.command, 'command');
+  const cwd = resolveShellCwd(req.workspaceCwd, p.cwd);
   // Enforce the same execution policy as process.spawn — isolation
-  // fail-closed, denyPatterns, installBlocked — and run with the
-  // sanitized env. Without this, shell.exec was a hole straight past
-  // every protection spawn honours.
-  const { env } = enforceShellPolicy(ctx.config, cmd, p.env);
-  return shellExec(cmd, env, p.timeoutMs);
+  // fail-closed, denyPatterns, installBlocked, allowedCwdRoots — and run
+  // with the sanitized env. Without this, shell.exec was a hole straight
+  // past every protection spawn honours.
+  const { env } = enforceShellPolicy(ctx.config, cmd, p.env, cwd);
+  return shellExec(cmd, env, p.timeoutMs, cwd);
+}
+
+/**
+ * Where a shell.exec runs: the workspace root, or `cwd` resolved against
+ * it. With no workspace root known, an absolute `cwd` is used as given
+ * and a relative one is refused rather than resolved against wherever
+ * the daemon was started. The policy then holds the result to
+ * allowedCwdRoots.
+ */
+function resolveShellCwd(workspaceCwd: string | undefined, cwd: unknown): string | undefined {
+  const root = typeof workspaceCwd === 'string' && workspaceCwd.length > 0 ? workspaceCwd : undefined;
+  if (cwd === undefined || cwd === null || cwd === '') return root;
+  if (typeof cwd !== 'string') {
+    throw new RunnerError('cwd must be a string', RUNNER_ERROR_CODES.PATH_DENIED);
+  }
+  if (root) return resolvePath(root, cwd);
+  if (isAbsolute(cwd)) return cwd;
+  throw new RunnerError('a relative cwd needs a workspace root', RUNNER_ERROR_CODES.PATH_DENIED);
 }
 
 async function info(ctx: HandlerContext): Promise<unknown> {

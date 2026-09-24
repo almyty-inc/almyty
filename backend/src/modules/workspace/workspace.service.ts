@@ -15,6 +15,9 @@ import { canAcceptWork } from '../runner/runner-state';
 const DEFAULT_TTL_MS = 60 * 60 * 1000; // 1 hour
 const MAX_TTL_MS = 24 * 60 * 60 * 1000;
 
+/** Workspace ids are uuids; anything else is answered "no" before it reaches Postgres. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface CreateWorkspaceInput {
   cwd: string;
   isolation?: RunnerIsolationTier;
@@ -85,7 +88,8 @@ export class WorkspaceService {
 
   /**
    * Look up a workspace, verifying it belongs to the caller's
-   * (user, org). Used by every dispatch path before routing.
+   * (user, org). The workspace routes' lookup; dispatch asks
+   * findForDispatch, which also requires it to be live on that runner.
    */
   async getOne(
     id: string,
@@ -96,6 +100,31 @@ export class WorkspaceService {
       where: { id, ownerUserId, organizationId },
     });
     if (!ws) throw new NotFoundException('workspace not found');
+    return ws;
+  }
+
+  /**
+   * The workspace a dispatch names, if the caller may send work into it:
+   * the caller's own, ACTIVE, pinned to the runner the work is going to,
+   * and not past its TTL (the sweep runs on a timer, so an expired row can
+   * still read ACTIVE for a while). Null otherwise -- including for a
+   * dispatch with no identified caller, since a workspace is always
+   * somebody's.
+   *
+   * RunnerCallService.dispatch asks this before any envelope leaves.
+   */
+  async findForDispatch(
+    id: string,
+    runnerId: string,
+    callerUserId: string | null | undefined,
+    now = new Date(),
+  ): Promise<Workspace | null> {
+    if (!callerUserId || !UUID_RE.test(id ?? '')) return null;
+    const ws = await this.workspaces.findOne({
+      where: { id, runnerId, ownerUserId: callerUserId, status: WorkspaceStatus.ACTIVE },
+    });
+    if (!ws) return null;
+    if (ws.ttlAt && ws.ttlAt.getTime() <= now.getTime()) return null;
     return ws;
   }
 
