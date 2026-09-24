@@ -138,7 +138,12 @@ export class AgentRuntimeProcessor {
             metadata: { triggerType: 'heartbeat', refusedBy: 'execution_access' },
           }),
         );
-        await this.runtimeService.disableHeartbeat(agentId, organizationId);
+        // Recorded on the agent too, so its page says why the heartbeat is off.
+        await this.runtimeService.disableHeartbeat(agentId, organizationId, {
+          code: 'OWNER_CANNOT_RUN',
+          message,
+          detectedAt: new Date().toISOString(),
+        });
         this.logger.warn(`Heartbeat for agent ${agentId} stopped: ${message}`);
         return;
       }
