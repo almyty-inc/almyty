@@ -14,12 +14,12 @@ import {
   UtcpExecutionResult,
 } from './types/utcp.types';
 
-import { Tool, ToolStatus } from '../../entities/tool.entity';
+import { Tool } from '../../entities/tool.entity';
 import { Api } from '../../entities/api.entity';
 import { Operation } from '../../entities/operation.entity';
 import { Organization } from '../../entities/organization.entity';
 import { Gateway } from '../../entities/gateway.entity';
-import { resourceServableThroughGateway } from '../gateways/private-gateway';
+import { findServableGatewayTool, servableToolsOnGateway } from '../gateways/gateway-servable';
 import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { ToolsService } from '../tools/tools.service';
@@ -115,18 +115,10 @@ export class UtcpService {
   }
 
   private async resolveTools(gateway: Gateway): Promise<Tool[]> {
-    const assignments = await this.gatewayToolRepository.find({
-      where: { gatewayId: gateway.id, isActive: true },
-      relations: { tool: true },
-    });
-    // The manual is served (and cached) per gateway, not per caller, so a
-    // private tool is only listed on a gateway that is private to the
-    // tool's own owner. Attaching one elsewhere is refused at write time;
-    // this catches rows that predate that or a gateway flipped since.
-    return assignments
-      .map((a) => a.tool)
-      .filter((t): t is Tool => !!t && t.status === ToolStatus.ACTIVE)
-      .filter((t) => resourceServableThroughGateway(gateway, t));
+    // The manual is served (and cached) per gateway, not per caller: it is
+    // exactly the gateway's servable set, the same set /execute resolves
+    // against, so what the manual shows and what runs cannot disagree.
+    return servableToolsOnGateway(this.gatewayToolRepository, gateway.id);
   }
 
   /**
@@ -359,6 +351,17 @@ export class UtcpService {
     const startTime = Date.now();
 
     try {
+      // Through a gateway, only a tool on that gateway's manual runs. The
+      // id used to go straight to the executor, so any tool of the
+      // organization ran through any UTCP gateway that answered the caller.
+      // A tool the manual does not carry is not found, as an unknown id is.
+      if (gatewayId) {
+        const served = await findServableGatewayTool(this.gatewayToolRepository, gatewayId, context?.toolId);
+        if (!served || served.tool.organizationId !== organizationId) {
+          return this.toolNotFound(context?.toolId, startTime);
+        }
+      }
+
       const result: ToolExecutionResult = await this.toolExecutorService.executeTool(
         context.toolId,
         context.parameters,
@@ -380,6 +383,11 @@ export class UtcpService {
           principal: principal ?? userPrincipal(userId),
         },
       );
+
+      // Out of the call's scope reads exactly as a tool that does not exist.
+      if (result.notFound) {
+        return this.toolNotFound(context.toolId, startTime);
+      }
 
       return {
         success: result.success,
@@ -415,6 +423,20 @@ export class UtcpService {
         },
       };
     }
+  }
+
+  /** The one answer for a tool this call cannot reach, whatever the reason. */
+  private toolNotFound(toolId: string | undefined, startTime: number): UtcpExecutionResult {
+    return {
+      success: false,
+      error: { code: 'TOOL_NOT_FOUND', message: 'Tool not found' },
+      metadata: {
+        executionTime: Date.now() - startTime,
+        toolId: toolId as string,
+        requestId: this.requestId(),
+        timestamp: new Date().toISOString(),
+      },
+    };
   }
 
   // ─── Helpers ────────────────────────────────────────────────────

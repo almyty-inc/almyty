@@ -11,6 +11,7 @@ import { GatewayTool } from '../../entities/gateway-tool.entity';
 import { GatewayAuthType } from '../../entities/gateway-auth.entity';
 import { ToolsService } from '../tools/tools.service';
 import { ToolExecutorService } from '../tools/tool-executor.service';
+import { fakeRepository } from '../../test/fake-repository';
 
 const REDIS_TOKEN = 'default_IORedisModuleConnectionToken';
 
@@ -77,9 +78,9 @@ describe('UtcpService — spec compliance', () => {
     } as any;
     // Default: gateway has the canonical fixture tool assigned. Specific
     // tests override this when they want to exercise scoping.
-    gatewayToolRepo = {
-      find: jest.fn().mockResolvedValue([{ tool: buildTool(), isActive: true }]),
-    } as any;
+    gatewayToolRepo = fakeRepository<any>([
+      { gatewayId: 'gw-1', toolId: 'tool-1', isActive: true, tool: buildTool(), gateway: buildGateway() },
+    ]) as any;
     toolsService = { getTools: jest.fn() } as any;
     toolExecutor = { executeTool: jest.fn() } as any;
 
@@ -123,7 +124,11 @@ describe('UtcpService — spec compliance', () => {
     it('scopes the manual to gateway-assigned tools when gateway is supplied', async () => {
       const tool = buildTool({ id: 'tool-assigned', name: 'assigned' });
       const otherTool = buildTool({ id: 'tool-not-assigned', name: 'leaked' });
-      gatewayToolRepo.find.mockResolvedValue([{ tool, isActive: true } as any]);
+      // Only the assigned tool on gw-1; the other is attached -- to gw-2.
+      const table = gatewayToolRepo as any;
+      await table.delete({ gatewayId: 'gw-1' });
+      table.seed({ gatewayId: 'gw-1', toolId: tool.id, isActive: true, tool, gateway: buildGateway() });
+      table.seed({ gatewayId: 'gw-2', toolId: otherTool.id, isActive: true, tool: otherTool, gateway: buildGateway({ id: 'gw-2' }) });
       operationRepo.findOne.mockResolvedValue(buildOperation());
       // Even if global tools include a leaked one, gateway scoping must hide it
       toolsService.getTools.mockResolvedValue({ tools: [tool, otherTool], total: 2 } as any);
@@ -134,10 +139,6 @@ describe('UtcpService — spec compliance', () => {
       });
 
       expect(manual.tools.map((t) => t.name)).toEqual(['assigned']);
-      expect(gatewayToolRepo.find).toHaveBeenCalledWith({
-        where: { gatewayId: 'gw-1', isActive: true },
-        relations: { tool: true },
-      });
     });
   });
 

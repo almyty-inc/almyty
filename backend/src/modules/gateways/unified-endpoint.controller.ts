@@ -244,10 +244,15 @@ export class UnifiedEndpointController {
       // auth configs loaded and its agent addressed. The sibling below
       // survived only because it re-scopes the agent afterwards; this path
       // had no such second check.
+      //
+      // And an A2A gateway only: this handler speaks A2A JSON-RPC, and a
+      // gateway serves its agent through its own protocol. A hosted-chat or
+      // Slack gateway's key (or an org key that happened to match one of
+      // those first) used to turn that agent into an A2A endpoint.
       where: servableToKey(
         apiKey.gatewayId
-          ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE }
-          : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE },
+          ? { id: apiKey.gatewayId, organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE, type: GatewayType.A2A }
+          : { organizationId: apiKey.organizationId, status: GatewayStatus.ACTIVE, type: GatewayType.A2A, agentId: Not(IsNull()) },
         apiKey.userId,
       ),
       relations: { authConfigs: true },

@@ -6,6 +6,7 @@ import { Message } from '../../entities/message.entity';
 
 import { AgentRuntimeService } from '../agents/agent-runtime.service';
 import { agentRunToTask } from './a2a-task.mapper';
+import { findGatewayRun } from '../gateways/gateway-servable';
 import type { Task } from './types/a2a-spec.types';
 import { A2A_ERROR_CODES } from './types/a2a-spec.types';
 
@@ -38,9 +39,8 @@ export class A2ATaskHandler {
       });
     }
 
-    const run = await this.runRepository.findOne({
-      where: { id: params.id, organizationId: gateway.organizationId },
-    });
+    // Only a run of this gateway's agent; another agent's is not found.
+    const run = await findGatewayRun(this.runRepository, gateway, { id: params.id });
 
     if (!run) {
       throw Object.assign(new Error('Task not found'), {
@@ -95,9 +95,8 @@ export class A2ATaskHandler {
       });
     }
 
-    const existing = await this.runRepository.findOne({
-      where: { id: params.id, organizationId: gateway.organizationId },
-    });
+    // Only a run of this gateway's agent may be cancelled through it.
+    const existing = await findGatewayRun(this.runRepository, gateway, { id: params.id });
     if (!existing) {
       throw Object.assign(new Error('Task not found'), {
         code: A2A_ERROR_CODES.TASK_NOT_FOUND,

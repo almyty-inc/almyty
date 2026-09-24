@@ -17,6 +17,7 @@ import type {
 } from './types/acp.types';
 import { ACP_ERROR_CODES } from './types/acp.types';
 import { gatewayPrincipal } from '../../common/authorization/execution-access.service';
+import { findGatewayRun } from '../gateways/gateway-servable';
 
 /** Default poll timeout for session/prompt (ms). */
 const PROMPT_POLL_TIMEOUT_MS = 30_000;
@@ -185,10 +186,7 @@ export class AcpServerService {
 
     // If sessionId is provided, look for an existing conversation/run
     if (params.sessionId) {
-      const existingRun = await this.findSessionRun(
-        params.sessionId,
-        gateway.organizationId,
-      );
+      const existingRun = await this.findSessionRun(params.sessionId, gateway);
 
       if (existingRun) {
         if (existingRun.status === AgentRunStatus.WAITING_INPUT) {
@@ -247,10 +245,7 @@ export class AcpServerService {
 
     // Resume or start a new run
     if (params.sessionId) {
-      const existingRun = await this.findSessionRun(
-        params.sessionId,
-        gateway.organizationId,
-      );
+      const existingRun = await this.findSessionRun(params.sessionId, gateway);
       if (existingRun && existingRun.status === AgentRunStatus.WAITING_INPUT) {
         await this.agentRuntimeService.sendInput(
           existingRun.id,
@@ -349,15 +344,7 @@ export class AcpServerService {
       });
     }
 
-    const run = await this.runRepository.findOne({
-      where: { id: params.sessionId, organizationId: gateway.organizationId },
-    });
-
-    if (!run) {
-      throw Object.assign(new Error('Session not found'), {
-        code: ACP_ERROR_CODES.SESSION_NOT_FOUND,
-      });
-    }
+    const run = await this.ownRunOrNotFound(gateway, params.sessionId);
 
     const messages = await this.getRunMessages(run);
     return agentRunToSessionUpdate(run, messages);
@@ -376,9 +363,13 @@ export class AcpServerService {
       });
     }
 
+    // Cancel only a run of this gateway's agent. An unknown id and another
+    // agent's run are the same "not found".
+    const existing = await this.ownRunOrNotFound(gateway, params.sessionId);
+
     try {
       const run = await this.agentRuntimeService.cancelRun(
-        params.sessionId,
+        existing.id,
         gateway.organizationId,
       );
       const messages = await this.getRunMessages(run);
@@ -456,19 +447,30 @@ export class AcpServerService {
    */
   private async findSessionRun(
     sessionId: string,
-    organizationId: string,
+    gateway: Gateway,
   ): Promise<AgentRun | null> {
     if (typeof sessionId !== 'string' || !UUID_RE.test(sessionId)) return null;
 
-    const byRunId = await this.runRepository.findOne({
-      where: { id: sessionId, organizationId },
-    });
+    // Only a run of this gateway's own agent: another agent's session id
+    // reads as one never seen, so it is neither resumed nor reported.
+    const byRunId = await findGatewayRun(this.runRepository, gateway, { id: sessionId });
     if (byRunId) return byRunId;
 
-    return this.runRepository.findOne({
-      where: { conversationId: sessionId, organizationId },
-      order: { createdAt: 'DESC' },
-    });
+    return findGatewayRun(this.runRepository, gateway, { conversationId: sessionId });
+  }
+
+  /** A run of this gateway's agent by run id, or the not-found an unknown id gets. */
+  private async ownRunOrNotFound(gateway: Gateway, sessionId: unknown): Promise<AgentRun> {
+    const run =
+      typeof sessionId === 'string' && UUID_RE.test(sessionId)
+        ? await findGatewayRun(this.runRepository, gateway, { id: sessionId })
+        : null;
+    if (!run) {
+      throw Object.assign(new Error('Session not found'), {
+        code: ACP_ERROR_CODES.SESSION_NOT_FOUND,
+      });
+    }
+    return run;
   }
 
   /**

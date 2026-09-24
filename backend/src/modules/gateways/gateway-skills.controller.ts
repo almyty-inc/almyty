@@ -25,6 +25,8 @@ import { PrivateGatewayGuard } from './private-gateway.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { userPrincipal } from '../../common/authorization/execution-access.service';
+import { GatewayTool } from '../../entities/gateway-tool.entity';
+import { isServableGatewayTool } from './gateway-servable';
 
 @Controller('gateways')
 @ApiTags('Gateways')
@@ -149,14 +151,20 @@ export class GatewaySkillsController {
 
       const userId = req.user.sub || req.user.id;
 
-      // Verify the tool belongs to the gateway
+      // Only a tool the gateway serves -- the servable predicate its skill
+      // bundle is built from. Anything else is not found, whether it does
+      // not exist or is simply not published here.
       const gateway = await this.gatewaysService.getGateway(gatewayId, organizationId, true);
-      const gatewayTool = gateway.tools?.find(gt => gt.toolId === toolId && gt.isActive);
-      if (!gatewayTool) {
-        throw new HttpException(
+      const gatewayTool = gateway.tools?.find(
+        (gt) => gt.toolId === toolId && isServableGatewayTool(Object.assign(new GatewayTool(), gt, { gateway })),
+      );
+      const notInGateway = () =>
+        new HttpException(
           { success: false, message: 'Tool not found in this gateway or is inactive', error: 'TOOL_NOT_IN_GATEWAY' },
           HttpStatus.NOT_FOUND,
         );
+      if (!gatewayTool) {
+        throw notInGateway();
       }
 
       const result = await this.toolExecutorService.executeTool(
@@ -174,6 +182,10 @@ export class GatewaySkillsController {
           securityPolicy: gatewayTool.securityPolicy ?? null,
         },
       );
+      // Out of the caller's scope is the same answer as not on the gateway.
+      if (result.notFound) {
+        throw notInGateway();
+      }
 
       // Increment gateway request counter
       try {
