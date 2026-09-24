@@ -41,7 +41,7 @@ import { FilesTab } from '@/components/agents/detail/files-tab'
 import { InterfacesTab } from '@/components/agents/detail/interfaces-tab'
 import { PromotedSkillsTab } from '@/components/agents/detail/promoted-skills-tab'
 import { ConstraintsTab } from '@/components/agents/detail/constraints-tab'
-import { InvokeDialog } from '@/components/agents/detail/invoke-dialog'
+import { RunPanel } from '@/components/agents/detail/run-panel'
 import { getApiErrorMessage } from '@/lib/api-error'
 
 export function AgentDetailPage() {
@@ -56,7 +56,7 @@ export function AgentDetailPage() {
   const { success, error: errorNotif } = useNotifications()
   const orgId = useOrganizationStore((s) => s.currentOrganization?.id)
 
-  const [invokeDialogOpen, setInvokeDialogOpen] = useState(false)
+  const [runPanelOpen, setRunPanelOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
 
   // Webhook state (lifted so overview tab can use it, synced from agent data)
@@ -354,7 +354,7 @@ export function AgentDetailPage() {
         onExport={handleExport}
         onExportTechDoc={handleExportTechDoc}
         onDuplicate={() => duplicateMutation.mutate()}
-        onInvoke={() => setInvokeDialogOpen(true)}
+        onInvoke={() => setRunPanelOpen(true)}
         onActivate={() => activateMutation.mutate()}
         onDeactivate={() => deactivateMutation.mutate()}
         activationDisabled={activateMutation.isPending || (workflow && (readiness.isFetching || readiness.isError || !readiness.data?.ready))}
@@ -365,6 +365,8 @@ export function AgentDetailPage() {
       <ModelIssueBanner agent={agent} />
       <RunFailureBanner agent={agent} executions={executions} />
 
+      {/* Run panel: opened by the header's Run button, inline in the page. */}
+      {runPanelOpen && <RunPanel agent={agent} onClose={() => setRunPanelOpen(false)} />}
 
       <AgentStats agent={agent} />
 
@@ -439,13 +441,6 @@ export function AgentDetailPage() {
           <ConstraintsTab agentId={id!} />
         </TabsContent>
       </Tabs>
-
-      {/* Invoke Dialog */}
-      <InvokeDialog
-        agent={agent}
-        open={invokeDialogOpen}
-        onOpenChange={setInvokeDialogOpen}
-      />
     </div>
   )
 }
