@@ -99,7 +99,7 @@ describe('gate 3: a budget cap scales a deployment to zero and audits it', () =>
   });
 
   it('ignores an inactive budget', async () => {
-    budgets.get('b-1').active = false;
+    await budgets.update('b-1', { active: false });
     for (let tick = 0; tick < 5; tick++) await processor.reconcile(id);
     const d = deployments.get(id);
     expect(d.desired.replicas).toBe(1);
@@ -109,7 +109,7 @@ describe('gate 3: a budget cap scales a deployment to zero and audits it', () =>
   });
 
   it('does not touch a budget that belongs to another organization', async () => {
-    budgets.get('b-1').organizationId = 'someone-else';
+    await budgets.update('b-1', { organizationId: 'someone-else' });
     for (let tick = 0; tick < 5; tick++) await processor.reconcile(id);
     expect(deployments.get(id).desired.replicas).toBe(1);
     expect(scale).not.toHaveBeenCalled();
