@@ -151,13 +151,13 @@ describe('analytics reads are organization-scoped', () => {
   });
 
   const reads: Array<[string, () => Promise<unknown>]> = [
-    ['getOverview', () => service.getOverview(ORG)],
-    ['getTimeline', () => service.getTimeline(ORG, '7d', 'hour')],
     ['getAuditSummary', () => service.getAuditSummary(ORG)],
   ];
   // Per-resource reads: also never another member's private gateway,
   // provider, tool or agent.
   const perResourceReads: Array<[string, () => Promise<unknown>]> = [
+    ['getOverview', () => service.getOverview(ORG, CALLER)],
+    ['getTimeline', () => service.getTimeline(ORG, '7d', 'hour', CALLER)],
     ['getRequestLogs', () => service.getRequestLogs({ organizationId: ORG, callerId: CALLER, page: 1, limit: 50 })],
     [
       'getRequestLogs (every optional filter set)',
@@ -192,19 +192,19 @@ describe('analytics reads are organization-scoped', () => {
   // getOverview swallows every sub-query error with `.catch(() => 0)`, so
   // pin the query count too: a tile that silently stops asking is visible.
   it('getOverview issues all eight tiles, each scoped', async () => {
-    await service.getOverview(ORG);
-    expect(recorder.builders).toHaveLength(5);
-    expect(recorder.finds).toHaveLength(3);
+    await service.getOverview(ORG, CALLER);
+    expect(recorder.builders).toHaveLength(8);
+    expect(recorder.finds).toHaveLength(0);
     expectScopedTo(recorder, ORG);
   });
 
   it('refuses every read that arrives without an organization', async () => {
-    await expect(service.getOverview('')).rejects.toThrow(/requires organizationId/);
+    await expect(service.getOverview('', CALLER)).rejects.toThrow(/requires organizationId/);
     await expect(service.getRequestLogs({ organizationId: '', callerId: CALLER, page: 1, limit: 10 })).rejects.toThrow(/requires organizationId/);
     await expect(service.getToolUsage('', '7d', CALLER)).rejects.toThrow(/requires organizationId/);
     await expect(service.getGatewayUsage('', '7d', CALLER)).rejects.toThrow(/requires organizationId/);
     await expect(service.getLlmUsage('', '7d', CALLER)).rejects.toThrow(/requires organizationId/);
-    await expect(service.getTimeline('', '7d', 'hour')).rejects.toThrow(/requires organizationId/);
+    await expect(service.getTimeline('', '7d', 'hour', CALLER)).rejects.toThrow(/requires organizationId/);
     await expect(service.getAuditSummary('')).rejects.toThrow(/requires organizationId/);
     await expect(service.getAgentRunsSummary('', CALLER)).rejects.toThrow(/requires organizationId/);
     await expect(service.exportData({ organizationId: '', callerId: CALLER, format: 'json', type: 'requests' })).rejects.toThrow(/requires organizationId/);
