@@ -3,18 +3,25 @@ import { NotFoundException, BadRequestException, ConflictException } from '@nest
 import { PromotedSkillsService } from '../promoted-skills.service';
 import { PromotedSkillRenderer } from '../promoted-skill-renderer';
 import { AgentRunStatus } from '../../../entities/agent-run.entity';
-import { fakeRepository } from '../../../test/fake-repository';
+import { fakeRepository, type FakeRepository } from '../../../test/fake-repository';
 
 /**
  * Unit tests for PromotedSkillsService — promoting a completed run into a
  * reusable SKILL.md, re-version on re-promote, guards, and the optional LLM
  * distiller (with its deterministic fallback).
+ *
+ * Skills, runs and the source agents are truthful tables. The service
+ * filters skills with a Raw SQL predicate on agentId (the private-agent
+ * rule); the fake evaluates that exact SQL against the agents table and
+ * throws for any SQL it does not recognise, so a changed or dropped
+ * predicate shows up here rather than only against Postgres (where the
+ * integration spec also runs it).
  */
 describe('PromotedSkillsService', () => {
   let service: PromotedSkillsService;
-  let skillStore: any[];
-  let skillRepo: any;
-  let runRepo: any;
+  let skills: FakeRepository<any>;
+  let runs: FakeRepository<any>;
+  let agents: FakeRepository<any>;
   let llm: { chat: jest.Mock };
 
   const completedRun = (over: any = {}) => ({
@@ -28,61 +35,16 @@ describe('PromotedSkillsService', () => {
     ...over,
   });
 
-  // The source agents' visibility, by id. The service filters with a Raw
-  // SQL predicate on agentId that binds :privateViewerId; this in-memory
-  // double applies the same rule so the wiring is exercised here and the
-  // SQL itself against Postgres in the integration spec.
-  let agents: Record<string, { visibility: string; createdBy: string | null }>;
-  const sourceVisible = (s: any, where: any) => {
-    const op = where.agentId;
-    if (!op) return true;
-    const viewer = op.objectLiteralParameters?.privateViewerId ?? null;
-    const agent = s.agentId ? agents[s.agentId] : undefined;
-    return !agent || agent.visibility !== 'private' || (!!agent.createdBy && agent.createdBy === viewer);
-  };
-
   beforeEach(() => {
-    skillStore = [];
-    agents = {};
-    let idc = 0;
-    skillRepo = {
-      find: jest.fn(({ where }: any) =>
-        Promise.resolve(
-          skillStore.filter((s) => s.organizationId === where.organizationId && sourceVisible(s, where)),
-        ),
-      ),
-      findOne: jest.fn(({ where }: any) =>
-        Promise.resolve(
-          skillStore.find(
-            (s) =>
-              (where.id ? s.id === where.id : true) &&
-              (where.slug ? s.slug === where.slug : true) &&
-              s.organizationId === where.organizationId &&
-              sourceVisible(s, where),
-          ) || null,
-        ),
-      ),
-      create: jest.fn((x: any) => ({ ...x })),
-      save: jest.fn((s: any) => {
-        if (!s.id) s.id = `skill-${++idc}`;
-        const i = skillStore.findIndex((x) => x.id === s.id);
-        if (i >= 0) skillStore[i] = s;
-        else skillStore.push(s);
-        return Promise.resolve(s);
-      }),
-      delete: jest.fn(({ id, organizationId }: any) => {
-        const before = skillStore.length;
-        skillStore = skillStore.filter((s) => !(s.id === id && s.organizationId === organizationId));
-        return Promise.resolve({ affected: before - skillStore.length });
-      }),
-    };
-    runRepo = { findOne: jest.fn() };
+    agents = fakeRepository<any>([]);
+    skills = fakeRepository<any>({ tables: { agents }, idPrefix: 'skill' });
+    runs = fakeRepository<any>([]);
     llm = { chat: jest.fn() };
-    service = new PromotedSkillsService(skillRepo, runRepo, new PromotedSkillRenderer(), llm as any);
+    service = new PromotedSkillsService(skills as any, runs as any, new PromotedSkillRenderer(), llm as any);
   });
 
   it('promotes a completed run into a SKILL.md (deterministic, no LLM)', async () => {
-    runRepo.findOne.mockResolvedValue(completedRun());
+    runs.seed(completedRun());
     const skill = await service.promoteFromRun('run-1', 'org-1', 'user-1', {});
 
     expect(skill.slug).toBe('researcher-skill');
@@ -94,35 +56,54 @@ describe('PromotedSkillsService', () => {
     expect(skill.content).toContain('search'); // the tool the run used
     expect(skill.content).toContain('the final answer'); // reference result
     expect(llm.chat).not.toHaveBeenCalled();
+    expect(skills.row(skill.id)).toMatchObject({ organizationId: 'org-1', slug: 'researcher-skill', version: 1 });
   });
 
   it('rejects promoting a run that is not completed', async () => {
-    runRepo.findOne.mockResolvedValue(completedRun({ status: AgentRunStatus.RUNNING }));
+    runs.seed(completedRun({ status: AgentRunStatus.RUNNING }));
     await expect(service.promoteFromRun('run-1', 'org-1', 'u', {})).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    expect(skills.rows()).toHaveLength(0);
   });
 
   it('throws NotFound for a missing run', async () => {
-    runRepo.findOne.mockResolvedValue(null);
     await expect(service.promoteFromRun('nope', 'org-1', 'u', {})).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 
+  it('refuses to promote a run that belongs to another organization', async () => {
+    runs.seed(completedRun({ organizationId: 'org-2' }));
+    await expect(service.promoteFromRun('run-1', 'org-1', 'u', {})).rejects.toBeInstanceOf(NotFoundException);
+    expect(skills.rows()).toHaveLength(0);
+  });
+
   it('re-promotes in place and bumps the version', async () => {
-    runRepo.findOne.mockResolvedValue(completedRun());
-    skillStore.push({ id: 'existing-1', organizationId: 'org-1', slug: 'researcher-skill', version: 2 });
+    runs.seed(completedRun());
+    skills.seed({ id: 'existing-1', organizationId: 'org-1', slug: 'researcher-skill', version: 2, agentId: 'a1' });
 
     const skill = await service.promoteFromRun('run-1', 'org-1', 'user-1', {});
 
     expect(skill.id).toBe('existing-1');
     expect(skill.version).toBe(3);
-    expect(skillStore).toHaveLength(1);
+    expect(skills.rows()).toHaveLength(1);
+    expect(skills.row('existing-1')).toMatchObject({ version: 3, sourceRunId: 'run-1' });
+  });
+
+  it("does not re-promote over another organization's skill of the same slug", async () => {
+    runs.seed(completedRun());
+    skills.seed({ id: 'theirs', organizationId: 'org-2', slug: 'researcher-skill', version: 7, content: 'their body' });
+
+    const skill = await service.promoteFromRun('run-1', 'org-1', 'user-1', {});
+
+    expect(skill.id).not.toBe('theirs');
+    expect(skill.version).toBe(1);
+    expect(skills.row('theirs')).toMatchObject({ organizationId: 'org-2', version: 7, content: 'their body' });
   });
 
   it('uses the LLM distiller when a providerId is given', async () => {
-    runRepo.findOne.mockResolvedValue(completedRun());
+    runs.seed(completedRun());
     llm.chat.mockResolvedValue({ message: { content: 'DISTILLED PROCEDURE' }, cost: 0.01, usage: { totalTokens: 9 } });
 
     const skill = await service.promoteFromRun('run-1', 'org-1', 'user-1', {
@@ -134,7 +115,7 @@ describe('PromotedSkillsService', () => {
   });
 
   it('falls back to the deterministic procedure when the distiller throws', async () => {
-    runRepo.findOne.mockResolvedValue(completedRun());
+    runs.seed(completedRun());
     llm.chat.mockRejectedValue(new Error('provider down'));
 
     const skill = await service.promoteFromRun('run-1', 'org-1', 'user-1', {
@@ -145,33 +126,35 @@ describe('PromotedSkillsService', () => {
   });
 
   it('lists, gets, and removes promoted skills (org-scoped)', async () => {
-    skillStore.push({ id: 's1', organizationId: 'org-1', slug: 'a' }, { id: 's2', organizationId: 'org-2', slug: 'b' });
+    skills.seed({ id: 's1', organizationId: 'org-1', slug: 'a' });
+    skills.seed({ id: 's2', organizationId: 'org-2', slug: 'b' });
 
-    expect(await service.list('org-1', 'user-1')).toHaveLength(1);
+    expect((await service.list('org-1', 'user-1')).map((s) => s.id)).toEqual(['s1']);
     expect((await service.get('s1', 'org-1', 'user-1')).id).toBe('s1');
     await expect(service.get('s2', 'org-1', 'user-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.remove('s2', 'org-1', 'user-1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(skills.row('s2')).toBeDefined();
 
     await service.remove('s1', 'org-1', 'user-1');
-    expect(skillStore.find((s) => s.id === 's1')).toBeUndefined();
+    expect(skills.row('s1')).toBeUndefined();
     await expect(service.remove('missing', 'org-1', 'user-1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('exposes skills for protocol serving as name + content', async () => {
-    skillStore.push({ id: 's1', organizationId: 'org-1', slug: 'my-skill', content: 'SKILL.md body' });
+  it('exposes skills for protocol serving as name + content, org-scoped', async () => {
+    skills.seed({ id: 's1', organizationId: 'org-1', slug: 'my-skill', content: 'SKILL.md body' });
+    skills.seed({ id: 's2', organizationId: 'org-2', slug: 'their-skill', content: 'theirs' });
     const served = await service.listForServing('org-1', 'user-1');
     expect(served).toEqual([{ name: 'my-skill', content: 'SKILL.md body' }]);
   });
 
   describe('skills promoted from a private agent', () => {
-    // 'mine' is private to owner-1, 'shared' is org-wide.
+    // 'a-private' is private to owner-1, 'a-org' is org-wide.
     beforeEach(() => {
-      agents['a-private'] = { visibility: 'private', createdBy: 'owner-1' };
-      agents['a-org'] = { visibility: 'org', createdBy: 'owner-1' };
-      skillStore.push(
-        { id: 'mine', organizationId: 'org-1', slug: 'mine', content: 'private body', agentId: 'a-private' },
-        { id: 'shared', organizationId: 'org-1', slug: 'shared', content: 'org body', agentId: 'a-org' },
-        { id: 'orphan', organizationId: 'org-1', slug: 'orphan', content: 'no agent', agentId: null },
-      );
+      agents.seed({ id: 'a-private', organizationId: 'org-1', visibility: 'private', createdBy: 'owner-1' });
+      agents.seed({ id: 'a-org', organizationId: 'org-1', visibility: 'org', createdBy: 'owner-1' });
+      skills.seed({ id: 'mine', organizationId: 'org-1', slug: 'mine', version: 1, content: 'private body', agentId: 'a-private' });
+      skills.seed({ id: 'shared', organizationId: 'org-1', slug: 'shared', content: 'org body', agentId: 'a-org' });
+      skills.seed({ id: 'orphan', organizationId: 'org-1', slug: 'orphan', content: 'no agent', agentId: null });
     });
 
     it('are listed and served to their owner', async () => {
@@ -185,7 +168,7 @@ describe('PromotedSkillsService', () => {
       expect((await service.listForServing('org-1', 'admin-2')).map((s) => s.name).sort()).toEqual(['orphan', 'shared']);
       await expect(service.get('mine', 'org-1', 'admin-2')).rejects.toBeInstanceOf(NotFoundException);
       await expect(service.remove('mine', 'org-1', 'admin-2')).rejects.toBeInstanceOf(NotFoundException);
-      expect(skillStore.find((s) => s.id === 'mine')).toBeDefined();
+      expect(skills.row('mine')).toBeDefined();
     });
 
     it('fail closed with no known viewer', async () => {
@@ -193,33 +176,32 @@ describe('PromotedSkillsService', () => {
       await expect(service.get('mine', 'org-1', undefined)).rejects.toBeInstanceOf(NotFoundException);
     });
 
+    it('are withdrawn when the source agent goes private, and come back when it does not', async () => {
+      await agents.update({ id: 'a-org' }, { visibility: 'private' });
+      expect((await service.list('org-1', 'admin-2')).map((s) => s.id)).toEqual(['orphan']);
+      await agents.update({ id: 'a-org' }, { visibility: 'org' });
+      expect((await service.list('org-1', 'admin-2')).map((s) => s.id).sort()).toEqual(['orphan', 'shared']);
+    });
+
     it("refuse promoting a run of another member's private agent as not found", async () => {
-      runRepo.findOne.mockResolvedValue(
-        completedRun({ agent: { id: 'a-private', name: 'Secret', visibility: 'private', createdBy: 'owner-1' } }),
-      );
+      runs.seed(completedRun({ agent: { id: 'a-private', name: 'Secret', visibility: 'private', createdBy: 'owner-1' } }));
       await expect(service.promoteFromRun('run-1', 'org-1', 'admin-2', {})).rejects.toBeInstanceOf(NotFoundException);
+      expect(skills.rows()).toHaveLength(3);
     });
 
     it("refuse re-promoting over another member's private-derived skill", async () => {
-      runRepo.findOne.mockResolvedValue(completedRun({ agent: { id: 'a-org', name: 'mine', visibility: 'org' } }));
+      runs.seed(completedRun({ agent: { id: 'a-org', name: 'mine', visibility: 'org' } }));
       await expect(
         service.promoteFromRun('run-1', 'org-1', 'admin-2', { name: 'mine' }),
       ).rejects.toBeInstanceOf(ConflictException);
-      expect(skillStore.find((s) => s.id === 'mine').content).toBe('private body');
+      expect(skills.row('mine')).toMatchObject({ content: 'private body', agentId: 'a-private' });
     });
-  });
 
-  /**
-   * `runRepo.findOne` above answers its canned run for any `where`, so the
-   * organization half of the run lookup was never exercised. Against a
-   * table, a run in another organization is not found, and no skill (which
-   * would embed that run's transcript) is written.
-   */
-  it('refuses to promote a run that belongs to another organization', async () => {
-    const runs = fakeRepository<any>([completedRun({ organizationId: 'org-2' })]);
-    service = new PromotedSkillsService(skillRepo, runs as any, new PromotedSkillRenderer(), llm as any);
-
-    await expect(service.promoteFromRun('run-1', 'org-1', 'u', {})).rejects.toBeInstanceOf(NotFoundException);
-    expect(skillStore).toHaveLength(0);
+    it('the owner may re-promote over their own private-derived skill', async () => {
+      runs.seed(completedRun({ agent: { id: 'a-private', name: 'mine', visibility: 'private', createdBy: 'owner-1' } }));
+      const skill = await service.promoteFromRun('run-1', 'org-1', 'owner-1', { name: 'mine' });
+      expect(skill.id).toBe('mine');
+      expect(skills.row('mine')?.version).toBe(2);
+    });
   });
 });

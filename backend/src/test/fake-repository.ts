@@ -87,15 +87,92 @@ function likeToRegExp(pattern: string, flags: string): RegExp {
   return new RegExp(`^${body}$`, flags);
 }
 
-function operatorMatches(cell: any, op: FindOperator<any>): boolean {
+/** A table a `Raw` predicate may read: anything that can list its rows now. */
+export interface RawTable {
+  rows(): any[];
+}
+
+/** What a match may consult beyond the row itself. */
+export interface MatchContext {
+  tables?: Record<string, RawTable>;
+}
+
+/**
+ * `Raw` predicates are SQL, so the fake cannot run them in general. It
+ * renders the SQL with a placeholder for the column and evaluates only
+ * the exact shapes listed below; any other SQL throws, because a Raw the
+ * fake guessed at would be a silent match.
+ *
+ *  - `<col> IS NULL`
+ *  - `(<col> IS NULL OR <shape>)`
+ *  - the "not someone else's private resource" fragment the helpers in
+ *    `monitoring/private-rows.ts` build for gateways, providers, tools and
+ *    agents:
+ *      NOT EXISTS (SELECT 1 FROM <table> <a> WHERE <a>.id = <col>
+ *        AND <a>.visibility = 'private'
+ *        AND <a>."<owner>"::text IS DISTINCT FROM CAST(:<param> AS text))
+ *    evaluated against `tables[<table>]` with Postgres null semantics
+ *    (`IS DISTINCT FROM` treats two nulls as equal, one null as distinct).
+ */
+const RAW_COLUMN = '"__fake_raw_column__"';
+const RAW_COLUMN_RE = RAW_COLUMN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const RAW_OR_NULL = new RegExp(`^\\(${RAW_COLUMN_RE} IS NULL OR (.+)\\)$`);
+const RAW_IS_NULL = new RegExp(`^${RAW_COLUMN_RE} IS NULL$`);
+const RAW_NOT_OTHERS_PRIVATE = new RegExp(
+  `^NOT EXISTS \\(SELECT 1 FROM ([a-z_]+) ([a-z_]+) WHERE \\2\\.id = ${RAW_COLUMN_RE} ` +
+    `AND \\2\\.visibility = 'private' ` +
+    `AND \\2\\."([A-Za-z_]+)"::text IS DISTINCT FROM CAST\\(:([A-Za-z_]+) AS text\\)\\)$`,
+);
+
+const asText = (v: any): string | null => (v === null || v === undefined ? null : String(v));
+
+function rawExpressionMatches(sql: string, cell: any, params: Record<string, any>, ctx: MatchContext): boolean {
+  const orNull = RAW_OR_NULL.exec(sql);
+  if (orNull) return cell === null || cell === undefined || rawExpressionMatches(orNull[1], cell, params, ctx);
+  if (RAW_IS_NULL.test(sql)) return cell === null || cell === undefined;
+  const priv = RAW_NOT_OTHERS_PRIVATE.exec(sql);
+  if (priv) {
+    const [, tableName, , ownerColumn, param] = priv;
+    const table = ctx.tables?.[tableName];
+    if (!table) {
+      throw new UnmodelledQueryError(`a Raw predicate reads the '${tableName}' table, which was not given in tables`);
+    }
+    if (!Object.prototype.hasOwnProperty.call(params, param) || params[param] === undefined) {
+      throw new UnmodelledQueryError(`a Raw predicate binds :${param}, which has no value`);
+    }
+    const viewer = asText(params[param]);
+    // `<a>.id = <col>` is never true for a null column, so nothing exists.
+    if (cell === null || cell === undefined) return true;
+    const exists = table
+      .rows()
+      .some(
+        (r) =>
+          scalarEquals(r.id, cell) &&
+          r.visibility === 'private' &&
+          // IS DISTINCT FROM: null vs null is not distinct; null vs a value is.
+          asText(r[ownerColumn]) !== viewer,
+      );
+    return !exists;
+  }
+  throw new UnmodelledQueryError(`the Raw SQL "${sql}" is not modelled`);
+}
+
+function rawMatches(cell: any, op: FindOperator<any>, ctx: MatchContext): boolean {
+  const getSql = (op as any)._getSql;
+  if (typeof getSql !== 'function') throw new UnmodelledQueryError('a Raw with a literal value is not modelled');
+  const sql = String(getSql(RAW_COLUMN)).replace(/\s+/g, ' ').trim();
+  return rawExpressionMatches(sql, cell, (op as any)._objectLiteralParameters ?? {}, ctx);
+}
+
+function operatorMatches(cell: any, op: FindOperator<any>, ctx: MatchContext): boolean {
   // `_value`, not `value`: the public getter unwraps a nested operator,
   // which would turn Not(In([...])) into Not([...]).
   const value = (op as any)._value;
   switch (op.type) {
     case 'equal':
-      return valueMatches(cell, value);
+      return valueMatches(cell, value, ctx);
     case 'not':
-      return !valueMatches(cell, value);
+      return !valueMatches(cell, value, ctx);
     case 'in':
     case 'any':
       return (value as any[]).some((v) => scalarEquals(cell, v));
@@ -116,18 +193,20 @@ function operatorMatches(cell: any, op: FindOperator<any>): boolean {
     case 'ilike':
       return typeof cell === 'string' && likeToRegExp(value, 'i').test(cell);
     case 'and':
-      return (value as any[]).every((v) => valueMatches(cell, v));
+      return (value as any[]).every((v) => valueMatches(cell, v, ctx));
     case 'or':
-      return (value as any[]).some((v) => valueMatches(cell, v));
+      return (value as any[]).some((v) => valueMatches(cell, v, ctx));
     case 'arrayContains':
       return Array.isArray(cell) && (value as any[]).every((v) => cell.includes(v));
+    case 'raw':
+      return rawMatches(cell, op, ctx);
     default:
       throw new UnmodelledQueryError(`the '${op.type}' operator is not modelled`);
   }
 }
 
 /** Evaluate one `where` value against one column. */
-export function valueMatches(cell: any, expected: any): boolean {
+export function valueMatches(cell: any, expected: any, ctx: MatchContext = {}): boolean {
   if (expected === undefined || expected === null) {
     // TypeORM's default `invalidWhereValuesBehavior` is to throw on both.
     throw new UnmodelledQueryError(
@@ -135,7 +214,7 @@ export function valueMatches(cell: any, expected: any): boolean {
         'TypeORM (use IsNull(), or leave the key out)',
     );
   }
-  if (expected instanceof FindOperator) return operatorMatches(cell, expected);
+  if (expected instanceof FindOperator) return operatorMatches(cell, expected, ctx);
   if (isPlainObject(expected)) {
     // A nested where: a relation or an embedded column. The fake has no
     // joins, so the row must carry the related object itself.
@@ -144,7 +223,7 @@ export function valueMatches(cell: any, expected: any): boolean {
         `nested where ${JSON.stringify(Object.keys(expected))} against a row that does not carry that relation`,
       );
     }
-    return whereMatches(cell, expected);
+    return whereMatches(cell, expected, ctx);
   }
   if (Array.isArray(expected)) {
     throw new UnmodelledQueryError('a bare array in a where object (use In())');
@@ -153,14 +232,14 @@ export function valueMatches(cell: any, expected: any): boolean {
 }
 
 /** A `where` object, or an array of them (TypeORM reads an array as OR). */
-export function whereMatches(row: any, where: any): boolean {
+export function whereMatches(row: any, where: any, ctx: MatchContext = {}): boolean {
   if (where === undefined) return true;
   if (Array.isArray(where)) {
     if (where.length === 0) throw new UnmodelledQueryError('an empty where array');
-    return where.some((clause) => whereMatches(row, clause));
+    return where.some((clause) => whereMatches(row, clause, ctx));
   }
   if (!isPlainObject(where)) throw new UnmodelledQueryError(`where of type ${typeof where}`);
-  return Object.entries(where).every(([column, expected]) => valueMatches(row?.[column], expected));
+  return Object.entries(where).every(([column, expected]) => valueMatches(row?.[column], expected, ctx));
 }
 
 /** `update`/`delete` criteria: an id, a list of ids, or a where object. */
@@ -226,6 +305,12 @@ export interface FakeRepositoryOptions<T> {
   make?: () => T;
   /** Prefix for ids assigned to rows saved without one. */
   idPrefix?: string;
+  /**
+   * Other tables a modelled `Raw` predicate reads, by SQL table name (e.g.
+   * `{ agents: agentsRepo }`). Read at query time, so later writes count.
+   * A `Raw` naming a table not given here throws.
+   */
+  tables?: Record<string, RawTable>;
 }
 
 export interface FakeRepository<T> {
@@ -269,7 +354,8 @@ export function fakeRepository<T extends { id?: any } = any>(
     table.set(String(entity.id), cloneRow(entity));
   };
 
-  const select = (where: any): any[] => [...table.values()].filter((row) => whereMatches(row, where));
+  const ctx: MatchContext = { tables: opts.tables };
+  const select = (where: any): any[] => [...table.values()].filter((row) => whereMatches(row, where, ctx));
 
   const query = (findOptions: any = {}): any[] => {
     let out = sortRows(select(findOptions.where), findOptions.order);
