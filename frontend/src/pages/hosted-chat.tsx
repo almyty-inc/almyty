@@ -75,11 +75,27 @@ function readableOn(hex: string): string {
   return luma > 0.6 ? '#18181b' : '#ffffff'
 }
 
+/** What the API may send a visitor back with after a sign-in that did not work. */
+const SIGN_IN_ERRORS: Record<string, string> = {
+  SIGN_IN_EXPIRED: 'That sign-in took too long or was started in another browser. Try again.',
+  SIGN_IN_DENIED: 'The sign-in was cancelled or refused.',
+  SIGN_IN_FAILED: 'We could not confirm who you are. Try again.',
+  EMAIL_NOT_ALLOWED: 'This chat only admits accounts from particular email domains.',
+  SIGN_IN_UNAVAILABLE: 'Sign-in is not set up for this chat right now.',
+}
+
+/** The reason code a failed redirect sign-in left in the address bar, if any. */
+function signInErrorFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  const code = new URLSearchParams(window.location.search).get('signin_error')
+  return code ? SIGN_IN_ERRORS[code] ?? SIGN_IN_ERRORS.SIGN_IN_FAILED : null
+}
+
 /**
  * What a visitor sees on a surface that requires sign-in, before they
  * have. Carries the tenant's name and colour so it reads as their door,
- * not ours. SSO and email codes have flows behind them; a mode without
- * one (OAuth) says so rather than pretending.
+ * not ours. Email codes happen on this card; OAuth and SSO are a full-page
+ * trip to the identity provider and back.
  */
 function SignInScreen({
   slug,
@@ -95,7 +111,18 @@ function SignInScreen({
   onSignedIn: () => void
 }) {
   const sso = branding.authMode === 'sso'
+  const oauth = branding.authMode === 'oauth'
   const emailCode = branding.authMode === 'email_otp'
+  const [redirectError] = useState(signInErrorFromUrl)
+  const redirectButton = (href: string, label: string) => (
+    <a
+      href={href}
+      className="mt-6 inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-medium"
+      style={{ backgroundColor: 'var(--tenant)', color: 'var(--on-tenant)' }}
+    >
+      {label}
+    </a>
+  )
   return (
     <div style={style} className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
       <div className="w-full max-w-sm rounded-2xl border bg-card p-8 text-center shadow-sm">
@@ -110,6 +137,11 @@ function SignInScreen({
           </div>
         )}
         <h1 className="font-heading text-xl font-semibold">Sign in to {branding.appName}</h1>
+        {redirectError && available && (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {redirectError}
+          </p>
+        )}
         {!available ? (
           <p className="mt-2 text-sm text-muted-foreground">
             This chat is not accepting sign-ins right now. Please contact {branding.appName}.
@@ -117,19 +149,20 @@ function SignInScreen({
         ) : sso ? (
           <>
             <p className="mt-2 text-sm text-muted-foreground">Use your organization account to continue.</p>
-            <a
-              href={hostedChatApi.ssoLoginUrl(slug)}
-              className="mt-6 inline-flex w-full items-center justify-center rounded-md px-4 py-2 text-sm font-medium"
-              style={{ backgroundColor: 'var(--tenant)', color: 'var(--on-tenant)' }}
-            >
-              Continue with single sign-on
-            </a>
+            {redirectButton(hostedChatApi.ssoLoginUrl(slug), 'Continue with single sign-on')}
+          </>
+        ) : oauth ? (
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Sign in with {branding.signInProvider ?? 'your account'} to continue.
+            </p>
+            {redirectButton(hostedChatApi.oauthLoginUrl(slug), `Continue with ${branding.signInProvider ?? 'your account'}`)}
           </>
         ) : emailCode ? (
           <EmailCodeSignIn slug={slug} onSignedIn={onSignedIn} />
         ) : (
           <p className="mt-2 text-sm text-muted-foreground">
-            This chat requires a sign-in method that is not set up yet. Please contact {branding.appName}.
+            This chat is not accepting sign-ins right now. Please contact {branding.appName}.
           </p>
         )}
         {!branding.whiteLabel && (

@@ -139,6 +139,8 @@ export interface VisitorOAuthConfig {
   /** Lowercase domains; empty admits any account the provider vouches for. */
   allowedEmailDomains: string[];
   credentialId: string | null;
+  /** How the client authenticates at the token endpoint. */
+  tokenEndpointAuthMethod: 'client_secret_post' | 'client_secret_basic';
   updatedAt: string;
 }
 

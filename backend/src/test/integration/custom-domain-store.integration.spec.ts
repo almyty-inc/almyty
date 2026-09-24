@@ -1,8 +1,9 @@
 import { DataSource, Repository } from 'typeorm';
 
-import { Gateway, GatewayType } from '../../entities/gateway.entity';
+import { Gateway, GatewayType, type VisitorOAuthConfig } from '../../entities/gateway.entity';
 import { Organization } from '../../entities/organization.entity';
 import { PgCustomDomainStore } from '../../modules/gateways/channels/custom-domain.service';
+import { PgVisitorOAuthStore } from '../../modules/gateways/channels/visitor-oauth-config.service';
 import { newCustomDomain, type CustomDomainConfig } from '../../modules/gateways/channels/custom-domain';
 
 /**
@@ -141,6 +142,37 @@ describeOrSkip('PgCustomDomainStore (real Postgres, migrated schema)', () => {
       } as Partial<Gateway>),
     );
     expect(await claimOf(created.id)).toBeNull();
+  });
+
+  it('the visitor OAuth column is written only by its store, never by a TypeORM save', async () => {
+    const oauthStore = new PgVisitorOAuthStore(gateways);
+    const loadedEarly = await gateways.findOneByOrFail({ id: GW_A });
+    const provider: VisitorOAuthConfig = {
+      preset: 'google',
+      issuer: 'https://accounts.google.com',
+      authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+      tokenEndpoint: 'https://oauth2.googleapis.com/token',
+      userinfoEndpoint: null,
+      jwksUri: 'https://www.googleapis.com/oauth2/v3/certs',
+      discoveryUrl: null,
+      tenant: null,
+      clientId: 'gid',
+      scopes: ['openid'],
+      allowedEmailDomains: [],
+      credentialId: null,
+      tokenEndpointAuthMethod: 'client_secret_post',
+      updatedAt: '2026-09-24T00:00:00.000Z',
+    };
+    await oauthStore.write(GW_A, ORG_B, { ...provider });
+    expect((await gateways.findOneByOrFail({ id: GW_A })).visitorOAuth).toBeNull();
+    await oauthStore.write(GW_A, ORG_A, { ...provider });
+
+    loadedEarly.name = 'Edited meanwhile';
+    await gateways.save(loadedEarly);
+    expect((await gateways.findOneByOrFail({ id: GW_A })).visitorOAuth).toMatchObject({ clientId: 'gid' });
+
+    await oauthStore.write(GW_A, ORG_A, null);
+    expect((await gateways.findOneByOrFail({ id: GW_A })).visitorOAuth).toBeNull();
   });
 
   it('replaceClaim is a compare-and-set on hostname and token', async () => {
