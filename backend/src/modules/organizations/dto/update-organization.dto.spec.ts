@@ -38,25 +38,22 @@ describe('UpdateOrganizationDto', () => {
     expect(await violations(UpdateOrganizationDto, {})).toEqual([]);
   });
 
-  it('accepts a plan upgrade', async () => {
-    expect(await violations(UpdateOrganizationDto, { plan: 'pro' })).toEqual([]);
-  });
-
-  it('rejects an unknown plan tier', async () => {
-    const errs = await violations(UpdateOrganizationDto, { plan: 'platinum' });
-    expect(errs).toContain('plan:isEnum');
+  // plan, billingInfo and planExpiresAt are written by the Stripe webhook
+  // (and referrals), never by the org's own admins. billingInfo holds the
+  // signed licenseToken and the Stripe customer id: accepting it here let an
+  // org admin paste another org's token to self-grant its entitlements, or
+  // point the org at someone else's Stripe customer and open their portal.
+  it.each([
+    ['plan', { plan: 'enterprise' }],
+    ['billingInfo', { billingInfo: { licenseToken: 'copied.token', stripeCustomerId: 'cus_victim' } }],
+    ['planExpiresAt', { planExpiresAt: '2099-12-31T23:59:59.000Z' }],
+  ])('rejects the billing-owned field %s', async (field, payload) => {
+    const errs = await violations(UpdateOrganizationDto, payload);
+    expect(errs.some((e) => e.startsWith(`${field}:`))).toBe(true);
   });
 
   it('accepts isActive boolean', async () => {
     expect(await violations(UpdateOrganizationDto, { isActive: false })).toEqual([]);
-  });
-
-  it('accepts billingInfo as object', async () => {
-    expect(await violations(UpdateOrganizationDto, { billingInfo: { customerId: 'cus_xxx' } })).toEqual([]);
-  });
-
-  it('accepts planExpiresAt as ISO date', async () => {
-    expect(await violations(UpdateOrganizationDto, { planExpiresAt: '2026-12-31T23:59:59.000Z' })).toEqual([]);
   });
 
   it('rejects unknown top-level fields when forbidNonWhitelisted is set', async () => {

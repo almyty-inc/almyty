@@ -1,6 +1,5 @@
 import { Organization } from './organization.entity';
 import { UserOrganization, OrganizationRole } from './user-organization.entity';
-import { Api } from './api.entity';
 
 describe('Organization Entity', () => {
   describe('generateSlug', () => {
@@ -148,79 +147,12 @@ describe('Organization Entity', () => {
     });
   });
 
-  describe('canAddMoreApis', () => {
-    it('should return true if no limit set', () => {
-      const org = new Organization();
-      org.settings = {};
-      org.apis = [{} as Api, {} as Api];
-
-      expect(org.canAddMoreApis()).toBe(true);
-    });
-
-    it('should return true if under limit', () => {
-      const org = new Organization();
-      org.settings = { maxApis: 5 };
-      org.apis = [{} as Api, {} as Api];
-
-      expect(org.canAddMoreApis()).toBe(true);
-    });
-
-    it('should return false if at limit', () => {
-      const org = new Organization();
-      org.settings = { maxApis: 2 };
-      org.apis = [{} as Api, {} as Api];
-
-      expect(org.canAddMoreApis()).toBe(false);
-    });
-
-    it('should return false if over limit', () => {
-      const org = new Organization();
-      org.settings = { maxApis: 1 };
-      org.apis = [{} as Api, {} as Api];
-
-      expect(org.canAddMoreApis()).toBe(false);
-    });
-
-    it('should handle null apis array', () => {
-      const org = new Organization();
-      org.settings = { maxApis: 5 };
-      org.apis = null;
-
-      expect(org.canAddMoreApis()).toBe(true);
-    });
-  });
-
-  it('has no relation-reading gateway / tool limit checks (they always passed)', () => {
-    // Quotas are enforced by COUNT in gateway-quota.ts / tool-quota.ts.
+  it('has no relation-reading API / gateway / tool limit checks (they always passed)', () => {
+    // Quotas are enforced by COUNT in api-quota.ts / gateway-quota.ts / tool-quota.ts.
     const org = new Organization() as any;
+    expect(org.canAddMoreApis).toBeUndefined();
     expect(org.canAddMoreGateways).toBeUndefined();
     expect(org.canAddMoreTools).toBeUndefined();
-  });
-
-  describe('canAddMoreApis edge cases', () => {
-    it('should handle undefined settings', () => {
-      const org = new Organization();
-      org.settings = undefined;
-      org.apis = [{} as Api];
-
-      expect(org.canAddMoreApis()).toBe(true);
-    });
-
-    it('should handle empty apis array', () => {
-      const org = new Organization();
-      org.settings = { maxApis: 5 };
-      org.apis = [];
-
-      expect(org.canAddMoreApis()).toBe(true);
-    });
-
-    it('should handle maxApis zero', () => {
-      const org = new Organization();
-      org.settings = { maxApis: 0 };
-      org.apis = [];
-
-      expect(org.canAddMoreApis()).toBe(true); // 0 < 0 is false, so returns true
-    });
   });
 
   describe('getAdmins edge cases', () => {

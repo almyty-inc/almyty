@@ -105,7 +105,8 @@ describe('ToolGeneratorService', () => {
             create: jest.fn(),
             save: jest.fn(),
             findOne: jest.fn(),
-            find: jest.fn(),
+            // No generated name is taken by another tool at write time.
+            find: jest.fn().mockResolvedValue([]),
           },
         },
         {
@@ -166,15 +167,17 @@ describe('ToolGeneratorService', () => {
       expect(result.generatedTools).toHaveLength(1);
     });
 
-    it('should skip operations with existing tools', async () => {
+    it('regenerates an operation that already has a tool in place, adding no row', async () => {
       jest.spyOn(operationRepository, 'find').mockResolvedValue([mockOperation] as any);
-      jest.spyOn(toolRepository, 'findOne').mockResolvedValue(mockTool as any);
+      jest.spyOn(toolRepository, 'findOne').mockResolvedValue({ ...mockTool } as any);
 
       const result = await service.generateToolsFromApi(mockApi as Api);
 
-      expect(result.summary.skipped).toBe(1);
-      expect(result.skippedOperations).toHaveLength(1);
-      expect(result.skippedOperations[0].reason).toBeDefined();
+      // This used to expect skipped: 1, which held only because the save
+      // mock answered undefined and the loop counted that as a failure.
+      expect(result.summary.generated).toBe(1);
+      expect(result.summary.skipped).toBe(0);
+      expect(toolRepository.create).not.toHaveBeenCalled();
     });
 
     it('should apply includeOperations filter', async () => {
@@ -229,18 +232,20 @@ describe('ToolGeneratorService', () => {
       expect(result.skippedOperations).toHaveLength(1);
     });
 
-    it('should handle null tool generation result', async () => {
+    it('generates a tool with fallback parameters when no schema can be derived', async () => {
       jest.spyOn(operationRepository, 'find').mockResolvedValue([mockOperation] as any);
       jest.spyOn(toolRepository, 'findOne').mockResolvedValue(null);
       jest.spyOn(jsonSchemaTranslator, 'translateOperationToInputSchema').mockResolvedValue(null);
       jest.spyOn(jsonSchemaTranslator, 'translateOperationToOutputSchema').mockResolvedValue(null);
-      jest.spyOn(toolRepository, 'create').mockReturnValue(mockTool as any);
-      jest.spyOn(toolRepository, 'save').mockResolvedValue(null);
+      jest.spyOn(toolRepository, 'create').mockImplementation((x: any) => x);
 
       const result = await service.generateToolsFromApi(mockApi as Api);
 
-      expect(result.summary.skipped).toBe(1);
-      expect(result.skippedOperations[0].reason).toContain('Failed to generate');
+      // This used to expect skipped: 1, from a save mock answering null,
+      // which no real save does.
+      expect(result.summary.generated).toBe(1);
+      expect(result.generatedTools[0].parameters).toBeDefined();
+      expect(result.generatedTools[0].inputSchemaId).toBeUndefined();
     });
   });
 

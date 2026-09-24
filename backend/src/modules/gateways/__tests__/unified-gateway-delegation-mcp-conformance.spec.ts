@@ -2,6 +2,7 @@ import { UnifiedGatewayDelegation } from '../unified-gateway-delegation.helper';
 import { AlmytyMcpService } from '../../mcp/almyty-mcp.service';
 import { Gateway, GatewayType } from '../../../entities/gateway.entity';
 import { Organization } from '../../../entities/organization.entity';
+import { refusingQueryBuilder } from './recording-query-builder';
 
 /**
  * MCP wire conformance of the unified endpoint's MCP delegation.
@@ -63,12 +64,9 @@ describe('UnifiedGatewayDelegation — MCP wire conformance', () => {
     delegation = new UnifiedGatewayDelegation(
       { findOne: jest.fn() } as any, // agent repo
       {
-        createQueryBuilder: jest.fn().mockReturnValue({
-          update: jest.fn().mockReturnThis(),
-          set: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          execute: jest.fn().mockResolvedValue(undefined),
-        }),
+        // MCP bumps its counters inside McpService; the delegation writes
+        // nothing to the gateways table on this path.
+        createQueryBuilder: refusingQueryBuilder('MCP counters belong to McpService'),
       } as any, // gateway repo
       mcpService as any,
       almytyMcp as any,

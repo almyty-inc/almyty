@@ -42,6 +42,8 @@ export interface JwtPayload {
   }>;
   /** Token version — see User.tokenVersion. Absent on legacy tokens (=> 0). */
   tv?: number;
+  /** Set on an SSO session: the one organization it may act in. See sso-session.ts. */
+  sso?: string;
   iat?: number;
   exp?: number;
 }
@@ -405,24 +407,36 @@ export class AuthService {
     return apiKey;
   }
 
-  async generateTokens(user: User): Promise<AuthTokens> {
+  /**
+   * `ssoOrganizationId` marks a session minted from that organization's
+   * SSO assertion: the token lists that organization only and carries the
+   * `sso` claim JwtStrategy confines the session with (see sso-session.ts).
+   */
+  async generateTokens(
+    user: User,
+    options: { ssoOrganizationId?: string } = {},
+  ): Promise<AuthTokens> {
     // Load user organizations for JWT payload
     const userWithOrgs = await this.userRepository.findOne({
       where: { id: user.id },
       relations: { organizationMemberships: { organization: true } },
     });
 
+    const sso = options.ssoOrganizationId;
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
-      organizations: effectiveMemberships(userWithOrgs.organizationMemberships).map(membership => ({
-        id: membership.organization.id,
-        name: membership.organization.name,
-        role: membership.role,
-      })),
+      organizations: effectiveMemberships(userWithOrgs.organizationMemberships)
+        .filter(membership => !sso || membership.organization?.id === sso)
+        .map(membership => ({
+          id: membership.organization.id,
+          name: membership.organization.name,
+          role: membership.role,
+        })),
       tv: userWithOrgs.tokenVersion ?? 0,
+      ...(sso ? { sso } : {}),
     };
 
     const accessToken = this.jwtService.sign(payload);

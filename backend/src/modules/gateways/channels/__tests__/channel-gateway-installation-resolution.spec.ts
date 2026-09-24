@@ -112,6 +112,7 @@ describe('ChannelGatewayService installation resolution', () => {
       'run.agentId = :agentId': (row, p) => row.agentId === p.agentId,
       'run.status IN (:...activeStatuses)': (row, p) => p.activeStatuses.includes(row.status),
       "run.metadata->>'threadId' = :threadId": (row, p) => row.metadata?.threadId === p.threadId,
+      "run.metadata->>'gatewayId' = :gatewayId": (row, p) => row.metadata?.gatewayId === p.gatewayId,
     };
     runRepository = {
       createQueryBuilder: jest.fn(() => {
@@ -275,7 +276,7 @@ describe('ChannelGatewayService installation resolution', () => {
       agentId: 'agent-1',
       status: 'running',
       createdAt: 1,
-      metadata: { threadId: '111.222' },
+      metadata: { threadId: '111.222', gatewayId: 'gw-1' },
       output: 'agent says hi',
       ...over,
     });
@@ -313,7 +314,17 @@ describe('ChannelGatewayService installation resolution', () => {
     });
 
     it('will not continue a run open on another thread', async () => {
-      runRows.push(openRun({ metadata: { threadId: '999.000' } }));
+      runRows.push(openRun({ metadata: { threadId: '999.000', gatewayId: 'gw-1' } }));
+
+      await deliver(buildService(false));
+
+      expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+      expect(agentRuntimeService.startRun).toHaveBeenCalled();
+    });
+
+    // Same thread id, same agent, different surface: not this conversation.
+    it('will not continue a run the agent has open on another gateway', async () => {
+      runRows.push(openRun({ metadata: { threadId: '111.222', gatewayId: 'gw-widget' } }));
 
       await deliver(buildService(false));
 
@@ -349,6 +360,21 @@ describe('ChannelGatewayService installation resolution', () => {
         await buildService(false).handleWidgetMessage(widgetGateway(), {
           message: 'hi there',
           threadId: '111.222',
+        });
+
+        expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();
+        expect(agentRuntimeService.startRun).toHaveBeenCalled();
+      });
+
+      // The same agent behind an SMS or Telegram surface keys its threads
+      // on a phone number or chat id. A widget visitor who presents one
+      // must not be fed into that conversation.
+      it('will not continue this agent\'s run on another gateway', async () => {
+        runRows.push(openRun({ id: 'run-sms', metadata: { threadId: '+15551234567', gatewayId: 'gw-sms' } }));
+
+        await buildService(false).handleWidgetMessage(widgetGateway(), {
+          message: 'hi there',
+          threadId: '+15551234567',
         });
 
         expect(agentRuntimeService.sendInput).not.toHaveBeenCalled();

@@ -22,6 +22,7 @@ import {
 } from './template-sanitizer';
 import { PublishToolTemplateDto, UpdateToolTemplateDto } from './dto/tool-hub.dto';
 import { capGeneratedDescription, precheckToolQuota, withToolQuota } from '../tools/tool-quota';
+import { withApiQuota } from '../apis/api-quota';
 
 export interface ListTemplatesFilters {
   category?: string;
@@ -223,7 +224,8 @@ export class ToolHubService {
             headers: scrubStringMap(template.apiConfig.headers) || {},
             version: '1.0.0',
           });
-          api = await this.apiRepository.save(newApi);
+          // A new API counts against settings.maxApis like any other.
+          api = await withApiQuota(this.apiRepository.manager, orgId, 1, (tx) => tx.getRepository(Api).save(newApi));
           this.logger.log(`Created API '${api.name}' for template '${template.name}' in org ${orgId}`);
         }
       }

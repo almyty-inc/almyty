@@ -16,6 +16,7 @@ import { ApisToolGeneratorHelper } from '../apis-tool-generator.helper';
 import { AccessPolicyService } from '../../../common/authorization/access-policy.service';
 import { CredentialRefResolver } from '../../credentials/credential-ref.resolver';
 import { FakeCredentialStore, makeCredentialRefFake } from '../../../test/credential-ref.fake';
+import { unlimitedQuotaManager } from '../../../test/tool-quota.fake';
 import { isEncrypted, encryptField } from '../../../common/security/field-crypto';
 import { CredentialType } from '../../../entities/credential.entity';
 import axios from 'axios';
@@ -42,6 +43,8 @@ describe('ApisService inline authentication', () => {
       // Record what each save carried: the entity is mutated afterwards.
       save: jest.fn(async (api: any) => { saves.push(JSON.parse(JSON.stringify(api))); return Object.assign(api, { id: api.id ?? 'api-1' }); }),
       count: jest.fn(async () => 0),
+      // Creates run through withApiQuota; the organization has no maxApis.
+      get manager() { return unlimitedQuotaManager(this); },
     };
     store = makeCredentialRefFake();
     toolGen = { generateToolsFromApi: jest.fn(), applyAuthentication: jest.fn() };

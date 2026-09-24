@@ -508,7 +508,8 @@ describe('McpService', () => {
     });
 
     it('should handle prompts/get for list-available-tools', async () => {
-      toolRepository.find.mockResolvedValue([
+      // Scoped to the caller the same way prompts/list is.
+      mockToolListing([
         { name: 'get-pet', description: 'Get pet by ID' },
       ]);
 

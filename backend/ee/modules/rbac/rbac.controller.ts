@@ -30,6 +30,8 @@ import { EE_ENTITLEMENTS } from '../../../src/modules/licensing/license.constant
 
 import { CustomRoleService } from './custom-role.service';
 import { AbacCondition, AbacEffect } from '../../../src/entities/abac-policy.entity';
+import { OrganizationRole } from '../../../src/entities/user-organization.entity';
+import { findEffectiveMembership } from '../../../src/common/authorization/membership';
 
 class CreateRoleDto {
   @IsString()
@@ -116,6 +118,14 @@ export class RbacController {
     return req.user.currentOrganizationId;
   }
 
+  /**
+   * The caller's role in the current organization -- what a role they
+   * write or hand out may not exceed (CustomRoleService.assertMayGrant).
+   */
+  private actorRole(req: any): OrganizationRole | undefined {
+    return findEffectiveMembership<any>(req.user?.organizationMemberships, this.orgId(req))?.role;
+  }
+
   // ── Custom roles ──
 
   @Get('roles')
@@ -127,7 +137,11 @@ export class RbacController {
   @Post('roles')
   @ApiOperation({ summary: 'Create a custom role' })
   async createRole(@Request() req: any, @Body() body: CreateRoleDto) {
-    const data = await this.rbac.createRole({ organizationId: this.orgId(req), ...body });
+    const data = await this.rbac.createRole({
+      ...body,
+      organizationId: this.orgId(req),
+      actorRole: this.actorRole(req),
+    });
     return { success: true, data };
   }
 
@@ -142,7 +156,7 @@ export class RbacController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: UpdateRoleDto,
   ) {
-    return { success: true, data: await this.rbac.updateRole(this.orgId(req), id, body) };
+    return { success: true, data: await this.rbac.updateRole(this.orgId(req), id, body, this.actorRole(req)) };
   }
 
   @Delete('roles/:id')
@@ -160,7 +174,7 @@ export class RbacController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: AssignDto,
   ) {
-    const data = await this.rbac.assign(this.orgId(req), id, body.userId, req.user.id);
+    const data = await this.rbac.assign(this.orgId(req), id, body.userId, req.user.id, this.actorRole(req));
     return { success: true, data };
   }
 

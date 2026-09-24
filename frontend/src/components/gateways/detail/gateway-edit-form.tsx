@@ -46,9 +46,11 @@ export interface GatewayEditFormProps {
   onSubmit: (data: EditGatewayForm & { visibility?: Visibility; teamId?: string | null }) => void
   onCancel: () => void
   isSystem?: boolean
+  /** Called with true while the form holds unsaved edits, false once it does not. */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSystem }: GatewayEditFormProps) {
+export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSystem, onDirtyChange }: GatewayEditFormProps) {
   const { currentOrganization } = useOrganizationStore()
   const formRef = React.useRef<HTMLFormElement>(null)
   const form = useForm<EditGatewayForm>({
@@ -75,6 +77,12 @@ export function GatewayEditForm({ gateway, isSaving, onSubmit, onCancel, isSyste
   const privateNotPossible =
     visibility.visibility === 'private' && !PRIVATE_CAPABLE_GATEWAY_TYPES.has(gateway?.type)
   const scopeChanged = visibility.visibility !== stored.visibility || visibility.teamId !== stored.teamId
+  // The page owns the leave guard (it also owns the navigation after a
+  // save), so it is told whenever the form holds unsaved edits.
+  const dirty = form.formState.isDirty || scopeChanged
+  React.useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
 
   const submit = (data: EditGatewayForm) => {
     if (privateNotPossible) return

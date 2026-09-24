@@ -1468,14 +1468,15 @@ describe('AlmytyMcpService', () => {
 
     it('list_budgets shows the ceiling and what a breach does', async () => {
       const res = await callTool('list_budgets');
-      expect(mockBudgetsService.list).toHaveBeenCalledWith('org-1');
+      // The caller rides along: a budget on another member's private agent is hidden.
+      expect(mockBudgetsService.list).toHaveBeenCalledWith('org-1', 'user-1');
       expect(parse(res).budgets[0]).toMatchObject({ limitCents: 5000, behavior: 'reject' });
     });
 
     it('get_spend defaults to the month and the day bucket', async () => {
       const res = await callTool('get_spend');
       expect(mockSpendService.getSummary).toHaveBeenCalledWith('org-1', {
-        from: expect.any(Date), granularity: 'day',
+        from: expect.any(Date), granularity: 'day', viewerId: 'user-1',
       });
       expect(parse(res).period).toBe('month');
       expect(parse(res).totalCents).toBe(1234);

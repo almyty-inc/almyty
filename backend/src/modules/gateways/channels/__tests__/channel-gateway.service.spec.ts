@@ -15,6 +15,13 @@ import { SignalAdapter } from '../adapters/signal.adapter';
 import { MatrixAdapter } from '../adapters/matrix.adapter';
 import { IrcAdapter } from '../adapters/irc.adapter';
 import { installFetchMock } from '../adapters/__tests__/test-helpers';
+import {
+  ClauseModel,
+  ExecutedQuery,
+  RecordingQueryBuilder,
+  clause,
+  matchingRows,
+} from '../../__tests__/recording-query-builder';
 
 /**
  * Unit coverage for ChannelGatewayService.testConnection — the per-adapter
@@ -327,8 +334,25 @@ describe('ChannelGatewayService.testConnection', () => {
   describe('widget surface', () => {
     let gatewayRepository: { findOne: jest.Mock };
     let eventRepository: { createQueryBuilder: jest.Mock };
-    let qb: any;
+    let qb: RecordingQueryBuilder;
+    let events: any[];
     let svc: ChannelGatewayService;
+
+    /**
+     * The widget transcript query, evaluated against a channel_events
+     * table. The chain that stood here answered a canned list whatever
+     * the WHERE said, so the gateway, channel, direction or kind predicate
+     * could go -- serving one widget another's messages -- with the suite
+     * green. A clause not listed throws.
+     */
+    const EVENT_CLAUSES: ClauseModel = {
+      'event.gatewayId = :gatewayId': (row, p) => row.gatewayId === p.gatewayId,
+      'event.channelType = :channelType': (row, p) => row.channelType === p.channelType,
+      "event.direction = 'outbound'": (row) => row.direction === 'outbound',
+      "event.payload->>'kind' = 'widget_message'": (row) => row.payload?.kind === 'widget_message',
+      "event.payload->>'threadId' = :threadId": (row, p) => row.payload?.threadId === p.threadId,
+      'event.createdAt > :after': (row, p) => row.createdAt.getTime() > p.after.getTime(),
+    };
 
     const widgetGateway = () =>
       ({
@@ -339,15 +363,16 @@ describe('ChannelGatewayService.testConnection', () => {
       } as unknown as Gateway);
 
     beforeEach(() => {
-      qb = {
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn(async () => []),
-      };
+      events = [];
       gatewayRepository = { findOne: jest.fn(async () => widgetGateway()) };
-      eventRepository = { createQueryBuilder: jest.fn(() => qb) };
+      eventRepository = {
+        createQueryBuilder: jest.fn(
+          (alias: string) =>
+            (qb = new RecordingQueryBuilder(alias, {
+              getMany: (query: ExecutedQuery) => matchingRows(query, events, EVENT_CLAUSES),
+            })),
+        ),
+      };
       svc = new ChannelGatewayService(
         gatewayRepository as any,
         null as any,
@@ -391,25 +416,46 @@ describe('ChannelGatewayService.testConnection', () => {
       await expect(svc.findWidgetGateway('gw-3')).rejects.toThrow(/not found/i);
     });
 
+    const T0 = new Date('2026-07-01T10:00:00Z');
+    const widgetEvent = (id: string, over: Record<string, any> = {}, payload: Record<string, any> = {}) => ({
+      id,
+      runId: `run-${id}`,
+      gatewayId: 'gw-1',
+      channelType: GatewayType.CHAT_WIDGET,
+      direction: 'outbound',
+      createdAt: T0,
+      ...over,
+      payload: { kind: 'widget_message', threadId: 't1', message: `says ${id}`, attachments: null, ...payload },
+    });
+
     it('listWidgetMessages filters by gateway + thread and maps payload rows', async () => {
-      const createdAt = new Date('2026-07-01T10:00:00Z');
-      qb.getMany.mockResolvedValueOnce([
-        { id: 'e1', runId: 'r1', payload: { kind: 'widget_message', threadId: 't1', message: 'hello', attachments: null }, createdAt },
-      ]);
+      events.push(
+        widgetEvent('e1'),
+        // Each of these differs from e1 in exactly one predicate.
+        widgetEvent('e-other-gateway', { gatewayId: 'gw-2' }),
+        widgetEvent('e-other-channel', { channelType: GatewayType.SLACK }),
+        widgetEvent('e-inbound', { direction: 'inbound' }),
+        widgetEvent('e-other-kind', {}, { kind: 'widget_typing' }),
+        widgetEvent('e-other-thread', {}, { threadId: 't2' }),
+      );
       const rows = await svc.listWidgetMessages('gw-1', 't1');
       expect(rows).toEqual([
-        { id: 'e1', runId: 'r1', message: 'hello', attachments: null, createdAt },
+        { id: 'e1', runId: 'run-e1', message: 'says e1', attachments: null, createdAt: T0 },
       ]);
-      expect(qb.where).toHaveBeenCalledWith('event.gatewayId = :gatewayId', { gatewayId: 'gw-1' });
-      expect(qb.andWhere).toHaveBeenCalledWith("event.payload->>'threadId' = :threadId", { threadId: 't1' });
+      expect(qb.argsOf('orderBy')).toEqual([['event.createdAt', 'ASC']]);
+      expect(qb.argsOf('limit')).toEqual([[100]]);
       // no `after` — the time filter must not be applied
-      expect(qb.andWhere).not.toHaveBeenCalledWith('event.createdAt > :after', expect.anything());
+      expect(clause(qb.executed[0], 'event.createdAt > :after')).toBeUndefined();
     });
 
     it('listWidgetMessages applies the incremental `after` filter', async () => {
-      const after = new Date('2026-07-01T10:00:00Z');
-      await svc.listWidgetMessages('gw-1', 't1', after);
-      expect(qb.andWhere).toHaveBeenCalledWith('event.createdAt > :after', { after });
+      events.push(
+        widgetEvent('e-old', { createdAt: new Date('2026-07-01T09:00:00Z') }),
+        widgetEvent('e-at', { createdAt: T0 }),
+        widgetEvent('e-new', { createdAt: new Date('2026-07-01T11:00:00Z') }),
+      );
+      const rows = await svc.listWidgetMessages('gw-1', 't1', T0);
+      expect(rows.map((r) => r.id)).toEqual(['e-new']);
     });
   });
 });

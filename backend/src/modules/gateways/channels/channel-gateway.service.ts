@@ -287,13 +287,18 @@ export class ChannelGatewayService {
       }
     }
 
-    // Find existing run for this thread, or start a new one
+    // Find existing run for this thread on this gateway, or start a new
+    // one. Scoped to the gateway, not just the agent: one agent sits
+    // behind several surfaces, and the public widget lets its caller
+    // pick any threadId, so an agent-wide match would let a thread
+    // opened on one surface capture messages sent on another.
     let run: AgentRun | null = null;
 
     if (normalized.threadId) {
       const existingRuns = await this.runRepository
         .createQueryBuilder('run')
         .where('run.agentId = :agentId', { agentId: gateway.agentId })
+        .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
         .andWhere('run.status IN (:...activeStatuses)', {
           activeStatuses: ['running', 'waiting_input', 'sleeping'],
         })
@@ -589,13 +594,19 @@ export class ChannelGatewayService {
       threadId: body.threadId,
     });
 
-    // Check for existing run with this threadId
+    // Check for existing run with this threadId ON THIS GATEWAY. The
+    // threadId comes from the request body of a public endpoint, and
+    // other surfaces behind the same agent key their threads on values
+    // an outsider can know (an SMS sender's phone number, a Telegram
+    // chat id). Matching on the agent alone let a widget caller feed
+    // text into someone else's live conversation and read the reply.
     let run: AgentRun | null = null;
 
     if (normalized.threadId) {
       const existingRuns = await this.runRepository
         .createQueryBuilder('run')
         .where('run.agentId = :agentId', { agentId: gateway.agentId })
+        .andWhere("run.metadata->>'gatewayId' = :gatewayId", { gatewayId: gateway.id })
         .andWhere('run.status IN (:...activeStatuses)', {
           activeStatuses: ['running', 'waiting_input', 'sleeping'],
         })
@@ -610,6 +621,13 @@ export class ChannelGatewayService {
     if (run) {
       run = await this.agentRuntimeService.sendInput(run.id, gateway.organizationId, normalized.text);
     } else {
+      const channelMetadata = {
+        channelUserId: normalized.userId,
+        gatewayId: gateway.id,
+        gatewayType: gateway.type,
+        source: 'chat_widget',
+        ...(normalized.threadId ? { threadId: normalized.threadId } : {}),
+      };
       run = await this.agentRuntimeService.startRun(
         gateway.agentId,
         gateway.organizationId,
@@ -617,20 +635,18 @@ export class ChannelGatewayService {
         // is the platform's own id for the sender ("U012ABC" on Slack),
         // and putting it in a column that references `users` made every
         // conversation write fail, so a channel could not answer at all.
-        // The sender is recorded in metadata below, where the rest of
-        // the channel's facts already live.
+        // The sender is recorded in metadata, where the rest of the
+        // channel's facts already live. Written with the insert so the
+        // gateway-scoped thread lookup above can see the run at once.
         null,
         normalized.text,
-        { maxSteps: 25 },
+        { maxSteps: 25, metadata: channelMetadata },
       );
 
       run.metadata = {
         ...(run.metadata || {}),
-        channelUserId: normalized.userId,
+        ...channelMetadata,
         threadId: normalized.threadId || run.id,
-        gatewayId: gateway.id,
-        gatewayType: gateway.type,
-        source: 'chat_widget',
       };
       await this.runRepository.save(run);
     }
