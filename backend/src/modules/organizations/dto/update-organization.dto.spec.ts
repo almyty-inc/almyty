@@ -71,9 +71,8 @@ describe('UpdateOrganizationDto', () => {
       expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: policy } })).toEqual([]);
     });
 
-    it('accepts null to clear it, and leaves other settings keys alone', async () => {
-      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: null, maxApis: 5, pendingInvites: [] } })).toEqual([]);
-      expect(await violations(UpdateOrganizationDto, { settings: { maxApis: 5 } })).toEqual([]);
+    it('accepts null to clear it', async () => {
+      expect(await violations(UpdateOrganizationDto, { settings: { defaultRouting: null } })).toEqual([]);
     });
 
     it('rejects an unknown objective, a bad tier and a non-object', async () => {
@@ -125,6 +124,38 @@ describe('UpdateOrganizationDto', () => {
 
     it('refuses an empty entry', async () => {
       expect(await violations(UpdateOrganizationDto, { settings: { egressAllowlist: ['  '] } })).not.toEqual([]);
+    });
+  });
+
+  // The limits are the plan's. An org admin holds PATCH on the org, so
+  // these used to be a self-service upgrade: settings.maxTools = 100000.
+  describe('settings keys an admin may not write', () => {
+    it.each([
+      ['maxTools', { maxTools: 100000 }],
+      ['maxApis', { maxApis: 100000 }],
+      ['maxGateways', { maxGateways: 100000 }],
+      ['pendingInvites', { pendingInvites: [{ email: 'x@y.z', inviteToken: 'chosen' }] }],
+      ['an unknown key', { someFutureLimit: 1 }],
+    ])('refuses %s on update and on create', async (_name, settings) => {
+      expect(await violations(UpdateOrganizationDto, { settings })).toEqual(['settings:organizationSettings']);
+      expect(await violations(CreateOrganizationDto, { name: 'Acme', settings })).toEqual(['settings:organizationSettings']);
+    });
+
+    it('says the limits come from the plan', async () => {
+      const dto = plainToInstance(UpdateOrganizationDto, { settings: { defaultRouting: null, maxTools: 5 } });
+      const [error] = await validate(dto);
+      expect(error.constraints?.organizationSettings).toContain('settings.maxTools cannot be changed here');
+    });
+
+    it('still takes every writable key', async () => {
+      expect(
+        await violations(UpdateOrganizationDto, {
+          settings: { defaultRouting: null, egressAllowlist: ['localhost'], allowUserScopedConnections: false },
+        }),
+      ).toEqual([]);
+      expect(await violations(UpdateOrganizationDto, { settings: { allowUserScopedConnections: 'yes' } })).toEqual([
+        'settings:organizationSettings',
+      ]);
     });
   });
 });

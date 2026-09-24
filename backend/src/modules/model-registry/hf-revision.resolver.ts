@@ -1,5 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 
+import { hfFetch } from './hf-fetch';
+
 /**
  * Pins a Hugging Face reference to the commit it names right now.
  *
@@ -61,7 +63,9 @@ export class HfRevisionResolver {
   private readonly fetchImpl: HubFetch;
 
   constructor(@Optional() @Inject(HF_HUB_FETCH) fetchImpl?: HubFetch) {
-    this.fetchImpl = fetchImpl ?? ((url, init) => fetch(url, init) as any);
+    // The Hub answers a renamed repository with a redirect; hfFetch
+    // follows it only onto Hugging Face hosts, through the SSRF gate.
+    this.fetchImpl = fetchImpl ?? ((url, init) => hfFetch(url, init));
   }
 
   /**
