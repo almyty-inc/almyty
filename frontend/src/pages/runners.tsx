@@ -1,6 +1,6 @@
 import { PageHeader } from '@/components/layout/page-header'
 import { pluralized } from '@/lib/utils'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -9,15 +9,7 @@ import { Cpu, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   DataTable,
   createActionsColumn,
@@ -71,7 +63,6 @@ export function RunnersPage() {
   const { success, error: notifyError } = useNotifications()
   const { currentOrganization } = useOrganizationStore()
   const [teamFilter, setTeamFilter] = useState<TeamFilterValue>('all')
-  const [deleting, setDeleting] = useState<Runner | null>(null)
   const { byId: teamLookup } = useTeamLookup(currentOrganization?.id)
 
   useEffect(() => {
@@ -91,13 +82,22 @@ export function RunnersPage() {
     onSuccess: () => {
       success('Runner deleted')
       queryClient.invalidateQueries({ queryKey: ['runners'] })
-      setDeleting(null)
     },
     onError: (err) => {
       notifyError('Could not delete the runner', getApiErrorMessage(err))
-      setDeleting(null)
     },
   })
+  const { mutate: deleteRunner } = deleteMutation
+  const { confirm, dialog: confirmDialog } = useConfirm()
+  const confirmDelete = useCallback(async (r: Runner) => {
+    const ok = await confirm({
+      title: <>Delete runner {r.name}?</>,
+      confirmLabel: 'Delete runner',
+      cancelLabel: 'Keep it',
+      destructive: true,
+    })
+    if (ok) deleteRunner(r.id)
+  }, [confirm, deleteRunner])
 
   const visibleRunners = filterByTeamVisibility(runners, teamFilter)
   const onlineCount = runners.filter((r) => r.state === 'online' || r.state === 'busy').length
@@ -197,12 +197,12 @@ export function RunnersPage() {
     },
     createActionsColumn<Runner>(
       (r) => navigate(`/runners/${r.id}`),
-      (r) => setDeleting(r),
+      (r) => confirmDelete(r),
       [
         { label: 'View details', onClick: (r) => navigate(`/runners/${r.id}`) },
       ],
     ),
-  ], [navigate, teamLookup])
+  ], [navigate, teamLookup, confirmDelete])
 
   if (isError) {
     return (
@@ -263,19 +263,7 @@ export function RunnersPage() {
         </Card>
       )}
 
-      <AlertDialog open={!!deleting} onOpenChange={(open) => { if (!open) setDeleting(null) }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete runner {deleting?.name}?</AlertDialogTitle>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep it</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleting && deleteMutation.mutate(deleting.id)}>
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
     </div>
   )
 }

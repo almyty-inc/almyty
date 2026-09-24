@@ -12,7 +12,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import { QueryError } from '@/components/ui/query-error'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CopyField } from '@/components/ui/copy-field'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import { gatewaysApi, toolsApi } from '@/lib/api'
 import { useEntitlements } from '@/hooks/use-entitlement'
@@ -55,7 +55,7 @@ export function GatewayDetailPage() {
   const { success, error: errorNotif, warning } = useNotifications()
   const queryClient = useQueryClient()
 
-  const [removeAllToolsDialogOpen, setRemoveAllToolsDialogOpen] = useState(false)
+  const { confirm, dialog: confirmDialog } = useConfirm()
   // Editing is its own page (/gateways/:id/edit), with the visibility
   // picker. ?edit=1 from older links goes there.
   const wantsEdit = searchParams.get('edit') === '1'
@@ -477,7 +477,15 @@ export function GatewayDetailPage() {
             assignPending={assignToolMutation.isPending}
             removePending={removeToolMutation.isPending}
             onApplyPreset={applyScopingPreset}
-            onRequestRemoveAll={() => setRemoveAllToolsDialogOpen(true)}
+            onRequestRemoveAll={async () => {
+              const ok = await confirm({
+                title: 'Remove all tools from this gateway?',
+                description: 'This will remove all tools from the gateway. The gateway will not be able to serve any requests until tools are assigned again.',
+                confirmLabel: 'Remove all tools',
+                destructive: true,
+              })
+              if (ok) applyScopingPreset('none')
+            }}
             onAssign={(toolId) => assignToolMutation.mutate({ toolId })}
             onRemove={(toolId) => removeToolMutation.mutate({ toolId })}
             securitySaving={updateToolConfigMutation.isPending}
@@ -534,29 +542,7 @@ export function GatewayDetailPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Remove All Tools Confirmation */}
-      <AlertDialog open={removeAllToolsDialogOpen} onOpenChange={setRemoveAllToolsDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove all tools?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove all tools from the gateway. The gateway will not be able to serve any requests until tools are assigned again.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                applyScopingPreset('none')
-                setRemoveAllToolsDialogOpen(false)
-              }}
-            >
-              Remove all tools
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {confirmDialog}
 
     </div>
   )

@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { render } from '../../test/setup'
 import { RunnersPage } from '../runners'
 
 vi.mock('../../lib/api', () => ({
-  runnersApi: { getAll: vi.fn() },
+  runnersApi: { getAll: vi.fn(), unregister: vi.fn() },
 }))
 
 vi.mock('../../store/organization', () => ({
@@ -21,10 +22,12 @@ vi.mock('../../store/app', () => ({
 import { runnersApi } from '../../lib/api'
 
 const mockedGetAll = runnersApi.getAll as ReturnType<typeof vi.fn>
+const mockedUnregister = runnersApi.unregister as ReturnType<typeof vi.fn>
 
 describe('RunnersPage', () => {
   beforeEach(() => {
     mockedGetAll.mockReset()
+    mockedUnregister.mockReset()
   })
 
   it('renders the empty state with a Start a runner CTA when no runners are registered', async () => {
@@ -74,6 +77,38 @@ describe('RunnersPage', () => {
     render(<RunnersPage />)
     await waitFor(() => {
       expect(screen.getByText(/couldn't load runners/i)).toBeInTheDocument()
+    })
+  })
+
+  describe('delete', () => {
+    const openDelete = async () => {
+      mockedGetAll.mockResolvedValue([makeRunner({ id: 'r3', name: 'old-machine', state: 'offline' })])
+      const user = userEvent.setup()
+      render(<RunnersPage />)
+      await user.click(await screen.findByRole('button', { name: /actions/i }))
+      await user.click(await screen.findByText('Delete'))
+      return { user, dialog: await screen.findByRole('alertdialog') }
+    }
+
+    it('asks before deleting, naming the runner', async () => {
+      const { dialog } = await openDelete()
+      expect(within(dialog).getByText(/delete runner old-machine\?/i)).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Delete runner' })).toBeInTheDocument()
+      expect(mockedUnregister).not.toHaveBeenCalled()
+    })
+
+    it('Keep it leaves the runner alone', async () => {
+      const { user, dialog } = await openDelete()
+      await user.click(within(dialog).getByRole('button', { name: 'Keep it' }))
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+      expect(mockedUnregister).not.toHaveBeenCalled()
+    })
+
+    it('deletes the runner once confirmed', async () => {
+      mockedUnregister.mockResolvedValue({})
+      const { user, dialog } = await openDelete()
+      await user.click(within(dialog).getByRole('button', { name: 'Delete runner' }))
+      await waitFor(() => expect(mockedUnregister).toHaveBeenCalledWith('r3'))
     })
   })
 })
